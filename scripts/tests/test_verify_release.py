@@ -326,7 +326,7 @@ class VerifyReleaseTests(unittest.TestCase):
                 "--source-commit",
                 COMMIT,
                 "--source-repository",
-                "https://github.com/robintra/PerfSentinelHub",
+                "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub",
                 "--image-digest",
                 image_digest,
             ],
@@ -593,6 +593,17 @@ class ReleaseTagCheckerTests(unittest.TestCase):
         wrong_workflow = json.loads(json.dumps(valid))
         wrong_workflow["github"]["workflow_identity_template"] = "https://example.invalid/{version}"
         invalid.append(json.dumps(wrong_workflow))
+        old_repository = json.loads(json.dumps(valid))
+        old_repository["github"] = {
+            name: value.replace("Institut-du-Numerique-Responsable/", "robintra/") for name, value in valid["github"].items()
+        }
+        invalid.append(json.dumps(old_repository))
+        missing_previous = json.loads(json.dumps(valid))
+        del missing_previous["previous_github"]
+        invalid.append(json.dumps(missing_previous))
+        moved_boundary = json.loads(json.dumps(valid))
+        moved_boundary["previous_github"]["last_version"] = "0.3.9"
+        invalid.append(json.dumps(moved_boundary))
         invalid.append(self.config.read_text(encoding="utf-8").replace('"schema_version": 1', '"schema_version": 1, "schema_version": 1'))
 
         for content in invalid:
@@ -631,10 +642,15 @@ class ReleaseTagCheckerTests(unittest.TestCase):
                     },
                     "github": {
                         "oidc_issuer": "https://token.actions.githubusercontent.com",
-                        "repository": "robintra/PerfSentinelHub",
-                        "repository_url": "https://github.com/robintra/PerfSentinelHub",
+                        "repository": "Institut-du-Numerique-Responsable/PerfSentinelHub",
+                        "repository_url": "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub",
                         "release_workflow": ".github/workflows/release.yml",
                         "tag_ref_template": "refs/tags/v{version}",
+                        "workflow_identity_template": "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v{version}",
+                    },
+                    "previous_github": {
+                        "repository": "robintra/PerfSentinelHub",
+                        "last_version": "0.3.8",
                         "workflow_identity_template": "https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v{version}",
                     },
                 },
@@ -669,9 +685,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for name in ("GH_TOKEN", "GITHUB_TOKEN", "COSIGN_PASSWORD"):
             environment.pop(name, None)
         expected = {
-            "repository": "robintra/PerfSentinelHub",
+            "repository": "Institut-du-Numerique-Responsable/PerfSentinelHub",
             "tag": "v0.1.0",
-            "url": "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.1.0",
+            "url": "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/tag/v0.1.0",
         }
         for value in (expected["tag"], expected["url"]):
             with self.subTest(value=value):
@@ -686,9 +702,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
         for value in (
             "v0.1.0-rc.1",
-            "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.01.0",
+            "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/tag/v0.01.0",
             "https://github.com/other/PerfSentinelHub/releases/tag/v0.1.0",
-            "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.1.0?download=1",
+            "https://github.com/robintra/PerfSentinelHub/releases/tag/v0.3.8",
+            "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/tag/v0.1.0?download=1",
         ):
             with self.subTest(value=value):
                 result = subprocess.run(
@@ -698,6 +715,56 @@ class ReleaseWorkflowTests(unittest.TestCase):
                     capture_output=True,
                 )
                 self.assertNotEqual(0, result.returncode)
+
+    def test_signer_keeps_the_pre_transfer_identity_through_0_3_8_only(self):
+        environment = os.environ.copy()
+        environment.pop("GITHUB_REPOSITORY", None)
+        cases = {
+            "v0.1.0": "robintra/PerfSentinelHub",
+            "v0.3.8": "robintra/PerfSentinelHub",
+            "v0.3.9": "Institut-du-Numerique-Responsable/PerfSentinelHub",
+            "v0.3.10": "Institut-du-Numerique-Responsable/PerfSentinelHub",
+            "v0.4.0": "Institut-du-Numerique-Responsable/PerfSentinelHub",
+        }
+        for tag, repository in cases.items():
+            with self.subTest(tag=tag):
+                result = subprocess.run(
+                    [sys.executable, str(VERIFIER), "signer", tag],
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(
+                    {
+                        "repository": repository,
+                        "identity": f"https://github.com/{repository}/.github/workflows/release.yml@refs/tags/{tag}",
+                    },
+                    json.loads(result.stdout),
+                )
+
+        for value in ("v0.3.8-rc.1", "0.3.8", "v1.0.0"):
+            with self.subTest(value=value):
+                result = subprocess.run(
+                    [sys.executable, str(VERIFIER), "signer", value],
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(0, result.returncode)
+
+    def test_public_verification_takes_the_signer_from_the_tag_era(self):
+        content = (REPOSITORY / ".github/workflows/release-verification.yml").read_text(encoding="utf-8")
+        cryptography = content.split("\n  cryptography:\n", 1)[1].split("\n  native:\n", 1)[0]
+
+        self.assertIn('python3 scripts/verify-release.py signer "$tag"', content)
+        self.assertIn("config/signing-identities.json", content)
+        self.assertIn('--certificate-identity "$identity"', cryptography)
+        self.assertEqual(2, cryptography.count('--repo "$SIGNING_REPOSITORY"'))
+        for listing in ("gh api", "gh release view", "gh release download"):
+            for line in (line for line in content.splitlines() if listing in line and "PerfSentinelHub" in line):
+                self.assertIn("Institut-du-Numerique-Responsable/PerfSentinelHub", line)
+        self.assertNotIn("github.com/robintra/PerfSentinelHub", content)
 
     def test_protected_publish_is_a_pure_promotion_of_one_verified_artifact(self):
         content = (REPOSITORY / ".github/workflows/release.yml").read_text(encoding="utf-8")

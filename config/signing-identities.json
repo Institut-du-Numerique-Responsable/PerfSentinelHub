@@ -8,10 +8,15 @@
   },
   "github": {
     "oidc_issuer": "https://token.actions.githubusercontent.com",
-    "repository": "robintra/PerfSentinelHub",
-    "repository_url": "https://github.com/robintra/PerfSentinelHub",
+    "repository": "Institut-du-Numerique-Responsable/PerfSentinelHub",
+    "repository_url": "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub",
     "release_workflow": ".github/workflows/release.yml",
     "tag_ref_template": "refs/tags/v{version}",
+    "workflow_identity_template": "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v{version}"
+  },
+  "previous_github": {
+    "repository": "robintra/PerfSentinelHub",
+    "last_version": "0.3.8",
     "workflow_identity_template": "https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v{version}"
   }
 }

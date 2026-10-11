@@ -25,7 +25,8 @@ STABLE_TAG = re.compile(r"^v0[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 REPOSITORY = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-PUBLIC_REPOSITORY = "robintra/PerfSentinelHub"
+PUBLIC_REPOSITORY = "Institut-du-Numerique-Responsable/PerfSentinelHub"
+SIGNING_IDENTITIES = Path(__file__).resolve().parents[1] / "config" / "signing-identities.json"
 PUBLIC_RELEASE_URL = re.compile(
     rf"^https://github[.]com/{re.escape(PUBLIC_REPOSITORY)}/releases/tag/(v0[.][0-9]+[.][0-9]+)$"
 )
@@ -63,11 +64,11 @@ SUBJECT_FIELDS = {
 }
 
 
-def image_checker_module():
-    path = Path(__file__).with_name("check-image-manifest.py")
-    spec = importlib.util.spec_from_file_location("check_image_manifest", path)
+def sibling_module(filename: str):
+    path = Path(__file__).with_name(filename)
+    spec = importlib.util.spec_from_file_location(filename.removesuffix(".py").replace("-", "_"), path)
     if spec is None or spec.loader is None:
-        raise ValueError("image manifest checker cannot be loaded")
+        raise ValueError(f"{filename} cannot be loaded")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -286,7 +287,7 @@ def validate_evidence(files: dict[str, Path], subjects, image_digest: str, versi
         validate_signature_bundle(files[f"{name}.sigstore.json"], digest)
         validate_sbom_attestation(files[f"{name}.sbom.sigstore.json"], (name, digest))
     validate_provenance(files[PROVENANCE_FILE], subject_digests)
-    checker = image_checker_module()
+    checker = sibling_module("check-image-manifest.py")
     actual_image_digest = checker.validated_digest(
         files[f"perf-sentinel-hub-{version}.oci.tar"],
         frozenset((('linux', 'amd64'), ('linux', 'arm64'))),
@@ -464,6 +465,20 @@ def public_release_input(value: str):
     }
 
 
+def release_signer(tag: str, config: Path):
+    match = STABLE_TAG.fullmatch(tag)
+    if match is None:
+        raise ValueError("release signer input must be a stable tag")
+    configuration = sibling_module("check-release-tag.py").signing_config(config)
+    previous = configuration["previous_github"]
+    _, last_minor, last_patch = (int(part) for part in previous["last_version"].split("."))
+    era = previous if (int(match.group(1)), int(match.group(2))) <= (last_minor, last_patch) else configuration["github"]
+    return {
+        "repository": era["repository"],
+        "identity": era["workflow_identity_template"].format(version=tag[1:]),
+    }
+
+
 def latest_stable(content: bytes) -> str:
     pages = load_json_bytes(content, "GitHub releases response")
     if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
@@ -527,6 +542,9 @@ def parser():
     verify.add_argument("--manifest", type=Path, required=True)
     public_input = commands.add_parser("public-input")
     public_input.add_argument("value")
+    signer = commands.add_parser("signer")
+    signer.add_argument("tag")
+    signer.add_argument("--config", type=Path, default=SIGNING_IDENTITIES)
     commands.add_parser("latest-stable")
     published = commands.add_parser("verify-published")
     published.add_argument("--root", type=Path, required=True)
@@ -549,6 +567,9 @@ def main(argv=None):
             verify_manifest(arguments.root, arguments.manifest)
         elif arguments.command == "public-input":
             json.dump(public_release_input(arguments.value), sys.stdout, sort_keys=True)
+            sys.stdout.write("\n")
+        elif arguments.command == "signer":
+            json.dump(release_signer(arguments.tag, arguments.config), sys.stdout, sort_keys=True)
             sys.stdout.write("\n")
         elif arguments.command == "latest-stable":
             print(latest_stable(sys.stdin.buffer.read()))

@@ -48,11 +48,19 @@ the public key only.
 Cosign bundles and GitHub attestations must use all of these values exactly:
 
 - OIDC issuer: `https://token.actions.githubusercontent.com`
-- Repository: `robintra/PerfSentinelHub`
+- Repository: `Institut-du-Numerique-Responsable/PerfSentinelHub`
 - Workflow: `.github/workflows/release.yml`
 - Source ref: `refs/tags/v0.MINOR.PATCH`
 - Certificate identity:
-  `https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v0.MINOR.PATCH`
+  `https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v0.MINOR.PATCH`
+
+Releases up to and including v0.3.8 were built and signed before the repository moved to the
+`Institut-du-Numerique-Responsable` organization. They keep the repository
+`robintra/PerfSentinelHub` and the certificate identity
+`https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v0.MINOR.PATCH`,
+recorded under `previous_github` in `config/signing-identities.json`.
+`python3 scripts/verify-release.py signer v0.MINOR.PATCH` prints the repository and identity
+that apply to a tag.
 
 Any identity, repository, workflow, ref, source commit, subject, or digest mismatch blocks the
 release.
@@ -120,7 +128,7 @@ Accept either the stable tag or its exact public GitHub Release URL:
 
 ```text
 python3 scripts/verify-release.py public-input v0.3.8
-python3 scripts/verify-release.py public-input https://github.com/robintra/PerfSentinelHub/releases/tag/v0.3.8
+python3 scripts/verify-release.py public-input https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/tag/v0.3.8
 ```
 
 After downloading every public release asset into `release/`, validate its closed checksum and
@@ -131,7 +139,7 @@ python3 scripts/verify-release.py verify-published --root release
 ```
 
 For each subject named in `release-manifest.json`, verify both public trust systems using the exact
-identity above:
+identity above. v0.3.8 predates the transfer, so the example uses the previous identity:
 
 ```text
 cosign verify-blob --bundle release/ARTIFACT.sigstore.json \
