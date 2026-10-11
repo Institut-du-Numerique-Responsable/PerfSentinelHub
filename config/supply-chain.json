@@ -309,12 +309,12 @@
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.12."
     },
     {
-      "name": "ghcr.io/robintra/perf-sentinel",
+      "name": "ghcr.io/institut-du-numerique-responsable/perf-sentinel",
       "kind": "container",
       "version": "0.26.2",
       "digest_or_sha": "sha256:908c9b31d24a21e579b3723bcae17c046628d762b626f5d897c45530fbe9343c",
       "released_at": "2026-10-09",
-      "source": "https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.26.2",
+      "source": "https://ghcr.io/v2/institut-du-numerique-responsable/perf-sentinel/manifests/0.26.2",
       "reason": "The analysis engine the Hub runs. Copied from the published image so the build reaches no host outside the registry."
     },
     {

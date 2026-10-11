@@ -2,7 +2,7 @@
 
 What the published image weighs, how fast it answers after a cold start, and
 how much memory it holds at rest. Every figure below comes from the released
-`ghcr.io/robintra/perf-sentinel-hub:0.3.3` image, not from a local build, and
+`ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:0.3.3` image, not from a local build, and
 the commands to reproduce them close the page.
 
 The Hub is published with NativeAOT: C# 14 on .NET 10 compiled ahead of time
@@ -59,7 +59,7 @@ figures are arm64 only. The amd64 image was sized, not run.
 ## Reproduce
 
 ```bash
-IMG=ghcr.io/robintra/perf-sentinel-hub:0.3.3
+IMG=ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:0.3.3
 docker pull "$IMG"
 
 docker run -d --name hub -p 18080:8080 \

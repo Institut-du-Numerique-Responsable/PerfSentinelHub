@@ -166,8 +166,8 @@ registry manifests by their recorded digests:
 
 ```text
 gh release edit v0.3.8 --draft
-oras manifest delete ghcr.io/robintra/perf-sentinel-hub@sha256:IMAGE_DIGEST
-oras manifest delete ghcr.io/robintra/charts/perf-sentinel-hub@sha256:CHART_DIGEST
+oras manifest delete ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@sha256:IMAGE_DIGEST
+oras manifest delete ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel-hub@sha256:CHART_DIGEST
 ```
 
 These commands are destructive. Confirm the exact release and digests from the incident record

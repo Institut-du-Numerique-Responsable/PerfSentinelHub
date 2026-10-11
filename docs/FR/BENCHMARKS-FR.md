@@ -2,7 +2,7 @@
 
 Ce que pèse l'image publiée, en combien de temps elle répond après un
 démarrage à froid, et combien de mémoire elle occupe au repos. Chaque chiffre
-ci-dessous vient de l'image publiée `ghcr.io/robintra/perf-sentinel-hub:0.3.3`,
+ci-dessous vient de l'image publiée `ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:0.3.3`,
 pas d'un build local, et les commandes pour les reproduire terminent la page.
 
 Le Hub est publié en NativeAOT : du C# 14 sur .NET 10 compilé à l'avance en un
@@ -60,7 +60,7 @@ arm64 seulement. L'image amd64 a été pesée, pas exécutée.
 ## Reproduire
 
 ```bash
-IMG=ghcr.io/robintra/perf-sentinel-hub:0.3.3
+IMG=ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:0.3.3
 docker pull "$IMG"
 
 docker run -d --name hub -p 18080:8080 \

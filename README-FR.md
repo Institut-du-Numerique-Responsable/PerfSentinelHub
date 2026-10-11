@@ -57,7 +57,7 @@ et un digest d'image immuable :
 
 ```bash
 helm upgrade --install perf-sentinel-hub deploy/helm/perf-sentinel-hub \
-  --set image.repository=ghcr.io/robintra/perf-sentinel-hub \
+  --set image.repository=ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub \
   --set image.digest=sha256:IMAGE_DIGEST \
   --set 'sources[0].id=production' \
   --set 'sources[0].name=Production' \
@@ -82,9 +82,9 @@ indice de découverte, jamais une identité de déploiement :
 
 ```bash
 IMAGE_DIGEST="$(jq -r .image.digest release/release-manifest.json)"
-docker pull "ghcr.io/robintra/perf-sentinel-hub@$IMAGE_DIGEST"
+docker pull "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@$IMAGE_DIGEST"
 
-CHART=ghcr.io/robintra/charts/perf-sentinel-hub
+CHART=ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel-hub
 CHART_DIGEST="$(oras resolve "$CHART:0.3.8")"
 helm pull "oci://$CHART@$CHART_DIGEST"
 ```

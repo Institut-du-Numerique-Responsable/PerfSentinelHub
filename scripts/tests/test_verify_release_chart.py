@@ -23,7 +23,7 @@ def chart_archive(path: Path, chart_yaml: str) -> None:
         PREFIX + "Chart.yaml": chart_yaml,
         PREFIX + "values.yaml": (
             "image:\n"
-            "  repository: ghcr.io/robintra/perf-sentinel-hub\n"
+            "  repository: ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub\n"
             f"  digest: {DIGEST}\n"
         ),
         PREFIX + "templates/_helpers.tpl": verify.IMAGE_HELPER,

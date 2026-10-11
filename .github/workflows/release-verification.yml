@@ -301,7 +301,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.public-release.outputs.image_digest }}
         run: |
           set -euo pipefail
-          image="ghcr.io/robintra/perf-sentinel-hub@$IMAGE_DIGEST"
+          image="ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@$IMAGE_DIGEST"
           docker pull "$image"
           id="$(docker run -d --rm -p 127.0.0.1:5082:8080 -e Hub__DatabasePath=/tmp/hub.db -e Hub__Sources__0__Id=verify -e Hub__Sources__0__Name=Verify -e Hub__Sources__0__Environment=release -e Hub__Sources__0__BaseUrl=http://127.0.0.1:9 "$image")"
           trap 'docker stop "$id" >/dev/null 2>&1 || true' EXIT
@@ -344,7 +344,7 @@ jobs:
           IMAGE_DIGEST: ${{ needs.public-release.outputs.image_digest }}
         run: |
           set -euo pipefail
-          chart=ghcr.io/robintra/charts/perf-sentinel-hub
+          chart=ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel-hub
           chart_digest="$(oras resolve "$chart:$VERSION")"
           printf '%s' "$chart_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
           mkdir chart
@@ -355,7 +355,7 @@ jobs:
           test -f "$pulled"
           cmp "public-release/perf-sentinel-hub-$VERSION.tgz" "$pulled"
           helm template verify "$pulled" --set 'sources[0].id=verify' --set 'sources[0].name=Verify' --set 'sources[0].environment=release' --set 'sources[0].baseUrl=http://127.0.0.1:9' > rendered.yaml
-          test "$(grep -Fc "ghcr.io/robintra/perf-sentinel-hub@$IMAGE_DIGEST" rendered.yaml)" -eq 1
+          test "$(grep -Fc "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@$IMAGE_DIGEST" rendered.yaml)" -eq 1
 
   report:
     name: Maintain one sanitized scheduled alert
