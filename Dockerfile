@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401-resolute-aot@sha256:37ed819a2da28a5cb2de264b64a35ce68137f04207656464b48ce3a5b7f9e32c AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-resolute-aot@sha256:2fa5621bb22034ea82107f1e9811e86f38c140cceac3cfafcdd59cb4a6db329c AS build
 ARG TARGETARCH
 ARG VERSION=0.3.8
 ARG SOURCE_DATE_EPOCH
