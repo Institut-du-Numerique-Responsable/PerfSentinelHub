@@ -342,6 +342,7 @@ jobs:
         env:
           VERSION: ${{ needs.public-release.outputs.version }}
           IMAGE_DIGEST: ${{ needs.public-release.outputs.image_digest }}
+          SIGNING_REPOSITORY: ${{ needs.public-release.outputs.signing_repository }}
         run: |
           set -euo pipefail
           chart=ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel-hub
@@ -355,7 +356,9 @@ jobs:
           test -f "$pulled"
           cmp "public-release/perf-sentinel-hub-$VERSION.tgz" "$pulled"
           helm template verify "$pulled" --set 'sources[0].id=verify' --set 'sources[0].name=Verify' --set 'sources[0].environment=release' --set 'sources[0].baseUrl=http://127.0.0.1:9' > rendered.yaml
-          test "$(grep -Fc "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@$IMAGE_DIGEST" rendered.yaml)" -eq 1
+          # A chart released before the repository transfer still binds the original owner's image path.
+          owner="${SIGNING_REPOSITORY%%/*}"
+          test "$(grep -Fc "ghcr.io/${owner,,}/perf-sentinel-hub@$IMAGE_DIGEST" rendered.yaml)" -eq 1
 
   report:
     name: Maintain one sanitized scheduled alert
