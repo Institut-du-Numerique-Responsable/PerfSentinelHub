@@ -28,7 +28,7 @@ jobs:
       source_commit: ${{ steps.metadata.outputs.source_commit }}
       commit_time: ${{ steps.metadata.outputs.commit_time }}
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,7 +72,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,7 +94,7 @@ jobs:
           dotnet restore PerfSentinelHub/PerfSentinelHub.csproj --locked-mode
           dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r "$RID" --self-contained true -p:PublishAot=true -p:Version="$VERSION" --no-restore
           python3 scripts/package-native.py --rid "$RID" --version "$VERSION" --commit-time "$COMMIT_TIME" --input "PerfSentinelHub/bin/Release/net10.0/$RID/publish" --output dist
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-a-${{ matrix.rid }}
           path: dist
@@ -121,7 +121,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,7 +143,7 @@ jobs:
           dotnet restore PerfSentinelHub/PerfSentinelHub.csproj --locked-mode
           dotnet publish PerfSentinelHub/PerfSentinelHub.csproj -c Release -r "$RID" --self-contained true -p:PublishAot=true -p:Version="$VERSION" --no-restore
           python3 scripts/package-native.py --rid "$RID" --version "$VERSION" --commit-time "$COMMIT_TIME" --input "PerfSentinelHub/bin/Release/net10.0/$RID/publish" --output dist
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-b-${{ matrix.rid }}
           path: dist
@@ -174,7 +174,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -182,11 +182,11 @@ jobs:
           ref: ${{ needs.metadata.outputs.source_commit }}
           persist-credentials: false
           fetch-depth: 1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-a-${{ matrix.rid }}
           path: candidate-a
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-b-${{ matrix.rid }}
           path: candidate-b
@@ -339,7 +339,7 @@ jobs:
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           }
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-verified-${{ matrix.rid }}
           path: verified
@@ -382,10 +382,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-verified-${{ matrix.rid }}
           path: native
@@ -407,7 +407,7 @@ jobs:
           set -euo pipefail
           jq --arg name "$SUBJECT" '.name = $name' "sbom/$SUBJECT.spdx.json" > "sbom/$SUBJECT.spdx.json.tmp"
           mv "sbom/$SUBJECT.spdx.json.tmp" "sbom/$SUBJECT.spdx.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-sbom-${{ matrix.key }}
           path: sbom
@@ -424,7 +424,7 @@ jobs:
     outputs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -520,7 +520,7 @@ jobs:
           set -euo pipefail
           jq --arg name "$SUBJECT" '.name = $name' "release/$SUBJECT.spdx.json" > "release/$SUBJECT.spdx.json.tmp"
           mv "release/$SUBJECT.spdx.json.tmp" "release/$SUBJECT.spdx.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: oci-verified
           path: release
@@ -535,7 +535,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -591,7 +591,7 @@ jobs:
           set -euo pipefail
           jq --arg name "$SUBJECT" '.name = $name' "release/$SUBJECT.spdx.json" > "release/$SUBJECT.spdx.json.tmp"
           mv "release/$SUBJECT.spdx.json.tmp" "release/$SUBJECT.spdx.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: helm-verified
           path: release
@@ -606,24 +606,24 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: native-verified-*
           path: release
           merge-multiple: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: native-sbom-*
           path: release
           merge-multiple: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: oci-verified
           path: release
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: helm-verified
           path: release
@@ -648,13 +648,13 @@ jobs:
               raise SystemExit(f'unsigned release file set differs: missing={sorted(expected-actual)}, extra={sorted(actual-expected)}')
           Path('subjects.sha256').write_text(''.join(f'{__import__("hashlib").sha256((Path("release") / name).read_bytes()).hexdigest()}  {name}' + chr(10) for name in subjects), encoding='ascii')
           PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-unsigned
           path: release
           if-no-files-found: error
           retention-days: 2
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-subjects
           path: subjects.sha256
@@ -694,10 +694,10 @@ jobs:
       contents: read
       id-token: write # Mint the short-lived keyless Cosign certificate.
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-unsigned
           path: release
@@ -713,7 +713,7 @@ jobs:
           bundle="release/$SUBJECT.sigstore.json"
           cosign sign-blob --yes --bundle "$bundle" "release/$SUBJECT"
           cosign verify-blob --bundle "$bundle" --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release[.]yml@refs/tags/v${VERSION}$" --certificate-oidc-issuer https://token.actions.githubusercontent.com "release/$SUBJECT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signature-${{ matrix.key }}
           path: release/*.sigstore.json
@@ -730,14 +730,14 @@ jobs:
       id-token: write # Sign provenance with the exact tag workflow identity.
       attestations: write # Store the generated provenance in GitHub's attestation API.
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-unsigned
           path: release
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-subjects
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -757,7 +757,7 @@ jobs:
             gh attestation verify "release/$subject" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v${VERSION}" --cert-oidc-issuer https://token.actions.githubusercontent.com --source-ref "refs/tags/v${VERSION}" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
           done < subjects.sha256
           cp "$BUNDLE" release.provenance.sigstore.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: provenance
           path: release.provenance.sigstore.json
@@ -798,10 +798,10 @@ jobs:
       id-token: write # Sign the SPDX predicate with the exact tag workflow identity.
       attestations: write # Store the generated SBOM attestation in GitHub's attestation API.
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-unsigned
           path: release
@@ -823,7 +823,7 @@ jobs:
           set -euo pipefail
           gh attestation verify "release/$SUBJECT" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" --predicate-type https://spdx.dev/Document/v2.3 --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v${VERSION}" --cert-oidc-issuer https://token.actions.githubusercontent.com --source-ref "refs/tags/v${VERSION}" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
           cp "$BUNDLE" "release/$SUBJECT.sbom.sigstore.json"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-attestation-${{ matrix.key }}
           path: release/*.sbom.sigstore.json
@@ -841,7 +841,7 @@ jobs:
       artifact_id: ${{ steps.release-artifact.outputs.artifact-id }}
       artifact_digest: ${{ steps.release-artifact.outputs.artifact-digest }}
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -849,21 +849,21 @@ jobs:
           ref: ${{ needs.metadata.outputs.source_commit }}
           persist-credentials: false
           fetch-depth: 1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-unsigned
           path: release
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: signature-*
           path: release
           merge-multiple: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: sbom-attestation-*
           path: release
           merge-multiple: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: provenance
           path: release
@@ -884,7 +884,7 @@ jobs:
           files = sorted(path for path in Path('release').iterdir() if path.is_file())
           Path('release/SHA256SUMS').write_text(''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}' + chr(10) for path in files), encoding='ascii')
           PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         id: release-artifact
         with:
           name: release-verified
@@ -908,7 +908,7 @@ jobs:
       contents: write  # Publishes the release assets and the GitHub release.
       packages: write  # Pushes the release container image to the registry.
     steps:
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
       - name: Bind the immutable workflow artifact
@@ -924,7 +924,7 @@ jobs:
           printf '%s' "$EXPECTED_ARTIFACT_DIGEST" | grep -Eq '^(sha256:)?[0-9a-f]{64}$'
           expected="sha256:${EXPECTED_ARTIFACT_DIGEST#sha256:}"
           test "$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" --jq .digest)" = "$expected"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.manifest.outputs.artifact_id }}
           path: publish-bundle
