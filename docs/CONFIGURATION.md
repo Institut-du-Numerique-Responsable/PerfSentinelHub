@@ -11,32 +11,32 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 
 ## Settings
 
-| Setting                            | Default                                            | Validation                                                                                      |
-|------------------------------------|----------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| `Hub:DatabasePath`                 | `/data/hub.db`                                     | Absolute path                                                                                   |
-| `Hub:PollInterval`                 | `01:00:00`                                         | Positive duration                                                                               |
-| `Hub:HttpTimeout`                  | `00:00:10`                                         | Positive duration                                                                               |
-| `Hub:MaxConcurrentPolls`           | `4`                                                | 1 to 32                                                                                         |
-| `Hub:Retention`                    | `180.00:00:00` (180 days)                          | Positive duration                                                                               |
-| `Hub:ResolutionGrace`              | `7.00:00:00` (7 days)                              | Positive, below `Retention`                                                                     |
-| `Hub:DefaultReadLimit`             | `1000`                                             | 1 to `MaxReadLimit`                                                                             |
-| `Hub:MaxReadLimit`                 | `10000`                                            | 1 to 10000                                                                                      |
-| `Hub:Analysis:EngineBinaryPath`    | none                                               | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
-| `Hub:Analysis:ReportDirectory`     | `/data/reports`                                    | Absolute, writable. Rendered reports live here                                                  |
-| `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                 | Header a reverse proxy sets with the requester's identity. Ignored for a `Hub:Auth` session     |
-| `Hub:Analysis:Workers`             | `2`                                                | 1 to 16                                                                                         |
-| `Hub:Analysis:MaxTracesCap`        | `2000`                                             | 1 to 10000, the engine's own limit on `--max-traces`                                            |
-| `Hub:Analysis:MaxTracesEmbedded`   | `50`                                               | 0 to 10000. Span trees embedded in the report. Setting it opts the sink out of size targeting   |
-| `Hub:Analysis:Timeout`             | `00:05:00`                                         | Positive, at most one hour                                                                      |
-| `Hub:Analysis:ReportRetention`     | `1.00:00:00` (24 hours)                            | Positive duration                                                                               |
-| `Hub:Analysis:RunRetention`        | `30.00:00:00` (30 days)                            | Positive, longer than `ReportRetention`. When a finished run's row is deleted                   |
-| `Hub:UpdateCheck:Enabled`          | `true`                                             | Whether the Hub asks GitHub for the newest published release                                    |
-| `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 day)                               | At least 15 minutes                                                                             |
-| `Hub:UpdateCheck:EngineEndpoint`   | GitHub releases API for `robintra/perf-sentinel`   | Absolute HTTPS, no credentials, query, or fragment                                              |
-| `Hub:UpdateCheck:HubEndpoint`      | GitHub releases API for `robintra/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                              |
-| `Hub:Auth:*`                       | off                                                | Browser sign-in against an OAuth2 provider, see [AUTHENTICATION.md](AUTHENTICATION.md)          |
-| `Hub:AckRelay:TrustIdentityHeader` | `false`                                            | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
-| `Hub:Sources`                      | none                                               | At least one source                                                                             |
+| Setting                            | Default                                                                     | Validation                                                                                      |
+|------------------------------------|-----------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| `Hub:DatabasePath`                 | `/data/hub.db`                                                              | Absolute path                                                                                   |
+| `Hub:PollInterval`                 | `01:00:00`                                                                  | Positive duration                                                                               |
+| `Hub:HttpTimeout`                  | `00:00:10`                                                                  | Positive duration                                                                               |
+| `Hub:MaxConcurrentPolls`           | `4`                                                                         | 1 to 32                                                                                         |
+| `Hub:Retention`                    | `180.00:00:00` (180 days)                                                   | Positive duration                                                                               |
+| `Hub:ResolutionGrace`              | `7.00:00:00` (7 days)                                                       | Positive, below `Retention`                                                                     |
+| `Hub:DefaultReadLimit`             | `1000`                                                                      | 1 to `MaxReadLimit`                                                                             |
+| `Hub:MaxReadLimit`                 | `10000`                                                                     | 1 to 10000                                                                                      |
+| `Hub:Analysis:EngineBinaryPath`    | none                                                                        | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
+| `Hub:Analysis:ReportDirectory`     | `/data/reports`                                                             | Absolute, writable. Rendered reports live here                                                  |
+| `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                                          | Header a reverse proxy sets with the requester's identity. Ignored for a `Hub:Auth` session     |
+| `Hub:Analysis:Workers`             | `2`                                                                         | 1 to 16                                                                                         |
+| `Hub:Analysis:MaxTracesCap`        | `2000`                                                                      | 1 to 10000, the engine's own limit on `--max-traces`                                            |
+| `Hub:Analysis:MaxTracesEmbedded`   | `50`                                                                        | 0 to 10000. Span trees embedded in the report. Setting it opts the sink out of size targeting   |
+| `Hub:Analysis:Timeout`             | `00:05:00`                                                                  | Positive, at most one hour                                                                      |
+| `Hub:Analysis:ReportRetention`     | `1.00:00:00` (24 hours)                                                     | Positive duration                                                                               |
+| `Hub:Analysis:RunRetention`        | `30.00:00:00` (30 days)                                                     | Positive, longer than `ReportRetention`. When a finished run's row is deleted                   |
+| `Hub:UpdateCheck:Enabled`          | `true`                                                                      | Whether the Hub asks GitHub for the newest published release                                    |
+| `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 day)                                                        | At least 15 minutes                                                                             |
+| `Hub:UpdateCheck:EngineEndpoint`   | GitHub releases API for `Institut-du-Numerique-Responsable/perf-sentinel`   | Absolute HTTPS, no credentials, query, or fragment                                              |
+| `Hub:UpdateCheck:HubEndpoint`      | GitHub releases API for `Institut-du-Numerique-Responsable/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                              |
+| `Hub:Auth:*`                       | off                                                                         | Browser sign-in against an OAuth2 provider, see [AUTHENTICATION.md](AUTHENTICATION.md)          |
+| `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                     | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
+| `Hub:Sources`                      | none                                                                        | At least one source                                                                             |
 
 ## Per-source settings
 

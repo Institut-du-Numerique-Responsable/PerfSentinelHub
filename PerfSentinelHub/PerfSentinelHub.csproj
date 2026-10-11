@@ -13,7 +13,7 @@
         <RuntimeIdentifiers>linux-x64;linux-arm64;osx-arm64;win-x64</RuntimeIdentifiers>
         <Copyright>Copyright (C) 2026 Robin Trassard</Copyright>
         <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
-        <RepositoryUrl>https://github.com/robintra/PerfSentinelHub</RepositoryUrl>
+        <RepositoryUrl>https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub</RepositoryUrl>
         <!-- The LoggerMessage generator emits its class blocks in a different order on
              every run, which moves the PDB, which moves the deterministic content hash
              whose MVID the native image embeds. No PDB, no drift. Gated on a RID so the

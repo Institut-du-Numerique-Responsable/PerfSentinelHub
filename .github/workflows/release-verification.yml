@@ -44,7 +44,7 @@ jobs:
             echo "published=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          total="$(gh api 'repos/robintra/PerfSentinelHub/releases?per_page=1' --jq 'length')"
+          total="$(gh api 'repos/Institut-du-Numerique-Responsable/PerfSentinelHub/releases?per_page=1' --jq 'length')"
           if [ "$total" -gt 0 ]; then
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
@@ -61,6 +61,8 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.selection.outputs.tag }}
+      signing_repository: ${{ steps.selection.outputs.signing_repository }}
+      signing_identity: ${{ steps.selection.outputs.signing_identity }}
       version: ${{ steps.authentication.outputs.version }}
       source_commit: ${{ steps.authentication.outputs.source_commit }}
       image_digest: ${{ steps.authentication.outputs.image_digest }}
@@ -76,6 +78,8 @@ jobs:
           sparse-checkout: |
             scripts/verify-release.py
             scripts/check-image-manifest.py
+            scripts/check-release-tag.py
+            config/signing-identities.json
           sparse-checkout-cone-mode: false
       - name: Download every page of public release metadata
         env:
@@ -84,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$REQUESTED_RELEASE" ]; then
-            gh api --paginate --slurp 'repos/robintra/PerfSentinelHub/releases?per_page=100' > "$RUNNER_TEMP/releases.json"
+            gh api --paginate --slurp 'repos/Institut-du-Numerique-Responsable/PerfSentinelHub/releases?per_page=100' > "$RUNNER_TEMP/releases.json"
           else
             printf '[]' > "$RUNNER_TEMP/releases.json"
           fi
@@ -100,7 +104,13 @@ jobs:
             tag="$(python3 scripts/verify-release.py latest-stable < "$RUNNER_TEMP/releases.json")"
           fi
           printf '%s' "$tag" | grep -Eq '^v0[.][0-9]+[.][0-9]+$'
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # Releases signed before the repository transfer keep their original identity.
+          signer="$(python3 scripts/verify-release.py signer "$tag")"
+          {
+            echo "tag=$tag"
+            echo "signing_repository=$(printf '%s' "$signer" | jq -r .repository)"
+            echo "signing_identity=$(printf '%s' "$signer" | jq -r .identity)"
+          } >> "$GITHUB_OUTPUT"
       - name: Download the closed public release without executing its contents
         env:
           GH_TOKEN: ${{ github.token }}
@@ -108,10 +118,10 @@ jobs:
         run: |
           set -euo pipefail
           tag="$TAG"
-          state="$(gh release view "$tag" --repo robintra/PerfSentinelHub --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')"
+          state="$(gh release view "$tag" --repo Institut-du-Numerique-Responsable/PerfSentinelHub --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')"
           test "$state" = "false	false	$tag"
           mkdir public-release
-          gh release download "$tag" --repo robintra/PerfSentinelHub --dir public-release
+          gh release download "$tag" --repo Institut-du-Numerique-Responsable/PerfSentinelHub --dir public-release
       - id: authentication
         name: Authenticate downloaded public assets and SHA256SUMS
         env:
@@ -158,9 +168,12 @@ jobs:
         env:
           TAG: ${{ needs.public-release.outputs.tag }}
           SOURCE_COMMIT: ${{ needs.public-release.outputs.source_commit }}
+          SIGNING_REPOSITORY: ${{ needs.public-release.outputs.signing_repository }}
+          SIGNING_IDENTITY: ${{ needs.public-release.outputs.signing_identity }}
         run: |
           set -euo pipefail
-          identity="https://github.com/robintra/PerfSentinelHub/.github/workflows/release.yml@refs/tags/$TAG"
+          identity="$SIGNING_IDENTITY"
+          test "$identity" = "https://github.com/$SIGNING_REPOSITORY/.github/workflows/release.yml@refs/tags/$TAG"
           issuer=https://token.actions.githubusercontent.com
           python3 - <<'PY' > subjects
           import json
@@ -169,8 +182,8 @@ jobs:
           PY
           while read -r subject; do
             cosign verify-blob --bundle "public-release/$subject.sigstore.json" --certificate-identity "$identity" --certificate-oidc-issuer "$issuer" "public-release/$subject"
-            gh attestation verify "public-release/$subject" --bundle public-release/release.provenance.sigstore.json --repo robintra/PerfSentinelHub --cert-identity "$identity" --cert-oidc-issuer "$issuer" --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
-            gh attestation verify "public-release/$subject" --bundle "public-release/$subject.sbom.sigstore.json" --repo robintra/PerfSentinelHub --predicate-type https://spdx.dev/Document/v2.3 --cert-identity "$identity" --cert-oidc-issuer "$issuer" --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
+            gh attestation verify "public-release/$subject" --bundle public-release/release.provenance.sigstore.json --repo "$SIGNING_REPOSITORY" --cert-identity "$identity" --cert-oidc-issuer "$issuer" --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
+            gh attestation verify "public-release/$subject" --bundle "public-release/$subject.sbom.sigstore.json" --repo "$SIGNING_REPOSITORY" --predicate-type https://spdx.dev/Document/v2.3 --cert-identity "$identity" --cert-oidc-issuer "$issuer" --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_COMMIT" --deny-self-hosted-runners >/dev/null
           done < subjects
 
   native:

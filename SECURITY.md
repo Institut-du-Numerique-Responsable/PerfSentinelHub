@@ -6,7 +6,7 @@ PerfSentinelHub is in the `0.x` development series. Only the latest published re
 
 ## Report a vulnerability privately
 
-Use [GitHub private vulnerability reporting](https://github.com/robintra/PerfSentinelHub/security/advisories/new). Do not open a public issue, pull request, discussion, or commit containing vulnerability details. Do not include production credentials or private finding data in any report.
+Use [GitHub private vulnerability reporting](https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/security/advisories/new). Do not open a public issue, pull request, discussion, or commit containing vulnerability details. Do not include production credentials or private finding data in any report.
 
 Include the affected version or commit, impact, prerequisites, minimal reproduction, and any proposed remediation. Sanitize logs and test data. You may use a harmless proof of concept, but do not access data you do not own, disrupt services, or test third-party installations without permission.
 

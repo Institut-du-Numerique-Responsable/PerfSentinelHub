@@ -22,8 +22,8 @@ of them. The source is not part of the link, since a daemon takes no window: und
 daemon the banner says so and asks for a trace backend.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
-  <img alt="The fleet health screen with a daemon row unfolded" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
+  <img alt="The fleet health screen with a daemon row unfolded" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
 </picture>
 
 ## Gauges
@@ -98,8 +98,8 @@ download. The name is undotted because the engine only discovers the dotted
 rather than relying on that discovery.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report-dark.png">
-  <img alt="A rendered report opened inside the launcher" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-report-dark.png">
+  <img alt="A rendered report opened inside the launcher" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-report.png">
 </picture>
 
 ## Live reports
@@ -151,8 +151,8 @@ demand and goes dead while one is in flight. Neither can storm the fleet, since 
 read in the last ten seconds is skipped and its stored copy served instead.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents-dark.png">
-  <img alt="The incidents screen with a row unfolded on its frozen findings" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incidents-dark.png">
+  <img alt="The incidents screen with a row unfolded on its frozen findings" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incidents.png">
 </picture>
 
 A row unfolds into the findings the daemon froze for that incident, each placed before
@@ -176,8 +176,8 @@ itself carries none. Each finding of the unfolded row ends with an Ack link, whi
 [The ack page](#the-ack-page) on that finding with the incident's daemon checked.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
-  <img alt="New analysis opened on an incident's window, under the banner naming it" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
+  <img alt="New analysis opened on an incident's window, under the banner naming it" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
 </picture>
 
 ## The ack page
@@ -209,8 +209,8 @@ carries the finding. The expiry is a day, sent as the last second of that day in
 an empty one is a permanent ack.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
-  <img alt="The ack page on a finding four daemons carry, one row per case" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
+  <img alt="The ack page on a finding four daemons carry, one row per case" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-ack.png">
 </picture>
 
 An ack hides a finding, so the link's context decides which rows start checked, among the
@@ -265,7 +265,7 @@ still mirrored and shown on the row, with `source` reading `toml` in `acks` on
 
 Do not set `[daemon.ack] enabled = false` on that daemon to close runtime acks, because the
 daemon then stops loading the TOML baseline too, see the engine's
-[ACK-WORKFLOW.md](https://github.com/robintra/perf-sentinel/blob/main/docs/ACK-WORKFLOW.md).
+[ACK-WORKFLOW.md](https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/blob/main/docs/ACK-WORKFLOW.md).
 
 ## Safety
 

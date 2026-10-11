@@ -141,7 +141,7 @@ class BadgeTests(unittest.TestCase):
         image, destination = BADGES["CodeQL"]
         readme = complete_readme().replace(
             badge("CodeQL", image, destination),
-            badge("CodeQL", image, "https://github.com/robintra/PerfSentinelHub"),
+            badge("CodeQL", image, "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub"),
         )
 
         result = run_checker(readme)
@@ -194,7 +194,7 @@ class BadgeTests(unittest.TestCase):
             badge(
                 "Build",
                 "https://img.shields.io/badge/build-pretty-green",
-                "https://github.com/robintra/PerfSentinelHub",
+                "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub",
             ) + "\n"
         )
 

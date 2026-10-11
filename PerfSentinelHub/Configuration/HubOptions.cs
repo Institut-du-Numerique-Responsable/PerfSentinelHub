@@ -89,10 +89,10 @@ public sealed record UpdateCheckOptions
     public TimeSpan Interval { get; set; } = TimeSpan.FromDays(1);
 
     public Uri EngineEndpoint { get; set; } =
-        new("https://api.github.com/repos/robintra/perf-sentinel/releases/latest");
+        new("https://api.github.com/repos/Institut-du-Numerique-Responsable/perf-sentinel/releases/latest");
 
     public Uri HubEndpoint { get; set; } =
-        new("https://api.github.com/repos/robintra/PerfSentinelHub/releases/latest");
+        new("https://api.github.com/repos/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/latest");
 }
 
 /// <summary>

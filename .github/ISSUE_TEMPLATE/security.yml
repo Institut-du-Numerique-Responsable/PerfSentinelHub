@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not describe a vulnerability in this public form. Submit the report through [GitHub private vulnerability reporting](https://github.com/robintra/PerfSentinelHub/security/advisories/new) and follow SECURITY.md. If the private form is unavailable, this public issue may contain only a request for reporting instructions.
+        Do not describe a vulnerability in this public form. Submit the report through [GitHub private vulnerability reporting](https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/security/advisories/new) and follow SECURITY.md. If the private form is unavailable, this public issue may contain only a request for reporting instructions.
   - type: checkboxes
     id: acknowledgement
     attributes:

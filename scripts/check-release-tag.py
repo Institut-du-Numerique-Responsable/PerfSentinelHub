@@ -19,8 +19,11 @@ ALLOWED_SIGNERS_KEY = "gpg.ssh.allowedSignersFile"
 TAG = re.compile(r"^v0[.][0-9]+[.][0-9]+$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 PRINCIPAL = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$")
-REPOSITORY = "robintra/PerfSentinelHub"
-CONFIG_FIELDS = {"schema_version", "release_tag", "github"}
+REPOSITORY = "Institut-du-Numerique-Responsable/PerfSentinelHub"
+# Releases up to 0.3.8 were built and signed in the repository before its transfer.
+PREVIOUS_REPOSITORY = "robintra/PerfSentinelHub"
+PREVIOUS_LAST_VERSION = "0.3.8"
+CONFIG_FIELDS = {"schema_version", "release_tag", "github", "previous_github"}
 TAG_IDENTITY_FIELDS = {"principal", "key_type", "public_key", "fingerprint"}
 GITHUB_FIELDS = {
     "oidc_issuer",
@@ -107,7 +110,17 @@ def validate_github_identity(github: dict) -> None:
         raise ValueError("runtime GitHub repository differs from the approved repository")
 
 
-def signing_identity(path: Path) -> dict[str, str]:
+def validate_previous_github_identity(previous: object) -> None:
+    expected_previous = {
+        "repository": PREVIOUS_REPOSITORY,
+        "last_version": PREVIOUS_LAST_VERSION,
+        "workflow_identity_template": f"https://github.com/{PREVIOUS_REPOSITORY}/.github/workflows/release.yml@refs/tags/v{{version}}",
+    }
+    if previous != expected_previous:
+        raise ValueError("previous GitHub repository or workflow identity differs from the release contract")
+
+
+def signing_config(path: Path) -> dict:
     payload = load_json(path)
     if (
         not isinstance(payload, dict)
@@ -125,7 +138,12 @@ def signing_identity(path: Path) -> dict[str, str]:
 
     validate_tag_key(release_tag)
     validate_github_identity(github)
-    return release_tag
+    validate_previous_github_identity(payload.get("previous_github"))
+    return payload
+
+
+def signing_identity(path: Path) -> dict[str, str]:
+    return signing_config(path)["release_tag"]
 
 
 def tag_principal(tag: str) -> str:
@@ -152,8 +170,9 @@ def verify_signature(tag: str, identity: dict[str, str]) -> bool:
     old_signers = previous_signers.stdout.strip() if previous_signers.returncode == 0 else None
     with tempfile.TemporaryDirectory(prefix="perf-sentinel-release-signers-") as directory:
         allowed_signers = Path(directory) / "allowed_signers"
-        allowed_signers.write_text(f'{identity["principal"]} {identity["public_key"]}\n', encoding="ascii")
-        allowed_signers.chmod(0o600)
+        descriptor = os.open(allowed_signers, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+            handle.write(f'{identity["principal"]} {identity["public_key"]}\n')
         try:
             if git("config", "--local", GPG_FORMAT_KEY, "ssh").returncode != 0 or git(
                 "config", "--local", ALLOWED_SIGNERS_KEY, str(allowed_signers)

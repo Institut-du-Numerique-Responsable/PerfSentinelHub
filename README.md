@@ -1,27 +1,27 @@
 <p align="center">
-    <a href="https://dotnet.microsoft.com/"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Frobintra%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version&label=.NET&color=512BD4&logo=dotnet&logoColor=white" alt=".NET" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg" alt="Security Audit" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
+    <a href="https://dotnet.microsoft.com/"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FInstitut-du-Numerique-Responsable%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version&label=.NET&color=512BD4&logo=dotnet&logoColor=white" alt=".NET" /></a>
+    <a href="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/ci.yml"><img src="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/security-audit.yml"><img src="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/security-audit.yml/badge.svg" alt="Security Audit" /></a>
+    <a href="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/codeql.yml"><img src="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
     <a href="https://sonarcloud.io/summary/overall?id=robintrassard_PerfSentinelHub"><img src="https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=coverage" alt="Coverage" /></a>
     <a href="https://sonarcloud.io/summary/overall?id=robintrassard_PerfSentinelHub"><img src="https://sonarcloud.io/api/project_badges/measure?project=robintrassard_PerfSentinelHub&metric=alert_status" alt="Quality Gate" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml"><img src="https://github.com/robintra/PerfSentinelHub/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/releases/latest"><img src="https://img.shields.io/github/v/release/robintra/PerfSentinelHub?display_name=tag&sort=semver&color=512BD4" alt="Latest release" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/pkgs/container/perf-sentinel-hub"><img src="https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED?logo=docker&logoColor=white" alt="Container image" /></a>
-    <a href="https://github.com/robintra/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub"><img src="https://img.shields.io/badge/chart-perf--sentinel--hub-0F1689?logo=helm&logoColor=white" alt="Helm chart" /></a>
+    <a href="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/release.yml"><img src="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
+    <a href="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/latest"><img src="https://img.shields.io/github/v/release/Institut-du-Numerique-Responsable/PerfSentinelHub?display_name=tag&sort=semver&color=512BD4" alt="Latest release" /></a>
+    <a href="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/pkgs/container/perf-sentinel-hub"><img src="https://img.shields.io/badge/ghcr.io-perf--sentinel--hub-2496ED?logo=docker&logoColor=white" alt="Container image" /></a>
+    <a href="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/pkgs/container/charts%2Fperf-sentinel-hub"><img src="https://img.shields.io/badge/chart-perf--sentinel--hub-0F1689?logo=helm&logoColor=white" alt="Helm chart" /></a>
 </p>
 
 # PerfSentinelHub
 
 **One durable endpoint for the findings your
-[Perf Sentinel](https://github.com/robintra/perf-sentinel) daemons produce, and a browser
+[Perf Sentinel](https://github.com/Institut-du-Numerique-Responsable/perf-sentinel) daemons produce, and a browser
 interface that launches an analysis without a terminal.** A NativeAOT service backed by
 SQLite. Daemons push their findings, and the Hub polls them as a fallback. History is kept
 180 days by default.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/hub-integration_dark.svg">
-  <img alt="How the Hub, the fleet, the browser and the engine fit together" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/hub-integration.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/hub-integration_dark.svg">
+  <img alt="How the Hub, the fleet, the browser and the engine fit together" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/hub-integration.svg">
 </picture>
 
 ## Run locally in five minutes
@@ -46,8 +46,8 @@ The first poll starts immediately. The launcher is at `http://localhost:5080/`, 
 SQLite file survives restarts at the configured path.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-new-dark.png">
-  <img alt="Starting an analysis against a trace backend" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-new.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-new-dark.png">
+  <img alt="Starting an analysis against a trace backend" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-new.png">
 </picture>
 
 ## Install with Helm

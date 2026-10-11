@@ -183,11 +183,11 @@ test("what the next re-read of a row should cost", () => {
 
 test("the download link points at the engine version the Hub runs", () => {
     assert.equal(PSL.releaseUrl("0.16.0"),
-        "https://github.com/robintra/perf-sentinel/releases/tag/v0.16.0");
+        "https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/releases/tag/v0.16.0");
     assert.equal(PSL.releaseUrl("0.17.0-rc.1"),
-        "https://github.com/robintra/perf-sentinel/releases/tag/v0.17.0-rc.1");
+        "https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/releases/tag/v0.17.0-rc.1");
     // No version to pin, so the release list rather than a made-up tag.
-    const list = "https://github.com/robintra/perf-sentinel/releases";
+    const list = "https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/releases";
     assert.equal(PSL.releaseUrl(null), list);
     assert.equal(PSL.releaseUrl(""), list);
     assert.equal(PSL.releaseUrl("unknown"), list);
@@ -336,7 +336,7 @@ test("updateState only speaks when both versions are known and one is older", ()
 });
 
 test("hubReleaseUrl lands on the list, which exists before any release does", () => {
-    assert.equal(PSL.hubReleaseUrl(), "https://github.com/robintra/PerfSentinelHub/releases");
+    assert.equal(PSL.hubReleaseUrl(), "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases");
 });
 
 test("knownShell answers null for anything that is not a shell id", () => {

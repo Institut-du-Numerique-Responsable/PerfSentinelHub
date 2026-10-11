@@ -8,8 +8,8 @@ le `.mmd` et réexporter les deux thèmes, jamais retoucher le SVG à la main.
 ## L'ensemble d'un seul coup d'œil
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/hub-integration_dark.svg">
-  <img alt="Comment le Hub, la flotte, le navigateur et le moteur s'articulent" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/hub-integration.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/hub-integration_dark.svg">
+  <img alt="Comment le Hub, la flotte, le navigateur et le moteur s'articulent" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/hub-integration.svg">
 </picture>
 
 Un seul Hub sert deux publics qui ne se recouvrent jamais. Le navigateur reçoit le
@@ -27,8 +27,8 @@ réside dans le Hub.
 ## Push et poll, et lequel des deux possède la joignabilité
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll_dark.svg">
-  <img alt="Le chemin de push, le chemin de poll, et le fait qu'un seul possède" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll_dark.svg">
+  <img alt="Le chemin de push, le chemin de poll, et le fait qu'un seul possède" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll.svg">
 </picture>
 
 Les deux chemins écrivent des findings. Un seul écrit la joignabilité.
@@ -68,8 +68,8 @@ là où se trouve la baseline, peut manquer.
 ## Ce que fait réellement une analyse lancée
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/analysis-run_dark.svg">
-  <img alt="Un run, de la soumission au rapport embarqué" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/analysis-run.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/analysis-run_dark.svg">
+  <img alt="Un run, de la soumission au rapport embarqué" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/analysis-run.svg">
 </picture>
 
 Deux choses de cette séquence se manquent facilement.
@@ -88,8 +88,8 @@ déjà exactement ce JSON.
 ## Trois horloges de rétention
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks_dark.svg">
-  <img alt="Findings, fenêtre de statut et rapports rendus expirent chacun sur son horloge" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks_dark.svg">
+  <img alt="Findings, fenêtre de statut et rapports rendus expirent chacun sur son horloge" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks.svg">
 </picture>
 
 Aucune des trois ne se déduit des autres, et elles sont appliquées par trois mécanismes
@@ -128,8 +128,8 @@ la même chose que résolu. Seule la rétention retire une ligne.
 ## Un run atteint toujours un état terminal
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/run-states_dark.svg">
-  <img alt="Les états que traverse un run et qui déplace chaque arête" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/run-states.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/run-states_dark.svg">
+  <img alt="Les états que traverse un run et qui déplace chaque arête" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/run-states.svg">
 </picture>
 
 Quoi qu'il arrive, une ligne ne reste pas en `running`. Un process qui meurt en cours de

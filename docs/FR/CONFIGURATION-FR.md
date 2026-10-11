@@ -12,32 +12,32 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 
 ## Réglages
 
-| Réglage                            | Défaut                                                | Validation                                                                                              |
-|------------------------------------|-------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
-| `Hub:DatabasePath`                 | `/data/hub.db`                                        | Chemin absolu                                                                                           |
-| `Hub:PollInterval`                 | `01:00:00`                                            | Durée positive                                                                                          |
-| `Hub:HttpTimeout`                  | `00:00:10`                                            | Durée positive                                                                                          |
-| `Hub:MaxConcurrentPolls`           | `4`                                                   | 1 à 32                                                                                                  |
-| `Hub:Retention`                    | `180.00:00:00` (180 jours)                            | Durée positive                                                                                          |
-| `Hub:ResolutionGrace`              | `7.00:00:00` (7 jours)                                | Positive, inférieure à `Retention`                                                                      |
-| `Hub:DefaultReadLimit`             | `1000`                                                | 1 à `MaxReadLimit`                                                                                      |
-| `Hub:MaxReadLimit`                 | `10000`                                               | 1 à 10000                                                                                               |
-| `Hub:Analysis:EngineBinaryPath`    | aucun                                                 | Optionnel, chemin absolu vers le binaire perf-sentinel. Absent, les runs d'analyse sont indisponibles   |
-| `Hub:Analysis:ReportDirectory`     | `/data/reports`                                       | Absolu, accessible en écriture. Les rapports rendus vivent ici                                          |
-| `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                    | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur, ignoré sous `Hub:Auth`              |
-| `Hub:Analysis:Workers`             | `2`                                                   | 1 à 16                                                                                                  |
-| `Hub:Analysis:MaxTracesCap`        | `2000`                                                | 1 à 10000, la limite propre du moteur sur `--max-traces`                                                |
-| `Hub:Analysis:MaxTracesEmbedded`   | `50`                                                  | 0 à 10000. Arbres de spans embarqués dans le rapport. Le poser fait sortir le sink du ciblage de taille |
-| `Hub:Analysis:Timeout`             | `00:05:00`                                            | Positive, une heure au plus                                                                             |
-| `Hub:Analysis:ReportRetention`     | `1.00:00:00` (24 heures)                              | Durée positive                                                                                          |
-| `Hub:Analysis:RunRetention`        | `30.00:00:00` (30 jours)                              | Positive, plus longue que `ReportRetention`. Quand la ligne d'un run terminé est supprimée              |
-| `Hub:UpdateCheck:Enabled`          | `true`                                                | Si le Hub demande à GitHub la release publiée la plus récente                                           |
-| `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 jour)                                 | Au moins 15 minutes                                                                                     |
-| `Hub:UpdateCheck:EngineEndpoint`   | API des releases GitHub de `robintra/perf-sentinel`   | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
-| `Hub:UpdateCheck:HubEndpoint`      | API des releases GitHub de `robintra/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
-| `Hub:Auth:*`                       | désactivé                                             | Connexion du navigateur via OAuth2, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md)                   |
-| `Hub:AckRelay:TrustIdentityHeader` | `false`                                               | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
-| `Hub:Sources`                      | aucune                                                | Au moins une source                                                                                     |
+| Réglage                            | Défaut                                                                         | Validation                                                                                              |
+|------------------------------------|--------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
+| `Hub:DatabasePath`                 | `/data/hub.db`                                                                 | Chemin absolu                                                                                           |
+| `Hub:PollInterval`                 | `01:00:00`                                                                     | Durée positive                                                                                          |
+| `Hub:HttpTimeout`                  | `00:00:10`                                                                     | Durée positive                                                                                          |
+| `Hub:MaxConcurrentPolls`           | `4`                                                                            | 1 à 32                                                                                                  |
+| `Hub:Retention`                    | `180.00:00:00` (180 jours)                                                     | Durée positive                                                                                          |
+| `Hub:ResolutionGrace`              | `7.00:00:00` (7 jours)                                                         | Positive, inférieure à `Retention`                                                                      |
+| `Hub:DefaultReadLimit`             | `1000`                                                                         | 1 à `MaxReadLimit`                                                                                      |
+| `Hub:MaxReadLimit`                 | `10000`                                                                        | 1 à 10000                                                                                               |
+| `Hub:Analysis:EngineBinaryPath`    | aucun                                                                          | Optionnel, chemin absolu vers le binaire perf-sentinel. Absent, les runs d'analyse sont indisponibles   |
+| `Hub:Analysis:ReportDirectory`     | `/data/reports`                                                                | Absolu, accessible en écriture. Les rapports rendus vivent ici                                          |
+| `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                                             | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur, ignoré sous `Hub:Auth`              |
+| `Hub:Analysis:Workers`             | `2`                                                                            | 1 à 16                                                                                                  |
+| `Hub:Analysis:MaxTracesCap`        | `2000`                                                                         | 1 à 10000, la limite propre du moteur sur `--max-traces`                                                |
+| `Hub:Analysis:MaxTracesEmbedded`   | `50`                                                                           | 0 à 10000. Arbres de spans embarqués dans le rapport. Le poser fait sortir le sink du ciblage de taille |
+| `Hub:Analysis:Timeout`             | `00:05:00`                                                                     | Positive, une heure au plus                                                                             |
+| `Hub:Analysis:ReportRetention`     | `1.00:00:00` (24 heures)                                                       | Durée positive                                                                                          |
+| `Hub:Analysis:RunRetention`        | `30.00:00:00` (30 jours)                                                       | Positive, plus longue que `ReportRetention`. Quand la ligne d'un run terminé est supprimée              |
+| `Hub:UpdateCheck:Enabled`          | `true`                                                                         | Si le Hub demande à GitHub la release publiée la plus récente                                           |
+| `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 jour)                                                          | Au moins 15 minutes                                                                                     |
+| `Hub:UpdateCheck:EngineEndpoint`   | API des releases GitHub de `Institut-du-Numerique-Responsable/perf-sentinel`   | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
+| `Hub:UpdateCheck:HubEndpoint`      | API des releases GitHub de `Institut-du-Numerique-Responsable/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
+| `Hub:Auth:*`                       | désactivé                                                                      | Connexion du navigateur via OAuth2, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md)                   |
+| `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                        | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
+| `Hub:Sources`                      | aucune                                                                         | Au moins une source                                                                                     |
 
 ## Réglages par source
 
