@@ -18,7 +18,7 @@ FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-resolute-chiseled-extra@sha25
 ARG SOURCE_COMMIT=unknown
 LABEL org.opencontainers.image.version="0.3.8" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \
-      org.opencontainers.image.source="https://github.com/robintra/PerfSentinelHub"
+      org.opencontainers.image.source="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub"
 WORKDIR /app
 # Root owns what it runs, so the service account cannot rewrite its own binary.
 COPY --from=build /out/PerfSentinelHub /app/PerfSentinelHub

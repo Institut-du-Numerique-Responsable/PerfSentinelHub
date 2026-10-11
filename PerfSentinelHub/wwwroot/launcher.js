@@ -704,8 +704,8 @@
         return to - from;
     }
 
-    const ENGINE_REPOSITORY = 'https://github.com/robintra/perf-sentinel';
-    const HUB_REPOSITORY = 'https://github.com/robintra/PerfSentinelHub';
+    const ENGINE_REPOSITORY = 'https://github.com/Institut-du-Numerique-Responsable/perf-sentinel';
+    const HUB_REPOSITORY = 'https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub';
     /* Every chart version with the engine version it ships, which a release tag
        cannot give: a chart-only fix bumps the chart and not the appVersion. */
     const CHART_PAGE = 'https://artifacthub.io/packages/helm/perf-sentinel/perf-sentinel';
