@@ -10,6 +10,9 @@ authors:
     family-names: "Trassard"
     alias: "robintra"
     affiliation: "Institut du Numérique Responsable"
+  - given-names: "Julien"
+    family-names: "Seité"
+    alias: "zecit"
 contact:
   - given-names: "Robin"
     family-names: "Trassard"
