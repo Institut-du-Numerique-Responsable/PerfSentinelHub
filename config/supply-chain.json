@@ -76,11 +76,11 @@
     {
       "name": "xunit.v3",
       "kind": "nuget",
-      "version": "4.0.1",
-      "digest_or_sha": "sha512-base64:20X21QzOidd8u+A0gXm8kJmxa622kaQvFJ7f4oCRMznZ0q8dAbXLSyTqSdp2LZc4uQ0tgX8yc2hW/mxnAfY8SQ==",
-      "lock_content_hash": "KpDYf6jFjYfOchuRJOAXPOpwN03hLE1AF4kWzCUSnhr8JZMiGH4BT1YidCcm6BE1H4E90GyJzuKoCwXbg9PXmA==",
-      "released_at": "2026-09-12T19:07:27.03Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/4.0.1.json",
+      "version": "4.0.2",
+      "digest_or_sha": "sha512-base64:jPqJKMQnhWCysQkAPjU8E4t3ejl/EOCd3ENcU/biyvtNuRncK+fDFDEw4Ixp6Gh83k5f5FBTH/RzTxaY18jSQg==",
+      "lock_content_hash": "TdjM2OAx7w/0E88E6PgaigLoTbQaxbSR3HF/8p92plchTjf29jPHW27ylvEOz+Nx8CvPwWKGQlOR1fDv6/Qh5A==",
+      "released_at": "2026-10-09T17:08:28.5Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/4.0.2.json",
       "reason": "Latest stable xUnit v3 meta-package."
     },
     {
@@ -437,21 +437,21 @@
     {
       "name": "Microsoft.Testing.Extensions.CodeCoverage",
       "kind": "nuget",
-      "version": "18.11.2",
-      "digest_or_sha": "sha512-base64:z2q/d2gEGZ4Q7j8BpBBbcPI1DXq3FD6OgQ3jJOK2rFQSmZbz//zzgegeNipe8YBEXuSSYNtegoXFesPLZZik7w==",
-      "lock_content_hash": "bT6awBEUR+fjPpeLAN++4qx5q0sgA9SeJt6QfijnFFPxNSr68BYsYFMQH8L8kY6vMJd3fuvFAFBht4JtWQcWtQ==",
-      "released_at": "2026-09-11T11:49:51.833Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.codecoverage/18.11.2.json",
+      "version": "18.12.0",
+      "digest_or_sha": "sha512-base64:bMR8B/80Nx8AyaOyuOTuSjaZtyuTCFeB3Q0Vej8eFBI3PQWOyk5lV8dEdm9TwQLNgxMQUxuF2uauwofS5LsHww==",
+      "lock_content_hash": "BST/sWYpKk9OXO7Yxktcg6FWORRsHU0EdCbMwZ7d3OqJsMKlrNHIZ30g0Ib4k5T5acJYXRBmg9mNrTU/N6cy1g==",
+      "released_at": "2026-10-06T14:36:48.687Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.codecoverage/18.12.0.json",
       "reason": "Coverage collector for Microsoft.Testing.Platform, replacing the VSTest coverlet collector."
     },
     {
       "name": "Microsoft.Testing.Extensions.TrxReport",
       "kind": "nuget",
-      "version": "2.4.1",
-      "digest_or_sha": "sha512-base64:U7Vmdjl8gXRVbX93z2SfOFrxf0OTOjvncMkdVE7hA3D5kvbOj5kuKyqA4eocEjynATf2++X9yumn1RPzjKqwiQ==",
-      "lock_content_hash": "KGAvJKRqhod45ecH4L1cCKIjGrzziUcLo3L4hRlfOg/Ww2Q7MnA30qHY2rnKzGyLVWf91tc2VleGe8c33FmPaQ==",
-      "released_at": "2026-09-16T14:22:09.977Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.4.1.json",
+      "version": "2.5.1",
+      "digest_or_sha": "sha512-base64:Jwt/qcp9SwMYzoKwZHZjB/nfDyKdL+VauBFAvlyb4PhV6E1d9VBMN7D/fXbW5+lK4l40QuVoi7sY451GZUNIgw==",
+      "lock_content_hash": "NHqpG2UAVsXoNnNZtyIjxgsfPe9N/E6eTHjHCs7uaSbdOCOsbX5I7N0d1BHyjM7vv3Q5R2nlvngKSHWT+ZCRXQ==",
+      "released_at": "2026-10-07T16:44:53.39Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.5.1.json",
       "reason": "TRX reporter for Microsoft.Testing.Platform, feeding sonar.cs.vstest.reportsPaths."
     }
   ]
