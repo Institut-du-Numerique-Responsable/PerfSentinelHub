@@ -170,8 +170,9 @@ def verify_signature(tag: str, identity: dict[str, str]) -> bool:
     old_signers = previous_signers.stdout.strip() if previous_signers.returncode == 0 else None
     with tempfile.TemporaryDirectory(prefix="perf-sentinel-release-signers-") as directory:
         allowed_signers = Path(directory) / "allowed_signers"
-        allowed_signers.write_text(f'{identity["principal"]} {identity["public_key"]}\n', encoding="ascii")
-        allowed_signers.chmod(0o600)
+        descriptor = os.open(allowed_signers, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+            handle.write(f'{identity["principal"]} {identity["public_key"]}\n')
         try:
             if git("config", "--local", GPG_FORMAT_KEY, "ssh").returncode != 0 or git(
                 "config", "--local", ALLOWED_SIGNERS_KEY, str(allowed_signers)
