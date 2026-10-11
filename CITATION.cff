@@ -19,10 +19,14 @@ repository-code: "https://github.com/Institut-du-Numerique-Responsable/PerfSenti
 url: "https://perf-sentinel.dev"
 license: AGPL-3.0-only
 keywords:
+  - "perf-sentinel"
   - "opentelemetry"
   - "observability"
   - "greenops"
-  - "green-software"
-  - "dotnet"
-  - "nativeaot"
+  - "green-software-development"
+  - "carbon-footprint"
   - "self-hosted"
+  - "sqlite"
+  - "dotnet"
+  - "csharp"
+  - "nativeaot"
