@@ -36,9 +36,9 @@ def public_api_fixture():
                 "visibility": "public",
                 "private": False,
                 "default_branch": "main",
-                "allow_squash_merge": True,
-                "allow_rebase_merge": True,
-                "allow_merge_commit": False,
+                "allow_squash_merge": False,
+                "allow_rebase_merge": False,
+                "allow_merge_commit": True,
                 "allow_auto_merge": False,
                 "delete_branch_on_merge": True,
                 "security_and_analysis": {
@@ -68,14 +68,13 @@ def public_api_fixture():
                     "ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
                 },
                 "rules": [
-                    {"type": "required_linear_history"},
                     {"type": "required_signatures"},
                     {"type": "non_fast_forward"},
                     {"type": "deletion"},
                     {
                         "type": "pull_request",
                         "parameters": {
-                            "allowed_merge_methods": ["squash", "rebase"],
+                            "allowed_merge_methods": ["merge"],
                             "dismiss_stale_reviews_on_push": True,
                             "require_code_owner_review": False,
                             "require_last_push_approval": False,
@@ -290,9 +289,9 @@ class RepositoryPolicyTests(unittest.TestCase):
 
     def test_requires_exact_global_merge_settings(self):
         expected = {
-            "allow_squash_merge": True,
-            "allow_rebase_merge": True,
-            "allow_merge_commit": False,
+            "allow_squash_merge": False,
+            "allow_rebase_merge": False,
+            "allow_merge_commit": True,
             "allow_auto_merge": False,
             "delete_branch_on_merge": True,
         }
@@ -313,7 +312,7 @@ class RepositoryPolicyTests(unittest.TestCase):
             "stale reviews kept": lambda policy: policy["branch_ruleset"].update(dismiss_stale_reviews_on_push=False),
             "code owner review": lambda policy: policy["branch_ruleset"].update(require_code_owner_review=True),
             "last push approval": lambda policy: policy["branch_ruleset"].update(require_last_push_approval=True),
-            "merge method dropped": lambda policy: policy["branch_ruleset"].update(allowed_merge_methods=["squash"]),
+            "merge method dropped": lambda policy: policy["branch_ruleset"].update(allowed_merge_methods=["squash", "merge"]),
         }
 
         result = run_checker(public_api_fixture())

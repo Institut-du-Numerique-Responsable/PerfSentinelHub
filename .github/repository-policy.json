@@ -4,9 +4,9 @@
   "visibility": "public",
   "default_branch": "main",
   "repository_settings": {
-    "allow_squash_merge": true,
-    "allow_rebase_merge": true,
-    "allow_merge_commit": false,
+    "allow_squash_merge": false,
+    "allow_rebase_merge": false,
+    "allow_merge_commit": true,
     "allow_auto_merge": false,
     "delete_branch_on_merge": true
   },
@@ -24,8 +24,7 @@
     "strict_required_status_checks_policy": true,
     "do_not_enforce_on_create": false,
     "allowed_merge_methods": [
-      "rebase",
-      "squash"
+      "merge"
     ],
     "required_status_checks": [
       {
@@ -45,7 +44,7 @@
         "app_id": 15368
       }
     ],
-    "require_linear_history": true,
+    "require_linear_history": false,
     "require_signed_commits": true,
     "allow_force_pushes": false,
     "allow_deletions": false,

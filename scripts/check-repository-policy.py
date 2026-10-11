@@ -190,9 +190,9 @@ def validate_policy_schema(policy) -> None:
     checks = branch["required_status_checks"]
     settings = policy["repository_settings"]
     expected_settings = {
-        "allow_squash_merge": True,
-        "allow_rebase_merge": True,
-        "allow_merge_commit": False,
+        "allow_squash_merge": False,
+        "allow_rebase_merge": False,
+        "allow_merge_commit": True,
         "allow_auto_merge": False,
         "delete_branch_on_merge": True,
     }
@@ -237,12 +237,12 @@ def canonical_branch_policy(branch, checks, expected_checks) -> bool:
         and branch["require_last_push_approval"] is False
         and branch["strict_required_status_checks_policy"] is True
         and branch["do_not_enforce_on_create"] is False
-        and sorted(branch["allowed_merge_methods"]) == ["rebase", "squash"]
+        and branch["allowed_merge_methods"] == ["merge"]
         and len(branch["allowed_merge_methods"]) == len(set(branch["allowed_merge_methods"]))
         and bool(checks)
         and len({check["context"] for check in checks}) == len(checks)
         and {(check["context"], check["app_id"]) for check in checks} == expected_checks
-        and branch["require_linear_history"] is True
+        and branch["require_linear_history"] is False
         and branch["require_signed_commits"] is True
         and branch["allow_force_pushes"] is False
         and branch["allow_deletions"] is False
@@ -780,7 +780,6 @@ def branch_errors(detailed, policy) -> list[str]:
     branch = active_ruleset(detailed, "branch", branch_policy["ref_include"], "default branch")
     branch_rules = rule_map(branch, "default branch ruleset")
     expected_branch_rules = {
-        "required_linear_history",
         "required_signatures",
         "non_fast_forward",
         "deletion",
