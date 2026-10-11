@@ -465,11 +465,11 @@ def public_release_input(value: str):
     }
 
 
-def release_signer(tag: str, config: Path):
+def release_signer(tag: str):
     match = STABLE_TAG.fullmatch(tag)
     if match is None:
         raise ValueError("release signer input must be a stable tag")
-    configuration = sibling_module("check-release-tag.py").signing_config(config)
+    configuration = sibling_module("check-release-tag.py").signing_config(SIGNING_IDENTITIES)
     previous = configuration["previous_github"]
     _, last_minor, last_patch = (int(part) for part in previous["last_version"].split("."))
     era = previous if (int(match.group(1)), int(match.group(2))) <= (last_minor, last_patch) else configuration["github"]
@@ -544,7 +544,6 @@ def parser():
     public_input.add_argument("value")
     signer = commands.add_parser("signer")
     signer.add_argument("tag")
-    signer.add_argument("--config", type=Path, default=SIGNING_IDENTITIES)
     commands.add_parser("latest-stable")
     published = commands.add_parser("verify-published")
     published.add_argument("--root", type=Path, required=True)
@@ -569,7 +568,7 @@ def main(argv=None):
             json.dump(public_release_input(arguments.value), sys.stdout, sort_keys=True)
             sys.stdout.write("\n")
         elif arguments.command == "signer":
-            json.dump(release_signer(arguments.tag, arguments.config), sys.stdout, sort_keys=True)
+            json.dump(release_signer(arguments.tag), sys.stdout, sort_keys=True)
             sys.stdout.write("\n")
         elif arguments.command == "latest-stable":
             print(latest_stable(sys.stdin.buffer.read()))
