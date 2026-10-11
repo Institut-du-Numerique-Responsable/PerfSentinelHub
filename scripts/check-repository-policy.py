@@ -207,6 +207,8 @@ def validate_policy_schema(policy) -> None:
     expected_secrets = {
         "CI_GATE_APP_ID",
         "CI_GATE_APP_PRIVATE_KEY",
+        "INVENTORY_SYNC_APP_ID",
+        "INVENTORY_SYNC_APP_PRIVATE_KEY",
         "SONAR_TOKEN",
     }
     if (
