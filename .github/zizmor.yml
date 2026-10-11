@@ -12,14 +12,18 @@ rules:
       - dependabot.yml
 
   # zizmor wants every secret carried by a GitHub Environment so its protection rules gate access.
-  # Four references are covered here: SONAR_TOKEN in the pull request analysis and in the main
-  # baseline, and the two create-github-app-token inputs of the trusted gate. The last two cannot
-  # move to an env block at all, since they are action inputs.
+  # Six references are covered here: SONAR_TOKEN in the pull request analysis and in the main
+  # baseline, the two create-github-app-token inputs of the trusted gate, and the two of the
+  # Dependabot inventory sync. The last four cannot move to an env block at all, since they are
+  # action inputs.
   #
   # An Environment only protects through its rules, and neither shape works on this path. Without
   # rules it is indirection that silences the audit and guards nothing. With a required reviewer it
   # would hold every pull request until the sole maintainer approves their own change. A branch
   # restriction cannot apply either, because the gate runs on pull_request events and never on main.
+  # The inventory sync has the same shape: it runs on Dependabot branches, its secrets are
+  # Dependabot secrets that only Dependabot-triggered runs receive, and the job also requires a
+  # Dependabot-authored pull request from this repository.
   #
   # What genuinely matters is already covered: the release path sits behind the hub-release
   # environment with a required reviewer, forks never receive secrets, and CI additionally checks
@@ -31,4 +35,5 @@ rules:
   secrets-outside-env:
     ignore:
       - ci.yml
+      - dependabot-inventory.yml
       - sonar-main.yml
