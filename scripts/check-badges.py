@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-REPO_URL = "https://github.com/robintra/PerfSentinelHub"
+REPO_URL = "https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub"
 SONAR_URL = "https://sonarcloud.io"
 SONAR_KEY = "robintrassard_PerfSentinelHub"
 CI_WORKFLOW = ".github/workflows/ci.yml"
@@ -16,7 +16,7 @@ LICENSE_SHA256 = "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07
 BADGES = {
     ".NET": (
         "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com"
-        "%2Frobintra%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version"
+        "%2FInstitut-du-Numerique-Responsable%2FPerfSentinelHub%2Fmain%2Fglobal.json&query=%24.sdk.version"
         "&label=.NET&color=512BD4&logo=dotnet&logoColor=white",
         "https://dotnet.microsoft.com/",
         ("global.json", '"sdk"'),
@@ -52,7 +52,7 @@ f"{SONAR_URL}/summary/overall?id={SONAR_KEY}",
         (RELEASE_WORKFLOW, None),
     ),
     "Latest release": (
-        "https://img.shields.io/github/v/release/robintra/PerfSentinelHub"
+        "https://img.shields.io/github/v/release/Institut-du-Numerique-Responsable/PerfSentinelHub"
         "?display_name=tag&sort=semver&color=512BD4",
         f"{REPO_URL}/releases/latest",
         ("CHANGELOG.md", None),

@@ -25,8 +25,8 @@ daemon ne prend aucune fenêtre : sous un daemon le bandeau le dit et demande un
 traces.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
-  <img alt="L'écran de santé de la flotte avec une ligne daemon dépliée" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
+  <img alt="L'écran de santé de la flotte avec une ligne daemon dépliée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
 </picture>
 
 ## Les jauges
@@ -107,8 +107,8 @@ le `.perf-sentinel.toml` pointé, qu'un téléchargement peut ne pas préserver,
 commande nomme le fichier au lieu de s'en remettre à cette découverte.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report-dark.png">
-  <img alt="Un rapport rendu, ouvert dans le lanceur" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-report.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-report-dark.png">
+  <img alt="Un rapport rendu, ouvert dans le lanceur" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-report.png">
 </picture>
 
 ## Les rapports live
@@ -166,8 +166,8 @@ prendre la flotte d'assaut, un daemon lu il y a moins de dix secondes étant sau
 copie stockée servie à la place.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents-dark.png">
-  <img alt="L'écran des incidents avec une ligne dépliée sur ses findings figés" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-incidents.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incidents-dark.png">
+  <img alt="L'écran des incidents avec une ligne dépliée sur ses findings figés" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incidents.png">
 </picture>
 
 Une ligne se déplie sur les findings que le daemon a gelés pour cet incident, chacun placé
@@ -193,8 +193,8 @@ termine par un lien Ack, qui ouvre [La page d'acquittement](#la-page-dacquitteme
 finding, le daemon de l'incident coché.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
-  <img alt="New analysis ouvert sur la fenêtre d'un incident, sous le bandeau qui le nomme" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
+  <img alt="New analysis ouvert sur la fenêtre d'un incident, sous le bandeau qui le nomme" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
 </picture>
 
 ## La page d'acquittement
@@ -227,8 +227,8 @@ ligne par source qui porte le finding. L'expiration est un jour, envoyé comme l
 seconde de ce jour en UTC, et une expiration vide est un acquittement permanent.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
-  <img alt="La page d'acquittement sur un finding porté par quatre daemons, une ligne par cas" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/img/hub/launcher-ack.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
+  <img alt="La page d'acquittement sur un finding porté par quatre daemons, une ligne par cas" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-ack.png">
 </picture>
 
 Un acquittement masque un finding, donc le contexte du lien décide des lignes cochées au
@@ -290,7 +290,7 @@ baseline restent reflétés et affichés sur la ligne, `source` valant `toml` da
 
 Ne mettez pas `[daemon.ack] enabled = false` sur ce daemon pour fermer les acquittements à
 l'exécution, parce que le daemon cesse alors de charger aussi la baseline TOML, voir
-[ACK-WORKFLOW-FR.md](https://github.com/robintra/perf-sentinel/blob/main/docs/FR/ACK-WORKFLOW-FR.md)
+[ACK-WORKFLOW-FR.md](https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/blob/main/docs/FR/ACK-WORKFLOW-FR.md)
 du moteur.
 
 ## Sûreté

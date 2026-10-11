@@ -8,8 +8,8 @@ re-exporting both themes, never touching the SVG by hand.
 ## The whole thing at once
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/hub-integration_dark.svg">
-  <img alt="How the Hub, the fleet, the browser and the engine fit together" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/hub-integration.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/hub-integration_dark.svg">
+  <img alt="How the Hub, the fleet, the browser and the engine fit together" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/hub-integration.svg">
 </picture>
 
 One Hub serves two audiences that never overlap. The browser gets the launcher and
@@ -26,8 +26,8 @@ resident in the Hub.
 ## Push and poll, and which one owns reachability
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll_dark.svg">
-  <img alt="The push path and the poll path, and the fact only one of them owns" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll_dark.svg">
+  <img alt="The push path and the poll path, and the fact only one of them owns" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/push-and-poll.svg">
 </picture>
 
 Both paths write findings. Only one writes reachability.
@@ -64,8 +64,8 @@ which is where the baseline sits, may be missing.
 ## What a launched analysis actually does
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/analysis-run_dark.svg">
-  <img alt="A run from submission to the embedded report" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/analysis-run.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/analysis-run_dark.svg">
+  <img alt="A run from submission to the embedded report" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/analysis-run.svg">
 </picture>
 
 Two things on this sequence are easy to miss.
@@ -83,8 +83,8 @@ entirely, because its own `/api/export/report` already returns exactly that JSON
 ## Three retention clocks
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks_dark.svg">
-  <img alt="Findings, status window and rendered reports each expire on their own clock" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks_dark.svg">
+  <img alt="Findings, status window and rendered reports each expire on their own clock" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/retention-clocks.svg">
 </picture>
 
 None of the three is derivable from the others, and they are enforced by three
@@ -118,8 +118,8 @@ resolved. Only retention removes a row.
 ## A run always reaches a terminal state
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/run-states_dark.svg">
-  <img alt="The states a run passes through and who moves each edge" src="https://raw.githubusercontent.com/robintra/PerfSentinelHub/main/docs/diagrams/svg/run-states.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/run-states_dark.svg">
+  <img alt="The states a run passes through and who moves each edge" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/diagrams/svg/run-states.svg">
 </picture>
 
 Whatever happens, a row does not stay `running`. A process that dies mid-run leaves an
