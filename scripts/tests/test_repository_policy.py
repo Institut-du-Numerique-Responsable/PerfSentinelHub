@@ -32,7 +32,7 @@ def public_api_fixture():
         "repository": {
             "status": 200,
             "body": {
-                "full_name": "robintra/PerfSentinelHub",
+                "full_name": "Institut-du-Numerique-Responsable/PerfSentinelHub",
                 "visibility": "public",
                 "private": False,
                 "default_branch": "main",
@@ -186,7 +186,7 @@ def run_checker(api, *, referenced_name="SONAR_TOKEN", policy_mutator=None):
                 sys.executable,
                 str(CHECKER),
                 "--repo",
-                "robintra/PerfSentinelHub",
+                "Institut-du-Numerique-Responsable/PerfSentinelHub",
                 "--root",
                 str(root),
                 "--fixture",
