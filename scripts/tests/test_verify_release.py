@@ -159,7 +159,7 @@ class ReleaseFixture:
                 self.add_tar_bytes(archive, f"blobs/sha256/{digest}", content)
         return output.getvalue()
 
-    def chart_archive(self, *, mutable=False, repository="ghcr.io/robintra/perf-sentinel-hub"):
+    def chart_archive(self, *, mutable=False, repository="ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub"):
         digest = "tag: mutable" if mutable else f"digest: {self.oci_digest}"
         image = 'image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"' if mutable else 'image: {{ include "perf-sentinel-hub.image" . | quote }}'
         output = io.BytesIO()
@@ -290,8 +290,8 @@ class VerifyReleaseTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
 
         for repository in (
-            "ghcr.io/robintra/perf-sentinel-hub:latest",
-            "ghcr.io/robintra/perf-sentinel-hub@sha256:" + "a" * 64,
+            "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:latest",
+            "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@sha256:" + "a" * 64,
         ):
             with self.subTest(repository=repository), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -909,8 +909,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("fsGroupChangePolicy: OnRootMismatch", result.stdout)
 
         for repository in (
-            "ghcr.io/robintra/perf-sentinel-hub:latest",
-            "ghcr.io/robintra/perf-sentinel-hub@sha256:" + "a" * 64,
+            "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:latest",
+            "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@sha256:" + "a" * 64,
         ):
             invalid = command.copy()
             invalid[invalid.index("image.repository=localhost:5000/team/perf-sentinel-hub")] = (

@@ -400,12 +400,12 @@ class SupplyChainCheckerTests(unittest.TestCase):
 
     def test_accepts_own_ghcr_container_source(self):
         item = inventory_item(
-            name="ghcr.io/robintra/perf-sentinel",
+            name="ghcr.io/institut-du-numerique-responsable/perf-sentinel",
             kind="container",
             version="0.16.0",
             digest_or_sha="sha256:" + "d" * 64,
             released_at="2026-08-28",
-            source="https://ghcr.io/v2/robintra/perf-sentinel/manifests/0.16.0",
+            source="https://ghcr.io/v2/institut-du-numerique-responsable/perf-sentinel/manifests/0.16.0",
         )
 
         errors = checker.validate_inventory([item])

@@ -711,7 +711,7 @@
     const CHART_PAGE = 'https://artifacthub.io/packages/helm/perf-sentinel/perf-sentinel';
     /* Not a link. safeHttpsHref would refuse the scheme, and it is a coordinate
        to paste into helm rather than a page to open. */
-    const CHART_COORDINATE = 'oci://ghcr.io/robintra/charts/perf-sentinel';
+    const CHART_COORDINATE = 'oci://ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel';
 
     /**
      * Where to get the engine a printed command needs. Pinned to the version

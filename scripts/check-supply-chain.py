@@ -216,7 +216,7 @@ def container_source_matches(item: dict) -> bool:
         source.scheme == "https"
         and source.netloc == "ghcr.io"
         and ghcr_match
-        and ghcr_match.group("namespace") == "robintra"
+        and ghcr_match.group("namespace") == "institut-du-numerique-responsable"
         and item["name"] == f"ghcr.io/{ghcr_match.group('namespace')}/{ghcr_match.group('repository')}"
         and item["version"] == ghcr_match.group("tag")
         and source.query == ""
