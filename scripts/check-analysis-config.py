@@ -69,6 +69,8 @@ SECRET_FIELDS = {"name", "scope", "purpose", "owner", "rotation_procedure"}
 REQUIRED_SECRETS = {
     "CI_GATE_APP_ID",
     "CI_GATE_APP_PRIVATE_KEY",
+    "INVENTORY_SYNC_APP_ID",
+    "INVENTORY_SYNC_APP_PRIVATE_KEY",
     "SONAR_TOKEN",
 }
 SECRET_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")

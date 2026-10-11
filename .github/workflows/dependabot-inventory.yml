@@ -1,0 +1,74 @@
+name: Dependabot inventory sync
+
+# Dependabot moves the pins in the workflows, Dockerfile, NuGet and tool files but not
+# config/supply-chain.json, so every one of its pull requests failed Action pin validation.
+# This job refills the moved inventory entries from their official sources and commits
+# them through a GitHub App, whose commit is signed and starts the CI again.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: dependabot-inventory-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync the supply-chain inventory
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Refill moved entries from official sources
+        id: sync
+        working-directory: candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/trusted/scripts/sync-supply-chain.py"
+          if git diff --quiet -- config/supply-chain.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        if: ${{ steps.sync.outputs.changed == 'true' }}
+        with:
+          app-id: ${{ secrets.INVENTORY_SYNC_APP_ID }}
+          private-key: ${{ secrets.INVENTORY_SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+      - name: Commit the inventory on the Dependabot branch
+        if: ${{ steps.sync.outputs.changed == 'true' }}
+        working-directory: candidate
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MUTATION: 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }'
+        run: |
+          contents="$(base64 -w0 config/supply-chain.json)"
+          jq -n --arg q "$MUTATION" --arg r "$REPOSITORY" --arg b "$HEAD_REF" --arg h "$HEAD_SHA" --arg c "$contents" '{query: $q, variables: {input: {branch: {repositoryNameWithOwner: $r, branchName: $b}, expectedHeadOid: $h, message: {headline: "build(deps): sync the supply-chain inventory"}, fileChanges: {additions: [{path: "config/supply-chain.json", contents: $c}]}}}}' | gh api graphql --input -
