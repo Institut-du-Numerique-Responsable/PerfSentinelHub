@@ -23,6 +23,18 @@ dependency-automation check rejects one: the protection is human review, pinned 
 checksums, and the full pipeline running before any merge, not a waiting period. Manually pinned
 inventory entries follow the same rule and may adopt a stable release as soon as it ships.
 
+## Inventory sync
+
+Dependabot moves the pins in the workflows, the Dockerfile, the NuGet declarations and lock files,
+and `.config/dotnet-tools.json`, but not their entries in `config/supply-chain.json`. On each
+Dependabot pull request, `.github/workflows/dependabot-inventory.yml` runs
+`scripts/sync-supply-chain.py` from the base branch. The script refills every moved entry from the
+official source the online supply-chain check reads, refuses a tag or digest that does not resolve
+to the declared pin, and runs the offline check on the result. A dedicated GitHub App, whose
+credentials are Dependabot secrets, commits the refilled inventory on the pull request branch. Its
+commit is signed and starts the CI again. The SDK-injected NativeAOT packages follow the .NET SDK
+and stay manual. Run the script from the repository root to refill the inventory locally.
+
 ## Security updates and exceptions
 
 Security updates are not delayed either and remain in individual pull requests. They do not bypass

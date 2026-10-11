@@ -47,6 +47,8 @@ def secret_inventory(**entry_overrides):
     for name, purpose in (
         ("CI_GATE_APP_ID", "Identify the dedicated CI gate GitHub App."),
         ("CI_GATE_APP_PRIVATE_KEY", "Mint a short-lived CI gate installation token."),
+        ("INVENTORY_SYNC_APP_ID", "Identify the dedicated inventory sync GitHub App."),
+        ("INVENTORY_SYNC_APP_PRIVATE_KEY", "Mint a short-lived inventory sync installation token."),
         ("SONAR_TOKEN", "Authenticate the trusted SonarCloud analysis job."),
     ):
         entry = {
