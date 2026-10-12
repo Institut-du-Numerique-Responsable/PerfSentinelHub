@@ -17,13 +17,12 @@ rule_files:
 scrape_configs:
   - job_name: perf-sentinel-hub
     metrics_path: /metrics
+    # The example dashboard reads one Hub, the one its Job variable selects.
+    # A second Hub scraped by the same Prometheus takes its own job_name, and
+    # HubDown in prometheus-alerts.yml, which matches this job only, its own rule.
     static_configs:
       - targets:
           - perf-sentinel-hub.observability:8080
-        labels:
-          # The Hub publishes one series per configured source, so an instance
-          # label per Hub is what separates two fleets sharing a Prometheus.
-          fleet: production
 
   # The daemons the Hub collects from publish their own, unrelated metrics:
   # findings, GreenOps figures, ingest rates. Nothing in this dashboard reads
