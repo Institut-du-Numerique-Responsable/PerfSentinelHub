@@ -2,6 +2,22 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- The example dashboard's `Fleet reachability` table listed every label of the scraped
+  series, `pod`, `namespace`, `container` and whatever else the scrape adds, which pushed
+  the source and its state off to the right. It now keeps one row per source,
+  `min by (source)`, so a source reads unreachable whenever the `Unreachable daemons`
+  count includes it. It shows two columns, `Source` and `State` (`État` in the French
+  file), and the state is drawn in the red and green its value mapping always named but
+  never displayed. Dashboard `version` 4.
+- `examples/prometheus-scrape.yml` suggested telling two Hubs apart by a target label
+  under one job. The example dashboard reads one Hub, the one its `Job` variable selects,
+  so a second Hub scraped by the same Prometheus takes its own job instead, and
+  `HubDown` a rule matching that job.
+
 ## [0.3.8] - 2026-10-09
 
 ### Added

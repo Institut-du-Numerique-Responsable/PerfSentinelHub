@@ -367,7 +367,7 @@
       },
       "targets": [
         {
-          "expr": "perf_sentinel_hub_source_reachable{job=~\"$job\"}",
+          "expr": "min by (source) (perf_sentinel_hub_source_reachable{job=~\"$job\"})",
           "refId": "A",
           "instant": true,
           "format": "table"
@@ -412,12 +412,30 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "__name__"
+              "options": "source"
             },
             "properties": [
               {
-                "id": "custom.hidden",
-                "value": true
+                "id": "displayName",
+                "value": "Source"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "State"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
               }
             ]
           }
@@ -667,5 +685,5 @@
   "timezone": "browser",
   "title": "PerfSentinelHub overview",
   "uid": "perf-sentinel-hub-overview",
-  "version": 3
+  "version": 4
 }
