@@ -23,7 +23,115 @@ public sealed record HubOptions
     public UpdateCheckOptions UpdateCheck { get; set; } = new();
     public AuthOptions Auth { get; set; } = new();
     public AckRelayOptions AckRelay { get; set; } = new();
+    public AccessOptions Access { get; set; } = new();
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
+}
+
+/// <summary>
+///     Who reaches which findings, sources and runs, declared as configuration: the
+///     Hub stores no user and no membership. Off by default, and nothing here is
+///     read or validated while it is off. Every list defaults to empty, since a
+///     bound list appends to its default.
+/// </summary>
+public sealed record AccessOptions
+{
+    public bool Enabled { get; set; }
+
+    // Subjects holding the built-in admin role on '*'.
+    public IReadOnlyList<string> Admins { get; set; } = [];
+
+    // Group references, provider or internal:, holding the built-in admin role on '*'.
+    public IReadOnlyList<string> AdminGroups { get; set; } = [];
+
+    public IReadOnlyList<InternalGroupOptions> Groups { get; set; } = [];
+    public IReadOnlyList<ProjectOptions> Projects { get; set; } = [];
+    public IReadOnlyList<RoleOptions> Roles { get; set; } = [];
+    public IReadOnlyList<GrantOptions> Grants { get; set; } = [];
+    public IReadOnlyList<MachineTokenOptions> MachineTokens { get; set; } = [];
+}
+
+// Referenced as internal:<Name>. Members are subjects, never machine tokens.
+public sealed record InternalGroupOptions
+{
+    public string Name { get; set; } = "";
+    public IReadOnlyList<string> Members { get; set; } = [];
+}
+
+public sealed record ProjectOptions
+{
+    public string Name { get; set; } = "";
+    public IReadOnlyList<PatternOptions> Patterns { get; set; } = [];
+}
+
+// Each part is exact, or a prefix ending in one '*'. Attribute is key=value, split on the first '='.
+public sealed record PatternOptions
+{
+    public string? Source { get; set; }
+    public string? Service { get; set; }
+    public string? Attribute { get; set; }
+}
+
+public sealed record RoleOptions
+{
+    public string Name { get; set; } = "";
+    public IReadOnlyList<string> Permissions { get; set; } = [];
+}
+
+// Project is a declared project or '*', which also covers records no project matches.
+public sealed record GrantOptions
+{
+    public string Group { get; set; } = "";
+    public string Project { get; set; } = "";
+    public string Role { get; set; } = "";
+}
+
+public sealed record MachineTokenOptions
+{
+    public string Name { get; set; } = "";
+    public string Group { get; set; } = "";
+    public DateTimeOffset? ExpiresAt { get; set; }
+
+    // Trimmed on binding, like SourceOptions.ImportApiKey: a Secret value often ends with a newline.
+    public string? Token
+    {
+        get;
+        set => field = value?.Trim();
+    }
+}
+
+/// <summary>The six permissions, the three built-in roles and what a machine token may hold.</summary>
+public static class AccessPermissions
+{
+    public const string FindingsRead = "findings.read";
+    public const string TracesRead = "traces.read";
+    public const string SourcesRead = "sources.read";
+    public const string AnalysesRun = "analyses.run";
+    public const string AcksWrite = "acks.write";
+    public const string AccessAdmin = "access.admin";
+
+    public const string ReaderRole = "reader";
+    public const string MemberRole = "member";
+    public const string AdminRole = "admin";
+
+    public static readonly IReadOnlyList<string> All =
+        [FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin];
+
+    // reader is not read-only: it starts analyses.
+    public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> BuiltInRoles =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            [ReaderRole] = [FindingsRead, TracesRead, AnalysesRun],
+            [MemberRole] = [FindingsRead, TracesRead, AnalysesRun, AcksWrite],
+            [AdminRole] = All
+        };
+
+    public static readonly IReadOnlyList<string> MachineTokenPermissions = [FindingsRead];
+
+    // A write is matched against every grouping a copy was seen in, a read against any.
+    public static bool IsWrite(string permission)
+    {
+        return permission is AnalysesRun or AcksWrite;
+    }
 }
 
 public sealed record AckRelayOptions
@@ -213,14 +321,17 @@ public sealed record SourceOptions
     }
 }
 
-public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
+public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = null) : IValidateOptions<HubOptions>
 {
     private const string UrlShape = "without credentials, query, or fragment.";
+
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public ValidateOptionsResult Validate(string? name, HubOptions options)
     {
         var errors = new List<string>();
         ValidateHubSettings(options, errors);
+        ValidateAccessSettings(options, _timeProvider.GetUtcNow(), errors);
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in options.Sources)
@@ -341,7 +452,7 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static void ValidateSource(SourceOptions source, HashSet<string> ids, List<string> errors)
     {
-        if (!IsValidSourceId(source.Id) || !ids.Add(source.Id))
+        if (!IsValidName(source.Id) || !ids.Add(source.Id))
             errors.Add("Source IDs must be unique and contain 1-64 ASCII letters, digits, '.', '_' or '-'.");
         if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.Environment))
             errors.Add($"Source '{source.Id}' requires a name and environment.");
@@ -479,10 +590,11 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
                value.Any(character => char.IsControl(character) || character == ' ');
     }
 
-    private static bool IsValidSourceId(string id)
+    // A source id, and an internal group, project or role name.
+    private static bool IsValidName(string name)
     {
-        return !string.IsNullOrWhiteSpace(id) &&
-               id.Length <= 64 &&
-               id.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
+        return !string.IsNullOrWhiteSpace(name) &&
+               name.Length <= 64 &&
+               name.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
     }
 }

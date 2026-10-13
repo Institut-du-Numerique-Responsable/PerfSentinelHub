@@ -163,6 +163,38 @@ version and forward again is therefore covered at the next start. A copy written
 per-source envelope existed has neither until its source reports it again. The cost of that
 start is measured in [BENCHMARKS.md](BENCHMARKS.md#start-on-a-filled-database).
 
+## Access control, ahead of its enforcement
+
+`Hub:Access` is compiled once, at the first request for it, into `AccessPolicy`
+(`Api/AccessPolicy.cs`): each project's patterns, each role's permissions, the grants, the
+internal groups by member subject, the admin sets, and a SHA-256 fingerprint of each machine
+token, never the token. `Program.cs` registers it whatever the setting, because a handler
+shared by both modes takes it as a service, and the Request Delegate Generator would read a
+type the container lacks as a JSON body, which a `GET` refuses. With access off it builds
+nothing and every scope it computes is unrestricted. This release refuses to start with
+access on, so nothing calls it yet.
+
+For one caller and one permission, `AccessPolicy.Scope` returns an `AccessScope`
+(`Api/AccessScope.cs`): unrestricted, nothing, or the union of the granted projects'
+patterns. An `AccessPattern` matches a finding copy, one signature at one source, on three
+things: the source, the copy's own service in `finding_sources.service` and never the
+fleet-wide `findings.service` an import rewrites, and the copy's rows in
+`finding_attributes`. A read needs one row to match, whatever grouping it came with; a write,
+for `acks.write` and `analyses.run`, needs every grouping identity of the copy, the
+no-grouping marker included, to carry the key and every value of it to match. A trace run
+on a service is judged on the Hub's copies of that service in the backend's environment,
+every one of which must write-match; `CoversSubject` matches the copies it is given, and
+the caller enforcement adds selects them by environment. Incident copies match on their
+pairs in `incident_attributes`.
+
+`Storage/HubDatabase.Access.cs` holds the same read match in SQL, for the reads enforcement
+will filter. A statement opens with the `ap` CTE, which decodes the one bound parameter
+`$access_patterns` once instead of once per row and pattern, then tests `visible`, the
+copies in scope, or `IncidentAccess`. Parts compare with `=` or `substr`, never `LIKE` or
+`GLOB`, which fold case and give `%` and `_` a meaning. `AccessScopeParityTests` runs one
+table of patterns through both over the rows H1's own backfill writes, and an explicit test
+times the CTE, see [BENCHMARKS.md](BENCHMARKS.md#access-scope-over-100000-copies).
+
 ## A run always reaches a terminal state
 
 <picture>

@@ -28,4 +28,8 @@ data:
            credential is not here either: only its header name is, in a source. */}}
     {{- $ackRelayValues := .Values.hub.ackRelay | default dict }}
     {{- $ackRelay := dict "TrustIdentityHeader" (default false $ackRelayValues.trustIdentityHeader) }}
-    {{ dict "Hub" (dict "DatabasePath" "/data/hub.db" "Analysis" $analysis "UpdateCheck" $updateCheck "Auth" $auth "AckRelay" $ackRelay "PollInterval" .Values.hub.pollInterval "HttpTimeout" .Values.hub.httpTimeout "MaxConcurrentPolls" .Values.hub.maxConcurrentPolls "Retention" .Values.hub.retention "ResolutionGrace" .Values.hub.resolutionGrace "DefaultReadLimit" .Values.hub.defaultReadLimit "MaxReadLimit" .Values.hub.maxReadLimit "Sources" $sources) | toJson }}
+    {{- /* Nil-safe for --reuse-values, like updateCheck above, and passed as is:
+           keys bind case-insensitively, and secretName and secretKey name a
+           Secret, hold none, and are ignored by the binder. */}}
+    {{- $access := .Values.hub.access | default dict }}
+    {{ dict "Hub" (dict "DatabasePath" "/data/hub.db" "Analysis" $analysis "UpdateCheck" $updateCheck "Auth" $auth "AckRelay" $ackRelay "Access" $access "PollInterval" .Values.hub.pollInterval "HttpTimeout" .Values.hub.httpTimeout "MaxConcurrentPolls" .Values.hub.maxConcurrentPolls "Retention" .Values.hub.retention "ResolutionGrace" .Values.hub.resolutionGrace "DefaultReadLimit" .Values.hub.defaultReadLimit "MaxReadLimit" .Values.hub.maxReadLimit "Sources" $sources) | toJson }}

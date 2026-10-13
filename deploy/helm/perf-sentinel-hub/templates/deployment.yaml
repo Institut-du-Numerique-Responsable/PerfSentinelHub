@@ -3,6 +3,17 @@
 {{- if hasKey $ids .id }}{{ fail (printf "duplicate source id: %s" .id) }}{{ end }}
 {{- $_ := set $ids .id true }}
 {{- end }}
+{{- /* Nil-safe for --reuse-values from a release that predates hub.access. This
+       release only checks each token's Secret reference; the env var that delivers
+       the token comes with enforcement. */}}
+{{- $access := .Values.hub.access | default dict }}
+{{- $tokenNames := dict }}
+{{- range ($access.machineTokens | default list) }}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9._-]{0,63}$" (toString .name)) }}{{ fail (printf "machine token name must match ^[a-z0-9][a-z0-9._-]{0,63}$: %v" .name) }}{{ end }}
+{{- if hasKey $tokenNames .name }}{{ fail (printf "duplicate machine token name: %s" .name) }}{{ end }}
+{{- $_ := set $tokenNames .name true }}
+{{- if not (and .secretName .secretKey) }}{{ fail (printf "machine token %s needs secretName and secretKey" .name) }}{{ end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

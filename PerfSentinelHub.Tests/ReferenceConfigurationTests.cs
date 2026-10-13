@@ -12,7 +12,7 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class ReferenceConfigurationTests
 {
-    private static JsonElement Reference()
+    internal static JsonElement Reference()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PerfSentinelHub.sln")))

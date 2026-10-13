@@ -62,6 +62,33 @@ hub:
     # proxy that sets the header itself and strips the one a client sent.
     # With neither, the relay refuses every caller.
     trustIdentityHeader: false
+  access:
+    # Who reaches which findings, sources and runs: projects, roles, grants,
+    # internal groups, admins and machine tokens, passed to the Hub as is. This
+    # release ships the model and its validation ahead of enforcement, so the
+    # Hub refuses to start with enabled: true and the schema refuses it too.
+    # Off, nothing here is validated or used, but it is still bound: expiresAt
+    # must be an ISO 8601 date and time. See docs/CONFIGURATION.md.
+    enabled: false
+    # Subjects, the provider's immutable account ids, holding admin on "*".
+    admins: []
+    # internal:<name> or provider groups holding admin on "*". Name a provider
+    # group by a path only the organisation can create; on GitLab, set
+    # auth.requiredGroups too, since any user can create a top-level group.
+    adminGroups: []
+    # Items { name, members: [subjects] }, referenced as "internal:<name>".
+    groups: []
+    # Items { name, patterns: [{ source, service, attribute }] }. Quote "*" and
+    # "team=..." in YAML flow mappings.
+    projects: []
+    # Items { name, permissions }, beside the built-in reader, member and admin.
+    roles: []
+    # Items { group, project, role }; project is a declared project or "*".
+    grants: []
+    # Items { name, group, expiresAt, secretName, secretKey }. The token is never
+    # in these values; this release only checks the Secret reference, and the
+    # chart will read the token from it once enforcement ships.
+    machineTokens: []
 # Each source takes id, name, environment, baseUrl, and optionally
 # kind (daemon, tempo, jaeger_query), retentionHours, authHeaderName and
 # publicUrl (the address printed commands and live reports use when baseUrl

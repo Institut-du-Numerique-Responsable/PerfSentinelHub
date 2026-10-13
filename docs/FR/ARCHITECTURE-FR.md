@@ -177,6 +177,42 @@ l'enveloppe par source n'a ni l'un ni l'autre tant que sa source ne la remonte p
 nouveau. Le coût de ce démarrage est mesuré dans
 [BENCHMARKS-FR.md](BENCHMARKS-FR.md#démarrer-sur-une-base-remplie).
 
+## Le contrôle d'accès, avant son application
+
+`Hub:Access` est compilé une fois, à la première demande, en `AccessPolicy`
+(`Api/AccessPolicy.cs`) : les motifs de chaque projet, les permissions de chaque rôle, les
+attributions, les groupes internes par sujet membre, les ensembles d'administrateurs, et
+l'empreinte SHA-256 de chaque jeton machine, jamais le jeton. `Program.cs` l'enregistre quel
+que soit le réglage, parce qu'un handler partagé par les deux modes le prend comme service,
+et que le Request Delegate Generator lirait un type absent du conteneur comme un corps JSON,
+qu'un `GET` refuse. Contrôle d'accès désactivé, il ne construit rien et chaque portée qu'il
+calcule est illimitée. Cette version refuse de démarrer avec le contrôle d'accès activé,
+donc rien ne l'appelle encore.
+
+Pour un appelant et une permission, `AccessPolicy.Scope` rend un `AccessScope`
+(`Api/AccessScope.cs`) : illimité, rien, ou l'union des motifs des projets attribués. Un
+`AccessPattern` reconnaît une copie de finding, une signature à une source, sur trois
+choses : la source, le service propre à la copie dans `finding_sources.service`, jamais le
+`findings.service` de la flotte qu'un import réécrit, et les lignes de la copie dans
+`finding_attributes`. Une lecture demande qu'une ligne corresponde, quel que soit le
+regroupement avec lequel elle est arrivée ; une écriture, pour `acks.write` et
+`analyses.run`, demande que chaque identité de regroupement de la copie, marqueur sans
+regroupement compris, porte la clé et que chacune de ses valeurs corresponde. Un run de
+traces sur un service est jugé sur les copies de ce service que le Hub tient dans
+l'environnement du backend, et chacune doit correspondre en écriture ; `CoversSubject`
+évalue les copies qu'on lui passe, et l'appelant qu'ajoutera l'application les choisit par
+environnement. Les copies d'incident correspondent sur leurs paires dans
+`incident_attributes`.
+
+`Storage/HubDatabase.Access.cs` tient la même correspondance de lecture en SQL, pour les
+lectures que l'application filtrera. Une requête s'ouvre sur la CTE `ap`, qui décode une
+seule fois l'unique paramètre lié `$access_patterns` au lieu d'une fois par ligne et par
+motif, puis teste `visible`, les copies dans la portée, ou `IncidentAccess`. Les parties se
+comparent avec `=` ou `substr`, jamais `LIKE` ni `GLOB`, qui ignorent la casse et donnent un
+sens à `%` et `_`. `AccessScopeParityTests` fait passer une même table de motifs par les deux
+sur les lignes qu'écrit le rattrapage de H1 lui-même, et un test explicite mesure la CTE,
+voir [BENCHMARKS-FR.md](BENCHMARKS-FR.md#portée-daccès-sur-100-000-copies).
+
 ## Un run atteint toujours un état terminal
 
 <picture>

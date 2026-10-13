@@ -96,6 +96,27 @@ le stockage temporaire de SQLite, qui écrit dans `/tmp` au-delà de son cache d
 compte ce fichier, que SQLite supprime dès son ouverture, dans la limite n'a pas
 été vérifié.
 
+## Portée d'accès sur 100 000 copies
+
+La CTE `visible` que le contrôle d'accès placera devant une lecture de findings
+restreinte, voir
+[ARCHITECTURE-FR.md](ARCHITECTURE-FR.md#le-contrôle-daccès-avant-son-application),
+retient 24 500 des 100 000 copies de finding à travers 12 motifs, six préfixes
+de service et six valeurs d'attribut, en 0,2 s environ, trois passes de 202 à
+203 ms. Mesuré par le test explicite
+`The_visible_cte_over_100k_copies_and_12_patterns` dans un build Release, sur la
+machine ci-dessus, la base sur son SSD interne, avec une ligne d'attribut par
+copie :
+
+```bash
+./PerfSentinelHub.Tests/bin/Release/net10.0/PerfSentinelHub.Tests \
+  -method '*.The_visible_cte_over_100k_copies_and_12_patterns' -explicit only -showLiveOutput
+```
+
+Une copie qu'aucun motif ne lit coûte la sonde de chaque motif, donc une portée
+étroite coûte plus qu'une large : les mêmes 12 motifs écrits pour retenir 90 500
+copies prennent 0,1 s. Rien n'exécute encore cette CTE.
+
 ## Reproduire
 
 ```bash
