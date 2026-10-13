@@ -65,8 +65,8 @@ public sealed partial class HubDatabase
     // Built once per shape, so the command takes a field rather than a string formatted at
     // the call. An unrestricted read has no leading CTE and no incident predicate, so its
     // SQL stays today's. Declared after IncidentAccess: static fields initialize in order.
-    private const string IncidentList = $"{IncidentListWhere}\n{IncidentListPage}";
-    private const string IncidentFind = $"{IncidentFindWhere}\n{IncidentFindPick}";
+    private const string IncidentList = $"{IncidentListWhere} {IncidentListPage}";
+    private const string IncidentFind = $"{IncidentFindWhere} {IncidentFindPick}";
 
     private static readonly string ScopedIncidentList =
         $"WITH {AccessPatternsCte}\n{IncidentListWhere} AND {IncidentAccess}\n{IncidentListPage}";
