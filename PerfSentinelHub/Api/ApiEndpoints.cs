@@ -257,7 +257,8 @@ public static partial class ApiEndpoints
             sourceIds,
             fromMs,
             toMs,
-            signature);
+            signature,
+            ReadOptional(request, "grouping"));
         return true;
     }
 

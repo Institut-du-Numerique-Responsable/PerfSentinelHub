@@ -122,12 +122,13 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             {
                 migration.Transaction = transaction;
                 migration.CommandText =
-                    Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7;
+                    Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
             await EnsureLineageColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
+            await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
             {
@@ -136,7 +137,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                       INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
                                       VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
                                              (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms),
-                                             (7, $applied_at_ms);
+                                             (7, $applied_at_ms), (8, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -205,6 +206,38 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                             ALTER TABLE finding_sources ADD COLUMN first_observed_day INTEGER;
                             """;
         await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Before version 8 a grouping lived only in each source's own copy of
+    ///     the envelope. Read once, on the boot that creates the table: later
+    ///     observations write their own rows, and the purge must not be undone.
+    ///     A row without its own copy is left out rather than credited with the
+    ///     shared envelope, which may be another source's. An envelope that is
+    ///     not valid JSON is skipped, so it cannot keep the Hub from starting.
+    /// </summary>
+    private static async Task BackfillGroupingsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = 8);";
+        if ((long)(await command.ExecuteScalarAsync(cancellationToken))! == 1)
+            return;
+
+        command.CommandText = """
+                              INSERT OR IGNORE INTO finding_groupings(signature, source_id, grouping, last_seen_ms)
+                              SELECT signature, source_id, grouping, last_seen_ms FROM (
+                                SELECT signature, source_id, last_seen_ms,
+                                       CASE WHEN json_valid(finding_json)
+                                         THEN json_extract(finding_json, '$.finding.grouping[0].value')
+                                       END AS grouping
+                                FROM finding_sources)
+                              WHERE typeof(grouping) = 'text' AND grouping <> '';
+                              """;
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<bool> HasColumnAsync(
@@ -440,6 +473,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM incidents WHERE last_seen_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM finding_observations WHERE rowid IN (
                                      SELECT rowid FROM finding_observations WHERE day < $cutoff_day LIMIT $chunk);
+                                   DELETE FROM finding_groupings WHERE rowid IN (
+                                     SELECT rowid FROM finding_groupings WHERE last_seen_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM source_acks WHERE rowid IN (
                                      SELECT rowid FROM source_acks WHERE read_at_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM analysis_runs WHERE rowid IN (
@@ -569,6 +604,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
         AddFilter(where, parameters, "signature", SignatureParameter, query.Signature);
         var windowed = AddWindow(parameters, query);
+        if (query.Grouping is not null)
+            parameters.Add(("$grouping", query.Grouping));
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -647,13 +684,14 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             ? ($"WITH {ScopedFindings},", "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}")
             : ("WITH", "findings", "", "");
         var window = windowed ? InWindow(row) : "";
+        var grouped = query.Grouping is null ? "" : InGrouping(row);
         var unacked = query.IncludeAcked ? "" : Unacked(row);
 #pragma warning disable S2077
         return $"""
                 {with} statused AS (
                   SELECT {row}.*, {StatusCase(row, heartbeatScope)} AS status
                   FROM {row}
-                  {where}{window}{unacked}
+                  {where}{window}{grouped}{unacked}
                 ),
                 selected AS (
                   SELECT * FROM statused
@@ -749,6 +787,18 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                AND o.day BETWEEN $from_day AND $to_day)
                            OR (p.first_seen_ms <= $to_ms
                                AND COALESCE(p.first_observed_day * 86400000, p.last_seen_ms) >= $from_ms)))
+                """;
+    }
+
+    // Any grouping a source in scope saw the finding in, not only the one its
+    // envelope names: the signature is grouping-blind.
+    private static string InGrouping(string row)
+    {
+        return $"""
+                 AND EXISTS (
+                    SELECT 1 FROM finding_groupings AS g
+                    WHERE g.signature = {row}.signature AND g.grouping = $grouping
+                      AND ($source_ids IS NULL OR g.source_id {InScope}))
                 """;
     }
 
@@ -1015,6 +1065,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                 severity = excluded.severity,
                                 severity_rank = excluded.severity_rank
                               WHERE excluded.severity_rank > finding_observations.severity_rank;
+                              INSERT INTO finding_groupings(signature, source_id, grouping, last_seen_ms)
+                              SELECT $signature, $source_id, $grouping, $observed_at WHERE $grouping IS NOT NULL
+                              ON CONFLICT(signature, source_id, grouping) DO UPDATE SET
+                                last_seen_ms = MAX(finding_groupings.last_seen_ms, excluded.last_seen_ms);
                               """;
         command.Parameters.AddWithValue(SignatureParameter, finding.Signature);
         command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
@@ -1027,6 +1081,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$severity", finding.Severity);
         command.Parameters.AddWithValue("$severity_rank", FindingParser.SeverityRank(finding.Severity));
         command.Parameters.AddWithValue("$day", observedAtMs / DayMs);
+        command.Parameters.AddWithValue("$grouping", (object?)finding.Grouping ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

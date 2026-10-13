@@ -23,7 +23,8 @@ public sealed record ParsedFinding(
     string? TraceId,
     string Confidence,
     int ConfidenceRank,
-    long? FirstSeenMs);
+    long? FirstSeenMs,
+    string? Grouping = null);
 
 // Explicit validation branches keep malformed-input handling auditable.
 // ReSharper disable ConvertIfStatementToSwitchStatement
@@ -129,8 +130,24 @@ public static class FindingParser
             traceId,
             confidence,
             ConfidenceRank(confidence),
-            JsonRead.ReadEpochMs(envelope, "first_seen_ms"));
+            JsonRead.ReadEpochMs(envelope, "first_seen_ms"),
+            EffectiveGrouping(body));
         return true;
+    }
+
+    // The value of the first grouping attribute, the one the daemon files the finding
+    // under and its /api/findings grouping filter matches. Null when the spans had none.
+    private static string? EffectiveGrouping(JsonElement body)
+    {
+        if (!body.TryGetProperty("grouping", out var grouping) ||
+            grouping.ValueKind != JsonValueKind.Array ||
+            grouping.GetArrayLength() == 0)
+            return null;
+
+        var first = grouping[0];
+        return first.ValueKind == JsonValueKind.Object && TryString(first, "value", out var value)
+            ? value
+            : null;
     }
 
     private static bool TryString(JsonElement element, string propertyName, out string value)

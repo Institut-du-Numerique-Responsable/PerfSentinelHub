@@ -31,7 +31,7 @@ push n'exerce pas.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport    |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
-| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                               |
+| `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                   |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                       |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
@@ -61,11 +61,23 @@ sources comptant quand la lecture n'a pas de périmètre, voir
 [Comment `include_acked` juge un finding](#comment-include_acked-juge-un-finding).
 `signature` est une correspondance exacte. Le Hub la borne et laisse sa forme au daemon :
 au-delà de 1 024 caractères, ou avec un caractère de contrôle, elle répond `400`. Un
-`service`, `finding_type`, `severity`, `status` ou `signature` donné vide ou composé
-seulement de blancs se lit comme absent, ce qu'un tableau de bord envoie pour son choix
-"All". Les lignes suivent un ordre total, `last_seen` décroissant puis `signature`, et
+`service`, `finding_type`, `severity`, `status`, `signature` ou `grouping` donné vide ou
+composé seulement de blancs se lit comme absent, ce qu'un tableau de bord envoie pour son
+choix "All". Les lignes suivent un ordre total, `last_seen` décroissant puis `signature`, et
 `offset` en saute autant avant que `limit` ne s'applique. `offset` va de 0 à 1 000 000, et
 une valeur hors de cette plage est un `400` plutôt qu'une page ramenée dans les bornes.
+
+`grouping` est le filtre du même nom du daemon, une correspondance exacte sur la valeur de
+regroupement effective d'un finding, le premier `[detection] grouping_attributes` porté par
+ses spans, par défaut `k8s.namespace.name`. C'est une chaîne libre comme `service`, donc une
+valeur inconnue donne une page vide. La signature ignore le regroupement, donc un même
+finding peut être vu dans plusieurs namespaces alors que son enveloppe ne nomme que le
+dernier : le Hub garde chaque regroupement dans lequel une source l'a remonté, et le filtre
+retient n'importe lequel d'entre eux, remonté par une source du périmètre. Le push d'un
+daemon fusionne une signature entre regroupements, alors que sa liste a une ligne par
+regroupement, donc c'est la collecte qui enregistre chacun d'eux. Il ne restreint pas `from` et
+`to` : une lecture fenêtrée liste un finding vu dans la fenêtre et vu dans ce regroupement,
+pas forcément les deux à la fois.
 
 `environment` et `source_id` donnent un périmètre à la lecture, les sources d'un
 environnement ou une seule source. Ce sont des ensembles fermés, les sources configurées du

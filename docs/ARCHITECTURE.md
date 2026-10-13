@@ -98,7 +98,10 @@ the Hub clock and by whole day: a day leaves once it lies entirely before the cu
 the day the cutoff falls in is kept. They carry no foreign key, because a cascade from
 one purge chunk would hold the write lock far longer than the chunk itself, so a purged
 finding can leave an observation row behind. That orphan is invisible, a read reaches an
-observation only through its source's row, and it leaves with its day.
+observation only through its source's row, and it leaves with its day. The groupings each
+source saw a finding in ride the same clock on their own `last_seen_ms`, without a foreign
+key for the same reason, and an orphan is as invisible: a read reaches one only through a
+finding.
 
 The ack mirror rides that clock as well, on `read_at_ms`, the time of the read that wrote
 the row. It does not age an ack: every read that succeeds rewrites its source's rows, so

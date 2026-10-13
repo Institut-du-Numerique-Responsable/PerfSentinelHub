@@ -109,7 +109,8 @@ public sealed record FindingQuery(
     IReadOnlyList<string>? SourceIds = null,
     long? FromMs = null,
     long? ToMs = null,
-    string? Signature = null);
+    string? Signature = null,
+    string? Grouping = null);
 
 // SourceIds is the resolved set: one id from source_id, every id of an
 // environment from environment, null for the whole fleet.

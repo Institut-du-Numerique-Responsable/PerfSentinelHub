@@ -106,7 +106,9 @@ portent aucune clé étrangère, parce qu'une cascade depuis une tranche de purg
 le verrou d'écriture bien plus longtemps que la tranche elle-même, donc un finding purgé
 peut laisser une ligne d'observation derrière lui. Cette orpheline est invisible, une
 lecture n'atteint une observation qu'à travers la ligne de sa source, et elle part avec
-son jour.
+son jour. Les regroupements où chaque source a vu un finding suivent la même horloge, sur
+leur propre `last_seen_ms`, sans clé étrangère pour la même raison, et une orpheline y est
+tout aussi invisible : une lecture n'en atteint une qu'à travers un finding.
 
 Le miroir des acquittements suit aussi cette horloge, sur `read_at_ms`, l'heure de la
 lecture qui a écrit la ligne. Elle ne fait pas vieillir un acquittement : chaque lecture
