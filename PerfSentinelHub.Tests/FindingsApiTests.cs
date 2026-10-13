@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -103,6 +104,7 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     [InlineData("from")]
     [InlineData("to")]
     [InlineData("signature")]
+    [InlineData("grouping")]
     public async Task A_blank_filter_reads_as_absent(string name)
     {
         await SeedAsync();
@@ -198,6 +200,46 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         Assert.Equal(1, await CountAsync($"{productionPath}&severity=critical", client));
         Assert.Equal(0, await CountAsync($"{productionPath}&severity=warning", client));
         Assert.Equal(1, await CountAsync($"{fleetPath}&severity=warning", client));
+    }
+
+    // The signature is grouping-blind, so one finding can be seen in several namespaces.
+    [Fact]
+    public async Task A_grouping_filter_lists_a_finding_in_every_grouping_it_was_seen_in()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await factory.Database.UpsertBatchAsync(
+            Staging, new ParsedBatch([await InGroupingAsync("grouped:x", "grouped", "test")], 0), 4000,
+            cancellationToken);
+        await factory.Database.UpsertBatchAsync(
+            Staging, new ParsedBatch([await InGroupingAsync("grouped:x", "grouped", "staging")], 0), 5000,
+            cancellationToken);
+        await factory.Database.UpsertBatchAsync(
+            Staging, new ParsedBatch([await VariantAsync("grouped:none", "grouped")], 0), 5000, cancellationToken);
+
+        const string path = "/api/findings?service=grouped";
+        Assert.Equal(["grouped:x"], await SignaturesAsync($"{path}&grouping=test"));
+        Assert.Equal(["grouped:x"], await SignaturesAsync($"{path}&grouping=staging"));
+        Assert.Empty(await SignaturesAsync($"{path}&grouping=production"));
+        Assert.Equal(2, await CountAsync(path));
+    }
+
+    [Fact]
+    public async Task A_grouping_filter_counts_only_the_sources_in_scope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await factory.Database.UpsertBatchAsync(
+            Production, new ParsedBatch([await InGroupingAsync("grouped-scope:x", "grouped-scope", "test")], 0),
+            4000, cancellationToken);
+        await factory.Database.UpsertBatchAsync(
+            Staging, new ParsedBatch([await InGroupingAsync("grouped-scope:x", "grouped-scope", "staging")], 0),
+            4000, cancellationToken);
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+
+        const string path = "/api/findings?service=grouped-scope";
+        Assert.Equal(1, await CountAsync($"{path}&grouping=test&environment=production", client));
+        Assert.Equal(0, await CountAsync($"{path}&grouping=test&environment=staging", client));
+        Assert.Equal(1, await CountAsync($"{path}&grouping=staging&source_id=staging-a", client));
     }
 
     [Fact]
@@ -690,6 +732,18 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         await factory.Database.UpsertBatchAsync(OpenStaging, batch, 4000, cancellationToken);
         await MirrorAsync(AckedProduction, 5000, AckReadStates.Ok, Ack($"{service}:x"));
         await MirrorAsync(OpenStaging, 5000, AckReadStates.Ok);
+    }
+
+    // A variant whose spans carried one grouping attribute, parsed as a daemon sends it.
+    private static async Task<ParsedFinding> InGroupingAsync(string signature, string service, string grouping)
+    {
+        var variant = await VariantAsync(signature, service);
+        var envelope = variant.EnvelopeJson.Replace(
+            "\"grouping\": []",
+            $"\"grouping\": [{{\"key\": \"k8s.namespace.name\", \"value\": \"{grouping}\"}}]",
+            StringComparison.Ordinal);
+        var parsed = Assert.Single(FindingParser.Parse(Encoding.UTF8.GetBytes($"[{envelope}]")).Findings);
+        return parsed with { Service = service, TraceId = null };
     }
 
     // One finding under a service of its own, so a test reads only what it seeded.

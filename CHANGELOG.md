@@ -4,6 +4,19 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- `GET /api/findings` takes `grouping`, the daemon's filter of that name: an exact match on
+  a finding's effective grouping value, by default its Kubernetes namespace. The signature
+  is grouping-blind, so the Hub now records every grouping a source reported a finding in,
+  in a `finding_groupings` table that retention purges on its own `last_seen_ms`, and the
+  filter matches any of them from a source in scope. A daemon's push coalesces a signature
+  across groupings, so the poll, which reads one row per grouping, is what records each of
+  them. On the upgrade each source's own stored copy is credited with the grouping it
+  names; a row without its own copy is not credited with the shared one, which may be
+  another source's, and an envelope that is not valid JSON is skipped. Blank reads as
+  absent, like the other filters, so a dashboard's "All" choice lists everything.
+
 ### Fixed
 
 - The example dashboard's `Fleet reachability` table listed every label of the scraped

@@ -32,7 +32,8 @@ public sealed class StorageTests
             names.Add(reader.GetString(0));
         Assert.Equal(
             [
-                "ack_reads", "analysis_runs", "endpoint_heartbeats", "finding_lineage", "finding_observations",
+                "ack_reads", "analysis_runs", "endpoint_heartbeats", "finding_groupings", "finding_lineage",
+                "finding_observations",
                 "finding_sources", "findings", "incident_reads", "incidents", "schema_migrations",
                 "source_acks", "source_imports", "source_state"
             ],
@@ -233,6 +234,68 @@ public sealed class StorageTests
         read.CommandText = "SELECT severity || ' ' || first_observed_day FROM finding_sources;";
         Assert.Equal("warning 1", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
+
+    [Fact]
+    public async Task Initialize_backfills_groupings_from_each_source_copy_once()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // A database from before version 8: the groupings only in the envelopes. A row
+        // without its own copy must not take the shared one, which may be another source's.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        {
+            await using var seed = connection.CreateCommand();
+            seed.CommandText = """
+                               INSERT INTO findings(
+                                 signature, finding_json, service, finding_type, severity, endpoint,
+                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                 max_confidence, max_confidence_rank)
+                               VALUES ('signature', '{"finding":{"grouping":[{"key":"k8s.namespace.name","value":"shared"}]}}',
+                                 'checkout', 'slow_sql', 'warning', 'POST /checkout', 'template-hash', 'trace',
+                                 500, 900, 'daemon_production', 4);
+                               INSERT INTO finding_sources(
+                                 signature, source_id, source_name, environment, producer_version,
+                                 first_seen_ms, last_seen_ms, finding_json)
+                               VALUES
+                                 ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
+                                  '{"finding":{"grouping":[{"key":"k8s.namespace.name","value":"test"}]}}'),
+                                 ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL),
+                                 ('signature', 'none', 'None', 'staging', '0.26.2', 500, 700,
+                                  '{"finding":{"grouping":[]}}'),
+                                 ('signature', 'garbled', 'Garbled', 'staging', '0.26.2', 500, 600, '{not json');
+                               DROP TABLE finding_groupings;
+                               DELETE FROM schema_migrations WHERE version = 8;
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        await using (var connection = await restarted.Database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = Groupings;
+            Assert.Equal("own test 800", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
+            // What the retention leaves: a later boot must not read it back from the envelopes.
+            command.CommandText = "DELETE FROM finding_groupings;";
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = Groupings;
+        Assert.IsType<DBNull>(await read.ExecuteScalarAsync(cancellationToken));
+    }
+
+    private const string Groupings = """
+                                     SELECT group_concat(source_id || ' ' || grouping || ' ' || last_seen_ms, ',')
+                                     FROM (SELECT * FROM finding_groupings ORDER BY source_id);
+                                     """;
 
     private static async Task<List<string>> SourceColumnsAsync(
         SqliteConnection connection,

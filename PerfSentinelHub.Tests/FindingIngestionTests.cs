@@ -48,6 +48,24 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Contains("future_contract_field", finding.EnvelopeJson, StringComparison.Ordinal);
     }
 
+    // The daemon files a finding under its first grouping attribute, the one its own filter matches.
+    [Theory]
+    [InlineData("[{\"key\": \"k8s.namespace.name\", \"value\": \"test\"}, {\"key\": \"service.namespace\", \"value\": \"other\"}]", "test")]
+    [InlineData("[]", null)]
+    [InlineData("[{\"key\": \"k8s.namespace.name\", \"value\": \"\"}]", null)]
+    [InlineData("[{\"key\": \"k8s.namespace.name\"}]", null)]
+    [InlineData("[{\"key\": \"k8s.namespace.name\", \"value\": 3}]", null)]
+    [InlineData("[\"test\"]", null)]
+    [InlineData("{\"value\": \"test\"}", null)]
+    public async Task Parser_reads_the_first_grouping_value(string grouping, string? expected)
+    {
+        var payload = (await File.ReadAllTextAsync(FixturePath, TestContext.Current.CancellationToken))
+            .Replace("\"grouping\": []", $"\"grouping\": {grouping}", StringComparison.Ordinal);
+
+        var finding = Assert.Single(FindingParser.Parse(Encoding.UTF8.GetBytes(payload)).Findings);
+        Assert.Equal(expected, finding.Grouping);
+    }
+
     [Fact]
     public async Task Upsert_merges_signature_and_tracks_each_source_and_heartbeat()
     {

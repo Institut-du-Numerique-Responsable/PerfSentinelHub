@@ -119,6 +119,32 @@ public sealed class WorkerAndRetentionTests : IDisposable
     }
 
     [Fact]
+    public async Task Purge_removes_a_grouping_no_source_saw_since_the_cutoff()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        await using (var connection = await database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                                  INSERT INTO finding_groupings(signature, source_id, grouping, last_seen_ms)
+                                  VALUES ('sig','a','test',500), ('sig','a','staging',1500);
+                                  """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await database.PurgeAsync(1000, 0, cancellationToken);
+
+        await using var reopened = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = "SELECT group_concat(grouping, ',') FROM finding_groupings;";
+        Assert.Equal("staging", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
     public async Task Purge_removes_a_mirrored_ack_that_no_read_refreshed_since_the_cutoff()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

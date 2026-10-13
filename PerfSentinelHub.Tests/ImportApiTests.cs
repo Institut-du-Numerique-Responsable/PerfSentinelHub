@@ -50,6 +50,19 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task Import_records_the_grouping_a_pushed_finding_was_seen_in()
+    {
+        using var request = await RequestAsync(ApiKey, 1, "pushed-grouping", "pushed-namespace");
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rows = await factory.Database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 1000, Grouping: "pushed-namespace"),
+            TestContext.Current.CancellationToken);
+        Assert.Equal("pushed-grouping-0", Assert.Single(rows).Signature);
+    }
+
+    [Fact]
     public async Task Import_rejects_more_than_one_hundred_findings()
     {
         using var request = await RequestAsync(ApiKey, 101);
@@ -140,12 +153,18 @@ public sealed class ImportApiTests(HubApplicationFactory factory) : IClassFixtur
     private static async Task<HttpRequestMessage> RequestAsync(
         string? apiKey,
         int count,
-        string? signaturePrefix = null)
+        string? signaturePrefix = null,
+        string? grouping = null)
     {
         using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
             FixturePath,
             TestContext.Current.CancellationToken));
         var finding = fixture.RootElement[0].GetRawText();
+        if (grouping is not null)
+            finding = finding.Replace(
+                "\"grouping\": []",
+                $"\"grouping\": [{{\"key\": \"k8s.namespace.name\", \"value\": \"{grouping}\"}}]",
+                StringComparison.Ordinal);
         var findings = Enumerable.Range(0, count).Select(index => signaturePrefix is null
             ? finding
             : finding.Replace(

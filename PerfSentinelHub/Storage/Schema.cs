@@ -212,4 +212,20 @@ internal static class Schema
                                  last_error_code TEXT
                                );
                                """;
+
+    // Every effective grouping a source saw a finding in, on the Hub clock. The
+    // signature is grouping-blind, so one finding can live in several namespaces
+    // while its envelope only names the last one, and a grouping filter must
+    // match all of them. Kept a rowid table because the purge deletes by rowid.
+    internal const string V8 = """
+                               CREATE TABLE IF NOT EXISTS finding_groupings (
+                                 signature TEXT NOT NULL,
+                                 source_id TEXT NOT NULL,
+                                 grouping TEXT NOT NULL,
+                                 last_seen_ms INTEGER NOT NULL,
+                                 PRIMARY KEY(signature, source_id, grouping)
+                               );
+                               CREATE INDEX IF NOT EXISTS ix_finding_groupings_last_seen
+                                 ON finding_groupings(last_seen_ms);
+                               """;
 }

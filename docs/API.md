@@ -29,7 +29,7 @@ the Hub's route to the daemon, which a push does not exercise.
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
-| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                           |
+| `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`               |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
@@ -59,10 +59,21 @@ the read has no scope, see
 [How `include_acked` judges a finding](#how-include_acked-judges-a-finding). `signature` is
 an exact match. The Hub bounds it and leaves its shape to the daemon: past 1,024 characters,
 or with a control character, it is a `400`. A `service`, `finding_type`, `severity`,
-`status` or `signature` given empty or as whitespace only reads as absent, which is what a
-dashboard sends for its "All" choice. The rows come in a total order, `last_seen` descending
+`status`, `signature` or `grouping` given empty or as whitespace only reads as absent, which
+is what a dashboard sends for its "All" choice. The rows come in a total order, `last_seen` descending
 then `signature`, and `offset` skips that many of them before `limit` applies. `offset` runs
 from 0 to 1,000,000, and a value outside that range is a `400` rather than a clamped page.
+
+`grouping` is the daemon's own filter of that name, an exact match on a finding's effective
+grouping value, the first `[detection] grouping_attributes` its spans carried, by default
+`k8s.namespace.name`. A free string like `service`, so an unknown one is an empty page. The
+signature is grouping-blind, so one finding can be seen in several namespaces while its
+envelope names only the last: the Hub keeps every grouping a source reported it in, and the
+filter matches any of them, from a source in scope. A daemon's push coalesces a signature
+across groupings, while its listing has one row per grouping, so the poll is what records
+each of them. It does not narrow `from` and `to`: a
+windowed read lists a finding seen in the window and seen in that grouping, not necessarily
+both at once.
 
 `environment` and `source_id` scope the read, to the sources of one environment or to one
 source. Both are closed sets, the Hub's configured sources, and a value outside them is a
