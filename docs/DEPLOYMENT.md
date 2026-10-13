@@ -114,3 +114,27 @@ still heartbeats, and a build is a synthetic shot against a branch. Importing
 one would make `status` false and would let a branch's findings read as
 production's. A CI job that wants the fleet's state calls `GET /api/findings`
 like any other reader. See [API.md](API.md).
+
+## Grouping attributes are chosen at each daemon
+
+The Hub adds no grouping setting of its own. It records, per source, every
+attribute a daemon captured on a finding, and a daemon captures only the
+attributes listed in its own `[detection] grouping_attributes`. A key such as
+`team` reaches the Hub only from the daemons that list it, so list it at every
+daemon whose findings should carry it, and set it on the spans, as a resource or
+span attribute, in the applications.
+
+An explicit list replaces the engine's default rather than extending it. Keep
+the defaults first:
+
+```toml
+[detection]
+grouping_attributes = ["k8s.namespace.name", "service.namespace", "team"]
+```
+
+The first attribute present on a span is the finding's grouping identity. On
+spans that carry neither default, from Compose or a VM for instance, the added
+key becomes that identity, which changes three things at that daemon: one
+detection group splits into one per value, so a count can fall below its
+threshold, the daemon lists a row per value, and the `grouping` label of its
+metrics follows. See [LIMITATIONS.md](LIMITATIONS.md).

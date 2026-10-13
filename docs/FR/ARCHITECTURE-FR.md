@@ -108,7 +108,10 @@ peut laisser une ligne d'observation derrière lui. Cette orpheline est invisibl
 lecture n'atteint une observation qu'à travers la ligne de sa source, et elle part avec
 son jour. Les regroupements où chaque source a vu un finding suivent la même horloge, sur
 leur propre `last_seen_ms`, sans clé étrangère pour la même raison, et une orpheline y est
-tout aussi invisible : une lecture n'en atteint une qu'à travers un finding.
+tout aussi invisible : une lecture n'en atteint une qu'à travers un finding. Les attributs
+de regroupement que chaque source a captés sur un finding la suivent de la même façon, sur
+leur propre `last_seen_ms`. Les paires que partagent les findings gelés d'un incident partent
+avec leur incident.
 
 Le miroir des acquittements suit aussi cette horloge, sur `read_at_ms`, l'heure de la
 lecture qui a écrit la ligne. Elle ne fait pas vieillir un acquittement : chaque lecture
@@ -126,6 +129,53 @@ ne survive jamais au fichier qu'il décompte.
 Le piège que ce schéma existe pour éviter : un poll qui omet un finding ne le résout
 pas. Le tampon circulaire du daemon peut simplement l'avoir évincé, et absent n'est pas
 la même chose que résolu. Seule la rétention retire une ligne.
+
+## Ce que contient la base
+
+Chaque table est créée dans `Storage/Schema.cs`. Un finding y est tenu deux fois : une
+fois pour toute la flotte, sous sa signature aveugle au regroupement, et une fois par source
+qui l'a remonté, parce que la ligne de flotte garde l'enveloppe la plus récente, quelle que
+soit la source, et rien d'autre.
+
+| Table                          | Une ligne par                                                        | Part                                       |
+|--------------------------------|----------------------------------------------------------------------|--------------------------------------------|
+| `findings`                     | signature, avec l'enveloppe la plus récente de toutes les sources    | rétention, sur `last_seen_ms`              |
+| `finding_sources`              | signature et source, avec l'enveloppe et le service de cette source  | rétention, sur `last_seen_ms`              |
+| `finding_observations`         | signature, source et jour                                            | rétention, par jour entier                 |
+| `finding_groupings`            | signature, source et valeur de regroupement effective                | rétention, sur `last_seen_ms`              |
+| `finding_attributes`           | signature, source, identité de regroupement et paire captée          | rétention, sur `last_seen_ms`              |
+| `finding_lineage`              | signature successeur et prédécesseur                                 | avec son successeur                        |
+| `endpoint_heartbeats`          | source, service et endpoint                                          | rétention, sur `last_seen_any_ms`          |
+| `source_state`                 | source, la joignabilité vue par le poll                              | rétention, sur `last_attempt_ms`           |
+| `source_imports`               | source, son dernier push                                             | jamais                                     |
+| `incidents`                    | incident et source                                                   | rétention, sur `last_seen_ms`              |
+| `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
+| `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
+| `incident_reads`, `ack_reads`  | source                                                               | jamais                                     |
+| `analysis_runs`                | run                                                                  | `Hub:Analysis:RunRetention`                |
+
+`finding_attributes` garde chaque attribut de regroupement qu'un daemon a capté, jusqu'aux
+huit du moteur, chacun sous l'identité de regroupement avec laquelle il est arrivé : la
+première paire de cette observation, ou quatre chaînes vides quand l'observation n'a pas de
+première paire bien formée, auquel cas aucune autre paire n'est enregistrée.
+`finding_sources.service` est le service que cette source a remonté, ce que
+`findings.service` n'est plus dès que deux sources divergent. `incident_attributes` tient
+les paires communes à tous les findings gelés de la copie d'un incident par une source, ou
+deux chaînes vides quand ils n'en partagent aucune, dérivées de la copie stockée chaque fois
+qu'une lecture la change. Une lecture qui laisse la copie telle quelle, mêmes findings ou
+recapture plus pauvre, ne fait que dater ses lignes du nouveau `last_seen_ms` de la copie.
+Rien ne lit encore ces trois-là. Elles sont enregistrées avant le contrôle d'accès, qui y
+fera correspondre les projets, pour que l'activer ne parte pas d'un historique vide.
+
+Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : les lignes
+d'attributs d'une copie dont l'observation la plus récente n'en a aucune, le service d'une
+copie qui n'en a pas, tous deux depuis l'enveloppe propre à cette copie, et les paires de
+chaque copie d'incident sans ligne ou datée d'autre chose que son `last_seen_ms`, ce que
+seule l'écriture d'un build plus ancien laisse. Une image ramenée sous cette version puis
+remontée est donc couverte au démarrage suivant. Une copie écrite avant l'existence de
+l'enveloppe par source n'a ni l'un ni l'autre tant que sa source ne la remonte pas de
+nouveau. Le coût de ce démarrage est mesuré dans
+[BENCHMARKS-FR.md](BENCHMARKS-FR.md#démarrer-sur-une-base-remplie).
 
 ## Un run atteint toujours un état terminal
 

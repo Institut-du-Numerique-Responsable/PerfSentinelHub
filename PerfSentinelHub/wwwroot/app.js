@@ -1513,11 +1513,7 @@
                     + 'to off and the command drops `--refresh`, leaving the engine its own default of '
                     + 'five seconds.',
                     engineNote(),
-                    source.auth_header_name
-                        ? 'This daemon is behind an `' + source.auth_header_name + '` header. '
-                        + '`query monitor` takes no such flag, so this command works only from somewhere '
-                        + 'that reaches the daemon without it.'
-                        : null
+                    PSL.monitorKeyHint(source)
                 ]
             }),
             settingsDisclosure(source, view)

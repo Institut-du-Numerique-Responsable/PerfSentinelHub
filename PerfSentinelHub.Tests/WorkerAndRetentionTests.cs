@@ -144,6 +144,42 @@ public sealed class WorkerAndRetentionTests : IDisposable
         Assert.Equal("staging", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    // An attribute rides its own last_seen_ms, an incident's pairs leave with the incident.
+    [Fact]
+    public async Task Purge_removes_attributes_no_source_saw_since_the_cutoff_and_the_pairs_of_purged_incidents()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        await using (var connection = await database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                                  INSERT INTO finding_attributes VALUES
+                                    ('sig','a','team','old','team','old',500),
+                                    ('sig','a','team','new','team','new',1500);
+                                  INSERT INTO incidents VALUES
+                                    ('old-incident','a','svc','restart',100,NULL,0,200,NULL,0,'[]',100,500,'[]'),
+                                    ('kept-incident','a','svc','restart',100,NULL,0,200,NULL,0,'[]',100,1500,'[]');
+                                  INSERT INTO incident_attributes VALUES
+                                    ('old-incident','a','team','old',500),
+                                    ('kept-incident','a','team','new',1500);
+                                  """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await database.PurgeAsync(1000, 0, cancellationToken);
+
+        await using var reopened = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = "SELECT group_concat(attr_value, ',') FROM finding_attributes;";
+        Assert.Equal("new", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+        read.CommandText = "SELECT group_concat(id || ' ' || attr_value, ',') FROM incident_attributes;";
+        Assert.Equal("kept-incident new", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
     [Fact]
     public async Task Purge_removes_a_mirrored_ack_that_no_read_refreshed_since_the_cutoff()
     {

@@ -228,4 +228,38 @@ internal static class Schema
                                CREATE INDEX IF NOT EXISTS ix_finding_groupings_last_seen
                                  ON finding_groupings(last_seen_ms);
                                """;
+
+    // Every grouping attribute a source captured on a finding, with the grouping
+    // identity (first pair) of the observation it came with, on the Hub clock. The
+    // signature is grouping-blind and the envelope keeps the newest observation only,
+    // so a scope matched on attributes will read this table. ('', '', '', '') marks an
+    // observation with no usable grouping. incident_attributes holds the pairs every
+    // frozen finding of an incident copy carries, ('', '') when there is none, derived
+    // from the stored findings_json whenever it changes and stamped with the copy's
+    // last_seen_ms, so a start finds the copies an older build wrote since. Both are kept
+    // rowid tables because the purge deletes by rowid, with no foreign key, like V6 and
+    // V8. finding_sources gains its copy's own service through
+    // HubDatabase.EnsureFindingSourceServiceColumnAsync, as V6's columns are added.
+    internal const string V9 = """
+                               CREATE TABLE IF NOT EXISTS finding_attributes (
+                                 signature TEXT NOT NULL,
+                                 source_id TEXT NOT NULL,
+                                 grouping_key TEXT NOT NULL,
+                                 grouping_value TEXT NOT NULL,
+                                 attr_key TEXT NOT NULL,
+                                 attr_value TEXT NOT NULL,
+                                 last_seen_ms INTEGER NOT NULL,
+                                 PRIMARY KEY(signature, source_id, grouping_key, grouping_value, attr_key, attr_value)
+                               );
+                               CREATE INDEX IF NOT EXISTS ix_finding_attributes_last_seen
+                                 ON finding_attributes(last_seen_ms);
+                               CREATE TABLE IF NOT EXISTS incident_attributes (
+                                 id TEXT NOT NULL,
+                                 source_id TEXT NOT NULL,
+                                 attr_key TEXT NOT NULL,
+                                 attr_value TEXT NOT NULL,
+                                 last_seen_ms INTEGER NOT NULL,
+                                 PRIMARY KEY(id, source_id, attr_key, attr_value)
+                               );
+                               """;
 }

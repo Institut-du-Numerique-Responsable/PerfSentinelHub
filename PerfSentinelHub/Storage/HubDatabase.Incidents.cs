@@ -88,7 +88,7 @@ public sealed partial class HubDatabase
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"""
+        command.CommandText = IncidentAttributesReset + $"""
                                INSERT INTO incidents({IncidentColumns}, findings_json)
                                VALUES ($id, $source_id, $service, $kind, $at_ms, $ended_at_ms, $window_from_ms,
                                        $window_to_ms, $oldest_finding_ms, $finding_count, $incident_json,
@@ -103,7 +103,7 @@ public sealed partial class HubDatabase
                                  finding_count = MAX(incidents.finding_count, excluded.finding_count),
                                  ended_at_ms = COALESCE(excluded.ended_at_ms, incidents.ended_at_ms),
                                  last_seen_ms = excluded.last_seen_ms;
-                               """;
+                               """ + IncidentAttributesUpsert;
         command.Parameters.AddWithValue("$id", incident.Id);
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
         command.Parameters.AddWithValue(ServiceParameter, incident.Service);
@@ -118,6 +118,62 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue("$findings_json", incident.FindingsJson);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // Frozen findings never change, and every poll and refresh upserts the daemon's
+    // whole ring under the write gate. So a copy the upsert leaves as it was, a richer
+    // stored copy or the same findings, keeps its pairs and takes the new stamp. Any
+    // other copy loses them, and IncidentAttributesUpsert derives them again from the
+    // row it writes. The condition is the upsert's own for replacing findings_json.
+    private const string IncidentAttributesReset = """
+                                                   DELETE FROM incident_attributes
+                                                   WHERE id = $id AND source_id = $source_id AND NOT EXISTS (
+                                                     SELECT 1 FROM incidents
+                                                     WHERE id = $id AND source_id = $source_id
+                                                       AND (finding_count > $finding_count
+                                                            OR findings_json IS $findings_json));
+                                                   UPDATE incident_attributes SET last_seen_ms = $observed_at
+                                                   WHERE id = $id AND source_id = $source_id;
+                                                   """;
+
+    private static readonly string IncidentAttributesUpsert =
+        IncidentAttributesWhere("i.id = $id AND i.source_id = $source_id");
+
+    // For each copy `filter` keeps that has no row: the grouping pairs every frozen
+    // finding carries, or the marker ('', '') when there is none, stamped with the
+    // copy's last_seen_ms. One copy is grouped at a time, through json_group_array since
+    // SQLite has no lateral join, so a start's work space is one incident's and never
+    // the table's. A non-object element or grouping hands json_each a NULL and yields
+    // nothing while the count still includes it, so its copy records no pair.
+    // finding_count is the length of the stored findings_json, the upsert has replaced
+    // both together since incidents shipped, and reading it spares a second parse.
+    private static string IncidentAttributesWhere(string filter)
+    {
+        const string entry = "CASE WHEN g.type = 'object' THEN g.value END";
+        const string underived =
+            "NOT EXISTS (SELECT 1 FROM incident_attributes AS ia WHERE ia.id = i.id AND ia.source_id = i.source_id)";
+#pragma warning disable S2077
+        return $"""
+                INSERT INTO incident_attributes(id, source_id, attr_key, attr_value, last_seen_ms)
+                SELECT i.id, i.source_id, p.value ->> 0, p.value ->> 1, i.last_seen_ms
+                FROM incidents AS i, json_each((
+                  SELECT json_group_array(json_array(k, v)) FROM (
+                    SELECT k, v FROM (
+                      SELECT f.key AS idx, {EntryField(entry, "key")} AS k, {EntryField(entry, "value")} AS v
+                      FROM json_each(CASE WHEN json_valid(i.findings_json) THEN i.findings_json END) AS f,
+                           json_each(CASE WHEN f.type <> 'object' THEN NULL
+                                          WHEN json_type(f.value, '$.finding.grouping') = 'array' THEN f.value END,
+                                     '$.finding.grouping') AS g
+                      WHERE CAST(g.key AS INTEGER) < 8)
+                    WHERE k IS NOT NULL AND v IS NOT NULL
+                    GROUP BY k, v
+                    HAVING COUNT(DISTINCT idx) = i.finding_count))) AS p
+                WHERE {filter} AND {underived};
+                INSERT INTO incident_attributes(id, source_id, attr_key, attr_value, last_seen_ms)
+                SELECT i.id, i.source_id, '', '', i.last_seen_ms FROM incidents AS i
+                WHERE {filter} AND {underived};
+                """;
+#pragma warning restore S2077
     }
 
     /// <summary>

@@ -36,7 +36,7 @@ public static class FindingParser
         JsonDocument document;
         try
         {
-            document = JsonDocument.Parse(payload);
+            document = JsonDocument.Parse(payload, JsonRead.UniqueProperties);
         }
         catch (JsonException exception)
         {
@@ -54,7 +54,7 @@ public static class FindingParser
         JsonDocument document;
         try
         {
-            document = JsonDocument.Parse(payload);
+            document = JsonDocument.Parse(payload, JsonRead.UniqueProperties);
         }
         catch (JsonException exception)
         {

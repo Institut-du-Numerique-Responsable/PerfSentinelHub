@@ -10,7 +10,8 @@ le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et n
 `POST /api/import/findings?source_id=<id>` accepte l'enveloppe du daemon
 `{"producer_version":"…","findings":[…]}` avec `X-API-Key`. Une requête porte de 1 à 100
 findings et 2 Mio au plus. La réponse n'est envoyée qu'une fois l'upsert idempotent par
-signature commité.
+signature commité. Un corps qui répète un nom de propriété dans un même objet est un `400`,
+car le Hub lit un finding avec deux parseurs qui en garderaient des copies différentes.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de

@@ -33,9 +33,35 @@ All notable changes to PerfSentinelHub are recorded here.
   that checks nobody, and the chart's schema refuses it too. Keycloak needs a Group
   Membership mapper with Add to userinfo on, GitLab's userinfo carries `groups` already,
   and Entra ID's and Google's carry no group, see `docs/AUTHENTICATION.md`.
+- The Hub records, per source, every grouping attribute a daemon captured on a finding,
+  each under the grouping identity of that observation, in a `finding_attributes` table,
+  the service each source reported in a new `finding_sources.service` column, and the pairs
+  every frozen finding of an incident copy shares in an `incident_attributes` table. Schema
+  version 9. Nothing reads them yet and no answer changes: they are recorded ahead of
+  access control, which will match projects on them, so that turning it on does not start
+  from an empty history. Retention purges attributes on their own `last_seen_ms` and an
+  incident's pairs with the incident. Every start fills in, from each source's own
+  envelope, the attributes and the service an older build left out, and the pairs of every
+  incident copy an older build wrote, so an image rolled back and forward again is covered
+  at the next start. The first start after the upgrade does it for every row: 2.3 s on
+  100,000 finding copies and 10,000 incidents of 20 frozen findings, and 6.5 s with 1,000
+  incidents of 1,000, against 0.14 s and 0.11 s for every later start, see
+  `docs/BENCHMARKS.md`, which also says what to do when the chart's 60 s startup probe is
+  too short for it. An attribute reaches the Hub only from the daemons whose
+  `[detection] grouping_attributes` lists it, see `docs/DEPLOYMENT.md`.
 
 ### Changed
 
+- The `perf-sentinel query monitor` command printed under a daemon whose published header
+  is `X-API-Key` now says to set `PERF_SENTINEL_DAEMON_API_KEY` to the daemon's read key
+  first, since the monitor sends that variable as that header. It said the command worked
+  only from somewhere that reached the daemon without the header. Any other header, an
+  Ingress's own for one, is still named as one `query monitor` cannot send.
+- A findings poll, a findings import or an incidents read whose body repeats a property
+  name within one object is refused as invalid JSON, a `400` for an import. The Hub reads
+  a finding's grouping with System.Text.Json, which keeps the last of the two, and its
+  attributes with SQLite, which keeps the first, so the two would disagree. The engine
+  never repeats one.
 - The `403` a refused sign-in answers now reads "Sign-in refused. Open the Hub's home page
   to try again, or ask the Hub's administrator for access.", since retrying is no use to a
   user outside the required groups, and the line still does not say which case it was.

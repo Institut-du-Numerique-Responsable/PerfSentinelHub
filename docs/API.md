@@ -10,7 +10,8 @@ page, by signature.
 `POST /api/import/findings?source_id=<id>` accepts the daemon's envelope
 `{"producer_version":"…","findings":[…]}` with `X-API-Key`. A request carries 1 to 100
 findings and at most 2 MiB. The response is sent only after the idempotent signature
-upsert commits.
+upsert commits. A body that repeats a property name within one object is a `400`, as the
+Hub reads a finding with two parsers that would keep different copies of it.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that

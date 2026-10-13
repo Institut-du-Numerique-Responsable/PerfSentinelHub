@@ -3,7 +3,8 @@
 What the published image weighs, how fast it answers after a cold start, and
 how much memory it holds at rest. Every figure below comes from the released
 `ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:0.3.3` image, not from a local build, and
-the commands to reproduce them close the page.
+the commands to reproduce them close the page. The one exception, the start on a
+filled database, says how it was measured.
 
 The Hub is published with NativeAOT: C# 14 on .NET 10 compiled ahead of time
 into one native executable, with no .NET runtime and no JIT in the image. The
@@ -55,6 +56,40 @@ The memory figure is a floor. A Hub that imports findings, keeps observation
 days, serves the launcher and renders reports holds more, and this page carries
 no figure for that until one is measured on a real fleet. The start and memory
 figures are arm64 only. The amd64 image was sized, not run.
+
+## Start on a filled database
+
+Every start fills in what an older build left out: from each source's own
+envelope, the service and the grouping attributes of a finding copy, and the
+pairs every frozen finding of an incident copy shares, see
+[ARCHITECTURE.md](ARCHITECTURE.md#what-the-database-holds). The first start
+after the upgrade finds all of it to do. Measured on two seeded databases,
+through `HubDatabase.InitializeAsync` in a Release build of the tests rather
+than the native image, with the bundled SQLite 3.53.4, on the machine above with
+the database on its internal SSD:
+
+| Database                                                | Size     | First start after the upgrade | Every later start |
+|---------------------------------------------------------|----------|-------------------------------|-------------------|
+| 100,000 finding copies, 10,000 incidents of 20 findings | 312 MiB  | 2.3 s                         | 0.14 s            |
+| 100,000 finding copies, 1,000 incidents of 1,000        | 1034 MiB | 6.5 s                         | 0.11 s            |
+
+Each copy's envelope is about 900 bytes with two grouping attributes, and each
+frozen finding about 1 KB with two, the same two across one incident. The first
+start writes 200,000 attribute rows and 100,000 services, and derives the pairs
+of every incident, which grows with the frozen findings held within
+`Hub:Retention`: 200,000 in the first database, 1,000,000 in the second, where
+every incident holds the daemon's cap of 1,000. A later start finds nothing to
+write and only reads which copies need it.
+
+That first start runs before the Hub listens, in one transaction. The chart's
+startup probe gives it 60 s and its default limit 500m of CPU, so a database
+holding several million frozen findings on slow nodes can fail the probe, and a
+killed start begins again from nothing. Raise `resources.limits.cpu` for the
+upgrade if so. The first start also holds every envelope it fills in, about
+90 MB here, in SQLite's temporary storage, which writes to `/tmp` past its 2 MB
+cache, and the chart mounts `/tmp` as a 32 MiB `emptyDir`. Whether the kubelet
+counts that file, which SQLite deletes as it opens it, against the limit was not
+checked.
 
 ## Reproduce
 
