@@ -34,7 +34,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 day)                                                        | At least 15 minutes                                                                             |
 | `Hub:UpdateCheck:EngineEndpoint`   | GitHub releases API for `Institut-du-Numerique-Responsable/perf-sentinel`   | Absolute HTTPS, no credentials, query, or fragment                                              |
 | `Hub:UpdateCheck:HubEndpoint`      | GitHub releases API for `Institut-du-Numerique-Responsable/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                              |
-| `Hub:Auth:*`                       | off                                                                         | Browser sign-in against an OAuth2 provider, see [AUTHENTICATION.md](AUTHENTICATION.md)          |
+| `Hub:Auth:*`                       | off                                                                         | OAuth2 browser sign-in, can be limited to groups, see [AUTHENTICATION.md](AUTHENTICATION.md)    |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                     | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
 | `Hub:Sources`                      | none                                                                        | At least one source                                                                             |
 

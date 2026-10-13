@@ -16,6 +16,29 @@ All notable changes to PerfSentinelHub are recorded here.
   names; a row without its own copy is not credited with the shared one, which may be
   another source's, and an envelope that is not valid JSON is skipped. Blank reads as
   absent, like the other filters, so a dashboard's "All" choice lists everything.
+- `Hub:Auth:RequiredGroups` (Helm `hub.auth.requiredGroups`) admits only members of the
+  provider groups it lists, declared as configuration rather than in a screen. At sign-in
+  the Hub reads the userinfo field `Hub:Auth:GroupsClaim` names, `groups` by default, as a
+  list of strings or a single string, and lets the user in when one entry equals one of
+  the required groups, exactly and case included. A userinfo without the field, or naming
+  none of them, fails the sign-in with the same `403` as any other refusal, and event
+  `1900` names the user and which case it was, never their groups. Membership is read at
+  sign-in only, so with groups set the session is no longer renewed while in use: it ends
+  8 hours after sign-in, and a member removed at the provider keeps access at most that
+  long. The list itself is checked on every request: a session records the group that
+  let it in, so turning the gate on, or dropping a group from it, ends the sessions it
+  no longer covers at the restart that deploys it rather than up to 8 hours later.
+  Empty, the default, the field is not read and the session is renewed as before.
+  Set while `Hub:Auth:Enabled` is off, the Hub refuses to start rather than leave a gate
+  that checks nobody, and the chart's schema refuses it too. Keycloak needs a Group
+  Membership mapper with Add to userinfo on, GitLab's userinfo carries `groups` already,
+  and Entra ID's and Google's carry no group, see `docs/AUTHENTICATION.md`.
+
+### Changed
+
+- The `403` a refused sign-in answers now reads "Sign-in refused. Open the Hub's home page
+  to try again, or ask the Hub's administrator for access.", since retrying is no use to a
+  user outside the required groups, and the line still does not say which case it was.
 
 ### Fixed
 

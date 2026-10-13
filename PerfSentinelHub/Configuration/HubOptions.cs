@@ -116,6 +116,14 @@ public sealed record AuthOptions
 
     // The userinfo field recorded as the identity.
     public string IdentityClaim { get; set; } = "email";
+
+    // The userinfo field listing the user's groups, read only when RequiredGroups is set.
+    public string GroupsClaim { get; set; } = "groups";
+
+    // Empty lets in whoever the provider signs in. Otherwise a user must belong to one
+    // of these, spelled as the provider sends them. Empty by default, since a bound
+    // list appends to its default.
+    public IReadOnlyList<string> RequiredGroups { get; set; } = [];
 }
 
 public static class SourceKinds
@@ -250,6 +258,11 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
 
     private static void ValidateAuthSettings(AuthOptions auth, List<string> errors)
     {
+        // Refused rather than ignored: a gate the operator believes is up would
+        // leave the Hub open to every reader of the port.
+        if (!auth.Enabled && auth.RequiredGroups.Count > 0)
+            errors.Add("Hub:Auth:RequiredGroups requires Hub:Auth:Enabled: off, the Hub signs nobody in "
+                       + "and checks no group.");
         if (!auth.Enabled) return;
         if (IsInvalidAuthEndpoint(auth.AuthorizationEndpoint) ||
             IsInvalidAuthEndpoint(auth.TokenEndpoint) ||
@@ -260,6 +273,10 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
             errors.Add("Hub:Auth:ClientId and Hub:Auth:ClientSecret are required.");
         if (string.IsNullOrWhiteSpace(auth.IdentityClaim))
             errors.Add("Hub:Auth:IdentityClaim must name a userinfo field.");
+        if (auth.RequiredGroups.Count > 0 && string.IsNullOrWhiteSpace(auth.GroupsClaim))
+            errors.Add("Hub:Auth:GroupsClaim must name a userinfo field when Hub:Auth:RequiredGroups is set.");
+        if (auth.RequiredGroups.Any(string.IsNullOrWhiteSpace))
+            errors.Add("Hub:Auth:RequiredGroups must not hold a blank entry.");
     }
 
     private static bool IsInvalidAuthEndpoint(Uri? endpoint)

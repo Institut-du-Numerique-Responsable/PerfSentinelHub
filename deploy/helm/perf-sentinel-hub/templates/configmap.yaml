@@ -22,7 +22,7 @@ data:
     {{- $authValues := .Values.hub.auth | default dict }}
     {{- $auth := dict "Enabled" false }}
     {{- if $authValues.enabled }}
-    {{- $auth = dict "Enabled" true "AuthorizationEndpoint" $authValues.authorizationEndpoint "TokenEndpoint" $authValues.tokenEndpoint "UserInformationEndpoint" $authValues.userInformationEndpoint "ClientId" $authValues.clientId "Scopes" (default "openid profile email" $authValues.scopes) "IdentityClaim" (default "email" $authValues.identityClaim) }}
+    {{- $auth = dict "Enabled" true "AuthorizationEndpoint" $authValues.authorizationEndpoint "TokenEndpoint" $authValues.tokenEndpoint "UserInformationEndpoint" $authValues.userInformationEndpoint "ClientId" $authValues.clientId "Scopes" (default "openid profile email" $authValues.scopes) "IdentityClaim" (default "email" $authValues.identityClaim) "GroupsClaim" (default "groups" $authValues.groupsClaim) "RequiredGroups" (default (list) $authValues.requiredGroups) }}
     {{- end }}
     {{- /* Nil-safe for --reuse-values, like updateCheck above. The ack
            credential is not here either: only its header name is, in a source. */}}

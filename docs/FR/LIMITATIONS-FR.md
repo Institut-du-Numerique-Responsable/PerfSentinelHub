@@ -146,10 +146,11 @@ le Hub peut nommer, un utilisateur connecté ou, une fois
 peut acquitter ou révoquer sur toutes les sources qui portent un identifiant
 d'acquittement. Le daemon n'a pas non plus de rôle par utilisateur : sa clé
 d'acquittement est une seule clé, et le Hub la détient. Restreignez qui se
-connecte côté fournisseur, et ne posez pas l'identifiant sur une source que
-personne ne doit acquitter depuis le Hub. Le nom envoyé alimente la piste
-d'audit du daemon et n'y autorise rien. Le daemon en garde 256 octets, donc un
-nom long qu'il a fallu encoder en pourcent peut être coupé.
+connecte, côté fournisseur ou avec `Hub:Auth:RequiredGroups`, et ne posez pas
+l'identifiant sur une source que personne ne doit acquitter depuis le Hub. Le
+nom envoyé alimente la piste d'audit du daemon et n'y autorise rien. Le daemon
+en garde 256 octets, donc un nom long qu'il a fallu encoder en pourcent peut
+être coupé.
 
 Le relais n'a ni jeton antiforgery ni politique CORS, il lit donc
 `Sec-Fetch-Site` et refuse toute valeur autre que `same-origin`, `cross-site`

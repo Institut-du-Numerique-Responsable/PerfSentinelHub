@@ -47,6 +47,14 @@ hub:
     scopes: "openid profile email"
     # The userinfo field recorded as the identity.
     identityClaim: email
+    # The userinfo field listing the user's groups, read only when
+    # requiredGroups is set.
+    groupsClaim: groups
+    # Empty lets in whoever the provider signs in. Otherwise only members of
+    # one of these groups, spelled exactly as the provider sends them (Keycloak
+    # with "Full group path" on sends "/hub-users"), and the session ends 8
+    # hours after sign-in instead of renewing while in use. Requires enabled.
+    requiredGroups: []
   ackRelay:
     # Who acks has to be known, and a hub.auth session always says. Set to
     # true to also accept the identity a reverse proxy puts in

@@ -35,7 +35,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:UpdateCheck:Interval`         | `1.00:00:00` (1 jour)                                                          | Au moins 15 minutes                                                                                     |
 | `Hub:UpdateCheck:EngineEndpoint`   | API des releases GitHub de `Institut-du-Numerique-Responsable/perf-sentinel`   | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
 | `Hub:UpdateCheck:HubEndpoint`      | API des releases GitHub de `Institut-du-Numerique-Responsable/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
-| `Hub:Auth:*`                       | désactivé                                                                      | Connexion du navigateur via OAuth2, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md)                   |
+| `Hub:Auth:*`                       | désactivé                                                                      | Connexion OAuth2 du navigateur, limitable par groupe, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md) |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                        | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
 | `Hub:Sources`                      | aucune                                                                         | Au moins une source                                                                                     |
 
