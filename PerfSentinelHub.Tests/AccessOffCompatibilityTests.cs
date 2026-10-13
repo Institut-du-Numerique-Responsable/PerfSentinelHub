@@ -22,7 +22,7 @@ namespace PerfSentinelHub.Tests;
 ///     existed, on a seeded database under a fixed clock. The Hub's own version is the
 ///     one field that moves with a release, so it is read from the build.
 /// </summary>
-public sealed class AccessOffCompatibilityTests : IAsyncLifetime
+public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
 {
     private const string Succeeded = "0123456789abcdef";
     private const string Pending = "fedcba9876543210";
@@ -110,7 +110,7 @@ public sealed class AccessOffCompatibilityTests : IAsyncLifetime
                 Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture), cancellationToken))
             .TrimEnd('\n').Replace("{hub_version}", HubVersion.Current, StringComparison.Ordinal);
         // A source's age is the session clock, today, less the time it was last seen.
-        golden = Regex.Replace(golden, @"\{age:(\d+)\}", match => ((SignInAt.ToUnixTimeMilliseconds() -
+        golden = AgePlaceholder().Replace(golden, match => ((SignInAt.ToUnixTimeMilliseconds() -
             long.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)) / 1000).ToString(CultureInfo.InvariantCulture));
         Assert.Equal(golden, actual);
         Assert.Equal(headers, Headers(response));
@@ -286,4 +286,7 @@ public sealed class AccessOffCompatibilityTests : IAsyncLifetime
             Pending, AnalysisStatuses.Pending, "test", "Test", "test", "daemon", "{}", "unknown",
             3_000, null, null, null, null, null, null), cancellationToken);
     }
+
+    [GeneratedRegex(@"\{age:(\d+)\}")]
+    private static partial Regex AgePlaceholder();
 }

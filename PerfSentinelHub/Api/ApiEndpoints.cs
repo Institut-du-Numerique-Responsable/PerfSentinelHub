@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
@@ -74,14 +75,14 @@ public static partial class ApiEndpoints
     }
 
     // Who the caller is, rather than any record, is refused: no permission anywhere.
-    private static IResult NoGrant()
+    private static JsonHttpResult<AnalysisProblem> NoGrant()
     {
         return Problem(StatusCodes.Status403Forbidden, "No grant on this Hub reaches you.");
     }
 
     // A listing answers 403 rather than [] when its permission is held nowhere: a CI gate
     // whose token has no grant must fail loudly, not pass on an empty page.
-    private static IResult NoFindingsRead()
+    private static JsonHttpResult<AnalysisProblem> NoFindingsRead()
     {
         return Problem(StatusCodes.Status403Forbidden, "No grant gives you findings.read on this Hub.");
     }

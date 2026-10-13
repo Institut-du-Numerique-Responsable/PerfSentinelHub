@@ -33,36 +33,13 @@ public sealed class AccessPolicy
 
         _admins.UnionWith(access.Admins);
         _adminGroups.UnionWith(access.AdminGroups);
-        foreach (var group in access.Groups)
-            foreach (var member in group.Members)
-            {
-                if (!_internalGroupsBySubject.TryGetValue(member, out var groups))
-                    _internalGroupsBySubject[member] = groups = [];
-                groups.Add(InternalPrefix + group.Name);
-            }
-
-        var projects = access.Projects.ToDictionary(
-            project => project.Name,
-            IReadOnlyList<AccessPattern> (project) => [.. project.Patterns.Select(AccessPattern.Compile)],
-            StringComparer.Ordinal);
-        var roles = new Dictionary<string, IReadOnlyList<string>>(AccessPermissions.BuiltInRoles,
-            StringComparer.Ordinal);
-        foreach (var role in access.Roles)
-            roles[role.Name] = role.Permissions;
-        foreach (var grant in access.Grants)
-        {
-            // Patterns null stands for '*', which also covers records no project matches.
-            var patterns = grant.Project == "*" ? null : projects[grant.Project];
-            _grants.Add(new Grant(grant.Group, patterns, roles[grant.Role].ToHashSet(StringComparer.Ordinal)));
-            if (patterns is null && grant.Role == AccessPermissions.AdminRole)
-                _adminGroups.Add(grant.Group);
-        }
+        IndexInternalGroups(access.Groups);
+        CompileGrants(access);
 
         // A session keeps only the provider groups the configuration names, so its cookie
         // grows with the configuration and not with the provider.
-        foreach (var group in access.Grants.Select(grant => grant.Group).Concat(access.AdminGroups))
-            if (!group.StartsWith(InternalPrefix, StringComparison.OrdinalIgnoreCase))
-                _providerGroups.Add(group);
+        _providerGroups.UnionWith(access.Grants.Select(grant => grant.Group).Concat(access.AdminGroups)
+            .Where(group => !group.StartsWith(InternalPrefix, StringComparison.OrdinalIgnoreCase)));
 
         foreach (var token in access.MachineTokens)
             _machineTokens.Add(new MachineToken(
@@ -82,6 +59,29 @@ public sealed class AccessPolicy
     {
         if (!Enabled) return AccessScope.Unrestricted;
         return AccessCaller.Of(context) is { } caller ? Scope(caller, permission) : AccessScope.Nothing;
+    }
+
+    public AccessScope Scope(AccessCaller caller, string permission)
+    {
+        if (!Enabled || IsAdmin(caller)) return AccessScope.Unrestricted;
+
+        var groups = EffectiveGroups(caller);
+        if (caller.Kind == AccessCaller.MachineToken)
+        {
+            // Its group's grants, AdminGroups included, intersected with what a machine may hold.
+            if (!AccessPermissions.MachineTokenPermissions.Contains(permission)) return AccessScope.Nothing;
+            if (_adminGroups.Overlaps(groups)) return AccessScope.Unrestricted;
+        }
+
+        if (permission == AccessPermissions.AccessAdmin) return AccessScope.Nothing;
+
+        // A grant on '*' carries no patterns and reaches everything.
+        var granted = _grants
+            .Where(grant => groups.Contains(grant.Group) && grant.Permissions.Contains(permission))
+            .Select(grant => grant.Patterns)
+            .ToList();
+        if (granted.Exists(patterns => patterns is null)) return AccessScope.Unrestricted;
+        return AccessScope.Of([.. granted.SelectMany(patterns => patterns!)]);
     }
 
     // Any permission anywhere: what /api/status and /api/sources ask of a caller.
@@ -144,29 +144,6 @@ public sealed class AccessPolicy
                (_admins.Contains(caller.Subject) || _adminGroups.Overlaps(EffectiveGroups(caller)));
     }
 
-    public AccessScope Scope(AccessCaller caller, string permission)
-    {
-        if (!Enabled || IsAdmin(caller)) return AccessScope.Unrestricted;
-
-        var groups = EffectiveGroups(caller);
-        if (caller.Kind == AccessCaller.MachineToken)
-        {
-            // Its group's grants, AdminGroups included, intersected with what a machine may hold.
-            if (!AccessPermissions.MachineTokenPermissions.Contains(permission)) return AccessScope.Nothing;
-            if (_adminGroups.Overlaps(groups)) return AccessScope.Unrestricted;
-        }
-
-        if (permission == AccessPermissions.AccessAdmin) return AccessScope.Nothing;
-
-        // A grant on '*' carries no patterns and reaches everything.
-        var granted = _grants
-            .Where(grant => groups.Contains(grant.Group) && grant.Permissions.Contains(permission))
-            .Select(grant => grant.Patterns)
-            .ToList();
-        if (granted.Exists(patterns => patterns is null)) return AccessScope.Unrestricted;
-        return AccessScope.Of([.. granted.SelectMany(patterns => patterns!)]);
-    }
-
     // The name of the machine token whose fingerprint this is, unless it has expired. Every
     // fingerprint is compared in fixed time with no early exit, as the import key is.
     public string? MachineTokenName(string token, DateTimeOffset now)
@@ -178,6 +155,37 @@ public sealed class AccessPolicy
                 machineToken.ExpiresAt > now)
                 name = machineToken.Name;
         return name;
+    }
+
+    private void IndexInternalGroups(IReadOnlyList<InternalGroupOptions> groups)
+    {
+        foreach (var group in groups)
+            foreach (var member in group.Members)
+            {
+                if (!_internalGroupsBySubject.TryGetValue(member, out var subjectGroups))
+                    _internalGroupsBySubject[member] = subjectGroups = [];
+                subjectGroups.Add(InternalPrefix + group.Name);
+            }
+    }
+
+    private void CompileGrants(AccessOptions access)
+    {
+        var projects = access.Projects.ToDictionary(
+            project => project.Name,
+            IReadOnlyList<AccessPattern> (project) => [.. project.Patterns.Select(AccessPattern.Compile)],
+            StringComparer.Ordinal);
+        var roles = new Dictionary<string, IReadOnlyList<string>>(AccessPermissions.BuiltInRoles,
+            StringComparer.Ordinal);
+        foreach (var role in access.Roles)
+            roles[role.Name] = role.Permissions;
+        foreach (var grant in access.Grants)
+        {
+            // Patterns null stands for '*', which also covers records no project matches.
+            var patterns = grant.Project == "*" ? null : projects[grant.Project];
+            _grants.Add(new Grant(grant.Group, patterns, roles[grant.Role].ToHashSet(StringComparer.Ordinal)));
+            if (patterns is null && grant.Role == AccessPermissions.AdminRole)
+                _adminGroups.Add(grant.Group);
+        }
     }
 
     private sealed record Grant(string Group, IReadOnlyList<AccessPattern>? Patterns, HashSet<string> Permissions);

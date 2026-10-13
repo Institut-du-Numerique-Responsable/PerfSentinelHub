@@ -819,12 +819,14 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         // Access patterns always take the scoped branch: every place a scope tests a
         // source then tests the copy, so pages, statuses and filters see the same copies.
         var access = query.Access is not null;
-        var (with, row, heartbeatScope, sourceScope) = access
-            ? ($"WITH {AccessPatternsCte}, {VisibleCopiesCte}, {ScopedFindings($"(fs.signature, fs.source_id) {Visible}")},",
-                "scoped", $" AND (scoped.signature, eh.source_id) {Visible}", $" AND (fs.signature, fs.source_id) {Visible}")
-            : query.SourceIds is not null
-                ? ($"WITH {ScopedFindings($"fs.source_id {InScope}")},", "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}")
-                : ("WITH", "findings", "", "");
+        var (with, row, heartbeatScope, sourceScope) = (access, query.SourceIds is not null) switch
+        {
+            (true, _) => ($"WITH {AccessPatternsCte}, {VisibleCopiesCte}, {ScopedFindings($"(fs.signature, fs.source_id) {Visible}")},",
+                "scoped", $" AND (scoped.signature, eh.source_id) {Visible}", $" AND (fs.signature, fs.source_id) {Visible}"),
+            (false, true) => ($"WITH {ScopedFindings($"fs.source_id {InScope}")},", "scoped", HeartbeatInScope,
+                $" AND fs.source_id {InScope}"),
+            _ => ("WITH", "findings", "", "")
+        };
         var window = windowed ? InWindow(row, Copies(access, "p")) : "";
         var grouped = query.Grouping is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));

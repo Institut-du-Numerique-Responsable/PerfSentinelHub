@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -104,7 +105,7 @@ public static partial class ApiEndpoints
 
     // Copies at other sources are ignored: the ack is taken at this one. A finding the Hub no
     // longer holds here, revoked through its mirrored ack, is judged on the source as a whole.
-    private static IResult? Refuse(AckTarget target, bool revoke, string sourceId, AccessScope reads, AccessScope acks)
+    private static JsonHttpResult<AnalysisProblem>? Refuse(AckTarget target, bool revoke, string sourceId, AccessScope reads, AccessScope acks)
     {
         const string ReadOnly = "You can read this finding at this source but not acknowledge it there.";
         if (target.Held && reads.Reads(new AccessCopy(sourceId, target.Service, target.Rows)))

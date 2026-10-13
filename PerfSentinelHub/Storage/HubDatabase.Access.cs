@@ -33,29 +33,6 @@ public sealed partial class HubDatabase
                                                           AND {FindingAccess("fs.source_id", "fs.signature", "fs.service")})
                                                       """;
 
-    // An incident copy, on the pairs every frozen finding carries. The ('', '') marker
-    // H1 writes for a copy with none matches no key.
-    public static readonly string IncidentAccess = Access(
-        "incidents.source_id",
-        "incidents.service",
-        """
-        SELECT 1 FROM incident_attributes AS ia
-        WHERE ia.id = incidents.id AND ia.source_id = incidents.source_id AND ia.attr_key = ap.key
-        """,
-        "ia.attr_value");
-
-    // The leading CTE and the incident predicate, empty for an unrestricted read so its SQL
-    // stays today's.
-    private static string AccessWith(AccessScope? access)
-    {
-        return access is null ? "" : $"WITH {AccessPatternsCte}\n";
-    }
-
-    private static string AccessAnd(AccessScope? access)
-    {
-        return access is null ? "" : $" AND {IncidentAccess}";
-    }
-
     private static void BindAccess(SqliteCommand command, AccessScope? access)
     {
         if (access is not null)
