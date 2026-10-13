@@ -98,7 +98,8 @@ public sealed record AccessPattern(
 
     private static (string? Stem, bool IsPrefix) Part(string? part)
     {
-        return part is null ? (null, false) : part.EndsWith('*') ? (part[..^1], true) : (part, false);
+        if (part is null) return (null, false);
+        return part.EndsWith('*') ? (part[..^1], true) : (part, false);
     }
 }
 

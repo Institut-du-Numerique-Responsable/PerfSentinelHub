@@ -105,14 +105,13 @@ public sealed class AccessPolicy
 
         if (permission == AccessPermissions.AccessAdmin) return AccessScope.Nothing;
 
-        var patterns = new List<AccessPattern>();
-        foreach (var grant in _grants.Where(grant => groups.Contains(grant.Group) && grant.Permissions.Contains(permission)))
-        {
-            if (grant.Patterns is null) return AccessScope.Unrestricted;
-            patterns.AddRange(grant.Patterns);
-        }
-
-        return AccessScope.Of(patterns);
+        // A grant on '*' carries no patterns and reaches everything.
+        var granted = _grants
+            .Where(grant => groups.Contains(grant.Group) && grant.Permissions.Contains(permission))
+            .Select(grant => grant.Patterns)
+            .ToList();
+        if (granted.Exists(patterns => patterns is null)) return AccessScope.Unrestricted;
+        return AccessScope.Of([.. granted.SelectMany(patterns => patterns!)]);
     }
 
     // The name of the machine token whose fingerprint this is, unless it has expired. Every
