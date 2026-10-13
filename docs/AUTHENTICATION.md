@@ -27,8 +27,10 @@ The routes left open still serve whoever reaches the port: `/api/findings`
 returns every finding of every source. Keep the network boundary for them, a
 NetworkPolicy or an ingress that does not publish those paths.
 
-Any user the provider signs in is let in. Restrict who may use the Hub on the
-provider side, by assigning the client to a group or to users.
+Without `Hub:Auth:RequiredGroups`, any user the provider signs in is let in:
+restrict who may use the Hub on the provider side, by assigning the client to a
+group or to users. With it, only members of the groups it lists are, see
+[Restricting to groups](#restricting-to-groups).
 
 ## How it works
 
@@ -37,11 +39,13 @@ browser goes through the authorization code flow with PKCE, the Hub exchanges
 the code at the token endpoint, then calls the userinfo endpoint with the access
 token and records the field named by `Hub:Auth:IdentityClaim` as the user. A
 userinfo without that field fails the sign-in rather than opening a nameless
-session. A failed sign-in, that one or a user cancelling on the provider's
-screen, answers `403` with a line sending the user back to the Hub's home page,
-and logs the reason as a warning (event `1900`). No token is kept: the session
-is an encrypted `hub_session` cookie, `Secure`, `HttpOnly`, `SameSite=Lax`,
-valid 8 hours and renewed while in use. There is no sign-out button.
+session. A failed sign-in, that one, a user cancelling on the provider's
+screen or a user outside the required groups, answers `403` with one line for
+every case, sending the user back to the Hub's home page or to its
+administrator, and logs the reason as a warning (event `1900`). No token is
+kept: the session is an encrypted `hub_session` cookie, `Secure`, `HttpOnly`,
+`SameSite=Lax`, valid 8 hours and renewed while in use, or not renewed under
+`Hub:Auth:RequiredGroups`. There is no sign-out button.
 
 The signed-in user is what the topbar shows and what a run records as
 `requested_by`. `Hub:Analysis:IdentityHeader` is ignored for a signed-in user,
@@ -80,16 +84,18 @@ the forwarded headers.
 
 ## Settings
 
-| Setting                            | Default                | Validation                                                         |
-|------------------------------------|------------------------|--------------------------------------------------------------------|
-| `Hub:Auth:Enabled`                 | `false`                | Nothing below is read or required while off                        |
-| `Hub:Auth:AuthorizationEndpoint`   | none                   | Absolute HTTPS (HTTP on loopback only), no credentials or fragment |
-| `Hub:Auth:TokenEndpoint`           | none                   | Same                                                               |
-| `Hub:Auth:UserInformationEndpoint` | none                   | Same                                                               |
-| `Hub:Auth:ClientId`                | none                   | Required                                                           |
-| `Hub:Auth:ClientSecret`            | none                   | Required, supplied through a Secret                                |
-| `Hub:Auth:Scopes`                  | `openid profile email` | Space-separated                                                    |
-| `Hub:Auth:IdentityClaim`           | `email`                | The userinfo field recorded as the user                            |
+| Setting                            | Default                | Validation                                                                   |
+|------------------------------------|------------------------|------------------------------------------------------------------------------|
+| `Hub:Auth:Enabled`                 | `false`                | Nothing below is required while off, and `RequiredGroups` must then be empty |
+| `Hub:Auth:AuthorizationEndpoint`   | none                   | Absolute HTTPS (HTTP on loopback only), no credentials or fragment           |
+| `Hub:Auth:TokenEndpoint`           | none                   | Same                                                                         |
+| `Hub:Auth:UserInformationEndpoint` | none                   | Same                                                                         |
+| `Hub:Auth:ClientId`                | none                   | Required                                                                     |
+| `Hub:Auth:ClientSecret`            | none                   | Required, supplied through a Secret                                          |
+| `Hub:Auth:Scopes`                  | `openid profile email` | Space-separated                                                              |
+| `Hub:Auth:IdentityClaim`           | `email`                | The userinfo field recorded as the user                                      |
+| `Hub:Auth:GroupsClaim`             | `groups`               | The userinfo field of the groups, read only with `RequiredGroups`            |
+| `Hub:Auth:RequiredGroups`          | none                   | No blank entry, refused while `Enabled` is off, see below                    |
 
 Declare `https://<hub host>/auth/callback` as the client's redirect URI, and
 make the client confidential.
@@ -127,3 +133,56 @@ play the provider with a fake one.
 
 Bitbucket is not an OpenID provider: its userinfo is the REST user resource,
 and its scopes are the ones granted to the OAuth consumer.
+
+## Restricting to groups
+
+`Hub:Auth:RequiredGroups` lists the groups whose members may use the Hub, and
+belonging to one of them is enough. At sign-in the Hub reads the userinfo field
+named by `Hub:Auth:GroupsClaim`, a list of strings or a single string, and
+compares each entry with the list: exactly, case included, the names as the
+provider sends them. An entry that is not a string is skipped. A userinfo
+without the field, or naming none of the groups, fails the sign-in. The user
+gets the same `403` line as any other failed sign-in, which does not say why.
+The warning (event `1900`) names the user and which of the two it was, never
+their groups. Empty, the default, the field is not read at all.
+
+Membership is read at sign-in only. With `RequiredGroups` set the session is not
+renewed while in use: it ends 8 hours after sign-in, and the next sign-in reads
+the groups again. A member removed at the provider keeps their access until
+their session ends, at most 8 hours. The list itself is checked on every
+request: a session records the group that let it in, so setting
+`RequiredGroups`, or removing a group from it, ends the sessions it no longer
+covers once the Hub restarts with it, those opened before the gate included.
+Their users go back through the sign-in. Without it the session is renewed as
+before.
+
+The list is configuration, deployed with the rest of it, and the Hub has no
+screen to change it. Set while `Hub:Auth:Enabled` is off, it stops the Hub at
+startup rather than leaving a gate that checks nobody, and the chart's schema
+refuses it the same way. Under Helm:
+
+```yaml
+hub:
+  auth:
+    enabled: true
+    # The provider's endpoints and client, as above.
+    groupsClaim: groups
+    requiredGroups:
+      - /perf-sentinel-hub
+```
+
+Not every provider puts groups in its userinfo:
+
+- **Keycloak** does once the client has a *Group Membership* mapper with
+  *Token Claim Name* `groups` and *Add to userinfo* on, on its dedicated scope
+  or on a *Default* client scope. On an *Optional* client scope the mapper
+  applies only when that scope is requested: add its name to `Hub:Auth:Scopes`.
+  With *Full group path* on, a group is sent as its path, `/parent/child`, and
+  `RequiredGroups` spells it that way. Off, it is the bare group name.
+- **GitLab** lists in `groups` the paths of the groups the user belongs to,
+  directly or through a parent group.
+- **Entra ID** and **Google** do not. Their userinfo carries the user's name and
+  email and no group, and Entra ID's cannot be extended, so `RequiredGroups`
+  cannot be used with them as they are. Restrict who signs in on the provider
+  side instead.
+- **Bitbucket Cloud**'s user resource lists no group either.

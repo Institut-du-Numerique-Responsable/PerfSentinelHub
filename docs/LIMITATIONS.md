@@ -132,10 +132,11 @@ The ack relay knows who asks and has no roles. Any caller the Hub can name, a
 signed-in user or, once `Hub:AckRelay:TrustIdentityHeader` is set, whoever the
 proxy header names, may ack or revoke on every source that carries an ack
 credential. The daemon has no per-user roles either: its ack key is one key, and
-the Hub holds it. Restrict who signs in on the provider side, and leave the
-credential off a source nobody should ack from the Hub. The name sent along
-feeds the daemon's audit trail and authorizes nothing there. The daemon keeps
-256 bytes of it, so a long name that had to be percent-encoded may be cut.
+the Hub holds it. Restrict who signs in, on the provider side or with
+`Hub:Auth:RequiredGroups`, and leave the credential off a source nobody should
+ack from the Hub. The name sent along feeds the daemon's audit trail and
+authorizes nothing there. The daemon keeps 256 bytes of it, so a long name that
+had to be percent-encoded may be cut.
 
 The relay has no antiforgery token and no CORS policy, so it reads
 `Sec-Fetch-Site` and refuses every value but `same-origin`, `cross-site` and

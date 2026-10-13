@@ -24,6 +24,9 @@ public static partial class HubAuthentication
 {
     private const string Scheme = "oauth";
 
+    // The required group a session was let in by, which the cookie handler checks again.
+    private const string GroupClaim = "hub_required_group";
+
     public static bool AddHubAuthentication(this WebApplicationBuilder builder)
     {
         // Read from configuration rather than IOptions: the handlers are
@@ -42,7 +45,19 @@ public static partial class HubAuthentication
                 options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Lax;
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
-                options.SlidingExpiration = true;
+                // Groups are read at sign-in only: a sliding session would keep a
+                // member removed at the provider in for as long as they used it.
+                options.SlidingExpiration = auth.RequiredGroups.Count == 0;
+                if (auth.RequiredGroups.Count == 0) return;
+                // The keys outlive a restart: a session opened before the gate, or
+                // let in by a group since dropped from it, would last its 8 hours.
+                options.Events.OnValidatePrincipal = context =>
+                {
+                    if (!auth.RequiredGroups.Contains(
+                            context.Principal?.FindFirst(GroupClaim)?.Value, StringComparer.Ordinal))
+                        context.RejectPrincipal();
+                    return Task.CompletedTask;
+                };
             })
             .AddOAuth(Scheme, options =>
             {
@@ -57,7 +72,7 @@ public static partial class HubAuthentication
                 foreach (var scope in auth.Scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                     options.Scope.Add(scope);
                 options.ClaimActions.MapJsonKey(ClaimTypes.Name, auth.IdentityClaim);
-                options.Events.OnCreatingTicket = ReadUserInformationAsync;
+                options.Events.OnCreatingTicket = context => ReadUserInformationAsync(context, auth);
                 options.Events.OnRemoteFailure = RefuseSignInAsync;
                 options.Events.OnRedirectToAuthorizationEndpoint = context =>
                 {
@@ -128,12 +143,14 @@ public static partial class HubAuthentication
     private static partial void LogAckRelayIdentifiesNobody(ILogger logger, string sourceIds);
 
     /// <summary>
-    ///     A cancelled consent screen or a userinfo without the identity field
-    ///     would otherwise surface as an unhandled 500. No redirect: it would send
-    ///     the user straight back to the screen they just cancelled. Nor "reload":
-    ///     reloading this callback replays a state whose correlation cookie is
-    ///     already spent, and fails again. The line names no URL built from the
-    ///     request, whose Host a client chooses.
+    ///     A cancelled consent screen, a userinfo without the identity field or a
+    ///     user in none of the required groups would otherwise surface as an
+    ///     unhandled 500. One line for all three, which tells a caller nothing of
+    ///     the user's groups. No redirect: it would send the user straight back to
+    ///     the screen they just cancelled. Nor "reload": reloading this callback
+    ///     replays a state whose correlation cookie is already spent, and fails
+    ///     again. The line names no URL built from the request, whose Host a
+    ///     client chooses.
     /// </summary>
     private static async Task RefuseSignInAsync(RemoteFailureContext context)
     {
@@ -145,14 +162,14 @@ public static partial class HubAuthentication
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         context.Response.ContentType = "text/plain; charset=utf-8";
         await context.Response.WriteAsync(
-            "Sign-in refused. Open the Hub's home page to try again.",
+            "Sign-in refused. Open the Hub's home page to try again, or ask the Hub's administrator for access.",
             context.HttpContext.RequestAborted);
     }
 
     [LoggerMessage(1900, LogLevel.Warning, "Sign-in refused: {Reason}")]
     private static partial void LogSignInRefused(ILogger logger, string reason);
 
-    private static async Task ReadUserInformationAsync(OAuthCreatingTicketContext context)
+    private static async Task ReadUserInformationAsync(OAuthCreatingTicketContext context, AuthOptions auth)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, context.Options.UserInformationEndpoint);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.AccessToken);
@@ -165,7 +182,26 @@ public static partial class HubAuthentication
         context.RunClaimActions(user.RootElement);
         // Fails the sign-in rather than recording a nameless session: the
         // provider's userinfo does not carry the configured field.
-        if (context.Identity?.Name is not { Length: > 0 })
+        if (context.Identity?.Name is not { Length: > 0 } name)
             throw new InvalidOperationException("The provider's userinfo lacks the Hub:Auth:IdentityClaim field.");
+        if (auth.RequiredGroups.Count == 0) return;
+
+        // The reasons name the user, for the operator's log, and never their groups.
+        if (!user.RootElement.TryGetProperty(auth.GroupsClaim, out var groups))
+            throw new InvalidOperationException(
+                $"The provider's userinfo for {name} lacks the Hub:Auth:GroupsClaim field.");
+        // A provider may send a lone group as a bare string rather than a list of one.
+        var member = groups.ValueKind == JsonValueKind.Array
+            ? groups.EnumerateArray().FirstOrDefault(group => IsRequired(group, auth))
+            : groups;
+        if (!IsRequired(member, auth))
+            throw new InvalidOperationException($"{name} is in none of Hub:Auth:RequiredGroups.");
+        context.Identity.AddClaim(new Claim(GroupClaim, member.GetString()!));
+    }
+
+    private static bool IsRequired(JsonElement group, AuthOptions auth)
+    {
+        return group.ValueKind == JsonValueKind.String &&
+               auth.RequiredGroups.Contains(group.GetString()!, StringComparer.Ordinal);
     }
 }

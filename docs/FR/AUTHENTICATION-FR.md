@@ -29,9 +29,10 @@ Les routes laissées ouvertes servent toujours qui joint le port :
 elles la frontière réseau, une NetworkPolicy ou un ingress qui ne publie pas ces
 chemins.
 
-Tout utilisateur que le fournisseur connecte entre. Restreignez qui peut
-utiliser le Hub côté fournisseur, en assignant le client à un groupe ou à des
-utilisateurs.
+Sans `Hub:Auth:RequiredGroups`, tout utilisateur que le fournisseur connecte
+entre : restreignez qui peut utiliser le Hub côté fournisseur, en assignant le
+client à un groupe ou à des utilisateurs. Avec, seuls entrent les membres des
+groupes qu'il liste, voir [Restreindre à des groupes](#restreindre-à-des-groupes).
 
 ## Comment ça marche
 
@@ -40,11 +41,13 @@ navigateur passe par le flux authorization code avec PKCE, le Hub échange le
 code sur le token endpoint, puis appelle l'endpoint userinfo avec l'access token
 et enregistre comme utilisateur le champ nommé par `Hub:Auth:IdentityClaim`. Un
 userinfo sans ce champ fait échouer la connexion plutôt que d'ouvrir une session
-sans nom. Une connexion échouée, celle-là ou un utilisateur qui annule sur
-l'écran du fournisseur, répond `403` avec une ligne renvoyant vers la page
-d'accueil du Hub, et journalise la raison en warning (événement `1900`). Aucun
-token n'est conservé : la session est un cookie chiffré `hub_session`, `Secure`,
-`HttpOnly`, `SameSite=Lax`, valable 8 heures et prolongé tant qu'il sert. Il n'y
+sans nom. Une connexion échouée, celle-là, un utilisateur qui annule sur
+l'écran du fournisseur ou un utilisateur hors des groupes exigés, répond `403`
+avec une même ligne pour tous les cas, renvoyant vers la page d'accueil du Hub
+ou vers son administrateur, et journalise la raison en warning (événement
+`1900`). Aucun token n'est conservé : la session est un cookie chiffré
+`hub_session`, `Secure`, `HttpOnly`, `SameSite=Lax`, valable 8 heures et
+prolongé tant qu'il sert, ou non prolongé sous `Hub:Auth:RequiredGroups`. Il n'y
 a pas de bouton de déconnexion.
 
 L'utilisateur connecté est ce qu'affiche la barre du haut et ce qu'un run
@@ -88,16 +91,18 @@ qu'il envoie soit en `https`. Seul le schéma est pris des en-têtes transmis.
 
 ## Réglages
 
-| Réglage                            | Défaut                 | Validation                                                               |
-|------------------------------------|------------------------|--------------------------------------------------------------------------|
-| `Hub:Auth:Enabled`                 | `false`                | Rien de ce qui suit n'est lu ni exigé tant que c'est désactivé           |
-| `Hub:Auth:AuthorizationEndpoint`   | aucun                  | HTTPS absolu (HTTP en loopback seulement), sans identifiants ni fragment |
-| `Hub:Auth:TokenEndpoint`           | aucun                  | Idem                                                                     |
-| `Hub:Auth:UserInformationEndpoint` | aucun                  | Idem                                                                     |
-| `Hub:Auth:ClientId`                | aucun                  | Obligatoire                                                              |
-| `Hub:Auth:ClientSecret`            | aucun                  | Obligatoire, fourni par un Secret                                        |
-| `Hub:Auth:Scopes`                  | `openid profile email` | Séparés par des espaces                                                  |
-| `Hub:Auth:IdentityClaim`           | `email`                | Le champ userinfo enregistré comme utilisateur                           |
+| Réglage                            | Défaut                 | Validation                                                                                         |
+|------------------------------------|------------------------|----------------------------------------------------------------------------------------------------|
+| `Hub:Auth:Enabled`                 | `false`                | Rien de ce qui suit n'est exigé tant que c'est désactivé, et `RequiredGroups` doit alors être vide |
+| `Hub:Auth:AuthorizationEndpoint`   | aucun                  | HTTPS absolu (HTTP en loopback seulement), sans identifiants ni fragment                           |
+| `Hub:Auth:TokenEndpoint`           | aucun                  | Idem                                                                                               |
+| `Hub:Auth:UserInformationEndpoint` | aucun                  | Idem                                                                                               |
+| `Hub:Auth:ClientId`                | aucun                  | Obligatoire                                                                                        |
+| `Hub:Auth:ClientSecret`            | aucun                  | Obligatoire, fourni par un Secret                                                                  |
+| `Hub:Auth:Scopes`                  | `openid profile email` | Séparés par des espaces                                                                            |
+| `Hub:Auth:IdentityClaim`           | `email`                | Le champ userinfo enregistré comme utilisateur                                                     |
+| `Hub:Auth:GroupsClaim`             | `groups`               | Le champ userinfo des groupes, lu seulement avec `RequiredGroups`                                  |
+| `Hub:Auth:RequiredGroups`          | aucun                  | Aucune entrée vide, refusé si `Enabled` est désactivé, voir plus bas                               |
 
 Déclarez `https://<hôte du hub>/auth/callback` comme URI de redirection du
 client, et faites du client un client confidentiel.
@@ -134,3 +139,58 @@ tests du Hub jouent le fournisseur avec un faux.
 
 Bitbucket n'est pas un fournisseur OpenID : son userinfo est la ressource REST de
 l'utilisateur, et ses scopes sont ceux accordés au consumer OAuth.
+
+## Restreindre à des groupes
+
+`Hub:Auth:RequiredGroups` liste les groupes dont les membres peuvent utiliser le
+Hub, et appartenir à l'un d'eux suffit. À la connexion, le Hub lit le champ
+userinfo nommé par `Hub:Auth:GroupsClaim`, une liste de chaînes ou une chaîne
+seule, et compare chaque entrée à la liste : à l'identique, casse comprise, les
+noms tels que le fournisseur les envoie. Une entrée qui n'est pas une chaîne est
+ignorée. Un userinfo sans ce champ, ou qui ne nomme aucun des groupes, fait
+échouer la connexion. L'utilisateur reçoit la même ligne `403` que pour toute
+autre connexion échouée, qui ne dit pas pourquoi. Le warning (événement `1900`)
+nomme l'utilisateur et lequel des deux cas c'était, jamais ses groupes. Vide, le
+défaut, le champ n'est pas lu du tout.
+
+L'appartenance n'est lue qu'à la connexion. Avec `RequiredGroups`, la session
+n'est pas prolongée tant qu'elle sert : elle prend fin 8 heures après la
+connexion, et la connexion suivante relit les groupes. Un membre retiré chez le
+fournisseur garde son accès jusqu'à la fin de sa session, 8 heures au plus. La
+liste, elle, est vérifiée à chaque requête : une session retient le groupe qui
+l'a admise, si bien que renseigner `RequiredGroups`, ou en retirer un groupe,
+ferme les sessions qu'il ne couvre plus dès que le Hub redémarre avec, y
+compris celles ouvertes avant la barrière. Leurs utilisateurs repassent par la
+connexion. Sans ce réglage, la session est prolongée comme avant.
+
+La liste est de la configuration, déployée avec le reste, et le Hub n'a aucun
+écran pour la modifier. Renseignée alors que `Hub:Auth:Enabled` est désactivé,
+elle arrête le Hub au démarrage plutôt que de laisser une barrière qui ne
+contrôle personne, et le schéma du chart la refuse de la même façon. Sous Helm :
+
+```yaml
+hub:
+  auth:
+    enabled: true
+    # Les endpoints et le client du fournisseur, comme plus haut.
+    groupsClaim: groups
+    requiredGroups:
+      - /perf-sentinel-hub
+```
+
+Tous les fournisseurs ne mettent pas les groupes dans leur userinfo :
+
+- **Keycloak** le fait dès que le client a un mapper *Group Membership* avec
+  *Token Claim Name* `groups` et *Add to userinfo* activé, sur son scope dédié
+  ou sur un client scope *Default*. Sur un client scope *Optional*, le mapper
+  ne s'applique que si ce scope est demandé : ajoutez son nom à
+  `Hub:Auth:Scopes`. Avec *Full group path* activé, un groupe est envoyé sous la
+  forme de son chemin, `/parent/enfant`, et `RequiredGroups` l'écrit ainsi.
+  Désactivé, c'est le nom seul du groupe.
+- **GitLab** liste dans `groups` les chemins des groupes dont l'utilisateur est
+  membre, directement ou par un groupe parent.
+- **Entra ID** et **Google** non. Leur userinfo porte le nom et l'email de
+  l'utilisateur et aucun groupe, et celui d'Entra ID ne peut pas être étendu,
+  si bien que `RequiredGroups` ne peut pas servir avec eux en l'état.
+  Restreignez qui se connecte côté fournisseur à la place.
+- La ressource utilisateur de **Bitbucket Cloud** ne liste aucun groupe non plus.

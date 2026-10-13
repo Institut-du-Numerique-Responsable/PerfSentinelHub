@@ -41,7 +41,9 @@
             "clientSecretName": { "type": "string" },
             "clientSecretKey": { "type": "string" },
             "scopes": { "type": "string" },
-            "identityClaim": { "type": "string" }
+            "identityClaim": { "type": "string" },
+            "groupsClaim": { "type": "string" },
+            "requiredGroups": { "type": "array", "items": { "type": "string", "minLength": 1 } }
           },
           "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
           "then": {
@@ -54,6 +56,9 @@
               "clientSecretKey": { "minLength": 1 }
             },
             "required": ["authorizationEndpoint", "tokenEndpoint", "userInformationEndpoint", "clientId", "clientSecretName", "clientSecretKey"]
+          },
+          "else": {
+            "properties": { "requiredGroups": { "maxItems": 0 } }
           }
         }
       }

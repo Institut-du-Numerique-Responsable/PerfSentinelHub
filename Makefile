@@ -92,6 +92,8 @@ SYNTHETIC_DIGEST := sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 HELM_TEST_VALUES := --set 'sources[0].id=test' --set 'sources[0].name=test' --set 'sources[0].environment=test' --set 'sources[0].baseUrl=http://perf-sentinel:4318' --set image.digest=$(SYNTHETIC_DIGEST)
 
+HELM_AUTH_VALUES := --set hub.auth.enabled=true --set hub.auth.authorizationEndpoint=https://sso.example.com/auth --set hub.auth.tokenEndpoint=https://sso.example.com/token --set hub.auth.userInformationEndpoint=https://sso.example.com/userinfo --set hub.auth.clientId=hub --set hub.auth.clientSecretName=hub-oauth --set hub.auth.clientSecretKey=client-secret
+
 helm-lint:
 	helm lint deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES)
 
@@ -102,6 +104,8 @@ helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/service.yaml | grep -q -- '- name: http'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true --set ingress.host=hub.example.com --set ingress.tlsSecretName=hub-tls | grep -q 'secretName: "hub-tls"'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true 2>&1 >/dev/null | grep -q 'ingress.host is required'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) --set 'hub.auth.requiredGroups={/hub-users}' --show-only templates/configmap.yaml | grep -q '"RequiredGroups":\["/hub-users"\]'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set 'hub.auth.requiredGroups={/hub-users}' 2>&1 >/dev/null | grep -q '/hub/auth/requiredGroups'
 
 release-check:
 	@test -n "$(VERSION)" || { echo "VERSION is required" >&2; exit 2; }

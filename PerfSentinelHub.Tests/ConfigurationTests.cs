@@ -305,6 +305,51 @@ public sealed class ConfigurationTests
         }).Succeeded);
     }
 
+    [Fact]
+    public void Required_groups_need_a_groups_field_no_blank_entry_and_sign_in_on()
+    {
+        string[] groups = ["/hub-users"];
+        Assert.Empty(AuthFailures(ValidAuth() with { RequiredGroups = groups }));
+        // Without a gate the groups field is never read, so it may be anything.
+        Assert.Empty(AuthFailures(ValidAuth() with { GroupsClaim = " " }));
+
+        Assert.Equal(
+            "Hub:Auth:GroupsClaim must name a userinfo field when Hub:Auth:RequiredGroups is set.",
+            Assert.Single(AuthFailures(ValidAuth() with { RequiredGroups = groups, GroupsClaim = " " })));
+        Assert.Equal(
+            "Hub:Auth:RequiredGroups must not hold a blank entry.",
+            Assert.Single(AuthFailures(ValidAuth() with { RequiredGroups = ["/hub-users", " "] })));
+        // Off, nobody signs in and nothing would check the groups: a gate the
+        // operator believes is up would let every reader of the port in.
+        Assert.Equal(
+            "Hub:Auth:RequiredGroups requires Hub:Auth:Enabled: off, the Hub signs nobody in and checks no group.",
+            Assert.Single(AuthFailures(new AuthOptions { RequiredGroups = groups })));
+    }
+
+    [Fact]
+    public void Required_groups_bind_from_indexed_keys_onto_an_empty_default()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Auth:RequiredGroups:0"] = "/hub-admins",
+                ["Hub:Auth:RequiredGroups:1"] = "/hub-users"
+            })
+            .Build();
+
+        var auth = configuration.GetSection("Hub:Auth").Get<AuthOptions>();
+
+        Assert.NotNull(auth);
+        Assert.Equal(["/hub-admins", "/hub-users"], auth.RequiredGroups);
+        Assert.Equal("groups", auth.GroupsClaim);
+        Assert.Empty(new AuthOptions().RequiredGroups);
+    }
+
+    private static string[] AuthFailures(AuthOptions auth)
+    {
+        return [.. new HubOptionsValidator().Validate(null, ValidOptions() with { Auth = auth }).Failures ?? []];
+    }
+
     private static AuthOptions ValidAuth()
     {
         return new AuthOptions
