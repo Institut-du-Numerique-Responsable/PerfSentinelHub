@@ -173,7 +173,8 @@ public sealed partial class HubOptionsValidator
     private static Dictionary<string, IReadOnlyList<string>> ValidateRoles(AccessOptions access, List<string> errors)
     {
         var names = new HashSet<string>(AccessPermissions.BuiltInRoles.Keys, StringComparer.OrdinalIgnoreCase);
-        var roles = new Dictionary<string, IReadOnlyList<string>>(AccessPermissions.BuiltInRoles, StringComparer.Ordinal);
+        var roles = new Dictionary<string, IReadOnlyList<string>>(AccessPermissions.BuiltInRoles,
+            StringComparer.Ordinal);
         for (var i = 0; i < access.Roles.Count; i++)
         {
             var role = access.Roles[i];
@@ -185,7 +186,8 @@ public sealed partial class HubOptionsValidator
                            + "Hub:Access:Admins or Hub:Access:AdminGroups.");
             else if (role.Permissions.Count == 0 ||
                      role.Permissions.Distinct(StringComparer.Ordinal).Count() != role.Permissions.Count ||
-                     role.Permissions.Any(permission => !AccessPermissions.All.Contains(permission, StringComparer.Ordinal)))
+                     role.Permissions.Any(permission =>
+                         !AccessPermissions.All.Contains(permission, StringComparer.Ordinal)))
                 errors.Add($"Hub:Access:Roles:{i}:Permissions must list one or more of findings.read, traces.read, "
                            + "sources.read, analyses.run and acks.write, each once.");
         }
