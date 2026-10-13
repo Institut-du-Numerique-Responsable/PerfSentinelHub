@@ -88,22 +88,7 @@ public sealed partial class HubDatabase
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = IncidentAttributesReset + $"""
-                               INSERT INTO incidents({IncidentColumns}, findings_json)
-                               VALUES ($id, $source_id, $service, $kind, $at_ms, $ended_at_ms, $window_from_ms,
-                                       $window_to_ms, $oldest_finding_ms, $finding_count, $incident_json,
-                                       $observed_at, $observed_at, $findings_json)
-                               ON CONFLICT(id, source_id) DO UPDATE SET
-                                 oldest_finding_ms = CASE WHEN excluded.finding_count >= incidents.finding_count
-                                   THEN excluded.oldest_finding_ms ELSE incidents.oldest_finding_ms END,
-                                 incident_json = CASE WHEN excluded.finding_count >= incidents.finding_count
-                                   THEN excluded.incident_json ELSE incidents.incident_json END,
-                                 findings_json = CASE WHEN excluded.finding_count >= incidents.finding_count
-                                   THEN excluded.findings_json ELSE incidents.findings_json END,
-                                 finding_count = MAX(incidents.finding_count, excluded.finding_count),
-                                 ended_at_ms = COALESCE(excluded.ended_at_ms, incidents.ended_at_ms),
-                                 last_seen_ms = excluded.last_seen_ms;
-                               """ + IncidentAttributesUpsert;
+        command.CommandText = IncidentUpsert;
         command.Parameters.AddWithValue("$id", incident.Id);
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
         command.Parameters.AddWithValue(ServiceParameter, incident.Service);
@@ -138,6 +123,26 @@ public sealed partial class HubDatabase
 
     private static readonly string IncidentAttributesUpsert =
         IncidentAttributesWhere("i.id = $id AND i.source_id = $source_id");
+
+    // Built once, the reset, the upsert and the derivation, so the command takes a
+    // field rather than a string formatted at the call: every part is a constant.
+    // Declared after IncidentAttributesUpsert: static fields initialize in order.
+    private static readonly string IncidentUpsert = IncidentAttributesReset + $"""
+                               INSERT INTO incidents({IncidentColumns}, findings_json)
+                               VALUES ($id, $source_id, $service, $kind, $at_ms, $ended_at_ms, $window_from_ms,
+                                       $window_to_ms, $oldest_finding_ms, $finding_count, $incident_json,
+                                       $observed_at, $observed_at, $findings_json)
+                               ON CONFLICT(id, source_id) DO UPDATE SET
+                                 oldest_finding_ms = CASE WHEN excluded.finding_count >= incidents.finding_count
+                                   THEN excluded.oldest_finding_ms ELSE incidents.oldest_finding_ms END,
+                                 incident_json = CASE WHEN excluded.finding_count >= incidents.finding_count
+                                   THEN excluded.incident_json ELSE incidents.incident_json END,
+                                 findings_json = CASE WHEN excluded.finding_count >= incidents.finding_count
+                                   THEN excluded.findings_json ELSE incidents.findings_json END,
+                                 finding_count = MAX(incidents.finding_count, excluded.finding_count),
+                                 ended_at_ms = COALESCE(excluded.ended_at_ms, incidents.ended_at_ms),
+                                 last_seen_ms = excluded.last_seen_ms;
+                               """ + IncidentAttributesUpsert;
 
     // For each copy `filter` keeps that has no row: the grouping pairs every frozen
     // finding carries, or the marker ('', '') when there is none, stamped with the
