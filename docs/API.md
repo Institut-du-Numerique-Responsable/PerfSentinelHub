@@ -36,6 +36,7 @@ the Hub's route to the daemon, which a push does not exercise.
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
 | `GET /api/incidents/{id}`            | One incident whole, the frozen findings included                                                                                                                                           |
 | `POST /api/incidents/refresh`        | Reads every daemon's incidents ring now, then answers exactly as `GET /api/incidents`. Same parameters. See below                                                                          |
+| `GET /api/access`                    | With `Hub:Access:Enabled` only: who the caller is and what they reach, plus the configuration for an admin. See [below](#get-apiaccess)                                                    |
 | `GET /metrics`                       | Prometheus text format, see [OPERATIONS.md](OPERATIONS.md#metrics)                                                                                                                         |
 | `GET /health/live`                   | Whether the process is up                                                                                                                                                                  |
 | `GET /health/ready`                  | Successful after SQLite initialization                                                                                                                                                     |
@@ -531,3 +532,53 @@ From CI:
 curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
   "https://hub.example.com/api/findings?environment=production&status=active&severity=critical"
 ```
+
+### `GET /api/access`
+
+Mapped only with `Hub:Access:Enabled`: with access off it answers `404`, and the launcher
+hides its Access tab on that answer. Any caller reads it, including one no grant reaches,
+since it is how that caller finds the id an administrator asks for. It never writes and
+never lists a machine token's value or fingerprint.
+
+```json
+{
+  "identity": "ada@example.com",
+  "subject": "2f6d0c1e-8a4b-4e2f-9c71-0d3b5a6e7f81",
+  "caller": "session",
+  "expires_at_ms": 1760040000000,
+  "admin": false,
+  "groups": [{"name": "/teams/shop", "origin": "provider"}, {"name": "oncall", "origin": "internal"}],
+  "reach": [{"group": "/teams/shop", "project": "shop", "role": "member",
+             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write"]}],
+  "projects": [{"name": "shop", "patterns": [{"source": null, "service": null, "attribute": "team=shop"}]}],
+  "configuration": null,
+  "unmatched": null,
+  "conflicts": null
+}
+```
+
+- `identity` is the display name `/api/status` returns; `subject` is the authorization key
+  that `Admins` and internal-group `Members` list. `caller` is `session` or
+  `machine_token`. `expires_at_ms` is the session's end, or the token's configured expiry.
+- `groups` are the caller's effective groups: the provider groups the configuration names,
+  kept at sign-in, and the internal groups listing the subject, named without `internal:`.
+- `reach` holds the caller's grants with what each gives them: a machine token keeps
+  `findings.read`, and `access.admin` appears only in an admin's session. An `Admins` or
+  `AdminGroups` entry reads as the `admin` role on `*`, with `group` null for `Admins`.
+  `projects` are the projects `reach` names.
+- **For an admin only**, the three last fields are filled:
+  - `configuration`: `projects`, `roles` (`built_in` marks `reader`, `member` and
+    `admin`), `grants`, `internal_groups` with their `members`, `admins`, `admin_groups`,
+    and `machine_tokens` as `{name, group, expires_at_ms, active}`, `active` meaning not
+    expired.
+  - `unmatched`: the finding copies seen within `Hub:Retention` that no pattern of any
+    project reads, as `services` (`{service, source_ids, findings}`), `attributes`
+    (`{key, value, findings}`) and `sources`, every configured source no pattern names in
+    its source part (`{source_id, findings}`, `findings` null for a trace backend).
+    `findings` counts copies, one per signature and source. Each list is ordered by count,
+    then name, and stops at 200 entries; `truncated` is true when one was cut.
+  - `conflicts`: `{copies, truncated}`, the copies on which a key some project pattern uses
+    carries two values, or is missing from one of the groupings the copy was seen under,
+    as `{signature, source_id, service, key, values, identities_without_key}`, ordered by
+    source then signature, at most 200. These are the copies where an attribute grant reads
+    but cannot acknowledge, see [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).

@@ -36,7 +36,7 @@ public sealed partial class HubDatabase
         """,
         "ia.attr_value");
 
-    // ponytail: the namespace is read out of the document with json_extract,
+    // The namespace is read out of the document with json_extract,
     // a scan over the rows the other predicates leave. A column and an index
     // if the table ever outgrows what the retention keeps.
     private const string IncidentListWhere = $"""

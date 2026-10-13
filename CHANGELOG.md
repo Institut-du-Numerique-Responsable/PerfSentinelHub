@@ -116,6 +116,19 @@ All notable changes to PerfSentinelHub are recorded here.
   builds ignore `Hub:Access` and fail open: `/api/findings` is anonymous again and every
   session sees every record (`RequiredGroups` still holds). Set `hub.access.enabled: false`
   first, as a deliberate decision, then roll back.
+- The access page. `GET /api/access`, mapped only with access on (`404` otherwise), tells
+  any caller, one no grant reaches included, their identity, their id (the subject an
+  administrator puts in `Admins` or `Members`), how they are signed in and until when,
+  their groups, and what each of their grants gives them. An admin also reads the whole
+  access configuration, with machine tokens by name, group and expiry and never their
+  value or fingerprint; the services, attribute values and sources no project covers
+  within `Hub:Retention`, so a newcomer is spotted and assigned in the configuration; and
+  the copies whose groupings disagree on a project attribute, where an attribute grant
+  reads but cannot acknowledge. Each admin list stops at 200 entries and says so. The
+  launcher shows it in a read-only Access tab, above the no-grant banner for a caller no
+  grant reaches; rights still change in the configuration only. With access on, the New
+  analysis form offers only the sources where the caller holds `analyses.run`, and a
+  daemon row unfolds only where they hold `sources.read`.
 
 ### Changed
 

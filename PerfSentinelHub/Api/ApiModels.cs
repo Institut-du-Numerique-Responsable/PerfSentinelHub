@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Api;
 
@@ -133,3 +134,65 @@ public sealed record IncidentQuery(
 public sealed record SubmittedAnalysis(string Id, string Status);
 
 public sealed record AnalysisProblem(string Detail);
+
+/// <summary>
+///     GET /api/access, with Hub:Access:Enabled only: who the caller is and what they
+///     reach. Configuration, Unmatched and Conflicts are null except for an admin. Never
+///     a machine token's value or fingerprint.
+/// </summary>
+public sealed record AccessResponse(
+    string? Identity,
+    string Subject,
+    string Caller,
+    long? ExpiresAtMs,
+    bool Admin,
+    IReadOnlyList<AccessGroup> Groups,
+    IReadOnlyList<AccessReach> Reach,
+    IReadOnlyList<ProjectOptions> Projects,
+    AccessConfiguration? Configuration,
+    AccessUnmatched? Unmatched,
+    AccessConflicts? Conflicts);
+
+// Origin is provider or internal; an internal group is named without its prefix.
+public sealed record AccessGroup(string Name, string Origin);
+
+// Group null is Admins, which names the subject rather than a group.
+public sealed record AccessReach(string? Group, string Project, string Role, IReadOnlyList<string> Permissions);
+
+public sealed record AccessConfiguration(
+    IReadOnlyList<ProjectOptions> Projects,
+    IReadOnlyList<AccessRole> Roles,
+    IReadOnlyList<GrantOptions> Grants,
+    IReadOnlyList<InternalGroupOptions> InternalGroups,
+    IReadOnlyList<string> Admins,
+    IReadOnlyList<string> AdminGroups,
+    IReadOnlyList<AccessMachineToken> MachineTokens);
+
+public sealed record AccessRole(string Name, IReadOnlyList<string> Permissions, bool BuiltIn);
+
+// Active means not expired.
+public sealed record AccessMachineToken(string Name, string Group, long ExpiresAtMs, bool Active);
+
+public sealed record AccessUnmatched(
+    IReadOnlyList<UnmatchedService> Services,
+    IReadOnlyList<UnmatchedAttribute> Attributes,
+    IReadOnlyList<UnmatchedSource> Sources,
+    bool Truncated);
+
+// Findings counts copies: one per (signature, source).
+public sealed record UnmatchedService(string? Service, IReadOnlyList<string> SourceIds, int Findings);
+
+public sealed record UnmatchedAttribute(string Key, string Value, int Findings);
+
+// Findings is null for a trace backend, which holds no finding.
+public sealed record UnmatchedSource(string SourceId, int? Findings);
+
+public sealed record AccessConflicts(IReadOnlyList<AccessConflict> Copies, bool Truncated);
+
+public sealed record AccessConflict(
+    string Signature,
+    string SourceId,
+    string? Service,
+    string Key,
+    IReadOnlyList<string> Values,
+    int IdentitiesWithoutKey);

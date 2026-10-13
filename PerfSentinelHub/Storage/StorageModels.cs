@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using PerfSentinelHub.Api;
 
 namespace PerfSentinelHub.Storage;
 
@@ -186,3 +187,10 @@ public sealed record AnalysisRun(
     string? ProducerVersion,
     string? ErrorCode,
     string? ResultJson);
+
+// What no project covers: services and pairs already cut and ordered, and every
+// source's count of unmatched copies, which the page joins to the configured sources.
+public sealed record UnmatchedCopies(
+    IReadOnlyList<UnmatchedService> Services,
+    IReadOnlyList<UnmatchedAttribute> Attributes,
+    IReadOnlyDictionary<string, int> CountsBySource);

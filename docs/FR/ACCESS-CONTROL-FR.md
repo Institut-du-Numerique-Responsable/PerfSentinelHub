@@ -155,6 +155,7 @@ intégré `admin` sur `*`.
 | `GET /api/analyses`, `GET /api/analyses/{id}`          | la règle de lecture du run                                           | filtré ; `404`                     |
 | `GET /reports/{id}.html`                               | la règle de lecture du run                                           | `404`                              |
 | `GET /metrics`                                         | anonyme, sur `Hub:MetricsPort` seulement                             | `404` ailleurs                     |
+| `GET /api/access`                                      | tout appelant, même sans grant ; davantage pour un admin, plus bas   |                                    |
 | `POST /api/import/findings`, `/health/*`               | inchangé                                                             |                                    |
 
 `GET /api/sources` ne liste que les sources où l'appelant détient quelque chose, chacune
@@ -226,6 +227,28 @@ d'attribut peut faire taire le même finding pour le déploiement d'une autre é
 démon**, jusqu'à son expiration ou sa révocation. Le Hub n'impose aucune expiration. Là où
 plusieurs équipes peuvent émettre le même nom de service, donnez à l'équipe propriétaire
 un grant de source ou de service pour `acks.write` et `analyses.run`.
+
+### La page d'accès
+
+L'onglet Accès du lanceur, tiré de `GET /api/access` ([API-FR.md](API-FR.md#get-apiaccess)),
+montre à chaque appelant qui il est, son identifiant (le sujet à mettre dans `Admins` ou
+`Members`), ses groupes et ce qu'atteignent ses grants. Un admin voit aussi toute la
+configuration, chaque service, valeur d'attribut et source qu'aucun projet ne couvre dans
+`Hub:Retention`, pour repérer un nouveau venu et l'affecter dans la configuration, et les
+conflits ci-dessous. La page n'écrit rien : les droits changent dans la configuration
+(valeurs Helm `hub.access`) et s'appliquent au redémarrage suivant.
+
+### Lire les conflits
+
+Un conflit est une copie de finding qu'un motif d'attribut d'un projet lit sans pouvoir
+l'écrire. Pour une clé qu'utilise un motif de projet, la copie en porte deux valeurs
+(`values` les liste), ou a été vue sous un regroupement où la clé manque
+(`identities_without_key` compte ces regroupements, les observations sans regroupement
+comprises). Deux déploiements d'un même service rattachés à des équipes différentes, ou
+des spans émis sous le nom de service d'une autre équipe, en produisent un. Sur ces
+copies, un grant `acks.write` passant par l'attribut est refusé (`403`) alors que la copie
+reste lisible. Répondez-y par un grant de source ou de service pour
+l'équipe propriétaire du service, ou en corrigeant l'attribut de regroupement au démon.
 
 ## Jetons machine
 

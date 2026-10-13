@@ -143,6 +143,7 @@ groups in `AdminGroups`, and groups granted the built-in `admin` role on `*`.
 | `GET /api/analyses`, `GET /api/analyses/{id}`          | the run's read rule                                                 | filtered; `404`                  |
 | `GET /reports/{id}.html`                               | the run's read rule                                                 | `404`                            |
 | `GET /metrics`                                         | anonymous, on `Hub:MetricsPort` only                                | `404` elsewhere                  |
+| `GET /api/access`                                      | any caller, even one no grant reaches; more for an admin, below     |                                  |
 | `POST /api/import/findings`, `/health/*`               | unchanged                                                           |                                  |
 
 `GET /api/sources` lists only the sources where the caller holds something, each with a
@@ -208,6 +209,27 @@ any that appear later: **an ack made through an attribute grant may silence the 
 finding for another team's deployment at that daemon**, until it expires or is revoked.
 The Hub forces no expiry. Where several teams can emit the same service name, give the
 owning team a source or service grant for `acks.write` and `analyses.run`.
+
+### The access page
+
+The launcher's Access tab, from `GET /api/access` ([API.md](API.md#get-apiaccess)), shows
+each caller who they are, their id (the subject to put in `Admins` or `Members`), their
+groups and what their grants reach. An admin also sees the whole configuration, every
+service, attribute value and source no project covers within `Hub:Retention`, so a
+newcomer is spotted and assigned in the configuration, and the conflicts below. The page
+writes nothing: rights change in the configuration (Helm values `hub.access`) and apply at
+the next restart.
+
+### Reading conflicts
+
+A conflict is a finding copy that a project's attribute pattern reads but cannot write. For
+a key some project pattern uses, the copy either carries two values of it (`values` lists
+them), or was seen under a grouping that lacks the key (`identities_without_key` counts
+those groupings, the no-grouping observations included). Two deployments of one service
+reporting under different teams, or spans emitted under another team's service name, give
+one. On these copies an `acks.write` grant through the attribute is refused (`403`) while
+the copy still reads. Answer it with a source or service grant for
+the team that owns the service, or by fixing the grouping attribute at the daemon.
 
 ## Machine tokens
 

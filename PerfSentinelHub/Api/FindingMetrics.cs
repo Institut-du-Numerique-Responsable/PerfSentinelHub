@@ -25,7 +25,7 @@ public sealed class FindingMetrics(
 
     // Written and read on request threads. Volatile on both sides for the reason
     // UpdateChecker gives: a plain reference store carries no barrier.
-    // ponytail: scrapes that find it stale at the same moment each count once,
+    // Scrapes that find it stale at the same moment each count once,
     // a SemaphoreSlim around the count if a burst of them ever shows up.
     private Snapshot? _snapshot;
 

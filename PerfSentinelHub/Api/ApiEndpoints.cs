@@ -58,7 +58,12 @@ public static partial class ApiEndpoints
         // With Hub:Access the findings need a caller too, a machine token for a machine.
         var findings = app.MapGet("/api/findings", GetFindingsAsync);
         var byTrace = app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
-        if (!app.Services.GetRequiredService<AccessPolicy>().Enabled)
+        if (app.Services.GetRequiredService<AccessPolicy>().Enabled)
+        {
+            // Any caller, even one no grant reaches. With access off it is not mapped.
+            app.MapGet("/api/access", GetAccessAsync);
+        }
+        else
         {
             findings.AllowAnonymous();
             byTrace.AllowAnonymous();

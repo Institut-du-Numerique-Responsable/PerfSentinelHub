@@ -38,6 +38,7 @@ push n'exerce pas.
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
 | `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                         |
 | `POST /api/incidents/refresh`        | Lit maintenant l'anneau d'incidents de chaque daemon, puis répond exactement comme `GET /api/incidents`. Mêmes paramètres. Voir plus bas                                                                           |
+| `GET /api/access`                    | Avec `Hub:Access:Enabled` seulement : qui est l'appelant et ce qu'il atteint, plus la configuration pour un admin. Voir [plus bas](#get-apiaccess)                                                                 |
 | `GET /metrics`                       | Format texte Prometheus, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)                                                                                                                                       |
 | `GET /health/live`                   | Si le process est debout                                                                                                                                                                                           |
 | `GET /health/ready`                  | Positif après l'initialisation de SQLite                                                                                                                                                                           |
@@ -570,3 +571,58 @@ Depuis la CI :
 curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
   "https://hub.example.com/api/findings?environment=production&status=active&severity=critical"
 ```
+
+### `GET /api/access`
+
+Montée seulement avec `Hub:Access:Enabled` : sans contrôle d'accès elle répond `404`, et le
+lanceur masque son onglet Accès sur cette réponse. Tout appelant la lit, y compris celui
+qu'aucun grant n'atteint, car c'est ainsi qu'il trouve l'identifiant qu'un administrateur
+lui demande. Elle n'écrit jamais et ne liste jamais la valeur ni l'empreinte d'un jeton
+machine.
+
+```json
+{
+  "identity": "ada@example.com",
+  "subject": "2f6d0c1e-8a4b-4e2f-9c71-0d3b5a6e7f81",
+  "caller": "session",
+  "expires_at_ms": 1760040000000,
+  "admin": false,
+  "groups": [{"name": "/teams/shop", "origin": "provider"}, {"name": "oncall", "origin": "internal"}],
+  "reach": [{"group": "/teams/shop", "project": "shop", "role": "member",
+             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write"]}],
+  "projects": [{"name": "shop", "patterns": [{"source": null, "service": null, "attribute": "team=shop"}]}],
+  "configuration": null,
+  "unmatched": null,
+  "conflicts": null
+}
+```
+
+- `identity` est le nom affiché que renvoie `/api/status` ; `subject` est la clé
+  d'autorisation que listent `Admins` et les `Members` d'un groupe interne. `caller` vaut
+  `session` ou `machine_token`. `expires_at_ms` est la fin de la session, ou l'expiration
+  configurée du jeton.
+- `groups` sont les groupes effectifs de l'appelant : les groupes du fournisseur que la
+  configuration nomme, gardés à la connexion, et les groupes internes qui listent le sujet,
+  nommés sans `internal:`.
+- `reach` porte les grants de l'appelant avec ce que chacun lui donne : un jeton machine
+  garde `findings.read`, et `access.admin` n'apparaît que dans la session d'un admin. Une
+  entrée `Admins` ou `AdminGroups` se lit comme le rôle `admin` sur `*`, avec `group` nul
+  pour `Admins`. `projects` sont les projets que `reach` nomme.
+- **Pour un admin seulement**, les trois derniers champs sont remplis :
+  - `configuration` : `projects`, `roles` (`built_in` marque `reader`, `member` et
+    `admin`), `grants`, `internal_groups` avec leurs `members`, `admins`, `admin_groups`,
+    et `machine_tokens` sous la forme `{name, group, expires_at_ms, active}`, `active`
+    signifiant non expiré.
+  - `unmatched` : les copies de findings vues dans `Hub:Retention` qu'aucun motif d'aucun
+    projet ne lit, en `services` (`{service, source_ids, findings}`), `attributes`
+    (`{key, value, findings}`) et `sources`, chaque source configurée qu'aucun motif ne
+    nomme dans sa partie source (`{source_id, findings}`, `findings` nul pour un backend de
+    traces). `findings` compte des copies, une par signature et source. Chaque liste est
+    triée par compte, puis par nom, et s'arrête à 200 entrées ; `truncated` vaut vrai
+    quand l'une a été coupée.
+  - `conflicts` : `{copies, truncated}`, les copies sur lesquelles une clé qu'utilise un
+    motif de projet porte deux valeurs, ou manque à l'un des groupements sous lesquels la
+    copie a été vue, sous la forme `{signature, source_id, service, key, values,
+    identities_without_key}`, triées par source puis signature, 200 au plus. Ce sont les
+    copies où un grant d'attribut lit sans pouvoir acquitter, voir
+    [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).

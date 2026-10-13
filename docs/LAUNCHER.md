@@ -5,8 +5,9 @@ Plain HTML, CSS and JavaScript. No framework, no build step, no network fetch: t
 typefaces are base64 in `wwwroot/fonts.css` and every icon is inline SVG.
 
 Five screens: start an analysis, follow one run, list recent runs, read fleet health, read
-the incidents the daemons recorded. A sixth has no tab and is reached by link only, see
-[The ack page](#the-ack-page).
+the incidents the daemons recorded. A sixth, the access page, has a tab only with
+`Hub:Access` on, see [The access page](#the-access-page). Another has no tab and is reached
+by link only, see [The ack page](#the-ack-page).
 
 ## The form follows the source
 
@@ -278,8 +279,36 @@ daemon then stops loading the TOML baseline too, see the engine's
 With `Hub:Access` on, `/api/status` answers `403` to a signed-in caller no grant reaches.
 The Hub is up, so the launcher does not show its unreachable banner. It says instead "No
 grant on this Hub reaches you. An administrator grants access in the Hub's
-configuration." and draws no screen. Any other failure of `/api/status` keeps the
-unreachable banner. See [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
+configuration." above the access page, which tells that caller their id to hand an
+administrator. Any other failure of `/api/status` keeps the unreachable banner. See
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md).
+
+With access on, each source in `/api/sources` carries the caller's `permissions` there. The
+New analysis form offers only the sources whose list holds `analyses.run`, and a daemon row
+on the Sources screen unfolds only where the list holds `sources.read`, which its view
+needs. Without a list, as with access off, nothing is withheld.
+
+## The access page
+
+The Access tab appears when `GET /api/access` answers, which is with `Hub:Access` on; a
+`404` keeps it hidden, and a `#/access` link then opens New, as any unknown route does. The
+page is read-only: no form and no button that writes, since rights are declared in the Hub's
+configuration (Helm values `hub.access`) and nowhere else. It shows:
+
+1. **Signed in as.** The identity, how (browser session or machine token) and until when,
+   that a group change at the provider applies at the next sign-in, and "Your id, for an
+   administrator", the subject as selectable text.
+2. **Your groups.** Chips marked provider or internal.
+3. **What you reach.** Project, group, role and permissions per grant. A grant on `*`
+   reads "Everything, records no project matches included".
+4. **Projects.** Each project those grants name, with its patterns written as
+   `source lab-daemon · service checkout-* · attribute team=shop`.
+5. **Configuration**, for an admin: projects, roles (built-in ones marked), grants,
+   internal groups and their members, admins and admin groups, and machine tokens with
+   their expiry as "expired", "in less than a day" or "in N days", never their value.
+6. **Not covered by any project**, for an admin: the services, attribute values and
+   sources no project covers, with counts, then the conflicts, see
+   [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).
 
 ## Safety
 

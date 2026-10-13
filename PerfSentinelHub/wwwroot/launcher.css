@@ -3738,3 +3738,50 @@ section > .banner + .banner,
         color: var(--text);
     }
 }
+
+/* The access page: read-only blocks, one card each, every table in its own
+   scroller. The subject is selected whole, since it is copied to an admin. */
+.access-card {
+    margin-top: 16px;
+    padding: 18px 18px 8px;
+}
+
+.access-card > p {
+    margin: 0 0 10px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-2);
+}
+
+.access-card .sources-wrap {
+    margin-bottom: 14px;
+}
+
+.access-table {
+    min-width: 560px;
+}
+
+.access-card > .access-muted {
+    font-size: 12px;
+    color: var(--text-3);
+}
+
+.access-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.access-subject {
+    font-family: var(--font-mono);
+    user-select: all;
+    overflow-wrap: anywhere;
+}
+
+.access-heading {
+    margin: 8px 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
