@@ -16,10 +16,10 @@ public sealed class AccessPolicy
 {
     private const string InternalPrefix = "internal:";
 
-    private readonly HashSet<string> _admins = new(StringComparer.Ordinal);
-
     // AdminGroups, and every group the built-in admin role is granted to on '*'.
     private readonly HashSet<string> _adminGroups = new(StringComparer.Ordinal);
+
+    private readonly HashSet<string> _admins = new(StringComparer.Ordinal);
     private readonly List<Grant> _grants = [];
     private readonly Dictionary<string, List<string>> _internalGroupsBySubject = new(StringComparer.Ordinal);
     private readonly List<MachineToken> _machineTokens = [];
@@ -44,7 +44,8 @@ public sealed class AccessPolicy
             project => project.Name,
             IReadOnlyList<AccessPattern> (project) => [.. project.Patterns.Select(AccessPattern.Compile)],
             StringComparer.Ordinal);
-        var roles = new Dictionary<string, IReadOnlyList<string>>(AccessPermissions.BuiltInRoles, StringComparer.Ordinal);
+        var roles = new Dictionary<string, IReadOnlyList<string>>(AccessPermissions.BuiltInRoles,
+            StringComparer.Ordinal);
         foreach (var role in access.Roles)
             roles[role.Name] = role.Permissions;
         foreach (var grant in access.Grants)
