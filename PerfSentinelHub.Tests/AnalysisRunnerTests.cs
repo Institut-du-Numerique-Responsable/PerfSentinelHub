@@ -132,8 +132,12 @@ public sealed class AnalysisRunnerTests : IDisposable
         Assert.Null(AnalysisRunner.LiveDaemonUrl(prefixed, true));
     }
 
-    [Fact]
-    public async Task A_daemon_run_is_rendered_live_when_the_probed_engine_takes_the_flag()
+    // With access on a live report would ack at the daemon directly, around acks.write.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_daemon_run_is_rendered_live_when_the_probed_engine_takes_the_flag_and_access_is_off(
+        bool accessOn)
     {
         // The pure helper above says what the URL should be, and EngineProbeTests
         // says what the binary answers. This is the wire between them: without it
@@ -146,6 +150,7 @@ public sealed class AnalysisRunnerTests : IDisposable
         }, cancellationToken);
         var options = RunnerOptions(StubEngine(
             ReportJson, 0, help: "      --daemon-url <URL>  live mode"));
+        options.Value.Access.Enabled = accessOn;
         var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
         await probe.StartAsync(cancellationToken);
         var runner = new AnalysisRunner(
@@ -169,10 +174,9 @@ public sealed class AnalysisRunnerTests : IDisposable
         var arguments = await File.ReadAllTextAsync(
             Path.Combine(_workspace, "reports", "render-args.txt"),
             cancellationToken);
-        Assert.Contains(
-            $"--daemon-url {source.EndpointArgument}",
-            arguments,
-            StringComparison.Ordinal);
+        Assert.Equal(
+            !accessOn,
+            arguments.Contains($"--daemon-url {source.EndpointArgument}", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -5,8 +5,9 @@
 # targets: docker compose, a VM, or a Prometheus without discovery. See
 # docs/OPERATIONS.md for the annotation form.
 #
-# /metrics carries no authentication, exactly like /api/status. Keep it behind
-# whatever fronts the rest of the Hub.
+# /metrics carries no authentication. The target below is Hub:MetricsPort, the
+# port /metrics answers on alone (required with access control on); a Hub without
+# it serves /metrics on its main port, 8080. See docs/OPERATIONS.md.
 
 global:
   scrape_interval: 30s
@@ -22,7 +23,7 @@ scrape_configs:
     # HubDown in prometheus-alerts.yml, which matches this job only, its own rule.
     static_configs:
       - targets:
-          - perf-sentinel-hub.observability:8080
+          - perf-sentinel-hub.observability:9464
 
   # The daemons the Hub collects from publish their own, unrelated metrics:
   # findings, GreenOps figures, ingest rates. Nothing in this dashboard reads

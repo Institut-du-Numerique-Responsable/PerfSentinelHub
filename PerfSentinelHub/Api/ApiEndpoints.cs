@@ -18,16 +18,19 @@ public static partial class ApiEndpoints
     {
         var version = HubVersion.Current;
 
-        app.MapGet("/api/status", async (
+        app.MapGet("/api/status", async Task<IResult> (
             HttpRequest request,
             EngineProbe engine,
             UpdateChecker updates,
             HubDatabase database,
+            AccessPolicy access,
             IOptions<HubOptions> hubOptions,
             CancellationToken cancellationToken) =>
         {
+            if (!access.ReachesAnything(request.HttpContext))
+                return NoGrant();
             var analysis = hubOptions.Value.Analysis;
-            return new StatusResponse(
+            return TypedResults.Ok(new StatusResponse(
                 "perf-sentinel-hub",
                 version,
                 KnownIdentity(request, analysis),
@@ -42,7 +45,7 @@ public static partial class ApiEndpoints
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded,
                     hubOptions.Value.MaxReadLimit),
-                [.. DetectionOverrides.SchemaFor(engine.Version)]);
+                [.. DetectionOverrides.SchemaFor(engine.Version)]));
         });
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
@@ -51,8 +54,15 @@ public static partial class ApiEndpoints
         app.MapPost("/api/sources/{sourceId}/acks/revoke", RevokeAckAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a daemon pushes with its key.
-        app.MapGet("/api/findings", GetFindingsAsync).AllowAnonymous();
-        app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync).AllowAnonymous();
+        // With Hub:Access the findings need a caller too, a machine token for a machine.
+        var findings = app.MapGet("/api/findings", GetFindingsAsync);
+        var byTrace = app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
+        if (!app.Services.GetRequiredService<AccessPolicy>().Enabled)
+        {
+            findings.AllowAnonymous();
+            byTrace.AllowAnonymous();
+        }
+
         app.MapGet("/api/incidents", GetIncidentsAsync);
         app.MapGet("/api/incidents/{id}", GetIncidentAsync);
         app.MapPost("/api/incidents/refresh", RefreshIncidentsAsync);
@@ -63,17 +73,34 @@ public static partial class ApiEndpoints
             .AllowAnonymous();
     }
 
-    private static async Task<IReadOnlyList<SourceResponse>> GetSourcesAsync(
+    // Who the caller is, rather than any record, is refused: no permission anywhere.
+    private static IResult NoGrant()
+    {
+        return Problem(StatusCodes.Status403Forbidden, "No grant on this Hub reaches you.");
+    }
+
+    // A listing answers 403 rather than [] when its permission is held nowhere: a CI gate
+    // whose token has no grant must fail loudly, not pass on an empty page.
+    private static IResult NoFindingsRead()
+    {
+        return Problem(StatusCodes.Status403Forbidden, "No grant gives you findings.read on this Hub.");
+    }
+
+    private static async Task<IResult> GetSourcesAsync(
+        HttpContext context,
         HubDatabase database,
+        AccessPolicy access,
         IOptions<HubOptions> options,
         CancellationToken cancellationToken)
     {
+        if (!access.ReachesAnything(context))
+            return NoGrant();
         var states = await database.QuerySourceStatesAsync(cancellationToken);
         var reads = await database.QueryIncidentReadsAsync(cancellationToken);
         var ackReads = await database.QueryAckReadsAsync(cancellationToken);
-        return
+        IReadOnlyList<SourceResponse> sources =
         [
-            .. options.Value.Sources.Select(source =>
+            .. access.Sources(context, options.Value.Sources).Select(source =>
             {
                 states.TryGetValue(source.Id, out var state);
                 reads.TryGetValue(source.Id, out var read);
@@ -100,9 +127,11 @@ public static partial class ApiEndpoints
                     read?.LastReadMs,
                     ackRead?.State,
                     ackRead?.LastReadMs,
-                    source.HasAckCredential);
+                    source.HasAckCredential,
+                    access.Permissions(context, source));
             })
         ];
+        return TypedResults.Ok(sources);
     }
 
     private static async Task<IResult> ImportFindingsAsync(
@@ -185,18 +214,26 @@ public static partial class ApiEndpoints
     private static async Task GetFindingsAsync(
         HttpContext context,
         HubDatabase database,
+        AccessPolicy access,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        if (!TryParseQuery(context.Request, options.Value, out var query))
+        var scope = access.Scope(context, AccessPermissions.FindingsRead);
+        if (scope.IsNothing)
+        {
+            await NoFindingsRead().ExecuteAsync(context);
+            return;
+        }
+
+        if (!TryParseQuery(context.Request, options.Value, access.Sources(context, options.Value.Sources), out var query))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
 
-        var rows = await database.QueryFindingsAsync(query, cancellationToken);
+        var rows = await database.QueryFindingsAsync(query with { Access = Narrowing(scope) }, cancellationToken);
         await FindingEnvelopeWriter.WriteArrayAsync(
             context.Response,
             rows,
@@ -207,22 +244,40 @@ public static partial class ApiEndpoints
 
     private static async Task GetFindingsByTraceAsync(
         string traceId,
-        HttpResponse response,
+        HttpContext context,
         HubDatabase database,
+        AccessPolicy access,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        var rows = await database.FindByTraceAsync(traceId, cancellationToken);
+        var scope = access.Scope(context, AccessPermissions.FindingsRead);
+        if (scope.IsNothing)
+        {
+            await NoFindingsRead().ExecuteAsync(context);
+            return;
+        }
+
+        var rows = await database.FindByTraceAsync(traceId, Narrowing(scope), cancellationToken);
         await FindingEnvelopeWriter.WriteArrayAsync(
-            response,
+            context.Response,
             rows,
             timeProvider.GetUtcNow(),
             loggerFactory.CreateLogger("FindingsApi"),
             cancellationToken);
     }
 
-    private static bool TryParseQuery(HttpRequest request, HubOptions options, out FindingQuery query)
+    // Null for an unrestricted scope, which keeps today's SQL.
+    private static AccessScope? Narrowing(AccessScope scope)
+    {
+        return scope.Patterns is null ? null : scope;
+    }
+
+    private static bool TryParseQuery(
+        HttpRequest request,
+        HubOptions options,
+        IReadOnlyList<SourceOptions> sources,
+        out FindingQuery query)
     {
         query = null!;
         if (!HasValidUtf8(request.QueryString.Value) || request.Query.Any(item => item.Value.Count != 1))
@@ -230,7 +285,7 @@ public static partial class ApiEndpoints
 
         if (!TryReadBounded(request, "limit", options.DefaultReadLimit, 1, options.MaxReadLimit, out var limit) ||
             !TryReadBounded(request, "offset", 0, 0, MaxFindingOffset, out var offset) ||
-            !TryReadSourceScope(request, options, out var sourceIds) ||
+            !TryReadSourceScope(request, sources, out var sourceIds) ||
             !TryReadEpochMs(request, "from", out var fromMs) ||
             !TryReadEpochMs(request, "to", out var toMs) ||
             fromMs > toMs ||
@@ -268,17 +323,18 @@ public static partial class ApiEndpoints
     ///     unknown one is a bad request rather than an empty page: a typo would
     ///     otherwise read as "nothing there". Given together they intersect, and a
     ///     source outside the named environment leaves the empty set, since a
-    ///     screen offers the two as filters that both apply.
+    ///     screen offers the two as filters that both apply. With access on, the
+    ///     sources are the caller's own list, so one outside it reads as unknown.
     /// </summary>
     private static bool TryReadSourceScope(
         HttpRequest request,
-        HubOptions options,
+        IReadOnlyList<SourceOptions> sources,
         out IReadOnlyList<string>? sourceIds)
     {
         sourceIds = null;
         var sourceId = ReadOptional(request, "source_id");
         if (sourceId is not null &&
-            !options.Sources.Any(source => string.Equals(source.Id, sourceId, StringComparison.Ordinal)))
+            !sources.Any(source => string.Equals(source.Id, sourceId, StringComparison.Ordinal)))
             return false;
 
         var environment = ReadOptional(request, "environment");
@@ -286,7 +342,7 @@ public static partial class ApiEndpoints
         {
             sourceIds =
             [
-                .. options.Sources
+                .. sources
                     .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
                     .Select(source => source.Id)
             ];

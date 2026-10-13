@@ -18,11 +18,17 @@ namespace PerfSentinelHub.Api;
 ///     Hub:Auth:Enabled. Off, nothing here is registered and the pipeline is the one
 ///     the Hub always had. On, every route needs a session except the ones a machine
 ///     calls: findings for IDE plugins and CI, the import (its own key), health and
-///     metrics.
+///     metrics. With Hub:Access:Enabled the findings need a caller too, and a machine
+///     token (HubTokenHandler) is the third credential beside the cookie.
 /// </summary>
 public static partial class HubAuthentication
 {
     private const string Scheme = "oauth";
+
+    // With access on: the bearer or the cookie, chosen per request.
+    private const string PolicyScheme = "hub";
+    private const string InternalPrefix = "internal:";
+    private const int MaxSubjectChars = 256;
 
     // The required group a session was let in by, which the cookie handler checks again.
     private const string GroupClaim = "hub_required_group";
@@ -33,11 +39,14 @@ public static partial class HubAuthentication
         // registered or not, which is decided before the container exists.
         var auth = builder.Configuration.GetSection($"{HubOptions.SectionName}:Auth").Get<AuthOptions>();
         if (auth is not { Enabled: true }) return false;
+        var access = builder.Configuration.GetValue<bool>($"{HubOptions.SectionName}:Access:Enabled");
 
-        builder.Services.AddAuthentication(options =>
+        var authentication = builder.Services.AddAuthentication(options =>
             {
-                options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = Scheme;
+                options.DefaultScheme = access ? PolicyScheme : CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = access ? PolicyScheme : Scheme;
+                // The OAuth callback still writes the cookie, whatever the default reads.
+                if (access) options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
             .AddCookie(options =>
             {
@@ -47,14 +56,19 @@ public static partial class HubAuthentication
                 options.ExpireTimeSpan = TimeSpan.FromHours(8);
                 // Groups are read at sign-in only: a sliding session would keep a
                 // member removed at the provider in for as long as they used it.
-                options.SlidingExpiration = auth.RequiredGroups.Count == 0;
-                if (auth.RequiredGroups.Count == 0) return;
+                // Grants are read with those groups, so access stops it sliding too.
+                options.SlidingExpiration = auth.RequiredGroups.Count == 0 && !access;
+                // The cookie scheme is reached through "hub" with access on; a page still signs in.
+                if (access) options.ForwardChallenge = Scheme;
+                if (auth.RequiredGroups.Count == 0 && !access) return;
                 // The keys outlive a restart: a session opened before the gate, or
                 // let in by a group since dropped from it, would last its 8 hours.
+                // One opened before access was on carries no subject and no group.
                 options.Events.OnValidatePrincipal = context =>
                 {
-                    if (!auth.RequiredGroups.Contains(
-                            context.Principal?.FindFirst(GroupClaim)?.Value, StringComparer.Ordinal))
+                    if ((auth.RequiredGroups.Count > 0 && !auth.RequiredGroups.Contains(
+                            context.Principal?.FindFirst(GroupClaim)?.Value, StringComparer.Ordinal)) ||
+                        (access && context.Principal?.FindFirst(AccessCaller.AccessClaim) is null))
                         context.RejectPrincipal();
                     return Task.CompletedTask;
                 };
@@ -90,6 +104,14 @@ public static partial class HubAuthentication
                 };
             });
 
+        if (access)
+            authentication
+                .AddScheme<AuthenticationSchemeOptions, HubTokenHandler>(HubTokenHandler.SchemeName, null)
+                .AddPolicyScheme(PolicyScheme, null, options => options.ForwardDefaultSelector = context =>
+                    HubTokenHandler.HasBearer(context.Request)
+                        ? HubTokenHandler.SchemeName
+                        : CookieAuthenticationDefaults.AuthenticationScheme);
+
         builder.Services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder()
                 .RequireAuthenticatedUser().Build());
@@ -116,10 +138,67 @@ public static partial class HubAuthentication
 
     public static void UseHubAuthentication(this WebApplication app)
     {
+        var access = app.Services.GetRequiredService<AccessPolicy>().Enabled;
+        // A same-site page could otherwise frame the launcher and click its writes. Every
+        // response, static files and reports and challenges included, unless it set its own.
+        if (access)
+            app.Use((context, next) =>
+            {
+                context.Response.OnStarting(() =>
+                {
+                    context.Response.Headers.TryAdd("Content-Security-Policy", "frame-ancestors 'self'");
+                    return Task.CompletedTask;
+                });
+                return next(context);
+            });
         app.UseForwardedHeaders();
         app.UseAuthentication();
         app.UseAuthorization();
+        if (access) app.Use(RefuseWritesAsync);
     }
+
+    /// <summary>
+    ///     The access request gate, after authorization: a machine token only reads, and a
+    ///     write without a bearer must come from the Hub's own page. Only a browser holds the
+    ///     cookie and every current one sends Sec-Fetch-Site; curl, CI and the CLI use a
+    ///     bearer, which a browser never attaches on its own.
+    /// </summary>
+    private static async Task RefuseWritesAsync(HttpContext context, RequestDelegate next)
+    {
+        var method = context.Request.Method;
+        var detail = context.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is not null ||
+                     HttpMethods.IsGet(method) || HttpMethods.IsHead(method)
+            ? null
+            : AccessCaller.Of(context)?.Kind == AccessCaller.MachineToken
+                ? "A machine token only reads."
+                : !HttpMethods.IsOptions(method) && !HubTokenHandler.HasBearer(context.Request) &&
+                  context.Request.Headers["Sec-Fetch-Site"] != "same-origin"
+                    ? "A request from another site is refused."
+                    : null;
+        if (detail is null)
+            await next(context);
+        else
+            await ApiEndpoints.Problem(StatusCodes.Status403Forbidden, detail).ExecuteAsync(context);
+    }
+
+    // At startup, so an old entry is found in the log rather than by the CI job it breaks.
+    public static void WarnOnExpiredMachineTokens(AccessPolicy access, TimeProvider timeProvider, ILogger logger)
+    {
+        foreach (var name in access.ExpiredMachineTokens(timeProvider.GetUtcNow()))
+            LogMachineTokenExpired(logger, name);
+    }
+
+    [LoggerMessage(
+        2001,
+        LogLevel.Warning,
+        "Machine token '{Name}' has expired and is refused: rotate it, or remove its entry from Hub:Access:MachineTokens.")]
+    private static partial void LogMachineTokenExpired(ILogger logger, string name);
+
+    [LoggerMessage(
+        1902,
+        LogLevel.Debug,
+        "Sign-in of {Name} kept no grant for the provider groups {Groups}: no grant and no AdminGroups entry names them.")]
+    private static partial void LogGroupsDropped(ILogger logger, string name, string groups);
 
     /// <summary>
     ///     The ack relay names who acks: a session, or the proxy's identity header
@@ -184,24 +263,88 @@ public static partial class HubAuthentication
         // provider's userinfo does not carry the configured field.
         if (context.Identity?.Name is not { Length: > 0 } name)
             throw new InvalidOperationException("The provider's userinfo lacks the Hub:Auth:IdentityClaim field.");
-        if (auth.RequiredGroups.Count == 0) return;
+        var access = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+        // One read of the field for both gates, so they can never disagree on a user's groups.
+        var groups = auth.RequiredGroups.Count > 0 || access.Enabled
+            ? ReadGroups(user.RootElement, auth.GroupsClaim)
+            : null;
+        if (auth.RequiredGroups.Count > 0)
+        {
+            // The reasons name the user, for the operator's log, and never their groups.
+            if (groups is null)
+                throw new InvalidOperationException(
+                    $"The provider's userinfo for {name} lacks the Hub:Auth:GroupsClaim field.");
+            var member = groups.FirstOrDefault(group => auth.RequiredGroups.Contains(group, StringComparer.Ordinal))
+                         ?? throw new InvalidOperationException($"{name} is in none of Hub:Auth:RequiredGroups.");
+            context.Identity.AddClaim(new Claim(GroupClaim, member));
+        }
 
-        // The reasons name the user, for the operator's log, and never their groups.
-        if (!user.RootElement.TryGetProperty(auth.GroupsClaim, out var groups))
-            throw new InvalidOperationException(
-                $"The provider's userinfo for {name} lacks the Hub:Auth:GroupsClaim field.");
-        // A provider may send a lone group as a bare string rather than a list of one.
-        var member = groups.ValueKind == JsonValueKind.Array
-            ? groups.EnumerateArray().FirstOrDefault(group => IsRequired(group, auth))
-            : groups;
-        if (!IsRequired(member, auth))
-            throw new InvalidOperationException($"{name} is in none of Hub:Auth:RequiredGroups.");
-        context.Identity.AddClaim(new Claim(GroupClaim, member.GetString()!));
+        if (access.Enabled)
+            AddAccessClaims(context, context.Identity, user.RootElement, auth, access, name, groups ?? []);
     }
 
-    private static bool IsRequired(JsonElement group, AuthOptions auth)
+    /// <summary>
+    ///     The subject decides and the identity displays: the subject is an id the
+    ///     provider never reassigns, and nothing is authorized on the identity. Only the
+    ///     provider groups a grant or AdminGroups names are kept, never one spelled
+    ///     internal:, so the cookie grows with the configuration and not with the provider.
+    /// </summary>
+    private static void AddAccessClaims(
+        OAuthCreatingTicketContext context,
+        ClaimsIdentity identity,
+        JsonElement user,
+        AuthOptions auth,
+        AccessPolicy access,
+        string name,
+        IReadOnlyList<string> groups)
     {
-        return group.ValueKind == JsonValueKind.String &&
-               auth.RequiredGroups.Contains(group.GetString()!, StringComparer.Ordinal);
+        if (!user.TryGetProperty(auth.SubjectClaim, out var field) || field.ValueKind != JsonValueKind.String ||
+            field.GetString() is not { Length: > 0 and <= MaxSubjectChars } subject || string.IsNullOrWhiteSpace(subject))
+            throw new InvalidOperationException(
+                $"The provider's userinfo for {name} lacks a string Hub:Auth:SubjectClaim field of 1 to {MaxSubjectChars} characters.");
+        if (IsReserved(subject) || IsReserved(name))
+            throw new InvalidOperationException(
+                $"{name}: the subject or the identity starts with a reserved prefix, local: or machine:.");
+
+        identity.AddClaim(new Claim(AccessCaller.SubjectClaim, subject));
+        var kept = groups.Where(group => !group.StartsWith(InternalPrefix, StringComparison.OrdinalIgnoreCase) &&
+                                         access.ProviderGroups.Contains(group)).Distinct(StringComparer.Ordinal).ToList();
+        foreach (var group in kept)
+            identity.AddClaim(new Claim(AccessCaller.GroupClaim, group));
+        if (groups.Except(kept, StringComparer.Ordinal).ToList() is { Count: > 0 } dropped)
+            LogGroupsDropped(
+                context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger(typeof(HubAuthentication)),
+                name,
+                string.Join(", ", dropped));
+        identity.AddClaim(new Claim(AccessCaller.AccessClaim, "1"));
+        identity.AddClaim(new Claim(AccessCaller.CallerClaim, AccessCaller.Session));
+    }
+
+    private static bool IsReserved(string value)
+    {
+        return value.StartsWith("local:", StringComparison.OrdinalIgnoreCase) ||
+               value.StartsWith(AccessCaller.MachinePrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     The groups field as step 1 reads it: an array gives its string entries in order,
+    ///     a lone string is one group and never split, anything else no group. Null when the
+    ///     field is missing, which RequiredGroups refuses and access does not.
+    /// </summary>
+    private static List<string>? ReadGroups(JsonElement user, string claim)
+    {
+        if (!user.TryGetProperty(claim, out var groups))
+            return null;
+        return groups.ValueKind switch
+        {
+            JsonValueKind.Array =>
+            [
+                .. groups.EnumerateArray().Where(group => group.ValueKind == JsonValueKind.String)
+                    .Select(group => group.GetString()!)
+            ],
+            JsonValueKind.String => [groups.GetString()!],
+            _ => []
+        };
     }
 }

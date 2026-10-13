@@ -55,21 +55,67 @@ All notable changes to PerfSentinelHub are recorded here.
   `analyses.run` and `acks.write`, beside the built-in `reader`, `member` and `admin`;
   grants of a role on a project or `*` to a group; internal groups of subjects; admins by
   subject or by group, provider groups included; and machine tokens for CI jobs, each
-  naming the Secret that will hold it and expiring within 365 days. This release ships
-  the model and its validation ahead of their enforcement: the Hub refuses to start with
-  `Hub:Access:Enabled` set to `true`, and the chart's schema refuses
-  `hub.access.enabled: true`, since a Hub that believed it filtered would serve every
-  caller everything. Off, the default, nothing under `Hub:Access` is validated or used and
-  every answer is unchanged; the values are still bound, so a machine token's `ExpiresAt`
-  must be an ISO 8601 date. Set to `true`, every other rule is checked beside that
-  refusal, each message naming its key and none echoing a token, so a configuration can
-  be staged and corrected now: a machine token's group holding no person, the `admin` role
-  granted on `*` only, `access.admin` never in a configured role. A provider group in
-  `AdminGroups` or a grant must be spelled as the provider sends it and be a name only the
-  organisation can create, and on GitLab needs `Hub:Auth:RequiredGroups` as well, see
-  `docs/CONFIGURATION.md`. The chart passes the block to the Hub as is, and refuses a
-  duplicate or malformed machine-token name, a missing Secret reference and an
-  `expiresAt` that is not an ISO 8601 date and time; it does not deliver the token yet.
+  naming the Secret that holds it and expiring within 365 days. Off, the default, nothing
+  under `Hub:Access` is validated or used and every answer is unchanged; the values are
+  still bound, so a machine token's `ExpiresAt` must be an ISO 8601 date. On, every rule
+  is checked at startup, each message naming its key and none echoing a token: a machine
+  token's group holding no person, the `admin` role granted on `*` only, `access.admin`
+  never in a configured role. A provider group in `AdminGroups` or a grant must be spelled
+  as the provider sends it and be a name only the organisation can create, and on GitLab
+  needs `Hub:Auth:RequiredGroups` as well, see `docs/CONFIGURATION.md`. The chart passes
+  the block to the Hub as is, and refuses a duplicate or malformed machine-token name, a
+  missing Secret reference and an `expiresAt` that is not an ISO 8601 date and time.
+- Access control is enforced with `Hub:Access:Enabled` (Helm `hub.access.enabled`), see
+  the new `docs/ACCESS-CONTROL.md`. Every route but the import, `/health` and `/metrics`
+  (anonymous, on `Hub:MetricsPort` only) then needs a browser session or a machine token,
+  and each answer covers what the caller's grants cover. `/api/findings`, `/api/findings/{traceId}` and the incidents are filtered per
+  source copy, before paging, with `sources[]`, `acks[]`, statuses and filters judged on
+  the copies in scope; a listing whose permission is held nowhere answers `403`, so a CI
+  gate whose token has no grant fails. `/api/sources` lists only the sources where the
+  caller holds something, with a `permissions` array. A record outside the caller's read
+  scope answers the `404` a missing one gets, writes included, and a readable one it may
+  not write `403`. An ack needs `acks.write` at the source before a relay slot is taken,
+  then on the finding's copy at that source; an ack made through an attribute grant has no
+  forced expiry and may silence the same finding for another team's deployment at that
+  daemon. A run's row and its report follow one rule: a daemon run needs `findings.read`
+  and `sources.read` at the daemon, a trace-backend run `traces.read` on the requested
+  service, or at the backend for a trace ID, and a trace report shows every service its
+  traces cross. The daemon view needs `sources.read` at the source as a whole. Reports the
+  Hub renders are static, since a live report would ack around `acks.write`. A browser
+  write must carry `Sec-Fetch-Site: same-origin`, and every response carries
+  `Content-Security-Policy: frame-ancestors 'self'`. The launcher says "No grant on this
+  Hub reaches you" when `/api/status` answers `403`.
+- Machine tokens: `Authorization: Bearer <token>`, compared by SHA-256 fingerprint in fixed
+  time, read from `Hub__Access__MachineTokens__<index>__Token`, which the chart fills from
+  each token's Secret. A token holds `findings.read` at most, whatever its grants: any
+  write gets `403`. An unknown or expired token gets `401` with
+  `WWW-Authenticate: Bearer error="invalid_token"`, even next to a valid cookie, so a proxy
+  in front of the Hub must neither inject nor forward `Authorization`. An expired entry is
+  logged at startup (event `2001`) and never stops the Hub. Revoke by removing the entry;
+  rotate by updating the Secret and restarting the deployment, see `docs/OPERATIONS.md`.
+- `Hub:Auth:SubjectClaim` (Helm `hub.auth.subjectClaim`, default `sub`), read only with
+  access control: the userinfo field that is the authorization key, one of `sub`, `oid`,
+  `uuid` and `account_id` (`account_id` for Bitbucket Cloud). `IdentityClaim` stays the
+  name shown and is never compared. With access on, a sign-in without a usable subject, or
+  whose subject or identity starts with `local:` or `machine:`, is refused (event `1900`);
+  the session keeps only the provider groups a grant or `AdminGroups` names, and logs the
+  others at Debug (event `1902`); `Hub:Analysis:IdentityHeader` is never read; and the
+  session ends 8 hours after sign-in, as under `RequiredGroups`. A session opened before
+  access was turned on signs in again.
+- `Hub:MetricsPort` (Helm `hub.metricsPort`): `/metrics` answers on that port alone, and
+  nothing else answers there. Required with access control on. The chart adds it to
+  `ASPNETCORE_HTTP_PORTS`, the container and the Service (port `metrics`) and refuses
+  `8080`; outside Helm, set `ASPNETCORE_HTTP_PORTS="8080;<port>"`. A Hub whose metrics port
+  is not bound beside another stops at startup (event `2002`, exit code 1).
+  `examples/prometheus-scrape.yml` now targets port 9464.
+- **Prerequisite before turning access on:** the JetBrains plugin release after 0.1.0,
+  which sends a credential per endpoint (robintra/perf-sentinel-jetbrains-plugin#31,
+  merged), on every IDE that reads the Hub; an older plugin gets `401`. Grafana's Hub
+  datasource needs a machine token. `Hub:Auth:RequiredGroups` is recommended alongside.
+- **Rollback:** with access on, never roll the image back below this release. Earlier
+  builds ignore `Hub:Access` and fail open: `/api/findings` is anonymous again and every
+  session sees every record (`RequiredGroups` still holds). Set `hub.access.enabled: false`
+  first, as a deliberate decision, then roll back.
 
 ### Changed
 

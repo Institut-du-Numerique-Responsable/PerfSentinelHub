@@ -140,7 +140,11 @@ cas les plus petits.
 
 Cette section décrit le Hub avec `Hub:Auth:Enabled` désactivé, le défaut. Activé,
 le Hub connecte lui-même les utilisateurs du navigateur et seules les routes
-machines restent ouvertes, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
+machines restent ouvertes, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md). Avec
+`Hub:Access` activé en plus, ces routes demandent elles aussi un jeton machine et chaque
+lecture est réduite aux grants de l'appelant, voir
+[ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) et
+[Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
 Un seul endpoint réclame une preuve, `POST /api/import/findings`, dont la
 `X-API-Key` est comparée par empreinte. Tous les autres ne réclament rien :
@@ -151,7 +155,7 @@ modèles de requêtes SQL et noms d'endpoints compris.
 
 Le `by` et le `reason` d'un acquittement reflété sont lisibles sur la route de
 lecture ouverte, `/api/findings`, qui reste ouverte aux machines quand
-`Hub:Auth` est activé. C'est qui a acquitté un finding et pourquoi, dans les
+`Hub:Auth` est activé, sauf si `Hub:Access` l'est aussi. C'est qui a acquitté un finding et pourquoi, dans les
 mots saisis sur le daemon, comme l'était déjà `acknowledged_by`.
 
 L'en-tête d'identité attribue, il n'authentifie pas.
@@ -161,7 +165,7 @@ derrière un proxy authentifiant, et aucune défense sans lui. Si le réseau n'e
 pas la frontière, posez ce proxy devant ou activez `Hub:Auth`. Voir
 [DEPLOYMENT-FR.md](DEPLOYMENT-FR.md).
 
-Le relais d'acquittement sait qui demande et n'a pas de rôles. Tout appelant que
+Sauf si `Hub:Access` est activé, le relais d'acquittement sait qui demande et n'a pas de rôles. Tout appelant que
 le Hub peut nommer, un utilisateur connecté ou, une fois
 `Hub:AckRelay:TrustIdentityHeader` posé, celui que nomme l'en-tête du proxy,
 peut acquitter ou révoquer sur toutes les sources qui portent un identifiant
@@ -185,6 +189,86 @@ C'est un plancher et non une frontière, et ce plancher n'est que celui du
 relais : `POST /api/analyses` et `POST /api/incidents/refresh` ne jugent ni le
 site ni le type de contenu. Un Hub joignable depuis une session de navigateur a
 donc sa place derrière un proxy qui ne relaie pas des origines arbitraires.
+
+## Ce que le contrôle d'accès ne couvre pas
+
+Avec `Hub:Access` activé, un appelant ne lit et n'écrit que ce qu'un grant lui donne, voir
+[ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Voici les limites de ce modèle.
+
+À qui un finding est attribué :
+
+- Un N+1 ou un groupe redondant qui traverse plusieurs services est listé sous le service
+  et le regroupement du premier span. Un second service appelant n'apparaît que dans
+  `pattern.occurrences_by_service`, donc son projet ne voit pas le finding. Le fan-out et
+  les appels sérialisés sont attribués au span parent.
+- Une signature replie tous les regroupements. Un projet qui reconnaît un regroupement
+  d'une copie lit l'enveloppe la plus récente de cette copie, qui peut décrire un autre
+  regroupement du même service et du même endpoint.
+- Un attribut ou un nom de service est posé par qui déploie l'application, par quiconque
+  peut envoyer de l'OTLP à un daemon, et par qui détient la clé d'import d'une source,
+  pour cette source seulement. La comparaison se fait par copie : une valeur plantée
+  n'expose que les copies de la source où elle a été plantée. Dans cette source :
+  - des spans sous le service et l'endpoint d'une autre équipe avec `team=evil` font lire
+    au projet d'evil l'enveloppe la plus récente de cette copie, qui peut être celle de
+    l'autre équipe ;
+  - les mêmes spans sans attribut de regroupement, ou avec une autre valeur, privent
+    l'équipe propriétaire de son grant par attribut : `403` sur chaque acquittement et
+    chaque révocation de ce finding à cette source, et sur un run de backend de traces de
+    ce service, tant que les spans arrivent, plus `Hub:Retention` ;
+  - un acquittement porte sur la signature, aveugle au regroupement. Celui qu'écrit un
+    grant par attribut fait aussi taire les regroupements de cette signature que le Hub
+    n'a pas vus sur ce daemon, et ceux qui apparaîtront, donc il peut faire taire le même
+    finding pour le déploiement d'une autre équipe sur ce daemon. Le Hub ne lui impose
+    aucune expiration.
+
+  Là où plusieurs équipes peuvent émettre le même nom de service, donnez à l'équipe
+  propriétaire un grant de source ou de service pour `acks.write` et `analyses.run`.
+- Lancer un run sur un backend de traces demande que toutes les copies du service dans
+  l'environnement du backend s'accordent. Nommez l'environnement d'un backend de traces
+  comme les daemons qui remontent ses services.
+- Une copie enregistrée avant la version 9 du schéma ne correspond à aucun motif
+  d'attribut ni à aucune partie de service tant que sa source ne la remonte pas à nouveau.
+- Ajouter un attribut de regroupement change l'identité des spans qui ne portaient aucun
+  des précédents.
+
+Un rapport de backend de traces montre tous les services que ses traces traversent. Un
+rapport se lit sur le sujet de son run, `traces.read` sur le service demandé, ou sur le
+backend entier pour un trace ID, et le Hub ne filtre pas le HTML écrit par le moteur. Qui
+détient `traces.read` sur un service lit, dans ses rapports, les spans, findings et
+compteurs de tous les services d'autres équipes que ces traces atteignent. C'est voulu, un
+problème naît souvent ailleurs. Ne donnez `traces.read` qu'à qui peut voir des traces
+d'autres équipes : les rôles intégrés `reader` et `member` le portent, un rôle avec
+`findings.read` seul ne le porte pas.
+
+`max_confidence` et `lineage` dans une enveloppe ne sont pas réduits aux copies de
+l'appelant, et une ligne de source écrite avant l'existence de la copie par source sert
+l'enveloppe partagée jusqu'à ce que cette source remonte à nouveau le finding.
+
+La fraîcheur d'une décision :
+
+- les groupes du fournisseur sont lus à la connexion, ils ont donc 8 heures au plus ;
+- `Hub:Auth:RequiredGroups`, les groupes internes, les admins, les grants et les jetons
+  machine s'appliquent au redémarrage qui les déploie ;
+- un jeton machine renouvelé demande un rollout restart, un jeton retiré part avec la
+  modification de ConfigMap qui relance le pod.
+
+Hors du modèle :
+
+- Le `/metrics` propre d'un daemon reste ouvert. Avec des libellés par service ou par
+  regroupement, il nomme des services et des regroupements, sans porter aucun finding.
+- Un tableau de bord qui lit un daemon ou un backend de traces avec son propre
+  identifiant montre ce que cet identifiant lit, à qui l'outil laisse entrer. Un jeton
+  machine dans un outil partagé aussi : une datasource Grafana sert tout le périmètre du
+  jeton à chaque utilisateur de Grafana, et un jeton dans les IDE des développeurs est un
+  identifiant partagé qui survit aux départs. Un jeton par équipe, avec les seuls projets
+  de cette équipe, limite les deux.
+- L'identité affichée dans `requested_by` et le `by` d'un acquittement est ce que porte le
+  `Hub:Auth:IdentityClaim` du fournisseur. Un utilisateur qui peut s'y renommer change ce
+  libellé, jamais ses droits, qui suivent `Hub:Auth:SubjectClaim`.
+- Un proxy devant le Hub qui injecte ou transmet `Authorization` casse chaque requête du
+  navigateur une fois l'accès activé : le Hub juge le bearer avant le cookie.
+- Les rôles combinent les seules permissions du Hub. Un nouveau type d'action demande une
+  nouvelle permission dans le Hub.
 
 ## Ce qui se joue hors du Hub
 

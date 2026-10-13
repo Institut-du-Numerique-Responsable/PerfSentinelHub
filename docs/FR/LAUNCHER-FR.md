@@ -300,6 +300,14 @@ l'exécution, parce que le daemon cesse alors de charger aussi la baseline TOML,
 [ACK-WORKFLOW-FR.md](https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/blob/main/docs/FR/ACK-WORKFLOW-FR.md)
 du moteur.
 
+## Quand aucun grant ne vous atteint
+
+Avec `Hub:Access` activé, `/api/status` répond `403` à un appelant connecté qu'aucun grant
+n'atteint. Le Hub répond, donc le lanceur n'affiche pas son bandeau d'injoignabilité. Il
+dit à la place « No grant on this Hub reaches you. An administrator grants access in the
+Hub's configuration. » et ne dessine aucun écran. Tout autre échec de `/api/status` garde
+le bandeau d'injoignabilité. Voir [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
+
 ## Sûreté
 
 Rien de ce qui vient du serveur n'est jamais écrit avec `innerHTML`. Chaque chaîne

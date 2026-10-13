@@ -24,6 +24,10 @@
         "resolutionGrace": { "type": "string", "minLength": 1 },
         "defaultReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
         "maxReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "metricsPort": {
+          "$comment": "8080 is the main port: /metrics would answer there and nothing else would.",
+          "type": ["integer", "null"], "minimum": 1, "maximum": 65535, "not": { "const": 8080 }
+        },
         "ackRelay": {
           "type": "object",
           "properties": {
@@ -34,11 +38,7 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "enabled": {
-              "$comment": "This release refuses to start with access on: refused here before Recreate stops the running pod.",
-              "type": "boolean",
-              "const": false
-            },
+            "enabled": { "type": "boolean" },
             "admins": { "type": "array", "items": { "type": "string", "minLength": 1 } },
             "adminGroups": { "type": "array", "items": { "type": "string", "minLength": 1 } },
             "groups": {
@@ -136,6 +136,7 @@
             "clientSecretKey": { "type": "string" },
             "scopes": { "type": "string" },
             "identityClaim": { "type": "string" },
+            "subjectClaim": { "enum": ["sub", "oid", "uuid", "account_id"] },
             "groupsClaim": { "type": "string" },
             "requiredGroups": { "type": "array", "items": { "type": "string", "minLength": 1 } }
           },
@@ -153,6 +154,22 @@
           },
           "else": {
             "properties": { "requiredGroups": { "maxItems": 0 } }
+          }
+        }
+      },
+      "if": { "properties": { "access": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] } }, "required": ["access"] },
+      "then": {
+        "$comment": "The Hub's A1, A2, A5 and A14, refused at helm upgrade rather than after Recreate has stopped the running pod.",
+        "required": ["auth", "metricsPort"],
+        "properties": {
+          "auth": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "ackRelay": { "properties": { "trustIdentityHeader": { "not": { "const": true } } } },
+          "metricsPort": { "type": "integer" },
+          "access": {
+            "anyOf": [
+              { "properties": { "admins": { "minItems": 1 } }, "required": ["admins"] },
+              { "properties": { "adminGroups": { "minItems": 1 } }, "required": ["adminGroups"] }
+            ]
           }
         }
       }

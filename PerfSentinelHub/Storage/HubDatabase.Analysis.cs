@@ -141,6 +141,32 @@ public sealed partial class HubDatabase
         return runs;
     }
 
+    /// <summary>
+    ///     The newest runs the caller may see, up to the limit. No SQL LIMIT: which rows are
+    ///     visible is decided per row, so the read walks newest first and stops at the
+    ///     limit. The table is bounded by Hub:Analysis:RunRetention.
+    /// </summary>
+    public async Task<IReadOnlyList<AnalysisRun>> ListRunsAsync(
+        int limit,
+        Func<AnalysisRun, CancellationToken, ValueTask<bool>> visible,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT {RunColumns} FROM analysis_runs ORDER BY created_at_ms DESC, id ASC;";
+
+        var runs = new List<AnalysisRun>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (runs.Count < limit && await reader.ReadAsync(cancellationToken))
+        {
+            var run = ReadRun(reader);
+            if (await visible(run, cancellationToken))
+                runs.Add(run);
+        }
+
+        return runs;
+    }
+
     public async Task<AnalysisRun?> FindRunAsync(string id, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);

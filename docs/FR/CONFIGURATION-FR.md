@@ -22,6 +22,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:ResolutionGrace`              | `7.00:00:00` (7 jours)                                                         | Positive, inférieure à `Retention`                                                                      |
 | `Hub:DefaultReadLimit`             | `1000`                                                                         | 1 à `MaxReadLimit`                                                                                      |
 | `Hub:MaxReadLimit`                 | `10000`                                                                        | 1 à 10000                                                                                               |
+| `Hub:MetricsPort`                  | aucun                                                                          | 1 à 65535. Le seul port où répond `/metrics`, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)        |
 | `Hub:Analysis:EngineBinaryPath`    | aucun                                                                          | Optionnel, chemin absolu vers le binaire perf-sentinel. Absent, les runs d'analyse sont indisponibles   |
 | `Hub:Analysis:ReportDirectory`     | `/data/reports`                                                                | Absolu, accessible en écriture. Les rapports rendus vivent ici                                          |
 | `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                                             | En-tête qu'un reverse proxy renseigne avec l'identité du demandeur, ignoré sous `Hub:Auth`              |
@@ -37,7 +38,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:UpdateCheck:HubEndpoint`      | API des releases GitHub de `Institut-du-Numerique-Responsable/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
 | `Hub:Auth:*`                       | désactivé                                                                      | Connexion OAuth2 du navigateur, limitable par groupe, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md) |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                        | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
-| `Hub:Access:*`                     | désactivé                                                                      | Modèle du contrôle d'accès, `Enabled` refusé dans cette version, voir plus bas                          |
+| `Hub:Access:*`                     | désactivé                                                                      | Contrôle d'accès, voir plus bas et [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md)                          |
 | `Hub:Sources`                      | aucune                                                                         | Au moins une source                                                                                     |
 
 ## Réglages par source
@@ -121,18 +122,20 @@ avertissement au démarrage, qui nomme les sources dont l'identifiant ne sera ja
 `Hub:Access` dit qui atteint quels findings, quelles sources et quels runs : projets, rôles,
 attributions, groupes internes, administrateurs et jetons machine. Tout cela est de la
 configuration, la base ne stocke ni utilisateur ni appartenance, et sous Helm le bloc entier
-est `hub.access`, transmis tel quel au Hub. Cette version livre le modèle et sa validation
-avant leur application : avec `Hub:Access:Enabled` à `true`, le Hub refuse de démarrer, avec
-« Hub:Access:Enabled is not available in this build yet. », et le schéma du chart refuse
-`hub.access.enabled: true` avant que le pod en service ne soit arrêté. Un Hub qui se
-croirait filtrant servirait sinon tout à tout appelant. Désactivé, le défaut, rien sous
-`Hub:Access` n'est validé ni utilisé et le Hub répond exactement comme avant, mais les
-valeurs sont tout de même liées, donc `ExpiresAt` doit déjà être une date ISO 8601 comme
-`2027-06-30T00:00:00Z`, sans quoi le Hub ne démarre pas. Chaque liste est vide par défaut.
+est `hub.access`, transmis tel quel au Hub. Comment il s'applique à chaque route, les jetons
+machine et les sessions sont dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Désactivé,
+le défaut, rien sous `Hub:Access` n'est validé ni utilisé et le Hub répond exactement comme
+avant, mais les valeurs sont tout de même liées, donc `ExpiresAt` doit déjà être une date
+ISO 8601 comme `2027-06-30T00:00:00Z`, sans quoi le Hub ne démarre pas. Chaque liste est
+vide par défaut. Avec `Enabled` activé, chaque règle ci-dessous est contrôlée au démarrage,
+chaque message nomme sa clé et son indice et ne reprend jamais un jeton ; le schéma du chart
+contrôle les règles entre clés au `helm upgrade`, avant que `Recreate` n'arrête le pod en
+service.
 
 | Réglage                      | Validation                                                                                                                                                                      |
 |------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Hub:Access:Enabled`         | `false` par défaut, refusé à `true` dans cette version. Exige `Hub:Auth:Enabled`, et `Hub:AckRelay:TrustIdentityHeader` désactivé                                               |
+| `Hub:Access:Enabled`         | `false` par défaut. Exige `Hub:Auth:Enabled`, `Hub:MetricsPort`, une entrée dans `Admins` ou `AdminGroups`, et `Hub:AckRelay:TrustIdentityHeader` désactivé                   |
+| `Hub:Auth:SubjectClaim`      | `sub` par défaut, lu seulement avec `Enabled` : `sub`, `oid`, `uuid` ou `account_id`, des identifiants qu'un fournisseur ne réattribue jamais                                   |
 | `Hub:Access:Admins`          | Sujets qui tiennent le rôle intégré `admin` sur `*` : 1 à 256 caractères, sans caractère de contrôle, sans préfixe `machine:` ni `local:`. Pas vide avec `AdminGroups`          |
 | `Hub:Access:AdminGroups`     | Références de groupe qui tiennent `admin` sur `*` : `internal:<nom>` ou un groupe du fournisseur, voir plus bas                                                                 |
 | `Hub:Access:Groups[]`        | `{ Name, Members[] }`, référencé comme `internal:<Name>`. Nom de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`, unique sans tenir compte de la casse ; membres comme `Admins` |
@@ -188,10 +191,11 @@ pour une machine et qu'une personne ajoutée plus tard les gagnerait en silence.
 tout autre jeton machine et de toute clé d'import, et est rogné comme une clé d'import.
 `ExpiresAt` est posé, à 365 jours au plus ; un jeton déjà expiré n'empêche pas le Hub de
 démarrer. Sous Helm, un élément est `{ name, group, expiresAt, secretName, secretKey }` :
-le jeton n'est jamais dans les values, et une fois l'application livrée le chart le lira
-dans ce Secret. Cette version ne fait qu'enregistrer la référence ; le chart refuse un nom
-dupliqué ou mal formé, une référence de Secret manquante et un `expiresAt` qui n'est pas une
-date et heure ISO 8601. Aucun message ne reprend jamais un jeton.
+le jeton n'est jamais dans les values, et avec `enabled` le chart le lit dans ce Secret pour
+`Hub__Access__MachineTokens__<index>__Token`. Le chart refuse un nom dupliqué ou mal formé,
+une référence de Secret manquante et un `expiresAt` qui n'est pas une date et heure
+ISO 8601. Aucun message ne reprend jamais un jeton. Une entrée expirée est journalisée au
+démarrage (événement `2001`) et refusée à chaque requête.
 
 ## Ce qu'est une source, et ce qui est mesuré
 

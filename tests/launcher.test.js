@@ -929,3 +929,12 @@ test("the button that does not apply to a row of unknown ack state reads as the 
         {ok: true, text: "Old: ack revoked."}
     ]);
 });
+
+test("a 403 on the status means no grant reaches the caller, anything else that the Hub is down", () => {
+    // Hub:Access answers 403 to a signed-in caller its grants do not reach: the
+    // Hub is up, and an administrator is who can change that.
+    assert.equal(PSL.shellBanner(403),
+        "No grant on this Hub reaches you. An administrator grants access in the Hub's configuration.");
+    assert.equal(PSL.shellBanner(500), null);
+    assert.equal(PSL.shellBanner(undefined), null);
+});

@@ -28,6 +28,7 @@ public static partial class ApiEndpoints
         HttpRequest request,
         HubDatabase database,
         EngineProbe engine,
+        AccessPolicy access,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -54,7 +55,8 @@ public static partial class ApiEndpoints
         using (document)
         {
             var root = document.RootElement;
-            if (ReadSource(root, hubOptions) is not { } source)
+            // A source missing from the caller's /api/sources reads as unknown.
+            if (ReadSource(root, access.Sources(request.HttpContext, hubOptions.Sources)) is not { } source)
                 return Problem(StatusCodes.Status400BadRequest, "Unknown source_id.");
 
             var requestElement = root.TryGetProperty("request", out var submitted)
@@ -68,6 +70,13 @@ public static partial class ApiEndpoints
             // here, with both versions named, not by the engine at run time.
             if (parsed.Detection.RefusedBy(engine.Version) is { } refused)
                 return Problem(StatusCodes.Status400BadRequest, refused);
+            // Starting needs R and analyses.run, so a requester reads their own run while
+            // their grant stands, with no requester clause.
+            var rule = new RunRule(request.HttpContext, access, database);
+            var subject = RunRule.Service(source.Kind, requestElement);
+            if (!await rule.HoldsAsync(source.Kind, source.Id, source.Environment, subject,
+                    [AccessPermissions.AnalysesRun, .. RunRule.Permissions(source.Kind)], cancellationToken))
+                return Problem(StatusCodes.Status403Forbidden, "You may not start this analysis.");
 
             var run = NewRun(source, requestElement, Identity(request, hubOptions.Analysis), nowMs);
             if (await database.TryInsertRunAsync(run, cancellationToken))
@@ -81,6 +90,7 @@ public static partial class ApiEndpoints
     private static async Task ListAnalysesAsync(
         HttpContext context,
         HubDatabase database,
+        AccessPolicy access,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
@@ -94,7 +104,12 @@ public static partial class ApiEndpoints
             return;
         }
 
-        var runs = await database.ListRunsAsync(limit, cancellationToken);
+        // Never 403: a caller who may see no run gets an empty list. Whoever holds every
+        // permission R reads on '*' keeps today's SQL.
+        var rule = new RunRule(context, access, database);
+        var runs = rule.SeesEverything
+            ? await database.ListRunsAsync(limit, cancellationToken)
+            : await database.ListRunsAsync(limit, rule.SeesAsync, cancellationToken);
         await AnalysisRunWriter.WriteArrayAsync(
             context.Response, runs, loggerFactory.CreateLogger("AnalysisApi"), cancellationToken);
     }
@@ -103,13 +118,14 @@ public static partial class ApiEndpoints
         string id,
         HttpContext context,
         HubDatabase database,
+        AccessPolicy access,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!IsRunId(id))
             return TypedResults.NotFound();
         var run = await database.FindRunAsync(id, cancellationToken);
-        if (run is null)
+        if (run is null || !await new RunRule(context, access, database).SeesAsync(run, cancellationToken))
             return TypedResults.NotFound();
 
         await AnalysisRunWriter.WriteObjectAsync(
@@ -123,7 +139,9 @@ public static partial class ApiEndpoints
     /// </summary>
     private static async Task<IResult> GetReportAsync(
         string id,
+        HttpContext context,
         HubDatabase database,
+        AccessPolicy access,
         AnalysisRunner runner,
         CancellationToken cancellationToken)
     {
@@ -132,8 +150,10 @@ public static partial class ApiEndpoints
         if (!IsRunId(id))
             return TypedResults.NotFound();
 
+        // The row's rule, R, and the 404 an unknown id gets: never a 403.
         var run = await database.FindRunAsync(id, cancellationToken);
-        if (run?.Status != AnalysisStatuses.Succeeded)
+        if (run?.Status != AnalysisStatuses.Succeeded ||
+            !await new RunRule(context, access, database).SeesAsync(run, cancellationToken))
             return TypedResults.NotFound();
 
         var path = runner.ReportPath(id);
@@ -161,11 +181,11 @@ public static partial class ApiEndpoints
             null, null, null, null, null, null);
     }
 
-    private static SourceOptions? ReadSource(JsonElement root, HubOptions options)
+    private static SourceOptions? ReadSource(JsonElement root, IReadOnlyList<SourceOptions> sources)
     {
         return root.TryGetProperty("source_id", out var sourceId) &&
                sourceId.ValueKind == JsonValueKind.String
-            ? options.Sources.FirstOrDefault(candidate =>
+            ? sources.FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, sourceId.GetString(), StringComparison.Ordinal))
             : null;
     }
@@ -182,7 +202,8 @@ public static partial class ApiEndpoints
     /// <summary>Null when no proxy established one, rather than a placeholder.</summary>
     private static string? KnownIdentity(HttpRequest request, AnalysisOptions analysis)
     {
-        // A session outranks the header, which any client can send.
+        // A session outranks the header, which any client can send. With access on every
+        // caller is named, so the header is never reached.
         return Sanitized(SessionName(request) ?? ProxyIdentity(request, analysis));
     }
 
@@ -226,11 +247,99 @@ public static partial class ApiEndpoints
 
     // The typed overload keeps NativeAOT trimming safe: the reflection-based
     // one is flagged by IL2026 and IL3050 at build time.
-    private static JsonHttpResult<AnalysisProblem> Problem(int statusCode, string detail)
+    internal static JsonHttpResult<AnalysisProblem> Problem(int statusCode, string detail)
     {
         return TypedResults.Json(
             new AnalysisProblem(detail),
             HubJsonContext.Default.AnalysisProblem,
             statusCode: statusCode);
+    }
+
+    /// <summary>
+    ///     R, the one rule for a run's row and its report. A daemon run is judged at the
+    ///     daemon as a whole, on findings.read and sources.read. A trace-backend run is
+    ///     judged on traces.read: at the backend as a whole for a trace ID (or a request that
+    ///     no longer parses), and on the requested service otherwise, through every Hub copy
+    ///     of that service in the run's environment. The report shows every service its
+    ///     traces cross; traces.read is the permission given with that in mind.
+    /// </summary>
+    private sealed class RunRule(HttpContext context, AccessPolicy access, HubDatabase database)
+    {
+        // The service subject reads the store, once per environment and service a request needs.
+        private readonly Dictionary<(string, string), IReadOnlyList<AccessCopy>> _copies = [];
+
+        public bool SeesEverything => !access.Enabled ||
+                                      new[] { AccessPermissions.TracesRead, AccessPermissions.FindingsRead, AccessPermissions.SourcesRead }
+                                          .All(permission => access.Scope(context, permission).Patterns is null);
+
+        public static IReadOnlyList<string> Permissions(string kind)
+        {
+            return kind == SourceKinds.Daemon
+                ? [AccessPermissions.FindingsRead, AccessPermissions.SourcesRead]
+                : [AccessPermissions.TracesRead];
+        }
+
+        // The requested service of a trace-backend service run; null for a daemon, a trace ID
+        // or anything unreadable, which are judged at the source as a whole.
+        public static string? Service(string kind, JsonElement request)
+        {
+            return kind != SourceKinds.Daemon && request.ValueKind == JsonValueKind.Object &&
+                   // A trace ID as the parser reads it: a string, so a null one is a service run.
+                   !(request.TryGetProperty("trace_id", out var traceId) && traceId.ValueKind == JsonValueKind.String) &&
+                   request.TryGetProperty("service", out var service) && service.ValueKind == JsonValueKind.String
+                ? service.GetString()
+                : null;
+        }
+
+        public async ValueTask<bool> SeesAsync(AnalysisRun run, CancellationToken cancellationToken)
+        {
+            if (!access.Enabled) return true;
+            string? service;
+            try
+            {
+                using var request = JsonDocument.Parse(run.RequestJson);
+                service = Service(run.Kind, request.RootElement);
+            }
+            catch (JsonException)
+            {
+                service = null;
+            }
+
+            return await HoldsAsync(run.Kind, run.SourceId, run.Environment, service, Permissions(run.Kind),
+                cancellationToken);
+        }
+
+        public async ValueTask<bool> HoldsAsync(
+            string kind,
+            string sourceId,
+            string environment,
+            string? service,
+            IReadOnlyList<string> permissions,
+            CancellationToken cancellationToken)
+        {
+            foreach (var permission in permissions)
+            {
+                var scope = access.Scope(context, permission);
+                if (scope.Patterns is null)
+                    continue;
+                if (kind == SourceKinds.Daemon || service is null
+                        ? !scope.HoldsAtSource(sourceId)
+                        : !scope.CoversSubject(sourceId, service, await CopiesAsync(environment, service, cancellationToken)))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private async ValueTask<IReadOnlyList<AccessCopy>> CopiesAsync(
+            string environment,
+            string service,
+            CancellationToken cancellationToken)
+        {
+            if (!_copies.TryGetValue((environment, service), out var copies))
+                _copies[(environment, service)] = copies =
+                    await database.ReadServiceCopiesAsync(environment, service, cancellationToken);
+            return copies;
+        }
     }
 }

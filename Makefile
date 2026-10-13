@@ -94,8 +94,11 @@ HELM_TEST_VALUES := --set 'sources[0].id=test' --set 'sources[0].name=test' --se
 
 HELM_AUTH_VALUES := --set hub.auth.enabled=true --set hub.auth.authorizationEndpoint=https://sso.example.com/auth --set hub.auth.tokenEndpoint=https://sso.example.com/token --set hub.auth.userInformationEndpoint=https://sso.example.com/userinfo --set hub.auth.clientId=hub --set hub.auth.clientSecretName=hub-oauth --set hub.auth.clientSecretKey=client-secret
 
-# One entry of each hub.access list, access off: what an operator stages before enforcement ships.
+# One entry of each hub.access list, access off unless HELM_ACCESS_ON follows.
 HELM_ACCESS_VALUES := --set 'hub.access.adminGroups={/hub-admins}' --set 'hub.access.groups[0].name=ci-shop' --set 'hub.access.projects[0].name=shop' --set 'hub.access.projects[0].patterns[0].attribute=team=shop' --set 'hub.access.roles[0].name=ci-reader' --set 'hub.access.roles[0].permissions={findings.read}' --set 'hub.access.grants[0].group=internal:ci-shop' --set 'hub.access.grants[0].project=shop' --set 'hub.access.grants[0].role=ci-reader' --set 'hub.access.machineTokens[0].name=ci-shop' --set 'hub.access.machineTokens[0].group=internal:ci-shop' --set-string 'hub.access.machineTokens[0].expiresAt=2027-06-30T00:00:00Z' --set 'hub.access.machineTokens[0].secretName=hub-machine-tokens' --set 'hub.access.machineTokens[0].secretKey=ci-shop'
+
+# Access on, with the metrics port it requires; the fixture above provides the admin.
+HELM_ACCESS_ON := --set hub.access.enabled=true --set hub.metricsPort=9464
 
 HELM_SECOND_TOKEN := --set 'hub.access.machineTokens[1].group=internal:ci-shop' --set-string 'hub.access.machineTokens[1].expiresAt=2027-06-30T00:00:00Z' --set 'hub.access.machineTokens[1].secretName=hub-machine-tokens' --set 'hub.access.machineTokens[1].secretKey=ci-other'
 
@@ -113,7 +116,16 @@ helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set 'hub.auth.requiredGroups={/hub-users}' 2>&1 >/dev/null | grep -q '/hub/auth/requiredGroups'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.access=null --show-only templates/configmap.yaml | grep -q '"Access":{}'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.access.adminGroup=x 2>&1 >/dev/null | grep -q 'adminGroup'
-	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) --set hub.access.enabled=true 2>&1 >/dev/null | grep -q '/hub/access/enabled'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) --show-only templates/configmap.yaml | grep -q '"SubjectClaim":"sub"'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) --set hub.auth.subjectClaim=email 2>&1 >/dev/null | grep -q '/hub/auth/subjectClaim'
+	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.metricsPort=9464) && printf '%s' "$$out" | grep -q 'value: "8080;9464"' && printf '%s' "$$out" | grep -q 'name: metrics, containerPort: 9464' && printf '%s' "$$out" | grep -q '"MetricsPort":9464' && printf '%s' "$$out" | grep -A2 -- '- name: metrics' | grep -q 'port: 9464'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.metricsPort=8080 2>&1 >/dev/null | grep -q '/hub/metricsPort'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) | grep -q 'name: Hub__Access__MachineTokens__0__Token'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) 2>&1 >/dev/null | grep -q '/hub/auth/enabled'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) --set hub.ackRelay.trustIdentityHeader=true 2>&1 >/dev/null | grep -q '/hub/ackRelay/trustIdentityHeader'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) --set 'hub.access.adminGroups=null' 2>&1 >/dev/null | grep -q '/hub/access'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) --set hub.access.enabled=true 2>&1 >/dev/null | grep -q "missing property 'metricsPort'"
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) --set 'hub.auth.requiredGroups={/perf-sentinel-hub}' --show-only templates/configmap.yaml | grep -q '"enabled":true'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) $(HELM_SECOND_TOKEN) --set 'hub.access.machineTokens[1].name=ci-shop' 2>&1 >/dev/null | grep -q 'duplicate machine token name: ci-shop'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) $(HELM_SECOND_TOKEN) --set 'hub.access.machineTokens[1].name=CI' 2>&1 >/dev/null | grep -q 'machine token name must match'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) --set 'hub.access.machineTokens[0].secretName=' 2>&1 >/dev/null | grep -q 'machine token ci-shop needs secretName and secretKey'

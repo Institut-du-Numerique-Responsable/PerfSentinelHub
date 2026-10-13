@@ -126,6 +126,14 @@ public sealed class AccessScope
         return patterns.Count == 0 ? Nothing : new AccessScope(patterns);
     }
 
+    public bool IsNothing => Patterns is { Count: 0 };
+
+    // Some pattern whose source part is absent or matches: the source holds something in scope.
+    public bool ReachesSource(string source)
+    {
+        return Patterns?.Any(pattern => pattern.MatchesSource(source)) ?? true;
+    }
+
     public bool Reads(AccessCopy copy)
     {
         return Patterns?.Any(pattern => pattern.Reads(copy)) ?? true;

@@ -99,7 +99,16 @@ aucune ne demande qui appelle, le lanceur et `POST /api/analyses` compris. Avec
 plugins d'IDE et les jobs de CI et qui renvoie toutes les findings de toutes
 les sources, `/metrics` et `/health`. Ne publiez l'hôte que sur un réseau
 autorisé à les lire, ou limitez qui le joint avec les annotations de liste
-d'adresses sources du contrôleur.
+d'adresses sources du contrôleur. Avec `Hub:Access` activé en plus,
+`/api/findings` exige une session ou un jeton machine et répond à chaque
+appelant avec son propre périmètre, et `/metrics` ne répond que sur
+`hub.metricsPort`, que l'Ingress ne route pas, voir
+[ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Un proxy ou un contrôleur devant
+le Hub ne doit alors ni injecter ni transmettre d'en-tête `Authorization` : une
+requête qui porte un bearer est jugée sur lui seul, et chaque requête du
+navigateur recevrait `401`. Hors Helm, un Hub qui reçoit `Hub__MetricsPort=9464`
+a aussi besoin de `ASPNETCORE_HTTP_PORTS="8080;9464"`, sinon il s'arrête au
+démarrage.
 
 Le contrôleur transmet les en-têtes qu'envoie un client, `X-Forwarded-User`
 compris. Laissez `hub.ackRelay.trustIdentityHeader` désactivé derrière cet

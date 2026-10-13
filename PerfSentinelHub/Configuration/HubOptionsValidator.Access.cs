@@ -2,8 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace PerfSentinelHub.Configuration;
 
-// Hub:Access, rules A0 to A12 (A3 ships with enforcement). Nothing is read while access is
-// off, so nothing is validated either. Each message names the key and its index, and none
+// Hub:Access, rules A1 to A12 and A14. Nothing is read while access is off, so nothing is
+// validated either. Each message names the key and its index, and none
 // echoes a machine token.
 public sealed partial class HubOptionsValidator
 {
@@ -21,8 +21,6 @@ public sealed partial class HubOptionsValidator
         var access = options.Access;
         if (!access.Enabled) return;
 
-        // A0, until enforcement ships: a Hub that believes it filters would serve everyone everything.
-        errors.Add("Hub:Access:Enabled is not available in this build yet.");
         if (!options.Auth.Enabled)
             errors.Add("Hub:Access:Enabled requires Hub:Auth:Enabled: access control needs a signed-in caller.");
         if (options.AckRelay.TrustIdentityHeader)
@@ -30,6 +28,14 @@ public sealed partial class HubOptionsValidator
                        + "Hub:AckRelay:TrustIdentityHeader cannot be set.");
         if (access.Admins.Count == 0 && access.AdminGroups.Count == 0)
             errors.Add("Hub:Access needs at least one entry in Admins or AdminGroups.");
+        // A3: an email or a name can be changed or handed to someone else at the provider.
+        if (options.Auth.SubjectClaim is not ("sub" or "oid" or "uuid" or "account_id"))
+            errors.Add("Hub:Auth:SubjectClaim must name an immutable account id (sub, oid, uuid or account_id) "
+                       + $"when Hub:Access:Enabled; '{options.Auth.SubjectClaim}' can be changed or reused at the provider.");
+        // A14: monitoring must not go dark without a word.
+        if (options.MetricsPort is null)
+            errors.Add("Hub:Access:Enabled needs Hub:MetricsPort: with access on, /metrics answers only on its own "
+                       + "port, and without one it would stop answering everywhere.");
 
         ValidateSubjects(access, errors);
         var groups = ValidateInternalGroups(access, errors);

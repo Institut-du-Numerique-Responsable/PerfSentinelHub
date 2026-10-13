@@ -35,7 +35,7 @@ flowchart LR
     screens --> hub
     runview --> hub
     hub --> runview
-    plugin -- "GET /api/findings" --> hub
+    plugin -- "GET /api/findings<br/><i>a bearer machine token<br/>with Hub:Access</i>" --> hub
 
     daemons -- "push, POST /api/import/findings" --> hub
     hub -- "poll, GET api/status and api/findings" --> daemons

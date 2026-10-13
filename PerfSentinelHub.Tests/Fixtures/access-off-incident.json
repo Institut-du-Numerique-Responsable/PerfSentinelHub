@@ -1,0 +1,4 @@
+{"id":"0000000000000000000000000000000a","service":"cart","kind":"oom_kill","at_ms":1000,"window_from_ms":900,"window_to_ms":1100,"findings":[{"finding":{"type":"slow_sql","severity":"warning","trace_id":"rider-trace","service":"cart",
+ "grouping":[{"key":"team","value":"billing"}],"source_endpoint":"GET /orders",
+ "pattern":{"template":"SELECT 1"},"confidence":"daemon_production","signature":"slow_sql:cart:0000000000000000000000000000000000000001"},
+ "first_seen_ms":1}],"ended_at_ms":null,"source_id":"lab","source_name":"Lab","environment":"lab","first_seen":5000,"last_seen":5000,"finding_count":1,"capture":"empty"}

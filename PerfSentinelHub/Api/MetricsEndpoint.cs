@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -19,9 +21,49 @@ namespace PerfSentinelHub.Api;
 ///     is one of the three values the read-time CASE yields. Nothing a caller
 ///     sends reaches a label, and nothing a daemon sends reaches one unfolded.
 /// </summary>
-public static class MetricsEndpoint
+public static partial class MetricsEndpoint
 {
     private const string ContentType = "text/plain; version=0.0.4; charset=utf-8";
+
+    /// <summary>
+    ///     Hub:MetricsPort: /metrics answers on that port alone, and nothing else answers
+    ///     there. Judged on the port the connection reached, never on the Host header a
+    ///     client writes. Setting the key does not make Kestrel listen, and a listener
+    ///     added in code would make Kestrel ignore the configured URLs, so once the server
+    ///     has started the Hub checks the port is bound beside another one, and stops if not.
+    /// </summary>
+    public static void UseMetricsPort(this WebApplication app, int port, Action refuse)
+    {
+        app.Use((context, next) =>
+        {
+            // Judged on the endpoint routing chose, which also takes /metrics/ and /METRICS.
+            if ((context.Connection.LocalPort == port) ==
+                (context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: "/metrics" }))
+                return next(context);
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return Task.CompletedTask;
+        });
+        app.Lifetime.ApplicationStarted.Register(() =>
+        {
+            // TestServer binds nothing and publishes no address; Kestrel always does.
+            if (app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses
+                is not { Count: > 0 } addresses)
+                return;
+            var ports = addresses.Select(address => BindingAddress.Parse(address).Port).ToHashSet();
+            if (ports.Contains(port) && ports.Count > 1)
+                return;
+            LogMetricsPortNotBound(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("MetricsEndpoint"), port);
+            refuse();
+            app.Lifetime.StopApplication();
+        });
+    }
+
+    [LoggerMessage(
+        2002,
+        LogLevel.Critical,
+        "Hub:MetricsPort {Port} must be a port the Hub listens on besides its main one; add it to "
+        + "ASPNETCORE_HTTP_PORTS, for example \"8080;{Port}\".")]
+    private static partial void LogMetricsPortNotBound(ILogger logger, int port);
 
     public static void MapMetrics(this WebApplication app)
     {

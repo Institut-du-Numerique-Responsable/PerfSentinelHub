@@ -106,7 +106,8 @@ public sealed partial class AnalysisRunner(
                     run.Id,
                     reportJson,
                     configPath,
-                    LiveDaemonUrl(source, engine.SupportsDaemonUrl),
+                    // A live report acks at the daemon directly, around acks.write.
+                    LiveDaemonUrl(source, engine.SupportsDaemonUrl && !options.Value.Access.Enabled),
                     timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 

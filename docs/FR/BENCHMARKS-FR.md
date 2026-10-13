@@ -98,9 +98,9 @@ compte ce fichier, que SQLite supprime dès son ouverture, dans la limite n'a pa
 
 ## Portée d'accès sur 100 000 copies
 
-La CTE `visible` que le contrôle d'accès placera devant une lecture de findings
+La CTE `visible` que le contrôle d'accès place devant une lecture de findings
 restreinte, voir
-[ARCHITECTURE-FR.md](ARCHITECTURE-FR.md#le-contrôle-daccès-avant-son-application),
+[ARCHITECTURE-FR.md](ARCHITECTURE-FR.md#le-contrôle-daccès),
 retient 24 500 des 100 000 copies de finding à travers 12 motifs, six préfixes
 de service et six valeurs d'attribut, en 0,2 s environ, trois passes de 202 à
 203 ms. Mesuré par le test explicite

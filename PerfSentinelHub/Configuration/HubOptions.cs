@@ -24,6 +24,11 @@ public sealed record HubOptions
     public AuthOptions Auth { get; set; } = new();
     public AckRelayOptions AckRelay { get; set; } = new();
     public AccessOptions Access { get; set; } = new();
+
+    // The one port /metrics answers on, and nothing else answers there. Unset, /metrics
+    // answers on every port as it always has; access control needs one (A14).
+    public int? MetricsPort { get; set; }
+
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
 }
 
@@ -225,7 +230,12 @@ public sealed record AuthOptions
     // The userinfo field recorded as the identity.
     public string IdentityClaim { get; set; } = "email";
 
-    // The userinfo field listing the user's groups, read only when RequiredGroups is set.
+    // The userinfo field holding the authorization key, an id the provider never reassigns.
+    // Read only with Hub:Access:Enabled; IdentityClaim stays the name people read.
+    public string SubjectClaim { get; set; } = "sub";
+
+    // The userinfo field listing the user's groups, read when RequiredGroups is set or
+    // Hub:Access:Enabled.
     public string GroupsClaim { get; set; } = "groups";
 
     // Empty lets in whoever the provider signs in. Otherwise a user must belong to one
@@ -362,6 +372,9 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:DefaultReadLimit must be between 1 and MaxReadLimit.");
         if (options.Sources.Count == 0)
             errors.Add("Hub:Sources must contain at least one source.");
+        // M1. Whether Kestrel listens there is known only once it has started (Program.cs).
+        if (options.MetricsPort is < 1 or > 65535)
+            errors.Add("Hub:MetricsPort must be between 1 and 65535.");
         ValidateAnalysisSettings(options.Analysis, errors);
         ValidateUpdateCheckSettings(options.UpdateCheck, errors);
         ValidateAuthSettings(options.Auth, errors);

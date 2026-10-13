@@ -358,7 +358,8 @@ daemon. Toutes deux sont un `POST` à corps JSON, et aucune n'est jamais ouverte
 dans le corps est ignoré : le Hub nomme lui-même l'appelant.
 
 Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'atteint jamais le
-daemon :
+daemon. Avec le contrôle d'accès, des étapes propres s'y ajoutent, voir
+[Avec le contrôle d'accès](#avec-le-contrôle-daccès) :
 
 1. **L'appelant.** L'utilisateur connecté sous `Hub:Auth`. Sinon la valeur de
    `Hub:Analysis:IdentityHeader`, et seulement quand `Hub:AckRelay:TrustIdentityHeader` est
@@ -511,3 +512,61 @@ soit l'âge apparent de sa ligne.
 Un run encore en cours à l'arrêt du service revient `interrupted` et n'est jamais rejoué
 de lui-même. Une reprise silencieuse lancerait une seconde requête lourde vers un backend
 que personne n'a demandé d'interroger deux fois.
+
+## Avec le contrôle d'accès
+
+Avec `Hub:Access:Enabled`, chaque route sauf l'import, `/health` et `/metrics` (anonyme,
+sur `Hub:MetricsPort` seulement) exige une session ou un jeton machine, et chaque réponse couvre ce que couvrent les grants de l'appelant. Le modèle
+est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil :
+
+- **Identifiants.** Une session du navigateur, ou `Authorization: Bearer <jeton machine>`.
+  Une requête qui porte un bearer est jugée sur lui seul. Un jeton inconnu ou expiré reçoit `401`, même
+  à côté d'un cookie valide, avec
+  `WWW-Authenticate: Bearer error="invalid_token"`. Un jeton machine ne fait que lire :
+  toute autre méthode reçoit `403 {"detail":"A machine token only reads."}`. Une écriture
+  du navigateur sans `Sec-Fetch-Site: same-origin` reçoit
+  `403 {"detail":"A request from another site is refused."}`.
+- **`/api/status` et `/api/sources`** répondent `403 {"detail":"No grant on this Hub
+  reaches you."}` à un appelant qui ne détient aucune permission nulle part.
+  `/api/sources` ne liste que les sources où l'appelant détient quelque chose, chacune avec
+  `permissions` : `findings.read`, `sources.read`, `analyses.run` et `acks.write` pour un
+  démon, `traces.read` et `analyses.run` pour un backend de traces. Le champ est absent sans
+  contrôle d'accès.
+- **Les deux routes de findings** sont filtrées par `findings.read` : un finding est listé
+  quand l'une de ses copies est dans le périmètre, et ses `sources[]`, `acks[]`, son
+  statut, ses première et dernière observations, et les filtres `include_acked`, `grouping`
+  et de fenêtre sont jugés sur les seules copies dans le périmètre. Les pages sont des
+  tranches de cette liste unique. Un `source_id` ou un `environment` hors du `/api/sources`
+  de l'appelant reçoit le même `400` qu'un inconnu. Un appelant qui ne détient
+  `findings.read` nulle part reçoit `403` plutôt que `[]` : une porte de CI dont le jeton
+  n'a aucun grant échoue.
+- **Les incidents** suivent `findings.read` de la même façon ; `/api/incidents/{id}` sert
+  la copie la plus riche dans le périmètre, et `404` s'il n'y en a aucune. Un
+  rafraîchissement ne lit que les démons où l'appelant lit quelque chose.
+- **La vue d'un démon** exige `sources.read` sur cette source entière, et répond sinon
+  `404` comme une source inconnue, avant le `400` d'un backend de traces.
+- **Les acks**, dans l'ordre plus haut : la source doit être dans le `/api/sources` de
+  l'appelant, sinon le même `404` ; puis, avant de prendre une place du relais ou de lire le
+  corps, l'appelant doit détenir `acks.write` quelque part sur cette source, sinon
+  `403 {"detail":"You may not acknowledge findings at this source."}` ; puis, sur le
+  finding détenu dans cette source, une copie que l'appelant ne peut pas lire reçoit
+  exactement le `404` d'un inconnu, et une copie qu'il lit sans pouvoir l'écrire `403`. La
+  révocation d'un ack reflété dont le Hub ne détient plus le finding exige la source
+  entière. `expires_at` reste au choix de l'appelant : aucune expiration n'est imposée.
+- **Les analyses.** Une seule règle décide qui voit la ligne d'un run et ouvre son
+  rapport : un run de démon exige `findings.read` et `sources.read` sur le démon entier ;
+  un run sur un backend de traces exige `traces.read` sur le service demandé, ou sur le
+  backend entier pour un trace ID. Lancer un run exige cela et `analyses.run`, sinon
+  `403 {"detail":"You may not start this analysis."}` ; une source hors de la liste de
+  l'appelant est le `400` d'un `source_id` inconnu. `GET /api/analyses` ne liste que les
+  runs visibles, jamais `403` ; un run caché et son rapport répondent `404`. Le JSON d'un
+  run est inchangé. **Un rapport de traces montre chaque service que ses traces
+  traversent**, comptes de `result` compris. Les rapports sont rendus statiques : pas de
+  `--daemon-url`.
+
+Depuis la CI :
+
+```sh
+curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
+  "https://hub.example.com/api/findings?environment=production&status=active&severity=critical"
+```

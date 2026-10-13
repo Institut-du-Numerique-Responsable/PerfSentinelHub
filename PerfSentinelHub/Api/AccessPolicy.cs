@@ -23,6 +23,7 @@ public sealed class AccessPolicy
     private readonly List<Grant> _grants = [];
     private readonly Dictionary<string, List<string>> _internalGroupsBySubject = new(StringComparer.Ordinal);
     private readonly List<MachineToken> _machineTokens = [];
+    private readonly HashSet<string> _providerGroups = new(StringComparer.Ordinal);
 
     public AccessPolicy(IOptions<HubOptions> options)
     {
@@ -57,6 +58,12 @@ public sealed class AccessPolicy
                 _adminGroups.Add(grant.Group);
         }
 
+        // A session keeps only the provider groups the configuration names, so its cookie
+        // grows with the configuration and not with the provider.
+        foreach (var group in access.Grants.Select(grant => grant.Group).Concat(access.AdminGroups))
+            if (!group.StartsWith(InternalPrefix, StringComparison.OrdinalIgnoreCase))
+                _providerGroups.Add(group);
+
         foreach (var token in access.MachineTokens)
             _machineTokens.Add(new MachineToken(
                 token.Name,
@@ -66,6 +73,51 @@ public sealed class AccessPolicy
     }
 
     public bool Enabled { get; }
+
+    public IReadOnlySet<string> ProviderGroups => _providerGroups;
+
+    // The request's caller with one permission. Off, or with no caller, it never narrows or
+    // widens anything on its own: Unrestricted off, Nothing for a principal with no claims.
+    public AccessScope Scope(HttpContext context, string permission)
+    {
+        if (!Enabled) return AccessScope.Unrestricted;
+        return AccessCaller.Of(context) is { } caller ? Scope(caller, permission) : AccessScope.Nothing;
+    }
+
+    // Any permission anywhere: what /api/status and /api/sources ask of a caller.
+    public bool ReachesAnything(HttpContext context)
+    {
+        return !Enabled || AccessPermissions.All.Any(permission => !Scope(context, permission).IsNothing);
+    }
+
+    // What makes sense at each kind of source, listed in /api/sources. Null with access off,
+    // which leaves the payload as it was. Source-level permissions need the source as a whole.
+    public IReadOnlyList<string>? Permissions(HttpContext context, SourceOptions source)
+    {
+        if (!Enabled) return null;
+        string[] listed = source.Kind == SourceKinds.Daemon
+            ? [AccessPermissions.FindingsRead, AccessPermissions.SourcesRead, AccessPermissions.AnalysesRun, AccessPermissions.AcksWrite]
+            : [AccessPermissions.TracesRead, AccessPermissions.AnalysesRun];
+        return
+        [
+            .. listed.Where(permission =>
+                source.Kind == SourceKinds.Daemon && permission is AccessPermissions.SourcesRead or AccessPermissions.AnalysesRun
+                    ? Scope(context, permission).HoldsAtSource(source.Id)
+                    : Scope(context, permission).ReachesSource(source.Id))
+        ];
+    }
+
+    // The sources the caller's /api/sources lists; a source outside it reads as unknown.
+    public IReadOnlyList<SourceOptions> Sources(HttpContext context, IReadOnlyList<SourceOptions> sources)
+    {
+        return Enabled ? [.. sources.Where(source => Permissions(context, source) is { Count: > 0 })] : sources;
+    }
+
+    // Names only: never the token.
+    public IEnumerable<string> ExpiredMachineTokens(DateTimeOffset now)
+    {
+        return _machineTokens.Where(token => token.ExpiresAt <= now).Select(token => token.Name);
+    }
 
     // A person's frozen provider groups and the internal groups listing their subject, read
     // live; a machine token's configured group alone. A provider never hands out internal:.

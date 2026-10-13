@@ -249,15 +249,17 @@ public sealed partial class HubDatabase
         // ponytail: the namespace is read out of the document with json_extract,
         // a scan over the rows the other predicates leave. A column and an index
         // if the table ever outgrows what the retention keeps.
+        // Access patterns filter before the page, so pages are slices of what the caller reads.
         command.CommandText = $"""
-                               SELECT {IncidentReadColumns} FROM incidents
+                               {AccessWith(query.Access)}SELECT {IncidentReadColumns} FROM incidents
                                WHERE ($service IS NULL OR service = $service)
                                  AND ($kind IS NULL OR kind = $kind)
                                  AND ($namespace IS NULL OR json_extract(incident_json, '$.namespace') = $namespace)
-                                 AND ($source_ids IS NULL OR source_id IN (SELECT value FROM json_each($source_ids)))
+                                 AND ($source_ids IS NULL OR source_id IN (SELECT value FROM json_each($source_ids))){AccessAnd(query.Access)}
                                ORDER BY at_ms DESC, id ASC, source_id ASC
                                LIMIT $limit OFFSET $offset;
                                """;
+        BindAccess(command, query.Access);
         command.Parameters.AddWithValue(ServiceParameter, (object?)query.Service ?? DBNull.Value);
         command.Parameters.AddWithValue("$kind", (object?)query.Kind ?? DBNull.Value);
         command.Parameters.AddWithValue("$namespace", (object?)query.Namespace ?? DBNull.Value);
@@ -278,17 +280,21 @@ public sealed partial class HubDatabase
     ///     One incident with its findings, the richest capture when several
     ///     daemons hold the id, and the first source by id among equals.
     /// </summary>
-    public async Task<StoredIncident?> FindIncidentAsync(string id, CancellationToken cancellationToken)
+    public async Task<StoredIncident?> FindIncidentAsync(
+        string id,
+        AccessScope? access,
+        CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-                               SELECT {IncidentReadColumns}, findings_json FROM incidents
-                               WHERE id = $id
+                               {AccessWith(access)}SELECT {IncidentReadColumns}, findings_json FROM incidents
+                               WHERE id = $id{AccessAnd(access)}
                                ORDER BY finding_count DESC, source_id ASC
                                LIMIT 1;
                                """;
         command.Parameters.AddWithValue("$id", id);
+        BindAccess(command, access);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadIncident(reader) : null;
     }

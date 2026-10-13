@@ -284,7 +284,7 @@ public sealed class IncidentPollingTests : IDisposable
             (await database.ListIncidentsAsync(new IncidentQuery(null, null, null, null, 0, 10), cancellationToken))
             .Count);
         // One id on the single-incident route reads as the richest capture.
-        var richest = await database.FindIncidentAsync(FixtureId, cancellationToken);
+        var richest = await database.FindIncidentAsync(FixtureId, null, cancellationToken);
         Assert.NotNull(richest);
         Assert.Equal("a", richest.SourceId);
         Assert.Equal(2, richest.FindingCount);
@@ -326,7 +326,7 @@ public sealed class IncidentPollingTests : IDisposable
         clock.Advance(TimeSpan.FromMinutes(1));
         await poller.PollAsync(source, cancellationToken);
 
-        var row = await database.FindIncidentAsync(FixtureId, cancellationToken);
+        var row = await database.FindIncidentAsync(FixtureId, null, cancellationToken);
         Assert.NotNull(row);
         Assert.Equal(endedAtMs, row.EndedAtMs);
         Assert.Equal(5_000_000, row.FirstSeenMs);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PerfSentinelHub.Api;
 
@@ -91,13 +92,18 @@ public sealed record SourceResponse(
     long? AcksReadMs,
     // Whether the Hub holds a credential to write acks to this daemon. Neither
     // its header nor its value is published: no printed command ever acks.
-    bool AckRelay);
+    bool AckRelay,
+    // What the caller may do at this source, with Hub:Access:Enabled. Null and so
+    // absent with access off, which leaves the payload as it was.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? Permissions = null);
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 
 // SourceIds is the resolved scope, as on IncidentQuery below. FromMs and ToMs
 // bound the observation window in epoch milliseconds, each side open when null.
-// Signature is an exact match.
+// Signature is an exact match. Access null reads every copy, as with access off;
+// otherwise only the copies its patterns read.
 public sealed record FindingQuery(
     string? Service,
     string? FindingType,
@@ -110,7 +116,8 @@ public sealed record FindingQuery(
     long? FromMs = null,
     long? ToMs = null,
     string? Signature = null,
-    string? Grouping = null);
+    string? Grouping = null,
+    AccessScope? Access = null);
 
 // SourceIds is the resolved set: one id from source_id, every id of an
 // environment from environment, null for the whole fleet.
@@ -120,7 +127,8 @@ public sealed record IncidentQuery(
     string? Kind,
     IReadOnlyList<string>? SourceIds,
     int Offset,
-    int Limit);
+    int Limit,
+    AccessScope? Access = null);
 
 public sealed record SubmittedAnalysis(string Id, string Status);
 

@@ -93,8 +93,8 @@ checked.
 
 ## Access scope over 100,000 copies
 
-The `visible` CTE that access control will put in front of a restricted findings
-read, see [ARCHITECTURE.md](ARCHITECTURE.md#access-control-ahead-of-its-enforcement),
+The `visible` CTE that access control puts in front of a restricted findings
+read, see [ARCHITECTURE.md](ARCHITECTURE.md#access-control),
 selects 24,500 of 100,000 finding copies through 12 patterns, six service
 prefixes and six attribute values, in about 0.2 s, three runs of 202 to 203 ms.
 Measured by the explicit test `The_visible_cte_over_100k_copies_and_12_patterns`
