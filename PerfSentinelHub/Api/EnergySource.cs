@@ -67,10 +67,12 @@ public static class EnergySource
     }
 
     // The flag survives a measured window tag, the suffix covers daemons older than it.
-    private static bool IsCalibrated(JsonElement green, Dictionary<string, string> models) =>
-        (green.TryGetProperty("energy_calibrated", out var flag) && flag.ValueKind == JsonValueKind.True) ||
-        (JsonRead.ReadString(green, "energy_model") ?? "").EndsWith(CalSuffix, StringComparison.Ordinal) ||
-        models.Values.Any(m => m.EndsWith(CalSuffix, StringComparison.Ordinal));
+    private static bool IsCalibrated(JsonElement green, Dictionary<string, string> models)
+    {
+        return (green.TryGetProperty("energy_calibrated", out var flag) && flag.ValueKind == JsonValueKind.True) ||
+               (JsonRead.ReadString(green, "energy_model") ?? "").EndsWith(CalSuffix, StringComparison.Ordinal) ||
+               models.Values.Any(m => m.EndsWith(CalSuffix, StringComparison.Ordinal));
+    }
 
     private static Dictionary<string, string> StringMap(JsonElement green, string name)
     {
