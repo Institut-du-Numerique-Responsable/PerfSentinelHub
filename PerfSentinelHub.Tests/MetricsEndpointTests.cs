@@ -1,16 +1,12 @@
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -421,25 +417,9 @@ public sealed class MetricsEndpointTests : IDisposable
     [InlineData("http://localhost:8080;http://+:9464", false)]
     public void The_hub_stops_when_the_metrics_port_is_not_bound_besides_the_main_one(string addresses, bool stops)
     {
-        var logger = new ListLogger<Program>();
-        using var bound = _factory.WithWebHostBuilder(builder =>
-        {
-            builder.UseSetting("Hub:MetricsPort", "9464");
-            builder.ConfigureServices(services =>
-            {
-                services.AddSingleton<ILoggerProvider>(new Capture(logger));
-                // Kestrel fills this feature; TestServer leaves it empty, so it is filled before the host starts.
-                services.AddHostedService(provider => new BindAddresses(
-                    provider.GetRequiredService<IServer>(), addresses.Split(';')));
-            });
-        });
-
-        _ = bound.Server;
-
-        var lifetime = bound.Services.GetRequiredService<IHostApplicationLifetime>();
-        Assert.Equal(stops, lifetime.ApplicationStopping.IsCancellationRequested);
-        Assert.Equal(stops, logger.Messages.Any(message =>
-            message.StartsWith("Hub:MetricsPort 9464 must be a port the Hub listens on", StringComparison.Ordinal)));
+        // The rule alone: an in-process host that stops while starting races the test
+        // host's own disposal, and the stop itself is the process test below.
+        Assert.Equal(!stops, MetricsEndpoint.IsBoundBesidesAnother(9464, addresses.Split(';')));
     }
 
     // The process itself: the exit code is Program's, which no in-process host can observe.
@@ -488,34 +468,6 @@ public sealed class MetricsEndpointTests : IDisposable
         var log = await stdout + await stderr;
         Assert.True(1 == hub.ExitCode, log);
         Assert.Contains("Hub:MetricsPort 9464 must be a port the Hub listens on", log, StringComparison.Ordinal);
-    }
-
-    private sealed class BindAddresses(IServer server, string[] addresses) : IHostedService
-    {
-        public Task StartAsync(CancellationToken cancellationToken)
-        {
-            var feature = new ServerAddressesFeature();
-            foreach (var address in addresses) feature.Addresses.Add(address);
-            server.Features.Set<IServerAddressesFeature>(feature);
-            return Task.CompletedTask;
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class Capture(ListLogger<Program> logger) : ILoggerProvider
-    {
-        public ILogger CreateLogger(string categoryName)
-        {
-            return logger;
-        }
-
-        public void Dispose()
-        {
-        }
     }
 
     private static SourceOptions Daemon(string id, string environment)

@@ -49,13 +49,19 @@ public static partial class MetricsEndpoint
             if (app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses
                 is not { Count: > 0 } addresses)
                 return;
-            var ports = addresses.Select(address => BindingAddress.Parse(address).Port).ToHashSet();
-            if (ports.Contains(port) && ports.Count > 1)
+            if (IsBoundBesidesAnother(port, addresses))
                 return;
             LogMetricsPortNotBound(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("MetricsEndpoint"), port);
             refuse();
             app.Lifetime.StopApplication();
         });
+    }
+
+    // The metrics port must be one the server listens on, and not its only one.
+    public static bool IsBoundBesidesAnother(int port, IEnumerable<string> addresses)
+    {
+        var ports = addresses.Select(address => BindingAddress.Parse(address).Port).ToHashSet();
+        return ports.Contains(port) && ports.Count > 1;
     }
 
     [LoggerMessage(
