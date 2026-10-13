@@ -134,7 +134,13 @@ Folding the row stops the reads.
 
 The settings themselves are one click further in, grouped and folded, each group showing
 how many of its values depart from the engine's own defaults. The row ends with the
-`perf-sentinel query monitor` command for the same view in a terminal.
+`perf-sentinel query monitor` command for the same view in a terminal. When the header
+published for that daemon, `PublicAuthHeaderName` or else `AuthHeaderName`, is `X-API-Key`,
+a line under the command says to set `PERF_SENTINEL_DAEMON_API_KEY` to the daemon's read
+key first, since the monitor sends that variable as `X-API-Key` and as nothing else. The
+engine reads the key from the environment, so the command itself stays the same in every
+shell. Any other header, an Ingress's own for one, is named instead, as one `query monitor`
+cannot send.
 
 ## The incidents screen
 

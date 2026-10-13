@@ -147,7 +147,14 @@ lectures.
 
 Les réglages eux-mêmes sont un clic plus loin, groupés et repliés, chaque groupe montrant
 combien de ses valeurs s'écartent des défauts du moteur. La ligne se termine par la
-commande `perf-sentinel query monitor` pour la même vue dans un terminal.
+commande `perf-sentinel query monitor` pour la même vue dans un terminal. Quand l'en-tête
+publié pour ce daemon, `PublicAuthHeaderName` ou à défaut `AuthHeaderName`, est
+`X-API-Key`, une ligne sous la commande indique de poser d'abord
+`PERF_SENTINEL_DAEMON_API_KEY` à la clé de lecture du daemon, puisque le monitor envoie
+cette variable en `X-API-Key` et sous aucune autre forme. Le moteur lit la clé dans
+l'environnement, donc la commande elle-même reste la même dans tous les shells. Tout autre
+en-tête, celui d'un Ingress par exemple, est nommé à la place, comme un en-tête que
+`query monitor` ne sait pas envoyer.
 
 ## L'écran des incidents
 

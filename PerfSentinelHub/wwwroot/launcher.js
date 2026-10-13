@@ -609,6 +609,24 @@
     }
 
     /**
+     * The line printed under the monitor command of a daemon behind a header. The
+     * monitor sends `PERF_SENTINEL_DAEMON_API_KEY` as `X-API-Key` and nothing else,
+     * so only that header gets the key hint, as prose since no shell quotes it. Any
+     * other, an Ingress's own for one, is named as a header the command cannot send.
+     *
+     * @param {any} source
+     * @returns {string | null}
+     */
+    function monitorKeyHint(source) {
+        const header = source.auth_header_name;
+        if (!header) return null;
+        return header.toLowerCase() === 'x-api-key'
+            ? 'Set `PERF_SENTINEL_DAEMON_API_KEY` to this daemon\'s read key first.'
+            : 'This daemon is behind an `' + header + '` header. `query monitor` takes no such flag, '
+            + 'so this command works only from somewhere that reaches the daemon without it.';
+    }
+
+    /**
      * The overridden thresholds as the file `-c` expects. Only the ones a run
      * actually changed: a value equal to the engine's own default is dropped
      * before it reaches here, so every key present is a real departure. A
@@ -1242,7 +1260,7 @@
         dur, durPrecise, durMinutes, durParts, splitByKind, clock, parseDur, humanDur, dtLocal, dtHuman, bytes,
         vparts, vcmp, versionGap, skew, detector, statusKey, argsLine, weightBand,
         shq, psq, SHELLS, shellById, defaultShell, exportLine,
-        analysisCommand, monitorCommand, detectionToml, quotedForShell,
+        analysisCommand, monitorCommand, monitorKeyHint, detectionToml, quotedForShell,
         lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
         hubReleaseUrl, updateState, knownShell, CHART_PAGE, CHART_COORDINATE,
         gaugeTone, gaugeMove,

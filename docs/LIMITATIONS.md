@@ -82,6 +82,26 @@ Lineage links a mutated signature to its predecessor only when exactly one
 stored finding matches. Ambiguity records nothing, because naming one of several
 candidates would be a guess. See [API.md](API.md).
 
+## What a finding is attributed to
+
+The engine files an N+1 or redundant-call group that spans several services
+under the service and the grouping of its first span. A second calling service
+appears only in `pattern.occurrences_by_service`. The Hub keeps that
+attribution: `/api/findings?service=` matches the first service only, and the
+grouping attributes it records for the finding are the first span's. Fan-out and
+serialized calls are attributed to the parent span.
+
+The Hub records every grouping attribute a source captured on a finding, and the
+service that source reported, per source. A source's copy written by an earlier
+version without its own envelope gets neither until that source reports the
+finding again.
+
+Adding an attribute to a daemon's `[detection] grouping_attributes` changes more
+than what the Hub records. On spans that carry none of the earlier attributes,
+the new one becomes the grouping identity: a detection group splits into one per
+value, and each can fall below its threshold. See
+[DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## What a run does not promise
 
 Reports are deleted after `Hub:Analysis:ReportRetention`, 24 hours by default.

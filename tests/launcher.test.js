@@ -197,6 +197,24 @@ test("the download link points at the engine version the Hub runs", () => {
     assert.equal(PSL.releaseUrl("javascript:alert(1)"), list);
 });
 
+test("the monitor command of a keyed daemon says the key comes first, outside the command", () => {
+    // A line of prose rather than a flag: the key is read from the environment, so the
+    // command itself stays the same in every shell.
+    const hint = "Set `PERF_SENTINEL_DAEMON_API_KEY` to this daemon's read key first.";
+    assert.equal(PSL.monitorKeyHint({auth_header_name: "X-API-Key"}), hint);
+    assert.equal(PSL.monitorKeyHint({auth_header_name: "x-api-key"}), hint);
+    assert.equal(PSL.monitorKeyHint({auth_header_name: null}), null);
+    // The monitor sends that variable as X-API-Key and nothing else, so any other header,
+    // an Ingress's own for one, is named as one the command cannot send.
+    for (const header of ["Authorization", "X-Gateway-Token"]) {
+        assert.equal(PSL.monitorKeyHint({auth_header_name: header}),
+            "This daemon is behind an `" + header + "` header. `query monitor` takes no such flag, "
+            + "so this command works only from somewhere that reaches the daemon without it.");
+    }
+    assert.doesNotMatch(PSL.monitorCommand({base_url: "http://d:4318", auth_header_name: "X-API-Key"}, 5),
+        /API_KEY/);
+});
+
 test("the monitor command carries the interval the row is re-reading on", () => {
     const source = {id: "d", base_url: "http://daemon.svc:4318"};
     const bare = "perf-sentinel query --daemon http://daemon.svc:4318 monitor";

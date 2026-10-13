@@ -101,7 +101,9 @@ finding can leave an observation row behind. That orphan is invisible, a read re
 observation only through its source's row, and it leaves with its day. The groupings each
 source saw a finding in ride the same clock on their own `last_seen_ms`, without a foreign
 key for the same reason, and an orphan is as invisible: a read reaches one only through a
-finding.
+finding. The grouping attributes each source captured on a finding ride it the same way, on
+their own `last_seen_ms`. The pairs an incident's frozen findings share leave with their
+incident.
 
 The ack mirror rides that clock as well, on `read_at_ms`, the time of the read that wrote
 the row. It does not age an ack: every read that succeeds rewrites its source's rows, so
@@ -117,6 +119,49 @@ enforces, so the countdown a reader sees never outlives the file it counts down 
 The trap the diagram exists to prevent: a poll that omits a finding does not resolve
 it. The daemon's ring buffer may simply have evicted it, and missing is not the same as
 resolved. Only retention removes a row.
+
+## What the database holds
+
+Every table is created in `Storage/Schema.cs`. A finding is held twice over: once
+fleet-wide, keyed on its grouping-blind signature, and once per source that reported it,
+because the fleet-wide row keeps the newest envelope from any source and nothing else.
+
+| Table                          | One row per                                                    | Leaves                                     |
+|--------------------------------|----------------------------------------------------------------|--------------------------------------------|
+| `findings`                     | signature, with the newest envelope from any source            | retention, on `last_seen_ms`               |
+| `finding_sources`              | signature and source, with that source's envelope and service  | retention, on `last_seen_ms`               |
+| `finding_observations`         | signature, source and day                                      | retention, by whole day                    |
+| `finding_groupings`            | signature, source and effective grouping value                 | retention, on `last_seen_ms`               |
+| `finding_attributes`           | signature, source, grouping identity and captured pair         | retention, on `last_seen_ms`               |
+| `finding_lineage`              | successor and predecessor signature                            | with its successor                         |
+| `endpoint_heartbeats`          | source, service and endpoint                                   | retention, on `last_seen_any_ms`           |
+| `source_state`                 | source, the poll's reachability                                | retention, on `last_attempt_ms`            |
+| `source_imports`               | source, its last push                                          | never                                      |
+| `incidents`                    | incident and source                                            | retention, on `last_seen_ms`               |
+| `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
+| `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
+| `incident_reads`, `ack_reads`  | source                                                         | never                                      |
+| `analysis_runs`                | run                                                            | `Hub:Analysis:RunRetention`                |
+
+`finding_attributes` keeps every grouping attribute a daemon captured, up to the engine's
+eight, each under the grouping identity it came with: the first pair of that observation,
+or four empty strings when the observation has no well-formed first pair, in which case no
+other pair is recorded. `finding_sources.service` is the service that source reported,
+which `findings.service` is not once two sources disagree. `incident_attributes` holds the
+pairs common to every frozen finding of one source's copy of an incident, or two empty
+strings when they share none, derived from the stored copy whenever a read changes it. A
+read that leaves the copy as it was, the same findings or a poorer recapture, only stamps
+its rows with the copy's new `last_seen_ms`. Nothing reads these three yet. They are
+recorded ahead of access control, which will match projects on them, so that turning it on
+does not start from an empty history.
+
+Each start fills in what an older build left out: the attribute rows of a copy whose newest
+observation has none, the service of a copy that has none, both from that copy's own
+envelope, and the pairs of every incident copy with no row or with a stamp other than its
+`last_seen_ms`, which only an older build's write leaves. An image rolled back below this
+version and forward again is therefore covered at the next start. A copy written before the
+per-source envelope existed has neither until its source reports it again. The cost of that
+start is measured in [BENCHMARKS.md](BENCHMARKS.md#start-on-a-filled-database).
 
 ## A run always reaches a terminal state
 

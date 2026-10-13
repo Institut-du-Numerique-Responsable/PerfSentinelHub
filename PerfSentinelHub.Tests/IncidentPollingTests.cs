@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
@@ -336,6 +337,202 @@ public sealed class IncidentPollingTests : IDisposable
         Assert.Equal(2, findings.RootElement.GetArrayLength());
         using var document = JsonDocument.Parse(row.IncidentJson);
         Assert.True(document.RootElement.TryGetProperty("oldest_finding_ms", out _));
+    }
+
+    [Theory]
+    [InlineData(
+        """[{"key": "k8s.namespace.name", "value": "shop"}, {"key": "team", "value": "shop"}, {"key": "env", "value": "a"}]""",
+        """[{"key": "team", "value": "shop"}, {"key": "env", "value": "b"}, {"key": "k8s.namespace.name", "value": "shop"}]""",
+        $"{FixtureId} a k8s.namespace.name=shop 1000,{FixtureId} a team=shop 1000")]
+    [InlineData("""[{"key": "team", "value": "shop"}]""", "[]", $"{FixtureId} a = 1000")]
+    [InlineData("""[{"key": "team", "value": "shop"}]""", """[{"key": "team", "value": "billing"}]""",
+        $"{FixtureId} a = 1000")]
+    [InlineData("""[{"key": "team", "value": "shop"}]""", """["team", {"key": "team", "value": ""}]""",
+        $"{FixtureId} a = 1000")]
+    public async Task An_incident_records_the_pairs_every_frozen_finding_carries(
+        string first,
+        string second,
+        string expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (_, database) = await BuildAsync(TimeProvider.System, cancellationToken);
+        var findings = await FrozenAsync(cancellationToken, first, second);
+
+        await database.UpsertIncidentsAsync("a", [await IncidentAsync(findings, cancellationToken)], 1000,
+            cancellationToken);
+
+        Assert.Equal(expected, await PairsAsync(database, cancellationToken));
+    }
+
+    // A copy with no common pair keeps the marker row alone, so a later start can tell it
+    // from a copy never derived.
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("""["abc", {"finding": {"grouping": [{"key": "team", "value": "shop"}]}}]""")]
+    [InlineData("""[1, {"finding": {"grouping": [{"key": "team", "value": "shop"}]}}]""")]
+    [InlineData("""[{"finding": "x"}, {"finding": {"grouping": [{"key": "team", "value": "shop"}]}}]""")]
+    [InlineData("""[{"finding": {"grouping": {"x": {"key": "team", "value": "shop"}}}}]""")]
+    public async Task An_incident_with_no_frozen_finding_or_a_malformed_one_records_no_pair(string findings)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (_, database) = await BuildAsync(TimeProvider.System, cancellationToken);
+
+        await database.UpsertIncidentsAsync("a", [await IncidentAsync(findings, cancellationToken)], 1000,
+            cancellationToken);
+
+        Assert.Equal($"{FixtureId} a = 1000", await PairsAsync(database, cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_poorer_recapture_keeps_the_pairs_of_the_stored_copy()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (_, database) = await BuildAsync(TimeProvider.System, cancellationToken);
+        const string shop = """[{"key": "team", "value": "shop"}]""";
+        var richer = await IncidentAsync(await FrozenAsync(cancellationToken, shop, shop), cancellationToken);
+        var poorer = await IncidentAsync(
+            await FrozenAsync(cancellationToken, """[{"key": "team", "value": "billing"}]"""), cancellationToken);
+
+        await database.UpsertIncidentsAsync("a", [richer], 1000, cancellationToken);
+        await database.UpsertIncidentsAsync("a", [poorer], 2000, cancellationToken);
+
+        Assert.Equal($"{FixtureId} a team=shop 2000", await PairsAsync(database, cancellationToken));
+    }
+
+    // Frozen findings never change once frozen, and every poll and refresh re-reads the whole
+    // ring under the write gate: a copy the read leaves as it was keeps its pairs, restamped.
+    [Fact]
+    public async Task A_re_read_that_leaves_the_copy_as_it_was_derives_nothing_again()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (_, database) = await BuildAsync(TimeProvider.System, cancellationToken);
+        const string shop = """[{"key": "team", "value": "shop"}]""";
+        var richer = await IncidentAsync(await FrozenAsync(cancellationToken, shop, shop), cancellationToken);
+        var poorer = await IncidentAsync(await FrozenAsync(cancellationToken, shop), cancellationToken);
+        await database.UpsertIncidentsAsync("a", [richer], 1000, cancellationToken);
+        await ExecuteAsync(
+            database,
+            """
+            CREATE TRIGGER fail_pair_insert BEFORE INSERT ON incident_attributes
+            BEGIN SELECT RAISE(ABORT, 'pairs derived again'); END;
+            CREATE TRIGGER fail_pair_delete BEFORE DELETE ON incident_attributes
+            BEGIN SELECT RAISE(ABORT, 'pairs derived again'); END;
+            """,
+            cancellationToken);
+
+        await database.UpsertIncidentsAsync("a", [richer], 2000, cancellationToken);
+        await database.UpsertIncidentsAsync("a", [poorer], 3000, cancellationToken);
+
+        Assert.Equal($"{FixtureId} a team=shop 3000", await PairsAsync(database, cancellationToken));
+    }
+
+    // Two daemons fed one alert share its id, so a copy is (id, source): deriving one copy
+    // again must leave the other copy of that id, and every other incident, alone.
+    [Fact]
+    public async Task Deriving_one_copy_again_leaves_every_other_copy_alone()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (_, database) = await BuildAsync(TimeProvider.System, cancellationToken);
+        var shop = await IncidentAsync(
+            await FrozenAsync(cancellationToken, """[{"key": "team", "value": "shop"}]"""), cancellationToken);
+        var billing = await IncidentAsync(
+            await FrozenAsync(cancellationToken, """[{"key": "team", "value": "billing"}]"""), cancellationToken);
+        var other = shop with { Id = new string('b', 32) };
+        await database.UpsertIncidentsAsync("a", [shop, other], 1000, cancellationToken);
+        await database.UpsertIncidentsAsync("b", [shop], 1000, cancellationToken);
+
+        await database.UpsertIncidentsAsync("a", [billing], 2000, cancellationToken);
+
+        Assert.Equal(
+            $"{new string('b', 32)} a team=shop 1000,{FixtureId} a team=billing 2000,{FixtureId} b team=shop 1000",
+            await PairsAsync(database, cancellationToken));
+    }
+
+    // Rows an older build left stale or never wrote, and findings no write path would have
+    // accepted: a start derives those copies again and never fails on them, leaves alone a
+    // copy whose rows describe its stored findings, and finds nothing to do the next time.
+    [Fact]
+    public async Task Boot_derives_the_pairs_of_every_incident_an_older_build_wrote()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (_, database) = await BuildAsync(TimeProvider.System, cancellationToken);
+        await ExecuteAsync(
+            database,
+            """
+            INSERT INTO incidents VALUES
+              ('stale','a','svc','restart',100,NULL,0,200,NULL,2,'{}',100,500,
+               '[{"finding":{"grouping":[{"key":"team","value":"shop"}]}},
+                 {"finding":{"grouping":[{"key":"team","value":"shop"}]}}]'),
+              ('missing','b','svc','restart',100,NULL,0,200,NULL,1,'{}',100,500,
+               '[{"finding":{"grouping":[{"key":"team","value":"billing"}]}}]'),
+              ('current','a','svc','restart',100,NULL,0,200,NULL,1,'{}',100,500,
+               '[{"finding":{"grouping":[{"key":"team","value":"never-read"}]}}]'),
+              ('string','a','svc','restart',100,NULL,0,200,NULL,1,'{}',100,500,'["abc"]'),
+              ('garbled','a','svc','restart',100,NULL,0,200,NULL,1,'{}',100,500,'not json');
+            DELETE FROM incident_attributes;
+            INSERT INTO incident_attributes VALUES
+              ('stale','a','team','old',400), ('current','a','team','kept',500), ('gone','a','team','x',500);
+            """,
+            cancellationToken);
+
+        var (_, rebooted) = await BuildAsync(TimeProvider.System, cancellationToken);
+
+        Assert.Equal(
+            "current a team=kept 500,garbled a = 500,missing b team=billing 500,stale a team=shop 500,string a = 500",
+            await PairsAsync(rebooted, cancellationToken));
+        await ExecuteAsync(
+            rebooted,
+            """
+            CREATE TRIGGER fail_pair_insert BEFORE INSERT ON incident_attributes
+            BEGIN SELECT RAISE(ABORT, 'pairs derived again'); END;
+            CREATE TRIGGER fail_pair_delete BEFORE DELETE ON incident_attributes
+            BEGIN SELECT RAISE(ABORT, 'pairs derived again'); END;
+            """,
+            cancellationToken);
+        await BuildAsync(TimeProvider.System, cancellationToken);
+    }
+
+    // The fixture incident's first frozen finding, once per grouping array given.
+    private static async Task<string> FrozenAsync(CancellationToken cancellationToken, params string[] groupings)
+    {
+        var frozen = JsonNode.Parse(await TemplateAsync(cancellationToken))!["findings"]![0]!;
+        var findings = new JsonArray();
+        foreach (var grouping in groupings)
+        {
+            var finding = frozen.DeepClone();
+            finding["finding"]!["grouping"] = JsonNode.Parse(grouping);
+            findings.Add(finding);
+        }
+
+        return findings.ToJsonString();
+    }
+
+    // The fixture incident holding the given findings array, as the poll parses it.
+    private static async Task<ParsedIncident> IncidentAsync(string findings, CancellationToken cancellationToken)
+    {
+        var incident = JsonNode.Parse(await TemplateAsync(cancellationToken))!;
+        incident["findings"] = JsonNode.Parse(findings);
+        return Assert.Single(IncidentParser.Parse(Encoding.UTF8.GetBytes($"[{incident.ToJsonString()}]")).Incidents);
+    }
+
+    private static async Task<string?> PairsAsync(HubDatabase database, CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT group_concat(
+                                id || ' ' || source_id || ' ' || attr_key || '=' || attr_value || ' ' || last_seen_ms, ',')
+                              FROM (SELECT * FROM incident_attributes ORDER BY id, source_id, attr_key, attr_value);
+                              """;
+        return await command.ExecuteScalarAsync(cancellationToken) as string;
+    }
+
+    private static async Task ExecuteAsync(HubDatabase database, string sql, CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<string> TemplateAsync(CancellationToken cancellationToken)

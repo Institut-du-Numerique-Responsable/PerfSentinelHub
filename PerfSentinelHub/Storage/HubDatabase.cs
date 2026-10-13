@@ -122,13 +122,16 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             {
                 migration.Transaction = transaction;
                 migration.CommandText =
-                    Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8;
+                    Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
+                    Schema.V9;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
             await EnsureLineageColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureFindingSourceServiceColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
+            await BackfillAttributesAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
             {
@@ -137,7 +140,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                       INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
                                       VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
                                              (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms),
-                                             (7, $applied_at_ms), (8, $applied_at_ms);
+                                             (7, $applied_at_ms), (8, $applied_at_ms), (9, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -238,6 +241,122 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                               WHERE typeof(grouping) = 'text' AND grouping <> '';
                               """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Each copy's own service, which findings.service cannot stand for: that
+    ///     column is fleet-wide, and the newest observation from any source
+    ///     overwrites it. Filled from the copy's own envelope by
+    ///     BackfillAttributesAsync.
+    /// </summary>
+    private static async Task EnsureFindingSourceServiceColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "finding_sources", "service", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = "ALTER TABLE finding_sources ADD COLUMN service TEXT;";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     What version 9 derives from rows an older build may have written. Run
+    ///     on every boot rather than once, because an image rolled back below it
+    ///     and forward again writes copies and incidents without it in between.
+    ///     A copy's service and attributes come from its own envelope, so a row
+    ///     without one keeps none until its source observes it again, and an
+    ///     envelope that is not valid JSON is skipped. Only a copy whose newest
+    ///     observation left no attribute row is read, so a purged attribute is
+    ///     never read back. Every write of this build keeps an incident copy's
+    ///     stamp equal to its last_seen_ms, so only a copy with no row, or with a
+    ///     stamp an older build's write left behind, is read again, and the rows of
+    ///     a copy an older build purged go too.
+    /// </summary>
+    private static async Task BackfillAttributesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = AttributesBackfill;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static readonly string AttributesBackfill =
+        """
+        UPDATE finding_sources SET service = json_extract(finding_json, '$.finding.service')
+        WHERE service IS NULL
+          AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text';
+        """
+        + FindingAttributesFrom(
+            """
+            SELECT CASE WHEN json_valid(fs.finding_json) THEN fs.finding_json END,
+                   fs.signature, fs.source_id, fs.last_seen_ms
+            FROM finding_sources AS fs
+            WHERE NOT EXISTS (
+              SELECT 1 FROM finding_attributes AS fa
+              WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
+                AND fa.last_seen_ms >= fs.last_seen_ms)
+            """)
+        + """
+          DELETE FROM incident_attributes WHERE last_seen_ms IS NOT (
+            SELECT i.last_seen_ms FROM incidents AS i
+            WHERE i.id = incident_attributes.id AND i.source_id = incident_attributes.source_id);
+          """
+        + IncidentAttributesWhere("true");
+
+    // The write path's own observation, in the shape FindingAttributesFrom reads.
+    private static readonly string FindingAttributesUpsert =
+        FindingAttributesFrom("SELECT $finding_json, $signature, $source_id, $observed_at");
+
+    // Every pair a finding copy carries, each under the grouping identity of the
+    // first entry, or the marker row alone when that entry is not a well-formed
+    // pair. `source` yields (doc, signature, source_id, seen), doc an envelope or
+    // NULL, which writes nothing. The engine sends eight entries at most. heads is
+    // materialized because both arms read it: inlined, the backfill scanned and
+    // probed every copy twice.
+    private static string FindingAttributesFrom(string source)
+    {
+        const string first = "doc -> '$.finding.grouping[0]'";
+        const string entry = "CASE WHEN e.type = 'object' THEN e.value END";
+#pragma warning disable S2077
+        return $"""
+                WITH src(doc, signature, source_id, seen) AS ({source}),
+                heads AS MATERIALIZED (
+                  SELECT doc, signature, source_id, seen,
+                         {EntryField(first, "key")} AS gk, {EntryField(first, "value")} AS gv
+                  FROM src WHERE doc IS NOT NULL)
+                INSERT INTO finding_attributes(
+                  signature, source_id, grouping_key, grouping_value, attr_key, attr_value, last_seen_ms)
+                SELECT signature, source_id, gk, gv, ak, av, seen FROM (
+                  SELECT h.signature, h.source_id, h.gk, h.gv, h.seen,
+                         {EntryField(entry, "key")} AS ak, {EntryField(entry, "value")} AS av
+                  FROM heads AS h, json_each(h.doc, '$.finding.grouping') AS e
+                  WHERE h.gk IS NOT NULL AND h.gv IS NOT NULL AND CAST(e.key AS INTEGER) < 8
+                  UNION ALL
+                  SELECT signature, source_id, '', '', seen, '', '' FROM heads WHERE gk IS NULL OR gv IS NULL)
+                WHERE ak IS NOT NULL AND av IS NOT NULL
+                ON CONFLICT(signature, source_id, grouping_key, grouping_value, attr_key, attr_value) DO UPDATE SET
+                  last_seen_ms = MAX(finding_attributes.last_seen_ms, excluded.last_seen_ms);
+                """;
+#pragma warning restore S2077
+    }
+
+    // A grouping entry's key or value when it is a string of 1 to 256 characters,
+    // else NULL. `entry` is a JSON object or NULL, never the bare text json_each
+    // gives a string element, so a malformed entry is skipped and never raises.
+    private static string EntryField(string entry, string field)
+    {
+        return $"""
+                CASE WHEN json_type({entry}, '$.{field}') = 'text'
+                       AND length(json_extract({entry}, '$.{field}')) BETWEEN 1 AND 256
+                  THEN json_extract({entry}, '$.{field}') END
+                """;
     }
 
     private static async Task<bool> HasColumnAsync(
@@ -471,10 +590,17 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM source_state WHERE last_attempt_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM incidents WHERE rowid IN (
                                      SELECT rowid FROM incidents WHERE last_seen_ms < $cutoff LIMIT $chunk);
+                                   DELETE FROM incident_attributes WHERE rowid IN (
+                                     SELECT ia.rowid FROM incident_attributes AS ia
+                                     WHERE NOT EXISTS (
+                                       SELECT 1 FROM incidents AS i WHERE i.id = ia.id AND i.source_id = ia.source_id)
+                                     LIMIT $chunk);
                                    DELETE FROM finding_observations WHERE rowid IN (
                                      SELECT rowid FROM finding_observations WHERE day < $cutoff_day LIMIT $chunk);
                                    DELETE FROM finding_groupings WHERE rowid IN (
                                      SELECT rowid FROM finding_groupings WHERE last_seen_ms < $cutoff LIMIT $chunk);
+                                   DELETE FROM finding_attributes WHERE rowid IN (
+                                     SELECT rowid FROM finding_attributes WHERE last_seen_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM source_acks WHERE rowid IN (
                                      SELECT rowid FROM source_acks WHERE read_at_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM analysis_runs WHERE rowid IN (
@@ -1038,10 +1164,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.CommandText = """
                               INSERT INTO finding_sources(
                                 signature, source_id, source_name, environment, producer_version,
-                                first_seen_ms, last_seen_ms, finding_json, severity, first_observed_day)
+                                first_seen_ms, last_seen_ms, finding_json, severity, first_observed_day, service)
                               VALUES (
                                 $signature, $source_id, $source_name, $environment, $producer_version,
-                                $first_seen, $observed_at, $finding_json, $severity, $day)
+                                $first_seen, $observed_at, $finding_json, $severity, $day, $service)
                               ON CONFLICT(signature, source_id) DO UPDATE SET
                                 source_name = excluded.source_name,
                                 environment = excluded.environment,
@@ -1052,6 +1178,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                   excluded.finding_json, finding_sources.finding_json),
                                 severity = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
                                   excluded.severity, finding_sources.severity),
+                                service = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
+                                  excluded.service, finding_sources.service),
                                 -- Set once: a MIN(day) read later would move with the purge.
                                 first_observed_day = COALESCE(
                                   finding_sources.first_observed_day, excluded.first_observed_day),
@@ -1069,7 +1197,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                               SELECT $signature, $source_id, $grouping, $observed_at WHERE $grouping IS NOT NULL
                               ON CONFLICT(signature, source_id, grouping) DO UPDATE SET
                                 last_seen_ms = MAX(finding_groupings.last_seen_ms, excluded.last_seen_ms);
-                              """;
+                              """ + FindingAttributesUpsert;
         command.Parameters.AddWithValue(SignatureParameter, finding.Signature);
         command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
         command.Parameters.AddWithValue("$source_name", source.SourceName);
@@ -1078,6 +1206,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue(FirstSeenParameter, firstSeenMs);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
+        command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$severity", finding.Severity);
         command.Parameters.AddWithValue("$severity_rank", FindingParser.SeverityRank(finding.Severity));
         command.Parameters.AddWithValue("$day", observedAtMs / DayMs);

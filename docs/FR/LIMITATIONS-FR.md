@@ -92,6 +92,27 @@ Le lignage relie une signature mutée à sa devancière seulement quand exacteme
 un finding stocké correspond. L'ambiguïté n'enregistre rien, parce que nommer
 l'un de plusieurs candidats serait une supposition. Voir [API-FR.md](API-FR.md).
 
+## À quoi un finding est attribué
+
+Le moteur range un groupe N+1 ou d'appels redondants qui traverse plusieurs
+services sous le service et le regroupement de son premier span. Un second
+service appelant n'apparaît que dans `pattern.occurrences_by_service`. Le Hub
+garde cette attribution : `/api/findings?service=` ne trouve que le premier
+service, et les attributs de regroupement qu'il enregistre pour le finding sont
+ceux du premier span. Les appels en éventail et sérialisés sont attribués au
+span parent.
+
+Le Hub enregistre, par source, chaque attribut de regroupement qu'une source a
+capté sur un finding, et le service que cette source a remonté. La copie d'une
+source écrite par une version antérieure sans enveloppe propre n'a ni l'un ni
+l'autre tant que cette source ne remonte pas de nouveau le finding.
+
+Ajouter un attribut au `[detection] grouping_attributes` d'un daemon change plus
+que ce que le Hub enregistre. Sur les spans qui ne portent aucun des attributs
+précédents, le nouveau devient l'identité de regroupement : un groupe de
+détection se scinde en un par valeur, et chacun peut passer sous son seuil. Voir
+[DEPLOYMENT-FR.md](DEPLOYMENT-FR.md).
+
 ## Ce qu'un run ne promet pas
 
 Les rapports sont supprimés après `Hub:Analysis:ReportRetention`, 24 heures par

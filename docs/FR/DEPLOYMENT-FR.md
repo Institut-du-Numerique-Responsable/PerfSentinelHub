@@ -121,3 +121,28 @@ branche. En importer un rendrait `status` faux et ferait passer les findings
 d'une branche pour ceux de la production. Un job de CI qui veut l'état de la
 flotte appelle `GET /api/findings` comme n'importe quel autre lecteur. Voir
 [API-FR.md](API-FR.md).
+
+## Les attributs de regroupement se choisissent sur chaque daemon
+
+Le Hub n'ajoute aucun réglage de regroupement à lui. Il enregistre, par source,
+chaque attribut qu'un daemon a capté sur un finding, et un daemon ne capte que
+les attributs que liste son propre `[detection] grouping_attributes`. Une clé
+comme `team` n'arrive au Hub que depuis les daemons qui la listent, donc
+listez-la sur chaque daemon dont les findings doivent la porter, et posez-la sur
+les spans, en attribut de ressource ou de span, dans les applications.
+
+Une liste explicite remplace le défaut du moteur au lieu de le compléter. Gardez
+les défauts en tête :
+
+```toml
+[detection]
+grouping_attributes = ["k8s.namespace.name", "service.namespace", "team"]
+```
+
+Le premier attribut présent sur un span est l'identité de regroupement du
+finding. Sur les spans qui ne portent aucun des défauts, depuis Compose ou une
+VM par exemple, la clé ajoutée devient cette identité, ce qui change trois
+choses sur ce daemon : un groupe de détection se scinde en un par valeur, donc
+un compte peut passer sous son seuil, le daemon liste une ligne par valeur, et
+le label `grouping` de ses métriques suit. Voir
+[LIMITATIONS-FR.md](LIMITATIONS-FR.md).

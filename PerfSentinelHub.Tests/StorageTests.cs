@@ -32,13 +32,27 @@ public sealed class StorageTests
             names.Add(reader.GetString(0));
         Assert.Equal(
             [
-                "ack_reads", "analysis_runs", "endpoint_heartbeats", "finding_groupings", "finding_lineage",
-                "finding_observations",
-                "finding_sources", "findings", "incident_reads", "incidents", "schema_migrations",
-                "source_acks", "source_imports", "source_state"
+                "ack_reads", "analysis_runs", "endpoint_heartbeats", "finding_attributes", "finding_groupings",
+                "finding_lineage", "finding_observations",
+                "finding_sources", "findings", "incident_attributes", "incident_reads", "incidents",
+                "schema_migrations", "source_acks", "source_imports", "source_state"
             ],
             names.Order(StringComparer.Ordinal));
         Assert.True(database.IsReady);
+    }
+
+    [Fact]
+    public async Task Initialize_records_every_schema_version()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        await using var connection = await fixture.Database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT group_concat(version, ',') FROM (SELECT version FROM schema_migrations ORDER BY version);";
+        Assert.Equal("1,2,3,4,5,6,7,8,9", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
     [Fact]
@@ -182,6 +196,7 @@ public sealed class StorageTests
                                ALTER TABLE finding_sources DROP COLUMN finding_json;
                                ALTER TABLE finding_sources DROP COLUMN severity;
                                ALTER TABLE finding_sources DROP COLUMN first_observed_day;
+                               ALTER TABLE finding_sources DROP COLUMN service;
                                DROP INDEX ix_finding_sources_source;
                                DROP TABLE finding_observations;
                                DELETE FROM schema_migrations WHERE version = 6;
@@ -199,7 +214,7 @@ public sealed class StorageTests
         var upgradedShape = await SourceColumnsAsync(reopened, cancellationToken);
         Assert.Equal(freshShape, upgradedShape);
         Assert.Equal(
-            ["finding_json TEXT 0", "severity TEXT 0", "first_observed_day INTEGER 0"],
+            ["finding_json TEXT 0", "severity TEXT 0", "first_observed_day INTEGER 0", "service TEXT 0"],
             upgradedShape.Skip(7));
 
         await using var read = reopened.CreateCommand();
@@ -231,8 +246,8 @@ public sealed class StorageTests
                 0),
             86_400_000,
             cancellationToken);
-        read.CommandText = "SELECT severity || ' ' || first_observed_day FROM finding_sources;";
-        Assert.Equal("warning 1", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+        read.CommandText = "SELECT severity || ' ' || first_observed_day || ' ' || service FROM finding_sources;";
+        Assert.Equal("warning 1 checkout", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
     [Fact]

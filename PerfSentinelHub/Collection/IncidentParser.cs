@@ -41,7 +41,7 @@ public static class IncidentParser
         JsonDocument document;
         try
         {
-            document = JsonDocument.Parse(payload);
+            document = JsonDocument.Parse(payload, JsonRead.UniqueProperties);
         }
         catch (JsonException exception)
         {

@@ -68,6 +68,18 @@ public sealed class IncidentParserTests
         Assert.Contains("other", IncidentParser.Kinds);
     }
 
+    // SQLite reads the first of two properties of one name and System.Text.Json the last.
+    [Fact]
+    public async Task A_body_that_repeats_a_property_name_is_refused()
+    {
+        var template = await TemplateAsync();
+        var repeated = template.Replace(
+            "\"service\":\"shop-svc\"", "\"service\":\"shop-svc\",\"service\":\"other-svc\"", StringComparison.Ordinal);
+        Assert.NotEqual(template, repeated);
+
+        Assert.Throws<InvalidDataException>(() => IncidentParser.Parse(Encoding.UTF8.GetBytes($"[{repeated}]")));
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("not json")]

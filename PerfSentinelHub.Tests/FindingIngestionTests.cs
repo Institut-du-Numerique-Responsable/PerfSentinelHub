@@ -191,6 +191,26 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal(1, batch.RejectedCount);
     }
 
+    // SQLite reads the first of two properties of one name and System.Text.Json the last, so
+    // a copy's recorded attributes and its grouping would disagree: such a body is refused.
+    [Theory]
+    [InlineData("""
+                "grouping": [{"key": "team", "value": "a"}], "grouping": [{"key": "team", "value": "b"}]
+                """)]
+    [InlineData("""
+                "grouping": [{"key": "team", "value": "a", "value": "b"}]
+                """)]
+    public async Task A_body_that_repeats_a_property_name_is_refused(string grouping)
+    {
+        var fixture = await File.ReadAllTextAsync(FixturePath, TestContext.Current.CancellationToken);
+        var repeated = fixture.Replace("\"grouping\": []", grouping, StringComparison.Ordinal);
+        Assert.NotEqual(fixture, repeated);
+
+        Assert.Throws<InvalidDataException>(() => FindingParser.Parse(Encoding.UTF8.GetBytes(repeated)));
+        Assert.Throws<InvalidDataException>(() => FindingParser.ParseImport(
+            Encoding.UTF8.GetBytes($$"""{"producer_version": "0.26.2", "findings": {{repeated}}}""")));
+    }
+
     [Fact]
     public async Task Upsert_rolls_back_the_whole_batch_when_a_related_write_fails()
     {
@@ -889,6 +909,273 @@ public sealed class FindingIngestionTests : IDisposable
         // Applied after the limit, the window would cut the page down to the fresher row, then empty it.
         var page = await database.QueryFindingsAsync(Days(10, 10) with { Limit = 1 }, cancellationToken);
         Assert.Equal(older.Signature, Assert.Single(page).Signature);
+    }
+
+    [Fact]
+    public async Task A_poll_and_an_import_each_record_every_pair_under_the_first_one()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = await GroupedAsync(
+            """[{"key": "k8s.namespace.name", "value": "shop-ns"}, {"key": "team", "value": "shop"}]""",
+            cancellationToken);
+
+        await database.UpsertBatchAsync(ProductionA, batch, 1000, cancellationToken);
+        Assert.True(await database.TryUpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"), batch, 2000, cancellationToken));
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            "production-a k8s.namespace.name=shop-ns k8s.namespace.name=shop-ns 1000,"
+            + "production-a k8s.namespace.name=shop-ns team=shop 1000,"
+            + "staging-a k8s.namespace.name=shop-ns k8s.namespace.name=shop-ns 2000,"
+            + "staging-a k8s.namespace.name=shop-ns team=shop 2000",
+            await AttributesAsync(connection, cancellationToken));
+    }
+
+    [Fact]
+    public async Task An_observation_without_grouping_records_the_marker_row()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+
+        await database.UpsertBatchAsync(
+            ProductionA,
+            FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken)),
+            1000,
+            cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal("production-a = = 1000", await AttributesAsync(connection, cancellationToken));
+    }
+
+    // The engine sends at most eight entries, each of 1 to 256 characters: anything else is
+    // skipped, and a malformed entry never fails the batch.
+    [Fact]
+    public async Task Only_the_first_eight_well_formed_entries_are_recorded()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var longest = new string('v', 256);
+        var batch = await GroupedAsync(
+            $$"""
+              [{"key": "team", "value": "shop"}, "plain", {"key": "empty", "value": ""},
+               {"key": "long", "value": "{{longest}}v"}, {"key": "k4", "value": "v4"}, 3,
+               {"key": "k6", "value": "v6"}, {"key": "k7", "value": "{{longest}}"},
+               {"key": "ninth", "value": "v8"}]
+              """,
+            cancellationToken);
+
+        await database.UpsertBatchAsync(ProductionA, batch, 1000, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            "production-a team=shop k4=v4 1000,production-a team=shop k6=v6 1000,"
+            + $"production-a team=shop k7={longest} 1000,production-a team=shop team=shop 1000",
+            await AttributesAsync(connection, cancellationToken));
+    }
+
+    [Theory]
+    [InlineData("\"team\"")]
+    [InlineData("{\"key\": \"team\"}")]
+    [InlineData("{\"key\": \"team\", \"value\": \"\"}")]
+    [InlineData("{\"key\": \"\", \"value\": \"shop\"}")]
+    [InlineData("{\"key\": \"team\", \"value\": 3}")]
+    [InlineData("{\"key\": \"team\", \"value\": {\"name\": \"shop\"}}")]
+    public async Task An_invalid_first_entry_records_the_marker_only(string first)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = await GroupedAsync($$"""[{{first}}, {"key": "team", "value": "shop"}]""", cancellationToken);
+
+        await database.UpsertBatchAsync(ProductionA, batch, 1000, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal("production-a = = 1000", await AttributesAsync(connection, cancellationToken));
+    }
+
+    [Fact]
+    public async Task An_attribute_keeps_its_latest_observation_when_an_older_one_commits_late()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = await GroupedAsync("""[{"key": "team", "value": "shop"}]""", cancellationToken);
+
+        await database.UpsertBatchAsync(ProductionA, batch, 2000, cancellationToken);
+        Assert.True(await database.TryUpsertBatchAsync(ProductionA, batch, 1000, cancellationToken));
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal("production-a team=shop team=shop 2000", await AttributesAsync(connection, cancellationToken));
+    }
+
+    [Fact]
+    public async Task The_attribute_backfill_covers_every_copy_last_written_without_rows_on_every_boot()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await CreateDatabase().InitializeAsync(cancellationToken);
+        // Copies an older build wrote: one with its own envelope, one before the per-source
+        // envelope existed, one garbled, and one this build already covered.
+        await ExecuteAsync(
+            """
+            INSERT INTO findings(
+              signature, finding_json, service, finding_type, severity, endpoint,
+              template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+              max_confidence, max_confidence_rank)
+            VALUES ('signature', '{"finding":{"grouping":[{"key":"team","value":"shared"}]}}',
+              'checkout', 'slow_sql', 'warning', 'POST /checkout', 'template-hash', 'trace',
+              500, 900, 'daemon_production', 4);
+            INSERT INTO finding_sources(
+              signature, source_id, source_name, environment, producer_version,
+              first_seen_ms, last_seen_ms, finding_json)
+            VALUES
+              ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
+               '{"finding":{"grouping":[{"key":"team","value":"shop"}]}}'),
+              ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL),
+              ('signature', 'garbled', 'Garbled', 'staging', '0.26.2', 500, 600, '{not json'),
+              ('signature', 'covered', 'Covered', 'staging', '0.26.2', 500, 700,
+               '{"finding":{"grouping":[{"key":"team","value":"ignored"}]}}');
+            INSERT INTO finding_attributes VALUES ('signature', 'covered', '', '', '', '', 700);
+            """,
+            cancellationToken);
+
+        await CreateDatabase().InitializeAsync(cancellationToken);
+        await using (var connection = await CreateDatabase().OpenConnectionAsync(cancellationToken))
+            Assert.Equal(
+                "covered = = 700,own team=shop team=shop 800",
+                await AttributesAsync(connection, cancellationToken));
+
+        // A second boot finds nothing left to write.
+        await ExecuteAsync(
+            """
+            CREATE TRIGGER fail_attribute_write BEFORE INSERT ON finding_attributes
+            BEGIN SELECT RAISE(ABORT, 'attributes backfilled twice'); END;
+            """,
+            cancellationToken);
+        await CreateDatabase().InitializeAsync(cancellationToken);
+        await ExecuteAsync("DROP TRIGGER fail_attribute_write;", cancellationToken);
+
+        // An image rolled back below this build observes the copy again, without rows.
+        await ExecuteAsync(
+            """
+            UPDATE finding_sources SET last_seen_ms = 900,
+              finding_json = '{"finding":{"grouping":[{"key":"team","value":"billing"}]}}'
+            WHERE source_id = 'own';
+            """,
+            cancellationToken);
+        await CreateDatabase().InitializeAsync(cancellationToken);
+
+        await using var reopened = await CreateDatabase().OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            "covered = = 700,own team=billing team=billing 900,own team=shop team=shop 800",
+            await AttributesAsync(reopened, cancellationToken));
+    }
+
+    // findings.service is fleet-wide and the newest observation from any source overwrites
+    // it, so a copy keeps the service its own source reported.
+    [Fact]
+    public async Task Each_copy_keeps_the_service_its_own_source_reported()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var reused = batch.Findings[0] with { Service = "other-svc" };
+
+        await database.UpsertBatchAsync(ProductionA, batch, 1000, cancellationToken);
+        Assert.True(await database.TryUpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
+            new ParsedBatch([reused], 0),
+            2000,
+            cancellationToken));
+        // An older observation of the same source committing late keeps the newer service.
+        Assert.True(await database.TryUpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"), batch, 1500, cancellationToken));
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal("other-svc", await TextScalarAsync(connection, "SELECT service FROM findings;", cancellationToken));
+        Assert.Equal(
+            "production-a rider-smoke,staging-a other-svc",
+            await TextScalarAsync(
+                connection,
+                """
+                SELECT group_concat(source_id || ' ' || service, ',')
+                FROM (SELECT * FROM finding_sources ORDER BY source_id);
+                """,
+                cancellationToken));
+    }
+
+    [Fact]
+    public async Task Boot_fills_a_missing_service_from_the_copys_own_envelope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        await database.UpsertBatchAsync(
+            ProductionA,
+            FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken)),
+            1000,
+            cancellationToken);
+        // What an older build leaves: no service, and for some copies no usable envelope.
+        await ExecuteAsync(
+            """
+            INSERT INTO finding_sources(
+              signature, source_id, source_name, environment, producer_version,
+              first_seen_ms, last_seen_ms, finding_json)
+            SELECT signature, 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL FROM findings
+            UNION ALL
+            SELECT signature, 'garbled', 'Garbled', 'staging', '0.26.2', 500, 900, '{not json' FROM findings
+            UNION ALL
+            SELECT signature, 'unnamed', 'Unnamed', 'staging', '0.26.2', 500, 900, '{"finding":{}}' FROM findings;
+            UPDATE finding_sources SET service = NULL;
+            """,
+            cancellationToken);
+
+        await CreateDatabase().InitializeAsync(cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(
+            "garbled -,legacy -,production-a rider-smoke,unnamed -",
+            await TextScalarAsync(
+                connection,
+                """
+                SELECT group_concat(source_id || ' ' || COALESCE(service, '-'), ',')
+                FROM (SELECT * FROM finding_sources ORDER BY source_id);
+                """,
+                cancellationToken));
+    }
+
+    // The fixture finding with the given grouping array in its envelope.
+    private static async Task<ParsedBatch> GroupedAsync(string grouping, CancellationToken cancellationToken)
+    {
+        var payload = (await File.ReadAllTextAsync(FixturePath, cancellationToken))
+            .Replace("\"grouping\": []", $"\"grouping\": {grouping}", StringComparison.Ordinal);
+        return FindingParser.Parse(Encoding.UTF8.GetBytes(payload));
+    }
+
+    private static Task<string> AttributesAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        return TextScalarAsync(
+            connection,
+            """
+            SELECT group_concat(
+              source_id || ' ' || grouping_key || '=' || grouping_value || ' '
+              || attr_key || '=' || attr_value || ' ' || last_seen_ms, ',')
+            FROM (SELECT * FROM finding_attributes ORDER BY source_id, attr_key, attr_value);
+            """,
+            cancellationToken);
+    }
+
+    private async Task ExecuteAsync(string sql, CancellationToken cancellationToken)
+    {
+        await using var connection = await CreateDatabase().OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     // The fixture finding under another severity, its envelope reduced to a name a test can read back.

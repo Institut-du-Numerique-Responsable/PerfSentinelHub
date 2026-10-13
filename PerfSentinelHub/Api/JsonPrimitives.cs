@@ -11,6 +11,13 @@ internal static class JsonRead
 {
     private const long MinPlausibleEpochMs = 1_000_000_000_000;
 
+    /// <summary>
+    ///     For a body whose envelopes SQLite reads too: it takes the first of two
+    ///     properties of one name and System.Text.Json the last, so the two would
+    ///     record different values for one finding. The engine never repeats one.
+    /// </summary>
+    public static readonly JsonDocumentOptions UniqueProperties = new() { AllowDuplicateProperties = false };
+
     /// <summary>One JSON value detached from its document, so the pooled buffer goes back.</summary>
     public static JsonElement Literal(string json)
     {

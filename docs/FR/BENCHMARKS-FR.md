@@ -3,7 +3,9 @@
 Ce que pèse l'image publiée, en combien de temps elle répond après un
 démarrage à froid, et combien de mémoire elle occupe au repos. Chaque chiffre
 ci-dessous vient de l'image publiée `ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:0.3.3`,
-pas d'un build local, et les commandes pour les reproduire terminent la page.
+pas d'un build local, et les commandes pour les reproduire terminent la page. La
+seule exception, le démarrage sur une base remplie, dit comment elle a été
+mesurée.
 
 Le Hub est publié en NativeAOT : du C# 14 sur .NET 10 compilé à l'avance en un
 seul exécutable natif, sans runtime .NET ni JIT dans l'image. La base est
@@ -56,6 +58,43 @@ des jours d'observation, sert le lanceur et produit des rapports en occupe
 davantage, et cette page n'en donne aucun chiffre tant qu'il n'a pas été mesuré
 sur une vraie flotte. Les chiffres de démarrage et de mémoire valent pour
 arm64 seulement. L'image amd64 a été pesée, pas exécutée.
+
+## Démarrer sur une base remplie
+
+Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : depuis
+l'enveloppe propre à chaque source, le service et les attributs de regroupement
+d'une copie de finding, et les paires que partagent tous les findings gelés
+d'une copie d'incident, voir
+[ARCHITECTURE-FR.md](ARCHITECTURE-FR.md#ce-que-contient-la-base). Le premier
+démarrage après la mise à jour trouve tout cela à faire. Mesuré sur deux bases
+remplies, à travers `HubDatabase.InitializeAsync` dans un build Release des
+tests plutôt que l'image native, avec le SQLite 3.53.4 embarqué, sur la machine
+ci-dessus avec la base sur son SSD interne :
+
+| Base                                                      | Taille   | Premier démarrage après la mise à jour | Chaque démarrage suivant |
+|-----------------------------------------------------------|----------|----------------------------------------|--------------------------|
+| 100 000 copies de findings, 10 000 incidents de 20        | 312 Mio  | 2,3 s                                  | 0,14 s                   |
+| 100 000 copies de findings, 1 000 incidents de 1 000      | 1034 Mio | 6,5 s                                  | 0,11 s                   |
+
+L'enveloppe de chaque copie fait environ 900 octets avec deux attributs de
+regroupement, et chaque finding gelé environ 1 Ko avec deux, les mêmes deux dans
+un incident. Le premier démarrage écrit 200 000 lignes d'attributs et 100 000
+services, et dérive les paires de chaque incident, ce qui croît avec les
+findings gelés tenus dans `Hub:Retention` : 200 000 dans la première base,
+1 000 000 dans la seconde, où chaque incident tient le plafond du daemon de
+1 000. Un démarrage suivant n'a rien à écrire et lit seulement quelles copies en
+ont besoin.
+
+Ce premier démarrage s'exécute avant que le Hub n'écoute, dans une seule
+transaction. La sonde de démarrage du chart lui laisse 60 s et sa limite par
+défaut 500m de CPU, donc une base qui tient plusieurs millions de findings gelés
+sur des nœuds lents peut échouer la sonde, et un démarrage tué reprend de zéro.
+Relevez alors `resources.limits.cpu` le temps de la mise à jour. Le premier
+démarrage tient aussi chaque enveloppe qu'il complète, environ 90 Mo ici, dans
+le stockage temporaire de SQLite, qui écrit dans `/tmp` au-delà de son cache de
+2 Mo, et le chart monte `/tmp` comme un `emptyDir` de 32 Mio. Que le kubelet
+compte ce fichier, que SQLite supprime dès son ouverture, dans la limite n'a pas
+été vérifié.
 
 ## Reproduire
 
