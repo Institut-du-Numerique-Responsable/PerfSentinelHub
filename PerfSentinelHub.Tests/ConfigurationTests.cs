@@ -1,8 +1,10 @@
+using System.Text;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 
@@ -492,6 +494,430 @@ public sealed class ConfigurationTests
             })));
 
         Assert.Throws<OptionsValidationException>(factory.CreateClient);
+    }
+
+    private const string A0 = "Hub:Access:Enabled is not available in this build yet.";
+
+    private const string MachineTokenValue = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
+    private static readonly DateTimeOffset Now = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+
+    // Until enforcement ships, a Hub that believes it filters would serve everyone everything.
+    [Fact]
+    public void A_valid_access_configuration_is_refused_only_until_enforcement_ships()
+    {
+        Assert.Equal(A0, Assert.Single(AccessFailures(AccessOn())));
+    }
+
+    [Fact]
+    public void Off_nothing_under_access_is_validated()
+    {
+        Assert.True(new HubOptionsValidator().Validate(null, ValidOptions()).Succeeded);
+        Assert.False(ValidOptions().Access.Enabled);
+        var garbage = AccessOn(access => access with
+        {
+            Enabled = false,
+            Admins = ["machine:x", " "],
+            Projects = [new ProjectOptions { Name = "*" }],
+            MachineTokens = [new MachineTokenOptions { Name = "BAD", Token = "short" }]
+        });
+
+        Assert.Empty(AccessFailures(garbage));
+    }
+
+    // Decided, question 9: the provider is the source of truth for admins, Admins stays as break-glass.
+    [Fact]
+    public void A_provider_admin_group_and_a_provider_admin_grant_on_the_whole_hub_are_accepted()
+    {
+        var options = AccessOn(access => access with
+        {
+            Admins = [],
+            AdminGroups = ["/hub-admins"],
+            Grants = [.. access.Grants, new GrantOptions { Group = "/platform/leads", Project = "*", Role = "admin" }]
+        });
+
+        Assert.Equal(A0, Assert.Single(AccessFailures(options)));
+    }
+
+    // A4 ties GroupsClaim to provider references: internal ones need no claim.
+    [Fact]
+    public void A_blank_groups_claim_is_accepted_when_every_group_reference_is_internal()
+    {
+        var options = AccessOn(access => access with
+        {
+            AdminGroups = ["internal:oncall"],
+            Grants = [.. access.Grants.Where(grant => grant.Group.StartsWith("internal:", StringComparison.Ordinal))]
+        });
+        options = options with { Auth = options.Auth with { GroupsClaim = " " } };
+
+        Assert.Equal(A0, Assert.Single(AccessFailures(options)));
+    }
+
+    [Theory]
+    [InlineData("A1", "Hub:Access:Enabled requires Hub:Auth:Enabled: access control needs a signed-in caller.")]
+    [InlineData("A2",
+        "With Hub:Access:Enabled only a Hub session or token names a caller; Hub:AckRelay:TrustIdentityHeader cannot be set.")]
+    [InlineData("A4", "Hub:Auth:GroupsClaim must name a userinfo field when Hub:Access refers to a provider group.")]
+    [InlineData("A5", "Hub:Access needs at least one entry in Admins or AdminGroups.")]
+    [InlineData("A6 blank", "Hub:Access:Admins:0 must be a subject of 1 to 256 characters with no control character.")]
+    [InlineData("A6 long", "Hub:Access:Admins:0 must be a subject of 1 to 256 characters with no control character.")]
+    [InlineData("A6 control",
+        "Hub:Access:Groups:0:Members:0 must be a subject of 1 to 256 characters with no control character.")]
+    [InlineData("A6 machine",
+        "Hub:Access:Admins:0: a machine token is never a person; it gets its group through Hub:Access:MachineTokens.")]
+    [InlineData("A6 local", "Hub:Access:Groups:0:Members:0: local accounts are not available in this build yet.")]
+    [InlineData("A7 name",
+        "Hub:Access:Groups:0:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored.")]
+    [InlineData("A7 duplicate",
+        "Hub:Access:Groups:2:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored.")]
+    [InlineData("A8 undeclared", "Hub:Access:Grants:0:Group: 'internal:nope' names no group in Hub:Access:Groups.")]
+    [InlineData("A8 case", "Hub:Access:Grants:0:Group: write the internal: prefix in lower case.")]
+    [InlineData("A8 star",
+        "Hub:Access:AdminGroups:0 must be internal:<name> or a provider group of 1 to 256 characters with no control character, '*' excepted.")]
+    [InlineData("A8 control",
+        "Hub:Access:Grants:0:Group must be internal:<name> or a provider group of 1 to 256 characters with no control character, '*' excepted.")]
+    [InlineData("A8 machine provider",
+        "Hub:Access:MachineTokens:0:Group must name an internal group: a machine token gets no provider group.")]
+    [InlineData("A9 name",
+        "Hub:Access:Projects:0:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored.")]
+    [InlineData("A9 duplicate",
+        "Hub:Access:Projects:2:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored.")]
+    [InlineData("A9 no pattern", "Hub:Access:Projects:0 needs at least one pattern.")]
+    [InlineData("A9 empty pattern", "Hub:Access:Projects:0:Patterns:0 must set Source, Service or Attribute.")]
+    [InlineData("A9 source star inside",
+        "Hub:Access:Projects:0:Patterns:0:Source must be a source id, or a prefix of one ending in a single '*'.")]
+    [InlineData("A9 source character",
+        "Hub:Access:Projects:0:Patterns:0:Source must be a source id, or a prefix of one ending in a single '*'.")]
+    [InlineData("A9 unknown source", "Hub:Access:Projects:0:Patterns:0:Source 'nope' matches no configured source.")]
+    [InlineData("A9 prefix of no source", "Hub:Access:Projects:0:Patterns:0:Source 'zz*' matches no configured source.")]
+    [InlineData("A9 service control",
+        "Hub:Access:Projects:0:Patterns:0:Service must be 1 to 256 characters with no control character, exact or a prefix ending in a single '*'.")]
+    [InlineData("A9 service long",
+        "Hub:Access:Projects:0:Patterns:0:Service must be 1 to 256 characters with no control character, exact or a prefix ending in a single '*'.")]
+    [InlineData("A9 attribute without equals", AttributeShape)]
+    [InlineData("A9 attribute without key", AttributeShape)]
+    [InlineData("A9 attribute without value", AttributeShape)]
+    [InlineData("A9 attribute key prefix", AttributeShape)]
+    [InlineData("A9 attribute value star inside", AttributeShape)]
+    [InlineData("A10 built-in name", RoleName)]
+    [InlineData("A10 duplicate", "Hub:Access:Roles:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', "
+                                 + "unique with case ignored, and not reader, member or admin.")]
+    [InlineData("A10 no permission", RolePermissions)]
+    [InlineData("A10 unknown permission", RolePermissions)]
+    [InlineData("A10 repeated permission", RolePermissions)]
+    [InlineData("A10 access.admin",
+        "Role 'auditor': access.admin is held only through the built-in admin role, Hub:Access:Admins or Hub:Access:AdminGroups.")]
+    [InlineData("A11 blank", "Hub:Access:Grants:0 needs Group, Project and Role.")]
+    [InlineData("A11 project", "Hub:Access:Grants:0:Project 'nope' is neither '*' nor a project in Hub:Access:Projects.")]
+    [InlineData("A11 project case", "Hub:Access:Grants:0:Project 'Shop' is neither '*' nor a project in Hub:Access:Projects.")]
+    [InlineData("A11 role", "Hub:Access:Grants:0:Role 'nope' is neither a built-in role nor one in Hub:Access:Roles.")]
+    [InlineData("A11 admin on a project",
+        "Grant 0: the admin role applies to the whole Hub; grant it on '*', or use Hub:Access:Admins or Hub:Access:AdminGroups.")]
+    [InlineData("A12 name", TokenName)]
+    [InlineData("A12 duplicate name", "Hub:Access:MachineTokens:1:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.")]
+    [InlineData("A12 group with members",
+        "Group 'oncall' backs machine token 'ci-shop' and must have no members: its grants are sized for a machine.")]
+    [InlineData("A12 no token", TokenShape)]
+    [InlineData("A12 short token", TokenShape)]
+    [InlineData("A12 token alphabet", TokenShape)]
+    [InlineData("A12 terminal prefix", TokenShape)]
+    [InlineData("A12 token twice", "Hub:Access:MachineTokens:1:Token must differ from every other machine token and every import API key.")]
+    [InlineData("A12 import key", "Hub:Access:MachineTokens:0:Token must differ from every other machine token and every import API key.")]
+    [InlineData("A12 no expiry", TokenExpiry)]
+    [InlineData("A12 beyond a year", TokenExpiry)]
+    public void Each_access_rule_names_the_key_it_refuses(string rule, string message)
+    {
+        string[] failures = AccessFailures(AccessCase(rule));
+
+        Assert.Contains(message, failures);
+        Assert.Contains(A0, failures);
+    }
+
+    [Fact]
+    public void An_access_error_never_echoes_a_machine_token()
+    {
+        var options = AccessOn(access => access with
+        {
+            MachineTokens =
+            [
+                access.MachineTokens[0] with { Token = MachineTokenValue + "!" },
+                access.MachineTokens[0] with { Name = "ci-other", Token = MachineTokenValue + "!" }
+            ]
+        });
+
+        string[] failures = AccessFailures(options);
+        Assert.True(failures.Length > 2);
+        Assert.DoesNotContain(failures, failure => failure.Contains(MachineTokenValue, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_machine_token_lives_at_most_a_year_and_an_expired_one_does_not_stop_the_hub()
+    {
+        // An expired entry is refused at each request, so an old one never keeps the Hub down.
+        DateTimeOffset[] accepted = [Now.AddDays(365), Now.AddDays(-1)];
+        foreach (var expiresAt in accepted)
+            Assert.Equal(A0, Assert.Single(AccessFailures(WithExpiry(expiresAt))));
+
+        Assert.Contains(TokenExpiry, AccessFailures(WithExpiry(Now.AddDays(365).AddSeconds(1))));
+
+        // The validator takes its clock as a parameter, so the limit moves with it.
+        var later = new FakeTimeProvider(Now.AddDays(10));
+        Assert.Equal(A0, Assert.Single(
+            new HubOptionsValidator(later).Validate(null, WithExpiry(Now.AddDays(370))).Failures ?? []));
+
+        static HubOptions WithExpiry(DateTimeOffset expiresAt)
+        {
+            return AccessOn(access => access with
+            {
+                MachineTokens = [access.MachineTokens[0] with { ExpiresAt = expiresAt }]
+            });
+        }
+    }
+
+    [Fact]
+    public void Access_binds_from_the_chart_s_camel_case_values()
+    {
+        // The chart passes hub.access as is: camelCase keys, and the Secret's name and key,
+        // which name a Secret, hold no secret and are ignored by the binder.
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(
+            """
+            {"Hub": {"Access": {"enabled": false, "admins": [], "adminGroups": ["/hub-admins"],
+              "groups": [{"name": "ci-a", "members": []}],
+              "projects": [{"name": "shop", "patterns": [{"attribute": "team=shop"}, {"source": "prod", "service": "cart*"}]}],
+              "roles": [{"name": "auditor", "permissions": ["findings.read", "traces.read"]}],
+              "grants": [{"group": "internal:ci-a", "project": "shop", "role": "auditor"}],
+              "machineTokens": [{"name": "ci-shop", "group": "internal:ci-a", "expiresAt": "2027-06-30T00:00:00Z",
+                                 "secretName": "hub-machine-tokens", "secretKey": "ci-shop"}]}}}
+            """));
+        var configuration = new ConfigurationBuilder()
+            .AddJsonStream(stream)
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Access:MachineTokens:0:Token"] = MachineTokenValue + "\n"
+            })
+            .Build();
+
+        var access = configuration.GetSection("Hub:Access").Get<AccessOptions>();
+
+        Assert.NotNull(access);
+        Assert.Empty(access.Admins);
+        Assert.Equal(["/hub-admins"], access.AdminGroups);
+        Assert.Equal("ci-a", Assert.Single(access.Groups).Name);
+        Assert.Equal("team=shop", access.Projects[0].Patterns[0].Attribute);
+        Assert.Equal("cart*", access.Projects[0].Patterns[1].Service);
+        Assert.Equal(["findings.read", "traces.read"], Assert.Single(access.Roles).Permissions);
+        Assert.Equal("auditor", Assert.Single(access.Grants).Role);
+        var token = Assert.Single(access.MachineTokens);
+        Assert.Equal(new DateTimeOffset(2027, 6, 30, 0, 0, 0, TimeSpan.Zero), token.ExpiresAt);
+        Assert.Equal(MachineTokenValue, token.Token);
+    }
+
+    // No shipped example may teach a bare top-level name: on GitLab anyone can create one.
+    [Fact]
+    public void Every_provider_group_in_the_reference_configuration_is_a_path()
+    {
+        var access = ReferenceConfigurationTests.Reference().GetProperty("Access");
+        string[] references =
+        [
+            .. access.GetProperty("Grants").EnumerateArray().Select(grant => grant.GetProperty("Group").GetString()!),
+            .. access.GetProperty("AdminGroups").EnumerateArray().Select(group => group.GetString()!)
+        ];
+
+        Assert.Contains(references, reference => !reference.StartsWith("internal:", StringComparison.Ordinal));
+        Assert.All(
+            references.Where(reference => !reference.StartsWith("internal:", StringComparison.Ordinal)),
+            reference => Assert.Contains('/', reference));
+    }
+
+    private const string AttributeShape =
+        "Hub:Access:Projects:0:Patterns:0:Attribute must read key=value: a key of 1 to 256 characters with no "
+        + "control character and no '*', and a value of 1 to 256, exact or a prefix ending in a single '*'.";
+
+    private const string RoleName =
+        "Hub:Access:Roles:0:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored, "
+        + "and not reader, member or admin.";
+
+    private const string RolePermissions =
+        "Hub:Access:Roles:0:Permissions must list one or more of findings.read, traces.read, sources.read, "
+        + "analyses.run and acks.write, each once.";
+
+    private const string TokenName = "Hub:Access:MachineTokens:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
+
+    private const string TokenShape =
+        "Hub:Access:MachineTokens:0:Token must be 32 to 512 characters of A-Z, a-z, 0-9, '-', '.', '_', '~', '+' "
+        + "and '/', with trailing '=' allowed, and must not start with pshub_.";
+
+    private const string TokenExpiry = "Hub:Access:MachineTokens:0:ExpiresAt must be set, at most 365 days from now.";
+
+    private static HubOptions AccessCase(string rule)
+    {
+        return rule switch
+        {
+            "A1" => AccessOn() with { Auth = new AuthOptions() },
+            "A2" => AccessOn() with { AckRelay = new AckRelayOptions { TrustIdentityHeader = true } },
+            "A4" => AccessOn() with { Auth = ValidAuth() with { GroupsClaim = " " } },
+            "A5" => AccessOn(access => access with { Admins = [], AdminGroups = [] }),
+            "A6 blank" => AccessOn(access => access with { Admins = [" "] }),
+            "A6 long" => AccessOn(access => access with { Admins = [new string('s', 257)] }),
+            "A6 control" => Members("7c1e\t9a02"),
+            "A6 machine" => AccessOn(access => access with { Admins = ["Machine:ci-shop"] }),
+            "A6 local" => Members("local:ops"),
+            "A7 name" => AccessOn(access => access with
+            {
+                Groups = [access.Groups[0] with { Name = "on call" }, .. access.Groups.Skip(1)]
+            }),
+            "A7 duplicate" => AccessOn(access => access with
+            {
+                Groups = [.. access.Groups, new InternalGroupOptions { Name = "OnCall" }]
+            }),
+            "A8 undeclared" => FirstGrant(grant => grant with { Group = "internal:nope" }),
+            "A8 case" => FirstGrant(grant => grant with { Group = "Internal:oncall" }),
+            "A8 star" => AccessOn(access => access with { AdminGroups = ["*"] }),
+            "A8 control" => FirstGrant(grant => grant with { Group = "/teams/\nshop" }),
+            "A8 machine provider" => FirstToken(token => token with { Group = "/teams/ci" }),
+            "A9 name" => FirstProject(project => project with { Name = "shop!" }),
+            "A9 duplicate" => AccessOn(access => access with
+            {
+                Projects = [.. access.Projects, access.Projects[0] with { Name = "Shop" }]
+            }),
+            "A9 no pattern" => FirstProject(project => project with { Patterns = [] }),
+            "A9 empty pattern" => FirstPattern(new PatternOptions()),
+            "A9 source star inside" => FirstPattern(new PatternOptions { Source = "pr*d" }),
+            "A9 source character" => FirstPattern(new PatternOptions { Source = "prod/eu" }),
+            "A9 unknown source" => FirstPattern(new PatternOptions { Source = "nope" }),
+            "A9 prefix of no source" => FirstPattern(new PatternOptions { Source = "zz*" }),
+            "A9 service control" => FirstPattern(new PatternOptions { Service = "cart\u0007" }),
+            "A9 service long" => FirstPattern(new PatternOptions { Service = new string('s', 257) }),
+            "A9 attribute without equals" => FirstPattern(new PatternOptions { Attribute = "team" }),
+            "A9 attribute without key" => FirstPattern(new PatternOptions { Attribute = "=shop" }),
+            "A9 attribute without value" => FirstPattern(new PatternOptions { Attribute = "team=" }),
+            "A9 attribute key prefix" => FirstPattern(new PatternOptions { Attribute = "te*=shop" }),
+            "A9 attribute value star inside" => FirstPattern(new PatternOptions { Attribute = "team=sh*p" }),
+            "A10 built-in name" => FirstRole(role => role with { Name = "Reader" }),
+            "A10 duplicate" => AccessOn(access => access with
+            {
+                Roles = [.. access.Roles, access.Roles[0] with { Name = "Auditor" }]
+            }),
+            "A10 no permission" => FirstRole(role => role with { Permissions = [] }),
+            "A10 unknown permission" => FirstRole(role => role with { Permissions = ["findings.write"] }),
+            "A10 repeated permission" => FirstRole(role => role with { Permissions = ["findings.read", "findings.read"] }),
+            "A10 access.admin" => FirstRole(role => role with { Permissions = ["findings.read", "access.admin"] }),
+            "A11 blank" => FirstGrant(grant => grant with { Role = "" }),
+            "A11 project" => FirstGrant(grant => grant with { Project = "nope" }),
+            "A11 project case" => FirstGrant(grant => grant with { Project = "Shop" }),
+            "A11 role" => FirstGrant(grant => grant with { Role = "nope" }),
+            "A11 admin on a project" => FirstGrant(grant => grant with { Role = "admin" }),
+            "A12 name" => FirstToken(token => token with { Name = "CI" }),
+            "A12 duplicate name" => AccessOn(access => access with
+            {
+                MachineTokens = [.. access.MachineTokens, access.MachineTokens[0] with { Token = MachineTokenValue + "2" }]
+            }),
+            "A12 group with members" => FirstToken(token => token with { Group = "internal:oncall" }),
+            "A12 no token" => FirstToken(token => token with { Token = null }),
+            "A12 short token" => FirstToken(token => token with { Token = new string('t', 31) }),
+            "A12 token alphabet" => FirstToken(token => token with { Token = MachineTokenValue + "!" }),
+            "A12 terminal prefix" => FirstToken(token => token with { Token = "pshub_" + MachineTokenValue }),
+            "A12 token twice" => AccessOn(access => access with
+            {
+                MachineTokens = [.. access.MachineTokens, access.MachineTokens[0] with { Name = "ci-other" }]
+            }),
+            "A12 import key" => AccessOn() with
+            {
+                Sources = [ValidSource() with { ImportApiKey = MachineTokenValue }]
+            },
+            "A12 no expiry" => FirstToken(token => token with { ExpiresAt = null }),
+            "A12 beyond a year" => FirstToken(token => token with { ExpiresAt = Now.AddDays(366) }),
+            _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, null)
+        };
+
+        static HubOptions Members(string member)
+        {
+            return AccessOn(access => access with
+            {
+                Groups = [access.Groups[0] with { Members = [member] }, .. access.Groups.Skip(1)]
+            });
+        }
+
+        static HubOptions FirstGrant(Func<GrantOptions, GrantOptions> change)
+        {
+            return AccessOn(access => access with { Grants = [change(access.Grants[0]), .. access.Grants.Skip(1)] });
+        }
+
+        static HubOptions FirstToken(Func<MachineTokenOptions, MachineTokenOptions> change)
+        {
+            return AccessOn(access => access with { MachineTokens = [change(access.MachineTokens[0])] });
+        }
+
+        static HubOptions FirstProject(Func<ProjectOptions, ProjectOptions> change)
+        {
+            return AccessOn(access => access with
+            {
+                Projects = [change(access.Projects[0]), .. access.Projects.Skip(1)]
+            });
+        }
+
+        static HubOptions FirstPattern(PatternOptions pattern)
+        {
+            return FirstProject(project => project with { Patterns = [pattern] });
+        }
+
+        static HubOptions FirstRole(Func<RoleOptions, RoleOptions> change)
+        {
+            return AccessOn(access => access with { Roles = [change(access.Roles[0]), .. access.Roles.Skip(1)] });
+        }
+    }
+
+    // Every kind of entry, each valid: refused only by A0.
+    private static HubOptions AccessOn(Func<AccessOptions, AccessOptions>? change = null)
+    {
+        var access = new AccessOptions
+        {
+            Enabled = true,
+            Admins = ["2f6d0c1e-8a4b-4e2f-9c71-0d3b5a6e7f81"],
+            AdminGroups = ["/hub-admins", "internal:oncall"],
+            Groups =
+            [
+                new InternalGroupOptions { Name = "oncall", Members = ["7c1e9a02-55d3-4b8e-a1f0-3e2d4c5b6a79"] },
+                new InternalGroupOptions { Name = "ci-a" }
+            ],
+            Projects =
+            [
+                new ProjectOptions { Name = "shop", Patterns = [new PatternOptions { Attribute = "team=shop=eu" }] },
+                new ProjectOptions
+                {
+                    Name = "prod-cart",
+                    Patterns =
+                    [
+                        new PatternOptions { Source = "prod", Service = "cart*" },
+                        new PatternOptions { Source = "pr*" }
+                    ]
+                }
+            ],
+            Roles = [new RoleOptions { Name = "auditor", Permissions = ["findings.read", "traces.read"] }],
+            Grants =
+            [
+                new GrantOptions { Group = "/teams/shop", Project = "shop", Role = "member" },
+                new GrantOptions { Group = "internal:oncall", Project = "*", Role = "member" },
+                new GrantOptions { Group = "internal:ci-a", Project = "shop", Role = "auditor" },
+                new GrantOptions { Group = "internal:ci-a", Project = "shop", Role = "auditor" }
+            ],
+            MachineTokens =
+            [
+                new MachineTokenOptions
+                {
+                    Name = "ci-shop",
+                    Group = "internal:ci-a",
+                    Token = MachineTokenValue,
+                    ExpiresAt = Now.AddDays(30)
+                }
+            ]
+        };
+        return ValidOptions() with { Auth = ValidAuth(), Access = change?.Invoke(access) ?? access };
+    }
+
+    private static string[] AccessFailures(HubOptions options)
+    {
+        return [.. new HubOptionsValidator(new FakeTimeProvider(Now)).Validate(null, options).Failures ?? []];
     }
 
     internal static HubOptions ValidOptions()

@@ -36,6 +36,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:UpdateCheck:HubEndpoint`      | GitHub releases API for `Institut-du-Numerique-Responsable/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                              |
 | `Hub:Auth:*`                       | off                                                                         | OAuth2 browser sign-in, can be limited to groups, see [AUTHENTICATION.md](AUTHENTICATION.md)    |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                     | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
+| `Hub:Access:*`                     | off                                                                         | Access control model, refused as `Enabled` in this release, see below                           |
 | `Hub:Sources`                      | none                                                                        | At least one source                                                                             |
 
 ## Per-source settings
@@ -106,6 +107,79 @@ caller only once `Hub:AckRelay:TrustIdentityHeader` is `true`, `hub.ackRelay.tru
 under Helm. Set it only behind a proxy that writes the header itself and strips the one a
 client sent. With neither, the relay can identify nobody and refuses every caller, and the
 Hub logs one warning at startup that names the sources whose credential will never be sent.
+
+## Access control
+
+`Hub:Access` says who reaches which findings, sources and runs: projects, roles, grants,
+internal groups, admins and machine tokens. All of it is configuration, the database stores
+no user and no membership, and under Helm the whole block is `hub.access`, passed to the Hub
+as is. This release ships the model and its validation ahead of their enforcement: with
+`Hub:Access:Enabled` set to `true` the Hub refuses to start, with "Hub:Access:Enabled is not
+available in this build yet.", and the chart's schema refuses `hub.access.enabled: true`
+before the running pod is stopped. A Hub that believed it filtered would otherwise serve
+every caller everything. Off, the default, nothing under `Hub:Access` is validated or used
+and the Hub answers exactly as before, but the values are still bound, so `ExpiresAt` must
+already be an ISO 8601 date such as `2027-06-30T00:00:00Z` or the Hub does not start. Every
+list is empty by default.
+
+| Setting                      | Validation                                                                                                                                                    |
+|------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Access:Enabled`         | `false` by default, refused as `true` in this release. Requires `Hub:Auth:Enabled`, and `Hub:AckRelay:TrustIdentityHeader` off                                |
+| `Hub:Access:Admins`          | Subjects holding the built-in `admin` role on `*`: 1 to 256 characters, no control character, no `machine:` or `local:` prefix. Not empty with `AdminGroups`  |
+| `Hub:Access:AdminGroups`     | Group references holding `admin` on `*`: `internal:<name>` or a provider group, see below                                                                     |
+| `Hub:Access:Groups[]`        | `{ Name, Members[] }`, referenced as `internal:<Name>`. Name of 1 to 64 ASCII letters, digits, `.`, `_` or `-`, unique with case ignored; members as `Admins` |
+| `Hub:Access:Projects[]`      | `{ Name, Patterns[] }`, named as a group, with at least one pattern `{ Source, Service, Attribute }` setting one part or more                                 |
+| `Hub:Access:Roles[]`         | `{ Name, Permissions[] }`, named as a group but not `reader`, `member` or `admin`, case ignored; permissions below, each once, never `access.admin`           |
+| `Hub:Access:Grants[]`        | `{ Group, Project, Role }`, all three set. `Project` is a declared project or `*`, `Role` built in or declared, and `admin` is granted on `*` only            |
+| `Hub:Access:MachineTokens[]` | `{ Name, Group, Token, ExpiresAt }`, see below                                                                                                                |
+
+**Permissions and roles.** The permissions are `findings.read`, `traces.read`,
+`sources.read`, `analyses.run` and `acks.write`, plus `access.admin`, which only the
+built-in `admin` role carries. The built-in roles are `reader` (`findings.read`,
+`traces.read`, `analyses.run`), `member` (`reader` and `acks.write`) and `admin` (all six,
+on `*` only). `reader` is not read-only: it starts analyses. A read-only role is a
+configured one, such as `auditor` with `findings.read` and `traces.read`.
+
+**Patterns.** A record is in a project when one of its patterns matches. A part is exact,
+or a prefix: at least one character, then a single `*` at the end. A bare `*` is refused in
+every part: `*` exists only as a grant's project, which also covers the records no project
+matches. `Source` takes a source id's characters and must name or prefix a configured
+source. `Service` is 1 to 256 characters with no control character. `Attribute` is
+`key=value`, split on the first `=`, so `team=a=b` has the key `team`: the key is exact, 1
+to 256 characters with no `*`, and the value a part of 1 to 256. An attribute key matches
+only on the daemons that capture it in `[detection] grouping_attributes`, see
+[DEPLOYMENT.md](DEPLOYMENT.md#grouping-attributes-are-chosen-at-each-daemon). Every
+comparison is ordinal: case matters, and `%` or `_` mean nothing.
+
+**Group references.** `internal:<name>`, with the prefix in lower case, names a declared
+internal group. Anything else is a provider group, spelled as the userinfo field
+`Hub:Auth:GroupsClaim` sends it, which must then name a field. A provider reference is
+refused when it is `*`, blank, longer than 256 characters, holds a control character, or
+starts with `internal:` in another case.
+
+**Provider groups in `AdminGroups` and in grants** must be names only the organisation can
+create: the full group path on Keycloak (`/teams/shop-admin`, "Full group path" on in the
+mapper), the full path under the organisation's own group on GitLab (`acme/hub-admins`),
+never a bare top-level name. `Hub:Auth:GroupsClaim` must name a field the provider manages
+and users cannot edit. Where users create groups of any name, gitlab.com and self-managed
+GitLab by default, anyone the provider signs in can create a top-level `platform-admins` and
+find it in their groups claim: there a provider admin group is unsafe unless
+`Hub:Auth:RequiredGroups` also limits sign-in to the organisation's members, see
+[AUTHENTICATION.md](AUTHENTICATION.md). `Admins`, by subject, stays the break-glass path
+when a provider admin group is misconfigured.
+
+**Machine tokens** are credentials for CI jobs and dashboards, and hold `findings.read` at
+most. `Name` matches `^[a-z0-9][a-z0-9._-]{0,63}$` and is unique. `Group` is an `internal:`
+group with no members, since its grants are sized for a machine and a person added later
+would silently gain them. `Token` is 32 to 512 characters of the RFC 6750 `b64token`
+alphabet, `A-Z`, `a-z`, `0-9`, `-`, `.`, `_`, `~`, `+` and `/` with trailing `=` allowed,
+does not start with `pshub_`, differs from every other machine token and every import key,
+and is trimmed like an import key. `ExpiresAt` is set, at most 365 days ahead; a token that
+has already expired does not stop the Hub. Under Helm an item is `{ name, group, expiresAt,
+secretName, secretKey }`: the token is never in the values, and once enforcement ships the
+chart reads it from that Secret. This release only records the reference; the chart refuses
+a duplicate or malformed name, a missing Secret reference and an `expiresAt` that is not an
+ISO 8601 date and time. No message ever echoes a token.
 
 ## What a source is, and what is measured
 

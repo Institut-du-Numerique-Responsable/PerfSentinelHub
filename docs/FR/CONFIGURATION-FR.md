@@ -37,6 +37,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:UpdateCheck:HubEndpoint`      | API des releases GitHub de `Institut-du-Numerique-Responsable/PerfSentinelHub` | HTTPS absolue, sans identifiants, ni query, ni fragment                                                 |
 | `Hub:Auth:*`                       | désactivé                                                                      | Connexion OAuth2 du navigateur, limitable par groupe, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md) |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                        | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
+| `Hub:Access:*`                     | désactivé                                                                      | Modèle du contrôle d'accès, `Enabled` refusé dans cette version, voir plus bas                          |
 | `Hub:Sources`                      | aucune                                                                         | Au moins une source                                                                                     |
 
 ## Réglages par source
@@ -114,6 +115,83 @@ pas vérifier, il ne nomme donc l'appelant qu'une fois `Hub:AckRelay:TrustIdenti
 écrit lui-même l'en-tête et retire celui qu'un client aurait envoyé. Sans l'un ni l'autre,
 le relais ne peut identifier personne et refuse tous les appelants, et le Hub journalise un
 avertissement au démarrage, qui nomme les sources dont l'identifiant ne sera jamais envoyé.
+
+## Contrôle d'accès
+
+`Hub:Access` dit qui atteint quels findings, quelles sources et quels runs : projets, rôles,
+attributions, groupes internes, administrateurs et jetons machine. Tout cela est de la
+configuration, la base ne stocke ni utilisateur ni appartenance, et sous Helm le bloc entier
+est `hub.access`, transmis tel quel au Hub. Cette version livre le modèle et sa validation
+avant leur application : avec `Hub:Access:Enabled` à `true`, le Hub refuse de démarrer, avec
+« Hub:Access:Enabled is not available in this build yet. », et le schéma du chart refuse
+`hub.access.enabled: true` avant que le pod en service ne soit arrêté. Un Hub qui se
+croirait filtrant servirait sinon tout à tout appelant. Désactivé, le défaut, rien sous
+`Hub:Access` n'est validé ni utilisé et le Hub répond exactement comme avant, mais les
+valeurs sont tout de même liées, donc `ExpiresAt` doit déjà être une date ISO 8601 comme
+`2027-06-30T00:00:00Z`, sans quoi le Hub ne démarre pas. Chaque liste est vide par défaut.
+
+| Réglage                      | Validation                                                                                                                                                                      |
+|------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Access:Enabled`         | `false` par défaut, refusé à `true` dans cette version. Exige `Hub:Auth:Enabled`, et `Hub:AckRelay:TrustIdentityHeader` désactivé                                               |
+| `Hub:Access:Admins`          | Sujets qui tiennent le rôle intégré `admin` sur `*` : 1 à 256 caractères, sans caractère de contrôle, sans préfixe `machine:` ni `local:`. Pas vide avec `AdminGroups`          |
+| `Hub:Access:AdminGroups`     | Références de groupe qui tiennent `admin` sur `*` : `internal:<nom>` ou un groupe du fournisseur, voir plus bas                                                                 |
+| `Hub:Access:Groups[]`        | `{ Name, Members[] }`, référencé comme `internal:<Name>`. Nom de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`, unique sans tenir compte de la casse ; membres comme `Admins` |
+| `Hub:Access:Projects[]`      | `{ Name, Patterns[] }`, nommé comme un groupe, avec au moins un motif `{ Source, Service, Attribute }` qui pose une partie ou plus                                              |
+| `Hub:Access:Roles[]`         | `{ Name, Permissions[] }`, nommé comme un groupe mais ni `reader`, ni `member`, ni `admin`, casse ignorée ; permissions ci-dessous, chacune une fois, jamais `access.admin`     |
+| `Hub:Access:Grants[]`        | `{ Group, Project, Role }`, les trois posés. `Project` est un projet déclaré ou `*`, `Role` intégré ou déclaré, et `admin` ne s'attribue que sur `*`                            |
+| `Hub:Access:MachineTokens[]` | `{ Name, Group, Token, ExpiresAt }`, voir plus bas                                                                                                                              |
+
+**Permissions et rôles.** Les permissions sont `findings.read`, `traces.read`,
+`sources.read`, `analyses.run` et `acks.write`, plus `access.admin`, que seul le rôle
+intégré `admin` porte. Les rôles intégrés sont `reader` (`findings.read`, `traces.read`,
+`analyses.run`), `member` (`reader` et `acks.write`) et `admin` (les six, sur `*`
+seulement). `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture
+seule est un rôle configuré, comme `auditor` avec `findings.read` et `traces.read`.
+
+**Motifs.** Un enregistrement est dans un projet quand l'un de ses motifs correspond. Une
+partie est exacte, ou un préfixe : au moins un caractère, puis un seul `*` à la fin. Un `*`
+seul est refusé dans chaque partie : `*` n'existe que comme projet d'une attribution, qui
+couvre aussi les enregistrements qu'aucun projet ne prend. `Source` prend les caractères
+d'un identifiant de source et doit nommer, ou préfixer, une source configurée. `Service`
+fait 1 à 256 caractères sans caractère de contrôle. `Attribute` s'écrit `clé=valeur`, coupé
+au premier `=`, donc `team=a=b` a la clé `team` : la clé est exacte, de 1 à 256 caractères
+sans `*`, et la valeur une partie de 1 à 256. Une clé d'attribut ne correspond que sur les
+daemons qui la captent dans `[detection] grouping_attributes`, voir
+[DEPLOYMENT-FR.md](DEPLOYMENT-FR.md#les-attributs-de-regroupement-se-choisissent-sur-chaque-daemon).
+Chaque comparaison est ordinale : la casse compte, et `%` ou `_` ne veulent rien dire.
+
+**Références de groupe.** `internal:<nom>`, préfixe en minuscules, nomme un groupe interne
+déclaré. Tout le reste est un groupe du fournisseur, écrit comme le champ userinfo
+`Hub:Auth:GroupsClaim` l'envoie, qui doit alors nommer un champ. Une référence au
+fournisseur est refusée quand elle vaut `*`, est vide, dépasse 256 caractères, contient un
+caractère de contrôle, ou commence par `internal:` dans une autre casse.
+
+**Les groupes du fournisseur dans `AdminGroups` et dans les attributions** doivent être des
+noms que seule l'organisation peut créer : le chemin complet du groupe sur Keycloak
+(`/teams/shop-admin`, « Full group path » activé dans le mapper), le chemin complet sous le
+groupe propre à l'organisation sur GitLab (`acme/hub-admins`), jamais un nom de premier
+niveau seul. `Hub:Auth:GroupsClaim` doit nommer un champ que le fournisseur gère et que
+l'utilisateur ne peut pas modifier. Là où les utilisateurs créent des groupes de n'importe
+quel nom, gitlab.com et GitLab auto-hébergé par défaut, quiconque le fournisseur connecte
+peut créer un `platform-admins` de premier niveau et le retrouver dans sa revendication de
+groupes : un groupe administrateur du fournisseur n'y est sûr que si
+`Hub:Auth:RequiredGroups` limite aussi la connexion aux membres de l'organisation, voir
+[AUTHENTICATION-FR.md](AUTHENTICATION-FR.md). `Admins`, par sujet, reste la voie de secours
+quand un groupe administrateur du fournisseur est mal configuré.
+
+**Les jetons machine** sont des identifiants pour les jobs de CI et les tableaux de bord,
+et tiennent au plus `findings.read`. `Name` suit `^[a-z0-9][a-z0-9._-]{0,63}$` et est
+unique. `Group` est un groupe `internal:` sans membre, puisque ses attributions sont taillées
+pour une machine et qu'une personne ajoutée plus tard les gagnerait en silence. `Token` fait
+32 à 512 caractères de l'alphabet `b64token` de la RFC 6750, `A-Z`, `a-z`, `0-9`, `-`, `.`,
+`_`, `~`, `+` et `/` avec des `=` finaux permis, ne commence pas par `pshub_`, diffère de
+tout autre jeton machine et de toute clé d'import, et est rogné comme une clé d'import.
+`ExpiresAt` est posé, à 365 jours au plus ; un jeton déjà expiré n'empêche pas le Hub de
+démarrer. Sous Helm, un élément est `{ name, group, expiresAt, secretName, secretKey }` :
+le jeton n'est jamais dans les values, et une fois l'application livrée le chart le lira
+dans ce Secret. Cette version ne fait qu'enregistrer la référence ; le chart refuse un nom
+dupliqué ou mal formé, une référence de Secret manquante et un `expiresAt` qui n'est pas une
+date et heure ISO 8601. Aucun message ne reprend jamais un jeton.
 
 ## Ce qu'est une source, et ce qui est mesuré
 

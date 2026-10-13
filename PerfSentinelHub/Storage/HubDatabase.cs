@@ -83,6 +83,34 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // an endpoint whose finding died out months ago is a new story, not a
     // template mutation.
     private static readonly long LineageWindowMs = (long)TimeSpan.FromDays(30).TotalMilliseconds;
+
+    private static readonly string AttributesBackfill =
+        """
+        UPDATE finding_sources SET service = json_extract(finding_json, '$.finding.service')
+        WHERE service IS NULL
+          AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text';
+        """
+        + FindingAttributesFrom(
+            """
+            SELECT CASE WHEN json_valid(fs.finding_json) THEN fs.finding_json END,
+                   fs.signature, fs.source_id, fs.last_seen_ms
+            FROM finding_sources AS fs
+            WHERE NOT EXISTS (
+              SELECT 1 FROM finding_attributes AS fa
+              WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
+                AND fa.last_seen_ms >= fs.last_seen_ms)
+            """)
+        + """
+          DELETE FROM incident_attributes WHERE last_seen_ms IS NOT (
+            SELECT i.last_seen_ms FROM incidents AS i
+            WHERE i.id = incident_attributes.id AND i.source_id = incident_attributes.source_id);
+          """
+        + IncidentAttributesWhere("true");
+
+    // The write path's own observation, in the shape FindingAttributesFrom reads.
+    private static readonly string FindingAttributesUpsert =
+        FindingAttributesFrom("SELECT $finding_json, $signature, $source_id, $observed_at");
+
     private readonly string _databasePath = options.Value.DatabasePath;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
@@ -286,33 +314,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.CommandText = AttributesBackfill;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
-
-    private static readonly string AttributesBackfill =
-        """
-        UPDATE finding_sources SET service = json_extract(finding_json, '$.finding.service')
-        WHERE service IS NULL
-          AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text';
-        """
-        + FindingAttributesFrom(
-            """
-            SELECT CASE WHEN json_valid(fs.finding_json) THEN fs.finding_json END,
-                   fs.signature, fs.source_id, fs.last_seen_ms
-            FROM finding_sources AS fs
-            WHERE NOT EXISTS (
-              SELECT 1 FROM finding_attributes AS fa
-              WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
-                AND fa.last_seen_ms >= fs.last_seen_ms)
-            """)
-        + """
-          DELETE FROM incident_attributes WHERE last_seen_ms IS NOT (
-            SELECT i.last_seen_ms FROM incidents AS i
-            WHERE i.id = incident_attributes.id AND i.source_id = incident_attributes.source_id);
-          """
-        + IncidentAttributesWhere("true");
-
-    // The write path's own observation, in the shape FindingAttributesFrom reads.
-    private static readonly string FindingAttributesUpsert =
-        FindingAttributesFrom("SELECT $finding_json, $signature, $source_id, $observed_at");
 
     // Every pair a finding copy carries, each under the grouping identity of the
     // first entry, or the marker row alone when that entry is not a well-formed

@@ -45,6 +45,9 @@ builder.Services.AddOptions<HubOptions>()
     .ValidateOnStart();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HubDatabase>();
+// Always registered, disabled with access off: registered only with it on, a handler taking it
+// would have the Request Delegate Generator read it as a JSON body, which a GET refuses.
+builder.Services.AddSingleton<AccessPolicy>();
 builder.Services.AddSingleton<EngineProbe>();
 // Registered here, on builder.Services, so it starts before the listener does:
 // Build() adds the web host's own hosted service after every registration made

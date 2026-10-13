@@ -49,6 +49,27 @@ All notable changes to PerfSentinelHub are recorded here.
   `docs/BENCHMARKS.md`, which also says what to do when the chart's 60 s startup probe is
   too short for it. An attribute reaches the Hub only from the daemons whose
   `[detection] grouping_attributes` lists it, see `docs/DEPLOYMENT.md`.
+- `Hub:Access` (Helm `hub.access`) describes access control as configuration: projects
+  matched on a source, a service or a captured grouping attribute, exact or by prefix;
+  roles over the permissions `findings.read`, `traces.read`, `sources.read`,
+  `analyses.run` and `acks.write`, beside the built-in `reader`, `member` and `admin`;
+  grants of a role on a project or `*` to a group; internal groups of subjects; admins by
+  subject or by group, provider groups included; and machine tokens for CI jobs, each
+  naming the Secret that will hold it and expiring within 365 days. This release ships
+  the model and its validation ahead of their enforcement: the Hub refuses to start with
+  `Hub:Access:Enabled` set to `true`, and the chart's schema refuses
+  `hub.access.enabled: true`, since a Hub that believed it filtered would serve every
+  caller everything. Off, the default, nothing under `Hub:Access` is validated or used and
+  every answer is unchanged; the values are still bound, so a machine token's `ExpiresAt`
+  must be an ISO 8601 date. Set to `true`, every other rule is checked beside that
+  refusal, each message naming its key and none echoing a token, so a configuration can
+  be staged and corrected now: a machine token's group holding no person, the `admin` role
+  granted on `*` only, `access.admin` never in a configured role. A provider group in
+  `AdminGroups` or a grant must be spelled as the provider sends it and be a name only the
+  organisation can create, and on GitLab needs `Hub:Auth:RequiredGroups` as well, see
+  `docs/CONFIGURATION.md`. The chart passes the block to the Hub as is, and refuses a
+  duplicate or malformed machine-token name, a missing Secret reference and an
+  `expiresAt` that is not an ISO 8601 date and time; it does not deliver the token yet.
 
 ### Changed
 

@@ -91,6 +91,25 @@ cache, and the chart mounts `/tmp` as a 32 MiB `emptyDir`. Whether the kubelet
 counts that file, which SQLite deletes as it opens it, against the limit was not
 checked.
 
+## Access scope over 100,000 copies
+
+The `visible` CTE that access control will put in front of a restricted findings
+read, see [ARCHITECTURE.md](ARCHITECTURE.md#access-control-ahead-of-its-enforcement),
+selects 24,500 of 100,000 finding copies through 12 patterns, six service
+prefixes and six attribute values, in about 0.2 s, three runs of 202 to 203 ms.
+Measured by the explicit test `The_visible_cte_over_100k_copies_and_12_patterns`
+in a Release build, on the machine above, the database on its internal SSD, with
+one attribute row per copy:
+
+```bash
+./PerfSentinelHub.Tests/bin/Release/net10.0/PerfSentinelHub.Tests \
+  -method '*.The_visible_cte_over_100k_copies_and_12_patterns' -explicit only -showLiveOutput
+```
+
+A copy no pattern reads costs every pattern's probe, so a narrow scope costs more
+than a wide one: the same 12 patterns written to select 90,500 copies take
+0.1 s. Nothing runs this CTE yet.
+
 ## Reproduce
 
 ```bash
