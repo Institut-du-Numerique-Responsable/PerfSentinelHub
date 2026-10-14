@@ -42,10 +42,14 @@
         let verified = null;
         let armed = false;
 
+        // The live region stays in the page and only its content changes: a region shown and
+        // filled in the same moment is not announced by every screen reader.
         function say(text, tone) {
-            result.textContent = text;
-            result.dataset.tone = tone;
-            result.hidden = false;
+            const banner = document.createElement('div');
+            banner.className = 'banner';
+            banner.dataset.tone = tone;
+            banner.textContent = text;
+            result.replaceChildren(banner);
         }
 
         function refused(answer) {
@@ -67,7 +71,7 @@
 
         form.addEventListener('submit', function (event) {
             event.preventDefault();
-            result.hidden = true;
+            result.replaceChildren();
             details.hidden = true;
             send('/api/device/verify', {user_code: input.value}).then(function (answer) {
                 if (answer.status !== 200) return refused(answer);
@@ -78,7 +82,10 @@
                 const warning = PSL.deviceNetworkAlert(verified);
                 networkAlert.textContent = warning || '';
                 networkAlert.hidden = !warning;
+                approve.removeAttribute('data-armed');
                 details.hidden = false;
+                // Where and when the code came from is what to read before deciding.
+                document.getElementById('device-request').focus();
             }).catch(failed);
         });
 
@@ -88,8 +95,10 @@
                 form.hidden = true;
                 details.hidden = true;
                 say(approved
-                    ? 'Approved. Your terminal signs in within a few seconds; you can close this page.'
+                    ? 'Approved. Your terminal signs in within a few seconds. You can close this page.'
                     : 'Denied. That terminal gets no access.', approved ? 'ok' : 'muted');
+                // The buttons that had the focus are gone: the outcome takes it.
+                result.focus();
             }).catch(failed);
         }
 
@@ -97,6 +106,9 @@
             if (PSL.deviceApproveStep(verified.same_network, armed) === 'arm') {
                 armed = true;
                 approve.textContent = 'Approve anyway';
+                approve.dataset.armed = 'true';
+                say('This code came from another network. Press Approve anyway only if you started that '
+                    + 'sign-in yourself, or Deny.', 'warn');
                 return;
             }
             decide(true);

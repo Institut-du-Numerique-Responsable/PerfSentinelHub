@@ -117,7 +117,7 @@ All notable changes to PerfSentinelHub are recorded here.
   builds ignore `Hub:Access` and fail open: `/api/findings` is anonymous again and every
   session sees every record (`RequiredGroups` still holds). Set `hub.access.enabled: false`
   first, as a deliberate decision, then roll back.
-- The access page. `GET /api/access`, mapped only with access on (`404` otherwise), tells
+- Your access and Coverage. `GET /api/access`, mapped only with access on (`404` otherwise), tells
   any caller, one no grant reaches included, their identity, their id (the subject an
   administrator puts in `Admins` or `Members`), how they are signed in and until when,
   their groups, and what each of their grants gives them. An admin also reads the whole
@@ -126,10 +126,16 @@ All notable changes to PerfSentinelHub are recorded here.
   within `Hub:Retention`, so a newcomer is spotted and assigned in the configuration; and
   the copies whose groupings disagree on a project attribute, where an attribute grant
   reads but cannot acknowledge. Each admin list stops at 200 entries and says so. The
-  launcher shows it in a read-only Access tab, above the no-grant banner for a caller no
-  grant reaches; rights still change in the configuration only. With access on, the New
-  analysis form offers only the sources where the caller holds `analyses.run`, and a
-  daemon row unfolds only where they hold `sources.read`.
+  launcher shows it on two read-only screens; rights still change in the configuration
+  only. **Your access**, opened from the identity chip, holds the caller's own part and
+  terminal tokens. **Coverage**, a tab for admins alone, starts with what no project
+  covers and one quoted YAML pattern per entry to paste into `hub.access.projects`, then
+  the conflicts, everyone's terminal tokens and the configuration folded by part. A caller
+  no grant reaches gets Your access on every route, under the no-grant banner, with no tab
+  and no version chip, and a block to copy that holds what an administrator needs. With
+  access on, the New analysis form offers only the sources where the caller holds
+  `analyses.run` and says how many it leaves out, and a daemon row unfolds only where they
+  hold `sources.read` and says so under its name otherwise.
 - Terminal sign-in, with access on. `perf-sentinel login` (perf-sentinel 0.27.0 or later)
   gets a personal token through the Hub's own device flow (RFC 8628): `POST /auth/device`
   hands the CLI a code, the developer types it on the Hub's `/device` page in a signed-in
@@ -144,8 +150,8 @@ All notable changes to PerfSentinelHub are recorded here.
   closer to its end signs in again first). At most 10 per person, the 11th dropping the
   oldest. Only its SHA-256 is stored, in the new `terminal_tokens` table (schema version
   10), which retention purges once expired. `POST /auth/revoke` (RFC 7009) revokes by
-  possession, and the access page lists the caller's tokens, or everyone's for an admin,
-  with a Revoke button (`GET /api/tokens`, `DELETE /api/tokens/{id}`). Pending codes live
+  possession. Your access lists the caller's tokens and Coverage everyone's, each with a
+  Revoke that asks for a second click (`GET /api/tokens`, `DELETE /api/tokens/{id}`). Pending codes live
   in memory: at most 200, 10 per client address (an IPv6 client counts by its /64), 10
   minutes each, polled every 5 seconds with `slow_down`; ten bad codes in 10 minutes pause
   a person's approvals. Events `2010` to `2015`.
@@ -175,8 +181,9 @@ All notable changes to PerfSentinelHub are recorded here.
   times a minute. The Hub refuses to start when an account is listed by no group and not
   in `Admins`, or when `Hub:Auth:TrustedProxyNetworks` is empty, and the chart's schema
   refuses the latter. Every local sign-in logs event `2020` and every refusal `2021`, both
-  at Warning, never with an undeclared name. The access page lists the accounts by name to
-  an admin (`local_accounts`). With no local account declared, or access off, nothing
+  at Warning, never with an undeclared name. Coverage lists the accounts by name to an
+  admin (`local_accounts`). The sign-in page carries the launcher's logo and palette,
+  inline, since its policy loads nothing. With no local account declared, or access off, nothing
   changes.
 
 ### Changed
@@ -207,6 +214,17 @@ All notable changes to PerfSentinelHub are recorded here.
 - The `403` a refused sign-in answers now reads "Sign-in refused. Open the Hub's home page
   to try again, or ask the Hub's administrator for access.", since retrying is no use to a
   user outside the required groups, and the line still does not say which case it was.
+- The launcher names each screen in the browser tab and, on every route change after the
+  first screen, moves the focus to its heading, so a screen reader announces where the
+  reader landed. Between 761 and 1400px the tab icons and the theme's label give way so
+  the bar keeps one row, and below 760px the tabs take a row of their own that scrolls
+  sideways, where the page itself used to: at 390px every screen was 84 to 232px wider
+  than the viewport. Below 760px a long inline code value breaks rather than widening the
+  page. Labels that were 9.5 to 10.5px are now 11px; only the glyphs inside the help dots
+  and the step numbers stay smaller, inside their fixed circles. The terminal approval page names the
+  code's format, takes the focus in its field, moves it to the request once the code is
+  verified, and announces the outcome. The monospace face falls back to SF Mono or Menlo
+  before Courier where JetBrains Mono is not loaded.
 
 ### Fixed
 

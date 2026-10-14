@@ -27,12 +27,14 @@ Cinq écrans de plus n'existent qu'avec la connexion et le contrôle d'accès
 actifs, et sont capturés de la même façon, en clair et en sombre, sur un second
 Hub (`demo/access.spec.ts`) :
 
-- `launcher-access.png`, la page d'accès d'un admin : les jetons de terminal de
-  tous, toute la configuration, ce qu'aucun projet ne couvre et les conflits ;
-- `launcher-access-member.png`, la même page pour un membre de deux groupes
-  d'équipe ;
+- `launcher-access.png`, Votre accès pour un membre de deux groupes d'équipe,
+  avec son jeton de terminal ;
+- `launcher-coverage.png`, l'écran Couverture d'un admin : ce qu'aucun projet ne
+  couvre, les motifs à coller, les conflits, les jetons de terminal de tous et
+  la configuration avec sa partie Grants dépliée ;
 - `launcher-no-grant.png`, le bandeau que reçoit un appelant connecté qu'aucun
-  grant n'atteint, au-dessus de la page qui lui donne son identifiant ;
+  grant n'atteint, au-dessus de son accès et de la demande à envoyer à un
+  administrateur ;
 - `hub-sign-in.png`, la page de connexion du Hub, son pli de compte local ouvert ;
 - `hub-device.png`, la page d'approbation du terminal avec un code en attente
   saisi et vérifié, avant Approve ou Deny.
@@ -114,7 +116,7 @@ avant ou après le redémarrage gardent les distances mesurées par le daemon.
 
 ## Les groupements du Hub d'accès sont écrits, pas capturés
 
-La page d'accès de l'admin liste les valeurs d'attribut qu'aucun projet ne
+L'écran Couverture de l'admin liste les valeurs d'attribut qu'aucun projet ne
 couvre et les conflits, et les deux exigent des findings portant des attributs
 de groupement. Le fichier de traces de démonstration du moteur n'en a aucun,
 donc aucune capture non plus. Le Hub d'accès reçoit donc une troisième source

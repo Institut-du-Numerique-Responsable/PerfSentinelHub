@@ -31,22 +31,34 @@ public static partial class LocalSignIn
     private const string Wrong = "The name or the password is wrong.";
 
     // Inline because the launcher's stylesheets sit behind the fallback policy, and allowed by its hash.
+    // The launcher's own palette, so a break-glass sign-in looks like the product it opens.
     private const string Style =
         """
-        :root{color-scheme:light dark;--bg:#f5f6f8;--fg:#16181d;--muted:#596170;--card:#fff;--line:#d8dce3;--accent:#2457d6;--on-accent:#fff;--alert:#a4262c}
-        @media (prefers-color-scheme:dark){:root{--bg:#111318;--fg:#e7e9ee;--muted:#9aa2ae;--card:#1a1d24;--line:#2d323c;--accent:#7aa2ff;--on-accent:#0b0d12;--alert:#ff8a8f}}
-        body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
-        main{box-sizing:border-box;width:min(26rem,calc(100% - 2rem));padding:2rem;background:var(--card);border:1px solid var(--line);border-radius:12px}
-        h1{margin:0 0 1.5rem;font-size:1.25rem}
-        .sso{display:block;padding:.75rem 1rem;border-radius:8px;background:var(--accent);color:var(--on-accent);text-align:center;text-decoration:none;font-weight:600}
-        details{margin-top:1.5rem;color:var(--muted)}
-        summary{cursor:pointer}
+        :root{color-scheme:light dark;--bg:#fff;--card:#fff;--ground:#f7f7f7;--fg:#20261f;--muted:#556b5c;--line:#ebebeb;--brand:#0ba671;--btn-bd:#a7c7bc;--btn-fg:#186b4f;--btn-bg:#e0f4ed;--sso-bg:#107a56;--sso-fg:#fff;--alert:#bf2a22;--alert-bg:#ffe4e1}
+        @media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1c241f;--ground:#141a17;--fg:#e8ede9;--muted:#a3b5ab;--line:#2b352e;--btn-bd:#2e4d41;--btn-fg:#5ecfa6;--btn-bg:rgba(11,166,113,.13);--sso-bg:#3ecf9d;--sso-fg:#0b1410;--alert:#ffa79e;--alert-bg:#3a1f1c}.light{display:none}.dark{display:block}}
+        .dark{display:none}
+        body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--ground);color:var(--fg);font:15px/1.5 'DM Sans',system-ui,-apple-system,sans-serif}
+        main{box-sizing:border-box;width:min(26rem,calc(100% - 2rem));padding:2rem;background:var(--card);border:1px solid var(--line);border-radius:14px}
+        .brand{display:flex;align-items:center;gap:9px;margin-bottom:1.75rem}
+        .brand svg{display:block;height:30px;width:auto}
+        .suffix{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+        h1{margin:0 0 .35rem;font-size:1.15rem;font-weight:600;letter-spacing:-.01em}
+        .lede{margin:0 0 1.25rem;color:var(--muted)}
+        .sso{display:block;padding:.7rem 1rem;border-radius:999px;background:var(--sso-bg);color:var(--sso-fg);text-align:center;text-decoration:none;font-weight:600}
+        a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+        details{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--muted)}
+        summary{cursor:pointer;font-weight:600;color:var(--fg)}
         p{margin:.75rem 0;font-size:.875rem}
-        .alert{color:var(--alert);font-weight:600}
+        .alert{padding:.5rem .75rem;border-radius:8px;background:var(--alert-bg);color:var(--alert);font-weight:600}
         label{display:block;margin-top:.75rem;color:var(--fg);font-size:.875rem}
-        input{box-sizing:border-box;width:100%;margin-top:.25rem;padding:.5rem;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
-        button{margin-top:1rem;padding:.5rem 1rem;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--fg);font:inherit;cursor:pointer}
+        input{box-sizing:border-box;width:100%;margin-top:.25rem;padding:.55rem .65rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+        button{margin-top:1rem;padding:.5rem 1.1rem;border:1px solid var(--btn-bd);border-radius:999px;background:var(--btn-bg);color:var(--btn-fg);font:inherit;font-weight:600;cursor:pointer}
         """;
+
+    // The launcher's two logos, read once from wwwroot and written inline: the policy loads
+    // nothing, and the files themselves sit behind sign-in. Empty when the files are missing,
+    // which leaves the page its title.
+    private static string _logos = "";
 
     private static readonly TimeSpan GateWait = TimeSpan.FromSeconds(10);
 
@@ -56,6 +68,7 @@ public static partial class LocalSignIn
 
     public static void MapLocalSignIn(this WebApplication app)
     {
+        _logos = Logo(app.Environment, "light") + Logo(app.Environment, "dark");
         // Always the page, signed in or not: a redirect would loop with /device, which
         // re-challenges a session that has less than an hour left.
         app.MapGet(Path,
@@ -222,6 +235,16 @@ public static partial class LocalSignIn
         response.Headers.ContentSecurityPolicy = Policy;
     }
 
+    private static string Logo(IWebHostEnvironment environment, string theme)
+    {
+        var file = environment.WebRootFileProvider.GetFileInfo($"logo-horiz-{theme}.svg");
+        if (!file.Exists)
+            return "";
+        using var stream = file.CreateReadStream();
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return $"<span class=\"{theme}\">{reader.ReadToEnd()}</span>";
+    }
+
     // No script, and nothing submitted is echoed but the return path, which is checked and encoded.
     private static ContentHttpResult Page(HttpContext context, int statusCode, string? alert, string returnUrl)
     {
@@ -235,12 +258,14 @@ public static partial class LocalSignIn
               <head>
               <meta charset="utf-8">
               <meta content="width=device-width, initial-scale=1" name="viewport">
-              <title>Sign in · PerfSentinel Hub</title>
+              <title>Sign in · Perf Sentinel Hub</title>
               <style>{{Style}}</style>
               </head>
               <body>
               <main>
-              <h1>Sign in to PerfSentinel Hub</h1>
+              <div aria-label="Perf Sentinel Hub" class="brand" role="img">{{_logos}}<span aria-hidden="true" class="suffix">hub</span></div>
+              <h1>Sign in to Perf Sentinel Hub</h1>
+              <p class="lede">With your organisation's single sign-on. A local account is for when it is down.</p>
               <a class="sso" href="{{pathBase}}/auth/sign-in/sso?return_url={{encoder.Encode(Uri.EscapeDataString(returnUrl))}}">Sign in with single sign-on</a>
               <details{{(alert is null ? "" : " open")}}>
               <summary>Sign in with a local account</summary>
@@ -248,7 +273,7 @@ public static partial class LocalSignIn
               {{(alert is null ? "" : $"<p class=\"alert\" role=\"alert\">{encoder.Encode(alert)}</p>")}}
               <form action="{{pathBase}}/auth/sign-in/local" method="post">
               <label for="name">Name</label>
-              <input autocapitalize="none" autocomplete="username" id="name" maxlength="64" name="name" required spellcheck="false">
+              <input autocapitalize="none" autocomplete="username"{{(alert is null ? "" : " autofocus")}} id="name" maxlength="64" name="name" required spellcheck="false">
               <label for="password">Password</label>
               <input autocomplete="current-password" id="password" maxlength="1024" name="password" required type="password">
               <input name="return_url" type="hidden" value="{{encoder.Encode(returnUrl)}}">

@@ -323,7 +323,7 @@ its whole scope to everyone who uses the tool.
 Developers sign the CLI in with `perf-sentinel login`, which needs
 `hub.auth.trustedProxyNetworks` set to the ingress controller's pods alone, see
 [AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in). A token is revoked from the
-access page or by `perf-sentinel logout`, and ends with the session that approved it
+launcher (its holder on Your access, an admin on Coverage) or by `perf-sentinel logout`, and ends with the session that approved it
 anyway. The table and the pending codes need nothing from an operator: expired tokens
 leave with the daily retention pass, and pending codes live in memory, so a restart only
 cancels the logins in flight. Events, at Information unless stated, never with a code or a
@@ -384,7 +384,7 @@ Keep the password in the team's vault, and test the account once, through
 `kubectl rollout restart deployment/<release>`: the chart cannot hash a Secret it does not
 own, so a changed Secret alone rolls nothing. The restart ends every session of the
 account. Terminal tokens it approved live until their expiry, 8 hours at most: revoke them
-from the access page.
+from the launcher's Coverage screen.
 
 ```bash
 kubectl create secret generic perf-sentinel-hub-break-glass --from-file=ops=ops.hash \

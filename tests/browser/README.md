@@ -25,11 +25,13 @@ trace file.
 Five more screens exist only with sign-in and access control on, and are
 captured the same way, light and dark, from a second Hub (`demo/access.spec.ts`):
 
-- `launcher-access.png`, the access page of an admin: the terminal tokens of
-  everyone, the whole configuration, what no project covers and the conflicts;
-- `launcher-access-member.png`, the same page for a member of two team groups;
+- `launcher-access.png`, Your access for a member of two team groups, with
+  their terminal token;
+- `launcher-coverage.png`, the Coverage screen of an admin: what no project
+  covers, the patterns to paste, the conflicts, everyone's terminal tokens and
+  the configuration with its Grants part unfolded;
 - `launcher-no-grant.png`, the banner a signed-in caller no grant reaches gets,
-  above the page that gives them their id;
+  above their access and the request to send an administrator;
 - `hub-sign-in.png`, the Hub's own sign-in page, its local account fold opened;
 - `hub-device.png`, the terminal approval page with a pending code entered and
   verified, before Approve or Deny.
@@ -103,7 +105,7 @@ the before-or-after-the-restart reading keep the distances the daemon measured.
 
 ## The groupings on the access Hub are written, not captured
 
-The admin's access page lists attribute values no project covers and the
+The admin's Coverage screen lists attribute values no project covers and the
 conflicts, and both need findings carrying grouping attributes. The engine's
 demo trace file has none, so no capture does. The access Hub therefore gets a
 third daemon source nothing listens for, and the setup pushes captured findings

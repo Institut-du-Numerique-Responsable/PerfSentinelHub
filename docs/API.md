@@ -540,7 +540,7 @@ curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
 ### `GET /api/access`
 
 Mapped only with `Hub:Access:Enabled`: with access off it answers `404`, and the launcher
-hides its Access tab on that answer. Any caller reads it, including one no grant reaches,
+then keeps its identity chip plain text and hides the Coverage tab. Any caller reads it, including one no grant reaches,
 since it is how that caller finds the id an administrator asks for. It never writes and
 never lists a machine token's value or fingerprint.
 

@@ -6,10 +6,17 @@ sans requête réseau : les deux polices sont en base64 dans `wwwroot/fonts.css`
 icône est un SVG en ligne.
 
 Cinq écrans : démarrer une analyse, suivre un run, lister les runs récents, lire la santé
-de la flotte, lire les incidents enregistrés par les daemons. Un sixième, la page d'accès,
-n'a d'onglet qu'avec `Hub:Access` actif, voir [La page d'accès](#la-page-daccès). Un autre
-n'a pas d'onglet et ne s'atteint que par un lien, voir
+de la flotte, lire les incidents enregistrés par les daemons. Avec `Hub:Access` actif, la
+pastille d'identité en haut à droite ouvre [Votre accès](#votre-accès), et un
+administrateur dispose d'un sixième onglet, [Couverture](#lécran-couverture). Un autre
+écran n'a pas d'onglet et ne s'atteint que par un lien, voir
 [La page d'acquittement](#la-page-dacquittement).
+
+Chaque changement de route nomme l'écran dans l'onglet du navigateur et place le focus sur
+son titre, pour qu'un lecteur d'écran annonce où le lecteur est arrivé. Sous 1400 px, les
+icônes des onglets et le libellé du thème s'effacent pour que la barre tienne sur une
+ligne, et sous 760 px les onglets prennent une ligne à eux qui défile latéralement au lieu
+de la page.
 
 ## Le formulaire suit la source
 
@@ -305,69 +312,101 @@ du moteur.
 ## Quand aucun grant ne vous atteint
 
 Avec `Hub:Access` activé, `/api/status` répond `403` à un appelant connecté qu'aucun grant
-n'atteint. Le Hub répond, donc le lanceur n'affiche pas son bandeau d'injoignabilité. Il
-dit à la place « No grant on this Hub reaches you. An administrator grants access in the
-Hub's configuration. » au-dessus de la page d'accès, qui donne à cet appelant son
-identifiant à transmettre à un administrateur. Tout autre échec de `/api/status` garde le
-bandeau d'injoignabilité. Voir [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
+n'atteint. Le Hub répond, donc le lanceur n'affiche pas son bandeau d'injoignabilité. Chaque
+route affiche [Votre accès](#votre-accès) sous le bandeau « No grant on this Hub reaches
+you. An administrator grants access in the Hub's configuration. » Les onglets et la
+pastille de version disparaissent, puisque chaque onglet mènerait au même refus, et la
+pastille d'identité nomme toujours l'appelant. À la place d'une portée vide, un bloc à
+copier réunit ce dont un administrateur a besoin : le nom, l'identifiant qu'il inscrit dans
+`Admins` ou `Members`, et les groupes qu'un grant peut nommer. Tout autre échec de
+`/api/status` garde le bandeau d'injoignabilité. Voir
+[ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant-dark.png">
-  <img alt="Le bandeau sans grant au-dessus de la page d'accès d'un appelant qu'aucun grant n'atteint" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
+  <img alt="Le bandeau sans grant au-dessus de l'accès de l'appelant, avec la demande à envoyer à un administrateur" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
 </picture>
 
 Avec le contrôle d'accès, chaque source de `/api/sources` porte les `permissions` de
 l'appelant sur elle. Le formulaire Nouvelle analyse ne propose que les sources dont la liste
-contient `analyses.run`, et la ligne d'un démon sur l'écran Sources ne se déplie que là où
-la liste contient `sources.read`, que sa vue exige. Sans liste, comme sans contrôle
-d'accès, rien n'est retenu.
+contient `analyses.run` et dit combien il en laisse de côté, par exemple « 2 of 4
+configured · 2 need analyses.run ». La ligne d'un démon sur l'écran Sources ne se déplie
+que là où la liste contient `sources.read`, que sa vue exige, et affiche sinon « details
+need sources.read » sous son nom. Sans liste, comme sans contrôle d'accès, rien n'est
+retenu.
 
-## La page d'accès
+## Votre accès
 
-L'onglet Accès apparaît quand `GET /api/access` répond, c'est-à-dire avec `Hub:Access`
-actif ; un `404` le garde masqué, et un lien `#/access` ouvre alors Nouvelle analyse, comme
-toute route inconnue. La page ne change aucun droit, car les droits sont déclarés dans la
-configuration du Hub (valeurs Helm `hub.access`) et nulle part ailleurs ; son seul bouton
-révoque un jeton de terminal. Elle montre :
+La pastille d'identité mène à `#/access` quand `GET /api/access` répond, c'est-à-dire avec
+`Hub:Access` actif ; un `404` la laisse en simple texte, et un lien `#/access` ouvre alors
+Nouvelle analyse, comme toute route inconnue. La page ne change aucun droit, car les droits
+sont déclarés dans la configuration du Hub (valeurs Helm `hub.access`) et nulle part
+ailleurs. Sa seule action révoque un jeton de terminal. Elle montre :
 
 1. **Connecté en tant que.** L'identité, le moyen (session de navigateur, jeton de
-   terminal ou jeton machine) et jusqu'à quand, le fait qu'un changement de groupe chez le fournisseur s'applique à la
-   prochaine connexion, et « Your id, for an administrator », le sujet en texte
-   sélectionnable.
+   terminal ou jeton machine) et jusqu'à quand, le fait qu'un changement de groupe chez le
+   fournisseur s'applique à la prochaine connexion, et « Your id, for an administrator »,
+   le sujet en texte sélectionnable.
 2. **Vos groupes.** Des pastilles marquées fournisseur ou interne.
 3. **Ce que vous atteignez.** Projet, groupe, rôle et permissions par grant. Un grant sur
-   `*` se lit « Everything, records no project matches included ».
-4. **Jetons de terminal**, tirés de `GET /api/tokens` : ceux de l'appelant, ou chaque jeton
-   vivant pour un admin, avec le propriétaire, l'adresse d'où la connexion a été demandée,
-   la création, l'expiration et la dernière utilisation (« never » avant la première).
-   **Revoke** envoie `DELETE /api/tokens/{id}` et recharge la liste ; le jeton cesse de
-   fonctionner à sa requête suivante. Voir
+   `*` se lit « Everything, including records no project covers ».
+4. **Vos jetons de terminal**, tirés de `GET /api/tokens` : ceux que `perf-sentinel login`
+   a obtenus pour cet appelant, avec l'adresse d'où la connexion a été demandée, la
+   création, l'expiration et la dernière utilisation (« never » avant la première).
+   **Revoke** demande une seconde fois, sous la forme **Confirm revoke**, et quitter le
+   bouton ou appuyer sur Échap le remet en place. Le clic confirmé envoie
+   `DELETE /api/tokens/{id}`, dit dans la carte ce qui s'est passé (le terminal reçoit un
+   `401` à sa requête suivante, ou le jeton n'existait déjà plus, ou il reste valide et
+   pourquoi) et place le focus sur la carte. Voir
    [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal).
-5. **Projets.** Chaque projet que ces grants nomment, avec ses motifs écrits
-   `source lab-daemon · service checkout-* · attribute team=shop`.
-6. **Configuration**, pour un admin : projets, rôles (les intégrés marqués), grants,
-   groupes internes et leurs membres, admins et groupes admins, jetons machine avec
-   leur expiration en « expired », « in less than a day » ou « in N days », jamais leur
-   valeur, et comptes locaux par nom, jamais leur hash.
-7. **Non couvert par un projet**, pour un admin : les services, valeurs d'attribut et
-   sources qu'aucun projet ne couvre, avec leurs comptes, puis les conflits, voir
-   [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
+5. **Projets que vous atteignez**, pour un membre : chaque projet que ces grants nomment,
+   avec ses motifs écrits `source lab-daemon · service checkout-* · attribute team=shop`.
+   Un administrateur reçoit à la place un lien vers Couverture.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-dark.png">
-  <img alt="La page d'accès d'un admin, avec chaque jeton de terminal, la configuration, ce qu'aucun projet ne couvre et les conflits" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access.png">
+  <img alt="L'accès d'un membre de deux groupes d'équipe, avec son jeton de terminal" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access.png">
 </picture>
 
-Un membre ne voit que les cinq premières cartes, avec ses seuls jetons :
+## L'écran Couverture
+
+L'onglet Coverage n'apparaît que pour un administrateur ; un membre qui suit un lien
+`#/coverage` arrive sur son propre accès. L'écran commence par ce qui demande un
+changement :
+
+1. **À traiter.** Les services, valeurs d'attribut et sources qu'aucun projet ne couvre,
+   avec leurs nombres de findings et, par leur nom, les sources où chacun a été vu. Les
+   findings qu'aucun projet ne couvre ne se lisent que par des grants sur `*`. Chaque liste
+   s'arrête à ses 200 premières entrées et le dit.
+2. **Motifs à coller.** Une ligne YAML par service, attribut et source non couverts, avec
+   un bouton Copy, prête à placer sous les `patterns` d'un projet de
+   `hub.access.projects`. Les valeurs sont entre guillemets, donc un `*` ou un `=` garde
+   son sens.
+3. **Déploiements en désaccord sur un attribut de projet.** Les copies de finding qu'un
+   motif d'attribut de projet lit sans pouvoir y écrire, parce que la copie porte deux
+   valeurs de la clé ou a aussi été vue sous un groupement sans elle. Un grant d'attribut
+   les lit mais ne peut pas les acquitter, voir
+   [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
+4. **Les jetons de terminal de tous**, avec le même Revoke.
+5. **Configuration**, telle que le Hub l'a chargée à son dernier démarrage, un pli par
+   partie avec son nombre : projets, rôles (les intégrés marqués), grants, groupes
+   internes et leurs membres, admins par identifiant et par groupe, jetons machine avec
+   leur expiration en « expired », « in less than a day » ou « in N days », jamais leur
+   valeur, et comptes locaux par nom, jamais leur hash. Une partie vide affiche « None
+   declared. »
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member-dark.png">
-  <img alt="La page d'accès d'un membre de deux groupes d'équipe" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage-dark.png">
+  <img alt="L'écran Couverture d'un admin : ce qu'aucun projet ne couvre, les motifs à coller, les conflits, chaque jeton de terminal et la configuration avec les grants dépliés" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage.png">
 </picture>
 
 La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le Hub la sert
 à part, avec une politique qui n'autorise ni l'encadrement ni le script en ligne, pour un
-navigateur qui approuve un `perf-sentinel login`.
+navigateur qui approuve un `perf-sentinel login`. Le champ du code prend le focus et
+accepte le code en majuscules ou minuscules, avec ou sans son tiret. Une fois le code
+vérifié, le focus passe sur l'endroit et l'heure de la demande. Un code venu d'un autre
+réseau change **Approve** en **Approve anyway**, ce que la page annonce, et le résultat
+est annoncé et prend le focus une fois les boutons disparus.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-device-dark.png">
@@ -379,8 +418,8 @@ navigateur qui approuve un `perf-sentinel login`.
 Avec un [compte local](AUTHENTICATION-FR.md#comptes-locaux) déclaré, un navigateur sans
 session arrive sur la page de connexion du Hub, `/auth/sign-in`, au lieu de celle du
 fournisseur. Ce n'est pas non plus un écran du lanceur : une page autonome, styles en
-ligne et sans script, puisque les fichiers du lanceur sont derrière la connexion, claire
-ou sombre selon le système. **Sign in with single sign-on** vient d'abord et mène au
+ligne et sans script, puisque les fichiers du lanceur sont derrière la connexion. Elle
+porte le logo du lanceur, en ligne, et sa palette, claire ou sombre selon le système. **Sign in with single sign-on** vient d'abord et mène au
 fournisseur ; **Sign in with a local account** est replié en dessous, avec la mention
 qu'il sert quand l'authentification unique est indisponible et que chaque connexion
 locale est journalisée. Après une tentative refusée, le pli s'ouvre avec la raison,
