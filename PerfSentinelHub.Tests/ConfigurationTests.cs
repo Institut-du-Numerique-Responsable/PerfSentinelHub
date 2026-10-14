@@ -329,6 +329,21 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void Trusted_proxy_networks_must_each_be_a_CIDR_network()
+    {
+        Assert.Empty(AuthFailures(ValidAuth() with { TrustedProxyNetworks = ["10.42.0.0/16", "127.0.0.1/32", "fd00::/8"] }));
+        Assert.Equal(
+            "Hub:Auth:TrustedProxyNetworks entry 'ingress' is not a CIDR network.",
+            Assert.Single(AuthFailures(ValidAuth() with { TrustedProxyNetworks = ["10.42.0.0/16", "ingress"] })));
+        Assert.Equal(
+            "Hub:Auth:TrustedProxyNetworks entry '10.42.0.0' is not a CIDR network.",
+            Assert.Single(AuthFailures(ValidAuth() with { TrustedProxyNetworks = ["10.42.0.0"] })));
+        // Off, nothing reads the list.
+        Assert.Empty(AuthFailures(new AuthOptions { TrustedProxyNetworks = ["ingress"] }));
+        Assert.Empty(new AuthOptions().TrustedProxyNetworks);
+    }
+
+    [Fact]
     public void Required_groups_bind_from_indexed_keys_onto_an_empty_default()
     {
         var configuration = new ConfigurationBuilder()

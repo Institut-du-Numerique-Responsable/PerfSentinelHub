@@ -227,11 +227,18 @@ that source reports the finding again.
 
 How fresh a decision is:
 
-- provider groups are read at sign-in, so they are at most 8 hours old;
+- provider groups are read at sign-in, so they are at most 8 hours old, and a terminal
+  token keeps those of the session that approved it, for no longer than that session;
 - `Hub:Auth:RequiredGroups`, internal groups, admins, grants and machine tokens apply at
   the restart that deploys them;
 - a rotated machine token needs a rollout restart, a removed one goes with the ConfigMap
   change that rolls the pod.
+- a revoked terminal token is refused from its next request.
+
+Terminal sign-in is not offered while `Hub:Auth:TrustedProxyNetworks` is empty. Behind a
+proxy listed there, the address the approval page shows and the per-address limits count
+are the client's own, as the proxy reports it: a proxy that forwards a client-supplied
+`X-Forwarded-For` unchanged lets a client choose the address it shows.
 
 Outside the model:
 

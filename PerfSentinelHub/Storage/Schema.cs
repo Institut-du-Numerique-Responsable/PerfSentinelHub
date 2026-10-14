@@ -262,4 +262,26 @@ internal static class Schema
                                  PRIMARY KEY(id, source_id, attr_key, attr_value)
                                );
                                """;
+
+    // Personal tokens a browser session approved for a terminal (the device flow). Only the
+    // SHA-256 of a token is kept, never the token. The owner is the approving session's subject;
+    // its identity is shown and never compared. provider_groups_json and required_group freeze
+    // what the session held at approval, so the token follows the session's rules. The pending
+    // device codes live in memory and have no table.
+    internal const string V10 = """
+                                CREATE TABLE IF NOT EXISTS terminal_tokens (
+                                  id TEXT PRIMARY KEY,
+                                  token_hash BLOB NOT NULL UNIQUE,
+                                  subject TEXT NOT NULL,
+                                  identity TEXT NOT NULL,
+                                  provider_groups_json TEXT NOT NULL,
+                                  required_group TEXT,
+                                  client_address TEXT,
+                                  created_at_ms INTEGER NOT NULL,
+                                  expires_at_ms INTEGER NOT NULL,
+                                  last_used_at_ms INTEGER
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_terminal_tokens_subject
+                                  ON terminal_tokens(subject, created_at_ms);
+                                """;
 }

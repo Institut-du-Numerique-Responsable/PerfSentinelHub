@@ -64,6 +64,16 @@ hub:
     # with "Full group path" on sends "/hub-users"), and the session ends 8
     # hours after sign-in instead of renewing while in use. Requires enabled.
     requiredGroups: []
+    # CIDR networks whose X-Forwarded-For and X-Forwarded-Proto the Hub trusts,
+    # one hop deep: the narrowest range holding the ingress controller's pods
+    # and nothing else, never a pod CIDR other workloads share, since every
+    # listed address can forge the client address. The ingress must itself see
+    # client addresses (externalTrafficPolicy: Local or the PROXY protocol).
+    # Empty trusts the scheme from any peer and the client address from none,
+    # and terminal sign-in (perf-sentinel login, with hub.access.enabled) stays
+    # off: behind the ingress every client would share its address. See
+    # docs/AUTHENTICATION.md.
+    trustedProxyNetworks: []
   ackRelay:
     # Who acks has to be known, and a hub.auth session always says. Set to
     # true to also accept the identity a reverse proxy puts in

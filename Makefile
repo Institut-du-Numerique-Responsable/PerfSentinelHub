@@ -118,6 +118,8 @@ helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.access.adminGroup=x 2>&1 >/dev/null | grep -q 'adminGroup'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) --show-only templates/configmap.yaml | grep -q '"SubjectClaim":"sub"'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) --set hub.auth.subjectClaim=email 2>&1 >/dev/null | grep -q '/hub/auth/subjectClaim'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) --set 'hub.auth.trustedProxyNetworks={10.42.0.0/16}' --show-only templates/configmap.yaml | grep -q '"TrustedProxyNetworks":\["10.42.0.0/16"\]'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) --show-only templates/configmap.yaml | grep -q '"TrustedProxyNetworks":\[\]'
 	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.metricsPort=9464) && printf '%s' "$$out" | grep -q 'value: "8080;9464"' && printf '%s' "$$out" | grep -q 'name: metrics, containerPort: 9464' && printf '%s' "$$out" | grep -q '"MetricsPort":9464' && printf '%s' "$$out" | grep -A2 -- '- name: metrics' | grep -q 'port: 9464'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.metricsPort=8080 2>&1 >/dev/null | grep -q '/hub/metricsPort'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) | grep -q 'name: Hub__Access__MachineTokens__0__Token'

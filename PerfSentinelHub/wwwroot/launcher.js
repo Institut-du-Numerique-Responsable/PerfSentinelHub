@@ -1362,6 +1362,87 @@
         }));
     }
 
+    /**
+     * The access page's terminal token table, one row per token: who owns it, where it was
+     * approved for, and when it was made, expires and was last used (to five minutes).
+     * @param {{id: string, identity: string, client_address: string | null, created_at_ms: number,
+     *          expires_at_ms: number, last_used_at_ms: number | null}[]} tokens
+     * @returns {{id: string, owner: string, from: string, created: string, expires: string, lastUsed: string}[]}
+     */
+    function tokenRows(tokens) {
+        return tokens.map(token => ({
+            id: token.id,
+            owner: token.identity,
+            from: token.client_address || 'unknown',
+            created: dtHuman(token.created_at_ms),
+            expires: dtHuman(token.expires_at_ms),
+            lastUsed: token.last_used_at_ms == null ? 'never' : dtHuman(token.last_used_at_ms)
+        }));
+    }
+
+    /**
+     * The revoke request. JSON even with no body: the Hub refuses any other write from a page.
+     * @param {string} id
+     * @returns {{path: string, init: {method: string, headers: Record<string, string>}}}
+     */
+    function tokenRevokeRequest(id) {
+        return {
+            path: '/api/tokens/' + encodeURIComponent(id),
+            init: {method: 'DELETE', headers: {'content-type': 'application/json'}}
+        };
+    }
+
+    /**
+     * The approval page's first line, with the session's end once known.
+     * @param {number | null} expiresAtMs
+     * @returns {string}
+     */
+    function deviceIntro(expiresAtMs) {
+        return 'Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started '
+            + 'yourself, just now: approving gives that terminal your access until '
+            + (expiresAtMs == null ? 'your session ends' : dtHuman(expiresAtMs).slice(11)) + '.';
+    }
+
+    /**
+     * Where and when a code was requested, who approves it and until when the token holds.
+     * @param {{client_address: string, requested_at_ms: number, identity: string | null,
+     *          token_expires_at_ms: number | null}} verify
+     * @param {number} nowMs
+     * @returns {string}
+     */
+    function deviceRequestLine(verify, nowMs) {
+        const minutes = Math.floor((nowMs - verify.requested_at_ms) / 60000);
+        const ago = minutes < 1 ? 'less than a minute ago' : minutes === 1 ? '1 minute ago' : minutes + ' minutes ago';
+        return 'Requested from ' + verify.client_address + ' at ' + clock(verify.requested_at_ms).slice(0, 8)
+            + ' (' + ago + '). You are signed in as ' + (verify.identity || 'unknown') + '. The token expires at '
+            + (verify.token_expires_at_ms == null ? 'the end of your session' : dtHuman(verify.token_expires_at_ms).slice(11))
+            + '.';
+    }
+
+    /**
+     * The warning shown above the buttons when the code came from another network than this
+     * browser, the one cheap signal that tells a remote phish from a login on this machine.
+     * @param {{client_address: string, same_network: boolean}} verify
+     * @returns {string | null}
+     */
+    function deviceNetworkAlert(verify) {
+        return verify.same_network
+            ? null
+            : 'This code was requested from another network than this browser (' + verify.client_address
+            + '). Approve only if you started that sign-in yourself on that machine.';
+    }
+
+    /**
+     * What a click on Approve does: send, or first turn into "Approve anyway" when the code
+     * came from another network.
+     * @param {boolean} sameNetwork
+     * @param {boolean} armed
+     * @returns {'send' | 'arm'}
+     */
+    function deviceApproveStep(sameNetwork, armed) {
+        return sameNetwork || armed ? 'send' : 'arm';
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -1381,6 +1462,7 @@
         INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentsCopy,
         incidentHandoffHash, readHandoff,
         ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary,
-        shellBanner, screenOf, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows
+        shellBanner, screenOf, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows,
+        tokenRows, tokenRevokeRequest, deviceIntro, deviceRequestLine, deviceNetworkAlert, deviceApproveStep
     };
 })(globalThis);

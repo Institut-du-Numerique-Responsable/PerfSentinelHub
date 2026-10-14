@@ -33,6 +33,9 @@
         sourcesError: false,
         // GET /api/access, null when access is off (the route answers 404) or failed.
         access: null,
+        // GET /api/tokens, read only with access on; null until it answers or when it failed.
+        tokens: null,
+        tokensError: null,
         loading: true,
         run: null,
         runError: false,
@@ -260,6 +263,7 @@
             state.sources = state.sourcesError ? null : results[1];
             state.access = results[2];
             state.loading = false;
+            if (state.access) loadTokens();
             const runnable = runSources();
             if (runnable.length > 0 && state.form.sourceId === null) {
                 // The one they were on last, if it is still configured. Falling back to
@@ -275,6 +279,16 @@
             }
             renderShell();
             onRoute();
+        });
+    }
+
+    /** The terminal tokens the access page lists: the caller's own, or everyone's for an admin. */
+    function loadTokens() {
+        return getJson('/api/tokens').then(function (tokens) {
+            state.tokens = tokens;
+            if (state.screen === 'access') render();
+        }).catch(function () {
+            state.tokens = null;
         });
     }
 
@@ -5019,8 +5033,8 @@
             el('h1', {class: 'page-title', text: 'Your access'}),
             el('p', {
                 class: 'page-sub',
-                text: 'Read-only. Who reaches what is declared in the Hub\'s configuration, and this page '
-                    + 'changes nothing.'
+                text: 'Who reaches what is declared in the Hub\'s configuration, and this page changes no '
+                    + 'right. Its one button revokes a terminal token.'
             })
         ]);
         if (banner) section.appendChild(noGrantBanner(banner));
@@ -5048,6 +5062,7 @@
                     return [row.project, row.group, row.role, row.permissions];
                 }))
         ]));
+        if (state.tokens) section.appendChild(tokensCard(access.admin));
         if (access.projects.length > 0) section.appendChild(accessCard('// projects', [projectsTable(access.projects)]));
         if (access.configuration) section.appendChild(configurationCard(access.configuration));
         if (access.unmatched) section.appendChild(unmatchedCard(access.unmatched, access.conflicts));
@@ -5069,6 +5084,7 @@
                 }))]),
                 el('tbody', {}, rows.map(function (row) {
                     return el('tr', {}, row.map(function (cell) {
+                        if (cell instanceof Node) return el('td', {}, [cell]);
                         return Array.isArray(cell)
                             ? el('td', {}, cell.map(function (line) {
                                 return el('div', {text: line});
@@ -5078,6 +5094,46 @@
                 }))
             ])
         ]);
+    }
+
+    /**
+     * The terminal tokens `perf-sentinel login` obtained, each with a Revoke button. An
+     * admin sees every live one. Revoking takes effect on the token's next request.
+     */
+    function tokensCard(admin) {
+        const rows = PSL.tokenRows(state.tokens);
+        return accessCard(admin ? '// terminal tokens, everyone\'s' : '// your terminal tokens', [
+            el('p', {
+                text: 'perf-sentinel login gets a terminal token once you approve its code. It carries your access, '
+                    + 'never admin, until the session that approved it ends.'
+            }),
+            state.tokensError ? el('div', {class: 'banner', 'data-tone': 'crit'}, [el('div', {text: state.tokensError})]) : null,
+            rows.length === 0
+                ? el('p', {class: 'access-muted', text: 'No terminal token.'})
+                : accessTable(['Owner', 'Requested from', 'Created', 'Expires', 'Last used', ''], rows.map(function (row) {
+                    return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row)];
+                }))
+        ]);
+    }
+
+    function revokeButton(row) {
+        const button = el('button', {
+            type: 'button', class: 'pill-button', text: 'Revoke',
+            'aria-label': 'Revoke the token of ' + row.owner + ' created ' + row.created
+        });
+        button.addEventListener('click', function () {
+            button.disabled = true;
+            const request = PSL.tokenRevokeRequest(row.id);
+            fetch(request.path, request.init).then(signInOn401).then(function (response) {
+                // A 404 is a token already gone: the list below says so either way.
+                state.tokensError = response.status === 204 || response.status === 404
+                    ? null
+                    : 'Revoking answered ' + response.status + '. Try again in a moment.';
+            }).catch(function () {
+                state.tokensError = 'The Hub did not answer. Try again in a moment.';
+            }).then(loadTokens);
+        });
+        return button;
     }
 
     function projectsTable(projects) {

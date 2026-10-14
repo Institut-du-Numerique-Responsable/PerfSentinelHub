@@ -194,3 +194,19 @@ public sealed record UnmatchedCopies(
     IReadOnlyList<UnmatchedService> Services,
     IReadOnlyList<UnmatchedAttribute> Attributes,
     IReadOnlyDictionary<string, int> CountsBySource);
+
+/// <summary>
+///     A terminal token's row: never the token, only its SHA-256. Subject owns it, Identity is
+///     shown; ProviderGroups and RequiredGroup are the approving session's, frozen at approval.
+/// </summary>
+public sealed record TerminalToken(
+    string Id,
+    byte[] TokenHash,
+    string Subject,
+    string Identity,
+    IReadOnlyList<string> ProviderGroups,
+    string? RequiredGroup,
+    string? ClientAddress,
+    long CreatedAtMs,
+    long ExpiresAtMs,
+    long? LastUsedAtMs);

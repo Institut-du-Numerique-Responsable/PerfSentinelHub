@@ -246,11 +246,20 @@ l'enveloppe partagée jusqu'à ce que cette source remonte à nouveau le finding
 
 La fraîcheur d'une décision :
 
-- les groupes du fournisseur sont lus à la connexion, ils ont donc 8 heures au plus ;
+- les groupes du fournisseur sont lus à la connexion, ils ont donc 8 heures au plus, et un
+  jeton de terminal garde ceux de la session qui l'a approuvé, pas plus longtemps que
+  cette session ;
 - `Hub:Auth:RequiredGroups`, les groupes internes, les admins, les grants et les jetons
   machine s'appliquent au redémarrage qui les déploie ;
 - un jeton machine renouvelé demande un rollout restart, un jeton retiré part avec la
   modification de ConfigMap qui relance le pod.
+- un jeton de terminal révoqué est refusé dès sa requête suivante.
+
+La connexion du terminal n'est pas offerte tant que `Hub:Auth:TrustedProxyNetworks` est
+vide. Derrière un proxy qui y figure, l'adresse que montre la page d'approbation et que
+comptent les limites par adresse est celle du client, telle que le proxy la rapporte : un
+proxy qui transmet tel quel un `X-Forwarded-For` fourni par le client laisse ce client
+choisir l'adresse qu'il montre.
 
 Hors du modèle :
 

@@ -318,6 +318,26 @@ its whole scope to everyone who uses the tool.
   token gets, and logged at startup as a warning (event `2001`, naming the token, never
   its value). It never stops the Hub.
 
+## Terminal tokens
+
+Developers sign the CLI in with `perf-sentinel login`, which needs
+`hub.auth.trustedProxyNetworks` set to the ingress controller's pods alone, see
+[AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in). A token is revoked from the
+access page or by `perf-sentinel logout`, and ends with the session that approved it
+anyway. The table and the pending codes need nothing from an operator: expired tokens
+leave with the daily retention pass, and pending codes live in memory, so a restart only
+cancels the logins in flight. Events, at Information unless stated, never with a code or a
+token:
+
+| Event | When |
+|-------|------|
+| `2010` | A terminal sign-in was approved, logged at the click even if no terminal collects the token: who, their subject, the requesting address, whether it came from another network than the approving browser |
+| `2011` | A terminal sign-in was denied |
+| `2012` | A terminal token was revoked: by whom (its holder, through `/auth/revoke`, or a subject from the access page), its owner and id |
+| `2013` | Warning: a code was refused because too many are pending, from that address (10) or in all (200) |
+| `2014` | Warning, at startup with access on: terminal sign-in is off because `Hub:Auth:TrustedProxyNetworks` is empty |
+| `2015` | The terminal collected the token of an approved sign-in: the token id, the requesting address, who approved it and their subject |
+
 ## Rolling back with access control on
 
 Never roll the image back below the release that enforces access control while

@@ -18,7 +18,8 @@ n'ouvre jamais un écran. Ce partage n'est imposé par aucune authentification, 
 simplement ce que chaque client demande, et il vaut mieux le savoir avant de lire l'une
 ou l'autre surface. `Hub:Auth` place le côté navigateur derrière une connexion et laisse
 `/api/findings` ouvert, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
-`Hub:Access` le ferme aussi : une machine envoie alors un jeton machine en bearer, voir
+`Hub:Access` le ferme aussi : une machine envoie alors un jeton machine en bearer, et le
+terminal d'un développeur, connecté par `perf-sentinel login`, un jeton de terminal, voir
 [Le contrôle d'accès](#le-contrôle-daccès).
 
 Le moteur apparaît deux fois sur ce tableau et c'est le même binaire les deux fois :
@@ -155,6 +156,7 @@ soit la source, et rien d'autre.
 | `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
 | `incident_reads`, `ack_reads`  | source                                                               | jamais                                     |
 | `analysis_runs`                | run                                                                  | `Hub:Analysis:RunRetention`                |
+| `terminal_tokens`              | jeton de terminal, par le SHA-256 de sa valeur                       | révocation, ou rétention passé `expires_at_ms` |
 
 `finding_attributes` garde chaque attribut de regroupement qu'un daemon a capté, jusqu'aux
 huit du moteur, chacun sous l'identité de regroupement avec laquelle il est arrivé : la
@@ -225,6 +227,19 @@ ajoute au cookie le sujet, les groupes du fournisseur qu'un grant nomme, `hub:ac
 une porte refuse l'écriture d'une machine et une écriture du navigateur sans
 `Sec-Fetch-Site: same-origin`, et un premier middleware pose `frame-ancestors 'self'` sur
 chaque réponse.
+
+**Connexion du terminal.** `ApiEndpoints.MapTerminalAccess` (`Api/ApiEndpoints.Terminal.cs`)
+ne déclare le flux d'appareil qu'avec `Hub:Auth:TrustedProxyNetworks` renseigné, puisque
+l'adresse cliente qu'il enregistre est celle que `ForwardedHeaders` prend de ces seuls
+réseaux, normalisée par `ClientAddress` (un client IPv6 par son /64).
+`DeviceAuthorizations` (`Api/DeviceAuthorizations.cs`) garde en mémoire les codes en
+attente, avec leurs plafonds, l'intervalle d'interrogation et les codes ratés de chaque
+personne. Les routes d'approbation lisent le ticket du cookie, jamais `HttpContext.User`,
+donc un bearer n'approuve rien. Une approbation récupérée devient une ligne de
+`terminal_tokens` par `HubDatabase.Tokens.cs`, qui garde le SHA-256 du jeton, le sujet qui
+l'a approuvé et les groupes du fournisseur qu'il avait. `HubTokenHandler.TerminalAsync`
+relit un bearer `pshub_` en un principal de type `terminal_token`, avec ces groupes figés,
+le contrôle `RequiredGroups` de l'étape 1, et jamais admin.
 
 **Où la portée s'applique.** `FindingQuery.Access` et `IncidentQuery.Access` portent la
 portée `findings.read` jusqu'au SQL : avec des motifs, la lecture des findings prend
@@ -304,3 +319,6 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Le moteur écrit le rapport                        | `Analysis/AnalysisRunner.cs`                                                                                   |
 | Le rapport servi dans l'iframe                    | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                               |
 | Hub vers api.github.com                           | `Collection/UpdateChecker.cs`, `ReadAsync`, seul appel sortant qui ne soit pas une source configurée           |
+| CLI vers le Hub, la connexion du terminal         | `Api/ApiEndpoints.Terminal.cs`, `StartDeviceAsync`, `PollDeviceAsync`, `RevokeTokenAsync`                      |
+| Navigateur vers le Hub, l'approbation             | `Api/ApiEndpoints.Terminal.cs`, `DevicePageAsync`, `VerifyDeviceAsync`, `ApproveDeviceAsync`                   |
+| CLI vers le Hub, avec un jeton de terminal        | `Api/HubTokenHandler.cs`, `TerminalAsync`, sur `FindTerminalTokenAsync`                                        |

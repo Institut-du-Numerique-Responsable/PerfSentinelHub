@@ -73,7 +73,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, cancellationToken);
+        await database.PurgeAsync(1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         Assert.Equal(2L, await CountAsync(reopened, "findings", cancellationToken));
@@ -110,7 +110,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
         }
 
         // The cutoff falls inside day 3, which is kept whole.
-        await database.PurgeAsync(3 * dayMs + dayMs / 2, 0, cancellationToken);
+        await database.PurgeAsync(3 * dayMs + dayMs / 2, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -136,7 +136,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, cancellationToken);
+        await database.PurgeAsync(1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -170,7 +170,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, cancellationToken);
+        await database.PurgeAsync(1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -203,7 +203,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, cancellationToken);
+        await database.PurgeAsync(1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -355,7 +355,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(0, 1000, cancellationToken);
+        await database.PurgeAsync(0, 1000, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         var surviving = await IdsAsync(reopened, cancellationToken);

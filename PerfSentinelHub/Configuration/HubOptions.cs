@@ -242,6 +242,10 @@ public sealed record AuthOptions
     // of these, spelled as the provider sends them. Empty by default, since a bound
     // list appends to its default.
     public IReadOnlyList<string> RequiredGroups { get; set; } = [];
+
+    // CIDR networks whose X-Forwarded-For and X-Forwarded-Proto are trusted. Empty keeps the
+    // scheme trusted from any peer and the address never; terminal sign-in needs the list.
+    public IReadOnlyList<string> TrustedProxyNetworks { get; set; } = [];
 }
 
 public static class SourceKinds
@@ -401,6 +405,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Auth:GroupsClaim must name a userinfo field when Hub:Auth:RequiredGroups is set.");
         if (auth.RequiredGroups.Any(string.IsNullOrWhiteSpace))
             errors.Add("Hub:Auth:RequiredGroups must not hold a blank entry.");
+        foreach (var network in auth.TrustedProxyNetworks.Where(network => !System.Net.IPNetwork.TryParse(network, out _)))
+            errors.Add($"Hub:Auth:TrustedProxyNetworks entry '{network}' is not a CIDR network.");
     }
 
     private static bool IsInvalidAuthEndpoint(Uri? endpoint)

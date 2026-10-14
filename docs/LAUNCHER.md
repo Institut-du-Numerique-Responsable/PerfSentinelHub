@@ -292,23 +292,33 @@ needs. Without a list, as with access off, nothing is withheld.
 
 The Access tab appears when `GET /api/access` answers, which is with `Hub:Access` on; a
 `404` keeps it hidden, and a `#/access` link then opens New, as any unknown route does. The
-page is read-only: no form and no button that writes, since rights are declared in the Hub's
-configuration (Helm values `hub.access`) and nowhere else. It shows:
+page changes no right, since rights are declared in the Hub's configuration (Helm values
+`hub.access`) and nowhere else; its one button revokes a terminal token. It shows:
 
-1. **Signed in as.** The identity, how (browser session or machine token) and until when,
+1. **Signed in as.** The identity, how (browser session, terminal token or machine token)
+   and until when,
    that a group change at the provider applies at the next sign-in, and "Your id, for an
    administrator", the subject as selectable text.
 2. **Your groups.** Chips marked provider or internal.
 3. **What you reach.** Project, group, role and permissions per grant. A grant on `*`
    reads "Everything, records no project matches included".
-4. **Projects.** Each project those grants name, with its patterns written as
+4. **Terminal tokens**, from `GET /api/tokens`: the caller's own, or every live one for an
+   admin, with owner, the address the login was requested from, creation, expiry and last
+   use ("never" until the first). **Revoke** sends `DELETE /api/tokens/{id}` and reloads
+   the list; the token stops working on its next request. See
+   [AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in).
+5. **Projects.** Each project those grants name, with its patterns written as
    `source lab-daemon · service checkout-* · attribute team=shop`.
-5. **Configuration**, for an admin: projects, roles (built-in ones marked), grants,
+6. **Configuration**, for an admin: projects, roles (built-in ones marked), grants,
    internal groups and their members, admins and admin groups, and machine tokens with
    their expiry as "expired", "in less than a day" or "in N days", never their value.
-6. **Not covered by any project**, for an admin: the services, attribute values and
+7. **Not covered by any project**, for an admin: the services, attribute values and
    sources no project covers, with counts, then the conflicts, see
    [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).
+
+The terminal sign-in page, `/device`, is not a launcher screen: the Hub serves it on its
+own, with a policy that allows no framing and no inline script, for a browser approving a
+`perf-sentinel login`.
 
 ## Safety
 

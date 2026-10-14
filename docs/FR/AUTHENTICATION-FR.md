@@ -89,7 +89,11 @@ même confiance.
 
 TLS s'arrête en général à l'ingress. Le Hub fait confiance à
 `X-Forwarded-Proto` venant de n'importe quel pair, pour que l'URI de redirection
-qu'il envoie soit en `https`. Seul le schéma est pris des en-têtes transmis.
+qu'il envoie soit en `https`. Seul le schéma est pris des en-têtes transmis,
+jusqu'à ce que `Hub:Auth:TrustedProxyNetworks` nomme le proxy : dès lors
+`X-Forwarded-Proto` et `X-Forwarded-For` sont tous deux crus, venant de ces
+réseaux seulement et sur un saut, si bien que le Hub voit l'adresse propre de
+chaque client et qu'un client qui lui parle directement ne peut pas en forger.
 
 ## Réglages
 
@@ -106,6 +110,7 @@ qu'il envoie soit en `https`. Seul le schéma est pris des en-têtes transmis.
 | `Hub:Auth:SubjectClaim`            | `sub`                  | La clé d'autorisation, lue seulement avec le contrôle d'accès : `sub`, `oid`, `uuid` ou `account_id` |
 | `Hub:Auth:GroupsClaim`             | `groups`               | Le champ userinfo des groupes, lu avec `RequiredGroups` ou le contrôle d'accès                     |
 | `Hub:Auth:RequiredGroups`          | aucun                  | Aucune entrée vide, refusé si `Enabled` est désactivé, voir plus bas                               |
+| `Hub:Auth:TrustedProxyNetworks`    | aucun                  | Réseaux CIDR du seul proxy (`10.42.200.0/28`) dont les en-têtes transmis sont crus ; la connexion du terminal l'exige |
 
 Déclarez `https://<hôte du hub>/auth/callback` comme URI de redirection du
 client, et faites du client un client confidentiel.
@@ -236,3 +241,81 @@ dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Ce qui change à la connexion
 - **`reader` n'est pas en lecture seule** : le rôle intégré lance des analyses.
 
 Chaque refus répond la même ligne `403` et journalise l'événement `1900` avec sa raison.
+
+## Connexion du terminal
+
+Avec le contrôle d'accès actif, `perf-sentinel login` obtient pour le développeur un
+jeton personnel pour la CLI, sans copier de secret. Il suit le flux d'autorisation
+d'appareil de la RFC 8628, mené par le Hub lui-même :
+
+1. La CLI demande un code au Hub (`POST /auth/device`) et l'affiche avec la page
+   `/device` du Hub.
+2. Le développeur ouvre `/device` dans un navigateur connecté au Hub et **tape** le code.
+   Aucun lien ne le porte : un code envoyé par quelqu'un d'autre ne peut pas arriver
+   prérempli.
+3. La page montre d'où et quand le code a été demandé, l'adresse et l'heure, qui est
+   connecté et quand le jeton expirera. Quand la demande vient d'un autre réseau que
+   celui du navigateur, elle le dit, et **Approve** demande un second clic
+   (**Approve anyway**). Un code venu d'un autre réseau a la forme d'un hameçonnage.
+4. Une fois approuvé, la consultation suivante de la CLI (`POST /auth/device/token`)
+   reçoit le jeton.
+
+**Qui approuve.** Seule une session de navigateur approuve, vérifie ou gère des jetons ;
+un jeton bearer jamais, si bien qu'un jeton ne peut pas en créer un autre. Une session à
+qui il reste moins d'une heure repasse d'abord par le fournisseur, si bien que chaque
+jeton vit au moins une heure.
+
+**Ce que porte le jeton.** Le sujet, l'identité et les groupes du fournisseur de la
+session qui approuve, figés à l'approbation, et le groupe `RequiredGroups` qui l'a
+admise. Les groupes internes, les listes d'admins et `RequiredGroups` sont lus à chaque
+requête, comme pour une session. Un jeton de terminal n'est **jamais admin**, même
+approuvé par un admin : il porte les droits de la personne, dont `hub ack` et
+`hub analyze` ont besoin, et les pouvoirs sur tout le Hub restent à une session de
+navigateur. Un code hameçonné ne livre donc au plus que les droits de la victime.
+
+**Durée et révocation.** Un jeton expire quand la session qui l'a approuvé expire, au
+plus 8 heures après cette connexion ; il n'y a pas de jeton de rafraîchissement. Une
+personne détient au plus 10 jetons vivants, et le 11e retire le plus ancien.
+`perf-sentinel logout` révoque son jeton (`POST /auth/revoke`), et la page d'accès liste
+les jetons de l'appelant, ou ceux de tous pour un admin, chacun avec un bouton
+**Revoke**. La révocation s'applique à la requête suivante. Seul le SHA-256 d'un jeton
+est conservé, jamais le jeton. Sous `RequiredGroups`, un jeton dont le groupe qui l'a
+admis a été retiré de la liste cesse de fonctionner au redémarrage suivant, comme une
+session.
+
+**Il exige `Hub:Auth:TrustedProxyNetworks`.** Derrière un ingress, sans cette liste,
+chaque requête porte l'adresse du contrôleur d'ingress : la page montrerait la même
+adresse pour chaque connexion, celle d'un attaquant comprise, et la limite par adresse
+des codes en attente bloquerait toute connexion de terminal pour un seul client bruyant.
+Le Hub ne peut pas savoir si un proxy le précède, donc avec la liste vide il ne mappe
+aucune route du flux d'appareil, journalise l'événement `2014` au démarrage et la CLI
+indique que le Hub n'offre pas de connexion du terminal. La liste des jetons et la
+révocation restent disponibles. Un Hub sans proxy devant liste `127.0.0.1/32`.
+
+Listez la plage la plus étroite qui contient le proxy et rien d'autre. Toute adresse de
+la liste peut fixer l'adresse cliente que le Hub enregistre, donc une plage partagée avec
+d'autres charges, comme le CIDR des pods de tout le cluster, laisse n'importe quel pod
+qui s'y trouve falsifier cette adresse : il passe la limite par adresse et peut emprunter
+l'adresse d'une victime pour masquer l'avertissement d'autre réseau. Donnez aux pods du
+contrôleur d'ingress une plage à eux, ou laissez une NetworkPolicy n'admettre vers le Hub
+que ces pods-là dans la plage listée.
+
+```yaml
+hub:
+  auth:
+    trustedProxyNetworks: ["10.42.200.0/28"]   # les seuls pods du contrôleur d'ingress
+```
+
+L'ingress doit lui-même voir l'adresse du client. Un Service LoadBalancer en
+`externalTrafficPolicy: Cluster` la remplace par l'adresse d'un nœud avant l'ingress :
+chaque connexion semble alors venir d'une poignée d'adresses, la page d'approbation
+n'avertit jamais d'un autre réseau, et la limite par adresse est partagée par tous ceux
+qui passent par un même nœud. Utilisez `externalTrafficPolicy: Local`, ou le protocole
+PROXY entre le load balancer et l'ingress.
+
+**Limites.** Au plus 200 codes en attente, 10 par adresse cliente (un client IPv6 compte
+par son /64) ; un code dure 10 minutes et sert une fois. La CLI consulte toutes les
+5 secondes, et 5 de plus chaque fois qu'elle consulte trop tôt (`slow_down`). Dix codes
+mal tapés ou inconnus en 10 minutes suspendent les approbations d'une personne pour le
+reste de ces 10 minutes. Les codes en attente vivent en mémoire, si bien qu'un
+redémarrage annule les connexions en cours.

@@ -235,8 +235,10 @@ montre à chaque appelant qui il est, son identifiant (le sujet à mettre dans `
 `Members`), ses groupes et ce qu'atteignent ses grants. Un admin voit aussi toute la
 configuration, chaque service, valeur d'attribut et source qu'aucun projet ne couvre dans
 `Hub:Retention`, pour repérer un nouveau venu et l'affecter dans la configuration, et les
-conflits ci-dessous. La page n'écrit rien : les droits changent dans la configuration
-(valeurs Helm `hub.access`) et s'appliquent au redémarrage suivant.
+conflits ci-dessous. La page n'écrit rien des droits : ils changent dans la configuration
+(valeurs Helm `hub.access`) et s'appliquent au redémarrage suivant. Sa seule écriture est
+le bouton **Revoke** du tableau des jetons de terminal, qui liste les jetons de
+l'appelant, ou chaque jeton vivant pour un admin.
 
 ### Lire les conflits
 
@@ -292,6 +294,31 @@ est journalisée au démarrage (événement `2001`) et n'arrête jamais le Hub.
   jeton copié dans les IDE des développeurs est un identifiant partagé lié à aucun compte,
   qui survit aux départs.
 
+## Jetons de terminal
+
+Un jeton de terminal (`pshub_…`) est l'identifiant par personne : `perf-sentinel login`
+en obtient un par le flux d'appareil du Hub, approuvé dans un navigateur connecté, comme
+le décrit [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal). Il est
+envoyé en `Authorization: Bearer`, comme un jeton machine, et il est jugé comme la
+personne qui l'a approuvé :
+
+- **Droits.** Le sujet et les groupes du fournisseur de la session qui approuve, figés à
+  l'approbation, avec les groupes internes et les grants lus à chaque requête.
+  Contrairement à un jeton machine il écrit aussi : acks et analyses sont enregistrés
+  sous l'identité de la personne.
+- **Jamais admin.** Pas même approuvé par un admin ; `GET /api/access` rapporte
+  `"caller": "terminal_token"` et `"admin": false`.
+- **`RequiredGroups`.** Le jeton garde le groupe qui a admis la session, et il est refusé
+  dès que ce groupe quitte `Hub:Auth:RequiredGroups`, comme une session.
+- **Jamais un navigateur.** Un jeton n'approuve aucune connexion et ne liste ni ne
+  révoque aucun jeton : ces routes lisent le seul cookie de session.
+- **Durée.** Jusqu'à la fin qu'aurait eue la session qui approuve, 8 heures au plus ; au
+  plus 10 par personne.
+
+La connexion du terminal n'est offerte qu'avec `Hub:Auth:TrustedProxyNetworks` renseigné,
+car la page d'approbation et les limites par adresse ont besoin de l'adresse propre de
+chaque client.
+
 ## Sessions
 
 Avec l'accès activé, une session prend fin 8 heures après la connexion, quel que soit son
@@ -343,6 +370,7 @@ hub:
     subjectClaim: sub
     groupsClaim: groups                       # mapper Keycloak avec "Full group path" activé
     requiredGroups: ["/perf-sentinel-hub"]
+    trustedProxyNetworks: ["10.42.200.0/28"]  # les seuls pods du contrôleur d'ingress, pour perf-sentinel login
   access:
     enabled: true
     admins: ["2f6d0c1e-8a4b-4e2f-9c71-0d3b5a6e7f81"]   # un sub : voie de secours
