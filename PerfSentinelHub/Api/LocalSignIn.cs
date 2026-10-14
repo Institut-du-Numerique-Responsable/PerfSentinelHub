@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -29,10 +30,7 @@ public static partial class LocalSignIn
     private const int MaxNameChars = 64;
     private const string Wrong = "The name or the password is wrong.";
 
-    private const string Policy =
-        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
-
-    // Inline because the launcher's stylesheets sit behind the fallback policy.
+    // Inline because the launcher's stylesheets sit behind the fallback policy, and allowed by its hash.
     private const string Style =
         """
         :root{color-scheme:light dark;--bg:#f5f6f8;--fg:#16181d;--muted:#596170;--card:#fff;--line:#d8dce3;--accent:#2457d6;--on-accent:#fff;--alert:#a4262c}
@@ -51,6 +49,10 @@ public static partial class LocalSignIn
         """;
 
     private static readonly TimeSpan GateWait = TimeSpan.FromSeconds(10);
+
+    private static readonly string Policy =
+        $"default-src 'none'; style-src 'sha256-{Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(Style)))}'; " +
+        "form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
     public static void MapLocalSignIn(this WebApplication app)
     {
@@ -85,14 +87,7 @@ public static partial class LocalSignIn
     {
         var request = context.Request;
         Secure(context.Response);
-        if (ForeignOrigin(request))
-            return TypedResults.Text("A request from another site is refused.", "text/plain; charset=utf-8",
-                statusCode: StatusCodes.Status403Forbidden);
-        if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType) ||
-            !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
-            return TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);
-        if (request.ContentLength is not (>= 0 and <= MaxBodyBytes))
-            return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        if (Refusal(request) is { } refusal) return refusal;
 
         var form = await request.ReadFormAsync(cancellationToken);
         var returnUrl = ReturnUrl(form["return_url"]);
@@ -122,16 +117,7 @@ public static partial class LocalSignIn
         bool verified;
         try
         {
-            if (name.Length == 0 || password.Length is 0 or > LocalPassword.MaxLength)
-                verified = false;
-            else if (account is null)
-            {
-                // The same cost as a declared name, and the result is thrown away.
-                _ = LocalPassword.Verify(password, gate.DummySalt, gate.DummyKey);
-                verified = false;
-            }
-            else
-                verified = LocalPassword.Verify(password, account.Salt, account.Key);
+            verified = Verify(name, password, account, gate);
         }
         finally
         {
@@ -147,7 +133,42 @@ public static partial class LocalSignIn
         }
 
         throttle.Succeeded(key);
-        var now = timeProvider.GetUtcNow();
+        await IssueSessionAsync(context, name, account!.Stamp, timeProvider.GetUtcNow());
+        LogSignedIn(logger, name, address);
+        return TypedResults.LocalRedirect(returnUrl);
+    }
+
+    // The cross-site gate, then a small url-encoded form: refused before anything is read.
+    private static IResult? Refusal(HttpRequest request)
+    {
+        if (ForeignOrigin(request))
+            return TypedResults.Text("A request from another site is refused.", "text/plain; charset=utf-8",
+                statusCode: StatusCodes.Status403Forbidden);
+        if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType) ||
+            !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+            return TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+        if (request.ContentLength is not (>= 0 and <= MaxBodyBytes))
+            return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        return null;
+    }
+
+    // Called inside the gate. An empty field hashes nothing; an unknown name hashes a dummy.
+    private static bool Verify(string name, string password, AccessPolicy.LocalAccount? account, LocalSignInGate gate)
+    {
+        if (name.Length == 0 || password.Length is 0 or > LocalPassword.MaxLength)
+            return false;
+        if (account is null)
+        {
+            // The same cost as a declared name, and the result is thrown away.
+            _ = LocalPassword.Verify(password, gate.DummySalt, gate.DummyKey);
+            return false;
+        }
+
+        return LocalPassword.Verify(password, account.Salt, account.Key);
+    }
+
+    private static Task IssueSessionAsync(HttpContext context, string name, string stamp, DateTimeOffset now)
+    {
         var subject = SubjectPrefix + name;
         var identity = new ClaimsIdentity(
         [
@@ -155,9 +176,9 @@ public static partial class LocalSignIn
             new Claim(AccessCaller.SubjectClaim, subject),
             new Claim(AccessCaller.AccessClaim, "1"),
             new Claim(AccessCaller.CallerClaim, AccessCaller.Session),
-            new Claim(StampClaim, account!.Stamp)
+            new Claim(StampClaim, stamp)
         ], AuthenticationType);
-        await context.SignInAsync(
+        return context.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(identity),
             new AuthenticationProperties
@@ -167,8 +188,6 @@ public static partial class LocalSignIn
                 IssuedUtc = now,
                 ExpiresUtc = now.AddHours(8)
             });
-        LogSignedIn(logger, name, address);
-        return TypedResults.LocalRedirect(returnUrl);
     }
 
     // The Hub's own page sends Sec-Fetch-Site: same-origin, and an Origin only its own.
@@ -268,7 +287,7 @@ public sealed class LocalSignInGate : IDisposable
 
     public async Task<bool> TryEnterAsync(TimeSpan wait, CancellationToken cancellationToken)
     {
-        if (_slot.Wait(0)) return true;
+        if (await _slot.WaitAsync(TimeSpan.Zero, cancellationToken)) return true;
         if (Interlocked.Increment(ref _waiting) > MaxWaiting)
         {
             Interlocked.Decrement(ref _waiting);

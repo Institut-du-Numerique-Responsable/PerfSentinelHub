@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -81,7 +83,7 @@ public sealed class LocalSignInTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType?.ToString());
-        AssertPageHeaders(response);
+        AssertPageHeaders(response, page);
         Assert.Contains("<title>Sign in · PerfSentinel Hub</title>", page, StringComparison.Ordinal);
         Assert.Contains("href=\"/auth/sign-in/sso?return_url=%2Fdevice\"", page, StringComparison.Ordinal);
         Assert.Contains("<details>", page, StringComparison.Ordinal);
@@ -188,8 +190,8 @@ public sealed class LocalSignInTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
         Assert.Equal(wrong.StatusCode, unknown.StatusCode);
         Assert.Equal(wrongBytes, await unknown.Content.ReadAsByteArrayAsync(Cancel));
-        AssertPageHeaders(wrong);
-        var page = System.Text.Encoding.UTF8.GetString(wrongBytes);
+        var page = Encoding.UTF8.GetString(wrongBytes);
+        AssertPageHeaders(wrong, page);
         Assert.Contains("The name or the password is wrong.", page, StringComparison.Ordinal);
         Assert.Contains("<details open>", page, StringComparison.Ordinal);
         Assert.Contains("role=\"alert\"", page, StringComparison.Ordinal);
@@ -701,13 +703,17 @@ public sealed class LocalSignInTests : IAsyncLifetime
         return await client.SendAsync(request, Cancel);
     }
 
-    private static void AssertPageHeaders(HttpResponseMessage response)
+    // The page's one inline style is allowed by its hash, computed here as a browser does.
+    private static void AssertPageHeaders(HttpResponseMessage response, string page)
     {
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.Equal("same-origin", response.Headers.GetValues("Referrer-Policy").Single());
+        var start = page.IndexOf("<style>", StringComparison.Ordinal) + "<style>".Length;
+        var style = page[start..page.IndexOf("</style>", start, StringComparison.Ordinal)];
+        var hash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(style)));
         Assert.Equal(
-            "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+            $"default-src 'none'; style-src 'sha256-{hash}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
             response.Headers.GetValues("Content-Security-Policy").Single());
     }
 

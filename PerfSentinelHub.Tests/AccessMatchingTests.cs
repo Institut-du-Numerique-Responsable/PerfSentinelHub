@@ -294,6 +294,16 @@ public sealed class AccessMatchingTests
         Assert.Null(policy.MachineTokenName(Token, Now));
     }
 
+    // The validator refuses such a hash at startup; past it, an empty key must never be compiled.
+    [Fact]
+    public void An_unparsable_local_hash_fails_the_policy_instead_of_compiling_an_empty_key()
+    {
+        Assert.Throws<InvalidOperationException>(() => Policy(access => access with
+        {
+            LocalAccounts = [new LocalAccountOptions { Name = "ops", PasswordHash = "not-a-hash" }]
+        }));
+    }
+
     private static AccessPolicy Policy(Func<AccessOptions, AccessOptions> change)
     {
         var access = new AccessOptions

@@ -55,8 +55,10 @@ public sealed class AccessPolicy
         // The stamp a local session carries: a rotated hash, or a removed account, ends its sessions.
         foreach (var account in access.LocalAccounts)
         {
-            LocalPassword.TryParse(account.PasswordHash!, out var salt, out var key);
-            var stamp = Base64Url.EncodeToString(SHA256.HashData(Encoding.UTF8.GetBytes(account.PasswordHash!))[..16]);
+            // The validator refuses such a hash at startup; an empty key here would be a bug, never an account.
+            if (!LocalPassword.TryParse(account.PasswordHash!, out var salt, out var key))
+                throw new InvalidOperationException($"Hub:Access:LocalAccounts {account.Name} has an unparsable PasswordHash.");
+            var stamp = Base64Url.EncodeToString(SHA256.HashData(Encoding.UTF8.GetBytes(account.PasswordHash!)).AsSpan(0, 16));
             _localAccounts[account.Name] = new LocalAccount(salt, key, stamp);
         }
     }
