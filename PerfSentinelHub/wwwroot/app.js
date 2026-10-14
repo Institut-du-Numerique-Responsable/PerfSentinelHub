@@ -5051,7 +5051,11 @@
             access.groups.length === 0
                 ? el('p', {class: 'access-muted', text: 'No group.'})
                 : el('div', {class: 'access-chips'}, access.groups.map(function (group) {
-                    return el('span', {class: 'chip', 'data-origin': group.origin, text: group.name + ' · ' + group.origin});
+                    return el('span', {
+                        class: 'chip',
+                        'data-origin': group.origin,
+                        text: group.name + ' · ' + group.origin
+                    });
                 }))
         ]));
         const reach = PSL.accessReachRows(access);
@@ -5107,7 +5111,10 @@
                 text: 'perf-sentinel login gets a terminal token once you approve its code. It carries your access, '
                     + 'never admin, until the session that approved it ends.'
             }),
-            state.tokensError ? el('div', {class: 'banner', 'data-tone': 'crit'}, [el('div', {text: state.tokensError})]) : null,
+            state.tokensError ? el('div', {
+                class: 'banner',
+                'data-tone': 'crit'
+            }, [el('div', {text: state.tokensError})]) : null,
             rows.length === 0
                 ? el('p', {class: 'access-muted', text: 'No terminal token.'})
                 : accessTable(['Owner', 'Requested from', 'Created', 'Expires', 'Last used', ''], rows.map(function (row) {

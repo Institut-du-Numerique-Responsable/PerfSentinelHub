@@ -24,7 +24,8 @@ public static class LocalPassword
     public static bool TryParse(string text, out byte[] salt, out byte[] key)
     {
         salt = key = [];
-        return text.Trim().Split('$') is ["", Algorithm, Cost, { Length: SaltChars } saltText, { Length: KeyChars } keyText] &&
+        return text.Trim().Split('$') is
+                   ["", Algorithm, Cost, { Length: SaltChars } saltText, { Length: KeyChars } keyText] &&
                TryDecode(saltText + "==", SaltBytes, out salt) && TryDecode(keyText + "=", KeyBytes, out key);
     }
 
