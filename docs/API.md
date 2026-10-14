@@ -484,7 +484,8 @@ query twice.
 
 With `Hub:Access:Enabled` every route but the import, `/health`, `/metrics` (anonymous,
 on `Hub:MetricsPort` only) and the CLI's `POST /auth/device`, `POST /auth/device/token`
-and `POST /auth/revoke` ([Terminal sign-in](#terminal-sign-in)) needs a session, a terminal
+and `POST /auth/revoke` ([Terminal sign-in](#terminal-sign-in)), and the sign-in page
+routes ([Local sign-in](#local-sign-in)), needs a session, a terminal
 token or a machine token, and each answer covers what the caller's grants cover. The model is in
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md); what changes on the wire:
 
@@ -574,8 +575,8 @@ never lists a machine token's value or fingerprint.
 - **For an admin only**, the three last fields are filled:
   - `configuration`: `projects`, `roles` (`built_in` marks `reader`, `member` and
     `admin`), `grants`, `internal_groups` with their `members`, `admins`, `admin_groups`,
-    and `machine_tokens` as `{name, group, expires_at_ms, active}`, `active` meaning not
-    expired.
+    `machine_tokens` as `{name, group, expires_at_ms, active}`, `active` meaning not
+    expired, and `local_accounts`, the declared local accounts by name, never their hash.
   - `unmatched`: the finding copies seen within `Hub:Retention` that no pattern of any
     project reads, as `services` (`{service, source_ids, findings}`), `attributes`
     (`{key, value, findings}`) and `sources`, every configured source no pattern names in
@@ -665,3 +666,32 @@ for an admin (at most `Hub:MaxReadLimit`); never the token nor its hash:
 `last_used_at_ms` moves at most once every 5 minutes. `DELETE /api/tokens/{id}` revokes
 the caller's own token, or anyone's for an admin; another user's token answers the `404`
 of a missing one.
+
+### Local sign-in
+
+Mapped only with `Hub:Access:Enabled` and at least one entry in `Hub:Access:LocalAccounts`;
+otherwise these answer as any unmapped route does. Every answer carries
+`Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: same-origin` and
+`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
+See [AUTHENTICATION.md](AUTHENTICATION.md#local-accounts) for the model.
+
+| Route | Who | Answers |
+|---|---|---|
+| `GET /auth/sign-in?return_url=` | anonymous | `200` and the page, signed in or not |
+| `GET /auth/sign-in/sso?return_url=` | anonymous | `302` to the provider, back to `return_url` after sign-in |
+| `POST /auth/sign-in/local` | anonymous, from the page | `302` to `return_url` with the session cookie; `403` and the page on a wrong name or password; `403` plain text from another site; `413`; `415`; `429` or `503` and the page, with `Retry-After` |
+
+`return_url` is a path on the Hub; anything else, `//host`, `/\host` or an absolute URL,
+becomes `/`. With a local account declared, a page request without a session is
+redirected to `/auth/sign-in?return_url=<path and query>` instead of the provider; `/api`,
+and a report inside the launcher's frame, still answer `401`.
+
+The POST takes `application/x-www-form-urlencoded` (else `415`) of at most 4 KiB with a
+`Content-Length` (else `413`): `name`, `password` and `return_url`. A `Sec-Fetch-Site`
+other than `same-origin`, or an `Origin` other than the Hub's own, gets `403`. The name is
+compared in lower case. A wrong password, an unknown name and an empty field answer the
+same `403` page, byte for byte. A client address and name past five consecutive failures,
+or an address past 5 attempts in its minute, get `429` and `Retry-After` in seconds; a
+request that waits more than 10 seconds for the hashing slot, or finds 8 already waiting,
+gets `503` and `Retry-After: 1`.

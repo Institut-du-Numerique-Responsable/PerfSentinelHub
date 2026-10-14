@@ -54,6 +54,9 @@ public sealed record AccessOptions
     public IReadOnlyList<RoleOptions> Roles { get; set; } = [];
     public IReadOnlyList<GrantOptions> Grants { get; set; } = [];
     public IReadOnlyList<MachineTokenOptions> MachineTokens { get; set; } = [];
+
+    // Break-glass accounts for when the provider is down, signed in on the Hub's own page.
+    public IReadOnlyList<LocalAccountOptions> LocalAccounts { get; set; } = [];
 }
 
 // Referenced as internal:<Name>. Members are subjects, never machine tokens.
@@ -99,6 +102,19 @@ public sealed record MachineTokenOptions
 
     // Trimmed on binding, like SourceOptions.ImportApiKey: a Secret value often ends with a newline.
     public string? Token
+    {
+        get;
+        set => field = value?.Trim();
+    }
+}
+
+// Signs in as local:<Name>. PasswordHash is the PHC string hash-password prints, delivered
+// through a Secret; trimmed on binding, since a Secret value often ends with a newline.
+public sealed record LocalAccountOptions
+{
+    public string Name { get; set; } = "";
+
+    public string? PasswordHash
     {
         get;
         set => field = value?.Trim();

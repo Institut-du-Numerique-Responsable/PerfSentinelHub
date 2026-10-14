@@ -338,6 +338,73 @@ token:
 | `2014` | Warning, at startup with access on: terminal sign-in is off because `Hub:Auth:TrustedProxyNetworks` is empty |
 | `2015` | The terminal collected the token of an approved sign-in: the token id, the requesting address, who approved it and their subject |
 
+## Local accounts (break-glass)
+
+A local account signs in on the Hub's own page while the provider is down, see
+[AUTHENTICATION.md](AUTHENTICATION.md#local-accounts). Its password never reaches the
+values, a command line or the Hub's log: the Hub holds only its hash, from a Secret.
+
+**Creating one.**
+
+1. Hash the password with the image. `hash-password` reads it from stdin, never from an
+   argument, and prints the hash alone; the password holds 15 to 1,024 characters.
+
+   ```bash
+   printf 'Password: ' >&2; IFS= read -rs password; echo
+   printf '%s\n' "$password" | docker run --rm -i ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:<version> hash-password > ops.hash
+   unset password
+   ```
+
+   The first line works in bash and zsh; `IFS=` keeps leading and trailing spaces, which
+   sign-in compares as typed. `printf` is a shell builtin, so the password appears in no
+   process list. From a
+   running Hub, `kubectl exec -i deploy/perf-sentinel-hub -- /app/PerfSentinelHub hash-password`
+   reads stdin the same way. On a terminal of its own, `hash-password` asks twice without
+   echoing.
+2. Store it, then delete the file:
+   `kubectl create secret generic perf-sentinel-hub-break-glass --from-file=ops=ops.hash`.
+   The hash is not the password, but keep it as private: 600,000 iterations slow an
+   offline guess, they do not stop one.
+3. Declare the account and give it a group, then `helm upgrade`:
+
+   ```yaml
+   hub:
+     access:
+       adminGroups: ["/hub-admins", "internal:break-glass"]
+       groups:
+         - { name: break-glass, members: ["local:ops"] }
+       localAccounts:
+         - { name: ops, secretName: perf-sentinel-hub-break-glass, secretKey: ops }
+   ```
+
+Keep the password in the team's vault, and test the account once, through
+`/auth/sign-in`, while the provider still works.
+
+**After every use, rotate it.** Hash a new password, replace the Secret, then
+`kubectl rollout restart deployment/<release>`: the chart cannot hash a Secret it does not
+own, so a changed Secret alone rolls nothing. The restart ends every session of the
+account. Terminal tokens it approved live until their expiry, 8 hours at most: revoke them
+from the access page.
+
+```bash
+kubectl create secret generic perf-sentinel-hub-break-glass --from-file=ops=ops.hash \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/perf-sentinel-hub
+```
+
+**Removing one.** Delete its entry and its `local:<name>` member. The ConfigMap checksum
+rolls the pod, and the account's sessions end at their next request.
+
+**Throttled.** Five failures from one address for one name start a backoff, from 30
+seconds up to 15 minutes, and one address hashes at most 5 times a minute. There is no
+lock to clear: an attacker's failures slow their own address, not the operator's. The
+state lives in memory, so a restart clears it.
+
+| Event | When |
+|-------|------|
+| `2020` | Warning: a local account signed in, with its name and the client address |
+| `2021` | Warning: a local sign-in was refused, with the account (`(unknown name)` for an undeclared one, never what was typed), the client address and the consecutive failures |
+
 ## Rolling back with access control on
 
 Never roll the image back below the release that enforces access control while

@@ -233,12 +233,27 @@ How fresh a decision is:
   the restart that deploys them;
 - a rotated machine token needs a rollout restart, a removed one goes with the ConfigMap
   change that rolls the pod.
-- a revoked terminal token is refused from its next request.
+- a revoked terminal token is refused from its next request;
+- a local account's new hash needs a rollout restart, which ends that account's browser
+  sessions; the terminal tokens it approved live until their expiry, 8 hours at most,
+  unless an admin revokes them.
 
 Terminal sign-in is not offered while `Hub:Auth:TrustedProxyNetworks` is empty. Behind a
 proxy listed there, the address the approval page shows and the per-address limits count
 are the client's own, as the proxy reports it: a proxy that forwards a client-supplied
 `X-Forwarded-For` unchanged lets a client choose the address it shows.
+
+Local accounts:
+
+- The throttle lives in memory, and a restart clears it.
+- There is no sign-out, for a local session as for any other.
+- One address hashes at most 5 times a minute, and one hash at a time runs. An attacker
+  with many addresses, two dozen IPv4 addresses or IPv6 /64s at a few hundred milliseconds
+  per 600,000-iteration hash, can still keep the hashing slot busy: the operator then
+  waits up to 10 seconds for it, and gets `503` beyond that. An ingress rate limit on
+  `/auth/sign-in/local` raises that bar.
+- Online guessing is bounded by that slot, the per-address budget, the backoff and the
+  15-character minimum, not stopped. Pick a long random password.
 
 Outside the model:
 

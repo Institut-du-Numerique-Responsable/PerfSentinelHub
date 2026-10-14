@@ -12,7 +12,7 @@ une machine :
 
 | Route                                                            | Accès                                                                      |
 |------------------------------------------------------------------|----------------------------------------------------------------------------|
-| `/` et les fichiers du lanceur                                   | session, sinon redirection vers le fournisseur                             |
+| `/` et les fichiers du lanceur                                   | session, sinon redirection vers le fournisseur, ou vers la page de connexion du Hub avec un [compte local](#comptes-locaux) |
 | `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, sinon `401`                                                       |
 | `/reports/`                                                      | session, `401` dans le cadre du lanceur, redirection si ouvert directement |
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`            | session, sinon `401`, et l'acquittement est pris au nom de la session      |
@@ -110,7 +110,7 @@ chaque client et qu'un client qui lui parle directement ne peut pas en forger.
 | `Hub:Auth:SubjectClaim`            | `sub`                  | La clé d'autorisation, lue seulement avec le contrôle d'accès : `sub`, `oid`, `uuid` ou `account_id` |
 | `Hub:Auth:GroupsClaim`             | `groups`               | Le champ userinfo des groupes, lu avec `RequiredGroups` ou le contrôle d'accès                     |
 | `Hub:Auth:RequiredGroups`          | aucun                  | Aucune entrée vide, refusé si `Enabled` est désactivé, voir plus bas                               |
-| `Hub:Auth:TrustedProxyNetworks`    | aucun                  | Réseaux CIDR du seul proxy (`10.42.200.0/28`) dont les en-têtes transmis sont crus ; la connexion du terminal l'exige |
+| `Hub:Auth:TrustedProxyNetworks`    | aucun                  | Réseaux CIDR du seul proxy (`10.42.200.0/28`) dont les en-têtes transmis sont crus ; la connexion du terminal et les comptes locaux l'exigent |
 
 Déclarez `https://<hôte du hub>/auth/callback` comme URI de redirection du
 client, et faites du client un client confidentiel.
@@ -319,3 +319,84 @@ par son /64) ; un code dure 10 minutes et sert une fois. La CLI consulte toutes 
 mal tapés ou inconnus en 10 minutes suspendent les approbations d'une personne pour le
 reste de ces 10 minutes. Les codes en attente vivent en mémoire, si bien qu'un
 redémarrage annule les connexions en cours.
+
+## Comptes locaux
+
+Avec le contrôle d'accès actif, un compte local est l'entrée quand le fournisseur est en
+panne. Se connecter par le fournisseur reste le chemin normal : déclarez un ou deux
+comptes de secours, gardez leurs mots de passe dans un coffre, et changez-les après
+chaque usage.
+
+**En déclarer un.** `Hub:Access:LocalAccounts` liste des `{ Name, PasswordHash }`. Le
+compte se connecte en tant que `local:<name>`, comme sujet et comme identité, et
+`Hub:Access:Admins` ou les `Members` d'un groupe interne doivent lister `local:<name>` :
+un compte qui n'atteindrait rien arrête le Hub au démarrage. Le nom suit
+`^[a-z0-9][a-z0-9._-]{0,63}$`. Le hash est la ligne qu'affiche
+`PerfSentinelHub hash-password` (voir
+[OPERATIONS-FR.md](OPERATIONS-FR.md#comptes-locaux-de-secours)), livrée depuis un Secret,
+jamais par les values. Un sujet ou une identité du fournisseur commençant par `local:`
+fait échouer la connexion, si bien qu'aucun utilisateur du fournisseur ne peut se faire
+passer pour un compte local.
+
+**La page de connexion.** Avec un compte local déclaré, une requête de page sans session
+va vers la page `/auth/sign-in` du Hub au lieu du fournisseur. Elle propose d'abord
+**Sign in with single sign-on** et, repliée en dessous, **Sign in with a local account**.
+Le Hub sert cette page sans contacter personne, elle s'ouvre donc pendant une panne du
+fournisseur ; le fournisseur n'est joint que lorsque l'utilisateur clique sur
+l'authentification unique, et l'utilisateur revient sur la page demandée. L'API répond
+toujours `401`, et le lanceur se recharge vers la page. Sans compte local déclaré rien ne
+change : une page va droit au fournisseur.
+
+**La session.** 8 heures fixes depuis la connexion, jamais renouvelée. Elle ne porte aucun
+groupe du fournisseur : ses groupes sont les groupes internes qui listent
+`local:<name>`, lus à chaque requête, et elle est admin quand `Admins` la liste ou
+qu'`AdminGroups` nomme l'un de ces groupes. `Hub:Auth:RequiredGroups` ne s'y applique
+pas : le compte est déclaré dans la même configuration, et c'est l'entrée quand le
+fournisseur ne l'est pas. Elle peut approuver une connexion du terminal, dont le jeton
+finit avec la session.
+
+**Une rotation met fin aux sessions.** Une session porte une empreinte du hash
+configuré. Un nouveau hash, une fois le pod redémarré, met fin à chaque session de ce
+compte, et retirer le compte y met fin à leur requête suivante. Les jetons de terminal
+que le compte a approuvés vivent jusqu'à leur expiration, 8 heures au plus ; un admin les
+révoque depuis la page d'accès.
+
+**Deviner.** Le Hub hache un mot de passe à la fois, PBKDF2-HMAC-SHA256 à 600 000
+itérations, et un mot de passe compte 15 à 1 024 caractères. Un nom inconnu coûte le même
+hachage qu'un nom déclaré et reçoit la même réponse, `403` "The name or the password is
+wrong.", octet pour octet, si bien que ni la réponse ni son délai ne distinguent les noms.
+
+- **Temporisation.** Une adresse cliente et un nom ont cinq échecs gratuits, puis
+  attendent 30 secondes, doublées à chaque échec suivant jusqu'à 15 minutes ; un succès
+  l'efface. Il n'y a pas de verrou : un attaquant ne ralentit que sa propre adresse,
+  jamais celle de l'opérateur.
+- **Budget.** Une adresse hache au plus 5 fois par minute, quels que soient les noms.
+- Au-delà de l'un ou l'autre, `429` avec `Retry-After`, sans hachage. Une requête attend
+  jusqu'à 10 secondes la place de hachage, 8 au plus en attente, puis reçoit `503` et
+  `Retry-After: 1`.
+- Le frein vit en mémoire, et un redémarrage l'efface.
+- Le formulaire n'est accepté que depuis la page du Hub : un `Sec-Fetch-Site` autre que
+  `same-origin`, ou une `Origin` étrangère, reçoit `403`.
+
+**Il exige `Hub:Auth:TrustedProxyNetworks`.** Sans elle, chaque client derrière l'ingress
+partage une adresse, et n'importe qui pourrait garder le compte de secours freiné. Le Hub
+refuse de démarrer avec un compte local et une liste vide. Un Hub sans proxy devant liste
+`127.0.0.1/32`.
+
+**Journalisation.** Chaque connexion locale journalise l'événement `2020` en Warning, avec
+le compte et l'adresse cliente. Chaque tentative refusée journalise l'événement `2021` en
+Warning, avec le compte, l'adresse et les échecs consécutifs. Un nom non déclaré est
+journalisé `(unknown name)` : ce peut être un mot de passe tapé dans le mauvais champ.
+Les réponses `429` et `503` ne sont pas journalisées.
+
+```yaml
+hub:
+  auth:
+    trustedProxyNetworks: ["10.42.200.0/28"]   # les seuls pods du contrôleur d'ingress
+  access:
+    adminGroups: ["/hub-admins", "internal:break-glass"]
+    groups:
+      - { name: break-glass, members: ["local:ops"] }
+    localAccounts:
+      - { name: ops, secretName: perf-sentinel-hub-break-glass, secretKey: ops }
+```

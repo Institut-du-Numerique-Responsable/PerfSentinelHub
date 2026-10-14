@@ -2,9 +2,9 @@ using System.Text.RegularExpressions;
 
 namespace PerfSentinelHub.Configuration;
 
-// Hub:Access, rules A1 to A12 and A14. Nothing is read while access is off, so nothing is
+// Hub:Access, rules A1 to A14. Nothing is read while access is off, so nothing is
 // validated either. Each message names the key and its index, and none
-// echoes a machine token.
+// echoes a machine token or a password hash.
 public sealed partial class HubOptionsValidator
 {
     private const string InternalPrefix = "internal:";
@@ -38,6 +38,7 @@ public sealed partial class HubOptionsValidator
                        + "port, and without one it would stop answering everywhere.");
 
         ValidateSubjects(access, errors);
+        ValidateLocalAccounts(options, errors);
         var groups = ValidateInternalGroups(access, errors);
         ValidateGroupReferences(options, groups, errors);
         var projects = ValidateProjects(access, options.Sources, errors);
@@ -46,8 +47,8 @@ public sealed partial class HubOptionsValidator
         ValidateMachineTokens(options, groups, now, errors);
     }
 
-    // A6: Admins and Members hold subjects. A machine token is no person, and local
-    // accounts arrive with their own release.
+    // A6: Admins and Members hold subjects. A machine token is no person, and local:<name>
+    // names a declared local account.
     private static void ValidateSubjects(AccessOptions access, List<string> errors)
     {
         var subjects = access.Admins.Select((subject, i) => ($"Hub:Access:Admins:{i}", subject))
@@ -59,8 +60,37 @@ public sealed partial class HubOptionsValidator
             else if (subject.StartsWith(MachinePrefix, StringComparison.OrdinalIgnoreCase))
                 errors.Add($"{path}: a machine token is never a person; it gets its group through "
                            + "Hub:Access:MachineTokens.");
-            else if (subject.StartsWith(LocalPrefix, StringComparison.OrdinalIgnoreCase))
-                errors.Add($"{path}: local accounts are not available in this build yet.");
+            else if (subject.StartsWith(LocalPrefix, StringComparison.OrdinalIgnoreCase) &&
+                     !access.LocalAccounts.Any(account => LocalPrefix + account.Name == subject))
+                errors.Add($"{path}: '{subject}' names no account in Hub:Access:LocalAccounts.");
+    }
+
+    // A13. Without trusted proxies every client behind one shares its address, and the
+    // backoff keyed on it would let anyone keep the break-glass account throttled.
+    private static void ValidateLocalAccounts(HubOptions options, List<string> errors)
+    {
+        var access = options.Access;
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < access.LocalAccounts.Count; i++)
+        {
+            var account = access.LocalAccounts[i];
+            var path = $"Hub:Access:LocalAccounts:{i}";
+            if (!ConfiguredName().IsMatch(account.Name) || !names.Add(account.Name))
+                errors.Add($"{path}:Name must match ^[a-z0-9][a-z0-9._-]{{0,63}}$ and be unique.");
+            if (account.PasswordHash is null || !LocalPassword.TryParse(account.PasswordHash, out _, out _))
+                errors.Add($"{path}:PasswordHash must be the PHC string PerfSentinelHub hash-password prints: "
+                           + "$pbkdf2-sha256$i=600000$<salt>$<key>.");
+            var subject = LocalPrefix + account.Name;
+            if (!access.Admins.Contains(subject, StringComparer.Ordinal) &&
+                !access.Groups.Any(group => group.Members.Contains(subject, StringComparer.Ordinal)))
+                errors.Add($"Local account '{account.Name}' is listed by no internal group and not in "
+                           + "Hub:Access:Admins, so it could sign in and reach nothing.");
+        }
+
+        if (access.LocalAccounts.Count > 0 && options.Auth.TrustedProxyNetworks.Count == 0)
+            errors.Add("Hub:Access:LocalAccounts needs Hub:Auth:TrustedProxyNetworks: without it every client behind "
+                       + "a proxy shares one address, and anyone could keep the break-glass account throttled. "
+                       + "A Hub with no proxy in front lists 127.0.0.1/32.");
     }
 
     // A7. Returns each declared group's members by name, for the references and A12.
@@ -246,7 +276,7 @@ public sealed partial class HubOptionsValidator
         {
             var token = tokens[i];
             var path = $"Hub:Access:MachineTokens:{i}";
-            if (!MachineTokenName().IsMatch(token.Name) || !names.Add(token.Name))
+            if (!ConfiguredName().IsMatch(token.Name) || !names.Add(token.Name))
                 errors.Add($"{path}:Name must match ^[a-z0-9][a-z0-9._-]{{0,63}}$ and be unique.");
 
             if (!token.Group.StartsWith(InternalPrefix, StringComparison.Ordinal))
@@ -286,6 +316,7 @@ public sealed partial class HubOptionsValidator
     [GeneratedRegex(@"^(?=.{32,512}\z)[A-Za-z0-9._~+/-]+=*\z")]
     private static partial Regex MachineTokenValue();
 
+    // A machine token's or a local account's name.
     [GeneratedRegex(@"^[a-z0-9][a-z0-9._-]{0,63}\z")]
-    private static partial Regex MachineTokenName();
+    private static partial Regex ConfiguredName();
 }

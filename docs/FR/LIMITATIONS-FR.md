@@ -253,13 +253,29 @@ La fraîcheur d'une décision :
   machine s'appliquent au redémarrage qui les déploie ;
 - un jeton machine renouvelé demande un rollout restart, un jeton retiré part avec la
   modification de ConfigMap qui relance le pod.
-- un jeton de terminal révoqué est refusé dès sa requête suivante.
+- un jeton de terminal révoqué est refusé dès sa requête suivante ;
+- le nouveau hash d'un compte local demande un rollout restart, qui met fin aux sessions
+  de navigateur de ce compte ; les jetons de terminal qu'il a approuvés vivent jusqu'à leur
+  expiration, 8 heures au plus, sauf si un admin les révoque.
 
 La connexion du terminal n'est pas offerte tant que `Hub:Auth:TrustedProxyNetworks` est
 vide. Derrière un proxy qui y figure, l'adresse que montre la page d'approbation et que
 comptent les limites par adresse est celle du client, telle que le proxy la rapporte : un
 proxy qui transmet tel quel un `X-Forwarded-For` fourni par le client laisse ce client
 choisir l'adresse qu'il montre.
+
+Comptes locaux :
+
+- Le frein vit en mémoire, et un redémarrage l'efface.
+- Il n'y a pas de déconnexion, pour une session locale comme pour une autre.
+- Une adresse hache au plus 5 fois par minute, et un seul hachage tourne à la fois. Un
+  attaquant aux nombreuses adresses, deux douzaines d'adresses IPv4 ou de /64 IPv6 à
+  quelques centaines de millisecondes par hachage de 600 000 itérations, peut encore
+  garder la place de hachage occupée : l'opérateur l'attend alors jusqu'à 10 secondes, et
+  reçoit `503` au-delà. Une limite de débit à l'ingress sur `/auth/sign-in/local` élève
+  cette barre.
+- Deviner en ligne est borné par cette place, le budget par adresse, la temporisation et
+  le minimum de 15 caractères, pas empêché. Choisissez un mot de passe long et aléatoire.
 
 Hors du modèle :
 

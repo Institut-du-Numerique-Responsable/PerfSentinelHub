@@ -1,3 +1,5 @@
+using System.Buffers.Text;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -8,7 +10,8 @@ namespace PerfSentinelHub.Api;
 /// <summary>
 ///     Hub:Access compiled once from the validated configuration: patterns, role
 ///     permissions, grants, internal membership by subject, the admin sets and each
-///     machine token's SHA-256 fingerprint, never the token. Always registered, so the
+///     machine token's SHA-256 fingerprint, never the token, and each local account's parsed
+///     hash and stamp. Always registered, so the
 ///     handlers shared by both modes can take it as a service: with access off it is a
 ///     disabled instance that builds nothing and whose every scope is Unrestricted.
 /// </summary>
@@ -22,6 +25,7 @@ public sealed class AccessPolicy
     private readonly HashSet<string> _admins = new(StringComparer.Ordinal);
     private readonly List<Grant> _grants = [];
     private readonly Dictionary<string, List<string>> _internalGroupsBySubject = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LocalAccount> _localAccounts = new(StringComparer.Ordinal);
     private readonly List<MachineToken> _machineTokens = [];
     private readonly HashSet<string> _providerGroups = new(StringComparer.Ordinal);
 
@@ -47,11 +51,37 @@ public sealed class AccessPolicy
                 token.Group,
                 SHA256.HashData(Encoding.UTF8.GetBytes(token.Token!)),
                 token.ExpiresAt!.Value));
+
+        // The stamp a local session carries: a rotated hash, or a removed account, ends its sessions.
+        foreach (var account in access.LocalAccounts)
+        {
+            // The validator refuses such a hash at startup; an empty key here would be a bug, never an account.
+            if (!LocalPassword.TryParse(account.PasswordHash!, out var salt, out var key))
+                throw new InvalidOperationException($"Hub:Access:LocalAccounts {account.Name} has an unparsable PasswordHash.");
+            var stamp = Base64Url.EncodeToString(SHA256.HashData(Encoding.UTF8.GetBytes(account.PasswordHash!)).AsSpan(0, 16));
+            _localAccounts[account.Name] = new LocalAccount(salt, key, stamp);
+        }
     }
 
     public bool Enabled { get; }
 
     public IReadOnlySet<string> ProviderGroups => _providerGroups;
+
+    public bool HasLocalAccounts => _localAccounts.Count > 0;
+
+    public LocalAccount? FindLocalAccount(string name)
+    {
+        return _localAccounts.GetValueOrDefault(name);
+    }
+
+    // A local ticket holds while access is on, its account is declared and its hash unchanged.
+    public bool HoldsLocalTicket(ClaimsPrincipal principal)
+    {
+        return principal.FindFirst(AccessCaller.SubjectClaim)?.Value is { } subject &&
+               subject.StartsWith(LocalSignIn.SubjectPrefix, StringComparison.Ordinal) &&
+               _localAccounts.TryGetValue(subject[LocalSignIn.SubjectPrefix.Length..], out var account) &&
+               principal.FindFirst(LocalSignIn.StampClaim)?.Value == account.Stamp;
+    }
 
     // The request's caller with one permission. Off, or with no caller, it never narrows or
     // widens anything on its own: Unrestricted off, Nothing for a principal with no claims.
@@ -194,6 +224,8 @@ public sealed class AccessPolicy
     }
 
     private sealed record Grant(string Group, IReadOnlyList<AccessPattern>? Patterns, HashSet<string> Permissions);
+
+    public sealed record LocalAccount(byte[] Salt, byte[] Key, string Stamp);
 
     private sealed record MachineToken(string Name, string Group, byte[] Fingerprint, DateTimeOffset ExpiresAt);
 }

@@ -4,8 +4,8 @@
 {{- $_ := set $ids .id true }}
 {{- end }}
 {{- /* Nil-safe for --reuse-values from a release that predates hub.access. Each
-       token's Secret reference is checked whatever the switch; the env var that
-       delivers the token is added only with access on. */}}
+       token's and local account's Secret reference is checked whatever the switch;
+       the env var that delivers the token or the hash is added only with access on. */}}
 {{- $access := .Values.hub.access | default dict }}
 {{- $tokenNames := dict }}
 {{- range ($access.machineTokens | default list) }}
@@ -13,6 +13,13 @@
 {{- if hasKey $tokenNames .name }}{{ fail (printf "duplicate machine token name: %s" .name) }}{{ end }}
 {{- $_ := set $tokenNames .name true }}
 {{- if not (and .secretName .secretKey) }}{{ fail (printf "machine token %s needs secretName and secretKey" .name) }}{{ end }}
+{{- end }}
+{{- $accountNames := dict }}
+{{- range ($access.localAccounts | default list) }}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9._-]{0,63}$" (toString .name)) }}{{ fail (printf "local account name must match ^[a-z0-9][a-z0-9._-]{0,63}$: %v" .name) }}{{ end }}
+{{- if hasKey $accountNames .name }}{{ fail (printf "duplicate local account name: %s" .name) }}{{ end }}
+{{- $_ := set $accountNames .name true }}
+{{- if not (and .secretName .secretKey) }}{{ fail (printf "local account %s needs secretName and secretKey" .name) }}{{ end }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -78,6 +85,13 @@ spec:
                 secretKeyRef:
                   name: {{ $token.secretName }}
                   key: {{ $token.secretKey }}
+            {{- end }}
+            {{- range $index, $account := $access.localAccounts | default list }}
+            - name: Hub__Access__LocalAccounts__{{ $index }}__PasswordHash
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $account.secretName }}
+                  key: {{ $account.secretKey }}
             {{- end }}
             {{- end }}
             {{- range $index, $source := .Values.sources }}

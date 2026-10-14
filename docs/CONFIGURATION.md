@@ -112,7 +112,7 @@ Hub logs one warning at startup that names the sources whose credential will nev
 ## Access control
 
 `Hub:Access` says who reaches which findings, sources and runs: projects, roles, grants,
-internal groups, admins and machine tokens. All of it is configuration, the database stores
+internal groups, admins, machine tokens and local accounts. All of it is configuration, the database stores
 no user and no membership, and under Helm the whole block is `hub.access`, passed to the Hub
 as is. How it applies to each route, machine tokens and sessions are in
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md). Off, the default, nothing under `Hub:Access` is
@@ -126,14 +126,15 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 |------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Hub:Access:Enabled`         | `false` by default. Requires `Hub:Auth:Enabled`, `Hub:MetricsPort`, an entry in `Admins` or `AdminGroups`, and `Hub:AckRelay:TrustIdentityHeader` off        |
 | `Hub:Auth:SubjectClaim`      | `sub` by default, read only with `Enabled`: `sub`, `oid`, `uuid` or `account_id`, ids a provider never reassigns                                             |
-| `Hub:Auth:TrustedProxyNetworks` | Empty by default. CIDR networks whose `X-Forwarded-For` and `X-Forwarded-Proto` are trusted, one hop deep; each entry must parse. Terminal sign-in (`perf-sentinel login`) is offered only when it is set, see [AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in) |
-| `Hub:Access:Admins`          | Subjects holding the built-in `admin` role on `*`: 1 to 256 characters, no control character, no `machine:` or `local:` prefix. Not empty with `AdminGroups`  |
+| `Hub:Auth:TrustedProxyNetworks` | Empty by default. CIDR networks whose `X-Forwarded-For` and `X-Forwarded-Proto` are trusted, one hop deep; each entry must parse. Terminal sign-in (`perf-sentinel login`) is offered only when it is set, see [AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in), and `LocalAccounts` requires it |
+| `Hub:Access:Admins`          | Subjects holding the built-in `admin` role on `*`: 1 to 256 characters, no control character, no `machine:` prefix, and `local:<name>` only for a declared local account. Not empty with `AdminGroups` |
 | `Hub:Access:AdminGroups`     | Group references holding `admin` on `*`: `internal:<name>` or a provider group, see below                                                                     |
 | `Hub:Access:Groups[]`        | `{ Name, Members[] }`, referenced as `internal:<Name>`. Name of 1 to 64 ASCII letters, digits, `.`, `_` or `-`, unique with case ignored; members as `Admins` |
 | `Hub:Access:Projects[]`      | `{ Name, Patterns[] }`, named as a group, with at least one pattern `{ Source, Service, Attribute }` setting one part or more                                 |
 | `Hub:Access:Roles[]`         | `{ Name, Permissions[] }`, named as a group but not `reader`, `member` or `admin`, case ignored; permissions below, each once, never `access.admin`           |
 | `Hub:Access:Grants[]`        | `{ Group, Project, Role }`, all three set. `Project` is a declared project or `*`, `Role` built in or declared, and `admin` is granted on `*` only            |
 | `Hub:Access:MachineTokens[]` | `{ Name, Group, Token, ExpiresAt }`, see below                                                                                                                |
+| `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, see below                                                                                                                           |
 
 **Permissions and roles.** The permissions are `findings.read`, `traces.read`,
 `sources.read`, `analyses.run` and `acks.write`, plus `access.admin`, which only the
@@ -183,6 +184,18 @@ reads it from that Secret into `Hub__Access__MachineTokens__<index>__Token`. The
 refuses a duplicate or malformed name, a missing Secret reference and an `expiresAt` that
 is not an ISO 8601 date and time. No message ever echoes a token. An expired entry is
 logged at startup (event `2001`) and refused at each request.
+
+**Local accounts** are break-glass accounts for when the provider is down, signed in on
+the Hub's own page as `local:<name>`, see
+[AUTHENTICATION.md](AUTHENTICATION.md#local-accounts). `Name` matches
+`^[a-z0-9][a-z0-9._-]{0,63}$` and is unique. `PasswordHash` is the line
+`PerfSentinelHub hash-password` prints, `$pbkdf2-sha256$i=600000$<salt>$<key>`, trimmed
+like a token; any other shape or iteration count is refused. `Admins` or a group's
+`Members` must list `local:<name>`, and `Hub:Auth:TrustedProxyNetworks` must not be empty.
+Under Helm an item is `{ name, secretName, secretKey }`: with `enabled` the chart reads the
+hash from that Secret into `Hub__Access__LocalAccounts__<index>__PasswordHash`, and refuses
+a duplicate or malformed name and a missing Secret reference; the schema refuses local
+accounts without `auth.trustedProxyNetworks`. No message ever echoes a hash.
 
 ## What a source is, and what is measured
 

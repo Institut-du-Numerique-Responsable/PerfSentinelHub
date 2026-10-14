@@ -571,7 +571,8 @@ public sealed class ConfigurationTests
             Enabled = false,
             Admins = ["machine:x", " "],
             Projects = [new ProjectOptions { Name = "*" }],
-            MachineTokens = [new MachineTokenOptions { Name = "BAD", Token = "short" }]
+            MachineTokens = [new MachineTokenOptions { Name = "BAD", Token = "short" }],
+            LocalAccounts = [new LocalAccountOptions { Name = "BAD", PasswordHash = "plain" }]
         });
 
         Assert.Empty(AccessFailures(garbage));
@@ -617,7 +618,8 @@ public sealed class ConfigurationTests
         "Hub:Access:Groups:0:Members:0 must be a subject of 1 to 256 characters with no control character.")]
     [InlineData("A6 machine",
         "Hub:Access:Admins:0: a machine token is never a person; it gets its group through Hub:Access:MachineTokens.")]
-    [InlineData("A6 local", "Hub:Access:Groups:0:Members:0: local accounts are not available in this build yet.")]
+    [InlineData("A6 local", "Hub:Access:Groups:0:Members:0: 'local:ops' names no account in Hub:Access:LocalAccounts.")]
+    [InlineData("A6 local case", "Hub:Access:Admins:0: 'Local:ops' names no account in Hub:Access:LocalAccounts.")]
     [InlineData("A7 name",
         "Hub:Access:Groups:0:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored.")]
     [InlineData("A7 duplicate",
@@ -677,11 +679,44 @@ public sealed class ConfigurationTests
     [InlineData("A12 import key", "Hub:Access:MachineTokens:0:Token must differ from every other machine token and every import API key.")]
     [InlineData("A12 no expiry", TokenExpiry)]
     [InlineData("A12 beyond a year", TokenExpiry)]
+    [InlineData("A13 name", LocalName)]
+    [InlineData("A13 duplicate", "Hub:Access:LocalAccounts:1:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.")]
+    [InlineData("A13 no hash", LocalHash)]
+    [InlineData("A13 iterations", LocalHash)]
+    [InlineData("A13 unlisted",
+        "Local account 'ops' is listed by no internal group and not in Hub:Access:Admins, so it could sign in and reach nothing.")]
+    [InlineData("A13 no proxy",
+        "Hub:Access:LocalAccounts needs Hub:Auth:TrustedProxyNetworks: without it every client behind a proxy shares one address, and anyone could keep the break-glass account throttled. A Hub with no proxy in front lists 127.0.0.1/32.")]
     public void Each_access_rule_names_the_key_it_refuses(string rule, string message)
     {
         string[] failures = AccessFailures(AccessCase(rule));
 
         Assert.Contains(message, failures);
+    }
+
+    [Fact]
+    public void A_local_account_listed_by_a_group_or_as_an_admin_is_accepted()
+    {
+        Assert.Empty(AccessFailures(LocalOn()));
+        Assert.Empty(AccessFailures(LocalOn(access => access with
+        {
+            Admins = [.. access.Admins, "local:ops"],
+            Groups = [access.Groups[0] with { Members = [] }, .. access.Groups.Skip(1)]
+        })));
+    }
+
+    [Fact]
+    public void A_local_account_error_never_echoes_its_hash()
+    {
+        var hash = LocalPasswordHash.Replace("i=600000", "i=1", StringComparison.Ordinal);
+
+        string[] failures = AccessFailures(LocalOn(access => access with
+        {
+            LocalAccounts = [access.LocalAccounts[0] with { PasswordHash = hash }]
+        }));
+
+        Assert.Equal([LocalHash], failures);
+        Assert.DoesNotContain(failures, failure => failure.Contains("AAECAwQF", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -737,13 +772,15 @@ public sealed class ConfigurationTests
               "roles": [{"name": "auditor", "permissions": ["findings.read", "traces.read"]}],
               "grants": [{"group": "internal:ci-a", "project": "shop", "role": "auditor"}],
               "machineTokens": [{"name": "ci-shop", "group": "internal:ci-a", "expiresAt": "2027-06-30T00:00:00Z",
-                                 "secretName": "hub-machine-tokens", "secretKey": "ci-shop"}]}}}
+                                 "secretName": "hub-machine-tokens", "secretKey": "ci-shop"}],
+              "localAccounts": [{"name": "ops", "secretName": "hub-break-glass", "secretKey": "ops"}]}}}
             """));
         var configuration = new ConfigurationBuilder()
             .AddJsonStream(stream)
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Hub:Access:MachineTokens:0:Token"] = MachineTokenValue + "\n"
+                ["Hub:Access:MachineTokens:0:Token"] = MachineTokenValue + "\n",
+                ["Hub:Access:LocalAccounts:0:PasswordHash"] = LocalPasswordHash + "\n"
             })
             .Build();
 
@@ -760,6 +797,9 @@ public sealed class ConfigurationTests
         var token = Assert.Single(access.MachineTokens);
         Assert.Equal(new DateTimeOffset(2027, 6, 30, 0, 0, 0, TimeSpan.Zero), token.ExpiresAt);
         Assert.Equal(MachineTokenValue, token.Token);
+        var local = Assert.Single(access.LocalAccounts);
+        Assert.Equal("ops", local.Name);
+        Assert.Equal(LocalPasswordHash, local.PasswordHash);
     }
 
     // No shipped example may teach a bare top-level name: on GitLab anyone can create one.
@@ -798,6 +838,15 @@ public sealed class ConfigurationTests
         + "and '/', with trailing '=' allowed, and must not start with pshub_.";
 
     private const string TokenExpiry = "Hub:Access:MachineTokens:0:ExpiresAt must be set, at most 365 days from now.";
+
+    private const string LocalPasswordHash =
+        "$pbkdf2-sha256$i=600000$AAECAwQFBgcICQoLDA0ODw$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY";
+
+    private const string LocalName = "Hub:Access:LocalAccounts:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
+
+    private const string LocalHash =
+        "Hub:Access:LocalAccounts:0:PasswordHash must be the PHC string PerfSentinelHub hash-password prints: "
+        + "$pbkdf2-sha256$i=600000$<salt>$<key>.";
 
     private static HubOptions AccessCase(string rule)
     {
@@ -877,8 +926,30 @@ public sealed class ConfigurationTests
             },
             "A12 no expiry" => FirstToken(token => token with { ExpiresAt = null }),
             "A12 beyond a year" => FirstToken(token => token with { ExpiresAt = Now.AddDays(366) }),
+            "A6 local case" => LocalOn(access => access with { Admins = ["Local:ops"] }),
+            "A13 name" => LocalOn(access => Local(access, local => local with { Name = "Ops" }, "local:Ops")),
+            "A13 duplicate" => LocalOn(access => access with { LocalAccounts = [access.LocalAccounts[0], access.LocalAccounts[0]] }),
+            "A13 no hash" => LocalOn(access => Local(access, local => local with { PasswordHash = null })),
+            "A13 iterations" => LocalOn(access => Local(access, local => local with
+            {
+                PasswordHash = LocalPasswordHash.Replace("600000", "600001", StringComparison.Ordinal)
+            })),
+            "A13 unlisted" => LocalOn(access => access with
+            {
+                Groups = [access.Groups[0] with { Members = [] }, .. access.Groups.Skip(1)]
+            }),
+            "A13 no proxy" => LocalOn() with { Auth = ValidAuth() },
             _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, null)
         };
+
+        static AccessOptions Local(AccessOptions access, Func<LocalAccountOptions, LocalAccountOptions> change, string? member = null)
+        {
+            return access with
+            {
+                LocalAccounts = [change(access.LocalAccounts[0])],
+                Groups = member is null ? access.Groups : [access.Groups[0] with { Members = [member] }, .. access.Groups.Skip(1)]
+            };
+        }
 
         static HubOptions Members(string member)
         {
@@ -963,6 +1034,22 @@ public sealed class ConfigurationTests
             ]
         };
         return ValidOptions() with { Auth = ValidAuth(), MetricsPort = 9464, Access = change?.Invoke(access) ?? access };
+    }
+
+    // A local account ops in the oncall group, behind a known proxy.
+    private static HubOptions LocalOn(Func<AccessOptions, AccessOptions>? change = null)
+    {
+        var options = AccessOn(access => access with
+        {
+            Groups = [access.Groups[0] with { Members = [.. access.Groups[0].Members, "local:ops"] }, .. access.Groups.Skip(1)],
+            LocalAccounts = [new LocalAccountOptions { Name = "ops", PasswordHash = LocalPasswordHash }]
+        });
+        options = options with
+        {
+            Auth = options.Auth with { TrustedProxyNetworks = ["127.0.0.1/32"] },
+            Access = change?.Invoke(options.Access) ?? options.Access
+        };
+        return options;
     }
 
     private static string[] AccessFailures(HubOptions options)

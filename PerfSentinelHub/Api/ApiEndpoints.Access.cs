@@ -99,7 +99,9 @@ public static partial class ApiEndpoints
             [
                 .. configured.MachineTokens.Select(token => new AccessMachineToken(
                     token.Name, token.Group, token.ExpiresAt!.Value.ToUnixTimeMilliseconds(), token.ExpiresAt > now))
-            ]);
+            ],
+            // Names only: never the hash.
+            [.. configured.LocalAccounts.Select(account => account.Name)]);
     }
 
     private static async Task<AccessUnmatched> UnmatchedAsync(

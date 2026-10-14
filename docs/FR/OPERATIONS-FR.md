@@ -361,6 +361,75 @@ cours. Événements, en Information sauf mention, jamais avec un code ni un jeto
 | `2014` | Warning, au démarrage avec le contrôle d'accès : la connexion du terminal est coupée parce que `Hub:Auth:TrustedProxyNetworks` est vide |
 | `2015` | Le terminal a récupéré le jeton d'une connexion approuvée : l'id du jeton, l'adresse qui a demandé, qui l'a approuvée et son sujet |
 
+## Comptes locaux de secours
+
+Un compte local se connecte sur la page du Hub pendant une panne du fournisseur, voir
+[AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux). Son mot de passe n'atteint
+jamais les values, une ligne de commande ni le journal du Hub : le Hub n'en détient que le
+hash, depuis un Secret.
+
+**En créer un.**
+
+1. Hachez le mot de passe avec l'image. `hash-password` le lit sur stdin, jamais depuis un
+   argument, et n'affiche que le hash ; le mot de passe compte 15 à 1 024 caractères.
+
+   ```bash
+   printf 'Password: ' >&2; IFS= read -rs password; echo
+   printf '%s\n' "$password" | docker run --rm -i ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub:<version> hash-password > ops.hash
+   unset password
+   ```
+
+   La première ligne fonctionne sous bash et zsh ; `IFS=` garde les espaces de début et de
+   fin, que la connexion compare tels que tapés. `printf` est une commande interne du shell,
+   le mot de passe n'apparaît donc dans aucune liste de processus. Depuis un Hub en marche,
+   `kubectl exec -i deploy/perf-sentinel-hub -- /app/PerfSentinelHub hash-password` lit
+   stdin de la même façon. Sur un terminal à lui, `hash-password` le demande deux fois sans
+   l'afficher.
+2. Rangez-le, puis supprimez le fichier :
+   `kubectl create secret generic perf-sentinel-hub-break-glass --from-file=ops=ops.hash`.
+   Le hash n'est pas le mot de passe, mais gardez-le aussi privé : 600 000 itérations
+   ralentissent une devinette hors ligne, elles ne l'empêchent pas.
+3. Déclarez le compte et donnez-lui un groupe, puis `helm upgrade` :
+
+   ```yaml
+   hub:
+     access:
+       adminGroups: ["/hub-admins", "internal:break-glass"]
+       groups:
+         - { name: break-glass, members: ["local:ops"] }
+       localAccounts:
+         - { name: ops, secretName: perf-sentinel-hub-break-glass, secretKey: ops }
+   ```
+
+Gardez le mot de passe dans le coffre de l'équipe, et testez le compte une fois, par
+`/auth/sign-in`, tant que le fournisseur fonctionne.
+
+**Après chaque usage, changez-le.** Hachez un nouveau mot de passe, remplacez le Secret,
+puis `kubectl rollout restart deployment/<release>` : le chart ne peut pas hacher un Secret
+qui ne lui appartient pas, un Secret modifié ne fait donc rien redémarrer à lui seul. Le
+redémarrage met fin à chaque session du compte. Les jetons de terminal qu'il a approuvés
+vivent jusqu'à leur expiration, 8 heures au plus : révoquez-les depuis la page d'accès.
+
+```bash
+kubectl create secret generic perf-sentinel-hub-break-glass --from-file=ops=ops.hash \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/perf-sentinel-hub
+```
+
+**En retirer un.** Supprimez son entrée et son membre `local:<nom>`. La somme de contrôle de
+la ConfigMap fait redémarrer le pod, et les sessions du compte prennent fin à leur requête
+suivante.
+
+**Freiné.** Cinq échecs depuis une adresse pour un nom démarrent une temporisation, de 30
+secondes jusqu'à 15 minutes, et une adresse hache au plus 5 fois par minute. Il n'y a pas
+de verrou à lever : les échecs d'un attaquant ralentissent sa propre adresse, pas celle de
+l'opérateur. L'état vit en mémoire, un redémarrage l'efface donc.
+
+| Événement | Quand |
+|-----------|-------|
+| `2020` | Warning : un compte local s'est connecté, avec son nom et l'adresse cliente |
+| `2021` | Warning : une connexion locale a été refusée, avec le compte (`(unknown name)` pour un nom non déclaré, jamais ce qui a été tapé), l'adresse cliente et les échecs consécutifs |
+
 ## Revenir en arrière avec le contrôle d'accès activé
 
 Ne revenez jamais à une image antérieure à la version qui applique le contrôle d'accès

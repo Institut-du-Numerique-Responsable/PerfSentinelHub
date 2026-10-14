@@ -5161,6 +5161,9 @@
         card.appendChild(accessTable(['Machine token', 'Group', 'Expires'], configuration.machine_tokens.map(function (token) {
             return [token.name, token.group, PSL.accessExpiry(token.expires_at_ms, now)];
         })));
+        card.appendChild(accessTable(['Local account', 'Signs in as'], configuration.local_accounts.map(function (name) {
+            return [name, 'local:' + name];
+        })));
         card.appendChild(el('p', {
             class: 'access-muted',
             text: 'Declared in the Hub\'s configuration (Helm values hub.access), applied at the next restart. '
