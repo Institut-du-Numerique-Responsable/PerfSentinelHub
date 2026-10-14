@@ -991,7 +991,7 @@ test("what you reach spells a grant on * as everything, and Admins as your own i
         ]
     });
     assert.deepEqual(rows, [
-        {project: "Everything, records no project matches included", group: "your id, in Admins", role: "admin",
+        {project: "Everything, including records no project covers", group: "your id, in Admins", role: "admin",
             permissions: "findings.read, access.admin"},
         {project: "shop", group: "/teams/shop", role: "member", permissions: "findings.read, acks.write"}
     ]);
@@ -1001,14 +1001,66 @@ test("what you reach spells a grant on * as everything, and Admins as your own i
 });
 
 test("#/access is the access screen only when the Hub answered /api/access, New otherwise", () => {
-    assert.equal(PSL.screenOf("#/access", true), "access");
-    assert.equal(PSL.screenOf("#/access", false), "new", "access off, or /api/access failed");
-    assert.equal(PSL.screenOf("", false), "new");
-    assert.equal(PSL.screenOf("#/recent", false), "recent");
-    assert.equal(PSL.screenOf("#/new?from=1&to=2&service=s", false), "new");
-    assert.equal(PSL.screenOf("#/run/0123456789abcdef", false), "run");
-    assert.equal(PSL.screenOf("#/report/0123456789abcdef", true), "report");
-    assert.equal(PSL.screenOf("#/nowhere", true), "new");
+    assert.equal(PSL.screenOf("#/access", true, false), "access");
+    assert.equal(PSL.screenOf("#/access", false, false), "new", "access off, or /api/access failed");
+    assert.equal(PSL.screenOf("", false, false), "new");
+    assert.equal(PSL.screenOf("#/recent", false, false), "recent");
+    assert.equal(PSL.screenOf("#/new?from=1&to=2&service=s", false, false), "new");
+    assert.equal(PSL.screenOf("#/run/0123456789abcdef", false, false), "run");
+    assert.equal(PSL.screenOf("#/report/0123456789abcdef", true, false), "report");
+    assert.equal(PSL.screenOf("#/nowhere", true, true), "new");
+});
+
+test("#/coverage is an administrator's screen: a member lands on their own access, access off on New", () => {
+    assert.equal(PSL.screenOf("#/coverage", true, true), "coverage");
+    assert.equal(PSL.screenOf("#/coverage", true, false), "access");
+    assert.equal(PSL.screenOf("#/coverage", false, false), "new");
+});
+
+test("the coverage snippet spells one quoted pattern per uncovered service, attribute and source", () => {
+    const snippet = PSL.coverageSnippet({
+        services: [{service: "reports-svc", source_ids: ["billing-stg"], findings: 3},
+            {service: null, source_ids: ["shop-prod"], findings: 1}],
+        attributes: [{key: "team", value: "pay\"ments", findings: 4}],
+        sources: [{source_id: "billing-stg", findings: 8}, {source_id: "tempo-eu", findings: null}]
+    });
+    assert.equal(snippet, [
+        "# Add the lines a team owns to the patterns of its project in hub.access.projects,",
+        "# then restart the Hub. A finding without a service needs a source or attribute pattern.",
+        "- { service: \"reports-svc\" }",
+        "- { attribute: \"team=pay\\\"ments\" }",
+        "- { source: \"billing-stg\" }",
+        "- { source: \"tempo-eu\" }"
+    ].join("\n"));
+    assert.equal(PSL.coverageSnippet({services: [], attributes: [], sources: []}), null);
+});
+
+test("what a refused caller sends an administrator names their id and groups, one per line", () => {
+    assert.equal(PSL.accessRequestText({
+        identity: "noor@example.com", subject: "c75e0b19",
+        groups: [{name: "/teams/marketing", origin: "provider"}, {name: "ops", origin: "internal"}]
+    }), "Please grant access to the Perf Sentinel Hub.\nname: noor@example.com\nid: c75e0b19\n"
+        + "groups: /teams/marketing (provider), ops (internal)");
+    assert.equal(PSL.accessRequestText({identity: null, subject: "s1", groups: []}),
+        "Please grant access to the Perf Sentinel Hub.\nname: s1\nid: s1\ngroups: none");
+});
+
+test("the source count says how many sources the caller may run on, and why the others are missing", () => {
+    assert.equal(PSL.sourceCountLabel(7, 7), "7 configured");
+    assert.equal(PSL.sourceCountLabel(5, 7), "5 of 7 configured · 2 need analyses.run");
+    assert.equal(PSL.sourceCountLabel(6, 7), "6 of 7 configured · 1 needs analyses.run");
+});
+
+test("a revoke outcome says what happened to the terminal, or what to do next", () => {
+    const row = {owner: "sam@example.com", created: "2026-10-14 14:23"};
+    assert.deepEqual(PSL.revokeOutcome(204, row), {ok: true,
+        text: "Revoked the token of sam@example.com created 2026-10-14 14:23. That terminal gets a 401 on its next request."});
+    assert.deepEqual(PSL.revokeOutcome(404, row), {ok: true,
+        text: "The token of sam@example.com created 2026-10-14 14:23 was already gone."});
+    assert.deepEqual(PSL.revokeOutcome(500, row), {ok: false,
+        text: "The Hub could not revoke this token (status 500). It is still valid. Try again in a moment."});
+    assert.deepEqual(PSL.revokeOutcome(0, row), {ok: false,
+        text: "The Hub did not answer. The token is still valid. Try again in a moment."});
 });
 
 test("the token table names each token's owner, origin, dates and last use", () => {

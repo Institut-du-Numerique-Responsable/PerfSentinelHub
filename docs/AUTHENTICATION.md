@@ -262,8 +262,8 @@ grants.
 **Lifetime and revocation.** A token expires when the session that approved it does,
 8 hours after that sign-in at most; there is no refresh token. A person holds at most 10
 live tokens, and the 11th drops the oldest. `perf-sentinel logout` revokes its token
-(`POST /auth/revoke`), and the access page lists the caller's tokens, or everyone's for
-an admin, each with a **Revoke** button. Revocation applies to the next request. Only a
+(`POST /auth/revoke`). The launcher lists the caller's own tokens on Your access, and
+everyone's on an admin's Coverage screen, each with a **Revoke** button. Revocation applies to the next request. Only a
 token's SHA-256 is stored, never the token. Under `RequiredGroups`, a token whose
 admitting group has been removed from the list stops working at the next restart, as a
 session does.
@@ -337,7 +337,7 @@ sign-in, whose token ends with the session.
 **Rotation ends the sessions.** A session carries a stamp of the configured hash. A new
 hash, once the pod restarts, ends every session of that account, and removing the account
 ends them at their next request. Terminal tokens the account approved live until they
-expire, 8 hours at most; an admin revokes them from the access page.
+expire, 8 hours at most; an admin revokes them from the Coverage screen.
 
 **Guessing.** The Hub hashes one password at a time, PBKDF2-HMAC-SHA256 at 600,000
 iterations, and a password holds 15 to 1,024 characters. An unknown name costs the same

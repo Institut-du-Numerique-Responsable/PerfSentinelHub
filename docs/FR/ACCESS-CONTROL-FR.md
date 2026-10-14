@@ -231,17 +231,20 @@ démon**, jusqu'à son expiration ou sa révocation. Le Hub n'impose aucune expi
 plusieurs équipes peuvent émettre le même nom de service, donnez à l'équipe propriétaire
 un grant de source ou de service pour `acks.write` et `analyses.run`.
 
-### La page d'accès
+### Votre accès et Couverture
 
-L'onglet Accès du lanceur, tiré de `GET /api/access` ([API-FR.md](API-FR.md#get-apiaccess)),
-montre à chaque appelant qui il est, son identifiant (le sujet à mettre dans `Admins` ou
-`Members`), ses groupes et ce qu'atteignent ses grants. Un admin voit aussi toute la
-configuration, chaque service, valeur d'attribut et source qu'aucun projet ne couvre dans
-`Hub:Retention`, pour repérer un nouveau venu et l'affecter dans la configuration, et les
-conflits ci-dessous. La page n'écrit rien des droits : ils changent dans la configuration
-(valeurs Helm `hub.access`) et s'appliquent au redémarrage suivant. Sa seule écriture est
-le bouton **Revoke** du tableau des jetons de terminal, qui liste les jetons de
-l'appelant, ou chaque jeton vivant pour un admin.
+Deux écrans du lanceur lisent `GET /api/access` ([API-FR.md](API-FR.md#get-apiaccess)).
+**Votre accès**, derrière la pastille d'identité, montre à chaque appelant qui il est, son
+identifiant (le sujet à mettre dans `Admins` ou `Members`), ses groupes, ce qu'atteignent
+ses grants et ses propres jetons de terminal. Un appelant qu'aucun grant n'atteint reçoit
+le même écran, avec un bloc à copier pour un administrateur. **Couverture**, un onglet
+réservé aux admins, commence par chaque service, valeur d'attribut et source qu'aucun
+projet ne couvre dans `Hub:Retention`, pour repérer un nouveau venu et l'affecter dans la
+configuration, avec un motif YAML par entrée prêt à coller. Viennent ensuite les conflits
+ci-dessous, chaque jeton de terminal vivant et toute la configuration, repliée par partie.
+Aucun des deux écrans n'écrit rien des droits : ils changent dans la configuration
+(valeurs Helm `hub.access`) et s'appliquent au redémarrage suivant. Leur seule écriture
+est le bouton **Revoke** des tableaux de jetons de terminal, qui demande un second clic.
 
 ### Lire les conflits
 

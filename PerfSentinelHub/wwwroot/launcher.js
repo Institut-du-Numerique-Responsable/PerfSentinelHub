@@ -1288,17 +1288,20 @@
     /**
      * The screen a hash names. `#/access` is one only on a Hub that answered
      * /api/access: with access off, or that read failed, it reads as New, as any
-     * unknown route always has.
+     * unknown route always has. `#/coverage` is an administrator's, and a member who
+     * follows a shared link to it lands on their own access instead.
      * @param {string | null | undefined} hash
      * @param {boolean} accessOn
+     * @param {boolean} admin
      * @returns {string}
      */
-    function screenOf(hash, accessOn) {
+    function screenOf(hash, accessOn, admin) {
         // The query a handoff link carries is the form's, not the route's.
         const route = (hash || '#/new').replace('#/', '').split('?')[0];
         if (route.indexOf('run/') === 0) return 'run';
         if (route.indexOf('report/') === 0) return 'report';
-        if (route === 'access') return accessOn ? 'access' : 'new';
+        if (route === 'coverage' && accessOn) return admin ? 'coverage' : 'access';
+        if (route === 'access' || route === 'coverage') return accessOn ? 'access' : 'new';
         // `ack` has no tab: it is reached by link only.
         return ['new', 'recent', 'sources', 'incidents', 'ack'].indexOf(route) >= 0 ? route : 'new';
     }
@@ -1355,11 +1358,81 @@
      */
     function accessReachRows(access) {
         return access.reach.map(entry => ({
-            project: entry.project === '*' ? 'Everything, records no project matches included' : entry.project,
+            project: entry.project === '*' ? 'Everything, including records no project covers' : entry.project,
             group: entry.group == null ? 'your id, in Admins' : entry.group,
             role: entry.role,
             permissions: entry.permissions.join(', ')
         }));
+    }
+
+    /**
+     * The patterns that would cover what no project covers, one YAML flow mapping per line,
+     * ready to paste under a project's patterns. Values are JSON-quoted, which YAML reads as
+     * double-quoted strings, so a `*` or a `=` cannot change their meaning. Null when nothing
+     * is left uncovered. A finding with no service has no service pattern to offer.
+     * @param {{services: {service: string | null}[], attributes: {key: string, value: string}[],
+     *          sources: {source_id: string}[]}} unmatched
+     * @returns {string | null}
+     */
+    function coverageSnippet(unmatched) {
+        const lines = []
+            .concat(unmatched.services.filter(row => row.service != null)
+                .map(row => '- { service: ' + JSON.stringify(row.service) + ' }'))
+            .concat(unmatched.attributes.map(row => '- { attribute: ' + JSON.stringify(row.key + '=' + row.value) + ' }'))
+            .concat(unmatched.sources.map(row => '- { source: ' + JSON.stringify(row.source_id) + ' }'));
+        if (lines.length === 0) return null;
+        return ['# Add the lines a team owns to the patterns of its project in hub.access.projects,',
+            '# then restart the Hub. A finding without a service needs a source or attribute pattern.']
+            .concat(lines).join('\n');
+    }
+
+    /**
+     * What a caller no grant reaches sends an administrator: the name, the id an
+     * administrator lists, and the groups a grant can name, with where each comes from.
+     * @param {{identity: string | null, subject: string, groups: {name: string, origin: string}[]}} access
+     * @returns {string}
+     */
+    function accessRequestText(access) {
+        const groups = access.groups.length === 0
+            ? 'none'
+            : access.groups.map(group => group.name + ' (' + group.origin + ')').join(', ');
+        return 'Please grant access to the Perf Sentinel Hub.\nname: ' + (access.identity || access.subject)
+            + '\nid: ' + access.subject + '\ngroups: ' + groups;
+    }
+
+    /**
+     * The source panel's count. With access on a source the caller may not run on is left
+     * out of the list, and the count says so rather than quietly shrinking.
+     * @param {number} runnable
+     * @param {number} total
+     * @returns {string}
+     */
+    function sourceCountLabel(runnable, total) {
+        if (runnable === total) return total + ' configured';
+        const missing = total - runnable;
+        return runnable + ' of ' + total + ' configured · ' + missing
+            + (missing === 1 ? ' needs' : ' need') + ' analyses.run';
+    }
+
+    /**
+     * What the tokens card says after a Revoke. A 404 is a token already gone. Status 0
+     * stands for no answer at all.
+     * @param {number} status
+     * @param {{owner: string, created: string}} row
+     * @returns {{ok: boolean, text: string}}
+     */
+    function revokeOutcome(status, row) {
+        const which = 'the token of ' + row.owner + ' created ' + row.created;
+        if (status === 204) {
+            return {ok: true, text: 'Revoked ' + which + '. That terminal gets a 401 on its next request.'};
+        }
+        if (status === 404) return {ok: true, text: 'The ' + which.slice(4) + ' was already gone.'};
+        return {
+            ok: false,
+            text: status === 0
+                ? 'The Hub did not answer. The token is still valid. Try again in a moment.'
+                : 'The Hub could not revoke this token (status ' + status + '). It is still valid. Try again in a moment.'
+        };
     }
 
     /**
@@ -1463,6 +1536,7 @@
         incidentHandoffHash, readHandoff,
         ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary,
         shellBanner, screenOf, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows,
+        coverageSnippet, accessRequestText, sourceCountLabel, revokeOutcome,
         tokenRows, tokenRevokeRequest, deviceIntro, deviceRequestLine, deviceNetworkAlert, deviceApproveStep
     };
 })(globalThis);

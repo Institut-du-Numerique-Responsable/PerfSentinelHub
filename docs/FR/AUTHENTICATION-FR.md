@@ -276,9 +276,9 @@ navigateur. Un code hameçonné ne livre donc au plus que les droits de la victi
 **Durée et révocation.** Un jeton expire quand la session qui l'a approuvé expire, au
 plus 8 heures après cette connexion ; il n'y a pas de jeton de rafraîchissement. Une
 personne détient au plus 10 jetons vivants, et le 11e retire le plus ancien.
-`perf-sentinel logout` révoque son jeton (`POST /auth/revoke`), et la page d'accès liste
-les jetons de l'appelant, ou ceux de tous pour un admin, chacun avec un bouton
-**Revoke**. La révocation s'applique à la requête suivante. Seul le SHA-256 d'un jeton
+`perf-sentinel logout` révoque son jeton (`POST /auth/revoke`). Le lanceur liste les
+jetons de l'appelant sur Votre accès, et ceux de tous sur l'écran Couverture d'un admin,
+chacun avec un bouton **Revoke**. La révocation s'applique à la requête suivante. Seul le SHA-256 d'un jeton
 est conservé, jamais le jeton. Sous `RequiredGroups`, un jeton dont le groupe qui l'a
 admis a été retiré de la liste cesse de fonctionner au redémarrage suivant, comme une
 session.
@@ -359,7 +359,7 @@ finit avec la session.
 configuré. Un nouveau hash, une fois le pod redémarré, met fin à chaque session de ce
 compte, et retirer le compte y met fin à leur requête suivante. Les jetons de terminal
 que le compte a approuvés vivent jusqu'à leur expiration, 8 heures au plus ; un admin les
-révoque depuis la page d'accès.
+révoque depuis l'écran Couverture.
 
 **Deviner.** Le Hub hache un mot de passe à la fois, PBKDF2-HMAC-SHA256 à 600 000
 itérations, et un mot de passe compte 15 à 1 024 caractères. Un nom inconnu coûte le même

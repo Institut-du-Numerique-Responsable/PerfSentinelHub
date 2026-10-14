@@ -94,3 +94,14 @@ v0.2.0	fc5ed79	2026-09-17	PASS
 # two stale lab scenarios, fixed in lab #167 (findings-page-filters) and #168
 # (hub-incidents-mirror), not Hub defects.
 v0.4.0	20ff4ab	2026-10-14	PASS
+#
+# v0.4.0, rerun after the line above. The first v0.4.0 tag, on 5c80254, never
+# published: its two native builds differed (the logging source generator
+# emitted ApiEndpoints' two log blocks in either order), fixed in #89, and the
+# tag was removed before anything was released. The eight hub-* scenarios were
+# then run again, all green, on lab commit 20ff4ab: first on
+# perf-sentinel-hub:0.4.0-5ecfb4e (main with #89), then on
+# perf-sentinel-hub:0.4.0-fe190e4, built from the access screens branch (#90),
+# whose last commit changes one equivalent line of device.js. Both answer 0.4.0
+# with engine 0.27.0, against daemon perf-sentinel:0.27.0-68c9152d and CLI
+# 0.27.0 from perf-sentinel main 4695e142, plugin main dd7888a.

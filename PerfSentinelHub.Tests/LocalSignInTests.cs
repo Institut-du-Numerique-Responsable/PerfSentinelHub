@@ -84,7 +84,7 @@ public sealed class LocalSignInTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType?.ToString());
         AssertPageHeaders(response, page);
-        Assert.Contains("<title>Sign in · PerfSentinel Hub</title>", page, StringComparison.Ordinal);
+        Assert.Contains("<title>Sign in · Perf Sentinel Hub</title>", page, StringComparison.Ordinal);
         Assert.Contains("href=\"/auth/sign-in/sso?return_url=%2Fdevice\"", page, StringComparison.Ordinal);
         Assert.Contains("<details>", page, StringComparison.Ordinal);
         Assert.Contains("value=\"/device\"", page, StringComparison.Ordinal);

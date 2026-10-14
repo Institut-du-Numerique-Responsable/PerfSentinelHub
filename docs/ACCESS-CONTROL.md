@@ -214,16 +214,19 @@ finding for another team's deployment at that daemon**, until it expires or is r
 The Hub forces no expiry. Where several teams can emit the same service name, give the
 owning team a source or service grant for `acks.write` and `analyses.run`.
 
-### The access page
+### Your access and Coverage
 
-The launcher's Access tab, from `GET /api/access` ([API.md](API.md#get-apiaccess)), shows
-each caller who they are, their id (the subject to put in `Admins` or `Members`), their
-groups and what their grants reach. An admin also sees the whole configuration, every
-service, attribute value and source no project covers within `Hub:Retention`, so a
-newcomer is spotted and assigned in the configuration, and the conflicts below. The page
-writes nothing about rights: they change in the configuration (Helm values `hub.access`)
-and apply at the next restart. Its one write is the **Revoke** button of the terminal
-token table, which lists the caller's own tokens, or every live token for an admin.
+Two launcher screens read `GET /api/access` ([API.md](API.md#get-apiaccess)). **Your
+access**, behind the identity chip, shows each caller who they are, their id (the subject
+to put in `Admins` or `Members`), their groups, what their grants reach and their own
+terminal tokens. A caller no grant reaches gets the same screen with a block to copy for an
+administrator. **Coverage**, a tab for admins only, starts with every service, attribute
+value and source no project covers within `Hub:Retention`, so a newcomer is spotted and
+assigned in the configuration, with one YAML pattern per entry ready to paste. Then come
+the conflicts below, every live terminal token and the whole configuration, folded by
+part. Neither screen writes anything about rights: they change in the configuration (Helm
+values `hub.access`) and apply at the next restart. Their one write is the **Revoke**
+button of the terminal token tables, which asks for a second click.
 
 ### Reading conflicts
 

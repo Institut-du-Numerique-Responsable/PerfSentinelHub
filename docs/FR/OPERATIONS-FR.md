@@ -346,7 +346,8 @@ l'outil.
 Les développeurs connectent la CLI avec `perf-sentinel login`, qui exige
 `hub.auth.trustedProxyNetworks` renseigné avec les seuls pods du contrôleur d'ingress,
 voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal). Un jeton se
-révoque depuis la page d'accès ou par `perf-sentinel logout`, et prend fin de toute façon
+révoque depuis le lanceur (son détenteur sur Votre accès, un admin sur Couverture) ou par
+`perf-sentinel logout`, et prend fin de toute façon
 avec la session qui l'a approuvé. La table et les codes en attente ne demandent rien à un
 opérateur : les jetons expirés partent avec la passe de rétention quotidienne, et les codes
 en attente vivent en mémoire, si bien qu'un redémarrage n'annule que les connexions en
@@ -408,7 +409,8 @@ Gardez le mot de passe dans le coffre de l'équipe, et testez le compte une fois
 puis `kubectl rollout restart deployment/<release>` : le chart ne peut pas hacher un Secret
 qui ne lui appartient pas, un Secret modifié ne fait donc rien redémarrer à lui seul. Le
 redémarrage met fin à chaque session du compte. Les jetons de terminal qu'il a approuvés
-vivent jusqu'à leur expiration, 8 heures au plus : révoquez-les depuis la page d'accès.
+vivent jusqu'à leur expiration, 8 heures au plus : révoquez-les depuis l'écran
+Couverture du lanceur.
 
 ```bash
 kubectl create secret generic perf-sentinel-hub-break-glass --from-file=ops=ops.hash \

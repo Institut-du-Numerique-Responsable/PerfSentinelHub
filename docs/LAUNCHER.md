@@ -5,9 +5,15 @@ Plain HTML, CSS and JavaScript. No framework, no build step, no network fetch: t
 typefaces are base64 in `wwwroot/fonts.css` and every icon is inline SVG.
 
 Five screens: start an analysis, follow one run, list recent runs, read fleet health, read
-the incidents the daemons recorded. A sixth, the access page, has a tab only with
-`Hub:Access` on, see [The access page](#the-access-page). Another has no tab and is reached
-by link only, see [The ack page](#the-ack-page).
+the incidents the daemons recorded. With `Hub:Access` on, the identity chip at the top
+right opens [Your access](#your-access), and an administrator gets a sixth tab,
+[Coverage](#the-coverage-screen). Another screen has no tab and is reached by link only,
+see [The ack page](#the-ack-page).
+
+Every route change names the screen in the browser tab and moves the focus to its
+heading, so a screen reader announces where the reader landed. Below 1400px the tab icons
+and the theme's label give way so the bar stays on one row, and below 760px the tabs take
+a row of their own that scrolls sideways instead of the page.
 
 ## The form follows the source
 
@@ -277,66 +283,93 @@ daemon then stops loading the TOML baseline too, see the engine's
 ## When no grant reaches you
 
 With `Hub:Access` on, `/api/status` answers `403` to a signed-in caller no grant reaches.
-The Hub is up, so the launcher does not show its unreachable banner. It says instead "No
-grant on this Hub reaches you. An administrator grants access in the Hub's
-configuration." above the access page, which tells that caller their id to hand an
-administrator. Any other failure of `/api/status` keeps the unreachable banner. See
+The Hub is up, so the launcher does not show its unreachable banner. Every route shows
+[Your access](#your-access) under the banner "No grant on this Hub reaches you. An
+administrator grants access in the Hub's configuration." The tabs and the version chip are
+gone, since each tab would lead to the same refusal, and the identity chip still names the
+caller. In place of an empty reach, a block to copy holds what an administrator needs: the
+name, the id they list in `Admins` or `Members`, and the groups a grant can name. Any
+other failure of `/api/status` keeps the unreachable banner. See
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant-dark.png">
-  <img alt="The no-grant banner above the access page of a caller no grant reaches" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
+  <img alt="The no-grant banner above the caller's access, with the request to send an administrator" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
 </picture>
 
 With access on, each source in `/api/sources` carries the caller's `permissions` there. The
-New analysis form offers only the sources whose list holds `analyses.run`, and a daemon row
-on the Sources screen unfolds only where the list holds `sources.read`, which its view
-needs. Without a list, as with access off, nothing is withheld.
+New analysis form offers only the sources whose list holds `analyses.run` and says how many
+it leaves out, as "2 of 4 configured · 2 need analyses.run". A daemon row on the Sources
+screen unfolds only where the list holds `sources.read`, which its view needs, and says
+"details need sources.read" under its name otherwise. Without a list, as with access off,
+nothing is withheld.
 
-## The access page
+## Your access
 
-The Access tab appears when `GET /api/access` answers, which is with `Hub:Access` on; a
-`404` keeps it hidden, and a `#/access` link then opens New, as any unknown route does. The
-page changes no right, since rights are declared in the Hub's configuration (Helm values
-`hub.access`) and nowhere else; its one button revokes a terminal token. It shows:
+The identity chip links to `#/access` when `GET /api/access` answers, which is with
+`Hub:Access` on; a `404` leaves the chip plain text, and a `#/access` link then opens New,
+as any unknown route does. The page changes no right, since rights are declared in the
+Hub's configuration (Helm values `hub.access`) and nowhere else. Its one action revokes a
+terminal token. It shows:
 
 1. **Signed in as.** The identity, how (browser session, terminal token or machine token)
-   and until when,
-   that a group change at the provider applies at the next sign-in, and "Your id, for an
-   administrator", the subject as selectable text.
+   and until when, that a group change at the provider applies at the next sign-in, and
+   "Your id, for an administrator", the subject as selectable text.
 2. **Your groups.** Chips marked provider or internal.
 3. **What you reach.** Project, group, role and permissions per grant. A grant on `*`
-   reads "Everything, records no project matches included".
-4. **Terminal tokens**, from `GET /api/tokens`: the caller's own, or every live one for an
-   admin, with owner, the address the login was requested from, creation, expiry and last
-   use ("never" until the first). **Revoke** sends `DELETE /api/tokens/{id}` and reloads
-   the list; the token stops working on its next request. See
-   [AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in).
-5. **Projects.** Each project those grants name, with its patterns written as
-   `source lab-daemon · service checkout-* · attribute team=shop`.
-6. **Configuration**, for an admin: projects, roles (built-in ones marked), grants,
-   internal groups and their members, admins and admin groups, machine tokens with
-   their expiry as "expired", "in less than a day" or "in N days", never their value, and
-   local accounts by name, never their hash.
-7. **Not covered by any project**, for an admin: the services, attribute values and
-   sources no project covers, with counts, then the conflicts, see
-   [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).
+   reads "Everything, including records no project covers".
+4. **Your terminal tokens**, from `GET /api/tokens`: the ones `perf-sentinel login` got for
+   this caller, with the address the login was requested from, creation, expiry and last
+   use ("never" until the first). **Revoke** asks once more, as **Confirm revoke**, and
+   leaving the button or pressing Escape puts it back. The confirmed click sends
+   `DELETE /api/tokens/{id}`, says in the card what happened (the terminal gets a `401` on
+   its next request, or the token was already gone, or it is still valid and why) and moves
+   the focus to the card. See [AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in).
+5. **Projects you reach**, for a member: each project those grants name, with its patterns
+   written as `source lab-daemon · service checkout-* · attribute team=shop`. An
+   administrator gets a link to Coverage instead.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-dark.png">
-  <img alt="The access page of an admin, with every terminal token, the configuration, what no project covers and the conflicts" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access.png">
+  <img alt="The access of a member of two team groups, with their terminal token" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access.png">
 </picture>
 
-A member sees the first five cards alone, with their own tokens only:
+## The coverage screen
+
+The Coverage tab appears for an administrator alone; a member who follows a `#/coverage`
+link lands on their own access. The screen starts with what asks for a change:
+
+1. **Needs attention.** The services, attribute values and sources no project covers, with
+   their finding counts and the sources each was seen at by name. Findings no project
+   covers are read only through grants on `*`. Each list stops at its first 200 entries
+   and says so.
+2. **Patterns to paste.** One YAML line per uncovered service, attribute and source, with
+   a Copy button, ready to go under the `patterns` of a project in `hub.access.projects`.
+   Values are quoted, so a `*` or a `=` keeps its meaning.
+3. **Deployments that disagree on a project attribute.** The finding copies a project's
+   attribute pattern reads but cannot write, because the copy carries two values of the
+   key or was also seen under a grouping without it. An attribute grant reads them but
+   cannot acknowledge them, see
+   [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).
+4. **Terminal tokens, everyone's**, with the same Revoke.
+5. **Configuration**, as the Hub loaded it at its last start, one fold per part with its
+   count: projects, roles (built-in ones marked), grants, internal groups and their
+   members, admins by id and by group, machine tokens with their expiry as "expired", "in
+   less than a day" or "in N days", never their value, and local accounts by name, never
+   their hash. An empty part says "None declared."
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member-dark.png">
-  <img alt="The access page of a member of two team groups" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member.png">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage-dark.png">
+  <img alt="The coverage screen of an admin: what no project covers, the patterns to paste, the conflicts, every terminal token and the configuration with the grants unfolded" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage.png">
 </picture>
 
 The terminal sign-in page, `/device`, is not a launcher screen: the Hub serves it on its
 own, with a policy that allows no framing and no inline script, for a browser approving a
-`perf-sentinel login`.
+`perf-sentinel login`. The code field takes the focus and accepts the code in any case,
+with or without its dash. Once the code is verified, the focus moves to where and when it
+was requested. A code from another network turns **Approve** into **Approve anyway**,
+which the page announces, and the outcome is announced and takes the focus once the
+buttons are gone.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-device-dark.png">
@@ -348,8 +381,8 @@ own, with a policy that allows no framing and no inline script, for a browser ap
 With a [local account](AUTHENTICATION.md#local-accounts) declared, a browser without a
 session lands on the Hub's own sign-in page, `/auth/sign-in`, instead of the provider's.
 It is not a launcher screen either: one self-contained page with its styles inline and no
-script, since the launcher's files sit behind the sign-in, light or dark after the
-system. **Sign in with single sign-on** comes first and leads to the provider; **Sign in
+script, since the launcher's files sit behind the sign-in. It carries the launcher's logo,
+inline, and its palette, light or dark after the system. **Sign in with single sign-on** comes first and leads to the provider; **Sign in
 with a local account** is folded below it, with the note that it is for when single
 sign-on is unavailable and that every local sign-in is logged. After a refused attempt the
 fold opens with the reason, never with what was typed. Either way the browser comes back to

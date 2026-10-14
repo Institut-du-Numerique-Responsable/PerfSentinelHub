@@ -580,7 +580,7 @@ curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
 ### `GET /api/access`
 
 Montée seulement avec `Hub:Access:Enabled` : sans contrôle d'accès elle répond `404`, et le
-lanceur masque son onglet Accès sur cette réponse. Tout appelant la lit, y compris celui
+lanceur garde alors sa pastille d'identité en simple texte et masque l'onglet Coverage. Tout appelant la lit, y compris celui
 qu'aucun grant n'atteint, car c'est ainsi qu'il trouve l'identifiant qu'un administrateur
 lui demande. Elle n'écrit jamais et ne liste jamais la valeur ni l'empreinte d'un jeton
 machine.

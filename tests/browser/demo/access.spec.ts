@@ -81,32 +81,42 @@ test("the access page of a member", async ({page}, info) => {
     await ensureTerminalToken(page, "sam@example.com");
     await accessPage(page);
     await expect(page.locator("#main")).toContainText("your terminal tokens");
-    await page.screenshot({
-        path: nameFor("launcher-access-member", info.project.name),
-        fullPage: true,
-        animations: "disabled"
-    });
+    // A member has no Coverage tab: their access is behind the identity chip.
+    await expect(page.locator('.shell-tab[data-screen="coverage"]')).toBeHidden();
+    await expect(page.locator("#identity")).toHaveAttribute("aria-current", "page");
+    await page.screenshot({path: nameFor("launcher-access", info.project.name), fullPage: true, animations: "disabled"});
 });
 
-test("the access page of an admin", async ({page}, info) => {
+test("the coverage screen of an admin", async ({page}, info) => {
     await signIn(page, "ada@example.com");
     await ensureTerminalToken(page, "ada@example.com");
-    await accessPage(page);
-    // The admin half: every token, the configuration, and what no project covers with
-    // the conflicts the pushed groupings make.
-    await expect(page.locator("#main")).toContainText("terminal tokens, everyone's");
-    await expect(page.locator("#main")).toContainText("// configuration");
+    await page.goto("/#/coverage");
+    await settled(page, "What access control covers");
+    // What no project covers comes first, with the patterns that would cover it, then the
+    // conflicts the pushed groupings make, everyone's tokens and the folded configuration.
+    await expect(page.locator("#main")).toContainText("needs attention");
     await expect(page.locator("#main")).toContainText("team=payments");
-    await expect(page.locator(".access-table", {hasText: "Groupings without the key"})).toBeVisible();
-    await page.screenshot({path: nameFor("launcher-access", info.project.name), fullPage: true, animations: "disabled"});
+    await expect(page.locator(".terminal-code", {hasText: "attribute: \"team=payments\""})).toBeVisible();
+    await expect(page.locator(".access-table", {hasText: "Groupings missing the key"})).toBeVisible();
+    await expect(page.locator("#main")).toContainText("terminal tokens, everyone's");
+    // One part open, so the shot shows what a fold holds.
+    await page.locator(".access-part summary", {hasText: "Grants"}).click();
+    await expect(page.locator(".access-part[open] .access-table")).toBeVisible();
+    // The click scrolled the page, and a full-page shot draws the sticky bar where it sits.
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({path: nameFor("launcher-coverage", info.project.name), fullPage: true, animations: "disabled"});
 });
 
 test("a caller no grant reaches", async ({page}, info) => {
     await signIn(page, "noor@example.com");
-    // On the access route, so the tab bar highlights Access above the access page.
-    await page.goto("/#/access");
+    // Any route shows the same screen, and no tab offers one that would be refused.
+    await page.goto("/#/sources");
     await settled(page, "No grant on this Hub reaches you");
     await expect(page.locator("#main")).toContainText("Your access");
+    await expect(page.locator("#main")).toContainText("send this to an administrator");
+    await expect(page.locator(".shell-tabs")).toBeHidden();
+    await expect(page.locator("#version-chip")).toBeHidden();
+    await expect(page.locator("#identity-name")).toHaveText("noor@example.com");
     await page.screenshot({
         path: nameFor("launcher-no-grant", info.project.name),
         fullPage: true,

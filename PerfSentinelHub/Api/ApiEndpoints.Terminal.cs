@@ -43,23 +43,29 @@ public static partial class ApiEndpoints
         </head>
         <body>
         <main class="shell-main device-main">
-            <span class="overline">// terminal sign-in</span>
+            <div aria-label="Perf Sentinel Hub" class="shell-wordmark device-brand" role="img">
+                <img alt="" data-logo="light" src="logo-horiz-light.svg">
+                <img alt="" data-logo="dark" src="logo-horiz-dark.svg">
+                <span aria-hidden="true" class="shell-wordmark-suffix">hub</span>
+            </div>
+            <span class="overline"><span aria-hidden="true">// </span>terminal sign-in</span>
             <h1 class="page-title">Approve a terminal</h1>
             <p class="page-sub" id="device-intro">Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started yourself, just now: approving gives that terminal your access until your session ends.</p>
             <form class="card device-card" id="device-form">
                 <label class="field-label" for="device-code">Code</label>
-                <input autocapitalize="characters" autocomplete="off" class="input" id="device-code" maxlength="9" name="user_code" required spellcheck="false" type="text">
-                <button class="pill-button" type="submit">Continue</button>
+                <input aria-describedby="device-code-hint" autocapitalize="characters" autocomplete="off" autofocus class="input" id="device-code" maxlength="9" name="user_code" placeholder="XXXX-XXXX" required spellcheck="false" type="text">
+                <p class="device-hint" id="device-code-hint">Eight letters, as perf-sentinel login prints them. Case and the dash do not matter.</p>
+                <button class="pill-button pill-primary" type="submit">Continue</button>
             </form>
-            <section class="card device-card" hidden id="device-details">
-                <p id="device-request"></p>
+            <section aria-labelledby="device-request" class="card device-card" hidden id="device-details">
+                <p id="device-request" tabindex="-1"></p>
                 <div class="banner" data-tone="warn" hidden id="device-alert" role="alert"></div>
                 <div class="device-actions">
-                    <button class="pill-button" id="device-approve" type="button">Approve</button>
+                    <button aria-describedby="device-alert" class="pill-button pill-primary" id="device-approve" type="button">Approve</button>
                     <button class="pill-button" id="device-deny" type="button">Deny</button>
                 </div>
             </section>
-            <div aria-live="polite" class="banner" data-tone="info" hidden id="device-result"></div>
+            <div aria-live="polite" class="device-result" id="device-result" tabindex="-1"></div>
         </main>
         </body>
         </html>
