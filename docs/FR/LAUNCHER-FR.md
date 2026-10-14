@@ -311,6 +311,11 @@ Hub's configuration. » au-dessus de la page d'accès, qui donne à cet appelant
 identifiant à transmettre à un administrateur. Tout autre échec de `/api/status` garde le
 bandeau d'injoignabilité. Voir [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant-dark.png">
+  <img alt="Le bandeau sans grant au-dessus de la page d'accès d'un appelant qu'aucun grant n'atteint" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
+</picture>
+
 Avec le contrôle d'accès, chaque source de `/api/sources` porte les `permissions` de
 l'appelant sur elle. Le formulaire Nouvelle analyse ne propose que les sources dont la liste
 contient `analyses.run`, et la ligne d'un démon sur l'écran Sources ne se déplie que là où
@@ -348,9 +353,26 @@ révoque un jeton de terminal. Elle montre :
    sources qu'aucun projet ne couvre, avec leurs comptes, puis les conflits, voir
    [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-dark.png">
+  <img alt="La page d'accès d'un admin, avec chaque jeton de terminal, la configuration, ce qu'aucun projet ne couvre et les conflits" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access.png">
+</picture>
+
+Un membre ne voit que les cinq premières cartes, avec ses seuls jetons :
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member-dark.png">
+  <img alt="La page d'accès d'un membre de deux groupes d'équipe" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member.png">
+</picture>
+
 La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le Hub la sert
 à part, avec une politique qui n'autorise ni l'encadrement ni le script en ligne, pour un
 navigateur qui approuve un `perf-sentinel login`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-device-dark.png">
+  <img alt="La page d'approbation du terminal avec un code en attente saisi, avant Approve ou Deny" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-device.png">
+</picture>
 
 ## La page de connexion
 
@@ -367,6 +389,11 @@ demandée. Le lanceur lui-même ne change pas : sur un `401` il se recharge, et 
 rechargement qui atteint cette page. Une page qui s'affiche que le fournisseur réponde
 ou non, c'est le but : le lanceur n'envoie jamais un navigateur droit vers un
 fournisseur en panne.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in-dark.png">
+  <img alt="La page de connexion du Hub, le pli du compte local ouvert" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in.png">
+</picture>
 
 ## Sûreté
 

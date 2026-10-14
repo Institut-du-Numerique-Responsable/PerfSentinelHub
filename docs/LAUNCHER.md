@@ -283,6 +283,11 @@ configuration." above the access page, which tells that caller their id to hand 
 administrator. Any other failure of `/api/status` keeps the unreachable banner. See
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant-dark.png">
+  <img alt="The no-grant banner above the access page of a caller no grant reaches" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
+</picture>
+
 With access on, each source in `/api/sources` carries the caller's `permissions` there. The
 New analysis form offers only the sources whose list holds `analyses.run`, and a daemon row
 on the Sources screen unfolds only where the list holds `sources.read`, which its view
@@ -317,9 +322,26 @@ page changes no right, since rights are declared in the Hub's configuration (Hel
    sources no project covers, with counts, then the conflicts, see
    [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-dark.png">
+  <img alt="The access page of an admin, with every terminal token, the configuration, what no project covers and the conflicts" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access.png">
+</picture>
+
+A member sees the first five cards alone, with their own tokens only:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member-dark.png">
+  <img alt="The access page of a member of two team groups" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-access-member.png">
+</picture>
+
 The terminal sign-in page, `/device`, is not a launcher screen: the Hub serves it on its
 own, with a policy that allows no framing and no inline script, for a browser approving a
 `perf-sentinel login`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-device-dark.png">
+  <img alt="The terminal approval page with a pending code entered, before Approve or Deny" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-device.png">
+</picture>
 
 ## The sign-in page
 
@@ -334,6 +356,11 @@ fold opens with the reason, never with what was typed. Either way the browser co
 the page it asked for. The launcher itself is unchanged: on a `401` it reloads, and the
 reload is what reaches this page. A page that renders whether or not the provider answers
 is the point: the launcher never sends a browser straight to a provider that is down.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in-dark.png">
+  <img alt="The Hub's own sign-in page, with the local account fold opened" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in.png">
+</picture>
 
 ## Safety
 
