@@ -138,7 +138,8 @@
             "identityClaim": { "type": "string" },
             "subjectClaim": { "enum": ["sub", "oid", "uuid", "account_id"] },
             "groupsClaim": { "type": "string" },
-            "requiredGroups": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            "requiredGroups": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "trustedProxyNetworks": { "type": "array", "items": { "type": "string", "minLength": 1 } }
           },
           "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
           "then": {

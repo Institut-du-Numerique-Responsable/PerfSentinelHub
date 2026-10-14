@@ -17,7 +17,8 @@ nothing else. An IDE plugin or a CI job gets `/api/findings` and never opens a s
 That split is not enforced by authentication, it is simply what each client asks for,
 and it is worth knowing before reading either surface. `Hub:Auth` puts the browser's side
 behind a sign-in and leaves `/api/findings` open, see [AUTHENTICATION.md](AUTHENTICATION.md).
-`Hub:Access` closes it too: a machine then sends a bearer machine token, see
+`Hub:Access` closes it too: a machine then sends a bearer machine token, and a
+developer's terminal, signed in by `perf-sentinel login`, a terminal token, see
 [Access control](#access-control).
 
 The engine appears twice on this board and it is the same binary both times: once as a
@@ -144,6 +145,7 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
 | `incident_reads`, `ack_reads`  | source                                                         | never                                      |
 | `analysis_runs`                | run                                                            | `Hub:Analysis:RunRetention`                |
+| `terminal_tokens`              | terminal token, by the SHA-256 of its value                    | revocation, or retention past `expires_at_ms` |
 
 `finding_attributes` keeps every grouping attribute a daemon captured, up to the engine's
 eight, each under the grouping identity it came with: the first pair of that observation,
@@ -206,6 +208,18 @@ groups a grant names, `hub:access` and `hub:caller` to the cookie. `AccessCaller
 those claims once per request. After authorization, a gate refuses a machine's write and
 a browser write without `Sec-Fetch-Site: same-origin`, and a first middleware sets
 `frame-ancestors 'self'` on every response.
+
+**Terminal sign-in.** `ApiEndpoints.MapTerminalAccess` (`Api/ApiEndpoints.Terminal.cs`)
+maps the device flow only with `Hub:Auth:TrustedProxyNetworks` set, since the client
+address it records is the one `ForwardedHeaders` takes from those networks alone,
+normalized by `ClientAddress` (an IPv6 client by its /64). `DeviceAuthorizations`
+(`Api/DeviceAuthorizations.cs`) holds the pending codes in memory, with their caps, the
+polling interval and each person's failed codes. The approval routes read the cookie
+ticket, never `HttpContext.User`, so a bearer approves nothing. A collected approval
+becomes a `terminal_tokens` row through `HubDatabase.Tokens.cs`, holding the SHA-256 of the
+token, the approving subject and the provider groups it held. `HubTokenHandler.TerminalAsync`
+reads a `pshub_` bearer back into a principal of kind `terminal_token`, with those frozen
+groups, step 1's `RequiredGroups` check, and never admin.
 
 **Where the scope applies.** `FindingQuery.Access` and `IncidentQuery.Access` carry the
 `findings.read` scope into SQL: with patterns, the findings read always takes its scoped
@@ -284,3 +298,6 @@ is wrong the first time anyone edits above it.
 | Engine writes the report                  | `Analysis/AnalysisRunner.cs`                                                                                 |
 | Report served into the iframe             | `Api/ApiEndpoints.Analysis.cs`, `GetReportAsync`                                                             |
 | Hub to api.github.com                     | `Collection/UpdateChecker.cs`, `ReadAsync`, the only outbound call that is not a configured source           |
+| CLI to Hub, terminal sign-in              | `Api/ApiEndpoints.Terminal.cs`, `StartDeviceAsync`, `PollDeviceAsync`, `RevokeTokenAsync`                    |
+| Browser to Hub, approving a terminal      | `Api/ApiEndpoints.Terminal.cs`, `DevicePageAsync`, `VerifyDeviceAsync`, `ApproveDeviceAsync`                 |
+| CLI to Hub, with a terminal token         | `Api/HubTokenHandler.cs`, `TerminalAsync`, over `FindTerminalTokenAsync`                                     |

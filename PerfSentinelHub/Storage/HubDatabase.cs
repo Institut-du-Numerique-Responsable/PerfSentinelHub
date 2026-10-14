@@ -157,7 +157,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 migration.Transaction = transaction;
                 migration.CommandText =
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
-                    Schema.V9;
+                    Schema.V9 + Schema.V10;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -174,7 +174,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                       INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms)
                                       VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
                                              (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms),
-                                             (7, $applied_at_ms), (8, $applied_at_ms), (9, $applied_at_ms);
+                                             (7, $applied_at_ms), (8, $applied_at_ms), (9, $applied_at_ms),
+                                             (10, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -562,18 +563,18 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
     }
 
-    public async Task PurgeAsync(long cutoffMs, long runCutoffMs, CancellationToken cancellationToken)
+    public async Task PurgeAsync(long cutoffMs, long runCutoffMs, long nowMs, CancellationToken cancellationToken)
     {
         // Chunked: holding the write gate for one whole multi-GB delete would 503 every daemon
         // import for the duration of the purge.
-        while (await PurgeChunkAsync(cutoffMs, runCutoffMs, cancellationToken) > 0)
+        while (await PurgeChunkAsync(cutoffMs, runCutoffMs, nowMs, cancellationToken) > 0)
         {
             // Every chunk is deleted by the call in the condition itself.
         }
     }
 
     private async Task<int> PurgeChunkAsync(
-        long cutoffMs, long runCutoffMs, CancellationToken cancellationToken)
+        long cutoffMs, long runCutoffMs, long nowMs, CancellationToken cancellationToken)
     {
         await _writeGate.WaitAsync(cancellationToken);
         try
@@ -614,11 +615,14 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM analysis_runs
                                      WHERE status NOT IN ('{AnalysisStatuses.Pending}', '{AnalysisStatuses.Running}')
                                        AND COALESCE(finished_at_ms, created_at_ms) < $run_cutoff LIMIT $chunk);
+                                   DELETE FROM terminal_tokens WHERE rowid IN (
+                                     SELECT rowid FROM terminal_tokens WHERE expires_at_ms <= $now_ms LIMIT $chunk);
                                    """;
             command.Parameters.AddWithValue("$cutoff", cutoffMs);
             // Floored, so the day the cutoff falls in is kept whole.
             command.Parameters.AddWithValue("$cutoff_day", cutoffMs / DayMs);
             command.Parameters.AddWithValue("$run_cutoff", runCutoffMs);
+            command.Parameters.AddWithValue("$now_ms", nowMs);
             command.Parameters.AddWithValue("$chunk", PurgeChunkSize);
             var deleted = await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

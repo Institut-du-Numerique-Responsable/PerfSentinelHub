@@ -83,7 +83,10 @@ unencrypted on the volume, which holds the database under the same trust.
 
 TLS usually ends at the ingress. The Hub trusts `X-Forwarded-Proto` from any
 peer so the redirect URI it sends reads `https`. Only the scheme is taken from
-the forwarded headers.
+the forwarded headers, until `Hub:Auth:TrustedProxyNetworks` names the proxy:
+from then on `X-Forwarded-Proto` and `X-Forwarded-For` are both trusted, from
+those networks only and one hop deep, so the Hub sees each client's own address
+and a client that talks to it directly cannot forge one.
 
 ## Settings
 
@@ -100,6 +103,7 @@ the forwarded headers.
 | `Hub:Auth:SubjectClaim`            | `sub`                  | The authorization key, read only with access control: `sub`, `oid`, `uuid` or `account_id` |
 | `Hub:Auth:GroupsClaim`             | `groups`               | The userinfo field of the groups, read with `RequiredGroups` or access control |
 | `Hub:Auth:RequiredGroups`          | none                   | No blank entry, refused while `Enabled` is off, see below                    |
+| `Hub:Auth:TrustedProxyNetworks`    | none                   | CIDR networks of the proxy alone (`10.42.200.0/28`) whose forwarded headers are trusted; terminal sign-in needs it |
 
 Declare `https://<hub host>/auth/callback` as the client's redirect URI, and
 make the client confidential.
@@ -226,3 +230,75 @@ changes for sign-in:
 - **`reader` is not read-only**: the built-in role starts analyses.
 
 Every refusal answers the same `403` line and logs event `1900` with its reason.
+
+## Terminal sign-in
+
+With access control on, `perf-sentinel login` gets the developer a personal token for
+the CLI, without copying a secret. It follows the device authorization flow of RFC 8628,
+run by the Hub itself:
+
+1. The CLI asks the Hub for a code (`POST /auth/device`) and prints it with the Hub's
+   `/device` page.
+2. The developer opens `/device` in a browser signed in to the Hub and **types** the
+   code. No link carries it: a code someone else sends cannot arrive filled in.
+3. The page shows where and when the code was requested, the address and the time, who
+   is signed in and when the token will expire. When the request came from another
+   network than the browser's, it says so, and **Approve** needs a second click
+   (**Approve anyway**). A code from another network is the shape of a phishing attempt.
+4. Once approved, the CLI's next poll (`POST /auth/device/token`) receives the token.
+
+**Who approves.** Only a browser session approves, verifies or manages tokens; a bearer
+token never does, so a token cannot mint another. A session with less than an hour left
+is sent back through the provider first, so every token lives at least an hour.
+
+**What the token carries.** The approving session's subject, identity and provider
+groups, frozen at approval, and the `RequiredGroups` group that admitted it. Internal
+groups, admin lists and `RequiredGroups` are read on every request, as for a session.
+A terminal token is **never admin**, even when an admin approves it: it holds the
+person's grants, which `hub ack` and `hub analyze` need, and the whole-Hub powers stay
+with a browser session. A phished code therefore hands over at most the victim's
+grants.
+
+**Lifetime and revocation.** A token expires when the session that approved it does,
+8 hours after that sign-in at most; there is no refresh token. A person holds at most 10
+live tokens, and the 11th drops the oldest. `perf-sentinel logout` revokes its token
+(`POST /auth/revoke`), and the access page lists the caller's tokens, or everyone's for
+an admin, each with a **Revoke** button. Revocation applies to the next request. Only a
+token's SHA-256 is stored, never the token. Under `RequiredGroups`, a token whose
+admitting group has been removed from the list stops working at the next restart, as a
+session does.
+
+**It needs `Hub:Auth:TrustedProxyNetworks`.** Behind an ingress, without that list,
+every request carries the ingress controller's address: the page would show the same
+address for every login, an attacker's included, and the per-address limit on pending
+codes would block every terminal sign-in for one noisy client. The Hub cannot tell
+whether a proxy fronts it, so with the list empty it maps none of the device-flow
+routes, logs event `2014` at startup and the CLI reports that the Hub offers no terminal
+sign-in. The token list and revocation stay available. A Hub with no proxy in front
+lists `127.0.0.1/32`.
+
+List the narrowest range that holds the proxy and nothing else. Any address in the list
+can set the client address the Hub records, so a range shared with other workloads, such
+as the whole cluster's pod CIDR, lets any pod in it forge that address: it gets past the
+per-address limit and can borrow a victim's address to hide the other-network warning.
+Give the ingress controller's pods a range of their own, or let a NetworkPolicy admit to
+the Hub only those pods within the listed range.
+
+```yaml
+hub:
+  auth:
+    trustedProxyNetworks: ["10.42.200.0/28"]   # the ingress controller's pods alone
+```
+
+The ingress must itself see the client's address. A LoadBalancer Service with
+`externalTrafficPolicy: Cluster` replaces it with a node's address before the ingress:
+every login then seems to come from a handful of addresses, the approval page never
+warns of another network, and the per-address limit is shared by everyone behind a
+node. Use `externalTrafficPolicy: Local`, or the PROXY protocol between the load
+balancer and the ingress.
+
+**Limits.** At most 200 pending codes, 10 per client address (an IPv6 client counts by
+its /64); a code lasts 10 minutes and is used once. The CLI polls every 5 seconds, and
+5 more each time it polls too early (`slow_down`). Ten mistyped or unknown codes in 10
+minutes pause a person's approvals for the rest of those 10 minutes. Pending codes live
+in memory, so a restart cancels the logins in flight.

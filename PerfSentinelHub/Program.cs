@@ -48,6 +48,8 @@ builder.Services.AddSingleton<HubDatabase>();
 // Always registered, disabled with access off: registered only with it on, a handler taking it
 // would have the Request Delegate Generator read it as a JSON body, which a GET refuses.
 builder.Services.AddSingleton<AccessPolicy>();
+// Always registered for the same reason; its routes are mapped with access on only.
+builder.Services.AddSingleton<DeviceAuthorizations>();
 builder.Services.AddSingleton<EngineProbe>();
 // Registered here, on builder.Services, so it starts before the listener does:
 // Build() adds the web host's own hosted service after every registration made
@@ -128,6 +130,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.MapHubApi();
 app.MapAnalysisApi();
+if (app.Services.GetRequiredService<AccessPolicy>().Enabled) app.MapTerminalAccess();
 app.MapMetrics();
 
 await app.RunAsync();

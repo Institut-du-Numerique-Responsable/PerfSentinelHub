@@ -516,11 +516,15 @@ que personne n'a demandé d'interroger deux fois.
 
 ## Avec le contrôle d'accès
 
-Avec `Hub:Access:Enabled`, chaque route sauf l'import, `/health` et `/metrics` (anonyme,
-sur `Hub:MetricsPort` seulement) exige une session ou un jeton machine, et chaque réponse couvre ce que couvrent les grants de l'appelant. Le modèle
+Avec `Hub:Access:Enabled`, chaque route sauf l'import, `/health`, `/metrics` (anonyme,
+sur `Hub:MetricsPort` seulement) et les `POST /auth/device`, `POST /auth/device/token` et
+`POST /auth/revoke` de la CLI ([Connexion du terminal](#connexion-du-terminal)) exige une
+session, un jeton de terminal ou un jeton machine, et chaque réponse couvre ce que couvrent
+les grants de l'appelant. Le modèle
 est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil :
 
-- **Identifiants.** Une session du navigateur, ou `Authorization: Bearer <jeton machine>`.
+- **Identifiants.** Une session du navigateur, ou `Authorization: Bearer` avec un jeton de
+  terminal (`pshub_…`, [Connexion du terminal](#connexion-du-terminal)) ou un jeton machine.
   Une requête qui porte un bearer est jugée sur lui seul. Un jeton inconnu ou expiré reçoit `401`, même
   à côté d'un cookie valide, avec
   `WWW-Authenticate: Bearer error="invalid_token"`. Un jeton machine ne fait que lire :
@@ -599,8 +603,9 @@ machine.
 
 - `identity` est le nom affiché que renvoie `/api/status` ; `subject` est la clé
   d'autorisation que listent `Admins` et les `Members` d'un groupe interne. `caller` vaut
-  `session` ou `machine_token`. `expires_at_ms` est la fin de la session, ou l'expiration
-  configurée du jeton.
+  `session`, `terminal_token` ou `machine_token`. `expires_at_ms` est la fin de la session,
+  celle du jeton de terminal (la fin de la session qui l'a approuvé), ou l'expiration
+  configurée du jeton machine. Un jeton de terminal n'est jamais `admin`.
 - `groups` sont les groupes effectifs de l'appelant : les groupes du fournisseur que la
   configuration nomme, gardés à la connexion, et les groupes internes qui listent le sujet,
   nommés sans `internal:`.
@@ -626,3 +631,84 @@ machine.
     identities_without_key}`, triées par source puis signature, 200 au plus. Ce sont les
     copies où un grant d'attribut lit sans pouvoir acquitter, voir
     [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
+
+### Connexion du terminal
+
+Mappée seulement avec `Hub:Access:Enabled`. Les routes du flux d'appareil, les cinq
+premières ci-dessous, ne sont mappées que si `Hub:Auth:TrustedProxyNetworks` est aussi
+renseigné ; sinon elles répondent comme toute route non mappée (`302` vers le fournisseur,
+`401` sous `/api`), et un client lit un `3xx`, `401` ou `404` sur `POST /auth/device`
+comme « pas de connexion du terminal ici ». Le flux est décrit dans
+[AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal).
+
+| Route | Qui | Réponses |
+|---|---|---|
+| `POST /auth/device` | anonyme (la CLI) | `200` ci-dessous ; `400` `invalid_request` ou `invalid_client` ; `403` avec `Sec-Fetch-Site` ; `413` au-delà de 4 Kio ; `429` `temporarily_unavailable` avec `Retry-After: 60` |
+| `POST /auth/device/token` | anonyme (la CLI) | `200` jeton ; `400` avec `authorization_pending`, `slow_down`, `access_denied`, `expired_token`, `invalid_grant`, `unsupported_grant_type`, `invalid_request` ou `invalid_client` ; `403` ; `413` |
+| `GET /device` | session du navigateur | la page d'approbation, ou la connexion sans session ou s'il reste moins d'1 h |
+| `POST /api/device/verify` | session du navigateur seule | `200` ci-dessous ; `400` code mal formé ; `401` ; `403` ; `404` aucun code en attente ; `415` ; `429` |
+| `POST /api/device/approve` | session du navigateur seule | `204` ; `400` ; `401` ; `403` ; `404` ; `409` la session finit dans l'heure ; `415` ; `429` |
+| `POST /auth/revoke` | anonyme, par possession | RFC 7009 : `200` que le jeton ait existé ou non ; `400 invalid_request` ; `403` ; `413` ; `503` avec `Retry-After: 1` |
+| `GET /api/tokens` | session du navigateur seule | `200` liste ; `401` |
+| `DELETE /api/tokens/{id}` | session du navigateur seule | `204` ; `401` ; `403` ; `404` ; `415` ; `503` avec `Retry-After: 1` |
+
+**Les routes de la CLI** (`/auth/device`, `/auth/device/token`, `/auth/revoke`) prennent un
+corps `application/x-www-form-urlencoded` où chaque paramètre figure une fois, répondent
+`Cache-Control: no-store`, et donnent leurs erreurs sous la forme `{"error":"<code>"}`
+(RFC 6749 §5.2). Une requête qui porte `Sec-Fetch-Site` vient d'un navigateur et reçoit
+`403`. `client_id` doit valoir `perf-sentinel`.
+
+```sh
+curl -fsS -d client_id=perf-sentinel https://hub.example.com/auth/device
+```
+
+```json
+{"device_code": "x4Kd…", "user_code": "BCDF-GHJK", "verification_uri": "https://hub.example.com/device",
+ "expires_in": 600, "interval": 5}
+```
+
+Il n'y a pas de `verification_uri_complete` : le code est toujours tapé sur la page.
+Consultez avec `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code` et
+`client_id`, pas plus vite que `interval` secondes (chaque consultation trop tôt répond
+`slow_down` et en ajoute 5). Une fois approuvé :
+
+```json
+{"access_token": "pshub_…", "token_type": "Bearer", "expires_in": 28512}
+```
+
+`expires_in` court jusqu'à la fin de la session qui approuve ; il n'y a pas de jeton de
+rafraîchissement. Révoquez avec `token=<jeton>` sur `/auth/revoke` ; `token_type_hint` est
+ignoré.
+
+**Les routes du navigateur** lisent le seul cookie de session : un jeton de terminal,
+même valide, reçoit `401 {"detail":"Approving a sign-in or managing tokens needs a browser session."}`.
+Un jeton machine reçoit ce `401` sur `GET /api/tokens` et, sur les trois autres, le `403`
+de toute écriture par jeton machine (`{"detail":"A machine token only reads."}`).
+Leurs écritures exigent `Content-Type: application/json` (sinon `415`) et
+`Sec-Fetch-Site: same-origin` (sinon `403`), le DELETE compris. `verify` prend
+`{"user_code":"BCDF-GHJK"}` (casse, `-` et espaces ignorés) et répond :
+
+```json
+{"user_code": "BCDF-GHJK", "client_address": "203.0.113.7", "same_network": false,
+ "requested_at_ms": 1760040000000, "identity": "ada@example.com", "token_expires_at_ms": 1760068800000}
+```
+
+`client_address` est l'adresse du client qui a demandé le code, une adresse IPv6 coupée à
+son /64 ; `same_network` la compare à l'adresse de cette requête. `approve` prend
+`{"user_code":"…","approve":true}`, ou `false` pour refuser ; un code est tranché une fois.
+Dix codes mal formés, inconnus ou expirés en 10 minutes répondent `429` avec `Retry-After`
+jusqu'à la fin de la fenêtre.
+
+`GET /api/tokens` liste les jetons de terminal vivants de l'appelant, du plus récent au plus
+ancien, ou chaque jeton vivant pour un admin (au plus `Hub:MaxReadLimit`) ; jamais le jeton
+ni son empreinte :
+
+```json
+[{"id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "identity": "ada@example.com", "subject": "2f6d0c1e-…",
+  "client_address": "203.0.113.7", "created_at_ms": 1760040000000, "expires_at_ms": 1760068800000,
+  "last_used_at_ms": 1760043600000}]
+```
+
+`last_used_at_ms` avance au plus une fois toutes les 5 minutes. `DELETE /api/tokens/{id}`
+révoque le jeton de l'appelant, ou celui de n'importe qui pour un admin ; le jeton d'un
+autre utilisateur répond le `404` d'un jeton absent.

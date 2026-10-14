@@ -126,6 +126,7 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 |------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Hub:Access:Enabled`         | `false` by default. Requires `Hub:Auth:Enabled`, `Hub:MetricsPort`, an entry in `Admins` or `AdminGroups`, and `Hub:AckRelay:TrustIdentityHeader` off        |
 | `Hub:Auth:SubjectClaim`      | `sub` by default, read only with `Enabled`: `sub`, `oid`, `uuid` or `account_id`, ids a provider never reassigns                                             |
+| `Hub:Auth:TrustedProxyNetworks` | Empty by default. CIDR networks whose `X-Forwarded-For` and `X-Forwarded-Proto` are trusted, one hop deep; each entry must parse. Terminal sign-in (`perf-sentinel login`) is offered only when it is set, see [AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in) |
 | `Hub:Access:Admins`          | Subjects holding the built-in `admin` role on `*`: 1 to 256 characters, no control character, no `machine:` or `local:` prefix. Not empty with `AdminGroups`  |
 | `Hub:Access:AdminGroups`     | Group references holding `admin` on `*`: `internal:<name>` or a provider group, see below                                                                     |
 | `Hub:Access:Groups[]`        | `{ Name, Members[] }`, referenced as `internal:<Name>`. Name of 1 to 64 ASCII letters, digits, `.`, `_` or `-`, unique with case ignored; members as `Admins` |

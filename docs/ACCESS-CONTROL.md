@@ -217,8 +217,9 @@ each caller who they are, their id (the subject to put in `Admins` or `Members`)
 groups and what their grants reach. An admin also sees the whole configuration, every
 service, attribute value and source no project covers within `Hub:Retention`, so a
 newcomer is spotted and assigned in the configuration, and the conflicts below. The page
-writes nothing: rights change in the configuration (Helm values `hub.access`) and apply at
-the next restart.
+writes nothing about rights: they change in the configuration (Helm values `hub.access`)
+and apply at the next restart. Its one write is the **Revoke** button of the terminal
+token table, which lists the caller's own tokens, or every live token for an admin.
 
 ### Reading conflicts
 
@@ -271,6 +272,29 @@ logged at startup (event `2001`) and never stops the Hub.
   token on `*` reopens every finding to every Grafana user. A token copied into
   developers' IDEs is a shared credential tied to no account, which survives offboarding.
 
+## Terminal tokens
+
+A terminal token (`pshub_…`) is the per-person credential: `perf-sentinel login` obtains
+one through the Hub's device flow, approved in a signed-in browser, as
+[AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in) describes. It is sent as
+`Authorization: Bearer`, like a machine token, and is judged as the person who approved
+it:
+
+- **Grants.** The approving session's subject and provider groups, frozen at approval,
+  with internal groups and grants read on every request. Unlike a machine token it also
+  writes: acks and analyses are recorded under the person's identity.
+- **Never admin.** Not even when an admin approves it; `GET /api/access` reports
+  `"caller": "terminal_token"` and `"admin": false`.
+- **`RequiredGroups`.** The token keeps the group that admitted the session, and is
+  refused once that group leaves `Hub:Auth:RequiredGroups`, as a session is.
+- **Never a browser.** A token approves no sign-in and lists or revokes no token: those
+  routes read the session cookie alone.
+- **Lifetime.** Until the approving session would have ended, 8 hours at most; at most 10
+  per person.
+
+Terminal sign-in is offered only with `Hub:Auth:TrustedProxyNetworks` set, since the
+approval page and the per-address limits need each client's own address.
+
 ## Sessions
 
 With access on, a session ends 8 hours after sign-in, however it is used, as it does under
@@ -319,6 +343,7 @@ hub:
     subjectClaim: sub
     groupsClaim: groups                       # Keycloak mapper with "Full group path" on
     requiredGroups: ["/perf-sentinel-hub"]
+    trustedProxyNetworks: ["10.42.200.0/28"]  # the ingress controller's pods alone, for perf-sentinel login
   access:
     enabled: true
     admins: ["2f6d0c1e-8a4b-4e2f-9c71-0d3b5a6e7f81"]   # a sub: break-glass

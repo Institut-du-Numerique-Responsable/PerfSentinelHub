@@ -30,9 +30,6 @@ public static partial class HubAuthentication
     private const string InternalPrefix = "internal:";
     private const int MaxSubjectChars = 256;
 
-    // The required group a session was let in by, which the cookie handler checks again.
-    private const string GroupClaim = "hub_required_group";
-
     public static bool AddHubAuthentication(this WebApplicationBuilder builder)
     {
         // Read from configuration rather than IOptions: the handlers are
@@ -67,13 +64,20 @@ public static partial class HubAuthentication
                     loggers));
 
         // TLS ends at the ingress: without the forwarded scheme the redirect_uri
-        // sent to the provider would read http. Only the scheme is trusted, and
-        // from any peer, since the ingress address is not known in advance.
-        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        // sent to the provider would read http. Without TrustedProxyNetworks only the
+        // scheme is trusted, and from any peer, since the ingress address is not known
+        // in advance. With it, the scheme and the client address are trusted from those
+        // networks alone, one hop deep, so a direct client cannot forge either.
+        builder.Services.AddOptions<ForwardedHeadersOptions>().Configure<IOptions<HubOptions>>((options, hub) =>
         {
-            options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+            var networks = hub.Value.Auth.TrustedProxyNetworks;
+            options.ForwardedHeaders = networks.Count == 0
+                ? ForwardedHeaders.XForwardedProto
+                : ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor;
             options.KnownIPNetworks.Clear();
             options.KnownProxies.Clear();
+            foreach (var network in networks)
+                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
         });
         return true;
     }
@@ -97,7 +101,7 @@ public static partial class HubAuthentication
         options.Events.OnValidatePrincipal = context =>
         {
             if ((auth.RequiredGroups.Count > 0 && !auth.RequiredGroups.Contains(
-                    context.Principal?.FindFirst(GroupClaim)?.Value, StringComparer.Ordinal)) ||
+                    context.Principal?.FindFirst(AccessCaller.RequiredGroupClaim)?.Value, StringComparer.Ordinal)) ||
                 (access && context.Principal?.FindFirst(AccessCaller.AccessClaim) is null))
                 context.RejectPrincipal();
             return Task.CompletedTask;
@@ -293,7 +297,7 @@ public static partial class HubAuthentication
                     $"The provider's userinfo for {name} lacks the Hub:Auth:GroupsClaim field.");
             var member = groups.FirstOrDefault(group => auth.RequiredGroups.Contains(group, StringComparer.Ordinal))
                          ?? throw new InvalidOperationException($"{name} is in none of Hub:Auth:RequiredGroups.");
-            context.Identity.AddClaim(new Claim(GroupClaim, member));
+            context.Identity.AddClaim(new Claim(AccessCaller.RequiredGroupClaim, member));
         }
 
         if (access.Enabled)

@@ -1010,3 +1010,55 @@ test("#/access is the access screen only when the Hub answered /api/access, New 
     assert.equal(PSL.screenOf("#/report/0123456789abcdef", true), "report");
     assert.equal(PSL.screenOf("#/nowhere", true), "new");
 });
+
+test("the token table names each token's owner, origin, dates and last use", () => {
+    const at = (h, m) => new Date(2026, 9, 14, h, m).getTime();
+    const rows = PSL.tokenRows([
+        {id: "0123456789abcdef0123456789abcdef", identity: "ada@example.com", subject: "2f6d", client_address: "203.0.113.7",
+            created_at_ms: at(9, 5), expires_at_ms: at(17, 5), last_used_at_ms: at(10, 40)},
+        {id: "fedcba9876543210fedcba9876543210", identity: "bob@example.com", subject: "9a1b", client_address: null,
+            created_at_ms: at(11, 0), expires_at_ms: at(19, 0), last_used_at_ms: null}
+    ]);
+    assert.deepEqual(rows, [
+        {id: "0123456789abcdef0123456789abcdef", owner: "ada@example.com", from: "203.0.113.7",
+            created: "2026-10-14 09:05", expires: "2026-10-14 17:05", lastUsed: "2026-10-14 10:40"},
+        {id: "fedcba9876543210fedcba9876543210", owner: "bob@example.com", from: "unknown",
+            created: "2026-10-14 11:00", expires: "2026-10-14 19:00", lastUsed: "never"}
+    ]);
+});
+
+test("revoking a token sends a DELETE with a JSON content type and no body", () => {
+    assert.deepEqual(PSL.tokenRevokeRequest("0123456789abcdef0123456789abcdef"), {
+        path: "/api/tokens/0123456789abcdef0123456789abcdef",
+        init: {method: "DELETE", headers: {"content-type": "application/json"}}
+    });
+});
+
+test("the approval page says where and when the code was requested, and until when the token holds", () => {
+    const now = new Date(2026, 9, 14, 14, 3, 40).getTime();
+    const verify = {
+        user_code: "BCDF-GHJK", client_address: "203.0.113.7", same_network: true,
+        requested_at_ms: new Date(2026, 9, 14, 14, 2, 31).getTime(), identity: "ada@example.com",
+        token_expires_at_ms: new Date(2026, 9, 14, 18, 42).getTime()
+    };
+    assert.equal(PSL.deviceRequestLine(verify, now),
+        "Requested from 203.0.113.7 at 14:02:31 (1 minute ago). You are signed in as ada@example.com. "
+        + "The token expires at 18:42.");
+    assert.equal(PSL.deviceRequestLine(Object.assign({}, verify, {requested_at_ms: now - 5000}), now).split(". ")[0],
+        "Requested from 203.0.113.7 at 14:03:35 (less than a minute ago)");
+    assert.equal(PSL.deviceRequestLine(Object.assign({}, verify, {requested_at_ms: now - 180000}), now).split(". ")[0],
+        "Requested from 203.0.113.7 at 14:00:40 (3 minutes ago)");
+    assert.equal(PSL.deviceIntro(verify.token_expires_at_ms),
+        "Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started yourself, "
+        + "just now: approving gives that terminal your access until 18:42.");
+});
+
+test("a code from another network warns, and Approve then needs a second click", () => {
+    assert.equal(PSL.deviceNetworkAlert({client_address: "203.0.113.7", same_network: true}), null);
+    assert.equal(PSL.deviceNetworkAlert({client_address: "203.0.113.7", same_network: false}),
+        "This code was requested from another network than this browser (203.0.113.7). Approve only if you "
+        + "started that sign-in yourself on that machine.");
+    assert.equal(PSL.deviceApproveStep(true, false), "send");
+    assert.equal(PSL.deviceApproveStep(false, false), "arm");
+    assert.equal(PSL.deviceApproveStep(false, true), "send");
+});

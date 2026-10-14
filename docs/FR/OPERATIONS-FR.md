@@ -341,6 +341,26 @@ l'outil.
   jeton inconnu, et journalisée au démarrage en avertissement (événement `2001`, qui nomme
   le jeton, jamais sa valeur). Elle n'arrête jamais le Hub.
 
+## Jetons de terminal
+
+Les développeurs connectent la CLI avec `perf-sentinel login`, qui exige
+`hub.auth.trustedProxyNetworks` renseigné avec les seuls pods du contrôleur d'ingress,
+voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal). Un jeton se
+révoque depuis la page d'accès ou par `perf-sentinel logout`, et prend fin de toute façon
+avec la session qui l'a approuvé. La table et les codes en attente ne demandent rien à un
+opérateur : les jetons expirés partent avec la passe de rétention quotidienne, et les codes
+en attente vivent en mémoire, si bien qu'un redémarrage n'annule que les connexions en
+cours. Événements, en Information sauf mention, jamais avec un code ni un jeton :
+
+| Événement | Quand |
+|-----------|-------|
+| `2010` | Une connexion du terminal a été approuvée, journalisée au clic même si aucun terminal ne récupère le jeton : qui, son sujet, l'adresse qui a demandé, si elle venait d'un autre réseau que le navigateur qui approuve |
+| `2011` | Une connexion du terminal a été refusée |
+| `2012` | Un jeton de terminal a été révoqué : par qui (son détenteur, par `/auth/revoke`, ou un sujet depuis la page d'accès), son propriétaire et son id |
+| `2013` | Warning : un code a été refusé parce que trop sont en attente, depuis cette adresse (10) ou en tout (200) |
+| `2014` | Warning, au démarrage avec le contrôle d'accès : la connexion du terminal est coupée parce que `Hub:Auth:TrustedProxyNetworks` est vide |
+| `2015` | Le terminal a récupéré le jeton d'une connexion approuvée : l'id du jeton, l'adresse qui a demandé, qui l'a approuvée et son sujet |
+
 ## Revenir en arrière avec le contrôle d'accès activé
 
 Ne revenez jamais à une image antérieure à la version qui applique le contrôle d'accès

@@ -3785,3 +3785,36 @@ section > .banner + .banner,
     font-weight: 600;
     color: var(--text);
 }
+
+/* The terminal sign-in page, GET /device: one narrow column, the code typed in capitals. */
+.device-main {
+    max-width: 560px;
+}
+
+.device-card {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 18px;
+}
+
+.device-card > p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-2);
+}
+
+.device-card .input {
+    letter-spacing: .2em;
+    text-transform: uppercase;
+}
+
+.device-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.device-main > .banner {
+    margin-top: 16px;
+}

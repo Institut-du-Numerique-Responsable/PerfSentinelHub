@@ -196,3 +196,36 @@ public sealed record AccessConflict(
     string Key,
     IReadOnlyList<string> Values,
     int IdentitiesWithoutKey);
+
+// RFC 6749 section 5.2: the device flow's and the revocation's errors.
+public sealed record OAuthError(string Error);
+
+// RFC 8628 section 3.2, without verification_uri_complete: the code is always typed.
+public sealed record DeviceAuthorizationResponse(
+    string DeviceCode,
+    string UserCode,
+    string VerificationUri,
+    int ExpiresIn,
+    int Interval);
+
+// No refresh token: a new one takes a new sign-in.
+public sealed record DeviceTokenResponse(string AccessToken, string TokenType, long ExpiresIn);
+
+// What the approval page shows before a click: where and when the code was asked for.
+public sealed record DeviceVerifyResponse(
+    string UserCode,
+    string ClientAddress,
+    bool SameNetwork,
+    long RequestedAtMs,
+    string? Identity,
+    long? TokenExpiresAtMs);
+
+// A terminal token as GET /api/tokens lists it: never the token, nor its hash.
+public sealed record TerminalTokenResponse(
+    string Id,
+    string Identity,
+    string Subject,
+    string? ClientAddress,
+    long CreatedAtMs,
+    long ExpiresAtMs,
+    long? LastUsedAtMs);

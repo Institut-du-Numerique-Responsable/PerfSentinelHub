@@ -482,11 +482,14 @@ query twice.
 
 ## With access control
 
-With `Hub:Access:Enabled` every route but the import, `/health` and `/metrics` (anonymous,
-on `Hub:MetricsPort` only) needs a session or a machine token, and each answer covers what the caller's grants cover. The model is in
+With `Hub:Access:Enabled` every route but the import, `/health`, `/metrics` (anonymous,
+on `Hub:MetricsPort` only) and the CLI's `POST /auth/device`, `POST /auth/device/token`
+and `POST /auth/revoke` ([Terminal sign-in](#terminal-sign-in)) needs a session, a terminal
+token or a machine token, and each answer covers what the caller's grants cover. The model is in
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md); what changes on the wire:
 
-- **Credentials.** A browser session, or `Authorization: Bearer <machine token>`. A request
+- **Credentials.** A browser session, or `Authorization: Bearer` with a terminal token
+  (`pshub_…`, [Terminal sign-in](#terminal-sign-in)) or a machine token. A request
   carrying a bearer is judged on it alone. An unknown or expired token gets `401`, even
   next to a valid cookie, with
   `WWW-Authenticate: Bearer error="invalid_token"`. A machine token only reads: any other
@@ -558,8 +561,10 @@ never lists a machine token's value or fingerprint.
 ```
 
 - `identity` is the display name `/api/status` returns; `subject` is the authorization key
-  that `Admins` and internal-group `Members` list. `caller` is `session` or
-  `machine_token`. `expires_at_ms` is the session's end, or the token's configured expiry.
+  that `Admins` and internal-group `Members` list. `caller` is `session`,
+  `terminal_token` or `machine_token`. `expires_at_ms` is the session's end, the terminal
+  token's (the approving session's end), or the machine token's configured expiry. A
+  terminal token is never `admin`.
 - `groups` are the caller's effective groups: the provider groups the configuration names,
   kept at sign-in, and the internal groups listing the subject, named without `internal:`.
 - `reach` holds the caller's grants with what each gives them: a machine token keeps
@@ -582,3 +587,81 @@ never lists a machine token's value or fingerprint.
     as `{signature, source_id, service, key, values, identities_without_key}`, ordered by
     source then signature, at most 200. These are the copies where an attribute grant reads
     but cannot acknowledge, see [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).
+
+### Terminal sign-in
+
+Mapped only with `Hub:Access:Enabled`. The device-flow routes, the first five below, are
+mapped only when `Hub:Auth:TrustedProxyNetworks` is set as well; otherwise they answer as
+any unmapped route does (`302` to the provider, `401` under `/api`), and a client reads a
+`3xx`, `401` or `404` on `POST /auth/device` as "no terminal sign-in here". See
+[AUTHENTICATION.md](AUTHENTICATION.md#terminal-sign-in) for the flow.
+
+| Route | Who | Answers |
+|---|---|---|
+| `POST /auth/device` | anonymous (the CLI) | `200` below; `400` `invalid_request` or `invalid_client`; `403` with `Sec-Fetch-Site`; `413` over 4 KiB; `429` `temporarily_unavailable` with `Retry-After: 60` |
+| `POST /auth/device/token` | anonymous (the CLI) | `200` token; `400` with `authorization_pending`, `slow_down`, `access_denied`, `expired_token`, `invalid_grant`, `unsupported_grant_type`, `invalid_request` or `invalid_client`; `403`; `413` |
+| `GET /device` | browser session | the approval page, or the sign-in when no session or less than 1 h is left |
+| `POST /api/device/verify` | browser session only | `200` below; `400` malformed code; `401`; `403`; `404` no such pending code; `415`; `429` |
+| `POST /api/device/approve` | browser session only | `204`; `400`; `401`; `403`; `404`; `409` the session ends within the hour; `415`; `429` |
+| `POST /auth/revoke` | anonymous, by possession | RFC 7009: `200` whether or not the token existed; `400 invalid_request`; `403`; `413`; `503` with `Retry-After: 1` |
+| `GET /api/tokens` | browser session only | `200` list; `401` |
+| `DELETE /api/tokens/{id}` | browser session only | `204`; `401`; `403`; `404`; `415`; `503` with `Retry-After: 1` |
+
+**The CLI routes** (`/auth/device`, `/auth/device/token`, `/auth/revoke`) take an
+`application/x-www-form-urlencoded` body with each parameter once, answer
+`Cache-Control: no-store`, and give their errors as `{"error":"<code>"}` (RFC 6749 §5.2). A
+request carrying `Sec-Fetch-Site` comes from a browser and gets `403`. `client_id` must be
+`perf-sentinel`.
+
+```sh
+curl -fsS -d client_id=perf-sentinel https://hub.example.com/auth/device
+```
+
+```json
+{"device_code": "x4Kd…", "user_code": "BCDF-GHJK", "verification_uri": "https://hub.example.com/device",
+ "expires_in": 600, "interval": 5}
+```
+
+There is no `verification_uri_complete`: the code is always typed on the page. Poll with
+`grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code` and `client_id`,
+no faster than `interval` seconds (each early poll answers `slow_down` and adds 5). Once
+approved:
+
+```json
+{"access_token": "pshub_…", "token_type": "Bearer", "expires_in": 28512}
+```
+
+`expires_in` runs to the end of the approving session; there is no refresh token. Revoke
+with `token=<token>` on `/auth/revoke`; `token_type_hint` is ignored.
+
+**The browser routes** read the session cookie alone: a terminal token, even a valid one,
+gets `401 {"detail":"Approving a sign-in or managing tokens needs a browser session."}`.
+A machine token gets that `401` on `GET /api/tokens` and the `403` every machine-token
+write gets on the three others (`{"detail":"A machine token only reads."}`). Their
+writes need `Content-Type: application/json` (else `415`) and `Sec-Fetch-Site: same-origin`
+(else `403`), the DELETE included. `verify` takes `{"user_code":"BCDF-GHJK"}` (case,
+`-` and spaces ignored) and answers:
+
+```json
+{"user_code": "BCDF-GHJK", "client_address": "203.0.113.7", "same_network": false,
+ "requested_at_ms": 1760040000000, "identity": "ada@example.com", "token_expires_at_ms": 1760068800000}
+```
+
+`client_address` is the requesting client's address, an IPv6 one cut to its /64;
+`same_network` compares it with the address of this request. `approve` takes
+`{"user_code":"…","approve":true}` or `false` to deny; a code is decided once. Ten
+malformed, unknown or expired codes in 10 minutes answer `429` with `Retry-After` until
+the window ends.
+
+`GET /api/tokens` lists the caller's live terminal tokens, newest first, or every live one
+for an admin (at most `Hub:MaxReadLimit`); never the token nor its hash:
+
+```json
+[{"id": "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "identity": "ada@example.com", "subject": "2f6d0c1e-…",
+  "client_address": "203.0.113.7", "created_at_ms": 1760040000000, "expires_at_ms": 1760068800000,
+  "last_used_at_ms": 1760043600000}]
+```
+
+`last_used_at_ms` moves at most once every 5 minutes. `DELETE /api/tokens/{id}` revokes
+the caller's own token, or anyone's for an admin; another user's token answers the `404`
+of a missing one.

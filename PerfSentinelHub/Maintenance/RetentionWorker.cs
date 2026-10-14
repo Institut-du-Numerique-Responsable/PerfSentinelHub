@@ -21,7 +21,7 @@ public sealed partial class RetentionWorker(
             var runCutoff = (now - options.Value.Analysis.RunRetention).ToUnixTimeMilliseconds();
             try
             {
-                await database.PurgeAsync(cutoff, runCutoff, stoppingToken);
+                await database.PurgeAsync(cutoff, runCutoff, now.ToUnixTimeMilliseconds(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

@@ -321,26 +321,36 @@ d'accès, rien n'est retenu.
 
 L'onglet Accès apparaît quand `GET /api/access` répond, c'est-à-dire avec `Hub:Access`
 actif ; un `404` le garde masqué, et un lien `#/access` ouvre alors Nouvelle analyse, comme
-toute route inconnue. La page est en lecture seule : aucun formulaire ni aucun bouton qui écrit,
-car les droits sont déclarés dans la configuration du Hub (valeurs Helm `hub.access`) et
-nulle part ailleurs. Elle montre :
+toute route inconnue. La page ne change aucun droit, car les droits sont déclarés dans la
+configuration du Hub (valeurs Helm `hub.access`) et nulle part ailleurs ; son seul bouton
+révoque un jeton de terminal. Elle montre :
 
-1. **Connecté en tant que.** L'identité, le moyen (session de navigateur ou jeton machine)
-   et jusqu'à quand, le fait qu'un changement de groupe chez le fournisseur s'applique à la
+1. **Connecté en tant que.** L'identité, le moyen (session de navigateur, jeton de
+   terminal ou jeton machine) et jusqu'à quand, le fait qu'un changement de groupe chez le fournisseur s'applique à la
    prochaine connexion, et « Your id, for an administrator », le sujet en texte
    sélectionnable.
 2. **Vos groupes.** Des pastilles marquées fournisseur ou interne.
 3. **Ce que vous atteignez.** Projet, groupe, rôle et permissions par grant. Un grant sur
    `*` se lit « Everything, records no project matches included ».
-4. **Projets.** Chaque projet que ces grants nomment, avec ses motifs écrits
+4. **Jetons de terminal**, tirés de `GET /api/tokens` : ceux de l'appelant, ou chaque jeton
+   vivant pour un admin, avec le propriétaire, l'adresse d'où la connexion a été demandée,
+   la création, l'expiration et la dernière utilisation (« never » avant la première).
+   **Revoke** envoie `DELETE /api/tokens/{id}` et recharge la liste ; le jeton cesse de
+   fonctionner à sa requête suivante. Voir
+   [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal).
+5. **Projets.** Chaque projet que ces grants nomment, avec ses motifs écrits
    `source lab-daemon · service checkout-* · attribute team=shop`.
-5. **Configuration**, pour un admin : projets, rôles (les intégrés marqués), grants,
+6. **Configuration**, pour un admin : projets, rôles (les intégrés marqués), grants,
    groupes internes et leurs membres, admins et groupes admins, et jetons machine avec
    leur expiration en « expired », « in less than a day » ou « in N days », jamais leur
    valeur.
-6. **Non couvert par un projet**, pour un admin : les services, valeurs d'attribut et
+7. **Non couvert par un projet**, pour un admin : les services, valeurs d'attribut et
    sources qu'aucun projet ne couvre, avec leurs comptes, puis les conflits, voir
    [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
+
+La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le Hub la sert
+à part, avec une politique qui n'autorise ni l'encadrement ni le script en ligne, pour un
+navigateur qui approuve un `perf-sentinel login`.
 
 ## Sûreté
 
