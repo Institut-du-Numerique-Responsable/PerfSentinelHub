@@ -75,3 +75,22 @@ v0.1.8	070998a	2026-09-10	PASS
 # once it was built, which is a lab prerequisite rather than a Hub defect.
 # hub-plugin-contract rewrote the plugin fixture byte for byte.
 v0.2.0	fc5ed79	2026-09-17	PASS
+#
+# v0.4.0: the eight hub-* scenarios green on lab commit 20ff4ab, run on their
+# own rather than inside verify-all-scenarios: hub-ingestion,
+# hub-derived-status, hub-lineage-mutation, hub-retention-purge,
+# hub-source-reachability, hub-plugin-contract, hub-incidents-mirror and
+# hub-access-control (machine tokens, the device flow driven by the real
+# perf-sentinel login, a local account, a provider sign-in, the metrics port
+# and the daemon's read gate seen by a polling Hub, on the native image).
+# The image perf-sentinel-hub:0.4.0-92b86b9 was built by seed-hub-local from
+# release/0.4.0 at 92b86b9 and answers 0.4.0 with engine 0.27.0, the
+# published perf-sentinel image pinned by digest. The daemon was
+# perf-sentinel:0.27.0-68c9152d, built locally from perf-sentinel
+# release/0.27.0, and the CLI 0.27.0 from the same branch. The JetBrains
+# plugin wire and token-file contracts ran against plugin main dd7888a. The
+# lab ran with local, uncommitted image pins in its daemon and Hub manifests.
+# An earlier pass the same day on Hub b03f2ce (0.3.8, engine 0.26.2) found
+# two stale lab scenarios, fixed in lab #167 (findings-page-filters) and #168
+# (hub-incidents-mirror), not Hub defects.
+v0.4.0	20ff4ab	2026-10-14	PASS

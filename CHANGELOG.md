@@ -2,7 +2,7 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.4.0] - 2026-10-14
 
 ### Added
 
@@ -108,9 +108,10 @@ All notable changes to PerfSentinelHub are recorded here.
   `8080`; outside Helm, set `ASPNETCORE_HTTP_PORTS="8080;<port>"`. A Hub whose metrics port
   is not bound beside another stops at startup (event `2002`, exit code 1).
   `examples/prometheus-scrape.yml` now targets port 9464.
-- **Prerequisite before turning access on:** the JetBrains plugin release after 0.1.0,
-  which sends a credential per endpoint (robintra/perf-sentinel-jetbrains-plugin#31,
-  merged), on every IDE that reads the Hub; an older plugin gets `401`. Grafana's Hub
+- **Prerequisite before turning access on:** JetBrains plugin 0.2.0, which sends a
+  credential per endpoint (robintra/perf-sentinel-jetbrains-plugin#31), on every IDE that
+  reads the Hub; an older plugin gets `401`. 0.2.0 is not on the Marketplace yet, so
+  turning access on before it ships leaves every IDE with `401`. Grafana's Hub
   datasource needs a machine token. `Hub:Auth:RequiredGroups` is recommended alongside.
 - **Rollback:** with access on, never roll the image back below this release. Earlier
   builds ignore `Hub:Access` and fail open: `/api/findings` is anonymous again and every
@@ -129,25 +130,25 @@ All notable changes to PerfSentinelHub are recorded here.
   grant reaches; rights still change in the configuration only. With access on, the New
   analysis form offers only the sources where the caller holds `analyses.run`, and a
   daemon row unfolds only where they hold `sources.read`.
-- Terminal sign-in, with access on. `perf-sentinel login` gets a personal token through
-  the Hub's own device flow (RFC 8628): `POST /auth/device` hands the CLI a code, the
-  developer types it on the Hub's `/device` page in a signed-in browser, sees the address
-  and time it was requested from, is warned and asked for a second click when that is
-  another network than the browser's, and approves; `POST /auth/device/token` then
-  returns a `pshub_` token. There is no `verification_uri_complete`, so no link can carry
-  a code. Only a browser session approves, lists or revokes, never a bearer. The token
-  carries the approving session's subject and provider groups, frozen, and the
-  `RequiredGroups` group that admitted it; it is refused once that group leaves the list,
-  is never admin even when an admin approves it, and expires with the approving session
-  (8 hours at most, at least 1 hour: a session closer to its end signs in again first).
-  At most 10 per person, the 11th dropping the oldest. Only its SHA-256 is stored, in the
-  new `terminal_tokens` table (schema version 10), which retention purges once expired.
-  `POST /auth/revoke` (RFC 7009) revokes by possession, and the access page lists the
-  caller's tokens, or everyone's for an admin, with a Revoke button
-  (`GET /api/tokens`, `DELETE /api/tokens/{id}`). Pending codes live in memory: at most
-  200, 10 per client address (an IPv6 client counts by its /64), 10 minutes each, polled
-  every 5 seconds with `slow_down`; ten bad codes in 10 minutes pause a person's
-  approvals. Events `2010` to `2015`.
+- Terminal sign-in, with access on. `perf-sentinel login` (perf-sentinel 0.27.0 or later)
+  gets a personal token through the Hub's own device flow (RFC 8628): `POST /auth/device`
+  hands the CLI a code, the developer types it on the Hub's `/device` page in a signed-in
+  browser, sees the address and time it was requested from, is warned and asked for a
+  second click when that is another network than the browser's, and approves;
+  `POST /auth/device/token` then returns a `pshub_` token. There is no
+  `verification_uri_complete`, so no link can carry a code. Only a browser session
+  approves, lists or revokes, never a bearer. The token carries the approving session's
+  subject and provider groups, frozen, and the `RequiredGroups` group that admitted it; it
+  is refused once that group leaves the list, is never admin even when an admin approves
+  it, and expires with the approving session (8 hours at most, at least 1 hour: a session
+  closer to its end signs in again first). At most 10 per person, the 11th dropping the
+  oldest. Only its SHA-256 is stored, in the new `terminal_tokens` table (schema version
+  10), which retention purges once expired. `POST /auth/revoke` (RFC 7009) revokes by
+  possession, and the access page lists the caller's tokens, or everyone's for an admin,
+  with a Revoke button (`GET /api/tokens`, `DELETE /api/tokens/{id}`). Pending codes live
+  in memory: at most 200, 10 per client address (an IPv6 client counts by its /64), 10
+  minutes each, polled every 5 seconds with `slow_down`; ten bad codes in 10 minutes pause
+  a person's approvals. Events `2010` to `2015`.
 - `Hub:Auth:TrustedProxyNetworks` (Helm `hub.auth.trustedProxyNetworks`): the CIDR
   networks whose `X-Forwarded-For` and `X-Forwarded-Proto` the Hub trusts, one hop deep.
   Empty, the default, changes nothing: the scheme is trusted from any peer and the client
@@ -179,6 +180,19 @@ All notable changes to PerfSentinelHub are recorded here.
   changes.
 
 ### Changed
+
+- The image ships perf-sentinel `0.27.0` as its analysis engine, repinned by digest from
+  `0.26.2`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.26.2` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.27.0` changes no detector, normalizer or signature, so a run finds what it found on
+  `0.26.2`, with the same signatures, and acknowledgments keep matching. A daemon on
+  `0.27.0` can put every read of its query API behind a key with `require_read_key`, and a
+  daemon source whose daemon turns it on needs `AuthHeaderName=X-API-Key` and
+  `AuthHeaderValue=<read_api_key>`, or its poll gets `401` and the source shows
+  unreachable. `perf-sentinel login --hub` in `0.27.0` is the CLI side of this release's
+  terminal sign-in.
 
 - The `perf-sentinel query monitor` command printed under a daemon whose published header
   is `X-API-Key` now says to set `PERF_SENTINEL_DAEMON_API_KEY` to the daemon's read key

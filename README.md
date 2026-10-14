@@ -83,7 +83,7 @@ IMAGE_DIGEST="$(jq -r .image.digest release/release-manifest.json)"
 docker pull "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@$IMAGE_DIGEST"
 
 CHART=ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel-hub
-CHART_DIGEST="$(oras resolve "$CHART:0.3.8")"
+CHART_DIGEST="$(oras resolve "$CHART:0.4.0")"
 helm pull "oci://$CHART@$CHART_DIGEST"
 ```
 
