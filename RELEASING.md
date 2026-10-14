@@ -69,10 +69,12 @@ release.
 
 No version is tagged without a recent PASS from the simulation lab. The lab runs the Hub image
 against a real daemon through `hub-ingestion`, `hub-derived-status`, `hub-lineage-mutation`,
-`hub-retention-purge`, `hub-source-reachability` and `hub-plugin-contract`, which is coverage no
-unit or integration test in this repository reaches: they exercise ingestion, polling, the derived
-status, the lineage columns and the plugin's envelope contract against a daemon that really
-produced the findings.
+`hub-retention-purge`, `hub-source-reachability`, `hub-plugin-contract`, `hub-incidents-mirror`
+and `hub-access-control`, which is coverage no unit or integration test in this repository
+reaches: they exercise ingestion, polling, the derived status, the lineage columns, the incident
+mirror and the plugin's envelope contract against a daemon that really produced the findings,
+and access control on the native image, with machine tokens, the device flow driven by the real
+`perf-sentinel login`, a local account and a provider sign-in.
 
 The gate is operator-driven by design. CI cannot reproduce a lab run, which needs a Kubernetes
 cluster, a workload fleet and an image built from the commit under test.
