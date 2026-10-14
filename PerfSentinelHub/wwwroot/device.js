@@ -82,7 +82,7 @@
                 const warning = PSL.deviceNetworkAlert(verified);
                 networkAlert.textContent = warning || '';
                 networkAlert.hidden = !warning;
-                approve.removeAttribute('data-armed');
+                delete approve.dataset.armed;
                 details.hidden = false;
                 // Where and when the code came from is what to read before deciding.
                 document.getElementById('device-request').focus();
