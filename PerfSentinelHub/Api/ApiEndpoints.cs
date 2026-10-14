@@ -459,11 +459,37 @@ public static partial class ApiEndpoints
         }
     }
 
+    // Every [LoggerMessage] of this class stays in this file: see LoggerMessageLayoutTests.
     [LoggerMessage(1301, LogLevel.Warning, "Source {SourceId} rejected {RejectedCount} imported findings.")]
     private static partial void LogRejectedImportedFindings(
         ILogger logger,
         string sourceId,
         int rejectedCount);
+
+    [LoggerMessage(2010, LogLevel.Information,
+        "Terminal sign-in approved by {Identity} ({Subject}) for {ClientAddress}, from another network: {OtherNetwork}.")]
+    private static partial void LogDeviceApproved(
+        ILogger logger, string identity, string subject, string clientAddress, bool otherNetwork);
+
+    [LoggerMessage(2015, LogLevel.Information,
+        "Terminal token {TokenId} issued to {ClientAddress} for {Identity} ({Subject}).")]
+    private static partial void LogTokenIssued(ILogger logger, string tokenId, string? clientAddress, string identity,
+        string subject);
+
+    [LoggerMessage(2011, LogLevel.Information,
+        "Terminal sign-in denied by {Identity} ({Subject}) for {ClientAddress}.")]
+    private static partial void LogDeviceDenied(ILogger logger, string identity, string subject, string clientAddress);
+
+    [LoggerMessage(2012, LogLevel.Information, "Terminal token {TokenId} of {Owner} revoked by {Actor}.")]
+    private static partial void LogTokenRevoked(ILogger logger, string actor, string owner, string tokenId);
+
+    [LoggerMessage(2013, LogLevel.Warning,
+        "Terminal sign-in refused for {ClientAddress}: too many codes pending, from this address or in all.")]
+    private static partial void LogDeviceCap(ILogger logger, string clientAddress);
+
+    [LoggerMessage(2014, LogLevel.Warning,
+        "Terminal sign-in is off: Hub:Auth:TrustedProxyNetworks is empty, so the Hub cannot tell clients apart behind a proxy.")]
+    private static partial void LogTerminalSignInOff(ILogger logger);
 }
 
 // Bounds how many import bodies may be buffered at once (MaxImports * 2 MiB). It is not a write
