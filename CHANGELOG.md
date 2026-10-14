@@ -180,6 +180,19 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
+- The image ships perf-sentinel `0.27.0` as its analysis engine, repinned by digest from
+  `0.26.2`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.26.2` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.27.0` changes no detector, normalizer or signature, so a run finds what it found on
+  `0.26.2`, with the same signatures, and acknowledgments keep matching. A daemon on
+  `0.27.0` can put every read of its query API behind a key with `require_read_key`, and a
+  daemon source whose daemon turns it on needs `AuthHeaderName=X-API-Key` and
+  `AuthHeaderValue=<read_api_key>`, or its poll gets `401` and the source shows
+  unreachable. `perf-sentinel login --hub` in `0.27.0` is the CLI side of this release's
+  terminal sign-in.
+
 - The `perf-sentinel query monitor` command printed under a daemon whose published header
   is `X-API-Key` now says to set `PERF_SENTINEL_DAEMON_API_KEY` to the daemon's read key
   first, since the monitor sends that variable as that header. It said the command worked
