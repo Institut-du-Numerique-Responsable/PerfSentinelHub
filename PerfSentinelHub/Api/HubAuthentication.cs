@@ -109,7 +109,10 @@ public static partial class HubAuthentication
             };
         }
         // The cookie scheme is reached through "hub" with access on; a page still signs in.
-        else if (access) options.ForwardChallenge = Scheme;
+        else if (access)
+        {
+            options.ForwardChallenge = Scheme;
+        }
 
         // The keys outlive a restart: a session opened before the gate, or
         // let in by a group since dropped from it, would last its 8 hours.
@@ -119,7 +122,8 @@ public static partial class HubAuthentication
         {
             var principal = context.Principal;
             if (principal?.Identity?.AuthenticationType == LocalSignIn.AuthenticationType
-                    ? !context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>().HoldsLocalTicket(principal)
+                    ? !context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>()
+                        .HoldsLocalTicket(principal)
                     : (auth.RequiredGroups.Count > 0 && !auth.RequiredGroups.Contains(
                           principal?.FindFirst(AccessCaller.RequiredGroupClaim)?.Value, StringComparer.Ordinal)) ||
                       (access && principal?.FindFirst(AccessCaller.AccessClaim) is null))

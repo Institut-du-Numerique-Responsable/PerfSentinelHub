@@ -58,7 +58,9 @@ public static partial class LocalSignIn
     {
         // Always the page, signed in or not: a redirect would loop with /device, which
         // re-challenges a session that has less than an hour left.
-        app.MapGet(Path, (HttpContext context) => Page(context, StatusCodes.Status200OK, null, ReturnUrl(context.Request.Query["return_url"])))
+        app.MapGet(Path,
+                (HttpContext context) => Page(context, StatusCodes.Status200OK, null,
+                    ReturnUrl(context.Request.Query["return_url"])))
             .AllowAnonymous();
         app.MapGet(Path + "/sso", (HttpContext context) =>
         {
@@ -110,7 +112,8 @@ public static partial class LocalSignIn
         {
             throttle.GiveBack(address, key);
             context.Response.Headers.RetryAfter = "1";
-            return Page(context, StatusCodes.Status503ServiceUnavailable, "The Hub is busy. Try again in a moment.", returnUrl);
+            return Page(context, StatusCodes.Status503ServiceUnavailable, "The Hub is busy. Try again in a moment.",
+                returnUrl);
         }
 
         var account = access.FindLocalAccount(name);
@@ -145,7 +148,8 @@ public static partial class LocalSignIn
             return TypedResults.Text("A request from another site is refused.", "text/plain; charset=utf-8",
                 statusCode: StatusCodes.Status403Forbidden);
         if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType) ||
-            !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded",
+                StringComparison.OrdinalIgnoreCase))
             return TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);
         if (request.ContentLength is not (>= 0 and <= MaxBodyBytes))
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
@@ -195,7 +199,8 @@ public static partial class LocalSignIn
     {
         return (request.Headers.TryGetValue("Sec-Fetch-Site", out var site) && site != "same-origin") ||
                (request.Headers.ContainsKey("Origin") && !string.Equals(
-                   request.Headers.Origin.ToString(), $"{request.Scheme}://{request.Host}", StringComparison.OrdinalIgnoreCase));
+                   request.Headers.Origin.ToString(), $"{request.Scheme}://{request.Host}",
+                   StringComparison.OrdinalIgnoreCase));
     }
 
     // A path on this Hub, or the root: never //host, /\host or an absolute URL.
