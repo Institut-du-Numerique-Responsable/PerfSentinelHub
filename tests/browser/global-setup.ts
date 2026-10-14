@@ -1,4 +1,5 @@
 import {ChildProcess, spawn, spawnSync} from "node:child_process";
+import {pbkdf2Sync, randomBytes} from "node:crypto";
 import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {join, resolve} from "node:path";
 import {tmpdir} from "node:os";
@@ -10,7 +11,9 @@ import {tmpdir} from "node:os";
 //
 // So this stands up: four fake daemons replaying real captures, a Hub built
 // from this checkout, and four analysis runs submitted through the API to give
-// the runs screen more than one state to show.
+// the runs screen more than one state to show. Then a second Hub from the same
+// build with sign-in and access control on, since the access screens exist only
+// there, and a fake provider to sign people in to it.
 
 const ROOT = resolve(__dirname, "..", "..");
 const WORK = join(tmpdir(), "perf-sentinel-hub-demo");
@@ -26,6 +29,14 @@ const DEAD_PORT = 41403;
 const ACKED_PORT = 41405;
 const BASELINE_PORT = 41406;
 const BASE = `http://127.0.0.1:${HUB_PORT}`;
+// The second Hub, with sign-in and access control on, for the screens that exist only
+// then. Its own port, its metrics port, the fake provider it signs people in with, and
+// a daemon source nothing listens for, which only ever gets findings pushed to it.
+const ACCESS_PORT = 41520;
+const ACCESS_METRICS_PORT = 41521;
+const PROVIDER_PORT = 41510;
+const PUSHED_PORT = 41407;
+const ACCESS_BASE = `http://127.0.0.1:${ACCESS_PORT}`;
 
 // global.json pins the SDK with rollForward: disable, and it is usually not
 // the dotnet on PATH. DOTNET_ROOT names the install that carries it when the
@@ -186,12 +197,141 @@ async function captureEmbedFixtures(runs: string[]): Promise<void> {
         JSON.stringify({epoch_ms: EPOCH_MS, routes}, null, 2) + "\n");
 }
 
-export default async function globalSetup(): Promise<void> {
+// Hub configuration written as nested values, the shape of the Helm values, and flattened
+// to the environment variables the Hub binds: arrays become indexes, keys join with "__".
+function hubEnv(prefix: string, value: unknown): Record<string, string> {
+    if (value === null || typeof value !== "object") return {[prefix]: String(value)};
+    return Object.assign({}, ...Object.entries(value).map(([key, inner]) => hubEnv(`${prefix}__${key}`, inner)));
+}
+
+// The PHC string `PerfSentinelHub hash-password` prints, computed here so the setup
+// needs no second build. The password is thrown away: the sign-in page is captured
+// for its form, and nothing signs in through it.
+function localPasswordHash(): string {
+    const salt = randomBytes(16);
+    const key = pbkdf2Sync(randomBytes(24).toString("base64"), salt, 600_000, 32, "sha256");
+    const unpadded = (bytes: Buffer) => bytes.toString("base64").replaceAll("=", "");
+    return `$pbkdf2-sha256$i=600000$${unpadded(salt)}$${unpadded(key)}`;
+}
+
+// The access screens read what the Hub holds about attributes, and no capture carries
+// any: the engine's demo trace file has no grouping attribute. So the pushed source gets
+// captured findings with a grouping written here, in three pushes, because one copy
+// seen under two groupings is what a conflict is: a signature first seen under team=shop
+// then under team=payments, another seen under team=shop then under no grouping at all.
+async function pushGroupedFindings(importKey: string): Promise<void> {
+    const findings = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-findings.json"), "utf8")) as
+        { finding: Record<string, unknown> }[];
+    const {version} = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-status-busy.json"), "utf8")) as
+        { version: string };
+    const grouped = (envelope: { finding: Record<string, unknown> }, team?: string) =>
+        ({...envelope, finding: {...envelope.finding, grouping: team ? [{key: "team", value: team}] : []}});
+    const push = async (batch: unknown[]) => {
+        const response = await fetch(`${ACCESS_BASE}/api/import/findings?source_id=shop-prod`, {
+            method: "POST",
+            headers: {"content-type": "application/json", "x-api-key": importKey},
+            body: JSON.stringify({producer_version: version, findings: batch})
+        });
+        if (!response.ok) throw new Error(`the push to the access Hub answered ${response.status}`);
+    };
+    await push([...findings.slice(0, 6).map((f) => grouped(f, "shop")),
+        ...findings.slice(6).map((f) => grouped(f, "payments"))]);
+    await push([grouped(findings[0], "payments")]);
+    await push([grouped(findings[1])]);
+}
+
+// The access-on Hub: sign-in against the fake provider, a local account (which puts
+// the Hub's own sign-in page in front), projects, grants, a machine token, the trusted
+// proxy network terminal sign-in needs and the metrics port access control needs.
+async function startAccessHub(engine: string, children: ChildProcess[]): Promise<void> {
+    children.push(spawn(process.execPath, [join(__dirname, "demo", "fake-provider.js"), String(PROVIDER_PORT)],
+        {stdio: "ignore", detached: true}));
+    const provider = `http://127.0.0.1:${PROVIDER_PORT}`;
+    const machineToken = randomBytes(30).toString("base64url");
+    const importKey = randomBytes(30).toString("base64url");
+    const daemonSource = (id: string, name: string, environment: string, port: number) =>
+        ({Id: id, Name: name, Environment: environment, Kind: "daemon", BaseUrl: `http://127.0.0.1:${port}`});
+    const hub = {
+        DatabasePath: join(WORK, "access", "hub.db"),
+        UpdateCheck: {Enabled: false},
+        Analysis: {EngineBinaryPath: engine, ReportDirectory: join(WORK, "access", "reports")},
+        MetricsPort: ACCESS_METRICS_PORT,
+        Sources: [
+            daemonSource("checkout-prod", "Checkout production", "production", BUSY_PORT),
+            daemonSource("billing-stg", "Billing staging", "staging", CALM_PORT),
+            {...daemonSource("shop-prod", "Shop production", "production", PUSHED_PORT), ImportApiKey: importKey},
+            {Id: "tempo-eu", Name: "Tempo EU", Environment: "production", Kind: "tempo",
+                BaseUrl: "http://127.0.0.1:41402", RetentionHours: 168}
+        ],
+        Auth: {
+            Enabled: true,
+            AuthorizationEndpoint: `${provider}/authorize`,
+            TokenEndpoint: `${provider}/token`,
+            UserInformationEndpoint: `${provider}/userinfo`,
+            ClientId: "perf-sentinel-hub",
+            ClientSecret: "demo",
+            // No proxy in front: the Hub's own peer is the client.
+            TrustedProxyNetworks: ["127.0.0.1/32"]
+        },
+        Access: {
+            Enabled: true,
+            AdminGroups: ["/hub-admins", "internal:break-glass"],
+            Groups: [
+                {Name: "break-glass", Members: ["local:ops"]},
+                {Name: "ci-orders", Members: []}
+            ],
+            LocalAccounts: [{Name: "ops", PasswordHash: localPasswordHash()}],
+            Projects: [
+                {Name: "checkout", Patterns: [{Source: "checkout-prod"}]},
+                {Name: "orders", Patterns: [{Service: "order*"}]},
+                {Name: "shop", Patterns: [{Attribute: "team=shop"}]}
+            ],
+            Roles: [{Name: "ci-reader", Permissions: ["findings.read"]}],
+            Grants: [
+                {Group: "/teams/shop", Project: "shop", Role: "member"},
+                {Group: "/teams/shop", Project: "checkout", Role: "reader"},
+                {Group: "/teams/orders", Project: "orders", Role: "member"},
+                {Group: "internal:ci-orders", Project: "orders", Role: "ci-reader"}
+            ],
+            MachineTokens: [{
+                Name: "ci-orders", Group: "internal:ci-orders", Token: machineToken,
+                ExpiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString()
+            }]
+        }
+    };
+    mkdirSync(join(WORK, "access", "reports"), {recursive: true});
+    // Detached and signalled as a group at teardown, like the first Hub. Both ports on
+    // loopback: the metrics port must be bound beside the main one or the Hub stops.
+    children.push(spawn(DOTNET,
+        ["run", "--project", join(ROOT, "PerfSentinelHub", "PerfSentinelHub.csproj"),
+            "-c", "Release", "--no-build", "--no-launch-profile"],
+        {
+            stdio: "ignore",
+            detached: true,
+            env: {
+                ...dotnetEnv(),
+                ASPNETCORE_URLS: `${ACCESS_BASE};http://127.0.0.1:${ACCESS_METRICS_PORT}`,
+                ASPNETCORE_ENVIRONMENT: "Production",
+                ...hubEnv("Hub", hub)
+            }
+        }));
+    await waitFor(`${ACCESS_BASE}/health/ready`, 90);
+    await pushGroupedFindings(importKey);
+
+    // The admin's access page counts what the two polled daemons hold, so it waits for
+    // both first polls. The machine token reads order* services, which both carry.
+    await Promise.all(["checkout-prod", "billing-stg"].map((source) => poll(async () => {
+        const response = await fetch(`${ACCESS_BASE}/api/findings?source_id=${source}&limit=1`,
+            {headers: {authorization: `Bearer ${machineToken}`}});
+        return response.ok && (await response.json() as unknown[]).length > 0 || undefined;
+    }, Date.now() + 30_000, 300, `the access Hub never polled ${source}`)));
+}
+
+async function startAll(children: ChildProcess[]): Promise<void> {
     const engine = engineBinary();
     rmSync(WORK, {recursive: true, force: true});
     mkdirSync(join(WORK, "reports"), {recursive: true});
 
-    const children: ChildProcess[] = [];
     // Detached like the Hub: an interrupted run must not leave these holding their
     // ports, or the next run's Hub binds against stale daemons and the capture
     // reads the previous run's data.
@@ -278,6 +418,7 @@ export default async function globalSetup(): Promise<void> {
         });
     children.push(hub);
     await waitFor(`${BASE}/health/ready`, 90);
+    await startAccessHub(engine, children);
 
     // Four runs, chosen for the states they end in rather than for variety:
     // two that succeed, one refused by a dead source, one refused before it is
@@ -302,9 +443,26 @@ export default async function globalSetup(): Promise<void> {
         baseUrl: BASE,
         succeeded,
         ackSignature: ackSignature(),
+        accessBaseUrl: ACCESS_BASE,
         pids: children.map((c) => c.pid).filter((p): p is number => typeof p === "number"),
         hubGroup: hub.pid
     }, null, 2));
+}
+
+export default async function globalSetup(): Promise<void> {
+    const children: ChildProcess[] = [];
+    try {
+        await startAll(children);
+    } catch (error) {
+        // Teardown finds the pids in state.json, which a failed setup never wrote, so
+        // whatever was already spawned is stopped here, the way teardown would.
+        for (const child of children) {
+            if (child.pid === undefined) continue;
+            try { process.kill(-child.pid, "SIGTERM"); } catch { /* not a group leader */ }
+            try { process.kill(child.pid, "SIGTERM"); } catch { /* already gone */ }
+        }
+        throw error;
+    }
 }
 
 export {WORK};

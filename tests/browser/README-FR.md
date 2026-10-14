@@ -1,6 +1,7 @@
 # Suite de démonstration navigateur
 
-Capture les écrans du lanceur que montrent `docs/` et le README. Elle produit
+Capture les écrans du lanceur que montrent `docs/` et le README, ainsi que les
+pages de connexion et d'approbation du terminal que le Hub sert lui-même. Elle produit
 des artefacts, pas des assertions : rien ici ne conditionne la CI, et
 `make verify-fast` ne la lance pas.
 
@@ -22,6 +23,20 @@ finding où atterrir dans ces fixtures, parce que le daemon des incidents est
 semé avec ses propres endpoints alors que les findings de la flotte viennent du
 fichier de traces de démonstration du moteur.
 
+Cinq écrans de plus n'existent qu'avec la connexion et le contrôle d'accès
+actifs, et sont capturés de la même façon, en clair et en sombre, sur un second
+Hub (`demo/access.spec.ts`) :
+
+- `launcher-access.png`, la page d'accès d'un admin : les jetons de terminal de
+  tous, toute la configuration, ce qu'aucun projet ne couvre et les conflits ;
+- `launcher-access-member.png`, la même page pour un membre de deux groupes
+  d'équipe ;
+- `launcher-no-grant.png`, le bandeau que reçoit un appelant connecté qu'aucun
+  grant n'atteint, au-dessus de la page qui lui donne son identifiant ;
+- `hub-sign-in.png`, la page de connexion du Hub, son pli de compte local ouvert ;
+- `hub-device.png`, la page d'approbation du terminal avec un code en attente
+  saisi et vérifié, avant Approve ou Deny.
+
 ## Ce que global-setup doit monter d'abord
 
 Le Hub n'a ni semeur, ni chargeur de fixtures, ni mode démo. Sa validation
@@ -36,7 +51,17 @@ monte :
 - quatre analyses soumises par l'API, choisies pour les états où elles
   finissent : deux réussissent, une tombe sur une source injoignable, une est
   refusée avant d'être mise en file parce que la fenêtre dépasse ce que le
-  backend conserve.
+  backend conserve,
+- un second Hub du même build avec `Hub:Auth` et `Hub:Access` actifs : un faux
+  fournisseur OAuth (`demo/fake-provider.js`) dont le sélecteur de compte
+  connecte Ada (un groupe admin), Sam (deux groupes d'équipe) ou Noor (un groupe
+  qu'aucun grant ne nomme), un compte local, qui place la page de connexion du
+  Hub devant, trois projets, leurs grants, un jeton machine,
+  `TrustedProxyNetworks` pour la connexion du terminal et un `MetricsPort` lié à
+  côté du port principal. Il interroge deux des faux daemons. Les tableaux de
+  jetons sont remplis par le flux d'appareil lui-même, une fois par personne et
+  par exécution : la spec lance un `perf-sentinel login` comme le fait la CLI,
+  l'approuve sur `/device` et récupère le jeton.
 
 ## Les fixtures sont des captures, pas des inventions
 
@@ -86,6 +111,20 @@ durée, donc un corps capturé le trimestre dernier mettrait "il y a 3 mois" sur
 un OOM kill et se lirait comme un écran cassé. Un seul décalage sur chaque
 champ en millisecondes, pour que les fenêtres, les findings figés et la lecture
 avant ou après le redémarrage gardent les distances mesurées par le daemon.
+
+## Les groupements du Hub d'accès sont écrits, pas capturés
+
+La page d'accès de l'admin liste les valeurs d'attribut qu'aucun projet ne
+couvre et les conflits, et les deux exigent des findings portant des attributs
+de groupement. Le fichier de traces de démonstration du moteur n'en a aucun,
+donc aucune capture non plus. Le Hub d'accès reçoit donc une troisième source
+daemon que personne n'écoute, et la mise en place y pousse des findings capturés
+par `POST /api/import/findings` en leur ajoutant un groupement `team` : la
+plupart sous `team=shop`, le reste sous `team=payments`, puis une signature de
+nouveau sous `team=payments` et une autre sans groupement, ce qui fait deux
+conflits. Seul le groupement est inventé ; chaque finding est capturé. La
+source apparaît injoignable sur l'onglet Sources, puisque ses findings sont
+poussés, jamais interrogés.
 
 ## Deux choses qu'elle attend de l'extérieur
 

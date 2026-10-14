@@ -1,6 +1,7 @@
 # Browser demo suite
 
-Captures the launcher screens that `docs/` and the README show. It produces
+Captures the launcher screens that `docs/` and the README show, and the Hub's
+own sign-in and terminal approval pages. It produces
 artefacts, not assertions: nothing here gates CI, and `make verify-fast` does
 not run it.
 
@@ -21,6 +22,18 @@ finding to land on in these fixtures, because the incidents daemon is seeded
 with its own endpoints while the fleet's findings come from the engine's demo
 trace file.
 
+Five more screens exist only with sign-in and access control on, and are
+captured the same way, light and dark, from a second Hub (`demo/access.spec.ts`):
+
+- `launcher-access.png`, the access page of an admin: the terminal tokens of
+  everyone, the whole configuration, what no project covers and the conflicts;
+- `launcher-access-member.png`, the same page for a member of two team groups;
+- `launcher-no-grant.png`, the banner a signed-in caller no grant reaches gets,
+  above the page that gives them their id;
+- `hub-sign-in.png`, the Hub's own sign-in page, its local account fold opened;
+- `hub-device.png`, the terminal approval page with a pending code entered and
+  verified, before Approve or Deny.
+
 ## What global-setup has to build first
 
 The Hub has no seeder, no fixture loader and no demo mode. Its validation
@@ -33,7 +46,16 @@ running against daemons that really answer, so `global-setup.ts` stands up:
 - the Hub, built from this checkout and run from its own binary,
 - four analysis runs submitted through the API, chosen for the states they end
   in: two succeed, one hits an unreachable source, one is refused before it is
-  queued because the window outruns what the backend keeps.
+  queued because the window outruns what the backend keeps,
+- a second Hub from the same build with `Hub:Auth` and `Hub:Access` on: a fake
+  OAuth provider (`demo/fake-provider.js`) whose account chooser signs in Ada
+  (an admin group), Sam (two team groups) or Noor (a group no grant names), a
+  local account, which puts the Hub's own sign-in page in front, three projects,
+  their grants, a machine token, `TrustedProxyNetworks` for terminal sign-in and
+  a `MetricsPort` bound beside the main port. It polls two of the fake daemons.
+  The token tables are filled by the device flow itself, once per person and
+  run: the spec starts a `perf-sentinel login` the way the CLI does, approves
+  it on `/device` and collects the token.
 
 ## The fixtures are captures, not inventions
 
@@ -78,6 +100,19 @@ stamps forward to the present as it serves them. The screen prints every time as
 quarter would put "3 months ago" on an OOM kill and read as a broken screen.
 One delta over every millisecond field, so the windows, the frozen findings and
 the before-or-after-the-restart reading keep the distances the daemon measured.
+
+## The groupings on the access Hub are written, not captured
+
+The admin's access page lists attribute values no project covers and the
+conflicts, and both need findings carrying grouping attributes. The engine's
+demo trace file has none, so no capture does. The access Hub therefore gets a
+third daemon source nothing listens for, and the setup pushes captured findings
+to it through `POST /api/import/findings` with a `team` grouping added: most
+under `team=shop`, the rest under `team=payments`, then one signature again
+under `team=payments` and another under no grouping, which is what makes two
+conflicts. Only the grouping is invented; every finding is a captured one. The
+source shows as unreachable on the Sources tab, since its findings are pushed,
+never polled.
 
 ## Two things it needs from outside
 

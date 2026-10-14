@@ -2,12 +2,16 @@ import {defineConfig, devices} from "@playwright/test";
 
 // Demo-only config. `npm run demo` ships two artefact groups to docs/img/hub/:
 //   - launcher_dark.gif, launcher_light.gif      (tour.spec.ts)
-//   - <screen>.png and <screen>-dark.png         (stills.spec.ts)
+//   - <screen>.png and <screen>-dark.png         (stills.spec.ts, access.spec.ts)
 // The light stills keep the bare name because they fill the <img src> slot of
 // a <picture>, which is what a reader with no dark preference gets.
 //
 // The Hub has no seeder and reads its daemons live, so global-setup.ts stands
-// up four fake daemons and a real Hub before any of this runs.
+// up four fake daemons and a real Hub before any of this runs, then a second Hub
+// with sign-in and access control on, which access.spec.ts captures.
+
+// The access-on Hub global-setup starts beside the first one.
+const ACCESS_BASE_URL = "http://127.0.0.1:41520";
 
 // 1280x900 holds the whole fleet screen with a daemon row unfolded.
 const VIEWPORT = {width: 1280, height: 900} as const;
@@ -57,6 +61,22 @@ export default defineConfig({
             name: "launcher-stills-light",
             testMatch: "stills.spec.ts",
             use: {...devices["Desktop Chrome"], viewport: VIEWPORT, colorScheme: "light", video: "off"}
+        },
+        {
+            name: "access-stills-dark",
+            testMatch: "access.spec.ts",
+            use: {
+                ...devices["Desktop Chrome"], viewport: VIEWPORT, colorScheme: "dark", video: "off",
+                baseURL: ACCESS_BASE_URL
+            }
+        },
+        {
+            name: "access-stills-light",
+            testMatch: "access.spec.ts",
+            use: {
+                ...devices["Desktop Chrome"], viewport: VIEWPORT, colorScheme: "light", video: "off",
+                baseURL: ACCESS_BASE_URL
+            }
         }
     ]
 });
