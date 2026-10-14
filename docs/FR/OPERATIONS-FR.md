@@ -133,25 +133,39 @@ trois sévérités, un compartiment `other` sur chacun, et trois statuts. Rien d
 ce qu'envoie un appelant n'atteint un libellé, et rien de ce qu'envoie un
 daemon n'en atteint un sans être replié.
 
-L'endpoint ne porte aucune authentification, exactement comme `/api/status`, et
-reste ouvert sous `Hub:Auth` pour que la collecte n'ait pas besoin de session.
-Gardez-le derrière ce qui protège déjà le reste du Hub. Il partage cette
-origine avec le lanceur, donc un proxy ouvert pour le navigateur sert aussi
-`/metrics` tant que le chemin n'est pas exclu. Le chart laisse la
-collecte en opt-in plutôt que de la supposer :
+L'endpoint ne porte aucune authentification et reste ouvert sous `Hub:Auth`, pour que la
+collecte n'ait pas besoin de session. Sans `Hub:MetricsPort`, il répond sur le port du
+Hub, qu'il partage avec le lanceur : un proxy ouvert pour le navigateur sert aussi
+`/metrics` tant que le chemin n'est pas exclu. Gardez-le derrière ce qui protège déjà le
+reste du Hub.
+
+`Hub:MetricsPort` (Helm `hub.metricsPort`) lui donne un port à lui : `/metrics` y répond
+et nulle part ailleurs, et rien d'autre n'y répond. Le jugement porte sur le port que la
+connexion a atteint, jamais sur l'en-tête `Host`. Le contrôle d'accès l'exige, voir
+[ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Renseigner la clé ne fait pas écouter le Hub
+sur ce port : le chart l'ajoute à `ASPNETCORE_HTTP_PORTS` (`"8080;9464"`), au conteneur et
+au Service comme un port nommé `metrics` ; hors Helm, réglez
+`ASPNETCORE_HTTP_PORTS="8080;9464"` à côté de `Hub__MetricsPort=9464`. Une fois démarré,
+le Hub vérifie que ce port est l'un de ceux qu'il écoute, en plus d'un autre, sinon il
+journalise l'événement `2002` en Critical et s'arrête avec le code 1 : le port principal
+répondrait et `/metrics` serait injoignable partout, ou, le port des métriques seul, les
+sondes et le lanceur recevraient `404`. Le chart refuse `8080`. L'Ingress continue de
+router vers `http` seulement.
+
+Le chart laisse la collecte en opt-in plutôt que de la supposer :
 
 ```yaml
 service:
   annotations:
     prometheus.io/scrape: "true"
-    prometheus.io/port: "8080"
+    prometheus.io/port: "9464"   # hub.metricsPort ; "8080" sans lui
     prometheus.io/path: /metrics
 ```
 
 Un opérateur qui sélectionne des Services (un `ServiceMonitor` de Prometheus
 Operator, un `VMServiceScrape` de VictoriaMetrics) trouve le Service par
-`app.kubernetes.io/name: perf-sentinel-hub` et collecte son port `http` sur
-`/metrics`.
+`app.kubernetes.io/name: perf-sentinel-hub` et collecte son port `metrics` sur
+`/metrics`, ou `http` sans `hub.metricsPort`.
 
 ### Les consommer
 
@@ -177,7 +191,9 @@ tableau de bord du Hub. À partir du moteur 0.24.0, ce tableau de bord lit
 `GET /api/findings` au travers d'une seconde source de données Infinity qui vise
 le Hub, à côté de celle qui vise un daemon.
 [API-FR.md](API-FR.md#api-de-lecture) décrit les paramètres `environment`,
-`from` et `to` que prend cette lecture.
+`from` et `to` que prend cette lecture. Avec le contrôle d'accès activé, cette source de
+données a besoin d'un jeton machine, envoyé en `Authorization: Bearer`, voir
+[ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#jetons-machine).
 
 ### Pourquoi une seule alerte
 
@@ -305,3 +321,36 @@ kubectl wait --for=delete pod -l app.kubernetes.io/name=perf-sentinel-hub --time
 
 Ensuite, depuis le pod assistant, copiez la sauvegarde par-dessus `/data/hub.db`,
 supprimez les `hub.db-wal` et `hub.db-shm` périmés à côté, et remontez l'échelle.
+
+## Jetons machine
+
+Avec le contrôle d'accès activé, les jobs de CI et les tableaux de bord lisent le Hub avec
+un jeton machine, voir [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#jetons-machine). Émettez
+un jeton par équipe, avec les seuls projets de cette équipe par un rôle limité aux
+findings : un jeton dans un outil partagé sert tout son périmètre à chaque utilisateur de
+l'outil.
+
+- **Révoquer** un jeton : supprimer son entrée de `hub.access.machineTokens`. La somme de
+  contrôle du ConfigMap change et le pod redémarre : le jeton cesse aussitôt de
+  fonctionner.
+- **Faire tourner** un jeton : mettre à jour son Secret, puis
+  `kubectl rollout restart deployment/<release>`. Le chart ne peut pas hacher un Secret
+  qu'il ne possède pas : un Secret modifié seul ne redémarre rien. Il en va de même pour
+  le secret du client OAuth et les clés des sources.
+- Une entrée dont `expiresAt` est passé est refusée à chaque requête avec le `401` d'un
+  jeton inconnu, et journalisée au démarrage en avertissement (événement `2001`, qui nomme
+  le jeton, jamais sa valeur). Elle n'arrête jamais le Hub.
+
+## Revenir en arrière avec le contrôle d'accès activé
+
+Ne revenez jamais à une image antérieure à la version qui applique le contrôle d'accès
+tant que `hub.access.enabled` vaut `true`. Les versions précédentes ignorent les clés
+`Hub:Access` et rien ne vérifie une configuration plus récente : elles **s'ouvrent**.
+`/api/findings` redevient anonyme et chaque session voit chaque enregistrement.
+`Hub:Auth:RequiredGroups` tient toujours dans ces versions, jusqu'à celle qui l'a ajouté :
+seuls ses membres se connectent. Réglez d'abord `hub.access.enabled: false`, comme une
+décision délibérée, puis revenez en arrière.
+
+Revenir avant la version de stockage (version 9 du schéma) puis repartir en avant est sûr
+pour les données : chaque démarrage complète les attributs, le service par source et les
+paires d'incident qu'une version plus ancienne a laissés de côté.

@@ -127,7 +127,10 @@ the smaller cases.
 
 This section describes the Hub with `Hub:Auth:Enabled` off, the default. On, the
 Hub signs browser users in itself and only the machine routes stay open, see
-[AUTHENTICATION.md](AUTHENTICATION.md).
+[AUTHENTICATION.md](AUTHENTICATION.md). With `Hub:Access` on as well, those routes need a
+machine token too and every read is trimmed to the caller's grants, see
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md) and
+[What access control does not cover](#what-access-control-does-not-cover).
 
 One endpoint asks for a credential, `POST /api/import/findings`, whose
 `X-API-Key` is compared by fingerprint. Every other one asks for nothing:
@@ -137,7 +140,8 @@ launcher itself. Whoever reaches the port reads every finding of every tenant,
 SQL query shapes and endpoint names included.
 
 The `by` and `reason` of a mirrored ack are readable on the open read route,
-`/api/findings`, which stays open to machines with `Hub:Auth` on. That is who
+`/api/findings`, which stays open to machines with `Hub:Auth` on unless `Hub:Access` is
+on as well. That is who
 acknowledged a finding and why, in the words typed at the daemon, as
 `acknowledged_by` already was.
 
@@ -148,7 +152,7 @@ authenticating proxy and no defence at all without one. If the network is not
 the boundary, put that proxy in front or turn on `Hub:Auth`. See
 [DEPLOYMENT.md](DEPLOYMENT.md).
 
-The ack relay knows who asks and has no roles. Any caller the Hub can name, a
+Unless `Hub:Access` is on, the ack relay knows who asks and has no roles. Any caller the Hub can name, a
 signed-in user or, once `Hub:AckRelay:TrustIdentityHeader` is set, whoever the
 proxy header names, may ack or revoke on every source that carries an ack
 credential. The daemon has no per-user roles either: its ack key is one key, and
@@ -169,6 +173,82 @@ is a floor and not a boundary, and the floor is the relay's alone:
 `POST /api/analyses` and `POST /api/incidents/refresh` judge neither the site
 nor the content type. A Hub reachable from a browser session therefore belongs
 behind a proxy that does not forward arbitrary origins.
+
+## What access control does not cover
+
+With `Hub:Access` on, a caller reads and writes only what a grant gives it, see
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md). These are the limits of that model.
+
+Who a finding is attributed to:
+
+- An N+1 or redundant group spanning several services is listed under the first span's
+  service and grouping. A second calling service appears only in
+  `pattern.occurrences_by_service`, so its project does not see the finding. Fan-out and
+  serialized calls are attributed to the parent span.
+- One signature folds every grouping. A project that matches one grouping of a copy reads
+  the copy's newest envelope, which may describe another grouping of the same service and
+  endpoint.
+- An attribute or a service name is set by whoever deploys the application, by anyone who
+  can send OTLP to a daemon, and by whoever holds a source's import key, for that source
+  only. Matching is per copy, so a planted value exposes only copies at the source it was
+  planted on. Within that source:
+  - spans under another team's service and endpoint with `team=evil` let evil's project
+    read that copy's newest envelope, which may be the other team's;
+  - the same spans with no grouping attribute, or another value, deny the owning team's
+    attribute grant: `403` on every ack and revoke of that finding at that source, and on
+    a trace-backend run of that service, for as long as the spans keep coming plus
+    `Hub:Retention`;
+  - an ack is keyed on the grouping-blind signature. One written through an attribute
+    grant also silences groupings of that signature the Hub has not seen at that daemon,
+    and any that appear later, so it may silence the same finding for another team's
+    deployment there. The Hub forces no expiry on it.
+
+  Where several teams can emit the same service name, give the owning team a source or
+  service grant for `acks.write` and `analyses.run`.
+- Starting a run at a trace backend needs every copy of the service in the backend's
+  environment to agree. Name a trace backend's environment like the daemons that report
+  its services.
+- A copy recorded before schema version 9 matches no attribute pattern and no service part
+  until its source reports it again.
+- Adding a grouping attribute changes the identity of spans that carried none of the
+  earlier ones.
+
+A trace-backend report shows every service its traces cross. A report is read on its
+run's subject, `traces.read` on the requested service or at the backend as a whole for a
+trace ID, and the Hub does not filter the HTML the engine wrote. Whoever holds
+`traces.read` on a service reads, in its reports, the spans, findings and counts of every
+other team's service those traces reach. That is intended, a problem often starts
+elsewhere. Give `traces.read` only to those who may see cross-team traces: the built-in
+`reader` and `member` roles carry it, a role with `findings.read` alone does not.
+
+`max_confidence` and `lineage` in an envelope are not trimmed to the caller's copies, and
+a source row written before the per-source copy existed serves the shared envelope until
+that source reports the finding again.
+
+How fresh a decision is:
+
+- provider groups are read at sign-in, so they are at most 8 hours old;
+- `Hub:Auth:RequiredGroups`, internal groups, admins, grants and machine tokens apply at
+  the restart that deploys them;
+- a rotated machine token needs a rollout restart, a removed one goes with the ConfigMap
+  change that rolls the pod.
+
+Outside the model:
+
+- A daemon's own `/metrics` stays open. With per-service or per-grouping labels it names
+  services and groupings, though it carries no finding.
+- A dashboard reading a daemon or a trace backend with its own credential shows whatever
+  that credential reads, to whoever the tool lets in. So does a machine token in a shared
+  tool: a Grafana datasource serves the token's whole scope to every Grafana user, and a
+  token in developers' IDEs is a shared credential that survives offboarding. One token per
+  team, granted only that team's projects, limits both.
+- The identity shown in `requested_by` and an ack's `by` is whatever the provider's
+  `Hub:Auth:IdentityClaim` holds. A user who can rename themselves there changes that
+  label, never their rights, which follow `Hub:Auth:SubjectClaim`.
+- A proxy in front of the Hub that injects or forwards `Authorization` breaks every browser
+  request once access is on: the Hub judges the bearer before the cookie.
+- Roles combine the Hub's permissions only. A new kind of action needs a new permission in
+  the Hub.
 
 ## What sits outside the Hub
 

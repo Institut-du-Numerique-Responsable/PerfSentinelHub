@@ -29,6 +29,7 @@ public static partial class ApiEndpoints
         DaemonClient client,
         DaemonViewGate gate,
         EngineProbe engine,
+        AccessPolicy access,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
@@ -36,7 +37,10 @@ public static partial class ApiEndpoints
     {
         var source = options.Value.Sources.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, sourceId, StringComparison.Ordinal));
-        if (source is null)
+        // sources.read at the source as a whole, judged before the trace-backend 400 so a
+        // refused source answers exactly as an unknown one.
+        if (source is null ||
+            !access.Scope(context, AccessPermissions.SourcesRead).HoldsAtSource(source.Id))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;

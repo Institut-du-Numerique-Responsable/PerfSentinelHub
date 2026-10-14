@@ -25,6 +25,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // A scoped status only trusts the heartbeats of its own scope.
     private const string HeartbeatInScope = $" AND eh.source_id {InScope}";
 
+    // With access patterns, a scope is a set of copies rather than of sources.
+    private const string Visible = "IN (SELECT signature, source_id FROM visible)";
+
     // A scoped read describes its scope: each finding as the freshest source in
     // scope reported it, first and last seen over those sources alone. The
     // partition and the pick share one sort. A source row written before the
@@ -35,33 +38,36 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // finding_type are fleet-wide and could move into `scope` if it ever hurts.
     // severity cannot, it judges the scoped envelope, nor can the ack filter,
     // which judges every source of the scope.
-    private const string ScopedFindings = $"""
-                                           scope AS (
-                                             SELECT signature, first_seen_ms, last_seen_ms, finding_json, severity
-                                             FROM (
-                                               SELECT fs.signature, fs.finding_json, fs.severity,
-                                                      MIN(fs.first_seen_ms) OVER w AS first_seen_ms,
-                                                      MAX(fs.last_seen_ms) OVER w AS last_seen_ms,
-                                                      ROW_NUMBER() OVER (
-                                                        PARTITION BY fs.signature
-                                                        ORDER BY fs.last_seen_ms DESC, fs.source_id ASC) AS pick
-                                               FROM finding_sources AS fs
-                                               WHERE fs.source_id {InScope}
-                                               WINDOW w AS (PARTITION BY fs.signature)
-                                             )
-                                             WHERE pick = 1
-                                           ),
-                                           scoped AS (
-                                             SELECT findings.signature,
-                                                    COALESCE(scope.finding_json, findings.finding_json) AS finding_json,
-                                                    findings.service, findings.finding_type,
-                                                    COALESCE(scope.severity, findings.severity) AS severity,
-                                                    findings.endpoint, findings.sample_trace_id,
-                                                    scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
-                                             FROM scope
-                                             JOIN findings ON findings.signature = scope.signature
-                                           )
-                                           """;
+    private static string ScopedFindings(string copies)
+    {
+        return $"""
+                scope AS (
+                  SELECT signature, first_seen_ms, last_seen_ms, finding_json, severity
+                  FROM (
+                    SELECT fs.signature, fs.finding_json, fs.severity,
+                           MIN(fs.first_seen_ms) OVER w AS first_seen_ms,
+                           MAX(fs.last_seen_ms) OVER w AS last_seen_ms,
+                           ROW_NUMBER() OVER (
+                             PARTITION BY fs.signature
+                             ORDER BY fs.last_seen_ms DESC, fs.source_id ASC) AS pick
+                    FROM finding_sources AS fs
+                    WHERE {copies}
+                    WINDOW w AS (PARTITION BY fs.signature)
+                  )
+                  WHERE pick = 1
+                ),
+                scoped AS (
+                  SELECT findings.signature,
+                         COALESCE(scope.finding_json, findings.finding_json) AS finding_json,
+                         findings.service, findings.finding_type,
+                         COALESCE(scope.severity, findings.severity) AS severity,
+                         findings.endpoint, findings.sample_trace_id,
+                         scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
+                  FROM scope
+                  JOIN findings ON findings.signature = scope.signature
+                )
+                """;
+    }
 
     // An ack with no expiry is permanent, and one expiring now has expired.
     // The read's now is the one its status is judged at.
@@ -633,9 +639,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
     public Task<IReadOnlyList<StoredFinding>> FindByTraceAsync(
         string traceId,
+        AccessScope? access,
         CancellationToken cancellationToken)
     {
-        return QueryAsync(new FindingQuery(null, null, null, _maxReadLimit), traceId, cancellationToken);
+        return QueryAsync(new FindingQuery(null, null, null, _maxReadLimit, Access: access), traceId, cancellationToken);
     }
 
     /// <summary>
@@ -747,6 +754,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$status", (object?)query.Status ?? DBNull.Value);
         command.Parameters.AddWithValue("$status_now", timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
         command.Parameters.AddWithValue("$status_grace", _resolutionGraceMs);
+        if (query.Access is { } access)
+            command.Parameters.AddWithValue("$access_patterns", access.ToJson());
 
         var rows = new List<StoredFinding>();
         var bySignature = new Dictionary<string, StoredFinding>(StringComparer.Ordinal);
@@ -807,12 +816,20 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // values remain bound parameters.
     private static string FindingsSql(StringBuilder where, FindingQuery query, bool windowed)
     {
-        var (with, row, heartbeatScope, sourceScope) = query.SourceIds is not null
-            ? ($"WITH {ScopedFindings},", "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}")
-            : ("WITH", "findings", "", "");
-        var window = windowed ? InWindow(row) : "";
-        var grouped = query.Grouping is null ? "" : InGrouping(row);
-        var unacked = query.IncludeAcked ? "" : Unacked(row);
+        // Access patterns always take the scoped branch: every place a scope tests a
+        // source then tests the copy, so pages, statuses and filters see the same copies.
+        var access = query.Access is not null;
+        var (with, row, heartbeatScope, sourceScope) = (access, query.SourceIds is not null) switch
+        {
+            (true, _) => ($"WITH {AccessPatternsCte}, {VisibleCopiesCte}, {ScopedFindings($"(fs.signature, fs.source_id) {Visible}")},",
+                "scoped", $" AND (scoped.signature, eh.source_id) {Visible}", $" AND (fs.signature, fs.source_id) {Visible}"),
+            (false, true) => ($"WITH {ScopedFindings($"fs.source_id {InScope}")},", "scoped", HeartbeatInScope,
+                $" AND fs.source_id {InScope}"),
+            _ => ("WITH", "findings", "", "")
+        };
+        var window = windowed ? InWindow(row, Copies(access, "p")) : "";
+        var grouped = query.Grouping is null ? "" : InGrouping(row, Copies(access, "g"));
+        var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));
 #pragma warning disable S2077
         return $"""
                 {with} statused AS (
@@ -848,7 +865,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     {
 #pragma warning disable S2077
         return $"""
-                WITH {ScopedFindings}
+                WITH {ScopedFindings($"fs.source_id {InScope}")}
                 SELECT finding_type, severity, status, COUNT(*)
                 FROM (
                   SELECT scoped.finding_type, scoped.severity,
@@ -901,13 +918,22 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // so a database that predates the observation days does not read as empty.
     // first_observed_day is stored: a MIN(day) would move with the purge and
     // fill the gaps it leaves. The scope decides whose presence counts.
-    private static string InWindow(string row)
+    // The copies a read covers through one alias: the $source_ids it names, or the ones
+    // its access patterns see (which already apply $source_ids).
+    private static string Copies(bool access, string alias)
+    {
+        return access
+            ? $"({alias}.signature, {alias}.source_id) {Visible}"
+            : $"($source_ids IS NULL OR {alias}.source_id {InScope})";
+    }
+
+    private static string InWindow(string row, string copies)
     {
         return $"""
                  AND EXISTS (
                     SELECT 1 FROM finding_sources AS p
                     WHERE p.signature = {row}.signature
-                      AND ($source_ids IS NULL OR p.source_id {InScope})
+                      AND {copies}
                       AND (EXISTS (
                              SELECT 1 FROM finding_observations AS o
                              WHERE o.signature = p.signature AND o.source_id = p.source_id
@@ -919,13 +945,13 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
     // Any grouping a source in scope saw the finding in, not only the one its
     // envelope names: the signature is grouping-blind.
-    private static string InGrouping(string row)
+    private static string InGrouping(string row, string copies)
     {
         return $"""
                  AND EXISTS (
                     SELECT 1 FROM finding_groupings AS g
                     WHERE g.signature = {row}.signature AND g.grouping = $grouping
-                      AND ($source_ids IS NULL OR g.source_id {InScope}))
+                      AND {copies})
                 """;
     }
 
@@ -937,7 +963,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // A source row with no copy of its own reads the shared one, in a scope
     // too, so a source is judged the same whatever scope it is read through.
     // A finding stays listed while one source of the scope holds it un-acked.
-    private static string Unacked(string row)
+    private static string Unacked(string row, string copies)
     {
         return $"""
                  AND EXISTS (
@@ -945,7 +971,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                     LEFT JOIN ack_reads AS ur ON ur.source_id = u.source_id
                       AND ur.state = '{AckReadStates.Ok}' AND ur.last_read_ms >= u.last_seen_ms
                     WHERE u.signature = {row}.signature
-                      AND ($source_ids IS NULL OR u.source_id {InScope})
+                      AND {copies}
                       AND CASE
                             WHEN ur.source_id IS NULL THEN json_extract(
                               COALESCE(u.finding_json, (

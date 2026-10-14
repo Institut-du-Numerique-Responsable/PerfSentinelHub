@@ -21,6 +21,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:ResolutionGrace`              | `7.00:00:00` (7 days)                                                       | Positive, below `Retention`                                                                     |
 | `Hub:DefaultReadLimit`             | `1000`                                                                      | 1 to `MaxReadLimit`                                                                             |
 | `Hub:MaxReadLimit`                 | `10000`                                                                     | 1 to 10000                                                                                      |
+| `Hub:MetricsPort`                  | none                                                                        | 1 to 65535. The only port `/metrics` answers on, see [OPERATIONS.md](OPERATIONS.md#metrics)     |
 | `Hub:Analysis:EngineBinaryPath`    | none                                                                        | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
 | `Hub:Analysis:ReportDirectory`     | `/data/reports`                                                             | Absolute, writable. Rendered reports live here                                                  |
 | `Hub:Analysis:IdentityHeader`      | `X-Forwarded-User`                                                          | Header a reverse proxy sets with the requester's identity. Ignored for a `Hub:Auth` session     |
@@ -36,7 +37,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:UpdateCheck:HubEndpoint`      | GitHub releases API for `Institut-du-Numerique-Responsable/PerfSentinelHub` | Absolute HTTPS, no credentials, query, or fragment                                              |
 | `Hub:Auth:*`                       | off                                                                         | OAuth2 browser sign-in, can be limited to groups, see [AUTHENTICATION.md](AUTHENTICATION.md)    |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                     | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
-| `Hub:Access:*`                     | off                                                                         | Access control model, refused as `Enabled` in this release, see below                           |
+| `Hub:Access:*`                     | off                                                                         | Access control, see below and [ACCESS-CONTROL.md](ACCESS-CONTROL.md)                            |
 | `Hub:Sources`                      | none                                                                        | At least one source                                                                             |
 
 ## Per-source settings
@@ -113,18 +114,18 @@ Hub logs one warning at startup that names the sources whose credential will nev
 `Hub:Access` says who reaches which findings, sources and runs: projects, roles, grants,
 internal groups, admins and machine tokens. All of it is configuration, the database stores
 no user and no membership, and under Helm the whole block is `hub.access`, passed to the Hub
-as is. This release ships the model and its validation ahead of their enforcement: with
-`Hub:Access:Enabled` set to `true` the Hub refuses to start, with "Hub:Access:Enabled is not
-available in this build yet.", and the chart's schema refuses `hub.access.enabled: true`
-before the running pod is stopped. A Hub that believed it filtered would otherwise serve
-every caller everything. Off, the default, nothing under `Hub:Access` is validated or used
-and the Hub answers exactly as before, but the values are still bound, so `ExpiresAt` must
-already be an ISO 8601 date such as `2027-06-30T00:00:00Z` or the Hub does not start. Every
-list is empty by default.
+as is. How it applies to each route, machine tokens and sessions are in
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md). Off, the default, nothing under `Hub:Access` is
+validated or used and the Hub answers exactly as before, but the values are still bound, so
+`ExpiresAt` must already be an ISO 8601 date such as `2027-06-30T00:00:00Z` or the Hub does
+not start. Every list is empty by default. With `Enabled` on, each rule below is checked at
+startup, and each message names its key and index and never echoes a token; the chart's
+schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the running pod.
 
 | Setting                      | Validation                                                                                                                                                    |
 |------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Hub:Access:Enabled`         | `false` by default, refused as `true` in this release. Requires `Hub:Auth:Enabled`, and `Hub:AckRelay:TrustIdentityHeader` off                                |
+| `Hub:Access:Enabled`         | `false` by default. Requires `Hub:Auth:Enabled`, `Hub:MetricsPort`, an entry in `Admins` or `AdminGroups`, and `Hub:AckRelay:TrustIdentityHeader` off        |
+| `Hub:Auth:SubjectClaim`      | `sub` by default, read only with `Enabled`: `sub`, `oid`, `uuid` or `account_id`, ids a provider never reassigns                                             |
 | `Hub:Access:Admins`          | Subjects holding the built-in `admin` role on `*`: 1 to 256 characters, no control character, no `machine:` or `local:` prefix. Not empty with `AdminGroups`  |
 | `Hub:Access:AdminGroups`     | Group references holding `admin` on `*`: `internal:<name>` or a provider group, see below                                                                     |
 | `Hub:Access:Groups[]`        | `{ Name, Members[] }`, referenced as `internal:<Name>`. Name of 1 to 64 ASCII letters, digits, `.`, `_` or `-`, unique with case ignored; members as `Admins` |
@@ -176,10 +177,11 @@ alphabet, `A-Z`, `a-z`, `0-9`, `-`, `.`, `_`, `~`, `+` and `/` with trailing `=`
 does not start with `pshub_`, differs from every other machine token and every import key,
 and is trimmed like an import key. `ExpiresAt` is set, at most 365 days ahead; a token that
 has already expired does not stop the Hub. Under Helm an item is `{ name, group, expiresAt,
-secretName, secretKey }`: the token is never in the values, and once enforcement ships the
-chart reads it from that Secret. This release only records the reference; the chart refuses
-a duplicate or malformed name, a missing Secret reference and an `expiresAt` that is not an
-ISO 8601 date and time. No message ever echoes a token.
+secretName, secretKey }`: the token is never in the values, and with `enabled` the chart
+reads it from that Secret into `Hub__Access__MachineTokens__<index>__Token`. The chart
+refuses a duplicate or malformed name, a missing Secret reference and an `expiresAt` that
+is not an ISO 8601 date and time. No message ever echoes a token. An expired entry is
+logged at startup (event `2001`) and refused at each request.
 
 ## What a source is, and what is measured
 

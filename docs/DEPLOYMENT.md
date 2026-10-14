@@ -94,7 +94,15 @@ them asks who calls, the launcher and `POST /api/analyses` included. With it on,
 three stay open: `/api/findings`, which IDE plugins and CI jobs read and which
 returns every finding of every source, `/metrics` and `/health`. Publish the
 host only on a network allowed to read them, or restrict who reaches it with
-the controller's source allow-list annotations.
+the controller's source allow-list annotations. With `Hub:Access` on as well,
+`/api/findings` needs a session or a machine token and answers each caller with
+its own scope, and `/metrics` answers only on `hub.metricsPort`, which the
+Ingress does not route, see [ACCESS-CONTROL.md](ACCESS-CONTROL.md). A proxy or
+controller in front of the Hub must then neither inject nor forward an
+`Authorization` header: a request carrying a bearer is judged on it alone, so
+every browser request would get `401`. Outside Helm, a Hub given
+`Hub__MetricsPort=9464` also needs `ASPNETCORE_HTTP_PORTS="8080;9464"`, or it stops
+at startup.
 
 The controller passes on the headers a client sends, `X-Forwarded-User`
 included. Leave `hub.ackRelay.trustIdentityHeader` off behind this Ingress

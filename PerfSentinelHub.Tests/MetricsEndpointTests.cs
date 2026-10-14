@@ -1,10 +1,12 @@
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -383,6 +385,89 @@ public sealed class MetricsEndpointTests : IDisposable
         Assert.Equal(["critical", "warning", "info"], FindingLabels.Severities);
         Assert.Equal([3, 2, 1], FindingLabels.Severities.Select(FindingParser.SeverityRank));
         Assert.Equal(0, FindingParser.SeverityRank(FindingLabels.Other));
+    }
+
+    // Hub:MetricsPort: /metrics answers on that port alone, and nothing else does there.
+    [Theory]
+    [InlineData("/metrics", 9464, HttpStatusCode.OK)]
+    [InlineData("/metrics", 8080, HttpStatusCode.NotFound)]
+    [InlineData("/metrics/", 9464, HttpStatusCode.OK)]
+    [InlineData("/metrics/", 8080, HttpStatusCode.NotFound)]
+    [InlineData("/METRICS", 8080, HttpStatusCode.NotFound)]
+    [InlineData("/health/live", 9464, HttpStatusCode.NotFound)]
+    [InlineData("/health/live", 8080, HttpStatusCode.OK)]
+    public async Task With_a_metrics_port_metrics_answer_there_alone(string path, int port, HttpStatusCode expected)
+    {
+        await using var dedicated = _factory.WithWebHostBuilder(builder => builder.UseSetting("Hub:MetricsPort", "9464"));
+
+        var context = await dedicated.Server.SendAsync(request =>
+        {
+            request.Request.Method = HttpMethods.Get;
+            request.Request.Path = path;
+            request.Connection.LocalPort = port;
+        }, TestContext.Current.CancellationToken);
+
+        Assert.Equal((int)expected, context.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("http://[::]:8080", true)]
+    [InlineData("http://[::]:9464", true)]
+    [InlineData("http://[::]:8080;http://[::]:9464", false)]
+    [InlineData("http://localhost:8080;http://+:9464", false)]
+    public void The_hub_stops_when_the_metrics_port_is_not_bound_besides_the_main_one(string addresses, bool stops)
+    {
+        // The rule alone: an in-process host that stops while starting races the test
+        // host's own disposal, and the stop itself is the process test below.
+        Assert.Equal(!stops, MetricsEndpoint.IsBoundBesidesAnother(9464, addresses.Split(';')));
+    }
+
+    // The process itself: the exit code is Program's, which no in-process host can observe.
+    [Fact]
+    public async Task An_unbound_metrics_port_exits_the_hub_with_code_1()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var output = AppContext.BaseDirectory;
+        var database = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-exit-{Guid.NewGuid():N}.db");
+        var start = new System.Diagnostics.ProcessStartInfo(
+            Path.Combine(output, OperatingSystem.IsWindows() ? "PerfSentinelHub.exe" : "PerfSentinelHub"))
+        {
+            WorkingDirectory = output,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            Environment =
+            {
+                // The runtime this test runs on, wherever the SDK lives.
+                ["DOTNET_ROOT"] = Path.GetFullPath(Path.Combine(
+                    Path.GetDirectoryName(typeof(object).Assembly.Location)!, "..", "..", "..")),
+                ["ASPNETCORE_URLS"] = "http://127.0.0.1:0",
+                ["Hub__DatabasePath"] = database,
+                ["Hub__MetricsPort"] = "9464",
+                ["Hub__Sources__0__Id"] = "local",
+                ["Hub__Sources__0__Name"] = "Local",
+                ["Hub__Sources__0__Environment"] = "test",
+                ["Hub__Sources__0__BaseUrl"] = "http://127.0.0.1:1"
+            }
+        };
+        using var hub = System.Diagnostics.Process.Start(start)!;
+        var stdout = hub.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderr = hub.StandardError.ReadToEndAsync(cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+
+        try
+        {
+            await hub.WaitForExitAsync(timeout.Token);
+        }
+        finally
+        {
+            if (!hub.HasExited) hub.Kill(true);
+            foreach (var file in new[] { database, database + "-wal", database + "-shm" }) File.Delete(file);
+        }
+
+        var log = await stdout + await stderr;
+        Assert.True(1 == hub.ExitCode, log);
+        Assert.Contains("Hub:MetricsPort 9464 must be a port the Hub listens on", log, StringComparison.Ordinal);
     }
 
     private static SourceOptions Daemon(string id, string environment)

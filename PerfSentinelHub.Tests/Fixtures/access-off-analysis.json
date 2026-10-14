@@ -1,0 +1,1 @@
+{"id":"0123456789abcdef","status":"succeeded","source_id":"test","source_name":"Test","environment":"test","kind":"daemon","request":{},"requested_by":"alice@example.internal","created_at_ms":1000,"started_at_ms":null,"finished_at_ms":2000,"expires_at_ms":90000,"producer_version":"0.24.0","error_code":null,"result":{"findings":3,"traces":12}}

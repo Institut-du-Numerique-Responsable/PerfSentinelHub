@@ -1,3 +1,5 @@
+using System.Security.Claims;
+
 namespace PerfSentinelHub.Api;
 
 /// <summary>
@@ -12,4 +14,37 @@ public sealed record AccessCaller(string Kind, string Subject, IReadOnlyList<str
     public const string TerminalToken = "terminal_token";
     public const string MachineToken = "machine_token";
     public const string MachinePrefix = "machine:";
+
+    // The claims a principal carries with access on. ClaimTypes.Name stays the identity.
+    public const string SubjectClaim = "hub:subject";
+    public const string CallerClaim = "hub:caller";
+    public const string GroupClaim = "hub:group";
+    public const string AccessClaim = "hub:access";
+    public const string MachineTokenClaim = "hub:machine_token";
+
+    // Resolved once per request. Null for a principal that carries no access claims.
+    public static AccessCaller? Of(HttpContext context)
+    {
+        if (context.Items.TryGetValue(typeof(AccessCaller), out var cached))
+            return (AccessCaller?)cached;
+
+        var user = context.User;
+        var caller = user.FindFirst(CallerClaim)?.Value is { } kind && user.FindFirst(SubjectClaim)?.Value is { } subject
+            ? new AccessCaller(kind, subject, [.. user.FindAll(GroupClaim).Select(claim => claim.Value)])
+            : null;
+        context.Items[typeof(AccessCaller)] = caller;
+        return caller;
+    }
+
+    public static ClaimsIdentity MachineIdentity(string name, string authenticationType)
+    {
+        var subject = MachinePrefix + name;
+        return new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.Name, subject),
+            new Claim(SubjectClaim, subject),
+            new Claim(CallerClaim, MachineToken),
+            new Claim(MachineTokenClaim, name)
+        ], authenticationType);
+    }
 }

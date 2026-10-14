@@ -333,7 +333,9 @@ a `POST` with a JSON body, and neither is ever open: under `Hub:Auth` they need 
 `expires_at` is optional, and an ack without one is permanent. A `by` in the body is
 ignored: the Hub names the caller itself.
 
-The Hub judges a request in this order, and a request it refuses never reaches the daemon:
+The Hub judges a request in this order, and a request it refuses never reaches the daemon.
+With access control on, steps of its own join these, see
+[With access control](#with-access-control).
 
 1. **The caller.** The signed-in user under `Hub:Auth`. Otherwise the value of
    `Hub:Analysis:IdentityHeader`, and only when `Hub:AckRelay:TrustIdentityHeader` is set,
@@ -476,3 +478,56 @@ its row looks.
 A run still running when the service stops comes back `interrupted` and is never replayed
 on its own. A silent retry would fire a second heavy query at a backend nobody asked to
 query twice.
+
+## With access control
+
+With `Hub:Access:Enabled` every route but the import, `/health` and `/metrics` (anonymous,
+on `Hub:MetricsPort` only) needs a session or a machine token, and each answer covers what the caller's grants cover. The model is in
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md); what changes on the wire:
+
+- **Credentials.** A browser session, or `Authorization: Bearer <machine token>`. A request
+  carrying a bearer is judged on it alone. An unknown or expired token gets `401`, even
+  next to a valid cookie, with
+  `WWW-Authenticate: Bearer error="invalid_token"`. A machine token only reads: any other
+  method gets `403 {"detail":"A machine token only reads."}`. A browser write without
+  `Sec-Fetch-Site: same-origin` gets `403 {"detail":"A request from another site is refused."}`.
+- **`/api/status` and `/api/sources`** answer `403 {"detail":"No grant on this Hub reaches
+  you."}` to a caller holding no permission anywhere. `/api/sources` lists only the sources
+  where the caller holds something, each with `permissions`: `findings.read`,
+  `sources.read`, `analyses.run` and `acks.write` for a daemon, `traces.read` and
+  `analyses.run` for a trace backend. The field is absent with access off.
+- **Both findings routes** are filtered by `findings.read`: a finding is listed when one
+  of its copies is in scope, and its `sources[]`, `acks[]`, status, first and last seen,
+  and the `include_acked`, `grouping` and window filters are judged on the in-scope copies
+  alone. Pages are slices of that one list. A `source_id` or an `environment` outside the
+  caller's `/api/sources` answers the same `400` as an unknown one. A caller holding
+  `findings.read` nowhere gets `403` rather than `[]`, so a CI gate whose token has no
+  grant fails.
+- **Incidents** follow `findings.read` the same way; `/api/incidents/{id}` serves the
+  richest copy in scope, and `404` when none is. A refresh reads only the daemons where
+  the caller reads something.
+- **The daemon view** needs `sources.read` at that source as a whole, and answers `404`
+  like an unknown source otherwise, before the trace-backend `400`.
+- **Acks**, in the order above: the source must be in the caller's `/api/sources`, or the
+  same `404`; then, before a relay slot is taken or the body read, the caller must hold
+  `acks.write` somewhere at that source, or `403 {"detail":"You may not acknowledge
+  findings at this source."}`; then, on the finding held at that source, a copy the caller
+  cannot read answers the very `404` an unknown one does, and one it reads but may not
+  write `403`. A revoke of a mirrored ack whose finding the Hub no longer holds needs the
+  source as a whole. `expires_at` stays the caller's choice: no expiry is forced.
+- **Analyses.** One rule decides who sees a run's row and opens its report: a daemon run
+  needs `findings.read` and `sources.read` at the daemon as a whole; a trace-backend run
+  needs `traces.read` on the requested service, or at the backend as a whole for a trace
+  ID. Starting a run needs that and `analyses.run`, otherwise
+  `403 {"detail":"You may not start this analysis."}`; a source outside the caller's list
+  is the `400` of an unknown `source_id`. `GET /api/analyses` lists only visible runs, never
+  `403`; a hidden run and its report answer `404`. The run JSON is unchanged. **A trace
+  report shows every service its traces cross**, `result` counts included. Reports render
+  static: no `--daemon-url`.
+
+From CI:
+
+```sh
+curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
+  "https://hub.example.com/api/findings?environment=production&status=active&severity=critical"
+```

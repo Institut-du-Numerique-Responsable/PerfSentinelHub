@@ -27,6 +27,8 @@
         themePosition: document.documentElement.getAttribute('data-theme-position') || 'auto',
         screen: 'new',
         status: null,
+        // The HTTP status /api/status failed with, which tells "no grant" from "down".
+        statusError: undefined,
         sources: null,
         sourcesError: false,
         loading: true,
@@ -219,7 +221,11 @@
             method: method,
             headers: {accept: 'application/json'}
         }).then(signInOn401).then(function (response) {
-            if (!response.ok) throw new Error(path + ' answered ' + response.status);
+            if (!response.ok) {
+                const error = new Error(path + ' answered ' + response.status);
+                error.status = response.status;
+                throw error;
+            }
             return response.json();
         });
     }
@@ -235,7 +241,8 @@
 
     function loadShell() {
         return Promise.all([
-            getJson('/api/status').catch(function () {
+            getJson('/api/status').catch(function (error) {
+                state.statusError = error.status;
                 return null;
             }),
             getJson('/api/sources').catch(function () {
@@ -550,7 +557,8 @@
         // Without it there is nothing truthful to draw, and reaching for it would
         // throw on the first field.
         if (!state.status) {
-            main.replaceChildren(hubUnreachableBanner());
+            const noGrant = PSL.shellBanner(state.statusError);
+            main.replaceChildren(noGrant ? noGrantBanner(noGrant) : hubUnreachableBanner());
             return;
         }
         if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
@@ -2460,6 +2468,11 @@
         }
 
         return panels;
+    }
+
+    /** Hub:Access found no grant for this caller: the Hub answers, it reaches nothing. */
+    function noGrantBanner(text) {
+        return el('div', {class: 'banner', 'data-tone': 'warn'}, [el('div', {text: text})]);
     }
 
     function hubUnreachableBanner() {

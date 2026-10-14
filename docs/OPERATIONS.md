@@ -122,25 +122,37 @@ environments × 13 × 4 × 3 series: twelve types, three severities, an `other`
 bucket on each, and three statuses. Nothing a caller sends reaches a label, and
 nothing a daemon sends reaches one unfolded.
 
-The endpoint carries no authentication, exactly like `/api/status`, and stays
-open under `Hub:Auth` so the scrape needs no session. Keep it behind whatever
-fronts the rest of the Hub. It shares that origin with the
-launcher, so a proxy opened for the browser serves `/metrics` as well unless
-the path is excluded. The chart leaves the scrape opted
-into rather than assumed:
+The endpoint carries no authentication and stays open under `Hub:Auth`, so the scrape
+needs no session. Without `Hub:MetricsPort` it answers on the Hub's own port, which it
+shares with the launcher: a proxy opened for the browser serves `/metrics` as well unless
+the path is excluded. Keep it behind whatever fronts the rest of the Hub.
+
+`Hub:MetricsPort` (Helm `hub.metricsPort`) gives it a port of its own: `/metrics` then
+answers there and nowhere else, and nothing else answers there. It is judged on the port
+the connection reached, never on the `Host` header. Access control requires it, see
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md). Setting the key does not make the Hub listen on
+the port: the chart adds it to `ASPNETCORE_HTTP_PORTS` (`"8080;9464"`), to the container
+and to the Service as a port named `metrics`; outside Helm, set
+`ASPNETCORE_HTTP_PORTS="8080;9464"` beside `Hub__MetricsPort=9464`. Once started, the Hub
+checks the port is one it listens on besides another, and otherwise logs event `2002` at
+Critical and stops with exit code 1: the main port would answer and `/metrics` would be
+unreachable everywhere, or, the metrics port alone, the probes and the launcher would get
+`404`. The chart refuses `8080`. The Ingress keeps routing to `http` only.
+
+The chart leaves the scrape opted into rather than assumed:
 
 ```yaml
 service:
   annotations:
     prometheus.io/scrape: "true"
-    prometheus.io/port: "8080"
+    prometheus.io/port: "9464"   # hub.metricsPort; "8080" without it
     prometheus.io/path: /metrics
 ```
 
 An operator that selects Services (a Prometheus Operator `ServiceMonitor`, a
 VictoriaMetrics `VMServiceScrape`) matches the Service on
-`app.kubernetes.io/name: perf-sentinel-hub` and scrapes its port `http` at
-`/metrics`.
+`app.kubernetes.io/name: perf-sentinel-hub` and scrapes its port `metrics` at
+`/metrics`, or `http` without `hub.metricsPort`.
 
 ### Consuming it
 
@@ -163,7 +175,9 @@ findings dashboard, `examples/grafana-findings-dashboard.json` in its
 repository, rather than by a dashboard of the Hub's. From engine 0.24.0 on, that
 dashboard reads `GET /api/findings` through a second Infinity datasource pointed
 at the Hub, beside the one pointed at a daemon. [API.md](API.md#read-api)
-describes the `environment`, `from` and `to` parameters that read takes.
+describes the `environment`, `from` and `to` parameters that read takes. With access
+control on, that datasource needs a machine token, sent as `Authorization: Bearer`, see
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md#machine-tokens).
 
 ### Why there is only one alert
 
@@ -286,3 +300,33 @@ kubectl wait --for=delete pod -l app.kubernetes.io/name=perf-sentinel-hub --time
 
 Then, from the helper pod, copy the backup over `/data/hub.db`, delete any stale
 `hub.db-wal` and `hub.db-shm` next to it, and scale back up.
+
+## Machine tokens
+
+With access control on, CI jobs and dashboards read the Hub with a machine token, see
+[ACCESS-CONTROL.md](ACCESS-CONTROL.md#machine-tokens). Issue one token per team, granted
+only that team's projects through a findings-only role: a token in a shared tool serves
+its whole scope to everyone who uses the tool.
+
+- **Revoke** a token by removing its entry from `hub.access.machineTokens`. The ConfigMap
+  checksum changes and the pod rolls, so the token stops working at once.
+- **Rotate** a token by updating its Secret, then
+  `kubectl rollout restart deployment/<release>`. The chart cannot hash a Secret it does
+  not own, so a changed Secret alone rolls nothing. The same holds for the OAuth client
+  secret and the source keys.
+- An entry past its `expiresAt` is refused at every request with the `401` an unknown
+  token gets, and logged at startup as a warning (event `2001`, naming the token, never
+  its value). It never stops the Hub.
+
+## Rolling back with access control on
+
+Never roll the image back below the release that enforces access control while
+`hub.access.enabled` is `true`. Earlier builds ignore the `Hub:Access` keys and nothing
+checks for a newer configuration, so they **fail open**: `/api/findings` is anonymous
+again and every session sees every record. `Hub:Auth:RequiredGroups` still holds in
+those builds, back to the release that added it, so only its members sign in. Set
+`hub.access.enabled: false` first, as a deliberate decision, then roll back.
+
+Rolling back below the storage release (schema version 9) and forward again is safe for
+the data: every start fills in the attributes, the per-source service and the incident
+pairs an older build left out.

@@ -91,9 +91,9 @@ public sealed partial class AckRelay(
 {
     public AckRelayGate Gate => gate;
 
-    public Task<bool> KnowsAsync(SourceOptions source, AckWrite write, CancellationToken cancellationToken)
+    public Task<AckTarget> ReadTargetAsync(SourceOptions source, AckWrite write, CancellationToken cancellationToken)
     {
-        return database.KnowsAckTargetAsync(source.Id, write.Signature, write.Revoke, cancellationToken);
+        return database.ReadAckTargetAsync(source.Id, write.Signature, cancellationToken);
     }
 
     public async Task<AckRelayAnswer> SendAsync(

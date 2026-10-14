@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 
 namespace PerfSentinelHub.Storage;
@@ -7,10 +8,6 @@ public sealed partial class HubDatabase
 {
     private const string AckReadUpsert = $"INSERT INTO ack_reads{ReadLedgerUpsert}";
     private const string AckReadSelect = $"{ReadLedgerSelect}ack_reads;";
-    private const string ThatPair = " WHERE source_id = $source_id AND signature = $signature)";
-    private const string CarriedFinding = $"EXISTS(SELECT 1 FROM finding_sources{ThatPair}";
-    private const string CarriedFindingExists = $"SELECT {CarriedFinding};";
-    private const string RevocableAckExists = $"SELECT {CarriedFinding} OR EXISTS(SELECT 1 FROM source_acks{ThatPair};";
 
     /// <summary>
     ///     Replaces one source's mirror with what its daemon just listed and
@@ -103,25 +100,45 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
-    ///     Whether the Hub holds that signature at that source, as a finding the
-    ///     source carried. A revoke also passes on an ack its daemon listed,
-    ///     which may outlive the finding, and never needs one: a daemon below
-    ///     0.24.0 takes an ack the mirror will not list. What the relay asks
-    ///     before it spends a daemon's write key, so its ack store only ever
-    ///     grows by findings the Hub knows.
+    ///     What the relay asks before it spends a daemon's write key: whether the Hub holds
+    ///     that signature at that source as a finding the source carried, with the copy's own
+    ///     service and attribute rows for the access check, and whether the mirror lists an
+    ///     ack of it. A revoke also passes on an ack its daemon listed, which may outlive the
+    ///     finding, and never needs one: a daemon below 0.24.0 takes an ack the mirror will
+    ///     not list. So the daemon's ack store only ever grows by findings the Hub knows.
     /// </summary>
-    public async Task<bool> KnowsAckTargetAsync(
+    public async Task<AckTarget> ReadAckTargetAsync(
         string sourceId,
         string signature,
-        bool revoke,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = revoke ? RevocableAckExists : CarriedFindingExists;
+        command.CommandText = """
+                              SELECT fs.signature IS NOT NULL, fs.service,
+                                     EXISTS(SELECT 1 FROM source_acks WHERE source_id = $source_id AND signature = $signature),
+                                     fa.grouping_key, fa.grouping_value, fa.attr_key, fa.attr_value
+                              FROM (SELECT 1)
+                              LEFT JOIN finding_sources AS fs ON fs.source_id = $source_id AND fs.signature = $signature
+                              LEFT JOIN finding_attributes AS fa
+                                ON fa.signature = fs.signature AND fa.source_id = fs.source_id;
+                              """;
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
         command.Parameters.AddWithValue(SignatureParameter, signature);
-        return await command.ExecuteScalarAsync(cancellationToken) is 1L;
+
+        var target = new AckTarget(false, null, false, []);
+        var rows = new List<AccessAttribute>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            target = new AckTarget(
+                reader.GetBoolean(0), reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetBoolean(2), rows);
+            if (!reader.IsDBNull(3))
+                rows.Add(new AccessAttribute(
+                    reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetString(6)));
+        }
+
+        return target;
     }
 
     /// <summary>
@@ -133,3 +150,6 @@ public sealed partial class HubDatabase
         return QueryReadsAsync(AckReadSelect, cancellationToken);
     }
 }
+
+/// <summary>An ack's target at one source: the held copy, if any, and whether the mirror lists an ack of it.</summary>
+public sealed record AckTarget(bool Held, string? Service, bool Mirrored, IReadOnlyList<AccessAttribute> Rows);

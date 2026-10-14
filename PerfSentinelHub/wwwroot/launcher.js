@@ -1248,6 +1248,20 @@
         });
     }
 
+    /**
+     * What the shell says when `/api/status` fails. Hub:Access answers 403 to a
+     * signed-in caller no grant reaches: the Hub is up, and only an administrator
+     * can change that. Any other failure is the Hub itself, and null leaves the
+     * page to its unreachable banner.
+     * @param {number | undefined} status
+     * @returns {string | null}
+     */
+    function shellBanner(status) {
+        return status === 403
+            ? 'No grant on this Hub reaches you. An administrator grants access in the Hub\'s configuration.'
+            : null;
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -1266,6 +1280,7 @@
         gaugeTone, gaugeMove,
         INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentsCopy,
         incidentHandoffHash, readHandoff,
-        ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary
+        ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary,
+        shellBanner
     };
 })(globalThis);

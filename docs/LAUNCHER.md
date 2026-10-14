@@ -273,6 +273,14 @@ Do not set `[daemon.ack] enabled = false` on that daemon to close runtime acks, 
 daemon then stops loading the TOML baseline too, see the engine's
 [ACK-WORKFLOW.md](https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/blob/main/docs/ACK-WORKFLOW.md).
 
+## When no grant reaches you
+
+With `Hub:Access` on, `/api/status` answers `403` to a signed-in caller no grant reaches.
+The Hub is up, so the launcher does not show its unreachable banner. It says instead "No
+grant on this Hub reaches you. An administrator grants access in the Hub's
+configuration." and draws no screen. Any other failure of `/api/status` keeps the
+unreachable banner. See [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
+
 ## Safety
 
 Nothing from the server is ever written with `innerHTML`. Every displayed string is a text

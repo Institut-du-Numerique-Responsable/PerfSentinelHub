@@ -496,17 +496,54 @@ public sealed class ConfigurationTests
         Assert.Throws<OptionsValidationException>(factory.CreateClient);
     }
 
-    private const string A0 = "Hub:Access:Enabled is not available in this build yet.";
-
     private const string MachineTokenValue = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
 
     private static readonly DateTimeOffset Now = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
 
-    // Until enforcement ships, a Hub that believes it filters would serve everyone everything.
     [Fact]
-    public void A_valid_access_configuration_is_refused_only_until_enforcement_ships()
+    public void A_valid_access_configuration_is_accepted()
     {
-        Assert.Equal(A0, Assert.Single(AccessFailures(AccessOn())));
+        Assert.Empty(AccessFailures(AccessOn()));
+    }
+
+    // A3: the authorization key must be an id the provider never reassigns.
+    [Theory]
+    [InlineData("sub", true)]
+    [InlineData("oid", true)]
+    [InlineData("uuid", true)]
+    [InlineData("account_id", true)]
+    [InlineData("email", false)]
+    [InlineData("Sub", false)]
+    public void The_subject_claim_names_an_immutable_account_id(string claim, bool accepted)
+    {
+        var options = AccessOn();
+        options = options with { Auth = options.Auth with { SubjectClaim = claim } };
+
+        Assert.Equal(
+            accepted ? [] : [$"Hub:Auth:SubjectClaim must name an immutable account id (sub, oid, uuid or account_id) when Hub:Access:Enabled; '{claim}' can be changed or reused at the provider."],
+            AccessFailures(options));
+    }
+
+    // A14: with access on /metrics answers on its own port only, so one must be set.
+    [Fact]
+    public void Access_needs_a_metrics_port()
+    {
+        Assert.Equal(
+            ["Hub:Access:Enabled needs Hub:MetricsPort: with access on, /metrics answers only on its own port, and without one it would stop answering everywhere."],
+            AccessFailures(AccessOn() with { MetricsPort = null }));
+    }
+
+    // M1, with access on or off: the key is opt-in.
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(65535, true)]
+    [InlineData(65536, false)]
+    public void A_metrics_port_is_a_tcp_port(int port, bool accepted)
+    {
+        var failures = new HubOptionsValidator().Validate(null, ValidOptions() with { MetricsPort = port }).Failures ?? [];
+
+        Assert.Equal(accepted ? [] : ["Hub:MetricsPort must be between 1 and 65535."], failures);
     }
 
     [Fact]
@@ -536,7 +573,7 @@ public sealed class ConfigurationTests
             Grants = [.. access.Grants, new GrantOptions { Group = "/platform/leads", Project = "*", Role = "admin" }]
         });
 
-        Assert.Equal(A0, Assert.Single(AccessFailures(options)));
+        Assert.Empty(AccessFailures(options));
     }
 
     // A4 ties GroupsClaim to provider references: internal ones need no claim.
@@ -550,7 +587,7 @@ public sealed class ConfigurationTests
         });
         options = options with { Auth = options.Auth with { GroupsClaim = " " } };
 
-        Assert.Equal(A0, Assert.Single(AccessFailures(options)));
+        Assert.Empty(AccessFailures(options));
     }
 
     [Theory]
@@ -630,7 +667,6 @@ public sealed class ConfigurationTests
         string[] failures = AccessFailures(AccessCase(rule));
 
         Assert.Contains(message, failures);
-        Assert.Contains(A0, failures);
     }
 
     [Fact]
@@ -646,7 +682,7 @@ public sealed class ConfigurationTests
         });
 
         string[] failures = AccessFailures(options);
-        Assert.True(failures.Length > 2);
+        Assert.True(failures.Length > 1);
         Assert.DoesNotContain(failures, failure => failure.Contains(MachineTokenValue, StringComparison.Ordinal));
     }
 
@@ -656,14 +692,13 @@ public sealed class ConfigurationTests
         // An expired entry is refused at each request, so an old one never keeps the Hub down.
         DateTimeOffset[] accepted = [Now.AddDays(365), Now.AddDays(-1)];
         foreach (var expiresAt in accepted)
-            Assert.Equal(A0, Assert.Single(AccessFailures(WithExpiry(expiresAt))));
+            Assert.Empty(AccessFailures(WithExpiry(expiresAt)));
 
         Assert.Contains(TokenExpiry, AccessFailures(WithExpiry(Now.AddDays(365).AddSeconds(1))));
 
         // The validator takes its clock as a parameter, so the limit moves with it.
         var later = new FakeTimeProvider(Now.AddDays(10));
-        Assert.Equal(A0, Assert.Single(
-            new HubOptionsValidator(later).Validate(null, WithExpiry(Now.AddDays(370))).Failures ?? []));
+        Assert.Empty(new HubOptionsValidator(later).Validate(null, WithExpiry(Now.AddDays(370))).Failures ?? []);
 
         static HubOptions WithExpiry(DateTimeOffset expiresAt)
         {
@@ -867,7 +902,7 @@ public sealed class ConfigurationTests
         }
     }
 
-    // Every kind of entry, each valid: refused only by A0.
+    // Every kind of entry, each valid.
     private static HubOptions AccessOn(Func<AccessOptions, AccessOptions>? change = null)
     {
         var access = new AccessOptions
@@ -912,7 +947,7 @@ public sealed class ConfigurationTests
                 }
             ]
         };
-        return ValidOptions() with { Auth = ValidAuth(), Access = change?.Invoke(access) ?? access };
+        return ValidOptions() with { Auth = ValidAuth(), MetricsPort = 9464, Access = change?.Invoke(access) ?? access };
     }
 
     private static string[] AccessFailures(HubOptions options)

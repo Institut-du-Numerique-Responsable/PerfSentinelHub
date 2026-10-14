@@ -18,6 +18,8 @@ n'ouvre jamais un écran. Ce partage n'est imposé par aucune authentification, 
 simplement ce que chaque client demande, et il vaut mieux le savoir avant de lire l'une
 ou l'autre surface. `Hub:Auth` place le côté navigateur derrière une connexion et laisse
 `/api/findings` ouvert, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
+`Hub:Access` le ferme aussi : une machine envoie alors un jeton machine en bearer, voir
+[Le contrôle d'accès](#le-contrôle-daccès).
 
 Le moteur apparaît deux fois sur ce tableau et c'est le même binaire les deux fois :
 une fois comme sous-processus que le Hub lance pour produire un rapport, une fois comme
@@ -177,7 +179,7 @@ l'enveloppe par source n'a ni l'un ni l'autre tant que sa source ne la remonte p
 nouveau. Le coût de ce démarrage est mesuré dans
 [BENCHMARKS-FR.md](BENCHMARKS-FR.md#démarrer-sur-une-base-remplie).
 
-## Le contrôle d'accès, avant son application
+## Le contrôle d'accès
 
 `Hub:Access` est compilé une fois, à la première demande, en `AccessPolicy`
 (`Api/AccessPolicy.cs`) : les motifs de chaque projet, les permissions de chaque rôle, les
@@ -186,8 +188,7 @@ l'empreinte SHA-256 de chaque jeton machine, jamais le jeton. `Program.cs` l'enr
 que soit le réglage, parce qu'un handler partagé par les deux modes le prend comme service,
 et que le Request Delegate Generator lirait un type absent du conteneur comme un corps JSON,
 qu'un `GET` refuse. Contrôle d'accès désactivé, il ne construit rien et chaque portée qu'il
-calcule est illimitée. Cette version refuse de démarrer avec le contrôle d'accès activé,
-donc rien ne l'appelle encore.
+calcule est illimitée : chaque handler garde le SQL d'aujourd'hui.
 
 Pour un appelant et une permission, `AccessPolicy.Scope` rend un `AccessScope`
 (`Api/AccessScope.cs`) : illimité, rien, ou l'union des motifs des projets attribués. Un
@@ -205,13 +206,35 @@ environnement. Les copies d'incident correspondent sur leurs paires dans
 `incident_attributes`.
 
 `Storage/HubDatabase.Access.cs` tient la même correspondance de lecture en SQL, pour les
-lectures que l'application filtrera. Une requête s'ouvre sur la CTE `ap`, qui décode une
+lectures filtrées. Une requête s'ouvre sur la CTE `ap`, qui décode une
 seule fois l'unique paramètre lié `$access_patterns` au lieu d'une fois par ligne et par
 motif, puis teste `visible`, les copies dans la portée, ou `IncidentAccess`. Les parties se
 comparent avec `=` ou `substr`, jamais `LIKE` ni `GLOB`, qui ignorent la casse et donnent un
 sens à `%` et `_`. `AccessScopeParityTests` fait passer une même table de motifs par les deux
 sur les lignes qu'écrit le rattrapage de H1 lui-même, et un test explicite mesure la CTE,
 voir [BENCHMARKS-FR.md](BENCHMARKS-FR.md#portée-daccès-sur-100-000-copies).
+
+**Qui appelle.** Avec l'accès activé, `HubAuthentication` enregistre un schéma de
+politique, `hub`, qui renvoie une requête portant `Authorization: Bearer` vers
+`HubTokenHandler` (`Api/HubTokenHandler.cs`) et toute autre vers le schéma du cookie, dont
+le challenge va toujours au fournisseur. Le handler de jetons compare l'empreinte du bearer
+à celle de chaque jeton machine par `AccessPolicy.MachineTokenName`, et une correspondance
+devient un principal dont le sujet est `machine:<nom>`. La connexion chez le fournisseur
+ajoute au cookie le sujet, les groupes du fournisseur qu'un grant nomme, `hub:access` et
+`hub:caller`. `AccessCaller.Of` lit ces claims une fois par requête. Après l'autorisation,
+une porte refuse l'écriture d'une machine et une écriture du navigateur sans
+`Sec-Fetch-Site: same-origin`, et un premier middleware pose `frame-ancestors 'self'` sur
+chaque réponse.
+
+**Où la portée s'applique.** `FindingQuery.Access` et `IncidentQuery.Access` portent la
+portée `findings.read` jusqu'au SQL : avec des motifs, la lecture des findings prend
+toujours sa branche bornée et chaque endroit qui testait une source teste la paire
+`(signature, source_id)` contre `visible`, avant la pagination. Le relais d'acquittement lit
+la copie de cette source avec `ReadAckTargetAsync` et la compare en C#. La visibilité d'un
+run, `RunRule` dans `ApiEndpoints.Analysis.cs`, lit les copies du service demandé dans
+l'environnement du run par `ReadServiceCopiesAsync`, une fois par environnement et par
+service pour une requête, et le listing parcourt `analysis_runs` du plus récent au plus
+ancien jusqu'à sa limite.
 
 ## Un run atteint toujours un état terminal
 

@@ -15,9 +15,9 @@ calls:
 | `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, otherwise `401`                                                |
 | `/reports/`                                                      | session, `401` in the launcher's frame, a redirect when opened directly |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`           | session, otherwise `401`, and the ack is taken in the session's name    |
-| `/api/findings`                                                  | open, for IDE plugins and CI jobs                                       |
+| `/api/findings`                                                  | open, for IDE plugins and CI jobs, unless access control is on          |
 | `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
-| `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape                                         |
+| `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape; `/metrics` on `Hub:MetricsPort` if set |
 
 The API answers `401` rather than a redirect because a fetch cannot follow a
 redirect to the provider's origin. The launcher reloads itself on a `401`, and
@@ -25,7 +25,9 @@ the reload is what sends the browser to sign in again.
 
 The routes left open still serve whoever reaches the port: `/api/findings`
 returns every finding of every source. Keep the network boundary for them, a
-NetworkPolicy or an ingress that does not publish those paths.
+NetworkPolicy or an ingress that does not publish those paths. With
+`Hub:Access:Enabled`, `/api/findings` needs a session or a machine token too, and
+each caller reaches what its grants cover, see [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
 
 Without `Hub:Auth:RequiredGroups`, any user the provider signs in is let in:
 restrict who may use the Hub on the provider side, by assigning the client to a
@@ -59,8 +61,9 @@ setting for a Hub behind a proxy that writes the header itself and strips the
 one a client sent. With a session the header is ignored there too. With neither
 a session nor that setting the relay answers `403` to everyone, see
 [CONFIGURATION.md](CONFIGURATION.md#the-ack-credential). Whoever is named may
-ack on every source that relays: the Hub has no roles, see
-[LIMITATIONS.md](LIMITATIONS.md#what-the-hub-does-not-authenticate).
+ack on every source that relays, see
+[LIMITATIONS.md](LIMITATIONS.md#what-the-hub-does-not-authenticate), unless access
+control is on, see [ACCESS-CONTROL.md](ACCESS-CONTROL.md#acknowledgments).
 
 Both relay routes also judge where the request comes from. A browser that sends
 `Sec-Fetch-Site: same-origin` passes, and every other value is a `403`,
@@ -93,8 +96,9 @@ the forwarded headers.
 | `Hub:Auth:ClientId`                | none                   | Required                                                                     |
 | `Hub:Auth:ClientSecret`            | none                   | Required, supplied through a Secret                                          |
 | `Hub:Auth:Scopes`                  | `openid profile email` | Space-separated                                                              |
-| `Hub:Auth:IdentityClaim`           | `email`                | The userinfo field recorded as the user                                      |
-| `Hub:Auth:GroupsClaim`             | `groups`               | The userinfo field of the groups, read only with `RequiredGroups`            |
+| `Hub:Auth:IdentityClaim`           | `email`                | The userinfo field recorded as the user, a display name                      |
+| `Hub:Auth:SubjectClaim`            | `sub`                  | The authorization key, read only with access control: `sub`, `oid`, `uuid` or `account_id` |
+| `Hub:Auth:GroupsClaim`             | `groups`               | The userinfo field of the groups, read with `RequiredGroups` or access control |
 | `Hub:Auth:RequiredGroups`          | none                   | No blank entry, refused while `Enabled` is off, see below                    |
 
 Declare `https://<hub host>/auth/callback` as the client's redirect URI, and
@@ -123,13 +127,13 @@ values.
 The endpoints below come from each provider's documentation. The Hub's tests
 play the provider with a fake one.
 
-| Provider        | Authorization, token, userinfo                                                                                                            | Scopes                 | `IdentityClaim`      |
-|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------|------------------------|----------------------|
-| Keycloak        | `https://<host>/realms/<realm>/protocol/openid-connect/auth`, `.../token`, `.../userinfo`                                                 | `openid profile email` | `preferred_username` |
-| Entra ID        | `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize`, `.../oauth2/v2.0/token`, `https://graph.microsoft.com/oidc/userinfo`  | `openid profile email` | `email`              |
-| Google          | `https://accounts.google.com/o/oauth2/v2/auth`, `https://oauth2.googleapis.com/token`, `https://openidconnect.googleapis.com/v1/userinfo` | `openid profile email` | `email`              |
-| GitLab          | `https://<host>/oauth/authorize`, `https://<host>/oauth/token`, `https://<host>/oauth/userinfo`                                           | `openid profile email` | `preferred_username` |
-| Bitbucket Cloud | `https://bitbucket.org/site/oauth2/authorize`, `https://bitbucket.org/site/oauth2/access_token`, `https://api.bitbucket.org/2.0/user`     | `account`              | `username`           |
+| Provider        | Authorization, token, userinfo                                                                                                            | Scopes                 | `IdentityClaim`      | `SubjectClaim` |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------|------------------------|----------------------|----------------|
+| Keycloak        | `https://<host>/realms/<realm>/protocol/openid-connect/auth`, `.../token`, `.../userinfo`                                                 | `openid profile email` | `preferred_username` | `sub`          |
+| Entra ID        | `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize`, `.../oauth2/v2.0/token`, `https://graph.microsoft.com/oidc/userinfo`  | `openid profile email` | `email`              | `sub`          |
+| Google          | `https://accounts.google.com/o/oauth2/v2/auth`, `https://oauth2.googleapis.com/token`, `https://openidconnect.googleapis.com/v1/userinfo` | `openid profile email` | `email`              | `sub`          |
+| GitLab          | `https://<host>/oauth/authorize`, `https://<host>/oauth/token`, `https://<host>/oauth/userinfo`                                           | `openid profile email` | `preferred_username` | `sub`          |
+| Bitbucket Cloud | `https://bitbucket.org/site/oauth2/authorize`, `https://bitbucket.org/site/oauth2/access_token`, `https://api.bitbucket.org/2.0/user`     | `account`              | `username`           | `account_id`   |
 
 Bitbucket is not an OpenID provider: its userinfo is the REST user resource,
 and its scopes are the ones granted to the OAuth consumer.
@@ -186,3 +190,39 @@ Not every provider puts groups in its userinfo:
   cannot be used with them as they are. Restrict who signs in on the provider
   side instead.
 - **Bitbucket Cloud**'s user resource lists no group either.
+
+## With access control
+
+`Hub:Access:Enabled` decides, inside the sessions `RequiredGroups` lets in, what each
+caller reaches. The two are independent and each needs `Hub:Auth:Enabled`; set both. The
+model, the routes and machine tokens are in [ACCESS-CONTROL.md](ACCESS-CONTROL.md). What
+changes for sign-in:
+
+- **The subject decides, the identity displays.** The userinfo field
+  `Hub:Auth:SubjectClaim` names (default `sub`, see the provider table) is the key that
+  `Hub:Access:Admins` and internal-group members are compared with. `IdentityClaim`
+  keeps its meaning: the name shown, recorded in `requested_by` and an ack's `by`, never
+  compared. A userinfo whose subject field is missing, not a string, blank or longer than
+  256 characters fails the sign-in.
+- **Reserved prefixes.** A subject or an identity starting with `local:` or `machine:`,
+  case ignored, fails the sign-in. With access off, the identity is only a display name
+  and such a value is still accepted.
+- **Groups.** `GroupsClaim` is read once per sign-in and feeds both gates, by the rules
+  above. The session keeps only the provider groups a grant or `Hub:Access:AdminGroups`
+  names, and never a value starting with `internal:`. The names it dropped are logged at
+  Debug (event `1902`), which shows how the provider spells them. A grant newly given to a
+  provider group reaches a signed-in user at their next sign-in.
+- **Provider admin groups.** `AdminGroups` may name a provider group. On a provider where
+  users create groups of any name (gitlab.com, and self-managed GitLab by default), anyone
+  can create a top-level group of that name: such an entry is safe only with
+  `RequiredGroups` limiting sign-in to the organisation's members, and the group named by
+  a full path under the organisation's own group. `Admins` is not exempt from
+  `RequiredGroups`: those people still need a listed group to sign in.
+- **The session no longer renews**, as under `RequiredGroups`: it ends 8 hours after
+  sign-in. A session opened before access control was turned on carries no subject and
+  goes back through the sign-in.
+- **`Hub:Analysis:IdentityHeader` is never read**, for status, `requested_by` and acks
+  alike, and `Hub:AckRelay:TrustIdentityHeader` must stay `false`.
+- **`reader` is not read-only**: the built-in role starts analyses.
+
+Every refusal answers the same `403` line and logs event `1900` with its reason.

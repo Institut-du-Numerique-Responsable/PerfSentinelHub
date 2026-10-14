@@ -17,6 +17,8 @@ nothing else. An IDE plugin or a CI job gets `/api/findings` and never opens a s
 That split is not enforced by authentication, it is simply what each client asks for,
 and it is worth knowing before reading either surface. `Hub:Auth` puts the browser's side
 behind a sign-in and leaves `/api/findings` open, see [AUTHENTICATION.md](AUTHENTICATION.md).
+`Hub:Access` closes it too: a machine then sends a bearer machine token, see
+[Access control](#access-control).
 
 The engine appears twice on this board and it is the same binary both times: once as a
 subprocess the Hub spawns to produce a report, and once as the daemon it collects from.
@@ -163,7 +165,7 @@ version and forward again is therefore covered at the next start. A copy written
 per-source envelope existed has neither until its source reports it again. The cost of that
 start is measured in [BENCHMARKS.md](BENCHMARKS.md#start-on-a-filled-database).
 
-## Access control, ahead of its enforcement
+## Access control
 
 `Hub:Access` is compiled once, at the first request for it, into `AccessPolicy`
 (`Api/AccessPolicy.cs`): each project's patterns, each role's permissions, the grants, the
@@ -171,8 +173,7 @@ internal groups by member subject, the admin sets, and a SHA-256 fingerprint of 
 token, never the token. `Program.cs` registers it whatever the setting, because a handler
 shared by both modes takes it as a service, and the Request Delegate Generator would read a
 type the container lacks as a JSON body, which a `GET` refuses. With access off it builds
-nothing and every scope it computes is unrestricted. This release refuses to start with
-access on, so nothing calls it yet.
+nothing and every scope it computes is unrestricted, so each handler keeps today's SQL.
 
 For one caller and one permission, `AccessPolicy.Scope` returns an `AccessScope`
 (`Api/AccessScope.cs`): unrestricted, nothing, or the union of the granted projects'
@@ -187,13 +188,33 @@ every one of which must write-match; `CoversSubject` matches the copies it is gi
 the caller enforcement adds selects them by environment. Incident copies match on their
 pairs in `incident_attributes`.
 
-`Storage/HubDatabase.Access.cs` holds the same read match in SQL, for the reads enforcement
-will filter. A statement opens with the `ap` CTE, which decodes the one bound parameter
+`Storage/HubDatabase.Access.cs` holds the same read match in SQL, for the reads that are
+filtered. A statement opens with the `ap` CTE, which decodes the one bound parameter
 `$access_patterns` once instead of once per row and pattern, then tests `visible`, the
 copies in scope, or `IncidentAccess`. Parts compare with `=` or `substr`, never `LIKE` or
 `GLOB`, which fold case and give `%` and `_` a meaning. `AccessScopeParityTests` runs one
 table of patterns through both over the rows H1's own backfill writes, and an explicit test
 times the CTE, see [BENCHMARKS.md](BENCHMARKS.md#access-scope-over-100000-copies).
+
+**Who is calling.** With access on, `HubAuthentication` registers a policy scheme, `hub`,
+which forwards a request carrying `Authorization: Bearer` to `HubTokenHandler`
+(`Api/HubTokenHandler.cs`) and every other one to the cookie scheme, whose challenge still
+goes to the provider. The token handler compares the bearer's fingerprint with every
+machine token's through `AccessPolicy.MachineTokenName`, and a match becomes a principal
+whose subject is `machine:<name>`. The provider sign-in adds the subject, the provider
+groups a grant names, `hub:access` and `hub:caller` to the cookie. `AccessCaller.Of` reads
+those claims once per request. After authorization, a gate refuses a machine's write and
+a browser write without `Sec-Fetch-Site: same-origin`, and a first middleware sets
+`frame-ancestors 'self'` on every response.
+
+**Where the scope applies.** `FindingQuery.Access` and `IncidentQuery.Access` carry the
+`findings.read` scope into SQL: with patterns, the findings read always takes its scoped
+branch and every place it tested a source tests the `(signature, source_id)` pair against
+`visible`, before paging. The ack relay reads the copy at that source with
+`ReadAckTargetAsync` and matches it in C#. A run's visibility, `RunRule` in
+`ApiEndpoints.Analysis.cs`, reads the copies of the requested service in the run's
+environment through `ReadServiceCopiesAsync`, once per environment and service for a
+request, and the listing walks `analysis_runs` newest first until it has its limit.
 
 ## A run always reaches a terminal state
 

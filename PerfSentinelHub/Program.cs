@@ -98,9 +98,16 @@ var app = builder.Build();
 await app.Services.GetRequiredService<HubDatabase>()
     .InitializeAsync(app.Lifetime.ApplicationStopping);
 
-HubAuthentication.WarnWhenAckRelayIdentifiesNobody(
-    app.Services.GetRequiredService<IOptions<HubOptions>>().Value,
+var hubOptions = app.Services.GetRequiredService<IOptions<HubOptions>>().Value;
+HubAuthentication.WarnWhenAckRelayIdentifiesNobody(hubOptions, app.Services.GetRequiredService<ILogger<Program>>());
+HubAuthentication.WarnOnExpiredMachineTokens(
+    app.Services.GetRequiredService<AccessPolicy>(),
+    app.Services.GetRequiredService<TimeProvider>(),
     app.Services.GetRequiredService<ILogger<Program>>());
+
+// Before authentication: the metrics port answers /metrics alone, with or without Hub:Auth.
+var exitCode = 0;
+if (hubOptions.MetricsPort is { } metricsPort) app.UseMetricsPort(metricsPort, () => exitCode = 1);
 
 // Before the static files: the fallback policy guards the launcher itself.
 if (authenticates) app.UseHubAuthentication();
@@ -124,4 +131,4 @@ app.MapAnalysisApi();
 app.MapMetrics();
 
 await app.RunAsync();
-return 0;
+return exitCode;

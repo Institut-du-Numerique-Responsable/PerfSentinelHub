@@ -16,9 +16,9 @@ une machine :
 | `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, sinon `401`                                                       |
 | `/reports/`                                                      | session, `401` dans le cadre du lanceur, redirection si ouvert directement |
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`            | session, sinon `401`, et l'acquittement est pris au nom de la session      |
-| `/api/findings`                                                  | ouvert, pour les plugins IDE et les jobs CI                                |
+| `/api/findings`                                                  | ouvert, pour les plugins IDE et les jobs CI, sauf contrôle d'accès         |
 | `POST /api/import/findings`                                      | sa propre `X-API-Key`, comme avant                                         |
-| `/health/live`, `/health/ready`, `/metrics`                      | ouvert, pour les sondes et le scrape                                       |
+| `/health/live`, `/health/ready`, `/metrics`                      | ouvert, pour les sondes et le scrape ; `/metrics` sur `Hub:MetricsPort` s'il est renseigné |
 
 L'API répond `401` plutôt qu'une redirection, car un fetch ne peut pas suivre
 une redirection vers l'origine du fournisseur. Le lanceur se recharge sur un
@@ -27,7 +27,9 @@ une redirection vers l'origine du fournisseur. Le lanceur se recharge sur un
 Les routes laissées ouvertes servent toujours qui joint le port :
 `/api/findings` renvoie tous les findings de toutes les sources. Gardez pour
 elles la frontière réseau, une NetworkPolicy ou un ingress qui ne publie pas ces
-chemins.
+chemins. Avec `Hub:Access:Enabled`, `/api/findings` exige aussi une session ou un jeton
+machine, et chaque appelant atteint ce que couvrent ses grants, voir
+[ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
 
 Sans `Hub:Auth:RequiredGroups`, tout utilisateur que le fournisseur connecte
 entre : restreignez qui peut utiliser le Hub côté fournisseur, en assignant le
@@ -63,9 +65,9 @@ d'un Hub placé derrière un proxy qui écrit lui-même l'en-tête et retire cel
 qu'un client aurait envoyé. Avec une session, l'en-tête y est ignoré aussi. Sans
 session ni ce réglage, le relais répond `403` à tout le monde, voir
 [CONFIGURATION-FR.md](CONFIGURATION-FR.md#lidentifiant-dacquittement). Quiconque
-est nommé peut acquitter sur toutes les sources qui relaient : le Hub n'a pas de
-rôles, voir
-[LIMITATIONS-FR.md](LIMITATIONS-FR.md#ce-que-le-hub-nauthentifie-pas).
+est nommé peut acquitter sur toutes les sources qui relaient, voir
+[LIMITATIONS-FR.md](LIMITATIONS-FR.md#ce-que-le-hub-nauthentifie-pas), sauf avec le
+contrôle d'accès, voir [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#acquittements).
 
 Les deux routes du relais jugent aussi d'où vient la requête. Un navigateur qui
 envoie `Sec-Fetch-Site: same-origin` passe, et toute autre valeur est un `403`,
@@ -100,8 +102,9 @@ qu'il envoie soit en `https`. Seul le schéma est pris des en-têtes transmis.
 | `Hub:Auth:ClientId`                | aucun                  | Obligatoire                                                                                        |
 | `Hub:Auth:ClientSecret`            | aucun                  | Obligatoire, fourni par un Secret                                                                  |
 | `Hub:Auth:Scopes`                  | `openid profile email` | Séparés par des espaces                                                                            |
-| `Hub:Auth:IdentityClaim`           | `email`                | Le champ userinfo enregistré comme utilisateur                                                     |
-| `Hub:Auth:GroupsClaim`             | `groups`               | Le champ userinfo des groupes, lu seulement avec `RequiredGroups`                                  |
+| `Hub:Auth:IdentityClaim`           | `email`                | Le champ userinfo enregistré comme utilisateur, un nom affiché                                     |
+| `Hub:Auth:SubjectClaim`            | `sub`                  | La clé d'autorisation, lue seulement avec le contrôle d'accès : `sub`, `oid`, `uuid` ou `account_id` |
+| `Hub:Auth:GroupsClaim`             | `groups`               | Le champ userinfo des groupes, lu avec `RequiredGroups` ou le contrôle d'accès                     |
 | `Hub:Auth:RequiredGroups`          | aucun                  | Aucune entrée vide, refusé si `Enabled` est désactivé, voir plus bas                               |
 
 Déclarez `https://<hôte du hub>/auth/callback` comme URI de redirection du
@@ -129,13 +132,13 @@ Le secret atteint le pod comme `Hub__Auth__ClientSecret`, jamais par les values.
 Les endpoints ci-dessous viennent de la documentation de chaque fournisseur. Les
 tests du Hub jouent le fournisseur avec un faux.
 
-| Fournisseur     | Autorisation, token, userinfo                                                                                                             | Scopes                 | `IdentityClaim`      |
-|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------|------------------------|----------------------|
-| Keycloak        | `https://<hôte>/realms/<realm>/protocol/openid-connect/auth`, `.../token`, `.../userinfo`                                                 | `openid profile email` | `preferred_username` |
-| Entra ID        | `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize`, `.../oauth2/v2.0/token`, `https://graph.microsoft.com/oidc/userinfo`  | `openid profile email` | `email`              |
-| Google          | `https://accounts.google.com/o/oauth2/v2/auth`, `https://oauth2.googleapis.com/token`, `https://openidconnect.googleapis.com/v1/userinfo` | `openid profile email` | `email`              |
-| GitLab          | `https://<hôte>/oauth/authorize`, `https://<hôte>/oauth/token`, `https://<hôte>/oauth/userinfo`                                           | `openid profile email` | `preferred_username` |
-| Bitbucket Cloud | `https://bitbucket.org/site/oauth2/authorize`, `https://bitbucket.org/site/oauth2/access_token`, `https://api.bitbucket.org/2.0/user`     | `account`              | `username`           |
+| Fournisseur     | Autorisation, token, userinfo                                                                                                             | Scopes                 | `IdentityClaim`      | `SubjectClaim` |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------|------------------------|----------------------|----------------|
+| Keycloak        | `https://<hôte>/realms/<realm>/protocol/openid-connect/auth`, `.../token`, `.../userinfo`                                                 | `openid profile email` | `preferred_username` | `sub`          |
+| Entra ID        | `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize`, `.../oauth2/v2.0/token`, `https://graph.microsoft.com/oidc/userinfo`  | `openid profile email` | `email`              | `sub`          |
+| Google          | `https://accounts.google.com/o/oauth2/v2/auth`, `https://oauth2.googleapis.com/token`, `https://openidconnect.googleapis.com/v1/userinfo` | `openid profile email` | `email`              | `sub`          |
+| GitLab          | `https://<hôte>/oauth/authorize`, `https://<hôte>/oauth/token`, `https://<hôte>/oauth/userinfo`                                           | `openid profile email` | `preferred_username` | `sub`          |
+| Bitbucket Cloud | `https://bitbucket.org/site/oauth2/authorize`, `https://bitbucket.org/site/oauth2/access_token`, `https://api.bitbucket.org/2.0/user`     | `account`              | `username`           | `account_id`   |
 
 Bitbucket n'est pas un fournisseur OpenID : son userinfo est la ressource REST de
 l'utilisateur, et ses scopes sont ceux accordés au consumer OAuth.
@@ -194,3 +197,42 @@ Tous les fournisseurs ne mettent pas les groupes dans leur userinfo :
   si bien que `RequiredGroups` ne peut pas servir avec eux en l'état.
   Restreignez qui se connecte côté fournisseur à la place.
 - La ressource utilisateur de **Bitbucket Cloud** ne liste aucun groupe non plus.
+
+## Avec le contrôle d'accès
+
+`Hub:Access:Enabled` décide, à l'intérieur des sessions que `RequiredGroups` laisse
+entrer, de ce que chaque appelant atteint. Les deux sont indépendants et chacun exige
+`Hub:Auth:Enabled` ; réglez les deux. Le modèle, les routes et les jetons machine sont
+dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Ce qui change à la connexion :
+
+- **Le sujet décide, l'identité s'affiche.** Le champ userinfo que nomme
+  `Hub:Auth:SubjectClaim` (par défaut `sub`, voir le tableau des fournisseurs) est la clé
+  à laquelle se comparent `Hub:Access:Admins` et les membres des groupes internes.
+  `IdentityClaim` garde son sens : le nom affiché, enregistré dans `requested_by` et dans
+  le `by` d'un ack, jamais comparé. Un userinfo dont le champ sujet manque, n'est pas une
+  chaîne, est vide ou dépasse 256 caractères fait échouer la connexion.
+- **Préfixes réservés.** Un sujet ou une identité qui commence par `local:` ou
+  `machine:`, casse ignorée, fait échouer la connexion. Sans contrôle d'accès, l'identité
+  n'est qu'un nom affiché et une telle valeur reste acceptée.
+- **Groupes.** `GroupsClaim` est lu une fois par connexion et alimente les deux portes,
+  selon les règles ci-dessus. La session ne garde que les groupes du fournisseur qu'un
+  grant ou `Hub:Access:AdminGroups` nomme, et jamais une valeur qui commence par
+  `internal:`. Les noms écartés sont journalisés en Debug (événement `1902`), ce qui
+  montre comment le fournisseur les écrit. Un grant donné à un groupe du fournisseur
+  atteint un utilisateur connecté à sa connexion suivante.
+- **Groupes d'admins du fournisseur.** `AdminGroups` peut nommer un groupe du
+  fournisseur. Chez un fournisseur où les utilisateurs créent des groupes de n'importe
+  quel nom (gitlab.com, et GitLab auto-hébergé par défaut), n'importe qui peut créer un
+  groupe de premier niveau de ce nom : une telle entrée n'est sûre qu'avec
+  `RequiredGroups` qui limite la connexion aux membres de l'organisation, et le groupe
+  nommé par un chemin complet sous le groupe de l'organisation. `Admins` n'échappe pas à
+  `RequiredGroups` : ces personnes ont quand même besoin d'un groupe listé pour se
+  connecter.
+- **La session n'est plus renouvelée**, comme sous `RequiredGroups` : elle prend fin
+  8 heures après la connexion. Une session ouverte avant l'activation du contrôle d'accès
+  ne porte aucun sujet et repasse par la connexion.
+- **`Hub:Analysis:IdentityHeader` n'est jamais lu**, pour le statut, `requested_by` et
+  les acks, et `Hub:AckRelay:TrustIdentityHeader` doit rester `false`.
+- **`reader` n'est pas en lecture seule** : le rôle intégré lance des analyses.
+
+Chaque refus répond la même ligne `403` et journalise l'événement `1900` avec sa raison.

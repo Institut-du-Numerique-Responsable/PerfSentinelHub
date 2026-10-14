@@ -3,9 +3,9 @@
 {{- if hasKey $ids .id }}{{ fail (printf "duplicate source id: %s" .id) }}{{ end }}
 {{- $_ := set $ids .id true }}
 {{- end }}
-{{- /* Nil-safe for --reuse-values from a release that predates hub.access. This
-       release only checks each token's Secret reference; the env var that delivers
-       the token comes with enforcement. */}}
+{{- /* Nil-safe for --reuse-values from a release that predates hub.access. Each
+       token's Secret reference is checked whatever the switch; the env var that
+       delivers the token is added only with access on. */}}
 {{- $access := .Values.hub.access | default dict }}
 {{- $tokenNames := dict }}
 {{- range ($access.machineTokens | default list) }}
@@ -49,10 +49,19 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
-          ports: [{ name: http, containerPort: 8080 }]
+          ports:
+            - { name: http, containerPort: 8080 }
+            {{- with .Values.hub.metricsPort }}
+            - { name: metrics, containerPort: {{ . }} }
+            {{- end }}
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
+            {{- with .Values.hub.metricsPort }}
+            # Hub:MetricsPort does not make Kestrel listen: the Hub stops at startup unless it does.
+            - name: ASPNETCORE_HTTP_PORTS
+              value: "8080;{{ . }}"
+            {{- end }}
             {{- with .Values.hub.auth }}
             {{- if .enabled }}
             - name: Hub__Auth__ClientSecret
@@ -60,6 +69,15 @@ spec:
                 secretKeyRef:
                   name: {{ .clientSecretName }}
                   key: {{ .clientSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- if $access.enabled }}
+            {{- range $index, $token := $access.machineTokens | default list }}
+            - name: Hub__Access__MachineTokens__{{ $index }}__Token
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $token.secretName }}
+                  key: {{ $token.secretKey }}
             {{- end }}
             {{- end }}
             {{- range $index, $source := .Values.sources }}

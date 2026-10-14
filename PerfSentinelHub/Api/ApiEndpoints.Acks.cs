@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
 
@@ -11,11 +13,12 @@ public static partial class ApiEndpoints
         string sourceId,
         HttpRequest request,
         AckRelay relay,
+        AccessPolicy access,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        return RelayAckAsync(sourceId, false, request, relay, options.Value, timeProvider, cancellationToken);
+        return RelayAckAsync(sourceId, false, request, relay, access, options.Value, timeProvider, cancellationToken);
     }
 
     // A POST of its own rather than a DELETE on the route above: the signature
@@ -24,26 +27,33 @@ public static partial class ApiEndpoints
         string sourceId,
         HttpRequest request,
         AckRelay relay,
+        AccessPolicy access,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
-        return RelayAckAsync(sourceId, true, request, relay, options.Value, timeProvider, cancellationToken);
+        return RelayAckAsync(sourceId, true, request, relay, access, options.Value, timeProvider, cancellationToken);
     }
 
     /// <summary>
     ///     Writes an ack, or revokes one, at the daemon behind a source, with
     ///     that daemon's own write key. Every check comes before the daemon is
     ///     called, the caller first: nobody unnamed learns which sources relay.
+    ///     With access on, a record outside the caller's read scope answers the 404 a
+    ///     missing one does, and a readable one it may not write answers 403.
     /// </summary>
+    // Every parameter is the route's own or a collaborator the router injects.
+#pragma warning disable S107
     private static async Task<IResult> RelayAckAsync(
         string sourceId,
         bool revoke,
         HttpRequest request,
         AckRelay relay,
+        AccessPolicy access,
         HubOptions options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (RelayIdentity(request, options) is not { } identity)
             return Problem(
@@ -51,12 +61,17 @@ public static partial class ApiEndpoints
                 "The Hub does not know who is asking, and an ack is taken in somebody's name.");
         // One answer for an unknown source, a trace backend and a daemon with
         // no ack credential, so the route tells nothing /api/sources does not.
-        if (options.Sources.FirstOrDefault(candidate =>
+        if (access.Sources(request.HttpContext, options.Sources).FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, sourceId, StringComparison.Ordinal))
             is not { Kind: SourceKinds.Daemon, HasAckCredential: true } source)
             return Problem(StatusCodes.Status404NotFound, "This source relays no acknowledgments.");
         if (RefuseForeignRequest(request) is { } refusal)
             return refusal;
+        // From the configuration alone and before a slot is taken, so a caller who may ack
+        // nothing here cannot hold both slots with slow bodies. It names no finding.
+        var acks = access.Scope(request.HttpContext, AccessPermissions.AcksWrite);
+        if (!acks.ReachesSource(source.Id))
+            return Problem(StatusCodes.Status403Forbidden, "You may not acknowledge findings at this source.");
         if (!relay.Gate.TryEnter())
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
@@ -74,12 +89,10 @@ public static partial class ApiEndpoints
             // The daemon acks any canonical signature. The Hub only spends the
             // key on one it holds at that source, which bounds what a caller
             // can grow the daemon's ack store by.
-            if (!await relay.KnowsAsync(source, write, cancellationToken))
-                return Problem(
-                    StatusCodes.Status404NotFound,
-                    revoke
-                        ? "The Hub holds no such finding at this source and mirrors no ack of it."
-                        : "The Hub holds no such finding at this source.");
+            var target = await relay.ReadTargetAsync(source, write, cancellationToken);
+            if (Refuse(target, revoke, source.Id, access.Scope(request.HttpContext, AccessPermissions.FindingsRead),
+                    acks) is { } refused)
+                return refused;
 
             var answer = await relay.SendAsync(source, write, identity, cancellationToken);
             return answer.Detail is null ? TypedResults.NoContent() : Problem(answer.Status, answer.Detail);
@@ -88,6 +101,24 @@ public static partial class ApiEndpoints
         {
             relay.Gate.Exit();
         }
+    }
+
+    // Copies at other sources are ignored: the ack is taken at this one. A finding the Hub no
+    // longer holds here, revoked through its mirrored ack, is judged on the source as a whole.
+    private static JsonHttpResult<AnalysisProblem>? Refuse(AckTarget target, bool revoke, string sourceId, AccessScope reads, AccessScope acks)
+    {
+        const string ReadOnly = "You can read this finding at this source but not acknowledge it there.";
+        if (target.Held && reads.Reads(new AccessCopy(sourceId, target.Service, target.Rows)))
+            return acks.Writes(new AccessCopy(sourceId, target.Service, target.Rows))
+                ? null
+                : Problem(StatusCodes.Status403Forbidden, ReadOnly);
+        if (!target.Held && revoke && target.Mirrored && reads.HoldsAtSource(sourceId))
+            return acks.HoldsAtSource(sourceId) ? null : Problem(StatusCodes.Status403Forbidden, ReadOnly);
+        return Problem(
+            StatusCodes.Status404NotFound,
+            revoke
+                ? "The Hub holds no such finding at this source and mirrors no ack of it."
+                : "The Hub holds no such finding at this source.");
     }
 
     /// <summary>

@@ -10,6 +10,11 @@ hub:
   resolutionGrace: "7.00:00:00"
   defaultReadLimit: 1000
   maxReadLimit: 10000
+  # The one port /metrics answers on, and nothing else answers there; the chart
+  # adds it to ASPNETCORE_HTTP_PORTS, the container and the Service (port name
+  # metrics). Null answers /metrics on 8080 with everything else. Required with
+  # hub.access.enabled; never 8080. Point a scrape at it, see docs/OPERATIONS.md.
+  metricsPort: null
   analysis:
     # The engine ships in the image. Set to null to run the Hub as a
     # collector only, which leaves the launcher unable to start a run.
@@ -34,8 +39,9 @@ hub:
     # Browser sign-in against an OAuth2 provider (Keycloak, Entra ID, Google,
     # GitLab, Bitbucket...), so no oauth2-proxy has to front the Hub. Declare
     # https://<hub host>/auth/callback as the client's redirect URI. The
-    # routes machines call stay open: /api/findings, the import (its own key),
-    # /health and /metrics. See docs/AUTHENTICATION.md.
+    # routes machines call stay open: /api/findings (unless hub.access.enabled,
+    # which wants a machine token there), the import (its own key), /health and
+    # /metrics. See docs/AUTHENTICATION.md.
     enabled: false
     authorizationEndpoint: ""
     tokenEndpoint: ""
@@ -45,10 +51,13 @@ hub:
     clientSecretName: ""
     clientSecretKey: ""
     scopes: "openid profile email"
-    # The userinfo field recorded as the identity.
+    # The userinfo field recorded as the identity, a display name.
     identityClaim: email
-    # The userinfo field listing the user's groups, read only when
-    # requiredGroups is set.
+    # The userinfo field holding the authorization key, read only with
+    # hub.access.enabled: sub, oid, uuid or account_id (Bitbucket Cloud).
+    subjectClaim: sub
+    # The userinfo field listing the user's groups, read when requiredGroups is
+    # set or hub.access.enabled.
     groupsClaim: groups
     # Empty lets in whoever the provider signs in. Otherwise only members of
     # one of these groups, spelled exactly as the provider sends them (Keycloak
@@ -64,11 +73,13 @@ hub:
     trustIdentityHeader: false
   access:
     # Who reaches which findings, sources and runs: projects, roles, grants,
-    # internal groups, admins and machine tokens, passed to the Hub as is. This
-    # release ships the model and its validation ahead of enforcement, so the
-    # Hub refuses to start with enabled: true and the schema refuses it too.
-    # Off, nothing here is validated or used, but it is still bound: expiresAt
-    # must be an ISO 8601 date and time. See docs/CONFIGURATION.md.
+    # internal groups, admins and machine tokens, passed to the Hub as is. On,
+    # it needs auth.enabled, metricsPort, an admin, and ackRelay.trustIdentityHeader
+    # false, and every route but the import, /health and /metrics (on metricsPort
+    # only) needs a session or a machine token. Off, nothing here is validated or used, but it is still
+    # bound: expiresAt must be an ISO 8601 date and time. Before turning it on,
+    # every IDE plugin reading the Hub needs a release that sends a credential.
+    # See docs/ACCESS-CONTROL.md.
     enabled: false
     # Subjects, the provider's immutable account ids, holding admin on "*".
     admins: []
@@ -86,8 +97,9 @@ hub:
     # Items { group, project, role }; project is a declared project or "*".
     grants: []
     # Items { name, group, expiresAt, secretName, secretKey }. The token is never
-    # in these values; this release only checks the Secret reference, and the
-    # chart will read the token from it once enforcement ships.
+    # in these values: with enabled, the chart reads it from that Secret into the
+    # pod's environment. Revoke by removing the entry (the pod rolls); rotate by
+    # updating the Secret, then kubectl rollout restart. One token per team.
     machineTokens: []
 # Each source takes id, name, environment, baseUrl, and optionally
 # kind (daemon, tempo, jaeger_query), retentionHours, authHeaderName and
@@ -101,14 +113,16 @@ sources: []
 # Annotations on the Service. Left empty because a scrape is opted into, not
 # assumed: set prometheus.io/scrape, /port and /path here, or point a
 # ServiceMonitor at the Service instead: it carries app.kubernetes.io/name and
-# app.kubernetes.io/instance, and names its port http.
+# app.kubernetes.io/instance, and names its port http, plus metrics when
+# hub.metricsPort is set (the only port /metrics answers on then).
 service:
   annotations: {}
 # Publishes the Hub outside the cluster on a host of its own, at its root: the
 # launcher calls /api and /reports as absolute paths, so a path prefix would
 # break it. The Ingress publishes every route, the open ones included
-# (/api/findings for IDE plugins and CI, /metrics, /health). Keep the host on a
-# network that may read them, see docs/DEPLOYMENT.md. TLS ends at the
+# (/api/findings for IDE plugins and CI unless hub.access.enabled, /metrics
+# unless hub.metricsPort, /health). Keep the host on a network that may read
+# them, see docs/DEPLOYMENT.md. It routes to the http port only. TLS ends at the
 # controller, and the Hub reads X-Forwarded-Proto so its OAuth redirect URI,
 # https://<host>/auth/callback, reads https.
 ingress:

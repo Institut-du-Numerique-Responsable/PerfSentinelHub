@@ -25,6 +25,55 @@ public sealed partial class HubDatabase
                                                finding_count, incident_json, first_seen_ms, last_seen_ms
                                                """;
 
+    // An incident copy, on the pairs every frozen finding carries. The ('', '') marker
+    // H1 writes for a copy with none matches no key.
+    public static readonly string IncidentAccess = Access(
+        "incidents.source_id",
+        "incidents.service",
+        """
+        SELECT 1 FROM incident_attributes AS ia
+        WHERE ia.id = incidents.id AND ia.source_id = incidents.source_id AND ia.attr_key = ap.key
+        """,
+        "ia.attr_value");
+
+    // ponytail: the namespace is read out of the document with json_extract,
+    // a scan over the rows the other predicates leave. A column and an index
+    // if the table ever outgrows what the retention keeps.
+    private const string IncidentListWhere = $"""
+                                              SELECT {IncidentReadColumns} FROM incidents
+                                              WHERE ($service IS NULL OR service = $service)
+                                                AND ($kind IS NULL OR kind = $kind)
+                                                AND ($namespace IS NULL OR json_extract(incident_json, '$.namespace') = $namespace)
+                                                AND ($source_ids IS NULL OR source_id IN (SELECT value FROM json_each($source_ids)))
+                                              """;
+
+    private const string IncidentListPage = """
+                                            ORDER BY at_ms DESC, id ASC, source_id ASC
+                                            LIMIT $limit OFFSET $offset;
+                                            """;
+
+    private const string IncidentFindWhere = $"""
+                                              SELECT {IncidentReadColumns}, findings_json FROM incidents
+                                              WHERE id = $id
+                                              """;
+
+    private const string IncidentFindPick = """
+                                            ORDER BY finding_count DESC, source_id ASC
+                                            LIMIT 1;
+                                            """;
+
+    // Built once per shape, so the command takes a field rather than a string formatted at
+    // the call. An unrestricted read has no leading CTE and no incident predicate, so its
+    // SQL stays today's. Declared after IncidentAccess: static fields initialize in order.
+    private const string IncidentList = $"{IncidentListWhere} {IncidentListPage}";
+    private const string IncidentFind = $"{IncidentFindWhere} {IncidentFindPick}";
+
+    private static readonly string ScopedIncidentList =
+        $"WITH {AccessPatternsCte}\n{IncidentListWhere} AND {IncidentAccess}\n{IncidentListPage}";
+
+    private static readonly string ScopedIncidentFind =
+        $"WITH {AccessPatternsCte}\n{IncidentFindWhere} AND {IncidentAccess}\n{IncidentFindPick}";
+
     // The two read ledgers, incident_reads and ack_reads, share a shape and
     // so these two statements. Each ledger names its table in a constant built
     // from them, which is the only text the shared methods below ever run.
@@ -246,18 +295,9 @@ public sealed partial class HubDatabase
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        // ponytail: the namespace is read out of the document with json_extract,
-        // a scan over the rows the other predicates leave. A column and an index
-        // if the table ever outgrows what the retention keeps.
-        command.CommandText = $"""
-                               SELECT {IncidentReadColumns} FROM incidents
-                               WHERE ($service IS NULL OR service = $service)
-                                 AND ($kind IS NULL OR kind = $kind)
-                                 AND ($namespace IS NULL OR json_extract(incident_json, '$.namespace') = $namespace)
-                                 AND ($source_ids IS NULL OR source_id IN (SELECT value FROM json_each($source_ids)))
-                               ORDER BY at_ms DESC, id ASC, source_id ASC
-                               LIMIT $limit OFFSET $offset;
-                               """;
+        // Access patterns filter before the page, so pages are slices of what the caller reads.
+        command.CommandText = query.Access is null ? IncidentList : ScopedIncidentList;
+        BindAccess(command, query.Access);
         command.Parameters.AddWithValue(ServiceParameter, (object?)query.Service ?? DBNull.Value);
         command.Parameters.AddWithValue("$kind", (object?)query.Kind ?? DBNull.Value);
         command.Parameters.AddWithValue("$namespace", (object?)query.Namespace ?? DBNull.Value);
@@ -278,17 +318,16 @@ public sealed partial class HubDatabase
     ///     One incident with its findings, the richest capture when several
     ///     daemons hold the id, and the first source by id among equals.
     /// </summary>
-    public async Task<StoredIncident?> FindIncidentAsync(string id, CancellationToken cancellationToken)
+    public async Task<StoredIncident?> FindIncidentAsync(
+        string id,
+        AccessScope? access,
+        CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-                               SELECT {IncidentReadColumns}, findings_json FROM incidents
-                               WHERE id = $id
-                               ORDER BY finding_count DESC, source_id ASC
-                               LIMIT 1;
-                               """;
+        command.CommandText = access is null ? IncidentFind : ScopedIncidentFind;
         command.Parameters.AddWithValue("$id", id);
+        BindAccess(command, access);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadIncident(reader) : null;
     }
