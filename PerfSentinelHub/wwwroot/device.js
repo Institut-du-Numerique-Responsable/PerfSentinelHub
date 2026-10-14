@@ -12,24 +12,23 @@
     } catch (e) {
         stored = null;
     }
-    document.documentElement.dataset.theme = stored === 'light' || stored === 'dark'
-        ? stored
-        : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    if (stored !== 'light' && stored !== 'dark') {
+        stored = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.dataset.theme = stored;
 
-    function send(path, body) {
-        return fetch(path, {
+    async function send(path, body) {
+        const response = await fetch(path, {
             method: 'POST',
             headers: {'content-type': 'application/json'},
             body: JSON.stringify(body)
-        }).then(function (response) {
-            // A lapsed session signs in again, and so does one too close to its end (409).
-            if (response.status === 401 || response.status === 409) location.reload();
-            return response.json().catch(function () {
-                return null;
-            }).then(function (payload) {
-                return {status: response.status, payload: payload};
-            });
         });
+        // A lapsed session signs in again, and so does one too close to its end (409).
+        if (response.status === 401 || response.status === 409) location.reload();
+        const payload = await response.json().catch(function () {
+            return null;
+        });
+        return {status: response.status, payload: payload};
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -50,7 +49,12 @@
         }
 
         function refused(answer) {
-            say(answer.payload && answer.payload.detail || 'The Hub answered ' + answer.status + '.', 'crit');
+            say(answer.payload?.detail || 'The Hub answered ' + answer.status + '.', 'crit');
+        }
+
+        // No answer (network down, Hub restarting) or one the page could not use: never silent.
+        function failed(error) {
+            say('The request could not be completed: ' + String(error?.message || error), 'crit');
         }
 
         fetch('/api/access', {headers: {accept: 'application/json'}}).then(function (response) {
@@ -75,7 +79,7 @@
                 networkAlert.textContent = warning || '';
                 networkAlert.hidden = !warning;
                 details.hidden = false;
-            });
+            }).catch(failed);
         });
 
         function decide(approved) {
@@ -86,7 +90,7 @@
                 say(approved
                     ? 'Approved. Your terminal signs in within a few seconds; you can close this page.'
                     : 'Denied. That terminal gets no access.', approved ? 'ok' : 'muted');
-            });
+            }).catch(failed);
         }
 
         approve.addEventListener('click', function () {

@@ -22,6 +22,7 @@ public static partial class ApiEndpoints
     private const int TokenIdHexChars = 32;
     private const string NoBrowserSession = "Approving a sign-in or managing tokens needs a browser session.";
     private const string NoSuchToken = "No such token.";
+    private const string InvalidRequest = "invalid_request";
 
     // Served by GET /device alone, never as a static file: only this route sends the page's
     // policy, no-store and the re-challenge of a session about to end. No inline script, and
@@ -131,7 +132,7 @@ public static partial class ApiEndpoints
         var (form, refusal) = await ReadOAuthRequestAsync(request, true, cancellationToken);
         if (refusal is not null) return refusal;
         if (!form!.TryGetValue("grant_type", out var grant) || !form.TryGetValue("device_code", out var deviceCode))
-            return OAuth("invalid_request");
+            return OAuth(InvalidRequest);
         if (grant != TerminalAccess.DeviceCodeGrant) return OAuth("unsupported_grant_type");
         var poll = devices.Poll(deviceCode.ToString());
         if (poll.Approval is not { } approval) return OAuth(poll.Error!);
@@ -183,7 +184,7 @@ public static partial class ApiEndpoints
         var (form, refusal) = await ReadOAuthRequestAsync(request, false, cancellationToken);
         if (refusal is not null) return refusal;
         if (!form!.TryGetValue("token", out var token) || StringValues.IsNullOrEmpty(token))
-            return OAuth("invalid_request");
+            return OAuth(InvalidRequest);
         var (stored, deleted) = await database.TryDeleteTerminalTokenByHashAsync(
             SHA256.HashData(Encoding.UTF8.GetBytes(token.ToString())), cancellationToken);
         if (!stored)
@@ -351,12 +352,12 @@ public static partial class ApiEndpoints
             return (null, TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
         if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType) ||
             !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
-            return (null, OAuth("invalid_request"));
+            return (null, OAuth(InvalidRequest));
         var form = QueryHelpers.ParseQuery(Encoding.UTF8.GetString(body));
         if (form.Values.Any(value => value.Count != 1))
-            return (null, OAuth("invalid_request"));
+            return (null, OAuth(InvalidRequest));
         if (!needsClient) return (form, null);
-        if (!form.TryGetValue("client_id", out var client)) return (null, OAuth("invalid_request"));
+        if (!form.TryGetValue("client_id", out var client)) return (null, OAuth(InvalidRequest));
         return client == TerminalAccess.ClientId ? (form, null) : (null, OAuth("invalid_client"));
     }
 

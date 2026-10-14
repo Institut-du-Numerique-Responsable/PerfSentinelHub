@@ -76,7 +76,7 @@ public sealed partial class HubDatabase
     /// </summary>
     public async Task TouchTerminalTokenAsync(string id, long nowMs, CancellationToken cancellationToken)
     {
-        if (!_writeGate.Wait(0, CancellationToken.None))
+        if (!await _writeGate.WaitAsync(0, CancellationToken.None))
             return;
         try
         {
