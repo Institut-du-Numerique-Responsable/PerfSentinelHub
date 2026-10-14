@@ -31,6 +31,8 @@
         statusError: undefined,
         sources: null,
         sourcesError: false,
+        // GET /api/access, null when access is off (the route answers 404) or failed.
+        access: null,
         loading: true,
         run: null,
         runError: false,
@@ -247,23 +249,29 @@
             }),
             getJson('/api/sources').catch(function () {
                 return 'error';
+            }),
+            // A 404 is a Hub with access off: the tab stays hidden.
+            getJson('/api/access').catch(function () {
+                return null;
             })
         ]).then(function (results) {
             state.status = results[0];
             state.sourcesError = results[1] === 'error';
             state.sources = state.sourcesError ? null : results[1];
+            state.access = results[2];
             state.loading = false;
-            if (state.sources && state.form.sourceId === null) {
+            const runnable = runSources();
+            if (runnable.length > 0 && state.form.sourceId === null) {
                 // The one they were on last, if it is still configured. Falling back to
                 // the first reachable one is what a first visit gets.
                 const remembered = rememberedSource();
-                const kept = state.sources.find(function (source) {
+                const kept = runnable.find(function (source) {
                     return source.id === remembered;
                 });
-                const usable = state.sources.find(function (source) {
+                const usable = runnable.find(function (source) {
                     return source.reachable;
                 });
-                state.form.sourceId = (kept || usable || state.sources[0] || {}).id || null;
+                state.form.sourceId = (kept || usable || runnable[0]).id;
             }
             renderShell();
             onRoute();
@@ -386,6 +394,7 @@
 
         renderFleetSkew();
         renderSourcesBadge();
+        document.querySelector('.shell-tab[data-screen="access"]').hidden = !state.access;
     }
 
     /** Takes a chip segment out along with the separator that was added for it. */
@@ -482,12 +491,7 @@
     // ------------------------------------------------------------ navigation
 
     function currentScreen() {
-        // The query a handoff link carries is the form's, not the route's.
-        const hash = (location.hash || '#/new').replace('#/', '').split('?')[0];
-        if (hash.indexOf('run/') === 0) return 'run';
-        if (hash.indexOf('report/') === 0) return 'report';
-        // `ack` has no tab: it is reached by link only.
-        return ['new', 'recent', 'sources', 'incidents', 'ack'].indexOf(hash) >= 0 ? hash : 'new';
+        return PSL.screenOf(location.hash, !!state.access);
     }
 
     function currentRunId() {
@@ -558,10 +562,13 @@
         // throw on the first field.
         if (!state.status) {
             const noGrant = PSL.shellBanner(state.statusError);
-            main.replaceChildren(noGrant ? noGrantBanner(noGrant) : hubUnreachableBanner());
+            // A caller no grant reaches still reads who they are, to ask an administrator.
+            if (noGrant && state.access) main.replaceChildren(renderAccessScreen(noGrant));
+            else main.replaceChildren(noGrant ? noGrantBanner(noGrant) : hubUnreachableBanner());
             return;
         }
-        if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
+        if (state.screen === 'access') main.replaceChildren(renderAccessScreen(null));
+        else if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
         else if (state.screen === 'incidents') main.replaceChildren(renderIncidentsScreen());
         else if (state.screen === 'ack') main.replaceChildren(renderAckScreen());
         else if (state.screen === 'new') main.replaceChildren(renderNewScreen());
@@ -1169,8 +1176,10 @@
     function sourceRow(source, index) {
         const now = Date.now();
         const row = el('tr', source.reachable ? {} : {'data-unreachable': 'true'});
-        // Only a daemon has something to unfold, so only a daemon gets a control.
-        if (source.kind === 'daemon') row.appendChild(daemonNameCell(source, index));
+        // Only a daemon has something to unfold, so only a daemon gets a control, and
+        // with access on only where the caller holds sources.read, which its view needs.
+        const unfolds = source.kind === 'daemon' && PSL.permits(source, 'sources.read');
+        if (unfolds) row.appendChild(daemonNameCell(source, index));
         else row.appendChild(el('td', {class: 'table-strong', text: source.name}));
         row.appendChild(el('td', {}, [el('span', {class: 'chip', text: PSL.KIND_LABEL[source.kind] || source.kind})]));
         row.appendChild(el('td', {}, [el('span', {class: 'chip chip-declared', text: source.environment})]));
@@ -1185,7 +1194,7 @@
         }));
         row.appendChild(producerCell(source));
         row.appendChild(el('td', {class: 'table-mono', text: source.last_error_code || '—'}));
-        if (source.kind !== 'daemon') return [row];
+        if (!unfolds) return [row];
 
         // Spanning the header count and not the literal 8: adding a column must
         // not be able to break the detail row.
@@ -2228,9 +2237,16 @@
     ];
 
     function selectedSource() {
-        return (state.sources || []).find(function (source) {
+        return runSources().find(function (source) {
             return source.id === state.form.sourceId;
         }) || null;
+    }
+
+    /** What the form offers: with access on, only where the caller holds analyses.run. */
+    function runSources() {
+        return (state.sources || []).filter(function (source) {
+            return PSL.permits(source, 'analyses.run');
+        });
     }
 
     /** Changing source clears both acknowledgements and closes the picker: they
@@ -2336,6 +2352,14 @@
         }
         if (!state.sources || state.sources.length === 0) {
             section.appendChild(el('div', {class: 'empty-state', text: 'This Hub has no configured source.'}));
+            return section;
+        }
+        if (runSources().length === 0) {
+            section.appendChild(el('div', {
+                class: 'empty-state',
+                text: 'No grant lets you start an analysis on this Hub. An administrator grants access in the '
+                    + 'Hub\'s configuration.'
+            }));
             return section;
         }
 
@@ -2524,7 +2548,7 @@
         return el('div', {class: 'card source-panel'}, [
             el('div', {class: 'panel-head'}, [
                 el('span', {class: 'overline', text: '// source'}),
-                el('span', {class: 'panel-head-source', text: state.sources.length + ' configured'})
+                el('span', {class: 'panel-head-source', text: runSources().length + ' configured'})
             ]),
             el('div', {class: 'source-list', role: 'radiogroup', 'aria-label': 'Source'},
                 sourceRows()),
@@ -2542,8 +2566,9 @@
     // polled and pushes on its own, a trace backend is only read when a run asks.
     // The fleet table groups on the same rule, from the same helper.
     function sourceRows() {
-        const kinds = PSL.splitByKind(state.sources);
-        if (!kinds.split) return state.sources.map(sourceRadio);
+        const sources = runSources();
+        const kinds = PSL.splitByKind(sources);
+        if (!kinds.split) return sources.map(sourceRadio);
         const radios = function (group) {
             return group.map(function (entry) {
                 return sourceRadio(entry.source);
@@ -2639,7 +2664,7 @@
                     text: 'There is no command line for this either. What this daemon is configured with, '
                         + 'and what it is holding at this moment, is on the Sources screen, on its own row.'
                 }),
-                sourcesRowLink()
+                selectedSource() && PSL.permits(selectedSource(), 'sources.read') ? sourcesRowLink() : null
             ])
         ]);
     }
@@ -4977,6 +5002,154 @@
     }
 
     // ---------------------------------------------------- screen: recent runs
+
+    // --------------------------------------------------------- screen: access
+
+    /**
+     * Who the caller is and what they reach, from /api/access. Read-only: no form and
+     * no button that writes, since rights live in the Hub's configuration alone. An
+     * admin also reads that configuration and what no project covers. `banner` is the
+     * no-grant text when /api/status refused the caller.
+     */
+    function renderAccessScreen(banner) {
+        const access = state.access;
+        const signedIn = PSL.accessSignedIn(access, Date.now());
+        const section = el('section', {}, [
+            ruledOverline('// access'),
+            el('h1', {class: 'page-title', text: 'Your access'}),
+            el('p', {
+                class: 'page-sub',
+                text: 'Read-only. Who reaches what is declared in the Hub\'s configuration, and this page '
+                    + 'changes nothing.'
+            })
+        ]);
+        if (banner) section.appendChild(noGrantBanner(banner));
+
+        section.appendChild(accessCard('// signed in as', [
+            el('p', {text: signedIn.line}),
+            signedIn.note ? el('p', {class: 'access-muted', text: signedIn.note}) : null,
+            el('p', {}, [
+                el('span', {text: signedIn.subjectLabel}),
+                el('code', {class: 'access-subject', text: signedIn.subject})
+            ])
+        ]));
+        section.appendChild(accessCard('// your groups', [
+            access.groups.length === 0
+                ? el('p', {class: 'access-muted', text: 'No group.'})
+                : el('div', {class: 'access-chips'}, access.groups.map(function (group) {
+                    return el('span', {class: 'chip', 'data-origin': group.origin, text: group.name + ' · ' + group.origin});
+                }))
+        ]));
+        const reach = PSL.accessReachRows(access);
+        section.appendChild(accessCard('// what you reach', [
+            reach.length === 0
+                ? el('p', {text: PSL.ACCESS_NO_REACH})
+                : accessTable(['Project', 'Group', 'Role', 'Permissions'], reach.map(function (row) {
+                    return [row.project, row.group, row.role, row.permissions];
+                }))
+        ]));
+        if (access.projects.length > 0) section.appendChild(accessCard('// projects', [projectsTable(access.projects)]));
+        if (access.configuration) section.appendChild(configurationCard(access.configuration));
+        if (access.unmatched) section.appendChild(unmatchedCard(access.unmatched, access.conflicts));
+        return section;
+    }
+
+    function accessCard(overline, children) {
+        return el('section', {class: 'card access-card'}, [
+            el('div', {class: 'panel-head'}, [el('span', {class: 'overline', text: overline})])
+        ].concat(children));
+    }
+
+    /** Every cell a text node. `rows` holds strings, or arrays of strings for one line each. */
+    function accessTable(headings, rows) {
+        return el('div', {class: 'sources-wrap'}, [
+            el('table', {class: 'table access-table'}, [
+                el('thead', {}, [el('tr', {}, headings.map(function (heading) {
+                    return el('th', {scope: 'col', text: heading});
+                }))]),
+                el('tbody', {}, rows.map(function (row) {
+                    return el('tr', {}, row.map(function (cell) {
+                        return Array.isArray(cell)
+                            ? el('td', {}, cell.map(function (line) {
+                                return el('div', {text: line});
+                            }))
+                            : el('td', {text: cell});
+                    }));
+                }))
+            ])
+        ]);
+    }
+
+    function projectsTable(projects) {
+        return accessTable(['Project', 'Patterns'], projects.map(function (project) {
+            return [project.name, project.patterns.map(PSL.describePattern)];
+        }));
+    }
+
+    function configurationCard(configuration) {
+        const now = Date.now();
+        const card = accessCard('// configuration', [projectsTable(configuration.projects)]);
+        card.appendChild(accessTable(['Role', 'Permissions'], configuration.roles.map(function (role) {
+            return [role.built_in ? role.name + ' (built-in)' : role.name, role.permissions.join(', ')];
+        })));
+        card.appendChild(accessTable(['Group', 'Project', 'Role'], configuration.grants.map(function (grant) {
+            return [grant.group, grant.project, grant.role];
+        })));
+        card.appendChild(accessTable(['Internal group', 'Members'], configuration.internal_groups.map(function (group) {
+            return ['internal:' + group.name, group.members.length === 0 ? 'no member' : group.members];
+        })));
+        card.appendChild(accessTable(['Admins, by id', 'Admin groups'], [
+            [configuration.admins.length === 0 ? 'none' : configuration.admins,
+                configuration.admin_groups.length === 0 ? 'none' : configuration.admin_groups]
+        ]));
+        card.appendChild(accessTable(['Machine token', 'Group', 'Expires'], configuration.machine_tokens.map(function (token) {
+            return [token.name, token.group, PSL.accessExpiry(token.expires_at_ms, now)];
+        })));
+        card.appendChild(el('p', {
+            class: 'access-muted',
+            text: 'Declared in the Hub\'s configuration (Helm values hub.access), applied at the next restart. '
+                + 'This page changes nothing.'
+        }));
+        return card;
+    }
+
+    function unmatchedCard(unmatched, conflicts) {
+        const card = accessCard('// not covered by any project', []);
+        if (unmatched.services.length + unmatched.attributes.length + unmatched.sources.length === 0) {
+            card.appendChild(el('p', {text: 'Every finding the Hub holds belongs to a project.'}));
+        } else {
+            card.appendChild(accessTable(['Service', 'Sources', 'Findings'], unmatched.services.map(function (row) {
+                return [row.service == null ? '(no service)' : row.service, row.source_ids.join(', '), String(row.findings)];
+            })));
+            card.appendChild(accessTable(['Attribute', 'Findings'], unmatched.attributes.map(function (row) {
+                return [row.key + '=' + row.value, String(row.findings)];
+            })));
+            card.appendChild(accessTable(['Source no pattern names', 'Findings'], unmatched.sources.map(function (row) {
+                return [row.source_id, row.findings == null ? 'trace backend' : String(row.findings)];
+            })));
+        }
+        if (unmatched.truncated) {
+            card.appendChild(el('p', {class: 'access-muted', text: 'Each list stops at its first 200 entries.'}));
+        }
+        card.appendChild(el('h2', {
+            class: 'access-heading',
+            text: 'Findings whose deployments disagree on a project attribute'
+        }));
+        card.appendChild(conflicts.copies.length === 0
+            ? el('p', {class: 'access-muted', text: 'None.'})
+            : accessTable(['Source', 'Signature', 'Service', 'Key', 'Values', 'Groupings without the key'],
+                conflicts.copies.map(function (row) {
+                    return [row.source_id, row.signature, row.service || '(no service)', row.key,
+                        row.values.join(', '), String(row.identities_without_key)];
+                })));
+        card.appendChild(el('p', {
+            class: 'access-muted',
+            text: (conflicts.truncated ? 'Only the first 200 are listed. ' : '')
+                + 'An acknowledgment through an attribute grant is refused on these. A source or service '
+                + 'grant for the team that owns the service answers it.'
+        }));
+        return card;
+    }
 
     function renderRecentScreen() {
         const section = el('section', {}, [

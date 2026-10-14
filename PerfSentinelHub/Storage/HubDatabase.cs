@@ -33,7 +33,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // partition and the pick share one sort. A source row written before the
     // per-source columns has no copy of its own yet and serves the shared one.
     // max_confidence stays fleet-wide, a source row carries no confidence of its own.
-    // ponytail: every row of the scope is read and sorted before any filter or
+    // Every row of the scope is read and sorted before any filter or
     // LIMIT, so a read costs the scope and not the page. service and
     // finding_type are fleet-wide and could move into `scope` if it ever hurts.
     // severity cannot, it judges the scoped envelope, nor can the ack filter,

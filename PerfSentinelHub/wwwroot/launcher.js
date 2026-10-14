@@ -1262,6 +1262,106 @@
             : null;
     }
 
+    /**
+     * Whether a source's own list allows a permission. A source without a list is
+     * a Hub with access off, where nothing is withheld.
+     * @param {{permissions?: string[] | null}} source
+     * @param {string} permission
+     * @returns {boolean}
+     */
+    function permits(source, permission) {
+        return !source.permissions || source.permissions.indexOf(permission) >= 0;
+    }
+
+    /**
+     * A project pattern as the access page writes it: only the parts it sets.
+     * @param {{source?: string | null, service?: string | null, attribute?: string | null}} pattern
+     * @returns {string}
+     */
+    function describePattern(pattern) {
+        return [['source', pattern.source], ['service', pattern.service], ['attribute', pattern.attribute]]
+            .filter(part => part[1] != null)
+            .map(part => part[0] + ' ' + part[1])
+            .join(' · ');
+    }
+
+    /**
+     * The screen a hash names. `#/access` is one only on a Hub that answered
+     * /api/access: with access off, or that read failed, it reads as New, as any
+     * unknown route always has.
+     * @param {string | null | undefined} hash
+     * @param {boolean} accessOn
+     * @returns {string}
+     */
+    function screenOf(hash, accessOn) {
+        // The query a handoff link carries is the form's, not the route's.
+        const route = (hash || '#/new').replace('#/', '').split('?')[0];
+        if (route.indexOf('run/') === 0) return 'run';
+        if (route.indexOf('report/') === 0) return 'report';
+        if (route === 'access') return accessOn ? 'access' : 'new';
+        // `ack` has no tab: it is reached by link only.
+        return ['new', 'recent', 'sources', 'incidents', 'ack'].indexOf(route) >= 0 ? route : 'new';
+    }
+
+    /**
+     * A machine token's expiry, in whole days left.
+     * @param {number} expiresAtMs
+     * @param {number} nowMs
+     * @returns {string}
+     */
+    function accessExpiry(expiresAtMs, nowMs) {
+        if (expiresAtMs <= nowMs) return 'expired';
+        const days = Math.floor((expiresAtMs - nowMs) / 86400000);
+        if (days === 0) return 'in less than a day';
+        return days === 1 ? 'in 1 day' : 'in ' + days + ' days';
+    }
+
+    const ACCESS_CALLER = {
+        session: 'a browser session', terminal_token: 'a terminal token', machine_token: 'a machine token'
+    };
+
+    /**
+     * The access page's first block. A session ends within the day, so its time is
+     * enough; a token's date is not.
+     * @param {{identity: string | null, subject: string, caller: string, expires_at_ms: number | null}} access
+     * @param {number} nowMs
+     * @returns {{line: string, note: string | null, subjectLabel: string, subject: string}}
+     */
+    function accessSignedIn(access, nowMs) {
+        const expires = access.expires_at_ms;
+        const until = expires == null ? ''
+            : ', until ' + (expires - nowMs < 86400000 ? dtHuman(expires).slice(11) : dtHuman(expires));
+        return {
+            line: 'Signed in as ' + (access.identity || access.subject) + ', through '
+                + (ACCESS_CALLER[/** @type {keyof typeof ACCESS_CALLER} */ (access.caller)] || access.caller)
+                + until + '.',
+            // A machine token's group is configuration, read on every request.
+            note: access.caller === 'machine_token'
+                ? null
+                : 'A group change at your provider applies at your next sign-in.',
+            subjectLabel: 'Your id, for an administrator: ',
+            subject: access.subject
+        };
+    }
+
+    const ACCESS_NO_REACH =
+        'No grant reaches your groups. An administrator grants access in the Hub\'s configuration.';
+
+    /**
+     * The "What you reach" table. A grant on `*` covers more than every project, and
+     * an entry with no group is Admins, which names the caller's id.
+     * @param {{reach: {group: string | null, project: string, role: string, permissions: string[]}[]}} access
+     * @returns {{project: string, group: string, role: string, permissions: string}[]}
+     */
+    function accessReachRows(access) {
+        return access.reach.map(entry => ({
+            project: entry.project === '*' ? 'Everything, records no project matches included' : entry.project,
+            group: entry.group == null ? 'your id, in Admins' : entry.group,
+            role: entry.role,
+            permissions: entry.permissions.join(', ')
+        }));
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -1281,6 +1381,6 @@
         INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentsCopy,
         incidentHandoffHash, readHandoff,
         ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary,
-        shellBanner
+        shellBanner, screenOf, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows
     };
 })(globalThis);

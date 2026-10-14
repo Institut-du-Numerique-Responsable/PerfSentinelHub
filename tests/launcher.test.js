@@ -938,3 +938,75 @@ test("a 403 on the status means no grant reaches the caller, anything else that 
     assert.equal(PSL.shellBanner(500), null);
     assert.equal(PSL.shellBanner(undefined), null);
 });
+
+test("a pattern reads as its set parts, in source, service, attribute order", () => {
+    assert.equal(PSL.describePattern({source: "lab-daemon", service: "checkout-*", attribute: "team=shop"}),
+        "source lab-daemon · service checkout-* · attribute team=shop");
+    assert.equal(PSL.describePattern({source: null, service: null, attribute: "team=shop"}), "attribute team=shop");
+    assert.equal(PSL.describePattern({source: "lab-d", service: null, attribute: null}), "source lab-d");
+});
+
+test("a machine token's expiry reads as expired or as whole days left", () => {
+    const now = Date.UTC(2026, 9, 13, 12, 0, 0);
+    const day = 86400000;
+    assert.equal(PSL.accessExpiry(now - 1, now), "expired");
+    assert.equal(PSL.accessExpiry(now, now), "expired");
+    assert.equal(PSL.accessExpiry(now + 3600000, now), "in less than a day");
+    assert.equal(PSL.accessExpiry(now + day, now), "in 1 day");
+    assert.equal(PSL.accessExpiry(now + 30 * day + 5, now), "in 30 days");
+});
+
+test("a source without a permissions list permits everything, as with access off", () => {
+    assert.equal(PSL.permits({id: "a"}, "analyses.run"), true);
+    assert.equal(PSL.permits({id: "a", permissions: ["findings.read"]}, "analyses.run"), false);
+    assert.equal(PSL.permits({id: "a", permissions: ["findings.read", "sources.read"]}, "sources.read"), true);
+    assert.equal(PSL.permits({id: "a", permissions: []}, "findings.read"), false);
+});
+
+test("the signed-in block names the caller, how, until when, and their id for an administrator", () => {
+    const now = new Date(2026, 9, 13, 10, 40).getTime();
+    const session = PSL.accessSignedIn({
+        identity: "ada@example.com", subject: "2f6d0c1e", caller: "session",
+        expires_at_ms: new Date(2026, 9, 13, 18, 40).getTime()
+    }, now);
+    assert.deepEqual(session, {
+        line: "Signed in as ada@example.com, through a browser session, until 18:40.",
+        note: "A group change at your provider applies at your next sign-in.",
+        subjectLabel: "Your id, for an administrator: ",
+        subject: "2f6d0c1e"
+    });
+    const machine = PSL.accessSignedIn({
+        identity: "machine:ci", subject: "machine:ci", caller: "machine_token",
+        expires_at_ms: new Date(2026, 10, 12, 9, 5).getTime()
+    }, now);
+    assert.equal(machine.line, "Signed in as machine:ci, through a machine token, until 2026-11-12 09:05.");
+    assert.equal(machine.note, null);
+});
+
+test("what you reach spells a grant on * as everything, and Admins as your own id", () => {
+    const rows = PSL.accessReachRows({
+        reach: [
+            {group: null, project: "*", role: "admin", permissions: ["findings.read", "access.admin"]},
+            {group: "/teams/shop", project: "shop", role: "member", permissions: ["findings.read", "acks.write"]}
+        ]
+    });
+    assert.deepEqual(rows, [
+        {project: "Everything, records no project matches included", group: "your id, in Admins", role: "admin",
+            permissions: "findings.read, access.admin"},
+        {project: "shop", group: "/teams/shop", role: "member", permissions: "findings.read, acks.write"}
+    ]);
+    assert.deepEqual(PSL.accessReachRows({reach: []}), []);
+    assert.equal(PSL.ACCESS_NO_REACH,
+        "No grant reaches your groups. An administrator grants access in the Hub's configuration.");
+});
+
+test("#/access is the access screen only when the Hub answered /api/access, New otherwise", () => {
+    assert.equal(PSL.screenOf("#/access", true), "access");
+    assert.equal(PSL.screenOf("#/access", false), "new", "access off, or /api/access failed");
+    assert.equal(PSL.screenOf("", false), "new");
+    assert.equal(PSL.screenOf("#/recent", false), "recent");
+    assert.equal(PSL.screenOf("#/new?from=1&to=2&service=s", false), "new");
+    assert.equal(PSL.screenOf("#/run/0123456789abcdef", false), "run");
+    assert.equal(PSL.screenOf("#/report/0123456789abcdef", true), "report");
+    assert.equal(PSL.screenOf("#/nowhere", true), "new");
+});

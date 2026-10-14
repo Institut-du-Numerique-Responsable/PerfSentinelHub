@@ -11,4 +11,5 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(IReadOnlyList<SourceResponse>))]
 [JsonSerializable(typeof(SubmittedAnalysis))]
 [JsonSerializable(typeof(AnalysisProblem))]
+[JsonSerializable(typeof(AccessResponse))]
 internal partial class HubJsonContext : JsonSerializerContext;

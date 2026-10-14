@@ -6,8 +6,10 @@ sans requête réseau : les deux polices sont en base64 dans `wwwroot/fonts.css`
 icône est un SVG en ligne.
 
 Cinq écrans : démarrer une analyse, suivre un run, lister les runs récents, lire la santé
-de la flotte, lire les incidents enregistrés par les daemons. Un sixième n'a pas d'onglet
-et ne s'atteint que par un lien, voir [La page d'acquittement](#la-page-dacquittement).
+de la flotte, lire les incidents enregistrés par les daemons. Un sixième, la page d'accès,
+n'a d'onglet qu'avec `Hub:Access` actif, voir [La page d'accès](#la-page-daccès). Un autre
+n'a pas d'onglet et ne s'atteint que par un lien, voir
+[La page d'acquittement](#la-page-dacquittement).
 
 ## Le formulaire suit la source
 
@@ -305,8 +307,40 @@ du moteur.
 Avec `Hub:Access` activé, `/api/status` répond `403` à un appelant connecté qu'aucun grant
 n'atteint. Le Hub répond, donc le lanceur n'affiche pas son bandeau d'injoignabilité. Il
 dit à la place « No grant on this Hub reaches you. An administrator grants access in the
-Hub's configuration. » et ne dessine aucun écran. Tout autre échec de `/api/status` garde
-le bandeau d'injoignabilité. Voir [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
+Hub's configuration. » au-dessus de la page d'accès, qui donne à cet appelant son
+identifiant à transmettre à un administrateur. Tout autre échec de `/api/status` garde le
+bandeau d'injoignabilité. Voir [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
+
+Avec le contrôle d'accès, chaque source de `/api/sources` porte les `permissions` de
+l'appelant sur elle. Le formulaire Nouvelle analyse ne propose que les sources dont la liste
+contient `analyses.run`, et la ligne d'un démon sur l'écran Sources ne se déplie que là où
+la liste contient `sources.read`, que sa vue exige. Sans liste, comme sans contrôle
+d'accès, rien n'est retenu.
+
+## La page d'accès
+
+L'onglet Accès apparaît quand `GET /api/access` répond, c'est-à-dire avec `Hub:Access`
+actif ; un `404` le garde masqué, et un lien `#/access` ouvre alors Nouvelle analyse, comme
+toute route inconnue. La page est en lecture seule : aucun formulaire ni aucun bouton qui écrit,
+car les droits sont déclarés dans la configuration du Hub (valeurs Helm `hub.access`) et
+nulle part ailleurs. Elle montre :
+
+1. **Connecté en tant que.** L'identité, le moyen (session de navigateur ou jeton machine)
+   et jusqu'à quand, le fait qu'un changement de groupe chez le fournisseur s'applique à la
+   prochaine connexion, et « Your id, for an administrator », le sujet en texte
+   sélectionnable.
+2. **Vos groupes.** Des pastilles marquées fournisseur ou interne.
+3. **Ce que vous atteignez.** Projet, groupe, rôle et permissions par grant. Un grant sur
+   `*` se lit « Everything, records no project matches included ».
+4. **Projets.** Chaque projet que ces grants nomment, avec ses motifs écrits
+   `source lab-daemon · service checkout-* · attribute team=shop`.
+5. **Configuration**, pour un admin : projets, rôles (les intégrés marqués), grants,
+   groupes internes et leurs membres, admins et groupes admins, et jetons machine avec
+   leur expiration en « expired », « in less than a day » ou « in N days », jamais leur
+   valeur.
+6. **Non couvert par un projet**, pour un admin : les services, valeurs d'attribut et
+   sources qu'aucun projet ne couvre, avec leurs comptes, puis les conflits, voir
+   [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
 
 ## Sûreté
 
