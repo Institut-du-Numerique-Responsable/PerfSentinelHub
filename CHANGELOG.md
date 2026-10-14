@@ -155,6 +155,28 @@ All notable changes to PerfSentinelHub are recorded here.
   would otherwise share one address: with access on and the list empty, the device-flow
   routes are not mapped and event `2014` says why at startup, while token listing and
   revocation stay available. A Hub with no proxy in front lists `127.0.0.1/32`.
+- Local break-glass accounts, with access on, for when the provider is down:
+  `Hub:Access:LocalAccounts` (Helm `hub.access.localAccounts`), each `{ Name,
+  PasswordHash }` with the hash delivered from a Secret. With one declared, a page
+  request without a session goes to the Hub's own `/auth/sign-in` page instead of the
+  provider: **Sign in with single sign-on** first, the local form folded below it. The
+  page contacts nothing, so it opens while the provider is down; the API still answers
+  `401`. An account signs in as `local:<name>` for a fixed 8 hours, reaches what the
+  internal groups listing that subject and `Admins` give it, and is not subject to
+  `Hub:Auth:RequiredGroups`. Its session carries a stamp of the hash, so a new hash ends
+  it at the restart that loads it, and a removed account at its next request. The hash is
+  a PHC string, PBKDF2-HMAC-SHA256 at exactly 600,000 iterations with a 16-byte salt,
+  printed by the new `PerfSentinelHub hash-password` command, which reads the password
+  from stdin or a prompt and never from an argument; passwords hold 15 to 1,024
+  characters. One password is hashed at a time, an unknown name is hashed against a dummy
+  and gets the same `403` byte for byte, a client address and name back off from 30
+  seconds to 15 minutes after five failures with no lock, and one address hashes at most 5
+  times a minute. The Hub refuses to start when an account is listed by no group and not
+  in `Admins`, or when `Hub:Auth:TrustedProxyNetworks` is empty, and the chart's schema
+  refuses the latter. Every local sign-in logs event `2020` and every refusal `2021`, both
+  at Warning, never with an undeclared name. The access page lists the accounts by name to
+  an admin (`local_accounts`). With no local account declared, or access off, nothing
+  changes.
 
 ### Changed
 

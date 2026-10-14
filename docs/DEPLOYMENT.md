@@ -80,7 +80,11 @@ The Hub must be served at the root of an origin, and by default it
 authenticates none of its readers. Both constraints shape the reverse proxy in
 front of it rather than the Hub itself, so read them before writing the
 ingress. See [LIMITATIONS.md](LIMITATIONS.md). `Hub:Auth` lifts the second one
-for the browser without a proxy, see [AUTHENTICATION.md](AUTHENTICATION.md).
+for the browser without a proxy, see [AUTHENTICATION.md](AUTHENTICATION.md). With
+local accounts declared, the Hub's own `/auth/sign-in` page fronts the provider and
+`Hub:Auth:TrustedProxyNetworks` must name the ingress controller's pods: the sign-in
+throttle keys on each client's own address. An ingress rate limit on
+`/auth/sign-in/local` adds a bar the Hub cannot raise alone.
 
 The chart writes that ingress when `ingress.enabled` is set. It publishes the
 Service at the root of `ingress.host`, never under a path, and with

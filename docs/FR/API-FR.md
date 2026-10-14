@@ -518,7 +518,8 @@ que personne n'a demandé d'interroger deux fois.
 
 Avec `Hub:Access:Enabled`, chaque route sauf l'import, `/health`, `/metrics` (anonyme,
 sur `Hub:MetricsPort` seulement) et les `POST /auth/device`, `POST /auth/device/token` et
-`POST /auth/revoke` de la CLI ([Connexion du terminal](#connexion-du-terminal)) exige une
+`POST /auth/revoke` de la CLI ([Connexion du terminal](#connexion-du-terminal)), et les
+routes de la page de connexion ([Connexion locale](#connexion-locale)), exige une
 session, un jeton de terminal ou un jeton machine, et chaque réponse couvre ce que couvrent
 les grants de l'appelant. Le modèle
 est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil :
@@ -616,8 +617,9 @@ machine.
 - **Pour un admin seulement**, les trois derniers champs sont remplis :
   - `configuration` : `projects`, `roles` (`built_in` marque `reader`, `member` et
     `admin`), `grants`, `internal_groups` avec leurs `members`, `admins`, `admin_groups`,
-    et `machine_tokens` sous la forme `{name, group, expires_at_ms, active}`, `active`
-    signifiant non expiré.
+    `machine_tokens` sous la forme `{name, group, expires_at_ms, active}`, `active`
+    signifiant non expiré, et `local_accounts`, les comptes locaux déclarés par nom, jamais
+    leur hash.
   - `unmatched` : les copies de findings vues dans `Hub:Retention` qu'aucun motif d'aucun
     projet ne lit, en `services` (`{service, source_ids, findings}`), `attributes`
     (`{key, value, findings}`) et `sources`, chaque source configurée qu'aucun motif ne
@@ -712,3 +714,32 @@ ni son empreinte :
 `last_used_at_ms` avance au plus une fois toutes les 5 minutes. `DELETE /api/tokens/{id}`
 révoque le jeton de l'appelant, ou celui de n'importe qui pour un admin ; le jeton d'un
 autre utilisateur répond le `404` d'un jeton absent.
+
+### Connexion locale
+
+Mappées seulement avec `Hub:Access:Enabled` et au moins une entrée dans
+`Hub:Access:LocalAccounts` ; sinon elles répondent comme toute route non mappée. Chaque
+réponse porte `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: same-origin` et
+`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
+Voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux) pour le modèle.
+
+| Route | Qui | Réponses |
+|---|---|---|
+| `GET /auth/sign-in?return_url=` | anonyme | `200` et la page, connecté ou non |
+| `GET /auth/sign-in/sso?return_url=` | anonyme | `302` vers le fournisseur, retour sur `return_url` après la connexion |
+| `POST /auth/sign-in/local` | anonyme, depuis la page | `302` vers `return_url` avec le cookie de session ; `403` et la page sur un nom ou un mot de passe faux ; `403` en texte brut depuis un autre site ; `413` ; `415` ; `429` ou `503` et la page, avec `Retry-After` |
+
+`return_url` est un chemin du Hub ; tout le reste, `//hôte`, `/\hôte` ou une URL absolue,
+devient `/`. Avec un compte local déclaré, une requête de page sans session est redirigée
+vers `/auth/sign-in?return_url=<chemin et requête>` au lieu du fournisseur ; `/api`, et un
+rapport dans le cadre du lanceur, répondent toujours `401`.
+
+Le POST prend du `application/x-www-form-urlencoded` (sinon `415`) de 4 Kio au plus avec
+un `Content-Length` (sinon `413`) : `name`, `password` et `return_url`. Un
+`Sec-Fetch-Site` autre que `same-origin`, ou une `Origin` autre que celle du Hub, reçoit
+`403`. Le nom est comparé en minuscules. Un mot de passe faux, un nom inconnu et un champ
+vide répondent la même page `403`, octet pour octet. Une adresse cliente et un nom au-delà
+de cinq échecs consécutifs, ou une adresse au-delà de 5 tentatives dans sa minute,
+reçoivent `429` et `Retry-After` en secondes ; une requête qui attend plus de 10 secondes
+la place de hachage, ou en trouve déjà 8 en attente, reçoit `503` et `Retry-After: 1`.

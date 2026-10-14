@@ -121,6 +121,19 @@
                   "secretKey": { "type": "string" }
                 }
               }
+            },
+            "localAccounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "secretName", "secretKey"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "secretName": { "type": "string" },
+                  "secretKey": { "type": "string" }
+                }
+              }
             }
           }
         },
@@ -160,7 +173,7 @@
       },
       "if": { "properties": { "access": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] } }, "required": ["access"] },
       "then": {
-        "$comment": "The Hub's A1, A2, A5 and A14, refused at helm upgrade rather than after Recreate has stopped the running pod.",
+        "$comment": "The Hub's A1, A2, A5, A13 and A14, refused at helm upgrade rather than after Recreate has stopped the running pod.",
         "required": ["auth", "metricsPort"],
         "properties": {
           "auth": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
@@ -171,6 +184,12 @@
               { "properties": { "admins": { "minItems": 1 } }, "required": ["admins"] },
               { "properties": { "adminGroups": { "minItems": 1 } }, "required": ["adminGroups"] }
             ]
+          }
+        },
+        "if": { "properties": { "access": { "properties": { "localAccounts": { "minItems": 1 } }, "required": ["localAccounts"] } } },
+        "then": {
+          "properties": {
+            "auth": { "properties": { "trustedProxyNetworks": { "minItems": 1 } }, "required": ["trustedProxyNetworks"] }
           }
         }
       }

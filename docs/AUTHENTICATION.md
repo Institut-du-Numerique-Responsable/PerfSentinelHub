@@ -11,7 +11,7 @@ calls:
 
 | Route                                                            | Access                                                                  |
 |------------------------------------------------------------------|-------------------------------------------------------------------------|
-| `/` and the launcher's files                                     | session, otherwise a redirect to the provider                           |
+| `/` and the launcher's files                                     | session, otherwise a redirect to the provider, or to the Hub's sign-in page with a [local account](#local-accounts) |
 | `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, otherwise `401`                                                |
 | `/reports/`                                                      | session, `401` in the launcher's frame, a redirect when opened directly |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`           | session, otherwise `401`, and the ack is taken in the session's name    |
@@ -103,7 +103,7 @@ and a client that talks to it directly cannot forge one.
 | `Hub:Auth:SubjectClaim`            | `sub`                  | The authorization key, read only with access control: `sub`, `oid`, `uuid` or `account_id` |
 | `Hub:Auth:GroupsClaim`             | `groups`               | The userinfo field of the groups, read with `RequiredGroups` or access control |
 | `Hub:Auth:RequiredGroups`          | none                   | No blank entry, refused while `Enabled` is off, see below                    |
-| `Hub:Auth:TrustedProxyNetworks`    | none                   | CIDR networks of the proxy alone (`10.42.200.0/28`) whose forwarded headers are trusted; terminal sign-in needs it |
+| `Hub:Auth:TrustedProxyNetworks`    | none                   | CIDR networks of the proxy alone (`10.42.200.0/28`) whose forwarded headers are trusted; terminal sign-in and local accounts need it |
 
 Declare `https://<hub host>/auth/callback` as the client's redirect URI, and
 make the client confidential.
@@ -302,3 +302,78 @@ its /64); a code lasts 10 minutes and is used once. The CLI polls every 5 second
 5 more each time it polls too early (`slow_down`). Ten mistyped or unknown codes in 10
 minutes pause a person's approvals for the rest of those 10 minutes. Pending codes live
 in memory, so a restart cancels the logins in flight.
+
+## Local accounts
+
+With access control on, a local account is the way in when the provider is down.
+Signing in through the provider stays the normal path: declare one or two break-glass
+accounts, keep their passwords in a vault, and change them after every use.
+
+**Declaring one.** `Hub:Access:LocalAccounts` lists `{ Name, PasswordHash }`. The account
+signs in as `local:<name>`, its subject and its identity alike, and `Hub:Access:Admins`
+or an internal group's `Members` must list `local:<name>`: an account that would reach
+nothing stops the Hub at startup. The name matches `^[a-z0-9][a-z0-9._-]{0,63}$`. The
+hash is the line `PerfSentinelHub hash-password` prints (see
+[OPERATIONS.md](OPERATIONS.md#local-accounts-break-glass)), delivered from a Secret, never
+through the values. A provider subject or identity starting with `local:` fails the
+sign-in, so no provider user can pass for a local account.
+
+**The sign-in page.** With a local account declared, a page request without a session goes
+to the Hub's own `/auth/sign-in` page instead of the provider. It offers **Sign in with
+single sign-on** first and, folded below it, **Sign in with a local account**. The Hub
+serves that page without contacting anyone, so it opens while the provider is down; the
+provider is reached only when the user clicks single sign-on, and the user comes back to
+the page they asked for. The API still answers `401`, and the launcher reloads into the
+page. With no local account declared nothing changes: a page goes straight to the
+provider.
+
+**The session.** A fixed 8 hours from sign-in, never renewed. It carries no provider
+group: its groups are the internal groups that list `local:<name>`, read at each request,
+and it is admin when `Admins` lists it or `AdminGroups` names one of those groups.
+`Hub:Auth:RequiredGroups` does not apply to it: the account is declared in the same
+configuration, and is the way in when the provider is not. It may approve a terminal
+sign-in, whose token ends with the session.
+
+**Rotation ends the sessions.** A session carries a stamp of the configured hash. A new
+hash, once the pod restarts, ends every session of that account, and removing the account
+ends them at their next request. Terminal tokens the account approved live until they
+expire, 8 hours at most; an admin revokes them from the access page.
+
+**Guessing.** The Hub hashes one password at a time, PBKDF2-HMAC-SHA256 at 600,000
+iterations, and a password holds 15 to 1,024 characters. An unknown name costs the same
+hash as a declared one and gets the same answer, `403` "The name or the password is
+wrong.", byte for byte, so neither the answer nor its timing tells names apart.
+
+- **Backoff.** A client address and a name get five failures free, then wait 30 seconds,
+  doubled at each further failure up to 15 minutes; a success clears it. There is no
+  lock: an attacker slows only their own address, never the operator's.
+- **Budget.** One address hashes at most 5 times a minute, whatever the names.
+- Beyond either, `429` with `Retry-After`, without hashing. A request waits up to 10
+  seconds for the hashing slot, with at most 8 waiting, then gets `503` and
+  `Retry-After: 1`.
+- The throttle lives in memory, and a restart clears it.
+- The form is accepted from the Hub's own page only: a `Sec-Fetch-Site` other than
+  `same-origin`, or a foreign `Origin`, gets `403`.
+
+**It needs `Hub:Auth:TrustedProxyNetworks`.** Without it every client behind the ingress
+shares one address, and anyone could keep the break-glass account throttled. The Hub
+refuses to start with a local account and an empty list. A Hub with no proxy in front
+lists `127.0.0.1/32`.
+
+**Logging.** Every local sign-in logs event `2020` at Warning, with the account and the
+client address. Every refused attempt logs event `2021` at Warning, with the account,
+the address and the consecutive failures. An undeclared name is logged as
+`(unknown name)`: it may be a password typed in the wrong field. `429` and `503` answers
+are not logged.
+
+```yaml
+hub:
+  auth:
+    trustedProxyNetworks: ["10.42.200.0/28"]   # the ingress controller's pods alone
+  access:
+    adminGroups: ["/hub-admins", "internal:break-glass"]
+    groups:
+      - { name: break-glass, members: ["local:ops"] }
+    localAccounts:
+      - { name: ops, secretName: perf-sentinel-hub-break-glass, secretKey: ops }
+```

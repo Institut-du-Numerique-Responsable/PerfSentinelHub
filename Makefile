@@ -100,6 +100,9 @@ HELM_ACCESS_VALUES := --set 'hub.access.adminGroups={/hub-admins}' --set 'hub.ac
 # Access on, with the metrics port it requires; the fixture above provides the admin.
 HELM_ACCESS_ON := --set hub.access.enabled=true --set hub.metricsPort=9464
 
+# A local account in a group of its own; access on needs trustedProxyNetworks beside it.
+HELM_LOCAL_ACCOUNT := --set 'hub.access.localAccounts[0].name=ops' --set 'hub.access.localAccounts[0].secretName=hub-break-glass' --set 'hub.access.localAccounts[0].secretKey=ops' --set 'hub.access.groups[1].name=break-glass' --set 'hub.access.groups[1].members={local:ops}'
+
 HELM_SECOND_TOKEN := --set 'hub.access.machineTokens[1].group=internal:ci-shop' --set-string 'hub.access.machineTokens[1].expiresAt=2027-06-30T00:00:00Z' --set 'hub.access.machineTokens[1].secretName=hub-machine-tokens' --set 'hub.access.machineTokens[1].secretKey=ci-other'
 
 helm-lint:
@@ -135,6 +138,12 @@ helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) --set-string 'hub.access.machineTokens[0].expiresAt=end of june' 2>&1 >/dev/null | grep -q '/hub/access/machineTokens/0/expiresAt'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) --show-only templates/configmap.yaml | grep -q '"machineTokens":\[{"expiresAt":"2027-06-30T00:00:00Z","group":"internal:ci-shop","name":"ci-shop"'
 	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES)) && printf '%s' "$$out" | grep -q '"Access":{"adminGroups":\["/hub-admins"\]' && ! printf '%s' "$$out" | grep -q 'Hub__Access__'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) $(HELM_LOCAL_ACCOUNT) --set 'hub.auth.trustedProxyNetworks={10.42.0.0/16}' | grep -q 'name: Hub__Access__LocalAccounts__0__PasswordHash'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) $(HELM_LOCAL_ACCOUNT) 2>&1 >/dev/null | grep -q '/hub/auth/trustedProxyNetworks'
+	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_LOCAL_ACCOUNT)) && printf '%s' "$$out" | grep -q '"localAccounts":\[{"name":"ops","secretKey":"ops","secretName":"hub-break-glass"}\]' && ! printf '%s' "$$out" | grep -q 'Hub__Access__LocalAccounts'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) $(HELM_LOCAL_ACCOUNT) --set 'hub.access.localAccounts[1].name=ops' --set 'hub.access.localAccounts[1].secretName=hub-break-glass' --set 'hub.access.localAccounts[1].secretKey=other' 2>&1 >/dev/null | grep -q 'duplicate local account name: ops'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) $(HELM_LOCAL_ACCOUNT) --set 'hub.access.localAccounts[0].name=Ops' 2>&1 >/dev/null | grep -q 'local account name must match'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) $(HELM_LOCAL_ACCOUNT) --set 'hub.access.localAccounts[0].secretKey=' 2>&1 >/dev/null | grep -q 'local account ops needs secretName and secretKey'
 
 release-check:
 	@test -n "$(VERSION)" || { echo "VERSION is required" >&2; exit 2; }

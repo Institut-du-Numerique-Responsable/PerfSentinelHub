@@ -166,7 +166,8 @@ public sealed record AccessConfiguration(
     IReadOnlyList<InternalGroupOptions> InternalGroups,
     IReadOnlyList<string> Admins,
     IReadOnlyList<string> AdminGroups,
-    IReadOnlyList<AccessMachineToken> MachineTokens);
+    IReadOnlyList<AccessMachineToken> MachineTokens,
+    IReadOnlyList<string> LocalAccounts);
 
 public sealed record AccessRole(string Name, IReadOnlyList<string> Permissions, bool BuiltIn);
 

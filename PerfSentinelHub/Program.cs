@@ -9,6 +9,16 @@ using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
+if (args is ["hash-password", ..])
+    // Read from stdin or typed at a prompt, never from argv: an argument stays in the shell
+    // history and the process list.
+    return HashPasswordCommand.Run(
+        args,
+        Console.In,
+        Console.IsInputRedirected ? null : () => Console.ReadKey(true),
+        Console.Out,
+        Console.Error);
+
 if (args is ["backup", ..])
 {
     // Any wrong arity must refuse loudly: the fallthrough would silently
@@ -50,6 +60,8 @@ builder.Services.AddSingleton<HubDatabase>();
 builder.Services.AddSingleton<AccessPolicy>();
 // Always registered for the same reason; its routes are mapped with access on only.
 builder.Services.AddSingleton<DeviceAuthorizations>();
+builder.Services.AddSingleton<LocalSignInThrottle>();
+builder.Services.AddSingleton<LocalSignInGate>();
 builder.Services.AddSingleton<EngineProbe>();
 // Registered here, on builder.Services, so it starts before the listener does:
 // Build() adds the web host's own hosted service after every registration made
@@ -130,7 +142,9 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.MapHubApi();
 app.MapAnalysisApi();
-if (app.Services.GetRequiredService<AccessPolicy>().Enabled) app.MapTerminalAccess();
+var accessPolicy = app.Services.GetRequiredService<AccessPolicy>();
+if (accessPolicy.Enabled) app.MapTerminalAccess();
+if (accessPolicy.HasLocalAccounts) app.MapLocalSignIn();
 app.MapMetrics();
 
 await app.RunAsync();

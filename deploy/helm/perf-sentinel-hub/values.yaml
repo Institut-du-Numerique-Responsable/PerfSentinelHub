@@ -111,6 +111,15 @@ hub:
     # pod's environment. Revoke by removing the entry (the pod rolls); rotate by
     # updating the Secret, then kubectl rollout restart. One token per team.
     machineTokens: []
+    # Break-glass accounts for when the provider is down, items { name,
+    # secretName, secretKey }. Each signs in as local:<name> on the Hub's own
+    # sign-in page, which then fronts single sign-on; list local:<name> in
+    # admins or in a group's members. The Secret holds the string
+    # `PerfSentinelHub hash-password` prints, never the password. Needs
+    # auth.trustedProxyNetworks. Rotate by updating the Secret, then kubectl
+    # rollout restart, which ends the account's sessions. See
+    # docs/AUTHENTICATION.md.
+    localAccounts: []
 # Each source takes id, name, environment, baseUrl, and optionally
 # kind (daemon, tempo, jaeger_query), retentionHours, authHeaderName and
 # publicUrl (the address printed commands and live reports use when baseUrl

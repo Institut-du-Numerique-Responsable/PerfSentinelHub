@@ -59,6 +59,7 @@ utilisateur qui se renomme chez le fournisseur change une étiquette, pas ses dr
 |-----------------------|---------------------------------------|-----------------------------------------|----------------------------------------------------------|
 | Session du navigateur | valeur de `Hub:Auth:SubjectClaim`     | valeur de `Hub:Auth:IdentityClaim`      | groupes du fournisseur à la connexion, groupes internes  |
 | Jeton machine         | `machine:<nom>`                       | `machine:<nom>`                         | son seul groupe configuré                                |
+| Compte local          | `local:<nom>`                         | `local:<nom>`                           | groupes internes seuls                                   |
 
 `Hub:Auth:SubjectClaim` (par défaut `sub`) n'accepte que `sub`, `oid`, `uuid` et
 `account_id`, des identifiants qu'un fournisseur ne réattribue jamais. `sub` convient à
@@ -87,7 +88,8 @@ entrée du fournisseur dans `AdminGroups` n'y est sûre qu'avec `Hub:Auth:Requir
 réglé sur le groupe de l'organisation.
 
 Les **groupes internes** (`Hub:Access:Groups`) sont déclarés dans les values, référencés
-`internal:<nom>`, et listent des sujets. L'appartenance est lue à chaque requête.
+`internal:<nom>`, et listent des sujets, `local:<nom>` pour un compte local.
+L'appartenance est lue à chaque requête.
 
 ### Projets
 
@@ -138,7 +140,8 @@ démon.
 Un grant donne à un groupe un rôle sur un projet ou sur `*`. Les admins détiennent chaque
 permission sur `*` : les sujets de `Admins` (la voie de secours quand un groupe d'admins
 du fournisseur se casse), les groupes de `AdminGroups`, et les groupes qui ont le rôle
-intégré `admin` sur `*`.
+intégré `admin` sur `*`. Un [compte local](#comptes-locaux) listé là, ou dans un groupe
+d'admins, est la voie qui ne dépend en rien du fournisseur.
 
 ### Ce que voit un appelant
 
@@ -319,10 +322,25 @@ La connexion du terminal n'est offerte qu'avec `Hub:Auth:TrustedProxyNetworks` r
 car la page d'approbation et les limites par adresse ont besoin de l'adresse propre de
 chaque client.
 
+## Comptes locaux
+
+`Hub:Access:LocalAccounts` déclare des comptes de secours pour les pannes du fournisseur,
+chacun `{ Name, PasswordHash }`, le hash livré depuis un Secret. En déclarer un place la
+page de connexion du Hub devant l'authentification unique, si bien qu'une requête de page
+n'atterrit jamais chez un fournisseur qui ne répond pas. Le compte se connecte en tant
+que `local:<nom>`, atteint ce que lui donnent les groupes internes qui listent ce sujet et
+`Admins`, et n'est pas soumis à `Hub:Auth:RequiredGroups`. Le Hub refuse de démarrer
+quand un compte n'est listé nulle part, ou quand `Hub:Auth:TrustedProxyNetworks` est
+vide : le frein s'appuie sur l'adresse cliente. La page, le frein, le hash et la
+journalisation sont dans [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux) ;
+créer et changer un mot de passe dans
+[OPERATIONS-FR.md](OPERATIONS-FR.md#comptes-locaux-de-secours).
+
 ## Sessions
 
 Avec l'accès activé, une session prend fin 8 heures après la connexion, quel que soit son
-usage, comme sous `RequiredGroups`. Les groupes du fournisseur sont lus à la connexion :
+usage, comme sous `RequiredGroups`. Une session locale aussi, et un nouveau hash pour son
+compte y met fin au redémarrage qui le charge. Les groupes du fournisseur sont lus à la connexion :
 un groupe qu'un utilisateur rejoint ou quitte chez le fournisseur s'applique à sa
 connexion suivante, 8 heures plus tard au plus. Tout le reste, groupes internes, admins,
 grants et `RequiredGroups`, est lu à chaque requête : une modification s'applique au
@@ -374,7 +392,11 @@ hub:
   access:
     enabled: true
     admins: ["2f6d0c1e-8a4b-4e2f-9c71-0d3b5a6e7f81"]   # un sub : voie de secours
-    adminGroups: ["/hub-admins"]
+    adminGroups: ["/hub-admins", "internal:break-glass"]
+    groups:
+      - { name: break-glass, members: ["local:ops"] }   # un compte local, pour une panne du fournisseur
+    localAccounts:
+      - { name: ops, secretName: perf-sentinel-hub-break-glass, secretKey: ops }
     projects:
       - { name: shop,    patterns: [ { attribute: "team=shop" } ] }
       - { name: billing, patterns: [ { service: "invoice-*" } ] }

@@ -24,7 +24,7 @@ namespace PerfSentinelHub.Api;
 /// </summary>
 public static partial class HubAuthentication
 {
-    private const string Scheme = "oauth";
+    internal const string Scheme = "oauth";
 
     // With access on: the bearer or the cookie, chosen per request.
     private const string PolicyScheme = "hub";
@@ -38,6 +38,9 @@ public static partial class HubAuthentication
         var auth = builder.Configuration.GetSection($"{HubOptions.SectionName}:Auth").Get<AuthOptions>();
         if (auth is not { Enabled: true }) return false;
         var access = builder.Configuration.GetValue<bool>($"{HubOptions.SectionName}:Access:Enabled");
+        // Local accounts count with access on only, like everything under Hub:Access.
+        var local = access && builder.Configuration.GetSection($"{HubOptions.SectionName}:Access:LocalAccounts")
+            .GetChildren().Any();
 
         var authentication = builder.Services.AddAuthentication(options =>
             {
@@ -46,7 +49,7 @@ public static partial class HubAuthentication
                 // The OAuth callback still writes the cookie, whatever the default reads.
                 if (access) options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
-            .AddCookie(options => ConfigureCookie(options, auth, access))
+            .AddCookie(options => ConfigureCookie(options, auth, access, local))
             .AddOAuth(Scheme, options => ConfigureOAuth(options, auth));
 
         if (access)
@@ -83,7 +86,7 @@ public static partial class HubAuthentication
         return true;
     }
 
-    private static void ConfigureCookie(CookieAuthenticationOptions options, AuthOptions auth, bool access)
+    private static void ConfigureCookie(CookieAuthenticationOptions options, AuthOptions auth, bool access, bool local)
     {
         options.Cookie.Name = "hub_session";
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
@@ -93,17 +96,33 @@ public static partial class HubAuthentication
         // member removed at the provider in for as long as they used it.
         // Grants are read with those groups, so access stops it sliding too.
         options.SlidingExpiration = auth.RequiredGroups.Count == 0 && !access;
+        if (local)
+        {
+            // The Hub's own page, so a page request never lands on a provider that is down:
+            // single sign-on is one click on it, the local form the fallback.
+            options.LoginPath = LocalSignIn.Path;
+            options.ReturnUrlParameter = "return_url";
+            options.Events.OnRedirectToLogin = context =>
+            {
+                AnswerChallenge(context.Request, context.Response, context.RedirectUri);
+                return Task.CompletedTask;
+            };
+        }
         // The cookie scheme is reached through "hub" with access on; a page still signs in.
-        if (access) options.ForwardChallenge = Scheme;
-        if (auth.RequiredGroups.Count == 0 && !access) return;
+        else if (access) options.ForwardChallenge = Scheme;
+
         // The keys outlive a restart: a session opened before the gate, or
         // let in by a group since dropped from it, would last its 8 hours.
         // One opened before access was on carries no subject and no group.
+        // A local ticket is judged first and alone: RequiredGroups never applies to it.
         options.Events.OnValidatePrincipal = context =>
         {
-            if ((auth.RequiredGroups.Count > 0 && !auth.RequiredGroups.Contains(
-                    context.Principal?.FindFirst(AccessCaller.RequiredGroupClaim)?.Value, StringComparer.Ordinal)) ||
-                (access && context.Principal?.FindFirst(AccessCaller.AccessClaim) is null))
+            var principal = context.Principal;
+            if (principal?.Identity?.AuthenticationType == LocalSignIn.AuthenticationType
+                    ? !context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>().HoldsLocalTicket(principal)
+                    : (auth.RequiredGroups.Count > 0 && !auth.RequiredGroups.Contains(
+                          principal?.FindFirst(AccessCaller.RequiredGroupClaim)?.Value, StringComparer.Ordinal)) ||
+                      (access && principal?.FindFirst(AccessCaller.AccessClaim) is null))
                 context.RejectPrincipal();
             return Task.CompletedTask;
         };
@@ -129,17 +148,26 @@ public static partial class HubAuthentication
 
     private static Task RedirectToAuthorizationEndpoint(RedirectContext<OAuthOptions> context)
     {
-        // A fetch cannot follow a redirect to the provider's origin. The
-        // API says 401 and the launcher reloads itself into the sign-in.
-        // A report says 401 only inside the launcher's frame: a shared
-        // report link opened on its own is a page and signs in like one.
-        if (context.Request.Path.StartsWithSegments("/api") ||
-            (context.Request.Path.StartsWithSegments("/reports") &&
-             context.Request.Headers["Sec-Fetch-Dest"] == "iframe"))
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        else
-            context.Response.Redirect(context.RedirectUri);
+        AnswerChallenge(context.Request, context.Response, context.RedirectUri);
         return Task.CompletedTask;
+    }
+
+    // A fetch cannot follow a redirect to the provider's origin. The
+    // API says 401 and the launcher reloads itself into the sign-in.
+    // A report says 401 only inside the launcher's frame: a shared
+    // report link opened on its own is a page and signs in like one.
+    private static void AnswerChallenge(HttpRequest request, HttpResponse response, string redirectUri)
+    {
+        if (AnswersUnauthorized(request))
+            response.StatusCode = StatusCodes.Status401Unauthorized;
+        else
+            response.Redirect(redirectUri);
+    }
+
+    private static bool AnswersUnauthorized(HttpRequest request)
+    {
+        return request.Path.StartsWithSegments("/api") ||
+               (request.Path.StartsWithSegments("/reports") && request.Headers["Sec-Fetch-Dest"] == "iframe");
     }
 
     // With access on: the machine token beside the cookie, and "hub" choosing per request.

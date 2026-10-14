@@ -310,8 +310,9 @@ page changes no right, since rights are declared in the Hub's configuration (Hel
 5. **Projects.** Each project those grants name, with its patterns written as
    `source lab-daemon · service checkout-* · attribute team=shop`.
 6. **Configuration**, for an admin: projects, roles (built-in ones marked), grants,
-   internal groups and their members, admins and admin groups, and machine tokens with
-   their expiry as "expired", "in less than a day" or "in N days", never their value.
+   internal groups and their members, admins and admin groups, machine tokens with
+   their expiry as "expired", "in less than a day" or "in N days", never their value, and
+   local accounts by name, never their hash.
 7. **Not covered by any project**, for an admin: the services, attribute values and
    sources no project covers, with counts, then the conflicts, see
    [ACCESS-CONTROL.md](ACCESS-CONTROL.md#reading-conflicts).
@@ -319,6 +320,20 @@ page changes no right, since rights are declared in the Hub's configuration (Hel
 The terminal sign-in page, `/device`, is not a launcher screen: the Hub serves it on its
 own, with a policy that allows no framing and no inline script, for a browser approving a
 `perf-sentinel login`.
+
+## The sign-in page
+
+With a [local account](AUTHENTICATION.md#local-accounts) declared, a browser without a
+session lands on the Hub's own sign-in page, `/auth/sign-in`, instead of the provider's.
+It is not a launcher screen either: one self-contained page with its styles inline and no
+script, since the launcher's files sit behind the sign-in, light or dark after the
+system. **Sign in with single sign-on** comes first and leads to the provider; **Sign in
+with a local account** is folded below it, with the note that it is for when single
+sign-on is unavailable and that every local sign-in is logged. After a refused attempt the
+fold opens with the reason, never with what was typed. Either way the browser comes back to
+the page it asked for. The launcher itself is unchanged: on a `401` it reloads, and the
+reload is what reaches this page. A page that renders whether or not the provider answers
+is the point: the launcher never sends a browser straight to a provider that is down.
 
 ## Safety
 

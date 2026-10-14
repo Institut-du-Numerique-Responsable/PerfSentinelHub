@@ -84,7 +84,11 @@ Le Hub doit être servi à la racine d'une origine, et par défaut il n'authenti
 aucun de ses lecteurs. Les deux contraintes façonnent le proxy inverse posé
 devant lui plutôt que le Hub lui-même, donc à lire avant d'écrire l'ingress.
 Voir [LIMITATIONS-FR.md](LIMITATIONS-FR.md). `Hub:Auth` lève la seconde pour le
-navigateur sans proxy, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
+navigateur sans proxy, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md). Avec des
+comptes locaux déclarés, la page `/auth/sign-in` du Hub précède le fournisseur et
+`Hub:Auth:TrustedProxyNetworks` doit nommer les pods du contrôleur d'ingress : le frein
+de connexion s'appuie sur l'adresse propre de chaque client. Une limite de débit à
+l'ingress sur `/auth/sign-in/local` ajoute une barre que le Hub ne peut pas élever seul.
 
 Le chart écrit cet ingress quand `ingress.enabled` est activé. Il publie le
 Service à la racine de `ingress.host`, jamais sous un chemin, et avec

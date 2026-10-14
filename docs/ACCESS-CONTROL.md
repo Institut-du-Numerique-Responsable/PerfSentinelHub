@@ -53,6 +53,7 @@ provider changes a label, not their rights.
 |------------------|---------------------------------|----------------------------------|----------------------------------------------|
 | Browser session  | `Hub:Auth:SubjectClaim`'s value | `Hub:Auth:IdentityClaim`'s value | Provider groups at sign-in, internal groups  |
 | Machine token    | `machine:<name>`                | `machine:<name>`                 | Its configured group alone                   |
+| Local account    | `local:<name>`                  | `local:<name>`                   | Internal groups alone                        |
 
 `Hub:Auth:SubjectClaim` (default `sub`) accepts only `sub`, `oid`, `uuid` and
 `account_id`, ids a provider never reassigns. `sub` fits Keycloak, Google, GitLab and
@@ -79,7 +80,8 @@ default), anyone could create a top-level group of the right name: a provider en
 group.
 
 **Internal groups** (`Hub:Access:Groups`) are declared in the values, referenced as
-`internal:<name>`, and list subjects. Membership is read on every request.
+`internal:<name>`, and list subjects, `local:<name>` for a local account. Membership is
+read on every request.
 
 ### Projects
 
@@ -126,7 +128,9 @@ instance `auditor: [findings.read, traces.read]`.
 
 A grant gives a group a role on a project or on `*`. Admins hold every permission on
 `*`: subjects in `Admins` (the break-glass path when a provider admin group breaks),
-groups in `AdminGroups`, and groups granted the built-in `admin` role on `*`.
+groups in `AdminGroups`, and groups granted the built-in `admin` role on `*`. A
+[local account](#local-accounts) listed there, or in an admin group, is the path that
+does not depend on the provider at all.
 
 ### What a caller sees
 
@@ -295,10 +299,24 @@ it:
 Terminal sign-in is offered only with `Hub:Auth:TrustedProxyNetworks` set, since the
 approval page and the per-address limits need each client's own address.
 
+## Local accounts
+
+`Hub:Access:LocalAccounts` declares break-glass accounts for when the provider is down,
+each `{ Name, PasswordHash }`, the hash delivered from a Secret. Declaring one puts the
+Hub's own sign-in page in front of single sign-on, so a page request never lands on a
+provider that does not answer. The account signs in as `local:<name>`, reaches what the
+internal groups listing that subject and `Admins` give it, and is not subject to
+`Hub:Auth:RequiredGroups`. The Hub refuses to start when an account is listed nowhere, or
+when `Hub:Auth:TrustedProxyNetworks` is empty: the throttle keys on the client address.
+The page, the throttle, the hash and the logging are in
+[AUTHENTICATION.md](AUTHENTICATION.md#local-accounts); creating and rotating a password
+in [OPERATIONS.md](OPERATIONS.md#local-accounts-break-glass).
+
 ## Sessions
 
 With access on, a session ends 8 hours after sign-in, however it is used, as it does under
-`RequiredGroups`. Provider groups are read at sign-in: a group a user joins or leaves at
+`RequiredGroups`. A local session does too, and a new hash for its account ends it at the
+restart that loads the hash. Provider groups are read at sign-in: a group a user joins or leaves at
 the provider applies at their next sign-in, 8 hours later at most. Everything else,
 internal groups, admins, grants and `RequiredGroups`, is read on every request, so a
 change applies at the restart that deploys it, for open sessions too. A session opened
@@ -347,7 +365,11 @@ hub:
   access:
     enabled: true
     admins: ["2f6d0c1e-8a4b-4e2f-9c71-0d3b5a6e7f81"]   # a sub: break-glass
-    adminGroups: ["/hub-admins"]
+    adminGroups: ["/hub-admins", "internal:break-glass"]
+    groups:
+      - { name: break-glass, members: ["local:ops"] }   # a local account, when the provider is down
+    localAccounts:
+      - { name: ops, secretName: perf-sentinel-hub-break-glass, secretKey: ops }
     projects:
       - { name: shop,    patterns: [ { attribute: "team=shop" } ] }
       - { name: billing, patterns: [ { service: "invoice-*" } ] }

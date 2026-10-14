@@ -341,9 +341,9 @@ révoque un jeton de terminal. Elle montre :
 5. **Projets.** Chaque projet que ces grants nomment, avec ses motifs écrits
    `source lab-daemon · service checkout-* · attribute team=shop`.
 6. **Configuration**, pour un admin : projets, rôles (les intégrés marqués), grants,
-   groupes internes et leurs membres, admins et groupes admins, et jetons machine avec
+   groupes internes et leurs membres, admins et groupes admins, jetons machine avec
    leur expiration en « expired », « in less than a day » ou « in N days », jamais leur
-   valeur.
+   valeur, et comptes locaux par nom, jamais leur hash.
 7. **Non couvert par un projet**, pour un admin : les services, valeurs d'attribut et
    sources qu'aucun projet ne couvre, avec leurs comptes, puis les conflits, voir
    [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
@@ -351,6 +351,22 @@ révoque un jeton de terminal. Elle montre :
 La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le Hub la sert
 à part, avec une politique qui n'autorise ni l'encadrement ni le script en ligne, pour un
 navigateur qui approuve un `perf-sentinel login`.
+
+## La page de connexion
+
+Avec un [compte local](AUTHENTICATION-FR.md#comptes-locaux) déclaré, un navigateur sans
+session arrive sur la page de connexion du Hub, `/auth/sign-in`, au lieu de celle du
+fournisseur. Ce n'est pas non plus un écran du lanceur : une page autonome, styles en
+ligne et sans script, puisque les fichiers du lanceur sont derrière la connexion, claire
+ou sombre selon le système. **Sign in with single sign-on** vient d'abord et mène au
+fournisseur ; **Sign in with a local account** est replié en dessous, avec la mention
+qu'il sert quand l'authentification unique est indisponible et que chaque connexion
+locale est journalisée. Après une tentative refusée, le pli s'ouvre avec la raison,
+jamais avec ce qui a été tapé. Dans les deux cas, le navigateur revient sur la page
+demandée. Le lanceur lui-même ne change pas : sur un `401` il se recharge, et c'est ce
+rechargement qui atteint cette page. Une page qui s'affiche que le fournisseur réponde
+ou non, c'est le but : le lanceur n'envoie jamais un navigateur droit vers un
+fournisseur en panne.
 
 ## Sûreté
 

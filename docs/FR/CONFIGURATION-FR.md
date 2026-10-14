@@ -136,14 +136,15 @@ service.
 |------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Hub:Access:Enabled`         | `false` par défaut. Exige `Hub:Auth:Enabled`, `Hub:MetricsPort`, une entrée dans `Admins` ou `AdminGroups`, et `Hub:AckRelay:TrustIdentityHeader` désactivé                   |
 | `Hub:Auth:SubjectClaim`      | `sub` par défaut, lu seulement avec `Enabled` : `sub`, `oid`, `uuid` ou `account_id`, des identifiants qu'un fournisseur ne réattribue jamais                                   |
-| `Hub:Auth:TrustedProxyNetworks` | Vide par défaut. Réseaux CIDR dont `X-Forwarded-For` et `X-Forwarded-Proto` sont crus, sur un saut ; chaque entrée doit s'analyser. La connexion du terminal (`perf-sentinel login`) n'est offerte que s'il est renseigné, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal) |
-| `Hub:Access:Admins`          | Sujets qui tiennent le rôle intégré `admin` sur `*` : 1 à 256 caractères, sans caractère de contrôle, sans préfixe `machine:` ni `local:`. Pas vide avec `AdminGroups`          |
+| `Hub:Auth:TrustedProxyNetworks` | Vide par défaut. Réseaux CIDR dont `X-Forwarded-For` et `X-Forwarded-Proto` sont crus, sur un saut ; chaque entrée doit s'analyser. La connexion du terminal (`perf-sentinel login`) n'est offerte que s'il est renseigné, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal), et `LocalAccounts` l'exige |
+| `Hub:Access:Admins`          | Sujets qui tiennent le rôle intégré `admin` sur `*` : 1 à 256 caractères, sans caractère de contrôle, sans préfixe `machine:`, et `local:<nom>` seulement pour un compte local déclaré. Pas vide avec `AdminGroups` |
 | `Hub:Access:AdminGroups`     | Références de groupe qui tiennent `admin` sur `*` : `internal:<nom>` ou un groupe du fournisseur, voir plus bas                                                                 |
 | `Hub:Access:Groups[]`        | `{ Name, Members[] }`, référencé comme `internal:<Name>`. Nom de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`, unique sans tenir compte de la casse ; membres comme `Admins` |
 | `Hub:Access:Projects[]`      | `{ Name, Patterns[] }`, nommé comme un groupe, avec au moins un motif `{ Source, Service, Attribute }` qui pose une partie ou plus                                              |
 | `Hub:Access:Roles[]`         | `{ Name, Permissions[] }`, nommé comme un groupe mais ni `reader`, ni `member`, ni `admin`, casse ignorée ; permissions ci-dessous, chacune une fois, jamais `access.admin`     |
 | `Hub:Access:Grants[]`        | `{ Group, Project, Role }`, les trois posés. `Project` est un projet déclaré ou `*`, `Role` intégré ou déclaré, et `admin` ne s'attribue que sur `*`                            |
 | `Hub:Access:MachineTokens[]` | `{ Name, Group, Token, ExpiresAt }`, voir plus bas                                                                                                                              |
+| `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, voir plus bas                                                                                                                                         |
 
 **Permissions et rôles.** Les permissions sont `findings.read`, `traces.read`,
 `sources.read`, `analyses.run` et `acks.write`, plus `access.admin`, que seul le rôle
@@ -197,6 +198,19 @@ le jeton n'est jamais dans les values, et avec `enabled` le chart le lit dans ce
 une référence de Secret manquante et un `expiresAt` qui n'est pas une date et heure
 ISO 8601. Aucun message ne reprend jamais un jeton. Une entrée expirée est journalisée au
 démarrage (événement `2001`) et refusée à chaque requête.
+
+**Les comptes locaux** sont des comptes de secours pour les pannes du fournisseur,
+connectés sur la page du Hub en tant que `local:<nom>`, voir
+[AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux). `Name` suit
+`^[a-z0-9][a-z0-9._-]{0,63}$` et est unique. `PasswordHash` est la ligne qu'affiche
+`PerfSentinelHub hash-password`, `$pbkdf2-sha256$i=600000$<sel>$<clé>`, rognée comme un
+jeton ; toute autre forme ou tout autre nombre d'itérations est refusé. `Admins` ou les
+`Members` d'un groupe doivent lister `local:<nom>`, et `Hub:Auth:TrustedProxyNetworks` ne
+doit pas être vide. Sous Helm, un élément est `{ name, secretName, secretKey }` : avec
+`enabled` le chart lit le hash dans ce Secret pour
+`Hub__Access__LocalAccounts__<index>__PasswordHash`, et refuse un nom dupliqué ou mal
+formé et une référence de Secret manquante ; le schéma refuse des comptes locaux sans
+`auth.trustedProxyNetworks`. Aucun message ne reprend jamais un hash.
 
 ## Ce qu'est une source, et ce qui est mesuré
 
