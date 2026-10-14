@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 
 namespace PerfSentinelHub.Api;
 
@@ -14,7 +15,7 @@ public static class ClientAddress
     {
         if (address is null) return "unknown";
         if (address.IsIPv4MappedToIPv6) return address.MapToIPv4().ToString();
-        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6) return address.ToString();
+        if (address.AddressFamily != AddressFamily.InterNetworkV6) return address.ToString();
         var bytes = address.GetAddressBytes();
         Array.Clear(bytes, 8, 8);
         return new IPAddress(bytes) + "/64";

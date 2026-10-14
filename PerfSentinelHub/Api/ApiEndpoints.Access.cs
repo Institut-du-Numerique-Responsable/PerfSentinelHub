@@ -134,7 +134,8 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         var conflicts = await database.QueryConflictsAsync(
-            AccessScope.Of(ProjectPatterns(options.Access)), Since(options, now), MaxAccessEntries + 1, cancellationToken);
+            AccessScope.Of(ProjectPatterns(options.Access)), Since(options, now), MaxAccessEntries + 1,
+            cancellationToken);
         return new AccessConflicts([.. conflicts.Take(MaxAccessEntries)], conflicts.Count > MaxAccessEntries);
     }
 

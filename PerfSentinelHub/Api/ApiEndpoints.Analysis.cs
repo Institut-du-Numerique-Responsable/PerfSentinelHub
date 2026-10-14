@@ -269,7 +269,11 @@ public static partial class ApiEndpoints
         private readonly Dictionary<(string, string), IReadOnlyList<AccessCopy>> _copies = [];
 
         public bool SeesEverything => !access.Enabled ||
-                                      new[] { AccessPermissions.TracesRead, AccessPermissions.FindingsRead, AccessPermissions.SourcesRead }
+                                      new[]
+                                          {
+                                              AccessPermissions.TracesRead, AccessPermissions.FindingsRead,
+                                              AccessPermissions.SourcesRead
+                                          }
                                           .All(permission => access.Scope(context, permission).Patterns is null);
 
         public static IReadOnlyList<string> Permissions(string kind)
@@ -285,7 +289,8 @@ public static partial class ApiEndpoints
         {
             return kind != SourceKinds.Daemon && request.ValueKind == JsonValueKind.Object &&
                    // A trace ID as the parser reads it: a string, so a null one is a service run.
-                   !(request.TryGetProperty("trace_id", out var traceId) && traceId.ValueKind == JsonValueKind.String) &&
+                   !(request.TryGetProperty("trace_id", out var traceId) &&
+                     traceId.ValueKind == JsonValueKind.String) &&
                    request.TryGetProperty("service", out var service) && service.ValueKind == JsonValueKind.String
                 ? service.GetString()
                 : null;
@@ -324,7 +329,8 @@ public static partial class ApiEndpoints
                     continue;
                 if (kind == SourceKinds.Daemon || service is null
                         ? !scope.HoldsAtSource(sourceId)
-                        : !scope.CoversSubject(sourceId, service, await CopiesAsync(environment, service, cancellationToken)))
+                        : !scope.CoversSubject(sourceId, service,
+                            await CopiesAsync(environment, service, cancellationToken)))
                     return false;
             }
 

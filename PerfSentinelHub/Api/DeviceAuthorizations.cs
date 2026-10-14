@@ -63,7 +63,10 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
     {
         get
         {
-            lock (_lock) return _byDevice.Count;
+            lock (_lock)
+            {
+                return _byDevice.Count;
+            }
         }
     }
 
@@ -78,7 +81,8 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
             foreach (var expired in _byDevice.Values.Where(entry => entry.ExpiresAtMs <= now).ToList())
                 Remove(expired);
             if (_byDevice.Count >= TerminalAccess.MaxPending ||
-                _byDevice.Values.Count(entry => entry.ClientAddress == clientAddress) >= TerminalAccess.MaxPendingPerAddress)
+                _byDevice.Values.Count(entry => entry.ClientAddress == clientAddress) >=
+                TerminalAccess.MaxPendingPerAddress)
                 return null;
 
             string userCode;
@@ -136,16 +140,20 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
     public void Issued(string deviceCode)
     {
         lock (_lock)
+        {
             if (_byDevice.TryGetValue(deviceCode, out var entry))
                 Remove(entry);
+        }
     }
 
     // The row could not be written: the next poll tries again.
     public void Unclaim(string deviceCode)
     {
         lock (_lock)
+        {
             if (_byDevice.TryGetValue(deviceCode, out var entry) && entry.State == State.Issuing)
                 entry.State = State.Approved;
+        }
     }
 
     // A code still waiting for a decision, null otherwise. userCode is normalized.
@@ -153,9 +161,11 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
     {
         var now = NowMs;
         lock (_lock)
+        {
             return Pending(userCode, now) is { } entry
                 ? new PendingCode(entry.UserCode, entry.ClientAddress, entry.RequestedAtMs)
                 : null;
+        }
     }
 
     // Approves, or denies with null. A code is decided once: false when it is not pending.
@@ -176,10 +186,12 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
     {
         var now = NowMs;
         lock (_lock)
+        {
             _failures[subject] = _failures.TryGetValue(subject, out var window) &&
                                  now - window.StartMs < TerminalAccess.FailureWindowMs
                 ? (window.StartMs, window.Count + 1)
                 : (now, 1);
+        }
     }
 
     // How long this subject must wait, or null while under the limit.
@@ -198,7 +210,8 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
     // Uppercased, without '-' and whitespace; null unless eight letters of the alphabet remain.
     public static string? NormalizeUserCode(string input)
     {
-        var code = new string([.. input.Where(letter => letter != '-' && !char.IsWhiteSpace(letter))]).ToUpperInvariant();
+        var code =
+            new string([.. input.Where(letter => letter != '-' && !char.IsWhiteSpace(letter))]).ToUpperInvariant();
         return code.Length == TerminalAccess.UserCodeLength && code.All(TerminalAccess.UserCodeAlphabet.Contains)
             ? code
             : null;
@@ -232,7 +245,12 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
         Denied
     }
 
-    private sealed class Entry(string deviceCode, string userCode, string clientAddress, long requestedAtMs, long expiresAtMs)
+    private sealed class Entry(
+        string deviceCode,
+        string userCode,
+        string clientAddress,
+        long requestedAtMs,
+        long expiresAtMs)
     {
         public string DeviceCode { get; } = deviceCode;
         public string UserCode { get; } = userCode;

@@ -96,12 +96,17 @@ public sealed class AccessPolicy
     {
         if (!Enabled) return null;
         string[] listed = source.Kind == SourceKinds.Daemon
-            ? [AccessPermissions.FindingsRead, AccessPermissions.SourcesRead, AccessPermissions.AnalysesRun, AccessPermissions.AcksWrite]
+            ?
+            [
+                AccessPermissions.FindingsRead, AccessPermissions.SourcesRead, AccessPermissions.AnalysesRun,
+                AccessPermissions.AcksWrite
+            ]
             : [AccessPermissions.TracesRead, AccessPermissions.AnalysesRun];
         return
         [
             .. listed.Where(permission =>
-                source.Kind == SourceKinds.Daemon && permission is AccessPermissions.SourcesRead or AccessPermissions.AnalysesRun
+                source.Kind == SourceKinds.Daemon &&
+                permission is AccessPermissions.SourcesRead or AccessPermissions.AnalysesRun
                     ? Scope(context, permission).HoldsAtSource(source.Id)
                     : Scope(context, permission).ReachesSource(source.Id))
         ];

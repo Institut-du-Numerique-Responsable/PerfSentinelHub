@@ -34,6 +34,28 @@ public sealed partial class HubDatabase
                                                           AND {FindingAccess("fs.source_id", "fs.signature", "fs.service")})
                                                       """;
 
+    // Built once, so the command takes a field rather than a string formatted at the call.
+    private static readonly string UnmatchedSql = $"""
+                                                   WITH {AccessPatternsCte},
+                                                   unmatched AS MATERIALIZED (
+                                                     SELECT fs.signature, fs.source_id, fs.service FROM finding_sources AS fs
+                                                     WHERE fs.last_seen_ms >= $since
+                                                       AND NOT {FindingAccess("fs.source_id", "fs.signature", "fs.service")})
+                                                   SELECT * FROM (
+                                                     SELECT 'service', service, NULL, group_concat(DISTINCT source_id), count(*) AS n
+                                                     FROM unmatched GROUP BY service ORDER BY n DESC, service LIMIT $limit)
+                                                   UNION ALL
+                                                   SELECT * FROM (
+                                                     SELECT 'attribute', attr_key, attr_value, NULL, count(*) AS n FROM (
+                                                       SELECT DISTINCT u.signature, u.source_id, fa.attr_key, fa.attr_value
+                                                       FROM unmatched AS u JOIN finding_attributes AS fa
+                                                         ON fa.signature = u.signature AND fa.source_id = u.source_id
+                                                       WHERE fa.attr_key <> '')
+                                                     GROUP BY attr_key, attr_value ORDER BY n DESC, attr_key, attr_value LIMIT $limit)
+                                                   UNION ALL
+                                                   SELECT 'source', source_id, NULL, NULL, count(*) FROM unmatched GROUP BY source_id;
+                                                   """;
+
     private static void BindAccess(SqliteCommand command, AccessScope? access)
     {
         if (access is not null)
@@ -72,33 +94,12 @@ public sealed partial class HubDatabase
             if (!copies.TryGetValue(key, out var rows))
                 copies[key] = rows = [];
             if (!reader.IsDBNull(2))
-                rows.Add(new AccessAttribute(reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5)));
+                rows.Add(new AccessAttribute(reader.GetString(2), reader.GetString(3), reader.GetString(4),
+                    reader.GetString(5)));
         }
 
         return [.. copies.Select(copy => new AccessCopy(copy.Key.Item2, service, copy.Value))];
     }
-
-    // Built once, so the command takes a field rather than a string formatted at the call.
-    private static readonly string UnmatchedSql = $"""
-        WITH {AccessPatternsCte},
-        unmatched AS MATERIALIZED (
-          SELECT fs.signature, fs.source_id, fs.service FROM finding_sources AS fs
-          WHERE fs.last_seen_ms >= $since
-            AND NOT {FindingAccess("fs.source_id", "fs.signature", "fs.service")})
-        SELECT * FROM (
-          SELECT 'service', service, NULL, group_concat(DISTINCT source_id), count(*) AS n
-          FROM unmatched GROUP BY service ORDER BY n DESC, service LIMIT $limit)
-        UNION ALL
-        SELECT * FROM (
-          SELECT 'attribute', attr_key, attr_value, NULL, count(*) AS n FROM (
-            SELECT DISTINCT u.signature, u.source_id, fa.attr_key, fa.attr_value
-            FROM unmatched AS u JOIN finding_attributes AS fa
-              ON fa.signature = u.signature AND fa.source_id = u.source_id
-            WHERE fa.attr_key <> '')
-          GROUP BY attr_key, attr_value ORDER BY n DESC, attr_key, attr_value LIMIT $limit)
-        UNION ALL
-        SELECT 'source', source_id, NULL, NULL, count(*) FROM unmatched GROUP BY source_id;
-        """;
 
     /// <summary>
     ///     The copies seen since <paramref name="sinceMs" /> that no pattern of
@@ -197,7 +198,10 @@ public sealed partial class HubDatabase
                 reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2),
                 reader.GetString(3),
-                [.. values.RootElement.EnumerateArray().Select(value => value.GetString()!).Order(StringComparer.Ordinal)],
+                [
+                    .. values.RootElement.EnumerateArray().Select(value => value.GetString()!)
+                        .Order(StringComparer.Ordinal)
+                ],
                 reader.GetInt32(5)));
         }
 

@@ -37,8 +37,8 @@ public static partial class MetricsEndpoint
         app.Use((context, next) =>
         {
             // Judged on the endpoint routing chose, which also takes /metrics/ and /METRICS.
-            if ((context.Connection.LocalPort == port) ==
-                (context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: "/metrics" }))
+            if (context.Connection.LocalPort == port ==
+                context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: "/metrics" })
                 return next(context);
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return Task.CompletedTask;
@@ -51,7 +51,8 @@ public static partial class MetricsEndpoint
                 return;
             if (IsBoundBesidesAnother(port, addresses))
                 return;
-            LogMetricsPortNotBound(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("MetricsEndpoint"), port);
+            LogMetricsPortNotBound(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("MetricsEndpoint"),
+                port);
             refuse();
             app.Lifetime.StopApplication();
         });

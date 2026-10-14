@@ -65,6 +65,11 @@ public static partial class ApiEndpoints
         </html>
         """;
 
+    private const string TerminalLog = "TerminalAccess";
+
+    private const string NoPendingCode =
+        "No sign-in is waiting for this code: it was decided, it expired, or it was mistyped. Run perf-sentinel login again.";
+
     /// <summary>
     ///     Terminal sign-in, mapped with Hub:Access:Enabled only. The token routes always, so a
     ///     token issued earlier can still be listed and revoked; the device flow only with
@@ -89,8 +94,6 @@ public static partial class ApiEndpoints
         app.MapPost("/api/device/verify", VerifyDeviceAsync);
         app.MapPost("/api/device/approve", ApproveDeviceAsync);
     }
-
-    private const string TerminalLog = "TerminalAccess";
 
     // RFC 8628 section 3.1. Codes are never logged.
     private static async Task<IResult> StartDeviceAsync(
@@ -168,7 +171,8 @@ public static partial class ApiEndpoints
         }
 
         devices.Issued(deviceCode.ToString());
-        LogTokenIssued(loggerFactory.CreateLogger(TerminalLog), row.Id, row.ClientAddress, approval.Identity, approval.Subject);
+        LogTokenIssued(loggerFactory.CreateLogger(TerminalLog), row.Id, row.ClientAddress, approval.Identity,
+            approval.Subject);
         return TypedResults.Json(
             new DeviceTokenResponse(token, "Bearer", (long)(approval.ExpiresUtc - now).TotalSeconds),
             HubJsonContext.Default.DeviceTokenResponse);
@@ -207,7 +211,8 @@ public static partial class ApiEndpoints
     {
         var session = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!session.Succeeded || EndsWithinTheHour(session, timeProvider))
-            return TypedResults.Challenge(new AuthenticationProperties { RedirectUri = context.Request.PathBase + "/device" });
+            return TypedResults.Challenge(new AuthenticationProperties
+            { RedirectUri = context.Request.PathBase + "/device" });
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'";
         return TypedResults.Content(DevicePage, "text/html; charset=utf-8");
@@ -222,7 +227,8 @@ public static partial class ApiEndpoints
         if (refusal is not null) return refusal;
         using var body = await ReadDecisionAsync(context.Request, cancellationToken);
         if (UserCodeOf(body) is not { } userCode)
-            return Failed(devices, caller!, StatusCodes.Status400BadRequest, "Enter the eight letters your terminal shows.");
+            return Failed(devices, caller!, StatusCodes.Status400BadRequest,
+                "Enter the eight letters your terminal shows.");
         if (devices.Find(userCode) is not { } pending)
             return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
         return TypedResults.Json(
@@ -235,9 +241,6 @@ public static partial class ApiEndpoints
                 session.Properties!.ExpiresUtc?.ToUnixTimeMilliseconds()),
             HubJsonContext.Default.DeviceVerifyResponse);
     }
-
-    private const string NoPendingCode =
-        "No sign-in is waiting for this code: it was decided, it expired, or it was mistyped. Run perf-sentinel login again.";
 
     private static async Task<IResult> ApproveDeviceAsync(
         HttpContext context,
@@ -254,7 +257,8 @@ public static partial class ApiEndpoints
             approveField.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             return Failed(devices, caller!, StatusCodes.Status400BadRequest, "The request is invalid.");
         if (EndsWithinTheHour(session!, timeProvider))
-            return Problem(StatusCodes.Status409Conflict, "Your session ends within the hour. Reload the page to sign in again.");
+            return Problem(StatusCodes.Status409Conflict,
+                "Your session ends within the hour. Reload the page to sign in again.");
         if (devices.Find(userCode) is not { } pending)
             return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
 
@@ -351,7 +355,8 @@ public static partial class ApiEndpoints
         if (await ReadBodyAsync(request, cancellationToken, MaxOAuthBodyBytes) is not { } body)
             return (null, TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
         if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType) ||
-            !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded",
+                StringComparison.OrdinalIgnoreCase))
             return (null, OAuth(InvalidRequest));
         var form = QueryHelpers.ParseQuery(Encoding.UTF8.GetString(body));
         if (form.Values.Any(value => value.Count != 1))
@@ -386,7 +391,8 @@ public static partial class ApiEndpoints
             return (null, null, refusal);
         if (devices.Throttled(caller.Subject) is { } wait)
         {
-            context.Response.Headers.RetryAfter = ((long)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            context.Response.Headers.RetryAfter =
+                ((long)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
             return (null, null, Problem(StatusCodes.Status429TooManyRequests,
                 "Too many codes that match no sign-in. Wait, then try again."));
         }
@@ -422,7 +428,8 @@ public static partial class ApiEndpoints
             : null;
     }
 
-    private static JsonHttpResult<AnalysisProblem> Failed(DeviceAuthorizations devices, AccessCaller caller, int statusCode, string detail)
+    private static JsonHttpResult<AnalysisProblem> Failed(DeviceAuthorizations devices, AccessCaller caller,
+        int statusCode, string detail)
     {
         devices.Fail(caller.Subject);
         return Problem(statusCode, detail);
@@ -433,10 +440,13 @@ public static partial class ApiEndpoints
     private static partial void LogDeviceApproved(
         ILogger logger, string identity, string subject, string clientAddress, bool otherNetwork);
 
-    [LoggerMessage(2015, LogLevel.Information, "Terminal token {TokenId} issued to {ClientAddress} for {Identity} ({Subject}).")]
-    private static partial void LogTokenIssued(ILogger logger, string tokenId, string? clientAddress, string identity, string subject);
+    [LoggerMessage(2015, LogLevel.Information,
+        "Terminal token {TokenId} issued to {ClientAddress} for {Identity} ({Subject}).")]
+    private static partial void LogTokenIssued(ILogger logger, string tokenId, string? clientAddress, string identity,
+        string subject);
 
-    [LoggerMessage(2011, LogLevel.Information, "Terminal sign-in denied by {Identity} ({Subject}) for {ClientAddress}.")]
+    [LoggerMessage(2011, LogLevel.Information,
+        "Terminal sign-in denied by {Identity} ({Subject}) for {ClientAddress}.")]
     private static partial void LogDeviceDenied(ILogger logger, string identity, string subject, string clientAddress);
 
     [LoggerMessage(2012, LogLevel.Information, "Terminal token {TokenId} of {Owner} revoked by {Actor}.")]
