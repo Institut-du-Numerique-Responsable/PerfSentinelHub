@@ -27,7 +27,7 @@ const PEOPLE = {
     noor: {sub: "c75e0b19-9f2a-4d63-8e41-7a3b6d2c5e90", email: "noor@example.com", groups: ["/teams/marketing"]}
 };
 
-const escape = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const escape = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.codePointAt(0)};`);
 
 http.createServer((req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
@@ -38,10 +38,10 @@ http.createServer((req, res) => {
             target.searchParams.set("state", url.searchParams.get("state") ?? "");
             return target.toString();
         };
+        const choices = Object.entries(PEOPLE).map(([person, info]) =>
+            `<p><a role="button" href="${escape(back(person))}">${escape(info.email)}</a></p>`).join("");
         res.writeHead(200, {"content-type": "text/html; charset=utf-8"});
-        res.end(`<!doctype html><title>Fake provider</title><h1>Sign in as</h1>${
-            Object.entries(PEOPLE).map(([person, info]) =>
-                `<p><a role="button" href="${escape(back(person))}">${escape(info.email)}</a></p>`).join("")}`);
+        res.end(`<!doctype html><title>Fake provider</title><h1>Sign in as</h1>${choices}`);
         return;
     }
     if (url.pathname === "/token" && req.method === "POST") {

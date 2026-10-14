@@ -11,15 +11,18 @@ const OUT = join(__dirname, "..", "..", "..", "docs", "img", "hub");
 // here with a bare ENOENT naming a temp path and nothing else.
 const STATE_FILE = join(tmpdir(), "perf-sentinel-hub-demo", "state.json");
 type DemoState = { succeeded: string, ackSignature: string, accessBaseUrl: string };
-let state: DemoState;
-try {
-    state = JSON.parse(readFileSync(STATE_FILE, "utf8")) as DemoState;
-} catch (error) {
-    throw new Error(
-        `No demo state at ${STATE_FILE}. global-setup did not finish: it stands up the fake ` +
-        `daemons, the Hub and the analysis runs these stills need. Its own error is above. ` +
-        `(${String(error)})`);
+function readState(): DemoState {
+    try {
+        return JSON.parse(readFileSync(STATE_FILE, "utf8")) as DemoState;
+    } catch (error) {
+        throw new Error(
+            `No demo state at ${STATE_FILE}. global-setup did not finish: it stands up the fake ` +
+            `daemons, the Hub and the analysis runs these stills need. Its own error is above. ` +
+            `(${String(error)})`);
+    }
 }
+
+export const state = readState();
 
 export const nameFor = (screen: string, project: string) =>
     join(OUT, project.endsWith("-dark") ? `${screen}-dark.png` : `${screen}.png`);
@@ -42,4 +45,3 @@ export async function settled(page: Page, marker: string | RegExp): Promise<void
         .toBe("static");
 }
 
-export {state};

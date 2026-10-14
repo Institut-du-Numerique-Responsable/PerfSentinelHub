@@ -210,7 +210,7 @@ function hubEnv(prefix: string, value: unknown): Record<string, string> {
 function localPasswordHash(): string {
     const salt = randomBytes(16);
     const key = pbkdf2Sync(randomBytes(24).toString("base64"), salt, 600_000, 32, "sha256");
-    const unpadded = (bytes: Buffer) => bytes.toString("base64").replace(/=+$/, "");
+    const unpadded = (bytes: Buffer) => bytes.toString("base64").replaceAll("=", "");
     return `$pbkdf2-sha256$i=600000$${unpadded(salt)}$${unpadded(key)}`;
 }
 
