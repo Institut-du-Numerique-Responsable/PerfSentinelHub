@@ -25,17 +25,6 @@ public sealed partial class HubDatabase
                                                finding_count, incident_json, first_seen_ms, last_seen_ms
                                                """;
 
-    // An incident copy, on the pairs every frozen finding carries. The ('', '') marker
-    // H1 writes for a copy with none matches no key.
-    public static readonly string IncidentAccess = Access(
-        "incidents.source_id",
-        "incidents.service",
-        """
-        SELECT 1 FROM incident_attributes AS ia
-        WHERE ia.id = incidents.id AND ia.source_id = incidents.source_id AND ia.attr_key = ap.key
-        """,
-        "ia.attr_value");
-
     // The namespace is read out of the document with json_extract,
     // a scan over the rows the other predicates leave. A column and an index
     // if the table ever outgrows what the retention keeps.
@@ -68,12 +57,6 @@ public sealed partial class HubDatabase
     private const string IncidentList = $"{IncidentListWhere} {IncidentListPage}";
     private const string IncidentFind = $"{IncidentFindWhere} {IncidentFindPick}";
 
-    private static readonly string ScopedIncidentList =
-        $"WITH {AccessPatternsCte}\n{IncidentListWhere} AND {IncidentAccess}\n{IncidentListPage}";
-
-    private static readonly string ScopedIncidentFind =
-        $"WITH {AccessPatternsCte}\n{IncidentFindWhere} AND {IncidentAccess}\n{IncidentFindPick}";
-
     // The two read ledgers, incident_reads and ack_reads, share a shape and
     // so these two statements. Each ledger names its table in a constant built
     // from them, which is the only text the shared methods below ever run.
@@ -105,6 +88,23 @@ public sealed partial class HubDatabase
                                                    UPDATE incident_attributes SET last_seen_ms = $observed_at
                                                    WHERE id = $id AND source_id = $source_id;
                                                    """;
+
+    // An incident copy, on the pairs every frozen finding carries. The ('', '') marker
+    // H1 writes for a copy with none matches no key.
+    public static readonly string IncidentAccess = Access(
+        "incidents.source_id",
+        "incidents.service",
+        """
+        SELECT 1 FROM incident_attributes AS ia
+        WHERE ia.id = incidents.id AND ia.source_id = incidents.source_id AND ia.attr_key = ap.key
+        """,
+        "ia.attr_value");
+
+    private static readonly string ScopedIncidentList =
+        $"WITH {AccessPatternsCte}\n{IncidentListWhere} AND {IncidentAccess}\n{IncidentListPage}";
+
+    private static readonly string ScopedIncidentFind =
+        $"WITH {AccessPatternsCte}\n{IncidentFindWhere} AND {IncidentAccess}\n{IncidentFindPick}";
 
     private static readonly string IncidentAttributesUpsert =
         IncidentAttributesWhere("i.id = $id AND i.source_id = $source_id");

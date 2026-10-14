@@ -121,12 +121,12 @@ public sealed class AccessScope
     // Null when unrestricted, empty for nothing.
     public IReadOnlyList<AccessPattern>? Patterns { get; }
 
+    public bool IsNothing => Patterns is { Count: 0 };
+
     public static AccessScope Of(IReadOnlyList<AccessPattern> patterns)
     {
         return patterns.Count == 0 ? Nothing : new AccessScope(patterns);
     }
-
-    public bool IsNothing => Patterns is { Count: 0 };
 
     // Some pattern whose source part is absent or matches: the source holds something in scope.
     public bool ReachesSource(string source)

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
+using IPNetwork = System.Net.IPNetwork;
 
 namespace PerfSentinelHub.Api;
 
@@ -77,7 +78,7 @@ public static partial class HubAuthentication
             options.KnownIPNetworks.Clear();
             options.KnownProxies.Clear();
             foreach (var network in networks)
-                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+                options.KnownIPNetworks.Add(IPNetwork.Parse(network));
         });
         return true;
     }
@@ -320,7 +321,8 @@ public static partial class HubAuthentication
         IReadOnlyList<string> groups)
     {
         if (!user.TryGetProperty(auth.SubjectClaim, out var field) || field.ValueKind != JsonValueKind.String ||
-            field.GetString() is not { Length: > 0 and <= MaxSubjectChars } subject || string.IsNullOrWhiteSpace(subject))
+            field.GetString() is not { Length: > 0 and <= MaxSubjectChars } subject ||
+            string.IsNullOrWhiteSpace(subject))
             throw new InvalidOperationException(
                 $"The provider's userinfo for {name} lacks a string Hub:Auth:SubjectClaim field of 1 to {MaxSubjectChars} characters.");
         if (IsReserved(subject) || IsReserved(name))
@@ -329,7 +331,8 @@ public static partial class HubAuthentication
 
         identity.AddClaim(new Claim(AccessCaller.SubjectClaim, subject));
         var kept = groups.Where(group => !group.StartsWith(InternalPrefix, StringComparison.OrdinalIgnoreCase) &&
-                                         access.ProviderGroups.Contains(group)).Distinct(StringComparer.Ordinal).ToList();
+                                         access.ProviderGroups.Contains(group)).Distinct(StringComparer.Ordinal)
+            .ToList();
         foreach (var group in kept)
             identity.AddClaim(new Claim(AccessCaller.GroupClaim, group));
         if (groups.Except(kept, StringComparer.Ordinal).ToList() is { Count: > 0 } dropped)

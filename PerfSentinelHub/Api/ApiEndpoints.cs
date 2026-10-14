@@ -233,7 +233,8 @@ public static partial class ApiEndpoints
             return;
         }
 
-        if (!TryParseQuery(context.Request, options.Value, access.Sources(context, options.Value.Sources), out var query))
+        if (!TryParseQuery(context.Request, options.Value, access.Sources(context, options.Value.Sources),
+                out var query))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;

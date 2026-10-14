@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Options;
 
 namespace PerfSentinelHub.Configuration;
@@ -405,7 +406,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Auth:GroupsClaim must name a userinfo field when Hub:Auth:RequiredGroups is set.");
         if (auth.RequiredGroups.Any(string.IsNullOrWhiteSpace))
             errors.Add("Hub:Auth:RequiredGroups must not hold a blank entry.");
-        foreach (var network in auth.TrustedProxyNetworks.Where(network => !System.Net.IPNetwork.TryParse(network, out _)))
+        foreach (var network in auth.TrustedProxyNetworks.Where(network => !IPNetwork.TryParse(network, out _)))
             errors.Add($"Hub:Auth:TrustedProxyNetworks entry '{network}' is not a CIDR network.");
     }
 

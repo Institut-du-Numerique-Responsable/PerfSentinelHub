@@ -28,47 +28,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // With access patterns, a scope is a set of copies rather than of sources.
     private const string Visible = "IN (SELECT signature, source_id FROM visible)";
 
-    // A scoped read describes its scope: each finding as the freshest source in
-    // scope reported it, first and last seen over those sources alone. The
-    // partition and the pick share one sort. A source row written before the
-    // per-source columns has no copy of its own yet and serves the shared one.
-    // max_confidence stays fleet-wide, a source row carries no confidence of its own.
-    // Every row of the scope is read and sorted before any filter or
-    // LIMIT, so a read costs the scope and not the page. service and
-    // finding_type are fleet-wide and could move into `scope` if it ever hurts.
-    // severity cannot, it judges the scoped envelope, nor can the ack filter,
-    // which judges every source of the scope.
-    private static string ScopedFindings(string copies)
-    {
-        return $"""
-                scope AS (
-                  SELECT signature, first_seen_ms, last_seen_ms, finding_json, severity
-                  FROM (
-                    SELECT fs.signature, fs.finding_json, fs.severity,
-                           MIN(fs.first_seen_ms) OVER w AS first_seen_ms,
-                           MAX(fs.last_seen_ms) OVER w AS last_seen_ms,
-                           ROW_NUMBER() OVER (
-                             PARTITION BY fs.signature
-                             ORDER BY fs.last_seen_ms DESC, fs.source_id ASC) AS pick
-                    FROM finding_sources AS fs
-                    WHERE {copies}
-                    WINDOW w AS (PARTITION BY fs.signature)
-                  )
-                  WHERE pick = 1
-                ),
-                scoped AS (
-                  SELECT findings.signature,
-                         COALESCE(scope.finding_json, findings.finding_json) AS finding_json,
-                         findings.service, findings.finding_type,
-                         COALESCE(scope.severity, findings.severity) AS severity,
-                         findings.endpoint, findings.sample_trace_id,
-                         scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
-                  FROM scope
-                  JOIN findings ON findings.signature = scope.signature
-                )
-                """;
-    }
-
     // An ack with no expiry is permanent, and one expiring now has expired.
     // The read's now is the one its status is judged at.
     private const string ActiveAck = "(sa.expires_at_ms IS NULL OR sa.expires_at_ms > $status_now)";
@@ -131,6 +90,47 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private int _ready;
 
     public bool IsReady => Volatile.Read(ref _ready) == 1;
+
+    // A scoped read describes its scope: each finding as the freshest source in
+    // scope reported it, first and last seen over those sources alone. The
+    // partition and the pick share one sort. A source row written before the
+    // per-source columns has no copy of its own yet and serves the shared one.
+    // max_confidence stays fleet-wide, a source row carries no confidence of its own.
+    // Every row of the scope is read and sorted before any filter or
+    // LIMIT, so a read costs the scope and not the page. service and
+    // finding_type are fleet-wide and could move into `scope` if it ever hurts.
+    // severity cannot, it judges the scoped envelope, nor can the ack filter,
+    // which judges every source of the scope.
+    private static string ScopedFindings(string copies)
+    {
+        return $"""
+                scope AS (
+                  SELECT signature, first_seen_ms, last_seen_ms, finding_json, severity
+                  FROM (
+                    SELECT fs.signature, fs.finding_json, fs.severity,
+                           MIN(fs.first_seen_ms) OVER w AS first_seen_ms,
+                           MAX(fs.last_seen_ms) OVER w AS last_seen_ms,
+                           ROW_NUMBER() OVER (
+                             PARTITION BY fs.signature
+                             ORDER BY fs.last_seen_ms DESC, fs.source_id ASC) AS pick
+                    FROM finding_sources AS fs
+                    WHERE {copies}
+                    WINDOW w AS (PARTITION BY fs.signature)
+                  )
+                  WHERE pick = 1
+                ),
+                scoped AS (
+                  SELECT findings.signature,
+                         COALESCE(scope.finding_json, findings.finding_json) AS finding_json,
+                         findings.service, findings.finding_type,
+                         COALESCE(scope.severity, findings.severity) AS severity,
+                         findings.endpoint, findings.sample_trace_id,
+                         scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
+                  FROM scope
+                  JOIN findings ON findings.signature = scope.signature
+                )
+                """;
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -646,7 +646,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AccessScope? access,
         CancellationToken cancellationToken)
     {
-        return QueryAsync(new FindingQuery(null, null, null, _maxReadLimit, Access: access), traceId, cancellationToken);
+        return QueryAsync(new FindingQuery(null, null, null, _maxReadLimit, Access: access), traceId,
+            cancellationToken);
     }
 
     /// <summary>
@@ -825,8 +826,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         var access = query.Access is not null;
         var (with, row, heartbeatScope, sourceScope) = (access, query.SourceIds is not null) switch
         {
-            (true, _) => ($"WITH {AccessPatternsCte}, {VisibleCopiesCte}, {ScopedFindings($"(fs.signature, fs.source_id) {Visible}")},",
-                "scoped", $" AND (scoped.signature, eh.source_id) {Visible}", $" AND (fs.signature, fs.source_id) {Visible}"),
+            (true, _) => (
+                $"WITH {AccessPatternsCte}, {VisibleCopiesCte}, {ScopedFindings($"(fs.signature, fs.source_id) {Visible}")},",
+                "scoped", $" AND (scoped.signature, eh.source_id) {Visible}",
+                $" AND (fs.signature, fs.source_id) {Visible}"),
             (false, true) => ($"WITH {ScopedFindings($"fs.source_id {InScope}")},", "scoped", HeartbeatInScope,
                 $" AND fs.source_id {InScope}"),
             _ => ("WITH", "findings", "", "")

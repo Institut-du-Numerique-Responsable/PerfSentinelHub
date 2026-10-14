@@ -16,7 +16,8 @@ public sealed partial class HubDatabase
     ///     so do its live ones beyond the newest nine, so a subject holds at most ten. False when
     ///     the write gate stays held, which the device flow answers with authorization_pending.
     /// </summary>
-    public async Task<bool> TryInsertTerminalTokenAsync(TerminalToken token, long nowMs, CancellationToken cancellationToken)
+    public async Task<bool> TryInsertTerminalTokenAsync(TerminalToken token, long nowMs,
+        CancellationToken cancellationToken)
     {
         if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
             return false;
@@ -59,11 +60,13 @@ public sealed partial class HubDatabase
     }
 
     // A read that never takes the gate: every bearer request makes one.
-    public async Task<TerminalToken?> FindTerminalTokenAsync(byte[] tokenHash, long nowMs, CancellationToken cancellationToken)
+    public async Task<TerminalToken?> FindTerminalTokenAsync(byte[] tokenHash, long nowMs,
+        CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT {TokenColumns} FROM terminal_tokens WHERE token_hash = $hash AND expires_at_ms > $now;";
+        command.CommandText =
+            $"SELECT {TokenColumns} FROM terminal_tokens WHERE token_hash = $hash AND expires_at_ms > $now;";
         command.Parameters.AddWithValue("$hash", tokenHash);
         command.Parameters.AddWithValue("$now", nowMs);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
