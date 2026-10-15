@@ -63,7 +63,7 @@ test("the window handed to a new analysis", async ({page}, info) => {
     // namespace, which is the pair the sentence is built for.
     await page.locator("button.row-toggle", {hasText: "checkout-svc"}).click();
     await expect(page.locator(".daemon-panel .table").first()).toBeVisible({timeout: 15_000});
-    await page.getByRole("button", {name: "Analyse this window"}).first().click();
+    await page.getByRole("link", {name: "Analyse this window"}).first().click();
     await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=[^&]+&incident=[0-9a-f]{32}$/);
     await expect(page.locator(".banner", {hasText: "from the incidents screen"})).toBeVisible();
     // A daemon takes no window, so the shot is the form that can run it. The
