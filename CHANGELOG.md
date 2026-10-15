@@ -24,8 +24,9 @@ All notable changes to PerfSentinelHub are recorded here.
   5 seconds to well under one on the same link. `text/html`, CSS, JavaScript and SVG only:
   JSON answers stay plain, since one may carry a token next to reflected input, the pair
   BREACH reads over HTTPS.
-- The report screen says "Loading the report" until its frame has loaded, where it showed
-  an empty page.
+- The report screen says "Loading the report", under a thin band sliding along its top
+  edge, until its frame has loaded, where it showed an empty page. With reduced motion
+  the band holds still.
 - On the Incidents screen, the service and namespace filters wait for the first read of the
   daemons, disabled, instead of opening on their "every" entry alone and filling under the
   pointer when the read lands. The namespace filter holds its place meanwhile, so the line

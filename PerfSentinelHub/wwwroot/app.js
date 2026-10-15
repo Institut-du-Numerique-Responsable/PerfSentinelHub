@@ -5724,6 +5724,7 @@
         }
         // A report runs to megabytes: until the frame loads it would read as a blank page.
         const loading = el('div', {class: 'report-loading', role: 'status'}, [
+            el('span', {class: 'report-loading-band', 'aria-hidden': 'true'}),
             el('span', {class: 'report-loading-text', text: 'Loading the report'})
         ]);
         if (!run) {

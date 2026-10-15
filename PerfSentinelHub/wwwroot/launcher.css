@@ -727,6 +727,13 @@ a.shell-identity[aria-current="page"] {
     .skeleton, .report-loading-text {
         animation: none;
     }
+
+    /* Still, the band stays as a full line: it says loading without moving. */
+    .report-loading-band::after {
+        width: 100%;
+        animation: none;
+        opacity: .6;
+    }
 }
 
 /* ------------------------------------------------------ screen: sources */
@@ -1994,9 +2001,41 @@ body[data-screen="report"] .shell-footer {
     align-items: center;
     justify-content: center;
     background: var(--bg);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-3);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+/* A report runs to megabytes and its size is unknown until it arrives, so the
+   band says "still coming" rather than how much is left. */
+.report-loading-band {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    overflow: hidden;
+    background: var(--accent-bg);
+}
+
+.report-loading-band::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 30%;
+    background: var(--brand);
+    animation: psSlide 1.4s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+
+@keyframes psSlide {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(340%);
+    }
 }
 
 .report-loading-text {
