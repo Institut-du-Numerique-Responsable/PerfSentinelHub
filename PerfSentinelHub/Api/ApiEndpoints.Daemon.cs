@@ -134,7 +134,7 @@ public static partial class ApiEndpoints
             observedAtMs,
             // An unread export means the daemon's own hints are unknown, and
             // "ok" is a claim about those hints as much as about the gauges.
-            DaemonView.Classify(status.Value, snapshot.Warnings.Count, report.ErrorCode is null),
+            DaemonView.Classify(status.Value, DaemonView.AdvisingCount(snapshot.Warnings), report.ErrorCode is null),
             status.ErrorCode,
             status.Value,
             relayedConfig,

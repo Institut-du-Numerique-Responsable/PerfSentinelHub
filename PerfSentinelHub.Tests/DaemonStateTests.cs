@@ -52,6 +52,22 @@ public sealed class DaemonStateTests
     }
 
     [Fact]
+    public void Only_the_hints_that_ask_for_something_count_towards_advised()
+    {
+        // A cold start or a snapshot note describes the daemon and is drawn muted:
+        // an amber verdict above them would read as an alarm the rows deny.
+        var hints = new[]
+        {
+            new ResultWarning("cold_start", "m"), new ResultWarning("snapshot_scope", "m"),
+            new ResultWarning("tuning", "m"), new ResultWarning("ingestion_drops", "m"),
+            new ResultWarning("from_a_newer_daemon", "m")
+        };
+
+        Assert.Equal(2, DaemonView.AdvisingCount(hints));
+        Assert.Equal(0, DaemonView.AdvisingCount(hints[..2]));
+    }
+
+    [Fact]
     public void A_full_gauge_outranks_a_warning()
     {
         // The stronger statement wins: the hint is still rendered underneath.

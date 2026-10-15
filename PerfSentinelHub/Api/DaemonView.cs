@@ -1,3 +1,4 @@
+using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 
 namespace PerfSentinelHub.Api;
@@ -20,6 +21,16 @@ public static class DaemonView
     public const string Advised = "advised";
     public const string Unknown = "unknown";
     public const string Ok = "ok";
+
+    // The hint kinds that ask something of the operator. cold_start and
+    // snapshot_scope describe the daemon instead: the launcher draws them muted
+    // and blue, and an amber verdict over them would contradict its own rows.
+    private static readonly HashSet<string> AdvisingKinds = ["ingestion_drops", "tuning"];
+
+    public static int AdvisingCount(IEnumerable<ResultWarning> warnings)
+    {
+        return warnings.Count(warning => AdvisingKinds.Contains(warning.Kind));
+    }
 
     public static DaemonGauges Read(DaemonStatus status)
     {
