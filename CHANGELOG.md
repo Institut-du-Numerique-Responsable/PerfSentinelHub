@@ -2,22 +2,74 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.4.1] - 2026-10-15
 
 ### Changed
 
+- The image ships perf-sentinel `0.28.0` as its analysis engine, repinned by digest from
+  `0.27.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.27.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.28.0` changes no detector, normalizer or signature, so a run finds what it found on
+  `0.27.0`, with the same signatures, and acknowledgments keep matching. Its changes sit in
+  periodic disclosure, which the Hub does not run yet: a signed disclosure's attestation now
+  names the report's content hash, an official `disclose` refuses a period its archive no
+  longer reaches, and a daemon with `[daemon.archive]` writes daily rollups that hold a
+  quarter. A polled daemon's `/api/status` gains a `disclosure_archive` field the Hub
+  ignores. The engine also moves to `rustls` 0.23.46 against RUSTSEC-2026-0346 to 0349.
 - The launcher's files and the reports are compressed, Brotli or gzip at their fastest
   level, for a browser that accepts it. A report is megabytes of repetitive HTML: one of
   8.5 MB measured on a real daemon falls to under 800 KB, and its download from about
   5 seconds to well under one on the same link. `text/html`, CSS, JavaScript and SVG only:
   JSON answers stay plain, since one may carry a token next to reflected input, the pair
   BREACH reads over HTTPS.
-- The report screen says "Loading the report" until its frame has loaded, where it showed
-  an empty page.
+- The report screen says "Loading the report", under a thin band sliding along its top
+  edge, until its frame has loaded, where it showed an empty page. With reduced motion
+  the band holds still.
 - On the Incidents screen, the service and namespace filters wait for the first read of the
   daemons, disabled, instead of opening on their "every" entry alone and filling under the
   pointer when the read lands. The namespace filter holds its place meanwhile, so the line
   no longer shifts, and is dropped as before when no incident carried a namespace.
+- The screens open on a functional heading and a single sentence. Incidents and Recent
+  analyses lose the paragraphs that came before their tables, the rest of the Incidents
+  text moves behind a "?" beside it, the Sources footer no longer repeats that an
+  environment is declared, and the status legend on Recent is gone, since every card
+  carries its own.
+- A filled button, Run analysis first among them, has a dark green face in the light theme
+  and a light green one with a dark label in the dark theme. White on the brand green read
+  3.13:1, under what a 14px label needs.
+- On a phone the four tabs fit the screen, the top bar scrolls away with the page, the
+  footer no longer sticks to the bottom, a source's or an incident's detail stays within
+  the screen's width, and an incident's findings table needs 640 pixels where it needed
+  1,090.
+- The Sources screen's Last success and Unreachable for columns tick with the rest of the
+  screen instead of keeping the age they had when it was drawn.
+- The quick ranges stop at 7 days. Past that a scan rarely finishes inside the timeout, and
+  a longer window stays one custom range away.
+
+### Fixed
+
+- A report link whose report expired, failed, has not finished or does not exist opens on
+  a page that says which, with Run it again with the same parameters, where it opened on
+  an empty frame. A run ID the Hub does not hold gets a heading and a way on.
+- An address the launcher has no screen for, `#/access` with access control off among
+  them, says so, where it opened New analysis without a word.
+- Run it again, on a failed, expired or empty run, opens New analysis filled with the run's
+  source, service, window, trace cap and thresholds, where it opened a blank form.
+- An incident's findings carry an Ack link only when a source in the Hub holds an ack
+  credential, and each link is named after its finding. The ack page has a way back, and
+  when no source carrying the finding can take an ack it says so, without a form whose
+  every control is disabled.
+- A daemon reads advised only for the hints that ask something of the operator,
+  `ingestion_drops` and `tuning`. A `cold_start` or a `snapshot_scope` hint, drawn muted
+  and blue, no longer turns the verdict amber.
+- Form fields are labelled, so a screen reader names them and a click on the label focuses
+  the field. Section titles are headings. A "?" is named after what it explains, its tip
+  closes with Escape, and the range picker hands the focus back to its button when it
+  closes. The radio groups move with the arrow keys.
+- The `/device` page sets the launcher's typefaces. Its policy admits `data:` fonts, which
+  is how `fonts.css` embeds them.
 
 ## [0.4.0] - 2026-10-14
 

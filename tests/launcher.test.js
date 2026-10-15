@@ -1002,19 +1002,20 @@ test("what you reach spells a grant on * as everything, and Admins as your own i
 
 test("#/access is the access screen only when the Hub answered /api/access, New otherwise", () => {
     assert.equal(PSL.screenOf("#/access", true, false), "access");
-    assert.equal(PSL.screenOf("#/access", false, false), "new", "access off, or /api/access failed");
+    assert.equal(PSL.screenOf("#/access", false, false), "missing", "access off, or /api/access failed");
     assert.equal(PSL.screenOf("", false, false), "new");
     assert.equal(PSL.screenOf("#/recent", false, false), "recent");
     assert.equal(PSL.screenOf("#/new?from=1&to=2&service=s", false, false), "new");
     assert.equal(PSL.screenOf("#/run/0123456789abcdef", false, false), "run");
     assert.equal(PSL.screenOf("#/report/0123456789abcdef", true, false), "report");
-    assert.equal(PSL.screenOf("#/nowhere", true, true), "new");
+    assert.equal(PSL.screenOf("#/nowhere", true, true), "missing");
+    assert.equal(PSL.screenOf("#/", false, false), "new");
 });
 
-test("#/coverage is an administrator's screen: a member lands on their own access, access off on New", () => {
+test("#/coverage is an administrator's screen: a member lands on their own access, access off on the missing screen", () => {
     assert.equal(PSL.screenOf("#/coverage", true, true), "coverage");
     assert.equal(PSL.screenOf("#/coverage", true, false), "access");
-    assert.equal(PSL.screenOf("#/coverage", false, false), "new");
+    assert.equal(PSL.screenOf("#/coverage", false, false), "missing");
 });
 
 test("the coverage snippet spells one quoted pattern per uncovered service, attribute and source", () => {
@@ -1122,4 +1123,35 @@ test("the incident filters wait for the first read only, even on a fleet with no
     // and a later refresh must not disable them again.
     assert.deepEqual(PSL.incidentFilterState(true, []), {pending: false, namespace: false});
     assert.deepEqual(PSL.incidentFilterState(true, ["shop"]), {pending: false, namespace: true});
+});
+
+test("running a past analysis again fills the form back from its request", () => {
+    const window = PSL.formFromRequest({service: "orders", from_ms: 10, to_ms: 20, max_traces: 300, detection: {n_plus_one_threshold: 4}});
+    assert.equal(window.mode, "service");
+    assert.equal(window.service, "orders");
+    assert.equal(window.rangeMode, "absolute");
+    assert.equal(window.fromMs, 10);
+    assert.equal(window.toMs, 20);
+    assert.equal(window.maxTraces, 300);
+    assert.deepEqual(window.detection, {n_plus_one_threshold: 4});
+    const relative = PSL.formFromRequest({service: "orders", lookback: "6h"});
+    assert.equal(relative.rangeMode, "relative");
+    assert.equal(relative.lookback, "6h");
+    const trace = PSL.formFromRequest({trace_id: "abc"});
+    assert.equal(trace.mode, "trace");
+    assert.equal(trace.traceId, "abc");
+    assert.equal(trace.rangeMode, undefined, "a trace run leaves the window alone");
+    assert.deepEqual(PSL.formFromRequest(null), {detection: {}, pickerOpen: false, mode: "service", service: "", traceId: ""});
+});
+
+test("a light read keeps the verdict calm over hints that only describe the daemon", () => {
+    const under = {value: 10, capacity: 100, pct: 10, at_capacity: false};
+    const previous = {
+        warnings: [{kind: "cold_start", message: "m"}, {kind: "snapshot_scope", message: "m"}],
+        traces: under, analysis_queue: under, findings: under, state: "ok"
+    };
+    const light = {observed_at_ms: 2, traces: under, analysis_queue: under, findings: under};
+    assert.equal(PSL.mergeLight(previous, light).state, "ok");
+    previous.warnings.push({kind: "tuning", message: "m"});
+    assert.equal(PSL.mergeLight(previous, light).state, "advised");
 });

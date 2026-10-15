@@ -104,6 +104,8 @@
         // The ack page: the finding its link names, the form, and what the last
         // submit came to. Null until a link opens it.
         ack: null,
+        // The route an in-app Ack link was followed from, for the page's way back.
+        ackReturn: null,
         // The incident a `#/new?from=…` link pre-filled the form from, or null.
         handoff: null,
         // Which shell every printed command is spelled for.
@@ -615,8 +617,19 @@
         else if (state.screen === 'new') main.replaceChildren(renderNewScreen());
         else if (state.screen === 'run') main.replaceChildren(renderRunScreen(currentRunId()));
         else if (state.screen === 'report') main.replaceChildren(renderReportScreen(currentRunId()));
+        else if (state.screen === 'missing') main.replaceChildren(renderMissingScreen());
         else main.replaceChildren(renderRecentScreen());
         startDurationTicker();
+        // Here and not only on a route change: a run or a report names itself once it has loaded.
+        const heading = document.querySelector('#main h1');
+        document.title = heading ? heading.textContent + ' · Perf Sentinel Hub' : 'Perf Sentinel Hub';
+    }
+
+    /** A render that would otherwise drop the focus on the body hands it to `selector`. */
+    function renderFocus(selector) {
+        render();
+        const target = document.querySelector(selector);
+        if (target) target.focus();
     }
 
     /**
@@ -626,7 +639,6 @@
      */
     function announceRoute() {
         const heading = document.querySelector('#main h1');
-        document.title = heading ? heading.textContent + ' · Perf Sentinel Hub' : 'Perf Sentinel Hub';
         if (!state.routed) {
             state.routed = true;
             return;
@@ -656,6 +668,8 @@
 
     function closeTip() {
         if (!openTip) return;
+        const anchor = document.querySelector('[aria-describedby="tipbox"]');
+        if (anchor) anchor.removeAttribute('aria-describedby');
         openTip.remove();
         openTip = null;
     }
@@ -665,8 +679,13 @@
      * a heading and never inside one, or a screen reader would read the
      * explanation as part of the heading.
      */
-    function helpDot(text) {
-        const dot = el('button', {type: 'button', class: 'help-dot', 'aria-label': text, text: '?'});
+    function helpDot(text, topic) {
+        // The explanation is the tip's, read as a description while it shows: as
+        // the name it made every "?" a paragraph long.
+        const dot = el('button', {
+            type: 'button', class: 'help-dot', text: '?',
+            'aria-label': topic ? 'About ' + topic.replace(/^\/\/\s*/, '') : 'Help'
+        });
         dot.addEventListener('mouseenter', function () {
             showTip(dot, text);
         });
@@ -686,7 +705,8 @@
 
     function showTip(anchor, text) {
         closeTip();
-        const box = el('div', {class: 'tipbox', role: 'tooltip', text: text});
+        const box = el('div', {class: 'tipbox', id: 'tipbox', role: 'tooltip', text: text});
+        anchor.setAttribute('aria-describedby', 'tipbox');
         document.body.appendChild(box);
         const at = anchor.getBoundingClientRect();
         const size = box.getBoundingClientRect();
@@ -728,8 +748,8 @@
     /** A label with its "?" beside it, which is the only place one belongs. */
     function titledOverline(text, help) {
         return el('div', {class: 'title-row'}, [
-            el('span', {class: 'overline', text: text}),
-            help ? helpDot(help) : null
+            el('h2', {class: 'overline', text: text}),
+            help ? helpDot(help, text) : null
         ]);
     }
 
@@ -826,7 +846,7 @@
         return el('div', {class: 'steps-block'}, [
             el('div', {class: 'steps-head'}, [
                 infoGlyph(14),
-                el('span', {class: 'overline', text: '// what you need first'})
+                el('h2', {class: 'overline', text: '// what you need first'})
             ]),
             // The content is always one node: the row is a two-column grid, and prose
             // carrying a code chip would otherwise arrive as several grid items and
@@ -980,7 +1000,7 @@
         return el('section', {class: 'card terminal'}, [
             el('div', {class: 'terminal-head'}, [
                 toggle,
-                spec.help ? helpDot(spec.help) : null,
+                spec.help ? helpDot(spec.help, spec.head) : null,
                 el('span', {class: 'terminal-sub', text: spec.sub})
             ]),
             body
@@ -1093,6 +1113,7 @@
         // onRoute has to apply it again, and loadRuns never re-renders New.
         applyHandoff(PSL.readHandoff(location.hash, Date.now()));
         const screen = currentScreen();
+        if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
         // The note this timer restores belongs to a panel the next render replaces.
         clearTimeout(state.noteTimer);
@@ -1109,7 +1130,8 @@
             const id = currentRunId();
             if (id && (!state.run || state.run.id !== id)) loadRun(id);
             else if (id) {
-                render();
+                // The render above already mounted the report frame: a second one would load it twice.
+                if (screen === 'run') render();
                 // The report frame cannot say its session lapsed: a 401 there is
                 // a blank pane. Asking the API is what reloads into the sign-in.
                 // No render on success, which would reload the report again.
@@ -1161,8 +1183,8 @@
             el('h1', {class: 'page-title', text: 'Fleet health'}),
             el('p', {
                 class: 'page-sub',
-                text: 'Everything on this screen is an observation except the environment column, which is '
-                    + 'declared. Sources are configured at deploy time, and the launcher cannot add one.'
+                text: 'Every column is observed except the environment, which each source declares about itself. '
+                    + 'Sources are configured at deploy time, not from here.'
             })
         ]);
 
@@ -1184,11 +1206,6 @@
         }
 
         section.appendChild(el('div', {class: 'sources-wrap'}, [sourcesTable(state.sources)]));
-        section.appendChild(el('p', {
-            class: 'sources-note',
-            text: 'The environment column is declared by each source\'s own configuration and is never '
-                + 'measured. A misconfigured deployment can label production as staging.'
-        }));
         return section;
     }
 
@@ -1249,14 +1266,15 @@
         row.appendChild(el('td', {}, [el('span', {class: 'chip', text: PSL.KIND_LABEL[source.kind] || source.kind})]));
         row.appendChild(el('td', {}, [el('span', {class: 'chip chip-declared', text: source.environment})]));
         row.appendChild(el('td', {}, [healthCell(source, now)]));
-        row.appendChild(el('td', {
-            'data-align': 'right',
-            text: source.last_success_ms ? PSL.dur(now - source.last_success_ms) + ' ago' : 'never'
-        }));
-        row.appendChild(el('td', {
-            'data-align': 'right',
-            text: source.unreachable_since_ms ? PSL.dur(now - source.unreachable_since_ms) : '—'
-        }));
+        // Ages, so they tick with the panel beside them instead of freezing at the render.
+        const lastSuccess = function () {
+            return source.last_success_ms ? PSL.dur(Date.now() - source.last_success_ms) + ' ago' : 'never';
+        };
+        const downFor = function () {
+            return source.unreachable_since_ms ? PSL.dur(Date.now() - source.unreachable_since_ms) : '—';
+        };
+        row.appendChild(live(el('td', {'data-align': 'right', text: lastSuccess()}), lastSuccess));
+        row.appendChild(live(el('td', {'data-align': 'right', text: downFor()}), downFor));
         row.appendChild(producerCell(source));
         row.appendChild(el('td', {class: 'table-mono', text: source.last_error_code || '—'}));
         if (!unfolds) return [row];
@@ -2298,7 +2316,8 @@
     // ---------------------------------------------------- screen: new analysis
 
     const QUICK_RANGES = [
-        '15m', '30m', '1h', '3h', '6h', '12h', '24h', '2d', '7d', '30d', '90d', '180d'
+        // Past 7d a scan rarely finishes inside the timeout: longer stays one custom range away.
+        '15m', '30m', '1h', '3h', '6h', '12h', '24h', '2d', '7d'
     ];
 
     function selectedSource() {
@@ -2612,14 +2631,14 @@
     function sourcePanel() {
         return el('div', {class: 'card source-panel'}, [
             el('div', {class: 'panel-head'}, [
-                el('span', {class: 'overline', text: '// source'}),
+                el('h2', {class: 'overline', text: '// source'}),
                 el('span', {
                     class: 'panel-head-source',
                     text: PSL.sourceCountLabel(runSources().length, (state.sources || []).length)
                 })
             ]),
-            el('div', {class: 'source-list', role: 'radiogroup', 'aria-label': 'Source'},
-                sourceRows()),
+            radioKeys(el('div', {class: 'source-list', role: 'radiogroup', 'aria-label': 'Source'},
+                sourceRows()), 'source'),
             el('p', {class: 'panel-note'}, [
                 el('span', {class: 'panel-note-rule', 'aria-hidden': 'true'}),
                 el('span', {
@@ -2704,7 +2723,7 @@
         }
 
         const head = el('div', {class: 'panel-head'}, [
-            el('span', {class: 'overline', text: source.kind === 'daemon' ? '// parameters' : '// query'}),
+            el('h2', {class: 'overline', text: source.kind === 'daemon' ? '// parameters' : '// query'}),
             el('span', {class: 'panel-head-source', text: source.name})
         ]);
 
@@ -2784,7 +2803,7 @@
             });
             group.appendChild(button);
         });
-        return field('Select traces by', group, 'one or the other, never both');
+        return field('Select traces by', radioKeys(group, 'mode'), 'one or the other, never both');
     }
 
     function serviceInput() {
@@ -2817,9 +2836,55 @@
         return input;
     }
 
+    /**
+     * What a radio group owes the keyboard: one tab stop on the checked radio,
+     * arrows to move the choice. A choice re-renders the screen, so the focus is
+     * put back on the radio at the same place in the new one.
+     */
+    function radioKeys(group, name) {
+        const radios = Array.prototype.slice.call(group.querySelectorAll('[role="radio"]'));
+        const checked = radios.findIndex(function (radio) {
+            return radio.getAttribute('aria-checked') === 'true';
+        });
+        radios.forEach(function (radio, index) {
+            radio.setAttribute('data-radio', name + '-' + index);
+            radio.tabIndex = index === Math.max(checked, 0) ? 0 : -1;
+        });
+        group.addEventListener('click', function (event) {
+            const radio = event.target.closest('[role="radio"]');
+            const again = radio && document.querySelector('[data-radio="' + radio.getAttribute('data-radio') + '"]');
+            if (again && again !== radio) again.focus();
+        });
+        group.addEventListener('keydown', function (event) {
+            const step = {ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1}[event.key];
+            const at = radios.indexOf(event.target);
+            if (!step || at < 0) return;
+            event.preventDefault();
+            radios[(at + step + radios.length) % radios.length].click();
+        });
+        return group;
+    }
+
+    let fieldCount = 0;
+
+    /**
+     * A form row. A text control gets a real label, so it is named and a click
+     * on the words focuses it. A radio group is named by aria-labelledby. The
+     * gloss stays outside the label and describes the control instead.
+     */
     function field(label, control, gloss) {
-        const heading = el('span', {class: 'field-label'}, [el('span', {text: label})]);
-        if (gloss) heading.appendChild(el('span', {class: 'field-gloss', text: gloss}));
+        const id = 'field-' + (++fieldCount);
+        const labelable = /^(INPUT|SELECT|TEXTAREA)$/.test(control.tagName);
+        if (labelable && !control.id) control.id = id;
+        const name = labelable
+            ? el('label', {id: id + '-label', for: control.id, text: label})
+            : el('span', {id: id + '-label', text: label});
+        if (!labelable && control.getAttribute('role')) control.setAttribute('aria-labelledby', id + '-label');
+        const heading = el('span', {class: 'field-label'}, [name]);
+        if (gloss) {
+            heading.appendChild(el('span', {class: 'field-gloss', id: id + '-gloss', text: gloss}));
+            if (labelable) control.setAttribute('aria-describedby', id + '-gloss');
+        }
         return el('div', {class: 'field'}, [heading, control]);
     }
 
@@ -2848,6 +2913,8 @@
         const button = el('button', {
             type: 'button',
             class: 'range-pill',
+            id: 'range-pill',
+            'aria-label': 'Time range, ' + windowLabel(),
             'aria-expanded': String(state.form.pickerOpen)
         }, [
             svg([['circle', {cx: '12', cy: '12', r: '9'}], ['path', {d: 'M12 7v5l3.2 2'}]], 14),
@@ -2856,7 +2923,7 @@
         ]);
         button.addEventListener('click', function () {
             state.form.pickerOpen = !state.form.pickerOpen;
-            render();
+            renderFocus(state.form.pickerOpen ? '.picker input' : '#range-pill');
         });
 
         const wrap = el('div', {class: 'range'}, [
@@ -2906,7 +2973,7 @@
         const backdrop = el('div', {class: 'picker-backdrop'});
         backdrop.addEventListener('click', function () {
             state.form.pickerOpen = false;
-            render();
+            renderFocus('#range-pill');
         });
 
         const from = el('input', {type: 'datetime-local', class: 'input-date', value: PSL.dtLocal(state.form.fromMs)});
@@ -2974,7 +3041,7 @@
             state.form[key] = values[key];
         });
         state.form.pickerOpen = false;
-        render();
+        renderFocus('#range-pill');
     }
 
     function dateField(label, control) {
@@ -3008,6 +3075,7 @@
             });
             units.appendChild(button);
         });
+        radioKeys(units, 'unit');
 
         const apply = el('button', {type: 'button', class: 'pill-button pill-sm', text: 'Apply'});
         apply.addEventListener('click', function () {
@@ -3086,7 +3154,7 @@
                     + 'holding fewer traces returns fewer. When it holds more, the backend picks which '
                     + 'ones and they are not an even spread, so narrow the window when you need a given '
                     + 'stretch covered. Traces come back whole rather than sampled, so this number bounds '
-                    + 'what the run costs.'),
+                    + 'what the run costs.', 'max traces'),
                 el('span', {class: 'field-gloss', text: 'how much comes back, not how far back'})
             ]),
             head,
@@ -3116,7 +3184,7 @@
         if (!fold) {
             return el('div', {class: 'sink'}, [
                 el('div', {class: 'sink-head'}, [
-                    el('span', {class: 'overline', text: head}),
+                    el('h2', {class: 'overline', text: head}),
                     el('span', {class: 'sink-sub', text: sub})
                 ]),
                 body
@@ -3434,7 +3502,7 @@
         ];
         return el('section', {class: 'card cost'}, [
             el('div', {class: 'cost-head'}, [
-                el('span', {class: 'overline', text: '// what this run costs'}),
+                el('h2', {class: 'overline', text: '// what this run costs'}),
                 el('span', {class: 'cost-sub', text: 'Reported by the service, not assumed.'})
             ]),
             el('div', {class: 'cost-grid'}, cells.map(function (cell) {
@@ -3583,8 +3651,8 @@
     function renderRunScreen(id) {
         const run = state.run;
         const section = el('section', {}, [backLink()]);
-        if (state.runError) {
-            section.appendChild(el('div', {class: 'empty-state', text: 'No analysis with that ID.'}));
+        if (state.runError === id) {
+            section.appendChild(unknownRun());
             return section;
         }
         if (!run || run.id !== id) {
@@ -3607,6 +3675,37 @@
         if (outcome) left.appendChild(outcome);
         section.appendChild(el('div', {class: 'run-grid'}, [left, factsRail(run, key)]));
         return section;
+    }
+
+    /** A run ID the Hub does not hold, from the run screen or a report link. */
+    function unknownRun() {
+        return el('div', {class: 'gone'}, [
+            el('h1', {class: 'page-title', text: 'No analysis with that ID.'}),
+            el('p', {
+                class: 'page-sub',
+                text: 'This Hub holds no analysis under it. The link may be mistyped, or come from another Hub.'
+            }),
+            el('div', {class: 'outcome-actions'}, [
+                el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'}),
+                el('a', {class: 'action action-secondary', href: '#/recent', text: 'All analyses'})
+            ])
+        ]);
+    }
+
+    /** Back to the form, filled with what this run asked, to send as it is or change first. */
+    function rerun(run) {
+        Object.assign(state.form, PSL.formFromRequest(run.request),
+            {sourceId: run.source_id, ackUnreachable: false, ackHeavy: false});
+        state.handoff = null;
+        location.hash = '#/new';
+    }
+
+    function rerunAction(label, filled) {
+        return {
+            label: label, filled: filled, action: function () {
+                rerun(state.run);
+            }
+        };
     }
 
     function backLink() {
@@ -3707,7 +3806,7 @@
 
         return el('section', {class: 'card log-card', 'aria-label': 'Service events'}, [
             el('div', {class: 'log-head'}, [
-                el('span', {class: 'overline', text: '// service events'}),
+                el('h2', {class: 'overline', text: '// service events'}),
                 el('span', {class: 'log-head-note', text: 'Only what the Hub actually recorded.'})
             ]),
             el('div', {class: 'log'}, rows),
@@ -3752,7 +3851,7 @@
         });
 
         const elapsed = el('section', {class: 'card rail-card'}, [
-            el('p', {class: 'overline', text: '// elapsed'}),
+            el('h2', {class: 'overline overline-p', text: '// elapsed'}),
             figure
         ]);
         // The only bar in the product, and only while running: it measures a known
@@ -3806,7 +3905,7 @@
             }]);
 
         return el('section', {class: 'request'}, [
-            el('p', {class: 'overline', text: '// request'}),
+            el('h2', {class: 'overline overline-p', text: '// request'}),
             el('div', {class: 'request-grid'}, facts.map(function (fact) {
                 return el('div', {class: 'fact-card'}, [
                     el('span', {class: 'fact-card-k', text: fact[0]}),
@@ -3831,7 +3930,7 @@
         if (key === 'running' || key === 'queued') return null;
         const spec = outcomeSpec(run, key);
         const panel = el('section', {class: 'outcome', 'data-tone': spec.tone}, [
-            el('p', {class: 'overline', text: '// ' + spec.title}),
+            el('h2', {class: 'overline overline-p', text: '// ' + spec.title}),
             el('p', {class: 'outcome-body', text: spec.body})
         ]);
         if (spec.counts) panel.appendChild(countStrip(spec.counts, {toned: true, filled: 1}));
@@ -3888,7 +3987,7 @@
                     [String(result.traces_analyzed), 'traces read', 'warn']
                 ],
                 warnings: result.warnings,
-                primary: {label: 'Wait and run it again', href: '#/new', filled: false},
+                primary: rerunAction('Wait and run it again', false),
                 secondary: {label: 'Open the blank dashboard anyway', href: '#/report/' + run.id},
                 note: 'A quality gate that passes on zero traces has not measured anything.'
             };
@@ -3897,7 +3996,7 @@
             return {
                 tone: 'crit', title: run.error_code || 'internal',
                 body: run.source_name + ': ' + (PSL.ERRORS[run.error_code] || 'it failed for an unnamed reason.'),
-                primary: {label: 'Run it again', href: '#/new', filled: false},
+                primary: rerunAction('Run it again', false),
                 secondary: {label: 'Check the source', href: '#/sources'},
                 note: 'Nothing was stored, so nothing expires.'
             };
@@ -3923,7 +4022,7 @@
             body: 'Retention is not configurable from here. Running the same analysis again produces a new '
                 + 'report with a new clock. It will not reproduce the old one, because the source has moved '
                 + 'on since then.',
-            primary: {label: 'Run it again', href: '#/new', filled: false},
+            primary: rerunAction('Run it again', false),
             note: PSL.argsLine(run)
         };
     }
@@ -4058,7 +4157,7 @@
             render();
             if (run.status === 'pending' || run.status === 'running') scheduleRunPoll(id);
         }).catch(function () {
-            state.runError = true;
+            state.runError = id;
             render();
         });
     }
@@ -4388,17 +4487,16 @@
     function renderIncidentsScreen() {
         const section = el('section', {}, [
             ruledOverline('// incidents'),
-            el('h1', {class: 'page-title', text: 'What was already burning'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'Each row is an incident a daemon recorded when the operator\'s alerting posted it, with the '
-                    + 'findings it froze from the minutes before. The daemon is the author: the Hub copies its record '
-                    + 'and re-derives nothing, and keeps the copy after the daemon\'s own ring has let it go. Opening '
-                    + 'this screen reads every daemon, so the rows are what the fleet holds now rather than what the '
-                    + 'last poll left. Under the table, when each daemon was last read. A deploy is posted for the '
-                    + 'same reason as a restart: to freeze what was already firing before the rollout, so a restart '
-                    + 'it causes is not read as a crash.'
-            })
+            el('h1', {class: 'page-title', text: 'Incidents the daemons recorded'}),
+            el('p', {class: 'page-sub'}, [
+                document.createTextNode('What was already burning when your alerting posted a restart, an OOM kill '
+                    + 'or a deploy: each row carries the findings its daemon froze from the minutes before. '),
+                helpDot('The daemon is the author: the Hub copies its record, re-derives nothing, and keeps the '
+                    + 'copy after the daemon\'s own ring has let it go. Opening this screen reads every daemon, so '
+                    + 'the rows are what the fleet holds now, and under the table is when each one was last read. '
+                    + 'A deploy is posted to freeze what was already firing before the rollout, so a restart it '
+                    + 'causes is not read as a crash.', 'incidents')
+            ])
         ]);
 
         if (state.loading || state.incidents === null) {
@@ -4779,7 +4877,11 @@
     }
 
     function incidentFindingsTable(findings, incident) {
-        const columns = ['Type', 'Severity', 'Endpoint', 'Seen', 'First seen', 'Ack'];
+        // Without a single ack credential in the Hub, every link would open a page that can do nothing.
+        const canAck = (state.sources || []).some(function (source) {
+            return source.ack_relay;
+        });
+        const columns = ['Type', 'Severity', 'Endpoint', 'Seen', 'First seen'].concat(canAck ? ['Ack'] : []);
         const head = el('tr', {}, columns.map(function (name) {
             return el('th', {text: name, scope: 'col', 'data-align': name === 'Seen' ? 'right' : null});
         }));
@@ -4803,12 +4905,28 @@
                         + (phase === 'after' ? ' after the restart' : ' before the incident')
                 }),
                 // The daemon that froze the finding is the only one the page checks.
-                el('td', {}, [finding.signature
-                    ? el('a', {href: PSL.ackRouteHash(finding.signature, incident.source_id), text: 'Ack'})
-                    : null])
+                canAck ? el('td', {}, [finding.signature ? ackLink(finding, incident) : null]) : null
             ]);
         });
-        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, rows)]);
+        const table = el('table', {class: 'table table-findings'}, [el('thead', {}, [head]), el('tbody', {}, rows)]);
+        if (canAck) return table;
+        return el('div', {}, [table, el('p', {
+            class: 'field-note',
+            text: 'No source in this Hub has an ack credential, so these findings are acknowledged in each daemon, not from here.'
+        })]);
+    }
+
+    function ackLink(finding, incident) {
+        const label = PSL.FINDING_TYPE_LABEL[finding.type] || finding.type || 'finding';
+        const link = el('a', {
+            href: PSL.ackRouteHash(finding.signature, incident.source_id),
+            'aria-label': 'Ack ' + label + ' on ' + (finding.source_endpoint || 'an unknown endpoint'),
+            text: 'Ack'
+        });
+        link.addEventListener('click', function () {
+            state.ackReturn = location.hash;
+        });
+        return link;
     }
 
     // ------------------------------------------------- screen: ack one finding
@@ -4847,6 +4965,10 @@
     function renderAckScreen() {
         const route = PSL.readAckRoute(location.hash);
         const section = el('section', {class: 'ack-stack'}, [el('div', {}, [
+            el('a', {class: 'back-pill', href: state.ackReturn || '#/incidents'}, [
+                svg([['path', {d: 'M15 18l-6-6 6-6'}]], 13),
+                el('span', {text: state.ackReturn ? 'Back to the incident' : 'Incidents'})
+            ]),
             ruledOverline('// acknowledgment'),
             el('h1', {class: 'page-title', text: 'Acknowledge a finding'}),
             el('p', {
@@ -4981,12 +5103,24 @@
             updateAckButtons(rows);
         });
 
+        const actionable = rows.some(function (row) {
+            return row.action !== 'none';
+        });
+        if (!actionable) {
+            return el('div', {class: 'card params-panel'}, [
+                el('p', {
+                    class: 'daemon-lead',
+                    text: rows.length === 0
+                        ? 'No source in this Hub carries this finding, so there is nothing to acknowledge from here.'
+                        : 'This Hub cannot write an ack to any source that carries this finding. Each row says why.'
+                }),
+                rows.length === 0 ? null : el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)])
+            ]);
+        }
         return el('form', {class: 'card params-panel'}, [
             field('Reason', reason, 'required, kept by each daemon beside your name'),
             field('Expires', expiry, 'optional, the end of that day in UTC. Empty is a permanent ack'),
-            rows.length === 0
-                ? el('p', {class: 'daemon-lead', text: 'No source in this Hub carries this finding.'})
-                : el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)]),
+            el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)]),
             el('div', {class: 'submit-row'}, [
                 acknowledge,
                 revoke,
@@ -5410,11 +5544,12 @@
     function renderRecentScreen() {
         const section = el('section', {}, [
             ruledOverline('// recent analyses'),
-            el('h1', {class: 'page-title', text: 'The team\'s short memory'}),
+            el('h1', {class: 'page-title', text: 'Analyses this Hub still holds'}),
             el('p', {
                 class: 'page-sub',
-                text: 'Reports are deleted ' + state.status.limits.report_retention_hours + ' hours after they '
-                    + 'succeed. This is not an audit trail, and a link you shared yesterday is already dead.'
+                text: 'The team\'s short memory, not an audit trail: reports are deleted '
+                    + state.status.limits.report_retention_hours + ' hours after they succeed, so a link shared '
+                    + 'yesterday is already dead.'
             })
         ]);
 
@@ -5424,12 +5559,12 @@
         }
         if (state.runs.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'Nothing here yet.'}),
-                el('p', {
-                    text: 'Not “no results”. This list is the team\'s short memory, and after '
-                        + state.status.limits.report_retention_hours + ' idle hours retention returns it to '
-                        + 'exactly this state. That is normal, so it reads as normal.'
-                })
+                el('p', {class: 'empty-title', text: 'No analysis in the last '
+                        + state.status.limits.report_retention_hours + ' hours.'}),
+                el('p', {text: 'Retention empties this list after that many idle hours.'}),
+                el('div', {class: 'outcome-actions empty-actions'}, [
+                    el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'})
+                ])
             ]));
             return section;
         }
@@ -5466,22 +5601,8 @@
             ]));
         }
 
-        section.appendChild(legendStrip());
         section.appendChild(el('div', {class: 'run-list'}, state.runs.map(runCard)));
         return section;
-    }
-
-    function legendStrip() {
-        const keys = ['queued', 'running', 'succeeded', 'empty', 'failed', 'interrupted', 'expired'];
-        const strip = el('div', {class: 'legend'}, [el('span', {class: 'overline', text: 'legend'})]);
-        keys.forEach(function (key) {
-            strip.appendChild(el('span', {
-                class: 'status-pill',
-                'data-status': key,
-                text: key === 'empty' ? 'succeeded · empty' : key
-            }));
-        });
-        return strip;
     }
 
     function runCard(run) {
@@ -5565,6 +5686,26 @@
         if (history) slot.appendChild(history);
     }
 
+    // ------------------------------------------------- screen: no such address
+
+    function renderMissingScreen() {
+        const route = (location.hash || '').replace('#/', '').split('?')[0];
+        const access = route === 'access' || route === 'coverage';
+        return el('section', {class: 'gone'}, [
+            el('h1', {class: 'page-title', text: access ? 'No access page on this Hub.' : 'Nothing lives at this address.'}),
+            el('p', {
+                class: 'page-sub',
+                text: access
+                    ? 'Access control is off here, or the Hub could not read who you are, so this page has nothing to show.'
+                    : 'The Hub has no screen called "' + route + '". The link may be mistyped, or older than this Hub.'
+            }),
+            el('div', {class: 'outcome-actions'}, [
+                el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'}),
+                el('a', {class: 'action action-secondary', href: '#/recent', text: 'All analyses'})
+            ])
+        ]);
+    }
+
     // ------------------------------------------------ screen: dashboard handoff
 
     /**
@@ -5573,28 +5714,77 @@
      * launcher, and the single return is always present.
      */
     function renderReportScreen(id) {
-        const frame = el('iframe', {class: 'report-frame', src: '/reports/' + id + '.html', title: 'Analysis report'});
+        const run = state.run && state.run.id === id ? state.run : null;
+        const key = run ? PSL.statusKey(run) : null;
+        const stage = el('div', {class: 'report-stage'});
+        const shell = el('div', {class: 'report-shell'}, [reportBar(id, run), stage]);
+        if (state.runError === id) {
+            stage.appendChild(el('div', {class: 'gone report-gone'}, [unknownRun()]));
+            return shell;
+        }
         // A report runs to megabytes: until the frame loads it would read as a blank page.
         const loading = el('div', {class: 'report-loading', role: 'status'}, [
+            el('span', {class: 'report-loading-band', 'aria-hidden': 'true'}),
             el('span', {class: 'report-loading-text', text: 'Loading the report'})
         ]);
+        if (!run) {
+            stage.appendChild(loading);
+            return shell;
+        }
+        if (key !== 'succeeded' && key !== 'empty') {
+            stage.appendChild(reportGone(run, key));
+            return shell;
+        }
+        const frame = el('iframe', {class: 'report-frame', src: '/reports/' + id + '.html', title: 'Analysis report'});
         frame.addEventListener('load', function () {
             loading.remove();
+            // A report deleted under a run that still reads succeeded comes back as
+            // an empty 404, which the frame would show as a blank page.
+            const body = frame.contentDocument && frame.contentDocument.body;
+            if (body && !body.firstElementChild && body.textContent.trim() === '') {
+                stage.replaceChildren(reportGone(run, 'expired'));
+            }
         });
+        stage.append(frame, loading);
+        return shell;
+    }
+
+    function reportBar(id, run) {
         const lifetime = live(el('span', {class: 'report-engine', text: reportLifetime(id)}),
             function () {
                 return reportLifetime(id);
             });
-        const bar = el('div', {class: 'report-bar'}, [
-            el('a', {class: 'pill-button', href: '#/run/' + id}, [
+        return el('div', {class: 'report-bar'}, [
+            el('a', {class: 'pill-button', href: run ? '#/run/' + id : '#/recent'}, [
                 svg([['path', {d: 'M14 6l-6 6 6 6'}]], 14),
-                el('span', {text: 'Back to the launcher'})
+                el('span', {text: run ? 'Back to the run' : 'All analyses'})
             ]),
             el('span', {class: 'report-path', text: 'report / ' + id}),
             el('span', {class: 'report-spacer'}),
             lifetime
         ]);
-        return el('div', {class: 'report-shell'}, [bar, el('div', {class: 'report-stage'}, [frame, loading])]);
+    }
+
+    /** Why a report link opens on nothing, and the way on from there. */
+    function reportGone(run, key) {
+        const view = {
+            queued: ['The report is not ready yet.', 'The analysis is still waiting for a worker. Its page says when the report is ready.'],
+            running: ['The report is not ready yet.', 'The analysis is still reading ' + run.source_name + '. Its page says when the report is ready.'],
+            failed: ['This analysis wrote no report.', 'It failed before the engine produced one. Its page says why.'],
+            interrupted: ['This analysis wrote no report.', 'It was interrupted before the engine produced one.'],
+            expired: ['This report is gone.', 'Its retention ended and the Hub deleted it. Running the same analysis '
+                + 'again writes a new report from what ' + run.source_name + ' holds now.']
+        }[key] || ['This report is gone.', 'The Hub no longer serves it.'];
+        const finished = key !== 'queued' && key !== 'running';
+        return el('div', {class: 'gone report-gone'}, [
+            el('h1', {class: 'page-title', text: view[0]}),
+            el('p', {class: 'page-sub', text: view[1]}),
+            el('div', {class: 'outcome-actions'}, [
+                finished ? actionButton(rerunAction('Run it again with the same parameters', true), true) : null,
+                el('a', {class: 'action action-secondary', href: '#/run/' + run.id, text: 'Open the run'})
+            ]),
+            finished ? el('p', {class: 'outcome-note', text: PSL.argsLine(run)}) : null
+        ]);
     }
 
     function reportLifetime(id) {
@@ -5621,9 +5811,15 @@
     // Escape closes the picker. Without it the only ways out are Apply, a quick
     // range or a click outside, and a keyboard user has none of them.
     globalThis.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && state.form.pickerOpen) {
+        if (event.key !== 'Escape') return;
+        // A tip must be dismissable without moving the pointer or the focus (WCAG 1.4.13).
+        if (openTip) {
+            closeTip();
+            return;
+        }
+        if (state.form.pickerOpen) {
             state.form.pickerOpen = false;
-            render();
+            renderFocus('#range-pill');
         }
     });
     render();

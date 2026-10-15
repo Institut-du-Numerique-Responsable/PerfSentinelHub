@@ -26,8 +26,8 @@ public static partial class ApiEndpoints
 
     // Served by GET /device alone, never as a static file: only this route sends the page's
     // policy, no-store and the re-challenge of a session about to end. No inline script, and
-    // the input carries no value, so no link can fill it. fonts.css is left out: its fonts are
-    // data: URIs, which default-src 'self' refuses, so the page uses the fallback faces.
+    // the input carries no value, so no link can fill it. fonts.css embeds its faces as data:
+    // URIs, which the policy admits for fonts alone, so the page sets the launcher's type.
     private const string DevicePage =
         """
         <!doctype html>
@@ -36,6 +36,7 @@ public static partial class ApiEndpoints
             <meta charset="utf-8">
             <meta content="width=device-width, initial-scale=1" name="viewport">
             <title>Perf Sentinel Hub - terminal sign-in</title>
+            <link href="fonts.css" rel="stylesheet">
             <link href="tokens.css" rel="stylesheet">
             <link href="launcher.css" rel="stylesheet">
             <script src="launcher.js"></script>
@@ -220,7 +221,7 @@ public static partial class ApiEndpoints
             return TypedResults.Challenge(new AuthenticationProperties
             { RedirectUri = context.Request.PathBase + "/device" });
         context.Response.Headers.CacheControl = "no-store";
-        context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; frame-ancestors 'none'";
+        context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; font-src 'self' data:; frame-ancestors 'none'";
         return TypedResults.Content(DevicePage, "text/html; charset=utf-8");
     }
 

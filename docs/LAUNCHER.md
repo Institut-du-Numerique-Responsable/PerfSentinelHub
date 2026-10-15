@@ -185,8 +185,10 @@ window, which opens New analysis on the incident's service and window, described
 form follows the source. The source stays the operator's choice, because a daemon takes no
 window and the incident's own daemon would run its in-memory snapshot rather than the
 window. The link keeps its parameters, so it can be shared or reloaded, and the New tab
-itself carries none. Each finding of the unfolded row ends with an Ack link, which opens
-[The ack page](#the-ack-page) on that finding with the incident's daemon checked.
+itself carries none. When a source in the Hub holds an ack credential, each finding of the
+unfolded row ends with an Ack link, which opens [The ack page](#the-ack-page) on that
+finding with the incident's daemon checked. Without one, a line under the table says the
+findings are acknowledged in each daemon instead.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
@@ -307,8 +309,8 @@ nothing is withheld.
 ## Your access
 
 The identity chip links to `#/access` when `GET /api/access` answers, which is with
-`Hub:Access` on; a `404` leaves the chip plain text, and a `#/access` link then opens New,
-as any unknown route does. The page changes no right, since rights are declared in the
+`Hub:Access` on; a `404` leaves the chip plain text, and a `#/access` link then opens a page
+saying there is no access page on this Hub, as any unknown route says it has no screen. The page changes no right, since rights are declared in the
 Hub's configuration (Helm values `hub.access`) and nowhere else. Its one action revokes a
 terminal token. It shows:
 

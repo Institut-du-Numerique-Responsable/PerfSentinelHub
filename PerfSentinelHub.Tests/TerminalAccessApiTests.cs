@@ -234,7 +234,7 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         Assert.Equal("text/html", page.Content.Headers.ContentType?.MediaType);
         Assert.Equal("no-store", page.Headers.CacheControl?.ToString());
-        Assert.Equal("default-src 'self'; frame-ancestors 'none'", string.Join(';', page.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal("default-src 'self'; font-src 'self' data:; frame-ancestors 'none'", string.Join(';', page.Headers.GetValues("Content-Security-Policy")));
         Assert.Contains("Enter the code your terminal shows.", html, StringComparison.Ordinal);
         Assert.Contains("maxlength=\"9\"", html, StringComparison.Ordinal);
         Assert.Contains("autocomplete=\"off\"", html, StringComparison.Ordinal);
