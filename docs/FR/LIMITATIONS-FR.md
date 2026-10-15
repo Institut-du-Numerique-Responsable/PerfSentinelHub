@@ -146,8 +146,8 @@ lecture est réduite aux grants de l'appelant, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) et
 [Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
-Un seul endpoint réclame une preuve, `POST /api/import/findings`, dont la
-`X-API-Key` est comparée par empreinte. Tous les autres ne réclament rien :
+Deux endpoints réclament une preuve, `POST /api/import/findings` et
+`POST /api/import/incidents`, dont la `X-API-Key` est comparée par empreinte. Tous les autres ne réclament rien :
 `/api/status`, `/api/sources`, `/api/findings`, `/api/analyses` aussi bien pour
 la liste que pour la requête qui lance un run, `/reports/`, `/metrics`, et le
 lanceur lui-même. Qui joint le port lit tous les findings de tous les tenants,

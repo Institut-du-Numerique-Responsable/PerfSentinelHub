@@ -35,6 +35,10 @@ resident in the Hub.
 
 Both paths write findings. Only one writes reachability.
 
+Incidents follow the same split from perf-sentinel 0.29.0: the daemon pushes each one when it is
+recorded, closed or completed, and the hourly poll still reads them as a safety net. Both write
+through one merge rule, so neither path can undo the other.
+
 A daemon pushing successfully proves that the daemon can reach the Hub. It proves
 nothing about whether the Hub can reach the daemon, which is a different route through
 a different set of firewalls, and that is the direction an operator needs when a source

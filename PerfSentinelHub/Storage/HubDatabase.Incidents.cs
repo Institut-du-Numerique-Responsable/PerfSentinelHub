@@ -166,6 +166,37 @@ public sealed partial class HubDatabase
         }
     }
 
+    /// <summary>
+    ///     Stores a daemon's pushed incidents under the poll's merge rule, so a
+    ///     push and a poll of one incident converge in either order. Waits for
+    ///     the write lock as long as a findings push does, then gives up: a 503
+    ///     the daemon retries beats a request held open behind a purge. Files
+    ///     the push, not a read: incident_reads stays the poll's own ledger.
+    /// </summary>
+    public async Task<bool> TryUpsertPushedIncidentsAsync(
+        string sourceId,
+        IReadOnlyList<ParsedIncident> incidents,
+        long observedAtMs,
+        CancellationToken cancellationToken)
+    {
+        if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
+            return false;
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var transaction = connection.BeginTransaction(false);
+            foreach (var incident in incidents)
+                await UpsertIncidentAsync(connection, transaction, sourceId, incident, observedAtMs, cancellationToken);
+            await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
     private static async Task UpsertIncidentAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,

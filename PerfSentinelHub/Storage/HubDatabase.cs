@@ -491,20 +491,29 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
 
         if (!fromPoll)
-        {
-            await using var imported = connection.CreateCommand();
-            imported.Transaction = transaction;
-            imported.CommandText = """
-                                   INSERT INTO source_imports(source_id, last_import_ms)
-                                   VALUES ($source_id, $observed_at)
-                                   ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
-                                   """;
-            imported.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
-            imported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
-            await imported.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await RecordImportAsync(connection, transaction, source.SourceId, observedAtMs, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>When this source last pushed, findings or incidents alike.</summary>
+    private static async Task RecordImportAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string sourceId,
+        long observedAtMs,
+        CancellationToken cancellationToken)
+    {
+        await using var imported = connection.CreateCommand();
+        imported.Transaction = transaction;
+        imported.CommandText = """
+                               INSERT INTO source_imports(source_id, last_import_ms)
+                               VALUES ($source_id, $observed_at)
+                               ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
+                               """;
+        imported.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        imported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        await imported.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task MarkSourceAttemptAsync(

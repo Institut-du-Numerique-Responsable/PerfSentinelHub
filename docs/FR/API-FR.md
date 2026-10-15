@@ -13,6 +13,15 @@ findings et 2 Mio au plus. La réponse n'est envoyée qu'une fois l'upsert idemp
 signature commité. Un corps qui répète un nom de propriété dans un même objet est un `400`,
 car le Hub lit un finding avec deux parseurs qui en garderaient des copies différentes.
 
+`POST /api/import/incidents?source_id=<id>` accepte les incidents d'un daemon, poussés par
+perf-sentinel 0.29.0 et suivants à côté de ses findings : `{"producer_version":"…","incidents":[…]}`,
+chaque incident sous la forme que sert `GET /api/incidents` sur le daemon. Il prend la même clé, la
+même porte à quatre places et la même attente d'écriture de cinq secondes, au plus 10 incidents et
+4 Mio par requête, puisqu'un incident porte jusqu'à mille findings gelés. Un incident poussé est
+fusionné comme un incident lu : la copie qui porte le plus de findings gelés l'emporte et une fin
+est gardée une fois vue, donc push et poll convergent dans n'importe quel ordre. Les refus se
+comptent sur `perf_sentinel_hub_incident_import_rejected_total`.
+
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit
@@ -20,7 +29,7 @@ rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq seco
 fusionnés. La rétention purge par tranches bornées, pour qu'une purge longue ne rejette
 pas les imports pendant toute sa durée.
 
-Un push met à jour les findings et les observations par source, rien d'autre. Il n'efface
+Un push met à jour les findings, les incidents et les observations par source, rien d'autre. Il n'efface
 jamais le `unreachable_since_ms` du chemin de poll. Une source que le Hub ne peut pas
 joindre continue de rapporter `unreachable_since` alors que son daemon pousse avec succès,
 et c'est juste : la joignabilité est un fait sur la route du Hub vers le daemon, qu'un
@@ -721,7 +730,7 @@ Mappées seulement avec `Hub:Access:Enabled` et au moins une entrée dans
 `Hub:Access:LocalAccounts` ; sinon elles répondent comme toute route non mappée. Chaque
 réponse porte `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
 `Referrer-Policy: same-origin` et
-`Content-Security-Policy: default-src 'none'; style-src 'sha256-<empreinte de la feuille de style intégrée à la page>'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
+`Content-Security-Policy: default-src 'none'; font-src data:; style-src 'sha256-<empreinte de la feuille de style intégrée à la page>'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
 Voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux) pour le modèle.
 
 | Route | Qui | Réponses |

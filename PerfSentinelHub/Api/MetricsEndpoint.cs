@@ -79,12 +79,13 @@ public static partial class MetricsEndpoint
             HubDatabase database,
             IOptions<HubOptions> options,
             ImportMetrics imports,
+            IncidentImportMetrics incidentImports,
             FindingMetrics findings,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
             var body = await RenderAsync(
-                database, options.Value, imports, findings, timeProvider, version, cancellationToken);
+                database, options.Value, imports, incidentImports, findings, timeProvider, version, cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
     }
@@ -93,6 +94,7 @@ public static partial class MetricsEndpoint
         HubDatabase database,
         HubOptions options,
         ImportMetrics imports,
+        IncidentImportMetrics incidentImports,
         FindingMetrics findings,
         TimeProvider timeProvider,
         string version,
@@ -173,6 +175,11 @@ public static partial class MetricsEndpoint
             + "series that appears only on the first failure reads as a scrape gap instead.");
         foreach (var (reason, count) in imports.Snapshot())
             Line(text, "perf_sentinel_hub_import_rejected_total", $"reason=\"{reason}\"", count);
+
+        Counter(text, "perf_sentinel_hub_incident_import_rejected_total",
+            "Incident imports the Hub refused, by reason, published from startup like the findings ones.");
+        foreach (var (reason, count) in incidentImports.Snapshot())
+            Line(text, "perf_sentinel_hub_incident_import_rejected_total", $"reason=\"{reason}\"", count);
 
         Family(text, "perf_sentinel_hub_analysis_queue_depth",
             "Analysis runs accepted and not yet claimed by a worker.");

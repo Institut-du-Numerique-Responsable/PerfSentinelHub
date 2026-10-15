@@ -1155,3 +1155,61 @@ test("a light read keeps the verdict calm over hints that only describe the daem
     previous.warnings.push({kind: "tuning", message: "m"});
     assert.equal(PSL.mergeLight(previous, light).state, "advised");
 });
+
+test("an incident's findings sort by the column asked, worst and most seen first on ties", () => {
+    const row = (type, severity, endpoint, seen, first) =>
+        ({seen_count: seen, first_seen_ms: first, finding: {type, severity, source_endpoint: endpoint}});
+    const rows = [
+        row("n_plus_one_sql", "warning", "/b", 3, 30),
+        row("slow_http", "critical", "/a", 1, 20),
+        row("n_plus_one_sql", "warning", "/a", 9, 10),
+        row("redundant_sql", "info", "/c", 9, 40)
+    ];
+    const endpoints = list => list.map(r => r.finding.source_endpoint + r.seen_count);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "severity", "desc")), ["/a1", "/a9", "/b3", "/c9"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "seen", "desc")), ["/a9", "/c9", "/b3", "/a1"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "endpoint", "asc")), ["/a1", "/a9", "/b3", "/c9"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "first", "asc")), ["/a9", "/a1", "/b3", "/c9"]);
+    assert.equal(rows[0].finding.source_endpoint, "/b", "the input is left in its order");
+});
+
+test("the folded incident filters say how many of them are in force", () => {
+    const filter = {service: "a", kind: "oom_kill", namespace: "", environment: "", source_id: ""};
+    assert.equal(PSL.moreFiltersLabel(filter), "More filters", "service and kind stay in sight");
+    assert.equal(PSL.moreFiltersLabel(Object.assign({}, filter, {environment: "prod", source_id: "x"})), "More filters, 2 set");
+});
+
+test("the ack expiry reads back in UTC, whatever the browser shows the date as", () => {
+    const now = Date.parse("2026-10-15T12:00:00Z");
+    assert.equal(PSL.ackExpiryLine("", now), "No date: the ack is permanent.");
+    assert.equal(PSL.ackExpiryLine("2026-11-30", now), "Holds until 2026-11-30 23:59:59 UTC.");
+    assert.equal(PSL.ackExpiryLine("2026-10-14", now), "The expiry is in the past.");
+});
+
+test("a frozen finding is told apart by its template, and found by it", () => {
+    const row = {finding: {source_endpoint: "/api/catalog/search", pattern: {template: "SELECT * FROM item WHERE id = ?"}}};
+    assert.equal(PSL.findingTemplate(row), "SELECT * FROM item WHERE id = ?");
+    assert.equal(PSL.findingTemplate({finding: {}}), "");
+    assert.ok(PSL.findingMatches(row, "  FROM ITEM "));
+    assert.ok(PSL.findingMatches(row, "catalog"));
+    assert.ok(PSL.findingMatches(row, ""));
+    assert.ok(!PSL.findingMatches(row, "orders"));
+    const sorted = PSL.sortFindings([
+        {seen_count: 1, first_seen_ms: 1, finding: {pattern: {template: "b"}}},
+        {seen_count: 1, first_seen_ms: 2, finding: {pattern: {template: "a"}}}
+    ], "template", "asc");
+    assert.deepEqual(sorted.map(PSL.findingTemplate), ["a", "b"]);
+});
+
+test("the daemon-side ack names the daemon before the subcommand and quotes what the shell needs", () => {
+    const line = PSL.ackCommand({base_url: "http://d:4318"}, "n_plus_one_sql:svc:ep:abc", "posix");
+    assert.equal(line, "perf-sentinel ack --daemon http://d:4318 create --signature n_plus_one_sql:svc:ep:abc --reason 'why it can wait'");
+});
+
+test("a finding after the incident is placed after the event that kind names", () => {
+    assert.equal(PSL.phaseLabel("before", "deploy"), " before the incident");
+    assert.equal(PSL.phaseLabel("after", "oom_kill"), " after the restart");
+    assert.equal(PSL.phaseLabel("after", "restart"), " after the restart");
+    assert.equal(PSL.phaseLabel("after", "deploy"), " after the deploy");
+    assert.equal(PSL.phaseLabel("after", "memory_saturation"), " after the incident");
+});

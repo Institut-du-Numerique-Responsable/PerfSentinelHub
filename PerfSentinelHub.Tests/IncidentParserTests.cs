@@ -94,4 +94,61 @@ public sealed class IncidentParserTests
             await File.ReadAllBytesAsync(FixturePath, TestContext.Current.CancellationToken));
         return fixture.RootElement[0].GetRawText();
     }
+
+    private static byte[] Envelope(string incidents, string producerVersion = "0.29.0")
+    {
+        return Encoding.UTF8.GetBytes($"{{\"producer_version\":\"{producerVersion}\",\"incidents\":{incidents}}}");
+    }
+
+    private static string FixtureIncidents()
+    {
+        return File.ReadAllText(FixturePath);
+    }
+
+    [Fact]
+    public void An_import_envelope_parses_its_incidents_as_the_poll_does()
+    {
+        var import = IncidentParser.ParseImport(Envelope(FixtureIncidents()));
+
+        Assert.Equal("0.29.0", import.ProducerVersion);
+        var incident = Assert.Single(import.Page.Incidents);
+        Assert.Equal("d650edad80ac5c2d99b8d1dde07100c2", incident.Id);
+        Assert.Equal(2, incident.FindingCount);
+        Assert.Equal(0, import.Page.RejectedCount);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("{}")]
+    public void An_import_without_incidents_is_invalid(string incidents)
+    {
+        Assert.Throws<InvalidDataException>(() => IncidentParser.ParseImport(Envelope(incidents)));
+    }
+
+    [Fact]
+    public void An_import_refuses_a_missing_or_overlong_producer_version()
+    {
+        Assert.Throws<InvalidDataException>(() => IncidentParser.ParseImport(
+            Encoding.UTF8.GetBytes($"{{\"incidents\":{FixtureIncidents()}}}")));
+        Assert.Throws<InvalidDataException>(() => IncidentParser.ParseImport(
+            Envelope(FixtureIncidents(), new string('9', 65))));
+    }
+
+    [Fact]
+    public void An_import_of_more_than_ten_incidents_is_too_large()
+    {
+        var one = FixtureIncidents().Trim()[1..^1];
+        var eleven = "[" + string.Join(",", Enumerable.Repeat(one, 11)) + "]";
+
+        Assert.Throws<ImportBatchTooLargeException>(() => IncidentParser.ParseImport(Envelope(eleven)));
+    }
+
+    [Fact]
+    public void An_import_repeating_a_property_is_invalid()
+    {
+        var payload = Encoding.UTF8.GetBytes(
+            $"{{\"producer_version\":\"0.29.0\",\"producer_version\":\"0.28.0\",\"incidents\":{FixtureIncidents()}}}");
+
+        Assert.Throws<InvalidDataException>(() => IncidentParser.ParseImport(payload));
+    }
 }

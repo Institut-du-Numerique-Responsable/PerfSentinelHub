@@ -73,6 +73,7 @@ public static partial class ApiEndpoints
         app.MapGet("/api/incidents/{id}", GetIncidentAsync);
         app.MapPost("/api/incidents/refresh", RefreshIncidentsAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
+        app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapGet("/health/live", TypedResults.Ok).AllowAnonymous();
         app.MapGet("/health/ready", (HubDatabase database) =>
                 database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable))
@@ -149,24 +150,8 @@ public static partial class ApiEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        if (!HasValidUtf8(request.QueryString.Value) ||
-            request.Query.Count != 1 ||
-            !request.Query.TryGetValue("source_id", out var sourceIds) ||
-            sourceIds.Count != 1)
-            return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-        var sourceId = sourceIds[0];
-        if (string.IsNullOrEmpty(sourceId))
-            return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-        var source = options.Value.Sources.FirstOrDefault(candidate =>
-            string.Equals(candidate.Id, sourceId, StringComparison.Ordinal));
-        if (source is null || !IsAuthorized(request, source.ImportApiKey))
-            return admission.Refuse(ImportRejection.Unauthorized, TypedResults.Unauthorized());
-        if (!admission.Gate.TryEnter())
-        {
-            request.HttpContext.Response.Headers.RetryAfter = "1";
-            return admission.Refuse(ImportRejection.GateFull,
-                TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
-        }
+        if (AdmitImport(request, options, admission.Gate, admission.Refuse<IResult>, out var source) is { } refused)
+            return refused;
 
         try
         {
@@ -210,6 +195,98 @@ public static partial class ApiEndpoints
                     source.Id,
                     import.Batch.RejectedCount);
             return TypedResults.Ok(new ImportResponse(import.Batch.Findings.Count, import.Batch.RejectedCount));
+        }
+        finally
+        {
+            admission.Gate.Exit();
+        }
+    }
+
+    /// <summary>
+    ///     What every import checks before reading its body: the query names one
+    ///     source, the key is that source's, and a gate slot is free. Null when
+    ///     the request may proceed, the refusal otherwise, already counted. The
+    ///     caller owns the slot and exits it.
+    /// </summary>
+    private static IResult? AdmitImport(
+        HttpRequest request,
+        IOptions<HubOptions> options,
+        ImportGate gate,
+        Func<ImportRejection, IResult, IResult> refuse,
+        out SourceOptions source)
+    {
+        source = null!;
+        if (!HasValidUtf8(request.QueryString.Value) ||
+            request.Query.Count != 1 ||
+            !request.Query.TryGetValue("source_id", out var sourceIds) ||
+            sourceIds.Count != 1 ||
+            string.IsNullOrEmpty(sourceIds[0]))
+            return refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
+        var match = options.Value.Sources.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, sourceIds[0], StringComparison.Ordinal));
+        if (match is null || !IsAuthorized(request, match.ImportApiKey))
+            return refuse(ImportRejection.Unauthorized, TypedResults.Unauthorized());
+        if (!gate.TryEnter())
+        {
+            request.HttpContext.Response.Headers.RetryAfter = "1";
+            return refuse(ImportRejection.GateFull,
+                TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
+        }
+
+        source = match;
+        return null;
+    }
+
+    // One incident carries up to a thousand frozen findings: the cap of one daemon page.
+    private const int IncidentImportMaxBytes = 4 * 1024 * 1024;
+
+    private static async Task<IResult> ImportIncidentsAsync(
+        HttpRequest request,
+        HubDatabase database,
+        IncidentImportAdmission admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        if (AdmitImport(request, options, admission.Gate, admission.Refuse<IResult>, out var source) is { } refused)
+            return refused;
+        try
+        {
+            var payload = await ReadBodyAsync(request, cancellationToken, IncidentImportMaxBytes);
+            if (payload is null)
+                return admission.Refuse(ImportRejection.TooLarge,
+                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
+
+            ParsedIncidentImport import;
+            try
+            {
+                import = IncidentParser.ParseImport(payload);
+            }
+            catch (ImportBatchTooLargeException)
+            {
+                return admission.Refuse(ImportRejection.TooLarge,
+                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
+            }
+            catch (InvalidDataException)
+            {
+                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
+            }
+
+            if (import.Page.Incidents.Count == 0)
+                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
+            if (!await database.TryUpsertPushedIncidentsAsync(source.Id, import.Page.Incidents,
+                    timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
+            {
+                request.HttpContext.Response.Headers.RetryAfter = "1";
+                return admission.Refuse(ImportRejection.WriteTimeout,
+                    TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
+            }
+
+            if (import.Page.RejectedCount > 0)
+                LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                    import.Page.RejectedCount);
+            return TypedResults.Ok(new ImportResponse(import.Page.Incidents.Count, import.Page.RejectedCount));
         }
         finally
         {
@@ -462,6 +539,12 @@ public static partial class ApiEndpoints
     // Every [LoggerMessage] of this class stays in this file: see LoggerMessageLayoutTests.
     [LoggerMessage(1301, LogLevel.Warning, "Source {SourceId} rejected {RejectedCount} imported findings.")]
     private static partial void LogRejectedImportedFindings(
+        ILogger logger,
+        string sourceId,
+        int rejectedCount);
+
+    [LoggerMessage(1302, LogLevel.Warning, "Source {SourceId} rejected {RejectedCount} imported incidents.")]
+    private static partial void LogRejectedImportedIncidents(
         ILogger logger,
         string sourceId,
         int rejectedCount);

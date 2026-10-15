@@ -2,6 +2,69 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.5.0] - 2026-10-15
+
+### Added
+
+- `POST /api/import/incidents?source_id=<id>` takes the incidents a daemon on perf-sentinel 0.29.0
+  or later pushes beside its findings, with the same key and gate, at most 10 incidents and 4 MiB
+  per request. An incident its ring evicts between two hourly polls now reaches the Hub. The poll
+  still reads incidents, and both paths merge under one rule. Refusals count on
+  `perf_sentinel_hub_incident_import_rejected_total{reason}`.
+
+### Changed
+
+- The image ships perf-sentinel `0.29.0` as its analysis engine, repinned by digest from
+  `0.28.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.28.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.29.0` changes no detector, normalizer or signature, so a run finds what it found on
+  `0.28.0`, with the same signatures, and acknowledgments keep matching. Its change sits in
+  the daemon: with `[daemon.hub_export]` and `[daemon.incidents]` both on, a daemon pushes
+  its incidents to the new `/api/import/incidents` beside its findings.
+- An incident's frozen findings open worst first, then most seen, where they followed their
+  first sighting, and every column but Ack sorts on a click or a keypress on its head. The
+  sorted column says so to a screen reader. A Template column shows the normalized query
+  each finding was raised on, cut to one line and whole in its tooltip: on a lab OOM kill,
+  72 findings over 12 templates had read as rows that repeated word for word. A field above
+  the table narrows them by endpoint or template as you type.
+- "Analyse this window" is a link, so it opens in a new tab too. A finding first seen after
+  a deploy reads "after the deploy", and after a memory saturation "after the incident",
+  where both read "after the restart".
+- Where the Hub cannot acknowledge a finding, the ack page prints the daemon's own
+  `perf-sentinel ack --daemon <url> create` command for it, and each disabled source checkbox
+  is described by the reason in its row.
+- The Incidents filter line keeps kind and service in sight and folds namespace,
+  environment and daemon behind More filters, which says how many of them are set.
+- The ack page reads the chosen expiry back in UTC, "Holds until 2026-11-30 23:59:59 UTC.",
+  beside the date the browser shows in its own locale.
+- The range picker opens and closes without drawing the form again, and on a phone its
+  quick ranges sit under the dates instead of beside them.
+- Between 761 and 1400 pixels wide the tabs take the 12-pixel padding meant for them, which
+  a later rule overrode.
+- A source's or an incident's detail is held to the visible width at every screen size,
+  where it was held only under 761 pixels and cut at the edge up to about 1,130.
+- The four cost tiles sit four in a row, or two by two below 1,180 pixels, never three and
+  one. A daemon selected on New analysis explains itself in one sentence, so Run analysis
+  stays nearer the top.
+- A "?" is 18 pixels with a 26-pixel target and a 3:1 ring, where it was 16 pixels with a
+  ring under 3:1. A source on New analysis is named by its name and health, its chips read
+  as a description, and an incident's row button names its kind and age beside the service.
+- A finding's status reads "not observed", not `not_observed`. An unknown report link no
+  longer credits an engine with a report that does not exist, nor repeats All analyses in
+  its bar.
+
+### Fixed
+
+- On a phone the ack page fits the screen: its finding card and source table pushed it
+  100 pixels past the edge.
+- The sign-in page shows the Hub's logo in the dark theme. A rule hiding the dark logo came
+  after the one showing it and won, so the page read "HUB" alone.
+- The sign-in page sets the launcher's typeface, DM Sans at 400 and 600, written into its
+  own stylesheet as `data:` fonts. Its policy gains `font-src data:` and the page still
+  loads nothing, so it opens while the provider is down.
+
 ## [0.4.1] - 2026-10-15
 
 ### Changed

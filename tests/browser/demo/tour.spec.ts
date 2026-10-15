@@ -118,7 +118,7 @@ test("launcher tour", async ({ page }) => {
 
   // The findings are frozen, so the last step is the one that reads them
   // against live traces: the same window, handed to a run that can take it.
-  const analyse = page.getByRole("button", { name: "Analyse this window" }).first();
+  const analyse = page.getByRole("link", { name: "Analyse this window" }).first();
   if (await analyse.count()) {
     await analyse.scrollIntoViewIfNeeded();
     await beat(page, 900);

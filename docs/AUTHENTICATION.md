@@ -17,6 +17,7 @@ calls:
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`           | session, otherwise `401`, and the ack is taken in the session's name    |
 | `/api/findings`                                                  | open, for IDE plugins and CI jobs, unless access control is on          |
 | `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
+| `POST /api/import/incidents`                                     | the same `X-API-Key` as the findings import                             |
 | `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape; `/metrics` on `Hub:MetricsPort` if set |
 
 The API answers `401` rather than a redirect because a fetch cannot follow a
