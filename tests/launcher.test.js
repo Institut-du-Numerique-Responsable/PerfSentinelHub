@@ -1155,3 +1155,33 @@ test("a light read keeps the verdict calm over hints that only describe the daem
     previous.warnings.push({kind: "tuning", message: "m"});
     assert.equal(PSL.mergeLight(previous, light).state, "advised");
 });
+
+test("an incident's findings sort by the column asked, worst and most seen first on ties", () => {
+    const row = (type, severity, endpoint, seen, first) =>
+        ({seen_count: seen, first_seen_ms: first, finding: {type, severity, source_endpoint: endpoint}});
+    const rows = [
+        row("n_plus_one_sql", "warning", "/b", 3, 30),
+        row("slow_http", "critical", "/a", 1, 20),
+        row("n_plus_one_sql", "warning", "/a", 9, 10),
+        row("redundant_sql", "info", "/c", 9, 40)
+    ];
+    const endpoints = list => list.map(r => r.finding.source_endpoint + r.seen_count);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "severity", "desc")), ["/a1", "/a9", "/b3", "/c9"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "seen", "desc")), ["/a9", "/c9", "/b3", "/a1"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "endpoint", "asc")), ["/a1", "/a9", "/b3", "/c9"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "first", "asc")), ["/a9", "/a1", "/b3", "/c9"]);
+    assert.equal(rows[0].finding.source_endpoint, "/b", "the input is left in its order");
+});
+
+test("the folded incident filters say how many of them are in force", () => {
+    const filter = {service: "a", kind: "oom_kill", namespace: "", environment: "", source_id: ""};
+    assert.equal(PSL.moreFiltersLabel(filter), "More filters", "service and kind stay in sight");
+    assert.equal(PSL.moreFiltersLabel(Object.assign({}, filter, {environment: "prod", source_id: "x"})), "More filters, 2 set");
+});
+
+test("the ack expiry reads back in UTC, whatever the browser shows the date as", () => {
+    const now = Date.parse("2026-10-15T12:00:00Z");
+    assert.equal(PSL.ackExpiryLine("", now), "No date: the ack is permanent.");
+    assert.equal(PSL.ackExpiryLine("2026-11-30", now), "Holds until 2026-11-30 23:59:59 UTC.");
+    assert.equal(PSL.ackExpiryLine("2026-10-14", now), "The expiry is in the past.");
+});

@@ -190,9 +190,11 @@ Une ligne se déplie sur les findings que le daemon a gelés pour cet incident, 
 avant l'incident ou après le redémarrage d'après son propre horodatage face à celui de
 l'incident. La colonne capture porte la lecture du daemon de jusqu'où son anneau
 remontait encore : complete, partial ou empty. Les durées sont relatives, jamais des
-dates, et l'horodatage exact est dans l'infobulle. Cinq sélecteurs restreignent la liste,
-par kind, service, namespace, environnement et daemon, celui du namespace apparaissant dès
-qu'une ligne en a porté un. C'est le Hub qui les applique, donc les lignes plus anciennes
+dates, et l'horodatage exact est dans l'infobulle. Les findings s'ouvrent du plus grave au
+moins grave, puis du plus vu au moins vu, et un clic ou une touche sur l'en-tête d'une
+colonne les trie selon elle. Cinq sélecteurs restreignent la liste. Kind et service restent
+visibles, namespace, environnement et daemon se replient derrière More filters, qui dit
+combien d'entre eux sont posés. Celui du namespace apparaît dès qu'une ligne en a porté un. C'est le Hub qui les applique, donc les lignes plus anciennes
 qu'un bouton charge ensuite, par centaine et depuis le magasin plutôt que depuis les
 daemons, suivent le même filtre. Sous le tableau, une ligne par daemon dit quand sa copie a
 été lue, ou qu'elle ne l'a jamais été, pour qu'une flotte calme ne se lise jamais comme une
@@ -242,7 +244,9 @@ finding le dit aussi. Aucun des deux ne retombe sur un autre écran.
 
 Dessous, un seul formulaire : une raison obligatoire, une expiration facultative, et une
 ligne par source qui porte le finding. L'expiration est un jour, envoyé comme la dernière
-seconde de ce jour en UTC, et une expiration vide est un acquittement permanent.
+seconde de ce jour en UTC, et une expiration vide est un acquittement permanent. Une ligne
+sous le champ la relit en UTC, "Holds until 2026-11-30 23:59:59 UTC.", à côté de la date
+que le navigateur affiche dans sa propre langue.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
@@ -422,7 +426,8 @@ Avec un [compte local](AUTHENTICATION-FR.md#comptes-locaux) déclaré, un naviga
 session arrive sur la page de connexion du Hub, `/auth/sign-in`, au lieu de celle du
 fournisseur. Ce n'est pas non plus un écran du lanceur : une page autonome, styles en
 ligne et sans script, puisque les fichiers du lanceur sont derrière la connexion. Elle
-porte le logo du lanceur, en ligne, et sa palette, claire ou sombre selon le système. **Sign in with single sign-on** vient d'abord et mène au
+porte le logo du lanceur, en ligne, sa police, DM Sans écrite dans la feuille de style en
+polices `data:`, et sa palette, claire ou sombre selon le système. **Sign in with single sign-on** vient d'abord et mène au
 fournisseur ; **Sign in with a local account** est replié en dessous, avec la mention
 qu'il sert quand l'authentification unique est indisponible et que chaque connexion
 locale est journalisée. Après une tentative refusée, le pli s'ouvre avec la raison,

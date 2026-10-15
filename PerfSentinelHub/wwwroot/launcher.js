@@ -890,6 +890,63 @@
     }
 
     /**
+     * The fold behind which the incident filters an operator reaches for less
+     * often wait, named with how many of them are set, so a folded filter is
+     * never silently in force.
+     * @param {{namespace: string, environment: string, source_id: string}} filter
+     * @returns {string}
+     */
+    function moreFiltersLabel(filter) {
+        const set = ['namespace', 'environment', 'source_id'].filter(function (key) {
+            return filter[key] !== '';
+        }).length;
+        return set === 0 ? 'More filters' : 'More filters, ' + set + ' set';
+    }
+
+    const SEVERITY_RANK = {critical: 3, warning: 2, info: 1};
+
+    /**
+     * An incident's frozen findings in the order a column asks for. Ties fall
+     * back to the default reading order, worst and most seen first, so equal
+     * rows never shuffle between two renders.
+     * @param {Array<{seen_count?: number, first_seen_ms: number, finding?: any}>} rows
+     * @param {'type' | 'severity' | 'endpoint' | 'seen' | 'first'} key
+     * @param {'asc' | 'desc'} dir
+     * @returns {Array<any>}
+     */
+    function sortFindings(rows, key, dir) {
+        const value = {
+            type: function (row) {
+                const type = (row.finding || {}).type || '';
+                return FINDING_TYPE_LABEL[type] || type;
+            },
+            severity: function (row) {
+                return SEVERITY_RANK[(row.finding || {}).severity] || 0;
+            },
+            endpoint: function (row) {
+                return (row.finding || {}).source_endpoint || '';
+            },
+            seen: function (row) {
+                return row.seen_count || 0;
+            },
+            first: function (row) {
+                return row.first_seen_ms;
+            }
+        };
+        const compare = function (name, a, b) {
+            const x = value[name](a);
+            const y = value[name](b);
+            return typeof x === 'string' ? x.localeCompare(y) : x - y;
+        };
+        const sign = dir === 'asc' ? 1 : -1;
+        return rows.slice().sort(function (a, b) {
+            return sign * compare(key, a, b)
+                || -compare('severity', a, b) || -compare('seen', a, b)
+                || compare('endpoint', a, b) || compare('first', a, b);
+        });
+    }
+
+    /**
      * Whether a frozen finding was already burning before the incident or fired
      * only after it. A finding is stamped when its trace is analysed, one TTL
      * after its last span, so a stamp past `at_ms` belongs to the replacement.
@@ -1134,6 +1191,23 @@
         }
         if (endMs <= nowMs) throw new RangeError('The expiry is in the past.');
         return isoUtc(endMs);
+    }
+
+    /**
+     * What the date input under an ack amounts to, in UTC, beside the date the
+     * browser shows in its own locale.
+     * @param {string | null | undefined} dateValue
+     * @param {number} nowMs
+     * @returns {string}
+     */
+    function ackExpiryLine(dateValue, nowMs) {
+        try {
+            const end = ackExpiry(dateValue, nowMs);
+            return end === null ? 'No date: the ack is permanent.'
+                : 'Holds until ' + end.slice(0, 10) + ' 23:59:59 UTC.';
+        } catch (error) {
+            return error.message;
+        }
     }
 
     /**
@@ -1571,9 +1645,9 @@
         lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
         hubReleaseUrl, updateState, knownShell, CHART_PAGE, CHART_COORDINATE,
         gaugeTone, gaugeMove,
-        INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentFilterState, incidentsCopy,
+        INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, sortFindings, moreFiltersLabel, INCIDENT_READ_STATE, incidentFilterState, incidentsCopy,
         incidentHandoffHash, readHandoff,
-        ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary,
+        ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackExpiryLine, ackChecked, ackPlan, ackBody, ackSummary,
         shellBanner, screenOf, formFromRequest, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows,
         coverageSnippet, accessRequestText, sourceCountLabel, revokeOutcome,
         tokenRows, tokenRevokeRequest, deviceIntro, deviceRequestLine, deviceNetworkAlert, deviceApproveStep

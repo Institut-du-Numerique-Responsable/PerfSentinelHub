@@ -172,8 +172,10 @@ A row unfolds into the findings the daemon froze for that incident, each placed 
 the incident or after the restart from its own stamp against the incident's. The capture
 column carries the daemon's reading of how far back its ring still reached: complete,
 partial, or empty. Times are relative, never dates, and the exact stamp sits in the
-tooltip. Five selects narrow the list, by kind, service, namespace, environment and daemon,
-the namespace one appearing once a row has carried one. The Hub applies them, so the older
+tooltip. The findings open worst first, then most seen, and a click or a keypress on a
+column head sorts them by that column. Five selects narrow the list. Kind and service stay
+in sight, and namespace, environment and daemon fold behind More filters, which says how
+many of them are set. The namespace one appears once a row has carried one. The Hub applies them, so the older
 rows a button loads next, a hundred at a time from the store rather than from the daemons,
 follow the same filter. Under the table, one line per daemon says when its copy was read,
 or that it was never read, so a quiet fleet never reads as a stale copy. A daemon that
@@ -221,7 +223,8 @@ signature the Hub holds no finding for says so. Neither falls back to another sc
 
 Below it sits one form: a required reason, an optional expiry, and one row per source that
 carries the finding. The expiry is a day, sent as the last second of that day in UTC, and
-an empty one is a permanent ack.
+an empty one is a permanent ack. A line under the field reads it back in UTC, "Holds until
+2026-11-30 23:59:59 UTC.", beside the date the browser shows in its own locale.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-ack-dark.png">
@@ -384,7 +387,8 @@ With a [local account](AUTHENTICATION.md#local-accounts) declared, a browser wit
 session lands on the Hub's own sign-in page, `/auth/sign-in`, instead of the provider's.
 It is not a launcher screen either: one self-contained page with its styles inline and no
 script, since the launcher's files sit behind the sign-in. It carries the launcher's logo,
-inline, and its palette, light or dark after the system. **Sign in with single sign-on** comes first and leads to the provider; **Sign in
+inline, its typeface, DM Sans written into the stylesheet as `data:` fonts, and its
+palette, light or dark after the system. **Sign in with single sign-on** comes first and leads to the provider; **Sign in
 with a local account** is folded below it, with the note that it is for when single
 sign-on is unavailable and that every local sign-in is logged. After a refused attempt the
 fold opens with the reason, never with what was typed. Either way the browser comes back to

@@ -133,7 +133,8 @@ button {
         display: none;
     }
 
-    .shell-tab {
+    /* Two classes: the base .shell-tab rule comes later in the file and won before. */
+    .shell-tabs .shell-tab {
         padding: 0 12px;
     }
 
@@ -177,6 +178,12 @@ button {
     }
 
     .daemon-detail .daemon-top {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* Beside the dates the quick ranges left them a third of a phone: stacked, both
+       read whole. Two classes, as the base .picker rule comes later in the file. */
+    .range .picker {
         grid-template-columns: minmax(0, 1fr);
     }
 
@@ -814,6 +821,24 @@ a.shell-identity[aria-current="page"] {
 
 .table-mono {
     font-family: var(--font-mono);
+}
+
+/* A sortable column head reads as the header it replaces, plus its arrow. */
+.sort-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.sort-head:hover, th[aria-sort] .sort-head {
+    color: var(--text);
 }
 
 /* An incident's findings: fewer columns than the fleet table, and the
@@ -3756,7 +3781,7 @@ section > .banner + .banner,
 
 /* A banner carries no margin of its own, so the filter line under one would
    sit flush against it. Matches the margin the line already has below. */
-.banner + .refresh {
+.banner + .refresh, .banner + .filter-stack {
     margin-top: 12px;
 }
 

@@ -2,6 +2,28 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- An incident's frozen findings open worst first, then most seen, where they followed their
+  first sighting, and every column but Ack sorts on a click or a keypress on its head. The
+  sorted column says so to a screen reader.
+- The Incidents filter line keeps kind and service in sight and folds namespace,
+  environment and daemon behind More filters, which says how many of them are set.
+- The ack page reads the chosen expiry back in UTC, "Holds until 2026-11-30 23:59:59 UTC.",
+  beside the date the browser shows in its own locale.
+- The range picker opens and closes without drawing the form again, and on a phone its
+  quick ranges sit under the dates instead of beside them.
+- Between 761 and 1400 pixels wide the tabs take the 12-pixel padding meant for them, which
+  a later rule overrode.
+
+### Fixed
+
+- The sign-in page sets the launcher's typeface, DM Sans at 400 and 600, written into its
+  own stylesheet as `data:` fonts. Its policy gains `font-src data:` and the page still
+  loads nothing, so it opens while the provider is down.
+
 ## [0.4.1] - 2026-10-15
 
 ### Changed

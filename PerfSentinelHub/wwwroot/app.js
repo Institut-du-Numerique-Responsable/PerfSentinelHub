@@ -106,6 +106,9 @@
         ack: null,
         // The route an in-app Ack link was followed from, for the page's way back.
         ackReturn: null,
+        // How an incident's frozen findings are ordered: worst, then most seen, first.
+        findingSort: {key: 'severity', dir: 'desc'},
+        incidentFiltersOpen: false,
         // The incident a `#/new?from=…` link pre-filled the form from, or null.
         handoff: null,
         // Which shell every printed command is spelled for.
@@ -2921,17 +2924,24 @@
             el('span', {class: 'range-pill-label', text: windowLabel()}),
             svg([['path', {d: 'M6 9l6 6 6-6'}]], 11)
         ]);
-        button.addEventListener('click', function () {
-            state.form.pickerOpen = !state.form.pickerOpen;
-            renderFocus(state.form.pickerOpen ? '.picker input' : '#range-pill');
-        });
-
-        const wrap = el('div', {class: 'range'}, [
-            el('div', {class: 'range-row'}, [
-                button,
-                el('span', {class: 'range-wire', text: rangeWire()})
-            ])
+        const row = el('div', {class: 'range-row'}, [
+            button,
+            el('span', {class: 'range-wire', text: rangeWire()})
         ]);
+        const wrap = el('div', {class: 'range'}, [row]);
+        button.addEventListener('click', function () {
+            if (state.form.pickerOpen) {
+                closePicker();
+                return;
+            }
+            // In place: re-rendering the form to show a panel would drop what the
+            // rest of it holds in focus, caret and slider capture.
+            state.form.pickerOpen = true;
+            button.setAttribute('aria-expanded', 'true');
+            row.after(rangePicker());
+            const first = wrap.querySelector('.picker input');
+            if (first) first.focus();
+        });
         if (state.form.pickerOpen) wrap.appendChild(rangePicker());
         const notes = rangeConsequences(source);
         if (notes.length > 0) wrap.appendChild(el('div', {class: 'consequences'}, notes));
@@ -2971,10 +2981,7 @@
 
     function rangePicker() {
         const backdrop = el('div', {class: 'picker-backdrop'});
-        backdrop.addEventListener('click', function () {
-            state.form.pickerOpen = false;
-            renderFocus('#range-pill');
-        });
+        backdrop.addEventListener('click', closePicker);
 
         const from = el('input', {type: 'datetime-local', class: 'input-date', value: PSL.dtLocal(state.form.fromMs)});
         const to = el('input', {type: 'datetime-local', class: 'input-date', value: PSL.dtLocal(state.form.toMs)});
@@ -3032,7 +3039,18 @@
         ]);
 
         readAbsolute();
-        return el('div', {}, [backdrop, el('div', {class: 'picker'}, [left, right])]);
+        return el('div', {class: 'picker-host'}, [backdrop, el('div', {class: 'picker'}, [left, right])]);
+    }
+
+    /** Closing changes nothing on the form, so the panel goes and nothing else is drawn again. */
+    function closePicker() {
+        state.form.pickerOpen = false;
+        const host = document.querySelector('.picker-host');
+        if (host) host.remove();
+        const button = document.getElementById('range-pill');
+        if (!button) return;
+        button.setAttribute('aria-expanded', 'false');
+        button.focus();
     }
 
     function applyRange(mode, values) {
@@ -4639,14 +4657,20 @@
         read.addEventListener('click', function () {
             loadIncidents();
         });
-        return el('div', {class: 'refresh'}, [
-            filterSelect('kind', filter.kind, Object.keys(PSL.INCIDENT_KIND_LABEL).map(function (kind) {
-                return [kind, PSL.INCIDENT_KIND_LABEL[kind]];
-            }), setFilter('kind')),
-            // Service and namespace list what the read returns, so they wait for it
-            // rather than open on "every" alone and change under the pointer.
-            filterSelect('service', filter.service, state.incidentServices.map(same), setFilter('service'),
-                filters.pending),
+        // Kind and service answer most questions. The other three fold away
+        // behind a toggle that says how many of them are set.
+        const more = el('button', {
+            type: 'button', class: 'pill-button', id: 'more-filters',
+            'aria-expanded': state.incidentFiltersOpen ? 'true' : 'false', 'aria-controls': 'more-filter-fields'
+        }, [
+            svg([['path', {d: state.incidentFiltersOpen ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}]], 12),
+            el('span', {text: PSL.moreFiltersLabel(filter)})
+        ]);
+        more.addEventListener('click', function () {
+            state.incidentFiltersOpen = !state.incidentFiltersOpen;
+            renderFocus('#more-filters');
+        });
+        const folded = el('div', {class: 'refresh refresh-more', id: 'more-filter-fields'}, [
             filters.namespace
                 ? filterSelect('namespace', filter.namespace, state.incidentNamespaces.map(same),
                     setFilter('namespace'), filters.pending)
@@ -4654,8 +4678,22 @@
             filterSelect('environment', filter.environment, environments.map(same), setFilter('environment')),
             filterSelect('daemon', filter.source_id, daemons.map(function (source) {
                 return [source.id, source.name];
-            }), setFilter('source_id')),
-            read
+            }), setFilter('source_id'))
+        ]);
+        folded.hidden = !state.incidentFiltersOpen;
+        return el('div', {class: 'filter-stack'}, [
+            el('div', {class: 'refresh'}, [
+                filterSelect('kind', filter.kind, Object.keys(PSL.INCIDENT_KIND_LABEL).map(function (kind) {
+                    return [kind, PSL.INCIDENT_KIND_LABEL[kind]];
+                }), setFilter('kind')),
+                // Service lists what the read returns, so it waits for it rather
+                // than open on "every" alone and change under the pointer.
+                filterSelect('service', filter.service, state.incidentServices.map(same), setFilter('service'),
+                    filters.pending),
+                more,
+                read
+            ]),
+            folded
         ]);
     }
 
@@ -4847,9 +4885,7 @@
             ]);
         }
         const capture = PSL.incidentCapture(detail);
-        const findings = (detail.findings || []).slice().sort(function (a, b) {
-            return a.first_seen_ms - b.first_seen_ms;
-        });
+        const findings = PSL.sortFindings(detail.findings || [], state.findingSort.key, state.findingSort.dir);
         const analyse = el('button', {type: 'button', class: 'pill-button'}, [
             svg([['path', {d: 'M5 12h14M13 6l6 6-6 6'}]], 14),
             el('span', {text: 'Analyse this window'})
@@ -4883,7 +4919,7 @@
         });
         const columns = ['Type', 'Severity', 'Endpoint', 'Seen', 'First seen'].concat(canAck ? ['Ack'] : []);
         const head = el('tr', {}, columns.map(function (name) {
-            return el('th', {text: name, scope: 'col', 'data-align': name === 'Seen' ? 'right' : null});
+            return findingHead(name, incident);
         }));
         const rows = findings.map(function (row) {
             const finding = row.finding || {};
@@ -4914,6 +4950,35 @@
             class: 'field-note',
             text: 'No source in this Hub has an ack credential, so these findings are acknowledged in each daemon, not from here.'
         })]);
+    }
+
+    const FINDING_SORT_KEY = {Type: 'type', Severity: 'severity', Endpoint: 'endpoint', Seen: 'seen', 'First seen': 'first'};
+
+    /** A column head that sorts on click. Counts and severity read worst first, the rest A to Z. */
+    function findingHead(name, incident) {
+        const key = FINDING_SORT_KEY[name];
+        const th = el('th', {scope: 'col', 'data-align': name === 'Seen' ? 'right' : null});
+        if (!key) {
+            th.textContent = name;
+            return th;
+        }
+        const sort = state.findingSort;
+        const active = sort.key === key;
+        if (active) th.setAttribute('aria-sort', sort.dir === 'asc' ? 'ascending' : 'descending');
+        const id = incidentKey(incident) + ':' + key;
+        const button = el('button', {type: 'button', class: 'sort-head', 'data-sort': id}, [
+            el('span', {text: name}),
+            active ? svg([['path', {d: sort.dir === 'asc' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}]], 11) : null
+        ]);
+        button.addEventListener('click', function () {
+            state.findingSort = active
+                ? {key: key, dir: sort.dir === 'asc' ? 'desc' : 'asc'}
+                : {key: key, dir: key === 'severity' || key === 'seen' ? 'desc' : 'asc'};
+            // The ids come from the daemon: escaped, so a quote in one cannot break the selector.
+            renderFocus('[data-sort="' + CSS.escape(id) + '"]');
+        });
+        th.appendChild(button);
+        return th;
     }
 
     function ackLink(finding, incident) {
@@ -5082,8 +5147,13 @@
             class: 'input-date ack-expiry', type: 'date', id: 'ack-expiry', value: ack.expiry,
             min: new Date().toISOString().slice(0, 10)
         });
+        const expiryLine = el('p', {
+            class: 'field-note', id: 'ack-expiry-line', 'aria-live': 'polite',
+            text: PSL.ackExpiryLine(ack.expiry, Date.now())
+        });
         expiry.addEventListener('input', function () {
             ack.expiry = expiry.value;
+            expiryLine.textContent = PSL.ackExpiryLine(expiry.value, Date.now());
             updateAckButtons(rows);
         });
 
@@ -5120,6 +5190,7 @@
         return el('form', {class: 'card params-panel'}, [
             field('Reason', reason, 'required, kept by each daemon beside your name'),
             field('Expires', expiry, 'optional, the end of that day in UTC. Empty is a permanent ack'),
+            expiryLine,
             el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)]),
             el('div', {class: 'submit-row'}, [
                 acknowledge,
@@ -5817,10 +5888,7 @@
             closeTip();
             return;
         }
-        if (state.form.pickerOpen) {
-            state.form.pickerOpen = false;
-            renderFocus('#range-pill');
-        }
+        if (state.form.pickerOpen) closePicker();
     });
     render();
     loadShell();
