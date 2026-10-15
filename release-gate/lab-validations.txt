@@ -105,3 +105,18 @@ v0.4.0	20ff4ab	2026-10-14	PASS
 # whose last commit changes one equivalent line of device.js. Both answer 0.4.0
 # with engine 0.27.0, against daemon perf-sentinel:0.27.0-68c9152d and CLI
 # 0.27.0 from perf-sentinel main 4695e142, plugin main dd7888a.
+#
+# v0.4.1, 2026-10-15. Targeted pass, not verify-all-scenarios: the release
+# repins the engine to perf-sentinel 0.28.0 and adds #91 (compressed reports
+# and launcher files, the report loader, the incident filters). Six hub-*
+# scenarios ran green on lab commit fd3e14c: hub-ingestion,
+# hub-derived-status, hub-source-reachability, hub-plugin-contract,
+# hub-incidents-mirror and hub-access-control. The image
+# perf-sentinel-hub:0.4.1-65fbb9d was built by seed-hub-local from
+# release/0.4.1 at 65fbb9d and answers 0.4.1 with engine 0.28.0, the
+# published perf-sentinel image pinned by digest. The daemon was
+# perf-sentinel:0.28.0-e097972a, built from the perf-sentinel 0.28.0 release
+# tree. The lab ran with local, uncommitted image pins in its daemon and Hub
+# manifests. Not run: hub-lineage-mutation and hub-retention-purge, which
+# neither the engine nor #91 touches.
+v0.4.1	fd3e14c	2026-10-15	PASS
