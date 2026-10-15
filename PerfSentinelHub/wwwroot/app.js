@@ -88,6 +88,9 @@
         // namespace seen across loads so the selects outlive their own filter,
         // and what each unfolded row answered.
         incidents: null,
+        // Set by the first read of the fleet that completes, failed or not, and
+        // never reset: the filters it releases keep their lists across refreshes.
+        incidentsRead: false,
         incidentsError: false,
         incidentsDone: false,
         // Set while a live read of the fleet is in flight, so the read-now
@@ -4338,6 +4341,7 @@
             });
         }).finally(function () {
             state.incidentsReading = false;
+            state.incidentsRead = true;
             // The sources carry the read stamps this screen prints under its
             // table, and the read that just ran moved them. Awaited, or the
             // stamps would be one render behind the rows they describe.
@@ -4520,8 +4524,7 @@
         const daemons = (state.sources || []).filter(function (source) {
             return source.kind === 'daemon';
         });
-        // Only the first read: later ones keep the lists the earlier reads built.
-        const pending = state.incidents === null && state.incidentServices.length === 0;
+        const filters = PSL.incidentFilterState(state.incidentsRead, state.incidentNamespaces);
         const environments = Array.from(new Set(daemons.map(function (source) {
             return source.environment;
         }).filter(Boolean))).sort();
@@ -4544,13 +4547,11 @@
             }), setFilter('kind')),
             // Service and namespace list what the read returns, so they wait for it
             // rather than open on "every" alone and change under the pointer.
-            filterSelect('service', filter.service, state.incidentServices.map(same), setFilter('service'), pending),
-            // Held in place while the read runs, so the line does not shift when it
-            // lands; dropped after a read none carried, since a select over nothing
-            // would promise a column the fleet has not filled.
-            pending || state.incidentNamespaces.length > 0
+            filterSelect('service', filter.service, state.incidentServices.map(same), setFilter('service'),
+                filters.pending),
+            filters.namespace
                 ? filterSelect('namespace', filter.namespace, state.incidentNamespaces.map(same),
-                    setFilter('namespace'), pending)
+                    setFilter('namespace'), filters.pending)
                 : null,
             filterSelect('environment', filter.environment, environments.map(same), setFilter('environment')),
             filterSelect('daemon', filter.source_id, daemons.map(function (source) {
