@@ -109,6 +109,8 @@
         // How an incident's frozen findings are ordered: worst, then most seen, first.
         findingSort: {key: 'severity', dir: 'desc'},
         incidentFiltersOpen: false,
+        // What was typed above each incident's findings, by incident key.
+        findingQuery: {},
         // The incident a `#/new?from=…` link pre-filled the form from, or null.
         handoff: null,
         // Which shell every printed command is spelled for.
@@ -2677,6 +2679,8 @@
         ]);
     }
 
+    let sourceMetaCount = 0;
+
     function sourceRadio(source) {
         const selected = source.id === state.form.sourceId;
         const now = Date.now();
@@ -2692,7 +2696,8 @@
             ])
         ]);
 
-        const line2 = el('div', {class: 'source-line source-meta'}, [
+        const metaId = 'source-meta-' + (++sourceMetaCount);
+        const line2 = el('div', {class: 'source-line source-meta', id: metaId}, [
             el('span', {class: 'chip', text: PSL.KIND_LABEL[source.kind] || source.kind}),
             el('span', {class: 'chip chip-declared', text: source.environment}),
             el('span', {class: 'source-version', text: producerLabel(source)})
@@ -2704,7 +2709,10 @@
             type: 'button',
             class: 'source-row',
             role: 'radio',
-            'aria-checked': selected ? 'true' : 'false'
+            'aria-checked': selected ? 'true' : 'false',
+            // The name and its health, then the chips as a description, rather than every chip run into the name.
+            'aria-label': source.name + ', ' + (source.reachable ? 'reachable' : 'unreachable'),
+            'aria-describedby': metaId
         }, [el('span', {class: 'source-dot'}), el('span', {}, [line1, line2])]);
         button.addEventListener('click', function () {
             selectSource(source.id);
@@ -2745,14 +2753,8 @@
                 el('p', {text: 'No parameters. A daemon snapshot is whatever it holds in memory right now.'}),
                 el('p', {
                     class: 'notice-sub',
-                    text: 'The window is the daemon\'s own ring buffer. There is nothing to widen: asking for '
-                        + 'three hours from a process that keeps ten minutes would be a request the source '
-                        + 'cannot answer, so the launcher does not offer it.'
-                }),
-                el('p', {
-                    class: 'notice-sub',
-                    text: 'There is no command line for this either. What this daemon is configured with, '
-                        + 'and what it is holding at this moment, is on the Sources screen, on its own row.'
+                    text: 'The window is its ring buffer, so there is nothing to widen. What it holds and how '
+                        + 'it is configured are on its row in Sources.'
                 }),
                 selectedSource() && PSL.permits(selectedSource(), 'sources.read') ? sourcesRowLink() : null
             ])
@@ -4825,7 +4827,10 @@
             type: 'button',
             class: 'row-toggle',
             'aria-expanded': state.panelOpen[foldKey(incident)] === true ? 'true' : 'false',
-            'aria-controls': 'incident-detail-' + incidentKey(incident)
+            'aria-controls': 'incident-detail-' + incidentKey(incident),
+            // Several incidents share a service: the kind and the age tell their buttons apart.
+            'aria-label': (PSL.INCIDENT_KIND_LABEL[incident.kind] || incident.kind) + ', ' + incident.service
+                + ', ' + PSL.dur(Date.now() - incident.at_ms) + ' ago'
         }, [el('span', {text: incident.service})]);
         button.addEventListener('click', function () {
             toggleIncident(incident, button);
@@ -4886,13 +4891,11 @@
         }
         const capture = PSL.incidentCapture(detail);
         const findings = PSL.sortFindings(detail.findings || [], state.findingSort.key, state.findingSort.dir);
-        const analyse = el('button', {type: 'button', class: 'pill-button'}, [
+        // A link, so it opens in a new tab too. Its end is clamped to the moment it is followed.
+        const analyse = el('a', {class: 'pill-button', href: PSL.incidentHandoffHash(detail, Date.now())}, [
             svg([['path', {d: 'M5 12h14M13 6l6 6-6 6'}]], 14),
             el('span', {text: 'Analyse this window'})
         ]);
-        analyse.addEventListener('click', function () {
-            location.hash = PSL.incidentHandoffHash(detail, Date.now());
-        });
         // The button comes after the note that describes the window, since it
         // is the action the note argues for. A bare row, so the panel's own
         // gap sets the distance and no margin adds a second one.
@@ -4908,23 +4911,54 @@
             el('div', {}, [analyse]),
             findings.length === 0
                 ? el('p', {class: 'daemon-lead', text: 'The daemon froze no finding for this incident.'})
-                : el('div', {class: 'sources-wrap'}, [incidentFindingsTable(findings, detail)])
+                : findingsFilter(detail),
+            findings.length === 0 ? null : el('div', {class: 'sources-wrap'}, [incidentFindingsTable(findings, detail)])
         ]);
     }
+
+    /** Narrows the frozen findings in place, on their endpoint or template, without drawing the screen again. */
+    function findingsFilter(incident) {
+        const key = incidentKey(incident);
+        const input = el('input', {
+            type: 'search', class: 'input findings-filter', placeholder: 'endpoint or template',
+            value: state.findingQuery[key] || '', autocomplete: 'off', spellcheck: 'false'
+        });
+        const count = el('span', {class: 'field-gloss', 'aria-live': 'polite'});
+        const apply = function () {
+            state.findingQuery[key] = input.value;
+            const rows = document.querySelectorAll('[data-findings="' + CSS.escape(key) + '"] tbody tr');
+            let shown = 0;
+            Array.prototype.forEach.call(rows, function (row) {
+                row.hidden = !PSL.findingMatches(FINDING_ROW.get(row), input.value);
+                if (!row.hidden) shown += 1;
+            });
+            count.textContent = input.value.trim() === '' ? '' : shown + ' of ' + rows.length + ' shown';
+        };
+        input.addEventListener('input', apply);
+        // Once the table beside it is in the page, so a query kept across a sort applies again.
+        queueMicrotask(apply);
+        const row = field('Filter the findings', input, null);
+        row.appendChild(count);
+        return row;
+    }
+
+    // Each table row's frozen finding, for the filter to test without reading it back from the cells.
+    const FINDING_ROW = new WeakMap();
 
     function incidentFindingsTable(findings, incident) {
         // Without a single ack credential in the Hub, every link would open a page that can do nothing.
         const canAck = (state.sources || []).some(function (source) {
             return source.ack_relay;
         });
-        const columns = ['Type', 'Severity', 'Endpoint', 'Seen', 'First seen'].concat(canAck ? ['Ack'] : []);
+        const columns = ['Type', 'Severity', 'Endpoint', 'Template', 'Seen', 'First seen'].concat(canAck ? ['Ack'] : []);
         const head = el('tr', {}, columns.map(function (name) {
             return findingHead(name, incident);
         }));
         const rows = findings.map(function (row) {
             const finding = row.finding || {};
             const phase = PSL.findingPhase(row, incident);
-            return el('tr', {}, [
+            const template = PSL.findingTemplate(row);
+            const tr = el('tr', {}, [
                 // Not table-mono: this reads as a label now, not as the
                 // identifier the API filters on, which is untouched.
                 el('td', {text: PSL.FINDING_TYPE_LABEL[finding.type] || finding.type || '?'}),
@@ -4934,17 +4968,21 @@
                     text: finding.severity || '?'
                 })]),
                 el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
+                // Truncated to one line, whole in the tooltip: the template is what tells two rows apart.
+                el('td', {class: 'table-mono'}, [el('span', {class: 'findings-template', title: template, text: template || '—'})]),
                 el('td', {'data-align': 'right', text: String(row.seen_count == null ? '?' : row.seen_count)}),
                 el('td', {
                     title: PSL.dtHuman(row.first_seen_ms),
-                    text: PSL.dur(Math.abs(row.first_seen_ms - incident.at_ms))
-                        + (phase === 'after' ? ' after the restart' : ' before the incident')
+                    text: PSL.dur(Math.abs(row.first_seen_ms - incident.at_ms)) + PSL.phaseLabel(phase, incident.kind)
                 }),
                 // The daemon that froze the finding is the only one the page checks.
                 canAck ? el('td', {}, [finding.signature ? ackLink(finding, incident) : null]) : null
             ]);
+            FINDING_ROW.set(tr, row);
+            return tr;
         });
-        const table = el('table', {class: 'table table-findings'}, [el('thead', {}, [head]), el('tbody', {}, rows)]);
+        const table = el('table', {class: 'table table-findings', 'data-findings': incidentKey(incident)},
+            [el('thead', {}, [head]), el('tbody', {}, rows)]);
         if (canAck) return table;
         return el('div', {}, [table, el('p', {
             class: 'field-note',
@@ -4952,7 +4990,9 @@
         })]);
     }
 
-    const FINDING_SORT_KEY = {Type: 'type', Severity: 'severity', Endpoint: 'endpoint', Seen: 'seen', 'First seen': 'first'};
+    const FINDING_SORT_KEY = {
+        Type: 'type', Severity: 'severity', Endpoint: 'endpoint', Template: 'template', Seen: 'seen', 'First seen': 'first'
+    };
 
     /** A column head that sorts on click. Counts and severity read worst first, the rest A to Z. */
     function findingHead(name, incident) {
@@ -5096,7 +5136,8 @@
             ['endpoint', finding.source_endpoint || '?'],
             ['first seen', PSL.dtHuman(envelope.first_seen)],
             ['last seen', PSL.dtHuman(envelope.last_seen)],
-            ['status', envelope.status || '?']
+            // The API's enum, worded: not_observed reads "not observed".
+            ['status', String(envelope.status || '?').replace(/_/g, ' ')]
         ];
         return el('div', {class: 'card params-panel'}, [
             el('div', {class: 'run-card-line'}, [
@@ -5177,14 +5218,17 @@
             return row.action !== 'none';
         });
         if (!actionable) {
-            return el('div', {class: 'card params-panel'}, [
-                el('p', {
-                    class: 'daemon-lead',
-                    text: rows.length === 0
-                        ? 'No source in this Hub carries this finding, so there is nothing to acknowledge from here.'
-                        : 'This Hub cannot write an ack to any source that carries this finding. Each row says why.'
-                }),
-                rows.length === 0 ? null : el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)])
+            return el('div', {class: 'ack-stack'}, [
+                el('div', {class: 'card params-panel'}, [
+                    el('p', {
+                        class: 'daemon-lead',
+                        text: rows.length === 0
+                            ? 'No source in this Hub carries this finding, so there is nothing to acknowledge from here.'
+                            : 'This Hub cannot write an ack to any source that carries this finding. Each row says why.'
+                    }),
+                    rows.length === 0 ? null : el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)])
+                ]),
+                daemonAckBlock(rows)
             ]);
         }
         return el('form', {class: 'card params-panel'}, [
@@ -5200,6 +5244,37 @@
         ]);
     }
 
+    /**
+     * Where the Hub cannot write an ack, the daemon still can: its own command,
+     * spelled for the daemon the link named, or the first one carrying the finding.
+     */
+    function daemonAckBlock(rows) {
+        const route = PSL.readAckRoute(location.hash) || {};
+        const daemons = rows.map(function (row) {
+            return (state.sources || []).find(function (source) {
+                return source.id === row.id && source.kind === 'daemon' && source.base_url;
+            });
+        }).filter(Boolean);
+        const source = daemons.find(function (candidate) {
+            return candidate.id === route.sourceId;
+        }) || daemons[0];
+        if (!source) return null;
+        return terminalBlock({
+            head: '// acknowledge it on the daemon',
+            sub: 'The daemon takes the ack itself, with its own key.',
+            id: 'ack-command',
+            spell: function (shellId) {
+                return PSL.ackCommand(source, state.ack.signature, shellId);
+            },
+            copyLabel: 'Copy the ack command for ' + source.name,
+            notes: [
+                'Set `PERF_SENTINEL_DAEMON_API_KEY` to this daemon\'s ack key first, and write the reason '
+                + 'in place of the last value. Add `--expires 7d` for an ack that lapses.',
+                engineNote()
+            ]
+        });
+    }
+
     function ackSourcesTable(rows) {
         const head = el('tr', {}, ['', 'Source', 'Current ack', 'What this page can do'].map(function (name) {
             return el('th', {text: name, scope: 'col'});
@@ -5207,7 +5282,9 @@
         return el('table', {class: 'table ack-table'}, [
             el('thead', {}, [head]),
             el('tbody', {}, rows.map(function (row) {
-                const box = el('input', {type: 'checkbox', 'aria-label': row.name});
+                const reasonId = 'ack-row-' + rows.indexOf(row);
+                // The row's last cell says what this page can do there, and why not when the box is off.
+                const box = el('input', {type: 'checkbox', 'aria-label': row.name, 'aria-describedby': reasonId});
                 box.checked = PSL.ackChecked(row, state.ack.checked);
                 box.disabled = row.action === 'none';
                 box.addEventListener('change', function () {
@@ -5223,7 +5300,7 @@
                         el('span', {class: 'chip chip-declared', text: row.environment || 'unknown'})
                     ]),
                     ackCell(row.ack),
-                    el('td', {text: row.note || (row.action === 'revoke' ? 'Revoke this ack.' : 'Acknowledge.')})
+                    el('td', {id: reasonId, text: row.note || (row.action === 'revoke' ? 'Revoke this ack.' : 'Acknowledge.')})
                 ]);
             }))
         ]);
@@ -5632,7 +5709,8 @@
             section.appendChild(el('div', {class: 'empty-state'}, [
                 el('p', {class: 'empty-title', text: 'No analysis in the last '
                         + state.status.limits.report_retention_hours + ' hours.'}),
-                el('p', {text: 'Retention empties this list after that many idle hours.'}),
+                el('p', {text: 'Retention empties this list after '
+                        + state.status.limits.report_retention_hours + ' idle hours.'}),
                 el('div', {class: 'outcome-actions empty-actions'}, [
                     el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'})
                 ])
@@ -5825,11 +5903,12 @@
             function () {
                 return reportLifetime(id);
             });
+        // Without a run, the page under the bar carries the ways out, so the bar does not repeat one.
         return el('div', {class: 'report-bar'}, [
-            el('a', {class: 'pill-button', href: run ? '#/run/' + id : '#/recent'}, [
+            run ? el('a', {class: 'pill-button', href: '#/run/' + id}, [
                 svg([['path', {d: 'M14 6l-6 6 6 6'}]], 14),
-                el('span', {text: run ? 'Back to the run' : 'All analyses'})
-            ]),
+                el('span', {text: 'Back to the run'})
+            ]) : null,
             el('span', {class: 'report-path', text: 'report / ' + id}),
             el('span', {class: 'report-spacer'}),
             lifetime
@@ -5861,8 +5940,10 @@
     function reportLifetime(id) {
         const run = state.run && state.run.id === id ? state.run : null;
         const version = state.status && state.status.engine_version;
+        // No run, no report: crediting an engine with it would describe a page that does not exist.
+        if (!run) return '';
         const rendered = 'Rendered by perf-sentinel ' + (version || 'unknown');
-        if (!run || !run.expires_at_ms) return rendered;
+        if (!run.expires_at_ms) return rendered;
         const left = run.expires_at_ms - Date.now();
         return rendered + (left > 0 ? ' · expires in ' + PSL.durPrecise(left) : ' · expired');
     }

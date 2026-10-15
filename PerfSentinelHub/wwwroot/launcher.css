@@ -169,14 +169,6 @@ button {
         padding: 0 9px;
     }
 
-    /* A row's detail spans the whole scrolling table: held to the visible width
-       it reads as a panel instead of prose cut at the screen's edge. */
-    .daemon-detail > td > * {
-        position: sticky;
-        left: 18px;
-        width: calc(100vw - 80px);
-    }
-
     .daemon-detail .daemon-top {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -750,8 +742,18 @@ a.shell-identity[aria-current="page"] {
    the page. */
 .sources-wrap {
     overflow-x: auto;
+    /* For the detail rule below: 100cqi is the width this scroller shows. */
+    container-type: inline-size;
     border-radius: var(--r);
     background: var(--surface);
+}
+
+/* A row's detail spans the whole table, which scrolls under 1,134 pixels. Held
+   to the visible width it reads as a panel instead of prose cut at the edge. */
+.daemon-detail > td > * {
+    position: sticky;
+    left: 18px;
+    width: calc(100cqi - 36px);
 }
 
 .table {
@@ -841,10 +843,23 @@ a.shell-identity[aria-current="page"] {
     color: var(--text);
 }
 
-/* An incident's findings: fewer columns than the fleet table, and the
-   endpoint wraps, so it needs far less than the fleet table's minimum. */
+/* An incident's findings: fewer columns than the fleet table, the endpoint
+   wraps and the template is cut to one line, so it needs less than the
+   fleet table's minimum. */
 .table-findings {
-    min-width: 640px;
+    min-width: 820px;
+}
+
+.findings-template {
+    display: block;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.findings-filter {
+    max-width: 320px;
 }
 
 .table-findings td.table-mono {
@@ -1131,7 +1146,7 @@ a.shell-identity[aria-current="page"] {
 
 .field-note {
     margin: 7px 0 0;
-    font-size: 11.5px;
+    font-size: 12px;
     color: var(--text-3);
 }
 
@@ -1845,11 +1860,18 @@ a.shell-identity[aria-current="page"] {
 
 .cost-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1px;
     background: var(--border);
     border-radius: 10px;
     overflow: hidden;
+}
+
+/* Four tiles in a row or two by two, never three and a lone one under them. */
+@media (max-width: 1180px) {
+    .cost-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .cost-cell {
@@ -1937,6 +1959,9 @@ a.shell-identity[aria-current="page"] {
 /* A banner and a card carry no margin of their own, and this screen stacks both. */
 .ack-stack {
     display: grid;
+    /* minmax(0, ...): an implicit auto column grew to the ack table's width and
+       pushed a phone's page 100px past its screen instead of letting it scroll. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
 }
 
@@ -3121,22 +3146,31 @@ section > .banner + .banner,
 
 /* The dashboard's own "?", same size and same rule: beside a heading, never
    inside one. */
+/* 18px drawn, 26px to the pointer: the ::after widens the target past the
+   24px floor without growing the mark. The ring takes --dash, a 3:1 token. */
 .help-dot {
+    position: relative;
     flex: none;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     padding: 0;
-    border: 1px solid var(--border-2);
+    border: 1px solid var(--dash);
     border-radius: 50%;
     background: transparent;
     color: var(--text-3);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: help;
+}
+
+.help-dot::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
 }
 
 .help-dot:hover {
@@ -3681,7 +3715,7 @@ section > .banner + .banner,
 }
 
 .daemon-source-note {
-    max-width: 80ch;
+    max-width: 68ch;
     margin: 0;
     font-size: 12px;
     color: var(--text-3);
@@ -3691,6 +3725,7 @@ section > .banner + .banner,
    this is the same kind of paragraph, not a gloss. No width limit, it sits
    above the full width of the card grid. */
 .settings-preamble {
+    max-width: 80ch;
     margin: 14px 0 0;
     font-size: 12.5px;
     line-height: 1.6;
@@ -4149,9 +4184,8 @@ section > .banner + .banner,
     margin-bottom: 4px;
 }
 
+/* Placed where any screen's content starts, so it reads like the run screen's own. */
 .report-gone {
     align-self: flex-start;
-    margin: 0 auto;
-    padding: 56px 24px;
-    width: 100%;
+    padding: 30px 22px;
 }

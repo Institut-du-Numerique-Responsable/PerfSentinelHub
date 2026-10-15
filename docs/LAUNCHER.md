@@ -172,8 +172,10 @@ A row unfolds into the findings the daemon froze for that incident, each placed 
 the incident or after the restart from its own stamp against the incident's. The capture
 column carries the daemon's reading of how far back its ring still reached: complete,
 partial, or empty. Times are relative, never dates, and the exact stamp sits in the
-tooltip. The findings open worst first, then most seen, and a click or a keypress on a
-column head sorts them by that column. Five selects narrow the list. Kind and service stay
+tooltip. Each finding shows the normalized query it was raised on, cut to one line and
+whole in its tooltip, since one endpoint often carries several. The findings open worst
+first, then most seen, a click or a keypress on a column head sorts them by that column,
+and a field above the table narrows them by endpoint or template. Five selects narrow the list. Kind and service stay
 in sight, and namespace, environment and daemon fold behind More filters, which says how
 many of them are set. The namespace one appears once a row has carried one. The Hub applies them, so the older
 rows a button loads next, a hundred at a time from the store rather than from the daemons,
@@ -223,7 +225,9 @@ signature the Hub holds no finding for says so. Neither falls back to another sc
 
 Below it sits one form: a required reason, an optional expiry, and one row per source that
 carries the finding. The expiry is a day, sent as the last second of that day in UTC, and
-an empty one is a permanent ack. A line under the field reads it back in UTC, "Holds until
+an empty one is a permanent ack. When no source carrying the finding can take an ack from
+the Hub, the page prints the daemon's own `perf-sentinel ack` command for it instead. A line
+under the field reads the expiry back in UTC, "Holds until
 2026-11-30 23:59:59 UTC.", beside the date the browser shows in its own locale.
 
 <picture>

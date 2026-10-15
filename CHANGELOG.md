@@ -8,7 +8,16 @@ All notable changes to PerfSentinelHub are recorded here.
 
 - An incident's frozen findings open worst first, then most seen, where they followed their
   first sighting, and every column but Ack sorts on a click or a keypress on its head. The
-  sorted column says so to a screen reader.
+  sorted column says so to a screen reader. A Template column shows the normalized query
+  each finding was raised on, cut to one line and whole in its tooltip: on a lab OOM kill,
+  72 findings over 12 templates had read as rows that repeated word for word. A field above
+  the table narrows them by endpoint or template as you type.
+- "Analyse this window" is a link, so it opens in a new tab too. A finding first seen after
+  a deploy reads "after the deploy", and after a memory saturation "after the incident",
+  where both read "after the restart".
+- Where the Hub cannot acknowledge a finding, the ack page prints the daemon's own
+  `perf-sentinel ack --daemon <url> create` command for it, and each disabled source checkbox
+  is described by the reason in its row.
 - The Incidents filter line keeps kind and service in sight and folds namespace,
   environment and daemon behind More filters, which says how many of them are set.
 - The ack page reads the chosen expiry back in UTC, "Holds until 2026-11-30 23:59:59 UTC.",
@@ -17,9 +26,24 @@ All notable changes to PerfSentinelHub are recorded here.
   quick ranges sit under the dates instead of beside them.
 - Between 761 and 1400 pixels wide the tabs take the 12-pixel padding meant for them, which
   a later rule overrode.
+- A source's or an incident's detail is held to the visible width at every screen size,
+  where it was held only under 761 pixels and cut at the edge up to about 1,130.
+- The four cost tiles sit four in a row, or two by two below 1,180 pixels, never three and
+  one. A daemon selected on New analysis explains itself in one sentence, so Run analysis
+  stays nearer the top.
+- A "?" is 18 pixels with a 26-pixel target and a 3:1 ring, where it was 16 pixels with a
+  ring under 3:1. A source on New analysis is named by its name and health, its chips read
+  as a description, and an incident's row button names its kind and age beside the service.
+- A finding's status reads "not observed", not `not_observed`. An unknown report link no
+  longer credits an engine with a report that does not exist, nor repeats All analyses in
+  its bar.
 
 ### Fixed
 
+- On a phone the ack page fits the screen: its finding card and source table pushed it
+  100 pixels past the edge.
+- The sign-in page shows the Hub's logo in the dark theme. A rule hiding the dark logo came
+  after the one showing it and won, so the page read "HUB" alone.
 - The sign-in page sets the launcher's typeface, DM Sans at 400 and 600, written into its
   own stylesheet as `data:` fonts. Its policy gains `font-src data:` and the page still
   loads nothing, so it opens while the provider is down.

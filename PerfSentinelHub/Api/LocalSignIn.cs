@@ -31,12 +31,14 @@ public static partial class LocalSignIn
     private const string Wrong = "The name or the password is wrong.";
 
     // Inline because the launcher's stylesheets sit behind the fallback policy, and allowed by its hash.
+    // `.dark{display:none}` comes before the dark media query: after it, at the same specificity, it
+    // hid the dark logo in the dark theme.
     // The launcher's own palette, so a break-glass sign-in looks like the product it opens.
     private const string Style =
         """
         :root{color-scheme:light dark;--bg:#fff;--card:#fff;--ground:#f7f7f7;--fg:#20261f;--muted:#556b5c;--line:#ebebeb;--brand:#0ba671;--btn-bd:#a7c7bc;--btn-fg:#186b4f;--btn-bg:#e0f4ed;--sso-bg:#107a56;--sso-fg:#fff;--alert:#bf2a22;--alert-bg:#ffe4e1}
-        @media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1c241f;--ground:#141a17;--fg:#e8ede9;--muted:#a3b5ab;--line:#2b352e;--btn-bd:#2e4d41;--btn-fg:#5ecfa6;--btn-bg:rgba(11,166,113,.13);--sso-bg:#3ecf9d;--sso-fg:#0b1410;--alert:#ffa79e;--alert-bg:#3a1f1c}.light{display:none}.dark{display:block}}
         .dark{display:none}
+        @media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1c241f;--ground:#141a17;--fg:#e8ede9;--muted:#a3b5ab;--line:#2b352e;--btn-bd:#2e4d41;--btn-fg:#5ecfa6;--btn-bg:rgba(11,166,113,.13);--sso-bg:#3ecf9d;--sso-fg:#0b1410;--alert:#ffa79e;--alert-bg:#3a1f1c}.light{display:none}.dark{display:block}}
         body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--ground);color:var(--fg);font:15px/1.5 'DM Sans',system-ui,-apple-system,sans-serif}
         main{box-sizing:border-box;width:min(26rem,calc(100% - 2rem));padding:2rem;background:var(--card);border:1px solid var(--line);border-radius:14px}
         .brand{display:flex;align-items:center;gap:9px;margin-bottom:1.75rem}

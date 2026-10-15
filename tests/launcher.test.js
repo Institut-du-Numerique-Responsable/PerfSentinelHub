@@ -1185,3 +1185,31 @@ test("the ack expiry reads back in UTC, whatever the browser shows the date as",
     assert.equal(PSL.ackExpiryLine("2026-11-30", now), "Holds until 2026-11-30 23:59:59 UTC.");
     assert.equal(PSL.ackExpiryLine("2026-10-14", now), "The expiry is in the past.");
 });
+
+test("a frozen finding is told apart by its template, and found by it", () => {
+    const row = {finding: {source_endpoint: "/api/catalog/search", pattern: {template: "SELECT * FROM item WHERE id = ?"}}};
+    assert.equal(PSL.findingTemplate(row), "SELECT * FROM item WHERE id = ?");
+    assert.equal(PSL.findingTemplate({finding: {}}), "");
+    assert.ok(PSL.findingMatches(row, "  FROM ITEM "));
+    assert.ok(PSL.findingMatches(row, "catalog"));
+    assert.ok(PSL.findingMatches(row, ""));
+    assert.ok(!PSL.findingMatches(row, "orders"));
+    const sorted = PSL.sortFindings([
+        {seen_count: 1, first_seen_ms: 1, finding: {pattern: {template: "b"}}},
+        {seen_count: 1, first_seen_ms: 2, finding: {pattern: {template: "a"}}}
+    ], "template", "asc");
+    assert.deepEqual(sorted.map(PSL.findingTemplate), ["a", "b"]);
+});
+
+test("the daemon-side ack names the daemon before the subcommand and quotes what the shell needs", () => {
+    const line = PSL.ackCommand({base_url: "http://d:4318"}, "n_plus_one_sql:svc:ep:abc", "posix");
+    assert.equal(line, "perf-sentinel ack --daemon http://d:4318 create --signature n_plus_one_sql:svc:ep:abc --reason 'why it can wait'");
+});
+
+test("a finding after the incident is placed after the event that kind names", () => {
+    assert.equal(PSL.phaseLabel("before", "deploy"), " before the incident");
+    assert.equal(PSL.phaseLabel("after", "oom_kill"), " after the restart");
+    assert.equal(PSL.phaseLabel("after", "restart"), " after the restart");
+    assert.equal(PSL.phaseLabel("after", "deploy"), " after the deploy");
+    assert.equal(PSL.phaseLabel("after", "memory_saturation"), " after the incident");
+});
