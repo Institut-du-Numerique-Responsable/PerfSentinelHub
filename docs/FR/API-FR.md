@@ -721,7 +721,7 @@ Mappées seulement avec `Hub:Access:Enabled` et au moins une entrée dans
 `Hub:Access:LocalAccounts` ; sinon elles répondent comme toute route non mappée. Chaque
 réponse porte `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
 `Referrer-Policy: same-origin` et
-`Content-Security-Policy: default-src 'none'; style-src 'sha256-<empreinte de la feuille de style intégrée à la page>'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
+`Content-Security-Policy: default-src 'none'; font-src data:; style-src 'sha256-<empreinte de la feuille de style intégrée à la page>'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
 Voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux) pour le modèle.
 
 | Route | Qui | Réponses |

@@ -673,7 +673,7 @@ Mapped only with `Hub:Access:Enabled` and at least one entry in `Hub:Access:Loca
 otherwise these answer as any unmapped route does. Every answer carries
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
 `Referrer-Policy: same-origin` and
-`Content-Security-Policy: default-src 'none'; style-src 'sha256-<hash of the page's inline stylesheet>'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
+`Content-Security-Policy: default-src 'none'; font-src data:; style-src 'sha256-<hash of the page's inline stylesheet>'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
 See [AUTHENTICATION.md](AUTHENTICATION.md#local-accounts) for the model.
 
 | Route | Who | Answers |

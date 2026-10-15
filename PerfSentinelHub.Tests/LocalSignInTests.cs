@@ -703,7 +703,7 @@ public sealed class LocalSignInTests : IAsyncLifetime
         return await client.SendAsync(request, Cancel);
     }
 
-    // The page's one inline style is allowed by its hash, computed here as a browser does.
+    // The page's one inline style, its faces included, is allowed by its hash, computed here as a browser does.
     private static void AssertPageHeaders(HttpResponseMessage response, string page)
     {
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
@@ -712,8 +712,9 @@ public sealed class LocalSignInTests : IAsyncLifetime
         var start = page.IndexOf("<style>", StringComparison.Ordinal) + "<style>".Length;
         var style = page[start..page.IndexOf("</style>", start, StringComparison.Ordinal)];
         var hash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(style)));
+        Assert.Equal(2, style.Split("@font-face{font-family:'DM Sans'").Length - 1);
         Assert.Equal(
-            $"default-src 'none'; style-src 'sha256-{hash}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+            $"default-src 'none'; font-src data:; style-src 'sha256-{hash}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
             response.Headers.GetValues("Content-Security-Policy").Single());
     }
 

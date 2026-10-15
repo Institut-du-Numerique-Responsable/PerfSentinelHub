@@ -62,13 +62,16 @@ public static partial class LocalSignIn
 
     private static readonly TimeSpan GateWait = TimeSpan.FromSeconds(10);
 
-    private static readonly string Policy =
-        $"default-src 'none'; style-src 'sha256-{Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(Style)))}'; " +
-        "form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+    // The page's whole stylesheet: DM Sans read once from wwwroot/fonts.css, whose faces are
+    // data: URIs, then Style. The policy allows it by its hash, so both are set together.
+    private static string _style = Style;
+    private static string _policy = PolicyFor(Style);
 
     public static void MapLocalSignIn(this WebApplication app)
     {
         _logos = Logo(app.Environment, "light") + Logo(app.Environment, "dark");
+        _style = Fonts(app.Environment) + Style;
+        _policy = PolicyFor(_style);
         // Always the page, signed in or not: a redirect would loop with /device, which
         // re-challenges a session that has less than an hour left.
         app.MapGet(Path,
@@ -232,7 +235,28 @@ public static partial class LocalSignIn
         response.Headers.CacheControl = "no-store";
         response.Headers.XContentTypeOptions = "nosniff";
         response.Headers["Referrer-Policy"] = "same-origin";
-        response.Headers.ContentSecurityPolicy = Policy;
+        response.Headers.ContentSecurityPolicy = _policy;
+    }
+
+    private static string PolicyFor(string style)
+    {
+        return $"default-src 'none'; font-src data:; style-src 'sha256-{Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(style)))}'; " +
+               "form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+    }
+
+    // The two weights the page sets, about 38 KB. Empty when the file is missing, which leaves
+    // the system faces Style falls back to.
+    private static string Fonts(IWebHostEnvironment environment)
+    {
+        var file = environment.WebRootFileProvider.GetFileInfo("fonts.css");
+        if (!file.Exists)
+            return "";
+        using var stream = file.CreateReadStream();
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return string.Concat(reader.ReadToEnd().Split('\n').Where(line =>
+            line.StartsWith("@font-face{font-family:'DM Sans'", StringComparison.Ordinal) &&
+            (line.Contains("font-weight:400;", StringComparison.Ordinal) ||
+             line.Contains("font-weight:600;", StringComparison.Ordinal))));
     }
 
     private static string Logo(IWebHostEnvironment environment, string theme)
@@ -259,7 +283,7 @@ public static partial class LocalSignIn
               <meta charset="utf-8">
               <meta content="width=device-width, initial-scale=1" name="viewport">
               <title>Sign in · Perf Sentinel Hub</title>
-              <style>{{Style}}</style>
+              <style>{{_style}}</style>
               </head>
               <body>
               <main>
