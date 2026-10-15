@@ -6,6 +6,18 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
+- The image ships perf-sentinel `0.28.0` as its analysis engine, repinned by digest from
+  `0.27.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.27.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.28.0` changes no detector, normalizer or signature, so a run finds what it found on
+  `0.27.0`, with the same signatures, and acknowledgments keep matching. Its changes sit in
+  periodic disclosure, which the Hub does not run yet: a signed disclosure's attestation now
+  names the report's content hash, an official `disclose` refuses a period its archive no
+  longer reaches, and a daemon with `[daemon.archive]` writes daily rollups that hold a
+  quarter. A polled daemon's `/api/status` gains a `disclosure_archive` field the Hub
+  ignores. The engine also moves to `rustls` 0.23.46 against RUSTSEC-2026-0346 to 0349.
 - The launcher's files and the reports are compressed, Brotli or gzip at their fastest
   level, for a browser that accepts it. A report is megabytes of repetitive HTML: one of
   8.5 MB measured on a real daemon falls to under 800 KB, and its download from about
