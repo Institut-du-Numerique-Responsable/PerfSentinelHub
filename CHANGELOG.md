@@ -14,6 +14,15 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
+- The image ships perf-sentinel `0.29.0` as its analysis engine, repinned by digest from
+  `0.28.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.28.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.29.0` changes no detector, normalizer or signature, so a run finds what it found on
+  `0.28.0`, with the same signatures, and acknowledgments keep matching. Its change sits in
+  the daemon: with `[daemon.hub_export]` and `[daemon.incidents]` both on, a daemon pushes
+  its incidents to the new `/api/import/incidents` beside its findings.
 - An incident's frozen findings open worst first, then most seen, where they followed their
   first sighting, and every column but Ack sorts on a click or a keypress on its head. The
   sorted column says so to a screen reader. A Template column shows the normalized query
