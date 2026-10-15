@@ -129,3 +129,19 @@ v0.4.1	fd3e14c	2026-10-15	PASS
 # seed-hub-local from release/0.4.1 at 5745cc1, with the same daemon
 # perf-sentinel:0.28.0-e097972a and the same local, uncommitted image pins.
 v0.4.1	fd3e14c	2026-10-15	PASS
+# v0.5.0, 2026-10-15. The release adds POST /api/import/incidents, takes the
+# rest of the launcher critique and repins the engine to perf-sentinel 0.29.0.
+# Seven hub-* scenarios ran green on lab commit 6c7dfdb: hub-ingestion,
+# hub-derived-status, hub-source-reachability, hub-plugin-contract,
+# hub-incidents-mirror, hub-access-control and the new hub-incidents-push
+# (five incidents through a daemon ring of two reach the Hub without a poll,
+# then the resolved end). The image perf-sentinel-hub:0.5.0-6d0b0b4 was built
+# by seed-hub-local from the release branch at 6d0b0b4 and answers 0.5.0 with
+# engine 0.29.0, the published perf-sentinel image pinned by digest. The
+# daemon was the published perf-sentinel 0.29.0 image, pinned by digest
+# sha256:67b1ec9c. The lab ran with local, uncommitted image pins in its
+# daemon and Hub manifests. hub-access-control first stopped at its
+# pre-flight for want of a local perf-sentinel release binary, and passed once
+# one was built from v0.29.0. Not run: hub-lineage-mutation and
+# hub-retention-purge, which neither the import nor the launcher touches.
+v0.5.0	6c7dfdb	2026-10-15	PASS
