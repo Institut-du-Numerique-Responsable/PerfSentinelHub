@@ -25,8 +25,11 @@ activé, et la copie survit à l'anneau du daemon. Le résultat de cette lecture
 répond 404 ou 503 sur cette route ne publie pas d'incidents, un daemon qui refuse la clé
 est `unauthorized`, et aucun des deux ne marque la source injoignable, puisque ses
 findings viennent d'être collectés. Les incidents sont lus au même poll horaire que les
-findings, donc un incident capturé quelques minutes avant un redémarrage du daemon peut
-se perdre entre deux polls, ce que l'archive NDJSON du daemon lui-même couvre.
+findings. Un daemon en perf-sentinel 0.29.0 ou suivant avec `[daemon.hub_export]` actif
+les pousse aussi quand ils sont enregistrés, fermés ou complétés, donc un incident que son
+anneau évince entre deux polls arrive quand même. Sans ce push, un incident capturé
+quelques minutes avant un redémarrage du daemon peut se perdre entre deux polls, ce que
+l'archive NDJSON du daemon lui-même couvre.
 
 Ce poll est le plancher des incidents, pas l'unique chemin. `POST /api/incidents/refresh`
 lit chaque daemon à la demande, et l'écran des incidents du lanceur l'appelle à chaque
@@ -83,6 +86,7 @@ deux seuls paquets sont SQLite.
 | `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Les runs acceptés et pas encore pris par un worker                |
 | `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | Dernier push d'un daemon. Pas un battement de cœur, voir plus bas |
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refusés, par motif                                        |
+| `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Imports d'incidents refusés, par les motifs des findings          |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Les runs actuellement stockés, par statut                         |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Les signatures de findings distinctes stockées, par environnement |
 

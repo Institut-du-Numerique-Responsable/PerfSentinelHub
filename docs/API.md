@@ -13,6 +13,14 @@ findings and at most 2 MiB. The response is sent only after the idempotent signa
 upsert commits. A body that repeats a property name within one object is a `400`, as the
 Hub reads a finding with two parsers that would keep different copies of it.
 
+`POST /api/import/incidents?source_id=<id>` accepts a daemon's incidents, pushed by perf-sentinel
+0.29.0 and later beside its findings: `{"producer_version":"…","incidents":[…]}`, each incident in
+the shape `GET /api/incidents` serves on the daemon. It takes the same key, the same four-slot gate
+and the same five-second write wait, at most 10 incidents and 4 MiB per request, since one incident
+carries up to a thousand frozen findings. A pushed incident is merged as a polled one is: the copy
+with more frozen findings wins and an end is kept once seen, so push and poll converge in any
+order. Refusals count on `perf_sentinel_hub_incident_import_rejected_total`.
+
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that
 cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon

@@ -4,6 +4,14 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- `POST /api/import/incidents?source_id=<id>` takes the incidents a daemon on perf-sentinel 0.29.0
+  or later pushes beside its findings, with the same key and gate, at most 10 incidents and 4 MiB
+  per request. An incident its ring evicts between two hourly polls now reaches the Hub. The poll
+  still reads incidents, and both paths merge under one rule. Refusals count on
+  `perf_sentinel_hub_incident_import_rejected_total{reason}`.
+
 ### Changed
 
 - An incident's frozen findings open worst first, then most seen, where they followed their

@@ -23,8 +23,11 @@ enabled, and the copy survives the daemon's own ring. What that read came to is
 `incidents_state` on `/api/sources`, kept apart from reachability: a daemon answering 404
 or 503 on that route publishes no incidents, one refusing the key is `unauthorized`, and
 neither marks the source unreachable, since its findings were just collected. Incidents
-are read on the same hourly poll as the findings, so one captured minutes before a daemon
-restart can be lost between two polls, which the daemon's own NDJSON archive covers.
+are read on the same hourly poll as the findings. A daemon on perf-sentinel 0.29.0 or
+later with `[daemon.hub_export]` on also pushes them as they are recorded, closed or
+completed, so an incident its ring evicts between two polls still arrives. Without that
+push, one captured minutes before a daemon restart can be lost between two polls, which
+the daemon's own NDJSON archive covers.
 
 That poll is the floor for incidents, not the only path. `POST /api/incidents/refresh`
 reads every daemon on demand, and the launcher's incidents screen calls it on every open,
@@ -75,6 +78,7 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_source_last_success_seconds`                        | gauge   | Age of the last successful poll                       |
 | `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | When a daemon last pushed. Not a heartbeat, see below |
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refused, by reason                            |
+| `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Incident imports refused, by the findings reasons     |
 | `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Runs accepted and not yet claimed by a worker         |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Runs currently stored, per status                     |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Distinct finding signatures stored, per environment   |

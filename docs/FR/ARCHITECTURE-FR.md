@@ -36,6 +36,10 @@ réside dans le Hub.
 
 Les deux chemins écrivent des findings. Un seul écrit la joignabilité.
 
+Les incidents suivent le même partage depuis perf-sentinel 0.29.0 : le daemon pousse chacun quand
+il est enregistré, fermé ou complété, et le poll horaire les lit toujours comme filet de sécurité.
+Les deux écrivent par une même règle de fusion, donc aucun chemin ne peut défaire l'autre.
+
 Un daemon qui pousse avec succès prouve qu'il peut joindre le Hub. Il ne prouve rien
 sur la capacité du Hub à le joindre, qui est une autre route à travers un autre jeu de
 pare-feux, et c'est cette direction dont un opérateur a besoin quand une source se tait.
