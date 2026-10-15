@@ -29,7 +29,7 @@ public enum ImportRejection
 ///     would need the very lock that failed. The count resets on restart, which is
 ///     what a Prometheus counter is allowed to do.
 /// </summary>
-public sealed class ImportMetrics
+public class ImportMetrics
 {
     private static readonly ImportRejection[] Reasons = Enum.GetValues<ImportRejection>();
     private readonly long[] _counts = new long[Reasons.Length];
@@ -63,6 +63,22 @@ public sealed class ImportMetrics
             // rather than publish refusals under a name that says nothing.
             _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null)
         };
+    }
+}
+
+/// <summary>
+///     The incident import's refusals, on a series of their own: a label added to
+///     the findings counter would change what an unaggregated alert on it matches.
+/// </summary>
+public sealed class IncidentImportMetrics : ImportMetrics;
+
+/// <summary>The incident import's admission: the shared gate, its own refusal count.</summary>
+public sealed record IncidentImportAdmission(ImportGate Gate, IncidentImportMetrics Metrics)
+{
+    public T Refuse<T>(ImportRejection reason, T result)
+    {
+        Metrics.Rejected(reason);
+        return result;
     }
 }
 
