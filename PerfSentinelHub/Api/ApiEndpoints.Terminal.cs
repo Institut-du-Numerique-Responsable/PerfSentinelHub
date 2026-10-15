@@ -221,7 +221,8 @@ public static partial class ApiEndpoints
             return TypedResults.Challenge(new AuthenticationProperties
             { RedirectUri = context.Request.PathBase + "/device" });
         context.Response.Headers.CacheControl = "no-store";
-        context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; font-src 'self' data:; frame-ancestors 'none'";
+        context.Response.Headers.ContentSecurityPolicy =
+            "default-src 'self'; font-src 'self' data:; frame-ancestors 'none'";
         return TypedResults.Content(DevicePage, "text/html; charset=utf-8");
     }
 

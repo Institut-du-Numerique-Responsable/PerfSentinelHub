@@ -242,8 +242,9 @@ public static partial class LocalSignIn
 
     private static string PolicyFor(string style)
     {
-        return $"default-src 'none'; font-src data:; style-src 'sha256-{Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(style)))}'; " +
-               "form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+        return
+            $"default-src 'none'; font-src data:; style-src 'sha256-{Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(style)))}'; " +
+            "form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
     }
 
     // The two weights the page sets, about 38 KB. Empty when the file is missing, which leaves

@@ -4969,7 +4969,11 @@
                 })]),
                 el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
                 // Truncated to one line, whole in the tooltip: the template is what tells two rows apart.
-                el('td', {class: 'table-mono'}, [el('span', {class: 'findings-template', title: template, text: template || '—'})]),
+                el('td', {class: 'table-mono'}, [el('span', {
+                    class: 'findings-template',
+                    title: template,
+                    text: template || '—'
+                })]),
                 el('td', {'data-align': 'right', text: String(row.seen_count == null ? '?' : row.seen_count)}),
                 el('td', {
                     title: PSL.dtHuman(row.first_seen_ms),
@@ -4991,7 +4995,12 @@
     }
 
     const FINDING_SORT_KEY = {
-        Type: 'type', Severity: 'severity', Endpoint: 'endpoint', Template: 'template', Seen: 'seen', 'First seen': 'first'
+        Type: 'type',
+        Severity: 'severity',
+        Endpoint: 'endpoint',
+        Template: 'template',
+        Seen: 'seen',
+        'First seen': 'first'
     };
 
     /** A column head that sorts on click. Counts and severity read worst first, the rest A to Z. */
@@ -5300,7 +5309,10 @@
                         el('span', {class: 'chip chip-declared', text: row.environment || 'unknown'})
                     ]),
                     ackCell(row.ack),
-                    el('td', {id: reasonId, text: row.note || (row.action === 'revoke' ? 'Revoke this ack.' : 'Acknowledge.')})
+                    el('td', {
+                        id: reasonId,
+                        text: row.note || (row.action === 'revoke' ? 'Revoke this ack.' : 'Acknowledge.')
+                    })
                 ]);
             }))
         ]);
@@ -5531,11 +5543,11 @@
                     el('div', {text: 'The Hub did not list the terminal tokens. Reload the page to try again.'})
                 ])
                 : rows.length === 0
-                ? el('p', {class: 'access-muted', text: 'No terminal token.'})
-                : accessTable('Terminal tokens', ['Owner', 'Requested from', 'Created', 'Expires', 'Last used', ''],
-                    rows.map(function (row) {
-                        return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row, headingId)];
-                    }))
+                    ? el('p', {class: 'access-muted', text: 'No terminal token.'})
+                    : accessTable('Terminal tokens', ['Owner', 'Requested from', 'Created', 'Expires', 'Last used', ''],
+                        rows.map(function (row) {
+                            return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row, headingId)];
+                        }))
         ], headingId);
     }
 
@@ -5707,10 +5719,14 @@
         }
         if (state.runs.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'No analysis in the last '
-                        + state.status.limits.report_retention_hours + ' hours.'}),
-                el('p', {text: 'Retention empties this list after '
-                        + state.status.limits.report_retention_hours + ' idle hours.'}),
+                el('p', {
+                    class: 'empty-title', text: 'No analysis in the last '
+                        + state.status.limits.report_retention_hours + ' hours.'
+                }),
+                el('p', {
+                    text: 'Retention empties this list after '
+                        + state.status.limits.report_retention_hours + ' idle hours.'
+                }),
                 el('div', {class: 'outcome-actions empty-actions'}, [
                     el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'})
                 ])
@@ -5841,7 +5857,10 @@
         const route = (location.hash || '').replace('#/', '').split('?')[0];
         const access = route === 'access' || route === 'coverage';
         return el('section', {class: 'gone'}, [
-            el('h1', {class: 'page-title', text: access ? 'No access page on this Hub.' : 'Nothing lives at this address.'}),
+            el('h1', {
+                class: 'page-title',
+                text: access ? 'No access page on this Hub.' : 'Nothing lives at this address.'
+            }),
             el('p', {
                 class: 'page-sub',
                 text: access
@@ -5923,7 +5942,7 @@
             failed: ['This analysis wrote no report.', 'It failed before the engine produced one. Its page says why.'],
             interrupted: ['This analysis wrote no report.', 'It was interrupted before the engine produced one.'],
             expired: ['This report is gone.', 'Its retention ended and the Hub deleted it. Running the same analysis '
-                + 'again writes a new report from what ' + run.source_name + ' holds now.']
+            + 'again writes a new report from what ' + run.source_name + ' holds now.']
         }[key] || ['This report is gone.', 'The Hub no longer serves it.'];
         const finished = key !== 'queued' && key !== 'running';
         return el('div', {class: 'gone report-gone'}, [

@@ -15,6 +15,9 @@ public static partial class ApiEndpoints
     // A deep OFFSET is a scan: SQLite steps over every skipped row.
     private const int MaxFindingOffset = 1_000_000;
 
+    // One incident carries up to a thousand frozen findings: the cap of one daemon page.
+    private const int IncidentImportMaxBytes = 4 * 1024 * 1024;
+
     public static void MapHubApi(this WebApplication app)
     {
         var version = HubVersion.Current;
@@ -150,7 +153,7 @@ public static partial class ApiEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        if (AdmitImport(request, options, admission.Gate, admission.Refuse<IResult>, out var source) is { } refused)
+        if (AdmitImport(request, options, admission.Gate, admission.Refuse, out var source) is { } refused)
             return refused;
 
         try
@@ -237,9 +240,6 @@ public static partial class ApiEndpoints
         return null;
     }
 
-    // One incident carries up to a thousand frozen findings: the cap of one daemon page.
-    private const int IncidentImportMaxBytes = 4 * 1024 * 1024;
-
     private static async Task<IResult> ImportIncidentsAsync(
         HttpRequest request,
         HubDatabase database,
@@ -249,7 +249,7 @@ public static partial class ApiEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        if (AdmitImport(request, options, admission.Gate, admission.Refuse<IResult>, out var source) is { } refused)
+        if (AdmitImport(request, options, admission.Gate, admission.Refuse, out var source) is { } refused)
             return refused;
         try
         {
