@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -100,6 +101,35 @@ public sealed class AnalysisApiTests : IDisposable
         using var list = await _client.GetAsync("/api/analyses", cancellationToken);
         var runs = await list.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         Assert.Contains(runs.EnumerateArray(), item => item.GetProperty("id").GetString() == id);
+    }
+
+    [Fact]
+    public async Task A_report_is_compressed_for_a_browser_that_accepts_it_and_the_api_is_not()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var submission = await SubmitAsync("""
+                                                 {"source_id":"prod-tempo","request":{"service":"order-service","lookback":"1h","max_traces":100}}
+                                                 """, cancellationToken);
+        var id = (await submission.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
+            .GetProperty("id").GetString()!;
+        await WaitForTerminalStatusAsync(id, cancellationToken);
+
+        using var reportRequest = new HttpRequestMessage(HttpMethod.Get, $"/reports/{id}.html");
+        reportRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "br, gzip");
+        using var report = await _client.SendAsync(reportRequest, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, report.StatusCode);
+        Assert.Equal("br", Assert.Single(report.Content.Headers.ContentEncoding));
+        await using (var body = new BrotliStream(await report.Content.ReadAsStreamAsync(cancellationToken),
+                         CompressionMode.Decompress))
+        using (var reader = new StreamReader(body))
+            Assert.Contains("<html>", await reader.ReadToEndAsync(cancellationToken), StringComparison.Ordinal);
+
+        // JSON stays plain: an answer may carry a token, and compressing a secret
+        // beside reflected input is what BREACH reads.
+        using var apiRequest = new HttpRequestMessage(HttpMethod.Get, "/api/analyses");
+        apiRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "br, gzip");
+        using var api = await _client.SendAsync(apiRequest, cancellationToken);
+        Assert.Empty(api.Content.Headers.ContentEncoding);
     }
 
     [Theory]

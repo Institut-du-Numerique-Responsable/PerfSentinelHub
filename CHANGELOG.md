@@ -2,6 +2,23 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The launcher's files and the reports are compressed, Brotli or gzip at their fastest
+  level, for a browser that accepts it. A report is megabytes of repetitive HTML: one of
+  8.5 MB measured on a real daemon falls to under 800 KB, and its download from about
+  5 seconds to well under one on the same link. `text/html`, CSS, JavaScript and SVG only:
+  JSON answers stay plain, since one may carry a token next to reflected input, the pair
+  BREACH reads over HTTPS.
+- The report screen says "Loading the report" until its frame has loaded, where it showed
+  an empty page.
+- On the Incidents screen, the service and namespace filters wait for the first read of the
+  daemons, disabled, instead of opening on their "every" entry alone and filling under the
+  pointer when the read lands. The namespace filter holds its place meanwhile, so the line
+  no longer shifts, and is dropped as before when no incident carried a namespace.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added

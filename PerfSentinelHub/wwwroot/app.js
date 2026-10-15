@@ -4483,8 +4483,10 @@
      * One labelled select for the filter line. The first option is the whole
      * set, worded from the label, and `options` are [value, text] pairs.
      */
-    function filterSelect(label, value, options, onChange) {
-        const select = el('select', {class: 'refresh-select', 'aria-label': label}, [
+    function filterSelect(label, value, options, onChange, disabled) {
+        const select = el('select', {
+            class: 'refresh-select', 'aria-label': label, disabled: disabled ? 'disabled' : null
+        }, [
             el('option', {value: '', text: 'every ' + label})
         ].concat(options.map(function (entry) {
             const option = el('option', {value: entry[0], text: entry[1]});
@@ -4518,6 +4520,8 @@
         const daemons = (state.sources || []).filter(function (source) {
             return source.kind === 'daemon';
         });
+        // Only the first read: later ones keep the lists the earlier reads built.
+        const pending = state.incidents === null && state.incidentServices.length === 0;
         const environments = Array.from(new Set(daemons.map(function (source) {
             return source.environment;
         }).filter(Boolean))).sort();
@@ -4538,11 +4542,15 @@
             filterSelect('kind', filter.kind, Object.keys(PSL.INCIDENT_KIND_LABEL).map(function (kind) {
                 return [kind, PSL.INCIDENT_KIND_LABEL[kind]];
             }), setFilter('kind')),
-            filterSelect('service', filter.service, state.incidentServices.map(same), setFilter('service')),
-            // Only once a row has carried one: a select over nothing would
-            // promise a column the fleet has not filled.
-            state.incidentNamespaces.length > 0
-                ? filterSelect('namespace', filter.namespace, state.incidentNamespaces.map(same), setFilter('namespace'))
+            // Service and namespace list what the read returns, so they wait for it
+            // rather than open on "every" alone and change under the pointer.
+            filterSelect('service', filter.service, state.incidentServices.map(same), setFilter('service'), pending),
+            // Held in place while the read runs, so the line does not shift when it
+            // lands; dropped after a read none carried, since a select over nothing
+            // would promise a column the fleet has not filled.
+            pending || state.incidentNamespaces.length > 0
+                ? filterSelect('namespace', filter.namespace, state.incidentNamespaces.map(same),
+                    setFilter('namespace'), pending)
                 : null,
             filterSelect('environment', filter.environment, environments.map(same), setFilter('environment')),
             filterSelect('daemon', filter.source_id, daemons.map(function (source) {
@@ -5565,6 +5573,13 @@
      */
     function renderReportScreen(id) {
         const frame = el('iframe', {class: 'report-frame', src: '/reports/' + id + '.html', title: 'Analysis report'});
+        // A report runs to megabytes: until the frame loads it would read as a blank page.
+        const loading = el('div', {class: 'report-loading', role: 'status'}, [
+            el('span', {class: 'report-loading-text', text: 'Loading the report'})
+        ]);
+        frame.addEventListener('load', function () {
+            loading.remove();
+        });
         const lifetime = live(el('span', {class: 'report-engine', text: reportLifetime(id)}),
             function () {
                 return reportLifetime(id);
@@ -5578,7 +5593,7 @@
             el('span', {class: 'report-spacer'}),
             lifetime
         ]);
-        return el('div', {class: 'report-shell'}, [bar, frame]);
+        return el('div', {class: 'report-shell'}, [bar, el('div', {class: 'report-stage'}, [frame, loading])]);
     }
 
     function reportLifetime(id) {
