@@ -120,3 +120,12 @@ v0.4.0	20ff4ab	2026-10-14	PASS
 # manifests. Not run: hub-lineage-mutation and hub-retention-purge, which
 # neither the engine nor #91 touches.
 v0.4.1	fd3e14c	2026-10-15	PASS
+# v0.4.1, 2026-10-15, again on the final tree. After the row above the release
+# took the launcher fixes (a way on from every dead end, labelled fields and
+# headings, the filled button's contrast, the phone layout, the report's
+# loading band), the advised verdict counting only ingestion_drops and tuning,
+# and the /device page's fonts. The same six hub-* scenarios ran green on lab
+# commit fd3e14c against perf-sentinel-hub:0.4.1-5745cc1, built by
+# seed-hub-local from release/0.4.1 at 5745cc1, with the same daemon
+# perf-sentinel:0.28.0-e097972a and the same local, uncommitted image pins.
+v0.4.1	fd3e14c	2026-10-15	PASS
