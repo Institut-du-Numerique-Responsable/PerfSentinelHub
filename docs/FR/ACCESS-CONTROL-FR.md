@@ -145,21 +145,21 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 
 ### Ce que voit un appelant
 
-| Route                                                  | Exige                                                                | Refus                              |
-|--------------------------------------------------------|----------------------------------------------------------------------|------------------------------------|
-| `/` et les fichiers du launcher                        | n'importe quel appelant                                              | redirection ou `401`               |
-| `GET /api/status`, `GET /api/sources`                  | une permission quelque part                                          | `403`                              |
-| `GET /api/findings`, `GET /api/findings/{traceId}`     | `findings.read`, filtré                                              | `403` si détenue nulle part        |
-| `GET /api/incidents`, `GET /api/incidents/{id}`        | `findings.read`, filtré ; la copie la plus riche dans le périmètre   | `403` ; `404`                      |
-| `POST /api/incidents/refresh`                          | `findings.read` ; ne lit que les démons dans le périmètre            | `403`                              |
-| `GET /api/sources/{sourceId}/daemon`                   | `sources.read` sur cette source entière                              | `404`                              |
-| `POST /api/sources/{sourceId}/acks` et `/acks/revoke`  | `findings.read` et `acks.write` sur le finding dans cette source     | `404`, `403`                       |
-| `POST /api/analyses`                                   | `analyses.run` et la règle de lecture du run, ci-dessous             | `403`                              |
-| `GET /api/analyses`, `GET /api/analyses/{id}`          | la règle de lecture du run                                           | filtré ; `404`                     |
-| `GET /reports/{id}.html`                               | la règle de lecture du run                                           | `404`                              |
-| `GET /metrics`                                         | anonyme, sur `Hub:MetricsPort` seulement                             | `404` ailleurs                     |
-| `GET /api/access`                                      | tout appelant, même sans grant ; davantage pour un admin, plus bas   |                                    |
-| `POST /api/import/findings`, `/health/*`               | inchangé                                                             |                                    |
+| Route                                                                  | Exige                                                              | Refus                       |
+|------------------------------------------------------------------------|--------------------------------------------------------------------|-----------------------------|
+| `/` et les fichiers du launcher                                        | n'importe quel appelant                                            | redirection ou `401`        |
+| `GET /api/status`, `GET /api/sources`                                  | une permission quelque part                                        | `403`                       |
+| `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtré                                            | `403` si détenue nulle part |
+| `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtré ; la copie la plus riche dans le périmètre | `403` ; `404`               |
+| `POST /api/incidents/refresh`                                          | `findings.read` ; ne lit que les démons dans le périmètre          | `403`                       |
+| `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` sur cette source entière                            | `404`                       |
+| `POST /api/sources/{sourceId}/acks` et `/acks/revoke`                  | `findings.read` et `acks.write` sur le finding dans cette source   | `404`, `403`                |
+| `POST /api/analyses`                                                   | `analyses.run` et la règle de lecture du run, ci-dessous           | `403`                       |
+| `GET /api/analyses`, `GET /api/analyses/{id}`                          | la règle de lecture du run                                         | filtré ; `404`              |
+| `GET /reports/{id}.html`                                               | la règle de lecture du run                                         | `404`                       |
+| `GET /metrics`                                                         | anonyme, sur `Hub:MetricsPort` seulement                           | `404` ailleurs              |
+| `GET /api/access`                                                      | tout appelant, même sans grant ; davantage pour un admin, plus bas |                             |
+| `POST /api/import/findings`, `POST /api/import/incidents`, `/health/*` | inchangé                                                           |                             |
 
 `GET /api/sources` ne liste que les sources où l'appelant détient quelque chose, chacune
 avec un tableau `permissions` (absent sans contrôle d'accès). Une source absente de cette

@@ -132,8 +132,8 @@ machine token too and every read is trimmed to the caller's grants, see
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md) and
 [What access control does not cover](#what-access-control-does-not-cover).
 
-One endpoint asks for a credential, `POST /api/import/findings`, whose
-`X-API-Key` is compared by fingerprint. Every other one asks for nothing:
+Two endpoints ask for a credential, `POST /api/import/findings` and
+`POST /api/import/incidents`, whose `X-API-Key` is compared by fingerprint. Every other one asks for nothing:
 `/api/status`, `/api/sources`, `/api/findings`, `/api/analyses` for both the
 listing and the request that starts a run, `/reports/`, `/metrics`, and the
 launcher itself. Whoever reaches the port reads every finding of every tenant,

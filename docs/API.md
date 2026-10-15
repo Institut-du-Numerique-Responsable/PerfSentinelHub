@@ -27,7 +27,7 @@ cannot take the write lock within five seconds gets `503 Retry-After: 1`, and da
 exporters retain and retry their coalesced batches. Retention purges in bounded chunks, so
 a long purge does not reject imports for its whole duration.
 
-A push updates findings and per-source observations only. It never clears the poll path's
+A push updates findings, incidents and per-source observations only. It never clears the poll path's
 `unreachable_since_ms`. A source the Hub cannot reach still reports `unreachable_since`
 while its daemon pushes successfully, and that is correct: reachability is a fact about
 the Hub's route to the daemon, which a push does not exercise.
