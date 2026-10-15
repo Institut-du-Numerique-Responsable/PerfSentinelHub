@@ -829,7 +829,10 @@
             traces: light.traces,
             analysis_queue: light.analysis_queue,
             findings: light.findings,
-            state: lightState(light, previous.warnings.length)
+            state: lightState(light, previous.warnings.filter(function (hint) {
+                // DaemonView.AdvisingCount's set: the other kinds describe the daemon.
+                return hint.kind === 'ingestion_drops' || hint.kind === 'tuning';
+            }).length)
         });
     }
 
@@ -1317,9 +1320,29 @@
         if (route.indexOf('run/') === 0) return 'run';
         if (route.indexOf('report/') === 0) return 'report';
         if (route === 'coverage' && accessOn) return admin ? 'coverage' : 'access';
-        if (route === 'access' || route === 'coverage') return accessOn ? 'access' : 'new';
+        if (route === 'access' || route === 'coverage') return accessOn ? 'access' : 'missing';
+        if (route === '') return 'new';
         // `ack` has no tab: it is reached by link only.
-        return ['new', 'recent', 'sources', 'incidents', 'ack'].indexOf(route) >= 0 ? route : 'new';
+        return ['new', 'recent', 'sources', 'incidents', 'ack'].indexOf(route) >= 0 ? route : 'missing';
+    }
+
+    /**
+     * The form fields a past run's request fills back in, so running it again
+     * starts from what it asked rather than from a blank form.
+     * @param {Record<string, unknown> | null | undefined} request
+     * @returns {Record<string, unknown>}
+     */
+    function formFromRequest(request) {
+        const r = request || {};
+        const form = {detection: Object.assign({}, r['detection'] || {}), pickerOpen: false};
+        if (r['trace_id']) return Object.assign(form, {mode: 'trace', traceId: String(r['trace_id'])});
+        Object.assign(form, {mode: 'service', service: String(r['service'] || ''), traceId: ''});
+        if (typeof r['max_traces'] === 'number') form.maxTraces = r['max_traces'];
+        if (typeof r['from_ms'] === 'number' && typeof r['to_ms'] === 'number') {
+            return Object.assign(form, {rangeMode: 'absolute', fromMs: r['from_ms'], toMs: r['to_ms']});
+        }
+        if (r['lookback']) Object.assign(form, {rangeMode: 'relative', lookback: String(r['lookback'])});
+        return form;
     }
 
     /**
@@ -1551,7 +1574,7 @@
         INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentFilterState, incidentsCopy,
         incidentHandoffHash, readHandoff,
         ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary,
-        shellBanner, screenOf, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows,
+        shellBanner, screenOf, formFromRequest, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows,
         coverageSnippet, accessRequestText, sourceCountLabel, revokeOutcome,
         tokenRows, tokenRevokeRequest, deviceIntro, deviceRequestLine, deviceNetworkAlert, deviceApproveStep
     };

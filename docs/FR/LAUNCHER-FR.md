@@ -204,9 +204,11 @@ qui ouvre New analysis sur le service et la fenêtre de l'incident, décrit sous
 formulaire suit la source. La source reste au choix de l'exploitant, parce qu'un daemon ne
 prend aucune fenêtre et que le daemon de l'incident lui-même analyserait son instantané en
 mémoire plutôt que la fenêtre. Le lien garde ses paramètres, donc il se partage et se
-recharge, et l'onglet New lui-même n'en porte aucun. Chaque finding de la ligne dépliée se
-termine par un lien Ack, qui ouvre [La page d'acquittement](#la-page-dacquittement) sur ce
-finding, le daemon de l'incident coché.
+recharge, et l'onglet New lui-même n'en porte aucun. Quand une source du Hub détient un
+identifiant d'acquittement, chaque finding de la ligne dépliée se termine par un lien Ack, qui ouvre
+[La page d'acquittement](#la-page-dacquittement) sur ce finding, le daemon de l'incident
+coché. Sans identifiant, une ligne sous le tableau dit que les findings s'acquittent dans chaque
+daemon.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
@@ -339,7 +341,8 @@ retenu.
 
 La pastille d'identité mène à `#/access` quand `GET /api/access` répond, c'est-à-dire avec
 `Hub:Access` actif ; un `404` la laisse en simple texte, et un lien `#/access` ouvre alors
-Nouvelle analyse, comme toute route inconnue. La page ne change aucun droit, car les droits
+une page qui dit que ce Hub n'a pas de page d'accès, comme toute route inconnue dit qu'il
+n'a pas d'écran à cette adresse. La page ne change aucun droit, car les droits
 sont déclarés dans la configuration du Hub (valeurs Helm `hub.access`) et nulle part
 ailleurs. Sa seule action révoque un jeton de terminal. Elle montre :
 

@@ -152,13 +152,38 @@ button {
 }
 
 @media (max-width: 760px) {
+    /* Two rows tall here: held at the top it would keep a sixth of a phone's height. */
     .shell-topbar {
+        position: static;
         padding: 9px 16px;
+    }
+
+    /* Without the icons the four tabs fit a 390px screen, so none hides past the edge. */
+    .shell-tab svg {
+        display: none;
+    }
+
+    /* Two classes: the base .shell-tab rule comes later in the file. */
+    .shell-tabs .shell-tab {
+        padding: 0 9px;
+    }
+
+    /* A row's detail spans the whole scrolling table: held to the visible width
+       it reads as a panel instead of prose cut at the screen's edge. */
+    .daemon-detail > td > * {
+        position: sticky;
+        left: 18px;
+        width: calc(100vw - 80px);
+    }
+
+    .daemon-detail .daemon-top {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .shell-tabs {
         order: 3;
         flex: 1 0 100%;
+        gap: 4px;
     }
 
     .shell-topbar .shell-cluster {
@@ -402,8 +427,6 @@ a.shell-identity[aria-current="page"] {
 }
 
 .shell-footer {
-    position: sticky;
-    bottom: 0;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -438,6 +461,15 @@ a.shell-identity[aria-current="page"] {
 
 /* ------------------------------------------------------- shared pieces */
 
+/* Section heads are h2 for heading navigation, drawn as the overline they were. */
+:where(h2).overline {
+    margin: 0;
+}
+
+:where(h2).overline-p {
+    margin-top: 1em;
+}
+
 .overline {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -462,6 +494,7 @@ a.shell-identity[aria-current="page"] {
 }
 
 .page-sub {
+    max-width: 72ch;
     margin: 0 0 20px;
     font-size: 13.5px;
     line-height: 1.55;
@@ -776,6 +809,16 @@ a.shell-identity[aria-current="page"] {
     font-family: var(--font-mono);
 }
 
+/* An incident's findings: fewer columns than the fleet table, and the
+   endpoint wraps, so it needs far less than the fleet table's minimum. */
+.table-findings {
+    min-width: 640px;
+}
+
+.table-findings td.table-mono {
+    overflow-wrap: anywhere;
+}
+
 .table-muted {
     color: var(--text-3);
 }
@@ -966,7 +1009,7 @@ a.shell-identity[aria-current="page"] {
 
 .panel-note {
     margin: 13px 0 0;
-    font-size: 11.5px;
+    font-size: 12px;
     line-height: 1.5;
     color: var(--text-3);
 }
@@ -1274,10 +1317,10 @@ a.shell-identity[aria-current="page"] {
 .picker-apply {
     height: 32px;
     padding: 0 15px;
-    border: 1px solid var(--brand);
+    border: 1px solid var(--fill);
     border-radius: 999px;
-    background: var(--brand);
-    color: #ffffff;
+    background: var(--fill);
+    color: var(--on-fill);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
@@ -1764,7 +1807,7 @@ a.shell-identity[aria-current="page"] {
 
 .cost-sub, .terminal-sub, .terminal-status,
 .refresh-read, .refresh-next, .refresh-label {
-    font-size: 11.5px;
+    font-size: 12px;
     color: var(--text-3);
 }
 
@@ -1811,7 +1854,7 @@ a.shell-identity[aria-current="page"] {
 
 .cost-note {
     margin: 0;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.4;
     color: var(--text-3);
 }
@@ -1829,10 +1872,10 @@ a.shell-identity[aria-current="page"] {
     gap: 9px;
     height: 44px;
     padding: 0 22px;
-    border: 1px solid var(--brand);
+    border: 1px solid var(--fill);
     border-radius: 999px;
-    background: var(--brand);
-    color: #ffffff;
+    background: var(--fill);
+    color: var(--on-fill);
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -2663,15 +2706,15 @@ body[data-screen="report"] .shell-footer {
 }
 
 .action-filled {
-    border-color: var(--brand);
-    background: var(--brand);
-    color: #ffffff;
+    border-color: var(--fill);
+    background: var(--fill);
+    color: var(--on-fill);
 }
 
 /* The filled one is the exception the rule above is written against: its face
    is opaque brand, which brightens the way a lit surface should. */
 .action-filled:hover {
-    border-color: var(--brand);
+    border-color: var(--fill);
     filter: brightness(1.08);
 }
 
@@ -2697,24 +2740,16 @@ body[data-screen="report"] .shell-footer {
     color: var(--crit-fg);
 }
 
-.legend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 7px;
-    margin-bottom: 18px;
-}
-
-.legend .overline {
-    margin-right: 4px;
-}
-
 /* Same reason as .banner + .refresh: the recent screen stacks up to two
-   banners above the legend and neither carries a margin of its own. Scoped to
-   section children so .ack-stack keeps its own spacing. */
+   banners above the run list and neither carries a margin of its own. Scoped
+   to section children so .ack-stack keeps its own spacing. */
 section > .banner + .banner,
-.banner + .legend {
+.banner + .run-list {
     margin-top: 12px;
+}
+
+.empty-actions {
+    justify-content: center;
 }
 
 .run-list {
@@ -3428,8 +3463,7 @@ section > .banner + .banner,
 
 /* The dashboard's Overview split. Gauges are wide, hints are a column of
    sentences, and putting them side by side is what keeps the fold to a screen.
-   No narrow fallback: the table around it holds a 1090px minimum and scrolls,
-   so this panel never gets less room than it has here, whatever the viewport. */
+   On a phone the panel is held to the screen's width and the two stack. */
 .daemon-top {
     display: grid;
     grid-template-columns: 1.35fr 1fr;
@@ -3583,6 +3617,7 @@ section > .banner + .banner,
 }
 
 .daemon-source-note {
+    max-width: 80ch;
     margin: 0;
     font-size: 12px;
     color: var(--text-3);
@@ -3664,10 +3699,10 @@ section > .banner + .banner,
     margin: 0 0 4px;
 }
 
-/* .sink-sub is 10.5px, which suits the short subtitle it was written for. The
+/* .sink-sub is 11px, which suits the short subtitle it was written for. The
    ones in this panel carry sentences, so they take the prose floor. */
 .daemon-panel .sink-sub {
-    font-size: 11.5px;
+    font-size: 12px;
 }
 
 /* ------------------------------------------------- the re-read interval */
@@ -4039,4 +4074,20 @@ section > .banner + .banner,
 
 #device-request:focus {
     outline: none;
+}
+
+/* A screen with nothing to show but why, and the way on. */
+.gone {
+    max-width: 640px;
+}
+
+.gone .page-sub {
+    margin-bottom: 4px;
+}
+
+.report-gone {
+    align-self: flex-start;
+    margin: 0 auto;
+    padding: 56px 24px;
+    width: 100%;
 }
