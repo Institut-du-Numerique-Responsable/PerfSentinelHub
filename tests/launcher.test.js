@@ -1114,3 +1114,12 @@ test("a code from another network warns, and Approve then needs a second click",
     assert.equal(PSL.deviceApproveStep(false, false), "arm");
     assert.equal(PSL.deviceApproveStep(false, true), "send");
 });
+
+test("the incident filters wait for the first read only, even on a fleet with no incident", () => {
+    // Before any read: disabled, the namespace filter holding its place.
+    assert.deepEqual(PSL.incidentFilterState(false, []), {pending: true, namespace: true});
+    // A read that found nothing is still a read: enabled, no namespace column,
+    // and a later refresh must not disable them again.
+    assert.deepEqual(PSL.incidentFilterState(true, []), {pending: false, namespace: false});
+    assert.deepEqual(PSL.incidentFilterState(true, ["shop"]), {pending: false, namespace: true});
+});

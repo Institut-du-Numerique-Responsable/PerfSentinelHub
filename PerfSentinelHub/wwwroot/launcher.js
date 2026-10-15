@@ -911,6 +911,22 @@
     };
 
     /**
+     * How the service and namespace filters of the incidents screen show. They
+     * list what a read returns, so they wait, disabled, for the first one, the
+     * namespace filter holding its place so the line does not shift when it
+     * lands. After any read, even one that found nothing, they stay enabled
+     * through later refreshes, and the namespace filter shows only once a row
+     * has carried a namespace: a select over nothing would promise a column the
+     * fleet has not filled.
+     * @param {boolean} read whether a read of the fleet has completed
+     * @param {string[]} namespaces the namespaces the reads have seen
+     * @returns {{pending: boolean, namespace: boolean}}
+     */
+    function incidentFilterState(read, namespaces) {
+        return {pending: !read, namespace: !read || namespaces.length > 0};
+    }
+
+    /**
      * How fresh the Hub's copy of one daemon's incidents is. The screen lists
      * one of these per daemon, so a quiet fleet reads differently from a stale
      * copy: an hour-old read of nothing is not the same answer as no read.
@@ -1532,7 +1548,7 @@
         lightState, mergeableView, mergeLight, refreshPlan, releaseUrl, openFolds,
         hubReleaseUrl, updateState, knownShell, CHART_PAGE, CHART_COORDINATE,
         gaugeTone, gaugeMove,
-        INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentsCopy,
+        INCIDENT_KIND_LABEL, FINDING_TYPE_LABEL, incidentCapture, findingPhase, INCIDENT_READ_STATE, incidentFilterState, incidentsCopy,
         incidentHandoffHash, readHandoff,
         ackRouteHash, ackEntryHash, readAckRoute, ackRows, ackExpiry, ackChecked, ackPlan, ackBody, ackSummary,
         shellBanner, screenOf, permits, describePattern, accessExpiry, accessSignedIn, ACCESS_NO_REACH, accessReachRows,

@@ -1,5 +1,7 @@
+using System.IO.Compression;
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
@@ -106,6 +108,16 @@ builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
 builder.Services.AddHostedService<RetentionWorker>();
 var authenticates = builder.AddHubAuthentication();
+// A report is several megabytes of repetitive HTML. Only the launcher's files and
+// the reports are compressed: none carries a secret, while a JSON answer may hold
+// a token next to reflected input, the pair BREACH reads over HTTPS.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.MimeTypes = ["text/html", "text/css", "text/javascript", "application/javascript", "image/svg+xml"];
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
 
 var app = builder.Build();
 
@@ -125,6 +137,8 @@ if (hubOptions.MetricsPort is { } metricsPort) app.UseMetricsPort(metricsPort, (
 
 // Before the static files: the fallback policy guards the launcher itself.
 if (authenticates) app.UseHubAuthentication();
+
+app.UseResponseCompression();
 
 // The launcher and the reports it opens are served from the same origin: the
 // theme handoff between them goes through sessionStorage, with no URL
