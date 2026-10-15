@@ -28,6 +28,8 @@ public sealed record ParsedIncident(
 
 public sealed record ParsedIncidentPage(IReadOnlyList<ParsedIncident> Incidents, int RejectedCount);
 
+public sealed record ParsedIncidentImport(string ProducerVersion, ParsedIncidentPage Page);
+
 public static class IncidentParser
 {
     /// <summary>
@@ -36,33 +38,61 @@ public static class IncidentParser
     /// </summary>
     public static readonly string[] Kinds = ["oom_kill", "memory_saturation", "restart", "deploy", "other"];
 
+    /// <summary>A pushed batch holds at most this many incidents, each up to a thousand findings.</summary>
+    public const int MaxImportIncidents = 10;
+
     public static ParsedIncidentPage Parse(ReadOnlyMemory<byte> payload)
     {
-        JsonDocument document;
+        using var document = Open(payload, "The incidents response is not valid JSON.");
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("The incidents response must be a JSON array.");
+        return ParseArray(document.RootElement);
+    }
+
+    /// <summary>
+    ///     A daemon's push: its version beside incidents in the very shape its
+    ///     listing serves, so a pushed copy and a polled one parse alike.
+    /// </summary>
+    public static ParsedIncidentImport ParseImport(ReadOnlyMemory<byte> payload)
+    {
+        using var document = Open(payload, "The import body is not valid JSON.");
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object ||
+            JsonRead.ReadString(root, "producer_version") is not { Length: > 0 and <= 64 } producerVersion ||
+            !root.TryGetProperty("incidents", out var incidents) ||
+            incidents.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("The import body is invalid.");
+
+        var count = incidents.GetArrayLength();
+        if (count > MaxImportIncidents)
+            throw new ImportBatchTooLargeException();
+        if (count == 0)
+            throw new InvalidDataException("The import batch is empty.");
+        return new ParsedIncidentImport(producerVersion, ParseArray(incidents));
+    }
+
+    private static JsonDocument Open(ReadOnlyMemory<byte> payload, string invalid)
+    {
         try
         {
-            document = JsonDocument.Parse(payload, JsonRead.UniqueProperties);
+            return JsonDocument.Parse(payload, JsonRead.UniqueProperties);
         }
         catch (JsonException exception)
         {
-            throw new InvalidDataException("The incidents response is not valid JSON.", exception);
+            throw new InvalidDataException(invalid, exception);
         }
+    }
 
-        using (document)
-        {
-            if (document.RootElement.ValueKind != JsonValueKind.Array)
-                throw new InvalidDataException("The incidents response must be a JSON array.");
-
-            var incidents = new List<ParsedIncident>();
-            var rejected = 0;
-            foreach (var element in document.RootElement.EnumerateArray())
-                if (TryParse(element, out var incident))
-                    incidents.Add(incident);
-                else
-                    rejected++;
-
-            return new ParsedIncidentPage(incidents, rejected);
-        }
+    private static ParsedIncidentPage ParseArray(JsonElement array)
+    {
+        var incidents = new List<ParsedIncident>();
+        var rejected = 0;
+        foreach (var element in array.EnumerateArray())
+            if (TryParse(element, out var incident))
+                incidents.Add(incident);
+            else
+                rejected++;
+        return new ParsedIncidentPage(incidents, rejected);
     }
 
     private static bool TryParse(JsonElement element, out ParsedIncident incident)
