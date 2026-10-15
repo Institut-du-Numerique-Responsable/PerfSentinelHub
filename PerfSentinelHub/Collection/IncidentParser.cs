@@ -32,14 +32,14 @@ public sealed record ParsedIncidentImport(string ProducerVersion, ParsedIncident
 
 public static class IncidentParser
 {
+    /// <summary>A pushed batch holds at most this many incidents, each up to a thousand findings.</summary>
+    public const int MaxImportIncidents = 10;
+
     /// <summary>
     ///     The daemon's closed set of kinds. Anything else folds to `other`, as
     ///     the daemon itself does, so a label can never carry a free string.
     /// </summary>
     public static readonly string[] Kinds = ["oom_kill", "memory_saturation", "restart", "deploy", "other"];
-
-    /// <summary>A pushed batch holds at most this many incidents, each up to a thousand findings.</summary>
-    public const int MaxImportIncidents = 10;
 
     public static ParsedIncidentPage Parse(ReadOnlyMemory<byte> payload)
     {
