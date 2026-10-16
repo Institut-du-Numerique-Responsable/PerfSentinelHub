@@ -643,7 +643,9 @@ les trois fichiers. Rien n'est stocké avant la réponse du moteur, et un refus 
 
 Les raisons du `422` sont `content_hash_mismatch`, l'empreinte ne se recalcule pas,
 `binding_mismatch`, l'attestation nomme un autre rapport, `malformed_report`, un corps, une
-partie ou un rapport que le Hub ou le moteur ne sait pas lire, `file_too_large`,
+partie ou un rapport que le Hub ou le moteur ne sait pas lire, dont une confidentialité autre
+que `public` ou `internal` et une date de période qui n'est pas au format `YYYY-MM-DD`,
+`file_too_large`,
 `missing_file`, `internal_refused`, un rapport interne alors que
 `Hub:Disclosures:AllowInternal` est coupé, et `engine_contract`, une réponse du moteur hors de
 son contrat.
@@ -707,9 +709,9 @@ type de contenu qui n'est pas du JSON un `415`, un `DELETE` compris.
 Un lien de partage dure `days`, de 1 à 30, `Hub:Disclosures:ShareLinkDays` quand le corps
 l'omet. La réponse,
 `{"id":"…","token":"pshare_…","path":"/share/pshare_…/","expires_at_ms":…}`, est le seul
-endroit où le jeton apparaît : le Hub en stocke le SHA-256. Une divulgation interne n'est
-jamais partagée (`422 {"reason":"internal_not_shareable"}`), une divulgation retirée non plus
-(`409`).
+endroit où le jeton apparaît : le Hub en stocke le SHA-256. Seule une divulgation publique
+est partagée (`422 {"reason":"internal_not_shareable"}` sinon), et une divulgation retirée
+jamais (`409`).
 
 Un retrait est définitif. Sa raison, de 1 à 500 caractères sans caractère de contrôle, est
 gardée avec le nom de l'appelant. Les fichiers restent et restent lisibles, chaque lien de

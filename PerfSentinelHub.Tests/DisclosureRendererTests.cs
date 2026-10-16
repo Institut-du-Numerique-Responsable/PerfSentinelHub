@@ -155,6 +155,18 @@ public sealed class DisclosureRendererTests : IDisposable
         Assert.False(DisclosureEnvelope.TryParse("[]"u8.ToArray(), out _));
     }
 
+    [Theory]
+    [InlineData("\"public\"", "\"INTERNAL\"")]
+    [InlineData("\"public\"", "\"restricted\"")]
+    [InlineData("\"2026-07-01\"", "\"soon\"")]
+    [InlineData("\"2026-09-30\"", "\"2026-13-01\"")]
+    public void The_envelope_refuses_a_confidentiality_or_a_date_the_schema_does_not_have(string valid, string invalid)
+    {
+        var report = Report.Replace(valid, invalid, StringComparison.Ordinal);
+
+        Assert.False(DisclosureEnvelope.TryParse(Encoding.UTF8.GetBytes(report), out _));
+    }
+
     private static string? Reason(RenderOutcome outcome)
     {
         return outcome switch

@@ -146,6 +146,7 @@ public sealed class DisclosuresApiTests : IDisposable
 
     [Theory]
     [InlineData("internal", false, """{"days":3}""", HttpStatusCode.UnprocessableEntity)]
+    [InlineData("restricted", false, """{"days":3}""", HttpStatusCode.UnprocessableEntity)]
     [InlineData("public", true, """{"days":3}""", HttpStatusCode.Conflict)]
     [InlineData("public", false, """{"days":31}""", HttpStatusCode.BadRequest)]
     [InlineData("public", false, """{"days":0}""", HttpStatusCode.BadRequest)]

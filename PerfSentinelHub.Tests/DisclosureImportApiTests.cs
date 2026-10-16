@@ -224,6 +224,23 @@ public sealed class DisclosureImportApiTests : IDisposable
         Assert.Single(await database.ListDeliveriesAsync(id, CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("INTERNAL")]
+    [InlineData("restricted")]
+    public async Task A_confidentiality_the_schema_does_not_have_is_422_before_any_engine_run(string confidentiality)
+    {
+        var hub = Hub(Rendering());
+        using var client = hub.CreateClient();
+
+        using var response = await client.SendAsync(
+            Publish(Report.Replace("\"public\"", $"\"{confidentiality}\"", StringComparison.Ordinal)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("""{"reason":"malformed_report"}""", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.False(EngineRan());
+    }
+
     [Fact]
     public async Task The_same_uuid_with_another_hash_is_409()
     {

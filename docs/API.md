@@ -601,9 +601,10 @@ three files. Nothing is stored before the engine answers, and a refusal stores n
 
 The `422` reasons are `content_hash_mismatch`, the hash does not recompute, `binding_mismatch`,
 the attestation names another report, `malformed_report`, a body, a part or a report the Hub or
-the engine cannot read, `file_too_large`, `missing_file`, `internal_refused`, an internal
-report while `Hub:Disclosures:AllowInternal` is off, and `engine_contract`, an engine answer
-outside its contract.
+the engine cannot read, a confidentiality other than `public` or `internal` among them, or a
+period date that is not `YYYY-MM-DD`, `file_too_large`, `missing_file`, `internal_refused`, an
+internal report while `Hub:Disclosures:AllowInternal` is off, and `engine_contract`, an engine
+answer outside its contract.
 
 A taken publication answers
 `{"id":"…","pdf":"rendered","reason":null,"content_hash_checked":true,"binding_checked":true}`.
@@ -662,8 +663,8 @@ not JSON is a `415`, a `DELETE` included.
 
 A share link lasts `days`, 1 to 30, `Hub:Disclosures:ShareLinkDays` when the body leaves it
 out. The answer, `{"id":"…","token":"pshare_…","path":"/share/pshare_…/","expires_at_ms":…}`, is
-the only place the token appears: the Hub stores its SHA-256. An internal disclosure is never
-shared (`422 {"reason":"internal_not_shareable"}`), and a withdrawn one neither (`409`).
+the only place the token appears: the Hub stores its SHA-256. Only a public disclosure is
+shared (`422 {"reason":"internal_not_shareable"}` otherwise), and a withdrawn one never (`409`).
 
 A withdrawal is final. Its `reason`, 1 to 500 characters with no control character, is kept
 with the caller's name. The files stay and stay readable, every share link stops answering,

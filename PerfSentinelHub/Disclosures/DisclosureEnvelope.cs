@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text.Json;
 
 namespace PerfSentinelHub.Disclosures;
@@ -52,11 +53,12 @@ public sealed record DisclosureEnvelope(
         if (Text(root, "schema_version") is not { } schema || !schema.StartsWith("perf-sentinel-report/", StringComparison.Ordinal) ||
             Text(metadata, "report_uuid") is not { } uuid ||
             Text(metadata, "intent") is not { } intent ||
-            Text(metadata, "confidentiality_level") is not { } confidentiality ||
+            // The schema has two levels: anything else would pass the internal check as public.
+            Text(metadata, "confidentiality_level") is not { } confidentiality || confidentiality is not ("public" or "internal") ||
             Text(Child(root, "organisation"), "name") is not { } organisation ||
             Text(period, "period_type") is not { } periodType ||
-            Text(period, "from_date") is not { } from ||
-            Text(period, "to_date") is not { } to ||
+            Text(period, "from_date") is not { } from || !IsDate(from) ||
+            Text(period, "to_date") is not { } to || !IsDate(to) ||
             Text(Child(root, "integrity"), "content_hash") is not { } contentHash)
             return null;
         return new DisclosureEnvelope(
@@ -116,6 +118,11 @@ public sealed record DisclosureEnvelope(
                !text.Any(char.IsControl)
             ? text
             : null;
+    }
+
+    private static bool IsDate(string text)
+    {
+        return DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
     }
 
     private static double? Number(JsonElement parent, string name)

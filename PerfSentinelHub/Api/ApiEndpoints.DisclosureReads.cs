@@ -106,7 +106,8 @@ public static partial class ApiEndpoints
             return refused;
         if (await database.GetDisclosureAsync(id, cancellationToken) is not { } summary)
             return TypedResults.NotFound();
-        if (summary.Confidentiality == "internal")
+        // Only public leaves the Hub, whatever a report stored before the envelope checked its level declares.
+        if (summary.Confidentiality != "public")
             return TypedResults.Json(new DisclosureRefusal("internal_not_shareable"),
                 HubJsonContext.Default.DisclosureRefusal, statusCode: StatusCodes.Status422UnprocessableEntity);
         if (summary.Withdrawn)
