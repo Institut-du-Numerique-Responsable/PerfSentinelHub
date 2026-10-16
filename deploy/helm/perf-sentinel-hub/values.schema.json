@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["image", "hub", "sources", "persistence", "resources"],
+  "required": ["image", "hub", "sources", "persistence", "probes", "resources"],
   "properties": {
     "image": {
       "type": "object",
@@ -237,6 +237,24 @@
         "storageClassName": { "type": "string" }
       }
     },
+    "probes": {
+      "type": "object",
+      "required": ["startup", "readiness", "liveness"],
+      "additionalProperties": false,
+      "properties": {
+        "startup": {
+          "type": "object",
+          "required": ["periodSeconds", "failureThreshold"],
+          "additionalProperties": false,
+          "properties": {
+            "periodSeconds": { "$ref": "#/$defs/probeSeconds" },
+            "failureThreshold": { "$ref": "#/$defs/probeCount" }
+          }
+        },
+        "readiness": { "$ref": "#/$defs/probe" },
+        "liveness": { "$ref": "#/$defs/probe" }
+      }
+    },
     "resources": {
       "type": "object",
       "required": ["requests", "limits"],
@@ -258,6 +276,18 @@
     }
   },
   "$defs": {
+    "probeSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+    "probeCount": { "type": "integer", "minimum": 1, "maximum": 720 },
+    "probe": {
+      "type": "object",
+      "required": ["periodSeconds", "timeoutSeconds", "failureThreshold"],
+      "additionalProperties": false,
+      "properties": {
+        "periodSeconds": { "$ref": "#/$defs/probeSeconds" },
+        "timeoutSeconds": { "$ref": "#/$defs/probeSeconds" },
+        "failureThreshold": { "$ref": "#/$defs/probeCount" }
+      }
+    },
     "positiveQuantity": {
       "type": "string",
       "pattern": "^(?:[1-9][0-9]*(?:\\.[0-9]+)?|0\\.[0-9]*[1-9][0-9]*)(?:m|[KMGTPE]i?)?$"

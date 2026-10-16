@@ -164,6 +164,15 @@ ingress:
 persistence:
   size: 1Gi
   storageClassName: ""
+# How the kubelet watches the Hub. The startup budget is periodSeconds times
+# failureThreshold, 5 minutes by default: a first start after an upgrade can
+# migrate a large database before /health/ready answers, and a kill midway
+# rolls the migration back, so every restart would start it over. Liveness
+# allows 5 seconds and 6 misses, so only a Hub that is really stuck restarts.
+probes:
+  startup: { periodSeconds: 5, failureThreshold: 60 }
+  readiness: { periodSeconds: 10, timeoutSeconds: 1, failureThreshold: 3 }
+  liveness: { periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 6 }
 resources:
   requests: { cpu: 50m, memory: 64Mi }
   limits: { cpu: 500m, memory: 256Mi }

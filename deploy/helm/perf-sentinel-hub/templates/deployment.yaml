@@ -121,9 +121,11 @@ spec:
             - { name: data, mountPath: /data }
             - { name: tmp, mountPath: /tmp }
             - { name: config, mountPath: /app/appsettings.Production.json, subPath: appsettings.Production.json }
-          startupProbe: { httpGet: { path: /health/ready, port: http }, failureThreshold: 30, periodSeconds: 2 }
-          readinessProbe: { httpGet: { path: /health/ready, port: http } }
-          livenessProbe: { httpGet: { path: /health/live, port: http } }
+          {{- with .Values.probes }}
+          startupProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: {{ .startup.periodSeconds }}, failureThreshold: {{ .startup.failureThreshold }} }
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: {{ .readiness.periodSeconds }}, timeoutSeconds: {{ .readiness.timeoutSeconds }}, failureThreshold: {{ .readiness.failureThreshold }} }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: {{ .liveness.periodSeconds }}, timeoutSeconds: {{ .liveness.timeoutSeconds }}, failureThreshold: {{ .liveness.failureThreshold }} }
+          {{- end }}
           resources: {{- toYaml .Values.resources | nindent 12 }}
       volumes:
         - name: data
