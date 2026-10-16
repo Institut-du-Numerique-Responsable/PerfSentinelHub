@@ -167,7 +167,7 @@ public sealed partial class HubDatabase
                                            LIMIT $limit OFFSET $offset;
                                            """;
 
-    private const string EpisodeList = $"{EpisodeListWhere}\n{EpisodeListPage}";
+    private const string EpisodeList = $"{EpisodeListWhere} {EpisodeListPage}";
 
     // An episode names both services and both templates, so a scope reads it only where it
     // reads each side at that source. It carries no attribute, so a pattern keyed on one
