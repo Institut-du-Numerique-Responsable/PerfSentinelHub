@@ -270,8 +270,24 @@ async function seedCorrelations(importKey: string): Promise<void> {
     const pool = {source: side("n_plus_one_sql", "order-svc"), target: side("pool_saturation", "orders-svc")};
     const slow = {source: side("slow_http", "reports-svc"), target: side("n_plus_one_http", "order-svc")};
     const quiet = {source: side("redundant_sql", "cache-svc"), target: side("slow_sql", "reports-svc")};
-    const episode = (n: number, pair: object, pairKey: number, startedAt: number, lastSeen: number,
-                     endedAt: number | null, peak: number) => ({
+    // An ended episode that straddles midnight prints its end with the full date, which widens the
+    // column past a phone's width, so whether the still fits would depend on the hour it is taken.
+    // Such an episode is moved back to end before midnight, its length kept.
+    const sameDay = (startedAt: number, endedAt: number) =>
+        new Date(startedAt).toDateString() === new Date(endedAt).toDateString();
+    const beforeMidnight = (startedAt: number, endedAt: number) => {
+        if (sameDay(startedAt, endedAt)) return 0;
+        const midnight = new Date(endedAt);
+        midnight.setHours(0, 0, 0, 0);
+        return endedAt - midnight.getTime() + minute;
+    };
+    const episode = (n: number, pair: object, pairKey: number, start: number, seen: number,
+                     ended: number | null, peak: number) => {
+        const shift = ended === null ? 0 : beforeMidnight(start, ended);
+        return episodeAt(n, pair, pairKey, start - shift, seen - shift, ended === null ? null : ended - shift, peak);
+    };
+    const episodeAt = (n: number, pair: object, pairKey: number, startedAt: number, lastSeen: number,
+                       endedAt: number | null, peak: number) => ({
         id: hex(0x100 + n), pair_key: hex(pairKey), ...pair,
         started_at_ms: startedAt, last_seen_ms: lastSeen, ended_at_ms: endedAt,
         peak_confidence: peak, peak_co_occurrences: Math.round(peak * 45),
