@@ -1671,6 +1671,174 @@
             .join(' · ');
     }
 
+    // ------------------------------------------------------------ disclosures
+
+    const DAY_MS = 86400000;
+    // What an official report needs, the engine's MIN_PERIOD_COVERAGE_FOR_OFFICIAL.
+    const OFFICIAL_COVERAGE = 0.75;
+    const RAIL_QUARTERS = 12;
+
+    /** The 16-hex id a disclosure route names, or null. */
+    function readDisclosureId(hash) {
+        const match = /^#\/disclosures\/([0-9a-f]{16})$/.exec(hash || '');
+        return match ? match[1] : null;
+    }
+
+    function quarterOf(year, month) {
+        return (year * 4) + Math.floor((month - 1) / 3);
+    }
+
+    function railCell(quarter, items, current, nowMs) {
+        const year = Math.floor(quarter / 4);
+        const cell = {label: year + ' Q' + ((quarter % 4) + 1), state: 'missing', level: null, id: null, daysLeft: null};
+        const live = items.find(function (item) {
+            return !item.withdrawn && item.confidentiality !== 'internal';
+        }) || items.find(function (item) {
+            return !item.withdrawn;
+        });
+        const shown = live || items[0];
+        if (shown) {
+            cell.state = !live ? 'withdrawn' : live.confidentiality === 'internal' ? 'internal' : 'published';
+            cell.level = shown.integrity_level;
+            cell.id = shown.id;
+        } else if (quarter === current) {
+            cell.state = 'current';
+            cell.daysLeft = Math.ceil((Date.UTC(year, ((quarter % 4) * 3) + 3, 1) - nowMs) / DAY_MS);
+        }
+        return cell;
+    }
+
+    /**
+     * Quarters at a glance, from the first one a disclosure closes to the current one, twelve
+     * at most. Each is published, internal, withdrawn, missing, or current with the days left
+     * in it. A disclosure is filed under the quarter its period ends in, and a live copy wins
+     * over a withdrawn one of the same quarter.
+     * @param {Array<{id: string, period: {to: string}, confidentiality: string, integrity_level: string | null, withdrawn: object | null}>} disclosures
+     * @param {number} nowMs
+     */
+    function periodRail(disclosures, nowMs) {
+        if (!disclosures || disclosures.length === 0) return [];
+        const now = new Date(nowMs);
+        const current = quarterOf(now.getUTCFullYear(), now.getUTCMonth() + 1);
+        const byQuarter = new Map();
+        disclosures.forEach(function (item) {
+            const parts = String(item.period.to).split('-');
+            const quarter = quarterOf(Number(parts[0]), Number(parts[1]));
+            byQuarter.set(quarter, (byQuarter.get(quarter) || []).concat([item]));
+        });
+        const quarters = Array.from(byQuarter.keys());
+        const end = Math.max(current, Math.max.apply(null, quarters));
+        const start = Math.max(Math.min.apply(null, quarters), end - RAIL_QUARTERS + 1);
+        const rail = [];
+        for (let quarter = start; quarter <= end; quarter++)
+            rail.push(railCell(quarter, byQuarter.get(quarter) || [], current, nowMs));
+        return rail;
+    }
+
+    /** Runtime coverage as a whole percent, and whether it falls under the official 75 %. */
+    function coverageNotch(coverage) {
+        if (coverage == null) return null;
+        return {percent: Math.round(coverage * 100), below: coverage < OFFICIAL_COVERAGE};
+    }
+
+    /**
+     * Who checked what. The Hub checks the content hash and the attestation's binding with
+     * its engine. The signature and the audit are only ever declared: whoever runs
+     * verify-hash checks the first, nobody here checks the second.
+     */
+    function checkRows(detail) {
+        const checks = detail.checks;
+        const audited = detail.disclosure.integrity_level === 'audited';
+        const binding = checks.binding === 'no_attestation' ? 'absent' : checks.binding;
+        const bindingBy = {checked: 'this Hub, same run', absent: 'no attestation published'};
+        return [
+            {
+                claim: 'The figures match the content hash',
+                by: checks.content_hash === 'checked' ? 'this Hub, perf-sentinel ' + checks.engine_version : 'not checked here',
+                outcome: checks.content_hash
+            },
+            {claim: 'The attestation names this content hash', by: bindingBy[binding] || 'not checked here', outcome: binding},
+            {
+                claim: "The publisher's pipeline signed the attestation",
+                by: 'you, with verify-hash against the expected signer',
+                outcome: checks.signature === 'declared' ? 'declared' : 'absent'
+            },
+            {
+                claim: 'An auditor reviewed the figures',
+                by: audited ? 'declared by the report' : 'nobody, the audited level is reserved',
+                outcome: audited ? 'declared' : 'none'
+            }
+        ];
+    }
+
+    /** verify-hash on the downloaded PDF, with this Hub's expected signer when it has one. */
+    function verifyCommand(detail) {
+        const lines = ['perf-sentinel verify-hash --report report.pdf'];
+        if (detail.expected_identity && detail.expected_issuer) {
+            lines.push('  --expected-identity ' + shq(detail.expected_identity));
+            lines.push('  --expected-issuer ' + shq(detail.expected_issuer));
+        }
+        return lines.join(' \\\n');
+    }
+
+    /** The last steps of the CI job that produces, signs and publishes a disclosure. */
+    function publishCommand(origin) {
+        return [
+            'perf-sentinel disclose --intent official --confidentiality public \\',
+            '  --period-type calendar-quarter --from 2026-07-01 --to 2026-09-30 \\',
+            '  --input /var/lib/perf-sentinel/archive --org-config org.toml \\',
+            '  --output report.json --emit-attestation attestation.intoto.jsonl',
+            'cosign sign-blob --bundle bundle.sig --new-bundle-format attestation.intoto.jsonl',
+            '# patch integrity.signature and integrity_level into report.json, see REPORTING.md',
+            'curl --fail -H "X-API-Key: $HUB_DISCLOSURES_KEY" \\',
+            '  -F report=@report.json \\',
+            '  -F attestation=@attestation.intoto.jsonl \\',
+            '  -F bundle=@bundle.sig \\',
+            '  ' + origin + '/api/import/disclosures'
+        ].join('\n');
+    }
+
+    function saveBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        setTimeout(function () {
+            URL.revokeObjectURL(url);
+        }, 4000);
+    }
+
+    /**
+     * A file saved through fetch and a Blob rather than a plain link, so a lapsed session
+     * signs back in instead of saving the 401's body under the file's name.
+     * @returns {Promise<boolean>} whether the file was handed to the browser
+     */
+    function downloadAs(url, filename, env) {
+        const io = env || {
+            fetch: function (target) {
+                return fetch(target, {credentials: 'same-origin'});
+            },
+            reload: function () {
+                location.reload();
+            },
+            save: saveBlob
+        };
+        return io.fetch(url).then(function (response) {
+            if (response.status === 401) {
+                io.reload();
+                return false;
+            }
+            if (!response.ok) return false;
+            return response.blob().then(function (blob) {
+                io.save(blob, filename);
+                return true;
+            });
+        }, function () {
+            return false;
+        });
+    }
+
     /**
      * The screen a hash names. `#/access` is one only on a Hub that answered
      * /api/access: with access off, or that read failed, it reads as New, as any
@@ -1689,8 +1857,11 @@
         if (route === 'coverage' && accessOn) return admin ? 'coverage' : 'access';
         if (route === 'access' || route === 'coverage') return accessOn ? 'access' : 'missing';
         if (route === '') return 'new';
+        if (route.indexOf('disclosures/') === 0) return 'disclosure';
         // `ack` has no tab: it is reached by link only.
-        return ['new', 'recent', 'sources', 'incidents', 'correlations', 'ack'].indexOf(route) >= 0 ? route : 'missing';
+        return ['new', 'recent', 'sources', 'incidents', 'correlations', 'disclosures', 'ack'].indexOf(route) >= 0
+            ? route
+            : 'missing';
     }
 
     /**
@@ -2020,6 +2191,13 @@
         ackSummary,
         shellBanner,
         screenOf,
+        readDisclosureId,
+        periodRail,
+        coverageNotch,
+        checkRows,
+        verifyCommand,
+        publishCommand,
+        downloadAs,
         formFromRequest,
         permits,
         describePattern,
