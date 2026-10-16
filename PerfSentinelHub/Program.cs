@@ -93,9 +93,11 @@ builder.Services.AddSingleton<ShareDownloadCounter>();
 builder.Services.AddHostedService<ShareDownloadFlusher>();
 builder.Services.AddSingleton<DeliveryWorker>();
 builder.Services.AddHostedService<DeliveryLoop>();
-// Its own client: a webhook is a destination of its own, never followed elsewhere.
-builder.Services.AddHttpClient(DeliveryWorker.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
-    new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+// Its own client: a webhook is a destination of its own, never followed elsewhere. No
+// request logging: the factory would log each URL, and a chat webhook URL is a secret.
+builder.Services.AddHttpClient(DeliveryWorker.ClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+    .RemoveAllLoggers();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();
