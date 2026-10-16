@@ -18,6 +18,9 @@ public sealed record HubOptions
     // with the endpoint still heartbeating from a reachable source =
     // likely_resolved; anything else = not_observed.
     public TimeSpan ResolutionGrace { get; set; } = TimeSpan.FromDays(7);
+    // A daemon that first sees more signatures than this in an hour is flagged on
+    // /api/sources and logged: see SignatureRate. 0 turns the check off.
+    public int NewSignaturesPerHourWarning { get; set; } = 1000;
     public int DefaultReadLimit { get; set; } = 1000;
     public int MaxReadLimit { get; set; } = 10_000;
     public AnalysisOptions Analysis { get; set; } = new();
@@ -389,6 +392,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:MaxConcurrentPolls must be between 1 and 32.");
         if (options.MaxReadLimit is < 1 or > 10_000)
             errors.Add("Hub:MaxReadLimit must be between 1 and 10000.");
+        if (options.NewSignaturesPerHourWarning < 0)
+            errors.Add("Hub:NewSignaturesPerHourWarning must be 0 or more, 0 turning the check off.");
         if (options.DefaultReadLimit < 1 || options.DefaultReadLimit > options.MaxReadLimit)
             errors.Add("Hub:DefaultReadLimit must be between 1 and MaxReadLimit.");
         if (options.Sources.Count == 0)

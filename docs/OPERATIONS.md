@@ -67,7 +67,7 @@ neither, see [LAUNCHER.md](LAUNCHER.md#the-ack-page).
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather
-than through a library: eleven metric families over data the Hub already holds do
+than through a library: thirteen metric families over data the Hub already holds do
 not justify a dependency in a service whose only two packages are SQLite.
 
 | Metric                                                                 | Type    | What it answers                                       |
@@ -83,6 +83,8 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Runs accepted and not yet claimed by a worker         |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Runs currently stored, per status                     |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Distinct finding signatures stored, per environment   |
+| `perf_sentinel_hub_findings_age_seconds`                               | gauge   | Age of the counts behind `findings`                   |
+| `perf_sentinel_hub_database_bytes`                                     | gauge   | Size of the database file and its write-ahead log     |
 
 Four things the shape is deliberate about.
 
@@ -116,7 +118,28 @@ every type, severity and status, nearly all of them empty for good, and the
 family is read through `sum()`, where an absent series already is a zero. The
 counts are kept for 15 seconds, because the endpoint is anonymous and a count
 reads every finding of its environment. A scrape inside that interval is served
-the previous counts, and every other family is still computed at scrape time.
+the previous counts, and every other family is still computed at scrape time. A
+scrape waits at most five seconds for a new count. Past that it gets the previous
+counts while the count finishes for a later scrape, and
+`perf_sentinel_hub_findings_age_seconds` says how old they are. A count grows with
+the signatures stored, so without that bound a store of millions of them made it
+outlast Prometheus' 10-second `scrape_timeout`, and every family went missing with
+it.
+
+`perf_sentinel_hub_database_bytes` is read from the file system, the database file
+plus its write-ahead log, so it still answers when SQLite itself is what fails. Alert
+on its growth against the volume rather than on the kubelet's volume metrics alone: a
+Hub whose database fills stops storing anything, and its sources then show
+`database_full` as their last error, a code about the Hub's own volume and not about
+the daemon, which answered.
+
+A daemon that first sees more than `Hub:NewSignaturesPerHourWarning` signatures in an
+hour, 1000 by default, is flagged on `/api/sources` and logged once until it falls back
+under. A healthy fleet settles on a stable set of signatures, so a source that keeps
+minting new ones is putting something unique per trace into a signature, and the Hub
+stores a row per signature it gets. The check runs every five minutes and skips a
+source whose findings all date from the last hour, as on a first contact. 0 turns it
+off.
 
 Cardinality is bounded by configuration. `source` takes the ids in
 `Hub:Sources`, fixed at startup and restricted to 1 to 64 ASCII letters, digits,
@@ -165,7 +188,7 @@ Four files under [`examples/`](../examples), each validated rather than sketched
 
 | File                                                                       | Is                                                                     |
 |----------------------------------------------------------------------------|------------------------------------------------------------------------|
-| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Eleven panels over eight of the eleven families, importable as it stands |
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Eleven panels over eight of the thirteen families, importable as it stands |
 | [`FR/grafana-dashboard-FR.json`](../examples/FR/grafana-dashboard-FR.json) | The same dashboard with French titles and descriptions                 |
 | [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)               | One rule, checked with `promtool check rules`                          |
 | [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)               | A scrape job for a deployment that names its targets                   |

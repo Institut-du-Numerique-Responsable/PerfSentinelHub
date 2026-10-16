@@ -59,8 +59,28 @@
         timeout: 'it did not answer inside this Hub\'s HTTP timeout. Busy is as likely as down.',
         invalid_status: 'it answered, but not with a status this Hub can read. Its /api/status has to carry a version string.',
         response_too_large: 'it answered with more than this Hub reads in one go. A [daemon] section past that cap is worth reporting.',
-        hub_busy: 'the Hub capped how many daemon reads run at once and this one hit the cap. It clears in about a second.'
+        hub_busy: 'the Hub capped how many daemon reads run at once and this one hit the cap. It clears in about a second.',
+        database_full: 'the daemon answered, but the Hub\'s own database is full and could not store it. Grow the Hub\'s volume or shorten Hub:Retention, then look for a source creating abnormally many signatures.',
+        storage_error: 'the daemon answered, but the Hub\'s own database refused to store it. Check the Hub\'s logs and volume, not the daemon.'
     };
+
+    /**
+     * The health a source's row shows. A full database is the Hub's, so it is named
+     * as such rather than as the daemon being down, and a source minting new
+     * signatures is flagged while it still answers.
+     * @param {import('../types').Source} source
+     * @param {number} now
+     * @returns {{tone: 'ok' | 'warn' | 'crit', text: string}}
+     */
+    function sourceHealth(source, now) {
+        if (source.last_error_code === 'database_full' && !source.reachable)
+            return {tone: 'crit', text: 'Hub database full'};
+        if (!source.reachable)
+            return {tone: 'crit', text: 'unreachable ' + dur(now - source.unreachable_since_ms)};
+        if (source.signature_rate_warning)
+            return {tone: 'warn', text: source.new_signatures_last_hour + ' new signatures in the last hour'};
+        return {tone: 'ok', text: source.last_attempt_ms == null ? 'not yet observed' : 'reachable'};
+    }
 
     /** @type {Record<import('../types').ErrorCode, string>} */
     const ERROR_TITLES = {
@@ -1889,6 +1909,7 @@
         ERRORS,
         READ_ERRORS,
         ERROR_TITLES,
+        sourceHealth,
         KIND_LABEL,
         dur,
         durPrecise,

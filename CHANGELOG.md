@@ -6,6 +6,14 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Added
 
+- `perf_sentinel_hub_database_bytes` publishes the database file and its write-ahead log,
+  read from the file system, and `perf_sentinel_hub_findings_age_seconds` the age of the
+  counts behind `perf_sentinel_hub_findings`.
+- A daemon that first sees more than `Hub:NewSignaturesPerHourWarning` signatures in an hour,
+  1000 by default, is flagged on `/api/sources` (`new_signatures_last_hour`,
+  `signature_rate_warning`), in the launcher's health column and once in the logs. A producer
+  that puts something unique per trace into a signature filled a 1Gi volume in 17 hours.
+
 - A Correlations screen and `GET /api/correlations` keep the periods during which a pair of
   findings kept following each other, as episodes a daemon on perf-sentinel 0.30.0 or later pushes
   to the new `POST /api/import/correlations?source_id=<id>` with `[daemon.correlation]` and
@@ -16,6 +24,14 @@ All notable changes to PerfSentinelHub are recorded here.
   most 100 episodes and 1 MiB per request, and refusals count on
   `perf_sentinel_hub_correlation_import_rejected_total{reason}`.
 
+### Changed
+
+- A `/metrics` scrape waits at most five seconds for the findings counts and is otherwise served
+  the previous ones while the count finishes. A store of millions of signatures made the count
+  outlast a 10-second `scrape_timeout`, and every family of the Hub went missing with it.
+- A poll that fails because the Hub's own volume is full now records `database_full` instead of
+  `storage_error`, and the launcher shows `Hub database full` rather than the daemon as
+  unreachable. Any other storage failure keeps `storage_error`, now explained as the Hub's.
 ## [0.5.0] - 2026-10-15
 
 ### Added

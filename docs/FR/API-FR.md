@@ -72,6 +72,15 @@ Sur `/api/sources`, les horodatages sont null pour une source jamais observée, 
 lecteur ne doit pas confondre avec l'epoch. `producer_version` est null pour un backend de
 traces, parce qu'un backend stocke des traces et ne détecte rien.
 
+`new_signatures_last_hour` compte les signatures qu'un daemon a vues pour la première
+fois dans la dernière heure, null tant que le Hub ne l'a pas jugé : avant le premier
+contrôle, cinq minutes au plus après le démarrage, et tant que tous les findings qu'il
+détient datent de cette heure, comme lors d'un premier contact. `signature_rate_warning`
+vaut true au-delà de `Hub:NewSignaturesPerHourWarning`, voir
+[OPERATIONS-FR.md](OPERATIONS-FR.md#métriques). `last_error_code` vaut `database_full`
+quand le volume du Hub lui-même est plein : le daemon a répondu et le Hub n'a pas pu
+stocker ce qu'il a lu.
+
 `acks_state` et `acks_read_ms` disent ce qu'a donné la dernière lecture des acquittements
 d'un daemon et quand elle a été prise, null tous les deux quand aucune n'a eu lieu. Les
 états sont ceux d'`incidents_state`, où `absent` couvre aussi un daemon antérieur à 0.24.0,

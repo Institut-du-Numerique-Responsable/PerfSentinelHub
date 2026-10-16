@@ -1319,3 +1319,23 @@ test("a stale episode says so in plain text", () => {
     assert.equal(PSL.episodeEndNote({ended_by: null}), "");
 });
 
+
+test("a full Hub database is said to be the Hub's, not the daemon's", () => {
+    const now = 10 * 60 * 1000;
+    const down = {reachable: false, unreachable_since_ms: 0, last_attempt_ms: now};
+    assert.deepEqual(PSL.sourceHealth({...down, last_error_code: "database_full"}, now),
+        {tone: "crit", text: "Hub database full"});
+    assert.deepEqual(PSL.sourceHealth({...down, last_error_code: "timeout"}, now),
+        {tone: "crit", text: "unreachable " + PSL.dur(now)});
+    assert.match(PSL.READ_ERRORS.database_full, /Hub's own/);
+    assert.match(PSL.READ_ERRORS.storage_error, /Hub's own/);
+});
+
+test("a source minting signatures is flagged while it answers", () => {
+    const up = {reachable: true, last_attempt_ms: 1};
+    assert.deepEqual(PSL.sourceHealth({...up, signature_rate_warning: true, new_signatures_last_hour: 9000}, 1),
+        {tone: "warn", text: "9000 new signatures in the last hour"});
+    assert.deepEqual(PSL.sourceHealth(up, 1), {tone: "ok", text: "reachable"});
+    assert.deepEqual(PSL.sourceHealth({reachable: true, last_attempt_ms: null}, 1),
+        {tone: "ok", text: "not yet observed"});
+});

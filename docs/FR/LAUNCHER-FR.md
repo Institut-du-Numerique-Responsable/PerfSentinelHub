@@ -145,6 +145,12 @@ rétention.
 
 ## La ligne de santé de la flotte
 
+La santé d'une ligne indique `reachable`, `not yet observed` avant le premier poll, ou
+`unreachable` avec sa durée. `Hub database full` remplace ce dernier quand le poll a
+échoué sur le volume du Hub lui-même plutôt que sur le daemon, et un daemon qui crée
+sans cesse de nouvelles signatures affiche son compte de la dernière heure en ton
+d'avertissement tant qu'il répond.
+
 La ligne d'un daemon se déplie sur les jauges qu'il rapporte face à leurs plafonds et les
 conseils qu'il écrit sur son propre tuning, dont `/metrics` ne porte ni les uns ni les
 autres.

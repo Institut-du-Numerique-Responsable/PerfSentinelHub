@@ -72,7 +72,8 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
         var workers = services.Where(descriptor =>
             descriptor.ServiceType == typeof(IHostedService) &&
             descriptor.ImplementationType is { } type &&
-            (type == typeof(PollWorker) || type == typeof(RetentionWorker))).ToArray();
+            (type == typeof(PollWorker) || type == typeof(RetentionWorker) ||
+             type == typeof(SignatureRateWorker))).ToArray();
         foreach (var worker in workers)
             services.Remove(worker);
     }

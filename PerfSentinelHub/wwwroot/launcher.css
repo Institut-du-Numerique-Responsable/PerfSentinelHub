@@ -890,6 +890,10 @@ a.shell-identity[aria-current="page"] {
     color: var(--ok-fg);
 }
 
+.health[data-health="warn"] {
+    color: var(--warn-fg);
+}
+
 .health[data-health="crit"] {
     color: var(--crit-fg);
 }

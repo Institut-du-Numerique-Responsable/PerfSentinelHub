@@ -94,6 +94,11 @@ public sealed record SourceResponse(
     // Whether the Hub holds a credential to write acks to this daemon. Neither
     // its header nor its value is published: no printed command ever acks.
     bool AckRelay,
+    // Signatures this daemon first saw in the last hour, null while the Hub has not
+    // judged it: see SignatureRate. The warning is that count past
+    // Hub:NewSignaturesPerHourWarning.
+    int? NewSignaturesLastHour,
+    bool SignatureRateWarning,
     // What the caller may do at this source, with Hub:Access:Enabled. Null and so
     // absent with access off, which leaves the payload as it was.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

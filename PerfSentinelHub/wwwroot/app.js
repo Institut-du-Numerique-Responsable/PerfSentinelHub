@@ -1348,15 +1348,10 @@
     }
 
     function healthCell(source, now) {
-        if (source.reachable) {
-            return el('span', {class: 'health', 'data-health': 'ok'}, [
-                el('span', {class: 'health-dot'}),
-                el('span', {text: source.last_attempt_ms == null ? 'not yet observed' : 'reachable'})
-            ]);
-        }
-        return el('span', {class: 'health', 'data-health': 'crit'}, [
+        const health = PSL.sourceHealth(source, now);
+        return el('span', {class: 'health', 'data-health': health.tone}, [
             el('span', {class: 'health-dot'}),
-            el('span', {text: 'unreachable ' + PSL.dur(now - source.unreachable_since_ms)})
+            el('span', {text: health.text})
         ]);
     }
 
@@ -3539,7 +3534,10 @@
             text.appendChild(el('p', {class: 'notice-block-body'}, [
                 el('span', {text: 'The last attempt returned '}),
                 el('span', {class: 'code-inline', text: source.last_error_code}),
-                el('span', {text: ': ' + (PSL.ERRORS[source.last_error_code] || 'the Hub could not reach it.')})
+                el('span', {
+                    text: ': ' + (PSL.READ_ERRORS[source.last_error_code] || PSL.ERRORS[source.last_error_code]
+                        || 'the Hub could not reach it.')
+                })
             ]));
         }
         text.appendChild(el('p', {

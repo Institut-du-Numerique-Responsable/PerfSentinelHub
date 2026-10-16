@@ -623,6 +623,15 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     }
 
     [Fact]
+    public async Task A_source_not_yet_judged_carries_no_signature_rate()
+    {
+        var sources = await ListAsync("/api/sources");
+        var source = sources.EnumerateArray().Single(item => item.GetProperty("id").GetString() == "test");
+        Assert.Equal(JsonValueKind.Null, source.GetProperty("new_signatures_last_hour").ValueKind);
+        Assert.False(source.GetProperty("signature_rate_warning").GetBoolean());
+    }
+
+    [Fact]
     public async Task Trace_lookup_returns_only_the_matching_envelope()
     {
         await SeedAsync();

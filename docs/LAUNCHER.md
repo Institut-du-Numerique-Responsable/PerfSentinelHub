@@ -131,6 +131,11 @@ Report links share within network reach of the Hub and die with the retention wi
 
 ## The fleet health row
 
+A row's health reads `reachable`, `not yet observed` before the first poll, or
+`unreachable` with how long. `Hub database full` replaces the latter when the poll failed
+on the Hub's own volume rather than on the daemon, and a daemon that keeps minting new
+signatures reads its count for the last hour in the warning tone while it still answers.
+
 A daemon's row unfolds into the gauges it reports against their caps and the hints it
 writes about its own tuning, neither of which `/metrics` carries.
 

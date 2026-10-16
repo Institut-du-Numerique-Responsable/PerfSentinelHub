@@ -328,4 +328,11 @@ internal static class Schema
                                 CREATE INDEX IF NOT EXISTS ix_episodes_last_seen
                                   ON correlation_episodes(last_seen_ms);
                                 """;
+
+    // The signatures a source first saw since a moment, which SignatureRate reads every
+    // five minutes: a range on this index rather than a scan of every row the source holds.
+    internal const string V12 = """
+                                CREATE INDEX IF NOT EXISTS ix_finding_sources_first_seen
+                                  ON finding_sources(source_id, first_seen_ms);
+                                """;
 }

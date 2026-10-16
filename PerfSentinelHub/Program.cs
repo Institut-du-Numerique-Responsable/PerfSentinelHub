@@ -110,6 +110,8 @@ builder.Services.AddTransient<AckReader>();
 builder.Services.AddTransient<AckRelay>();
 builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
+builder.Services.AddSingleton<SignatureRate>();
+builder.Services.AddHostedService<SignatureRateWorker>();
 builder.Services.AddHostedService<RetentionWorker>();
 var authenticates = builder.AddHubAuthentication();
 // A report is several megabytes of repetitive HTML. Only the launcher's files and

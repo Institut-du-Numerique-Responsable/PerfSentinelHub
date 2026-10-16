@@ -39,6 +39,17 @@ export type DisplayStatus =
 /** How a requested trace count sits against the Hub's caps. */
 export type WeightBand = "invalid" | "safe" | "heavy" | "ceiling" | "over";
 
+/** What the collector records when a poll fails, `SourcePoller.ErrorCode`. */
+export type SourceErrorCode =
+    | "timeout"
+    | "response_too_large"
+    | "invalid_status"
+    | "invalid_findings"
+    | "database_full"
+    | "storage_error"
+    | "http_error"
+    | "network_error";
+
 /** A configured source, as `GET /api/sources` returns it. */
 export interface Source {
     id: string;
@@ -51,7 +62,7 @@ export interface Source {
     last_success_ms?: number | null;
     unreachable_since_ms?: number | null;
     producer_version?: string | null;
-    last_error_code?: ErrorCode | null;
+    last_error_code?: SourceErrorCode | null;
     base_url?: string;
     engine_subcommand?: string | null;
     auth_header_name?: string | null;
@@ -60,6 +71,8 @@ export interface Source {
     ack_relay?: boolean;
     acks_state?: string | null;
     acks_read_ms?: number | null;
+    new_signatures_last_hour?: number | null;
+    signature_rate_warning?: boolean;
 }
 
 /** One analysis run, as the analyses routes return it. */

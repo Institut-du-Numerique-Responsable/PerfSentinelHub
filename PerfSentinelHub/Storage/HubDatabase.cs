@@ -157,7 +157,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 migration.Transaction = transaction;
                 migration.CommandText =
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
-                    Schema.V9 + Schema.V10 + Schema.V11;
+                    Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -175,7 +175,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                       VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
                                              (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms),
                                              (7, $applied_at_ms), (8, $applied_at_ms), (9, $applied_at_ms),
-                                             (10, $applied_at_ms), (11, $applied_at_ms);
+                                             (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -683,6 +683,33 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             counts.Add(new FindingCount(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3)));
         return counts;
+    }
+
+    /// <summary>
+    ///     How many signatures this source first saw at or after sinceMs, on its own
+    ///     clock as stored. Null when it holds none from before: a source met within
+    ///     the window has only new signatures, which says nothing about a rate.
+    /// </summary>
+    public async Task<int?> CountNewSignaturesAsync(
+        string sourceId,
+        long sinceMs,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT
+                                (SELECT MIN(first_seen_ms) FROM finding_sources WHERE source_id = $source_id),
+                                (SELECT COUNT(*) FROM finding_sources
+                                 WHERE source_id = $source_id AND first_seen_ms >= $since_ms);
+                              """;
+        command.Parameters.AddWithValue("$source_id", sourceId);
+        command.Parameters.AddWithValue("$since_ms", sinceMs);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        if (reader.IsDBNull(0) || reader.GetInt64(0) >= sinceMs)
+            return null;
+        return reader.GetInt32(1);
     }
 
     /// <summary>

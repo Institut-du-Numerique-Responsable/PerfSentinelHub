@@ -105,6 +105,7 @@ public static partial class ApiEndpoints
         HubDatabase database,
         AccessPolicy access,
         IOptions<HubOptions> options,
+        SignatureRate rate,
         CancellationToken cancellationToken)
     {
         if (!access.ReachesAnything(context))
@@ -142,6 +143,8 @@ public static partial class ApiEndpoints
                     ackRead?.State,
                     ackRead?.LastReadMs,
                     source.HasAckCredential,
+                    rate.NewSignaturesLastHour(source.Id),
+                    rate.IsAbnormal(source.Id),
                     access.Permissions(context, source));
             })
         ];
