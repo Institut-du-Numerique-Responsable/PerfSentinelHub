@@ -541,7 +541,8 @@ public sealed class AckRelayApiTests(HubApplicationFactory factory) : IClassFixt
                     1_798_761_600_000),
                 new ParsedAck("baseline", "toml", "ci", null, "2026-09-20T10:00:00Z", null, null),
                 // Five seconds after the epoch, behind the factory's clock.
-                new ParsedAck("expired", "daemon", "robin", "old", "1970-01-01T00:00:01Z", "1970-01-01T00:00:05Z", 5_000)
+                new ParsedAck("expired", "daemon", "robin", "old", "1970-01-01T00:00:01Z", "1970-01-01T00:00:05Z",
+                    5_000)
             ],
             AckReadStates.Ok,
             NowMs,

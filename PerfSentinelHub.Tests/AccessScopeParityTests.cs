@@ -29,7 +29,8 @@ public sealed class AccessScopeParityTests : IDisposable
     [Theory]
     [InlineData("", "", "")]
     [InlineData("source=daemon-a", "s1 daemon-a,s2 daemon-a,s4 daemon-a,s6 daemon-a", "i1 daemon-a")]
-    [InlineData("source=daemon*", "s1 daemon-a,s1 daemon-b,s2 daemon-a,s4 daemon-a,s5 daemon-b,s6 daemon-a", "i1 daemon-a,i1 daemon-b,i2 daemon-b")]
+    [InlineData("source=daemon*", "s1 daemon-a,s1 daemon-b,s2 daemon-a,s4 daemon-a,s5 daemon-b,s6 daemon-a",
+        "i1 daemon-a,i1 daemon-b,i2 daemon-b")]
     [InlineData("source=Daemon-a", "", "")]
     [InlineData("service=cart", "s1 daemon-a,s5 daemon-b", "i1 daemon-a,i2 daemon-b")]
     [InlineData("service=cart*", "s1 daemon-a,s1 daemon-b,s5 daemon-b", "i1 daemon-a,i1 daemon-b,i2 daemon-b")]
@@ -42,7 +43,8 @@ public sealed class AccessScopeParityTests : IDisposable
     [InlineData("attribute=team=a=*", "s5 daemon-b", "i1 daemon-b")]
     [InlineData("attribute=k8s.namespace.name=shop-ns", "s1 daemon-a", "")]
     [InlineData("source=daemon-b;service=cart", "s5 daemon-b", "i2 daemon-b")]
-    [InlineData("source=daemon-a;attribute=team=shop|service=invoice*", "s1 daemon-a,s2 daemon-a,s4 daemon-a", "i1 daemon-a,i3 lab")]
+    [InlineData("source=daemon-a;attribute=team=shop|service=invoice*", "s1 daemon-a,s2 daemon-a,s4 daemon-a",
+        "i1 daemon-a,i3 lab")]
     [InlineData("source=lab;service=Sh*;attribute=team=S*", "s3 lab", "")]
     public async Task The_sql_fragments_read_what_the_matcher_reads(string patterns, string findings, string incidents)
     {
@@ -87,7 +89,8 @@ public sealed class AccessScopeParityTests : IDisposable
         Assert.Contains(new AccessAttribute("", "", "", ""), copies["s1 daemon-b"].Rows);
         Assert.Null(copies["s4 daemon-a"].Service);
         Assert.Empty(copies["s6 daemon-a"].Rows);
-        Assert.Equal(2, copies["s2 daemon-a"].Rows.Select(row => (row.GroupingKey, row.GroupingValue)).Distinct().Count());
+        Assert.Equal(2,
+            copies["s2 daemon-a"].Rows.Select(row => (row.GroupingKey, row.GroupingValue)).Distinct().Count());
 
         var incidents = await IncidentsAsync(connection, cancellationToken);
         Assert.Equal(new AccessAttribute("", "", "team", "shop"), Assert.Single(incidents["i1 daemon-a"].Rows));
@@ -153,6 +156,7 @@ public sealed class AccessScopeParityTests : IDisposable
     {
         await Database().InitializeAsync(cancellationToken);
         await using (var connection = await Database().OpenConnectionAsync(cancellationToken))
+        {
             await ExecuteAsync(
                 connection,
                 """
@@ -193,6 +197,7 @@ public sealed class AccessScopeParityTests : IDisposable
                   ('i3', 'lab', 'invoice-api', 'latency', 1, 0, 1, 0, '{}', 1, 7, '[]');
                 """,
                 cancellationToken);
+        }
 
         await Database().InitializeAsync(cancellationToken);
         await Database().CatchUpAttributesAsync(cancellationToken);
@@ -261,7 +266,8 @@ public sealed class AccessScopeParityTests : IDisposable
 
     private static List<string> Matching(Dictionary<string, AccessCopy> copies, AccessScope scope)
     {
-        return [.. copies.Where(copy => scope.Reads(copy.Value)).Select(copy => copy.Key).Order(StringComparer.Ordinal)];
+        return
+            [.. copies.Where(copy => scope.Reads(copy.Value)).Select(copy => copy.Key).Order(StringComparer.Ordinal)];
     }
 
     private static async Task<List<string>> KeysAsync(
@@ -293,7 +299,8 @@ public sealed class AccessScopeParityTests : IDisposable
     {
         return patterns.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(pattern =>
         {
-            var parts = pattern.Split(';').Select(part => part.Split('=', 2)).ToDictionary(part => part[0], part => part[1]);
+            var parts = pattern.Split(';').Select(part => part.Split('=', 2))
+                .ToDictionary(part => part[0], part => part[1]);
             return Compile(new PatternOptions
             {
                 Source = parts.GetValueOrDefault("source"),

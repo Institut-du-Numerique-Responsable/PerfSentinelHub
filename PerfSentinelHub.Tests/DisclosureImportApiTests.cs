@@ -16,12 +16,15 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class DisclosureImportApiTests : IDisposable
 {
-    private const string ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+    private const string
+        ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
     private static readonly string Report = DisclosureRendererTests.Report;
     private static readonly string HashOnly = Report.Replace("\"signed\"", "\"hash-only\"", StringComparison.Ordinal);
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
-    private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-dimport-{Guid.NewGuid():N}");
+
+    private readonly string _workspace =
+        Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-dimport-{Guid.NewGuid():N}");
 
     public void Dispose()
     {
@@ -34,7 +37,7 @@ public sealed class DisclosureImportApiTests : IDisposable
     [Fact]
     public async Task A_hub_without_an_import_key_answers_404()
     {
-        using var client = Hub(Rendering(), importKey: null).CreateClient();
+        using var client = Hub(Rendering(), null).CreateClient();
 
         using var response = await client.SendAsync(Publish(Report), TestContext.Current.CancellationToken);
 
@@ -47,7 +50,7 @@ public sealed class DisclosureImportApiTests : IDisposable
         var hub = Hub(Rendering());
         using var client = hub.CreateClient();
 
-        using var response = await client.SendAsync(Publish(Report, key: "wrong"), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Publish(Report, "wrong"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Contains("perf_sentinel_hub_disclosure_import_rejected_total{reason=\"unauthorized\"} 1",
@@ -72,9 +75,12 @@ public sealed class DisclosureImportApiTests : IDisposable
         Assert.True(body.RootElement.GetProperty("binding_checked").GetBoolean());
         var id = body.RootElement.GetProperty("id").GetString()!;
         var database = Database(hub);
-        Assert.Equal(Encoding.UTF8.GetBytes(Report), await database.ReadFileAsync(id, DisclosureFile.Report, CancellationToken.None));
-        Assert.Equal("bundle"u8.ToArray(), await database.ReadFileAsync(id, DisclosureFile.Bundle, CancellationToken.None));
-        Assert.StartsWith("%PDF", Encoding.ASCII.GetString((await database.ReadFileAsync(id, DisclosureFile.Pdf, CancellationToken.None))!));
+        Assert.Equal(Encoding.UTF8.GetBytes(Report),
+            await database.ReadFileAsync(id, DisclosureFile.Report, CancellationToken.None));
+        Assert.Equal("bundle"u8.ToArray(),
+            await database.ReadFileAsync(id, DisclosureFile.Bundle, CancellationToken.None));
+        Assert.StartsWith("%PDF",
+            Encoding.ASCII.GetString((await database.ReadFileAsync(id, DisclosureFile.Pdf, CancellationToken.None))!));
         // One published delivery per webhook that takes public reports.
         Assert.Equal("auditors:published", string.Join(',',
             (await database.ListDeliveriesAsync(id, CancellationToken.None)).Select(d => $"{d.Webhook}:{d.Event}")));
@@ -96,7 +102,8 @@ public sealed class DisclosureImportApiTests : IDisposable
         using var response = await client.SendAsync(Publish(Report), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal($$"""{"reason":"{{reason}}"}""", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal($$"""{"reason":"{{reason}}"}""",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Empty(await Database(hub).ListDisclosuresAsync(CancellationToken.None));
         Assert.Contains("perf_sentinel_hub_disclosure_import_rejected_total{reason=\"render_refused\"} 1",
             await client.GetStringAsync("/metrics", TestContext.Current.CancellationToken));
@@ -113,7 +120,8 @@ public sealed class DisclosureImportApiTests : IDisposable
         using var response = await client.SendAsync(Publish(report), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("""{"reason":"malformed_report"}""", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("""{"reason":"malformed_report"}""",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.False(EngineRan());
     }
 
@@ -131,7 +139,8 @@ public sealed class DisclosureImportApiTests : IDisposable
         using var response = await client.SendAsync(Publish(Report), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("""{"reason":"file_too_large"}""", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("""{"reason":"file_too_large"}""",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Empty(await Database(hub).ListDisclosuresAsync(CancellationToken.None));
     }
 
@@ -183,7 +192,8 @@ public sealed class DisclosureImportApiTests : IDisposable
         using var response = await client.SendAsync(Publish(report), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("""{"reason":"internal_refused"}""", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("""{"reason":"internal_refused"}""",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.False(EngineRan());
     }
 
@@ -221,7 +231,8 @@ public sealed class DisclosureImportApiTests : IDisposable
         Assert.NotNull(summary.SignatureAddedAtMs);
         Assert.True(summary.HasAttestation);
         Assert.Equal("signed", summary.IntegrityLevel);
-        Assert.Equal(Encoding.UTF8.GetBytes(Report), await database.ReadFileAsync(id, DisclosureFile.Report, CancellationToken.None));
+        Assert.Equal(Encoding.UTF8.GetBytes(Report),
+            await database.ReadFileAsync(id, DisclosureFile.Report, CancellationToken.None));
         Assert.Single(await database.ListDeliveriesAsync(id, CancellationToken.None));
     }
 
@@ -250,7 +261,8 @@ public sealed class DisclosureImportApiTests : IDisposable
     [InlineData("\"Example SAS\"", "\"Other SAS\"")]
     [InlineData("\"2026-09-30\"", "\"2026-09-29\"")]
     [InlineData("18.42", "99.5")]
-    public async Task A_signed_copy_the_engine_cannot_render_is_409_when_it_changes_the_card(string stored, string changed)
+    public async Task A_signed_copy_the_engine_cannot_render_is_409_when_it_changes_the_card(string stored,
+        string changed)
     {
         // Without a render nothing recomputes the hash, so the card's own fields must match.
         var hub = Hub(new FakeEngine
@@ -264,7 +276,8 @@ public sealed class DisclosureImportApiTests : IDisposable
         var id = (await JsonAsync(unsigned)).RootElement.GetProperty("id").GetString()!;
 
         using var signed = await client.SendAsync(
-            Publish(Report.Replace(stored, changed, StringComparison.Ordinal), ("attestation", "statement"u8.ToArray())),
+            Publish(Report.Replace(stored, changed, StringComparison.Ordinal),
+                ("attestation", "statement"u8.ToArray())),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Conflict, signed.StatusCode);
@@ -279,7 +292,8 @@ public sealed class DisclosureImportApiTests : IDisposable
     {
         var hub = Hub(Rendering());
         using var client = hub.CreateClient();
-        await client.SendAsync(Publish(HashOnly, ("attestation", "statement"u8.ToArray())), TestContext.Current.CancellationToken);
+        await client.SendAsync(Publish(HashOnly, ("attestation", "statement"u8.ToArray())),
+            TestContext.Current.CancellationToken);
         (string, byte[])[] parts = attestation is null
             ? [("bundle", Encoding.UTF8.GetBytes(bundle))]
             : [("attestation", Encoding.UTF8.GetBytes(attestation)), ("bundle", Encoding.UTF8.GetBytes(bundle))];
@@ -303,7 +317,8 @@ public sealed class DisclosureImportApiTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("""{"reason":"malformed_report"}""", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("""{"reason":"malformed_report"}""",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.False(EngineRan());
     }
 
@@ -315,7 +330,8 @@ public sealed class DisclosureImportApiTests : IDisposable
         await client.SendAsync(Publish(Report), TestContext.Current.CancellationToken);
 
         using var response = await client.SendAsync(
-            Publish(Report.Replace("sha256:aaaa", "sha256:bbbb", StringComparison.Ordinal)), TestContext.Current.CancellationToken);
+            Publish(Report.Replace("sha256:aaaa", "sha256:bbbb", StringComparison.Ordinal)),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Single(await Database(hub).ListDisclosuresAsync(CancellationToken.None));
@@ -327,7 +343,7 @@ public sealed class DisclosureImportApiTests : IDisposable
         using var client = Hub(Rendering()).CreateClient();
 
         using var response = await client.SendAsync(
-            Publish(Report, ("attestation", new byte[(8 * 1024 * 1024) + 1])), TestContext.Current.CancellationToken);
+            Publish(Report, ("attestation", new byte[8 * 1024 * 1024 + 1])), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
     }
@@ -343,7 +359,8 @@ public sealed class DisclosureImportApiTests : IDisposable
             Publish(Report, (extraPart, "{}"u8.ToArray())), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal("""{"reason":"malformed_report"}""", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("""{"reason":"malformed_report"}""",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.False(EngineRan());
     }
 
@@ -388,14 +405,19 @@ public sealed class DisclosureImportApiTests : IDisposable
     public async Task Metrics_name_every_reason_from_startup_and_say_nothing_while_disclosures_are_off()
     {
         using var on = Hub(Rendering()).CreateClient();
-        using var off = Hub(Rendering(), importKey: null).CreateClient();
+        using var off = Hub(Rendering(), null).CreateClient();
 
         var metrics = await on.GetStringAsync("/metrics", TestContext.Current.CancellationToken);
         Assert.All(
-            ["unauthorized", "gate_full", "too_large", "unsupported_media_type", "malformed_report", "render_refused",
-             "internal_refused", "conflict"],
-            reason => Assert.Contains($"perf_sentinel_hub_disclosure_import_rejected_total{{reason=\"{reason}\"}} 0", metrics));
-        Assert.DoesNotContain("disclosure", await off.GetStringAsync("/metrics", TestContext.Current.CancellationToken));
+            [
+                "unauthorized", "gate_full", "too_large", "unsupported_media_type", "malformed_report",
+                "render_refused",
+                "internal_refused", "conflict"
+            ],
+            reason => Assert.Contains($"perf_sentinel_hub_disclosure_import_rejected_total{{reason=\"{reason}\"}} 0",
+                metrics));
+        Assert.DoesNotContain("disclosure",
+            await off.GetStringAsync("/metrics", TestContext.Current.CancellationToken));
     }
 
     private static FakeEngine Rendering()
@@ -429,7 +451,8 @@ public sealed class DisclosureImportApiTests : IDisposable
                         {
                             Name = "auditors",
                             Url = new Uri("http://127.0.0.1:9/hook"),
-                            Secret = "webhook-secret-0123456789abcdef0123" // gitleaks:allow -- synthetic test credential
+                            Secret =
+                                "webhook-secret-0123456789abcdef0123" // gitleaks:allow -- synthetic test credential
                         }
                     ]
                 };

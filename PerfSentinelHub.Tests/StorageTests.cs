@@ -8,6 +8,11 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class StorageTests
 {
+    private const string Groupings = """
+                                     SELECT group_concat(source_id || ' ' || grouping || ' ' || last_seen_ms, ',')
+                                     FROM (SELECT * FROM finding_groupings ORDER BY source_id);
+                                     """;
+
     [Fact]
     public async Task Initialize_is_idempotent_and_creates_the_schema()
     {
@@ -307,11 +312,6 @@ public sealed class StorageTests
         read.CommandText = Groupings;
         Assert.IsType<DBNull>(await read.ExecuteScalarAsync(cancellationToken));
     }
-
-    private const string Groupings = """
-                                     SELECT group_concat(source_id || ' ' || grouping || ' ' || last_seen_ms, ',')
-                                     FROM (SELECT * FROM finding_groupings ORDER BY source_id);
-                                     """;
 
     private static async Task<List<string>> SourceColumnsAsync(
         SqliteConnection connection,

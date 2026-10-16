@@ -15,20 +15,21 @@ namespace PerfSentinelHub.Tests;
 public sealed class DisclosureRendererTests : IDisposable
 {
     internal const string Report = """
-        {"schema_version":"perf-sentinel-report/v1.7",
-         "report_metadata":{"intent":"official","confidentiality_level":"public","integrity_level":"signed",
-           "generated_at":"2026-10-05T12:00:00Z","report_uuid":"00000000-0000-4000-8000-000000000002"},
-         "organisation":{"name":"Example SAS"},
-         "period":{"from_date":"2026-07-01","to_date":"2026-09-30","period_type":"calendar-quarter"},
-         "scope_manifest":{"total_applications_declared":4,"applications_measured":3},
-         "aggregate":{"total_energy_kwh":18.42,"total_carbon_kgco2eq":1.91,"aggregate_waste_ratio":0.2,
-           "canonical_waste":{"waste_ratio":0.18},"period_coverage":0.91},
-         "applications":[{"service_name":"checkout","display_name":"Checkout","energy_kwh":9.4},
-           {"service_name":"billing","energy_kwh":2.1}],
-         "integrity":{"content_hash":"sha256:aaaa"}}
-        """;
+                                   {"schema_version":"perf-sentinel-report/v1.7",
+                                    "report_metadata":{"intent":"official","confidentiality_level":"public","integrity_level":"signed",
+                                      "generated_at":"2026-10-05T12:00:00Z","report_uuid":"00000000-0000-4000-8000-000000000002"},
+                                    "organisation":{"name":"Example SAS"},
+                                    "period":{"from_date":"2026-07-01","to_date":"2026-09-30","period_type":"calendar-quarter"},
+                                    "scope_manifest":{"total_applications_declared":4,"applications_measured":3},
+                                    "aggregate":{"total_energy_kwh":18.42,"total_carbon_kgco2eq":1.91,"aggregate_waste_ratio":0.2,
+                                      "canonical_waste":{"waste_ratio":0.18},"period_coverage":0.91},
+                                    "applications":[{"service_name":"checkout","display_name":"Checkout","energy_kwh":9.4},
+                                      {"service_name":"billing","energy_kwh":2.1}],
+                                    "integrity":{"content_hash":"sha256:aaaa"}}
+                                   """;
 
-    private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-render-{Guid.NewGuid():N}");
+    private readonly string _workspace =
+        Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-render-{Guid.NewGuid():N}");
 
     public void Dispose()
     {
@@ -39,7 +40,8 @@ public sealed class DisclosureRendererTests : IDisposable
     [Fact]
     public async Task A_rendered_pdf_comes_back_and_the_private_directory_is_gone()
     {
-        var renderer = await RendererAsync(new FakeEngine { DisclosePdf = true, DisclosePdfOutput = """{"result":"rendered"}""" },
+        var renderer = await RendererAsync(
+            new FakeEngine { DisclosePdf = true, DisclosePdfOutput = """{"result":"rendered"}""" },
             "https://github.com/acme/infra/.github/workflows/disclose.yml@refs/heads/main",
             "https://token.actions.githubusercontent.com");
 
@@ -51,7 +53,8 @@ public sealed class DisclosureRendererTests : IDisposable
             TestContext.Current.CancellationToken);
         Assert.Contains("--attestation", arguments, StringComparison.Ordinal);
         Assert.Contains("--expected-identity https://github.com/acme/infra", arguments, StringComparison.Ordinal);
-        Assert.Contains("--expected-issuer https://token.actions.githubusercontent.com", arguments, StringComparison.Ordinal);
+        Assert.Contains("--expected-issuer https://token.actions.githubusercontent.com", arguments,
+            StringComparison.Ordinal);
         AssertPrivateDirectoryGone(arguments);
     }
 
@@ -111,7 +114,8 @@ public sealed class DisclosureRendererTests : IDisposable
     {
         var renderer = await RendererAsync(new FakeEngine { DisclosePdf = false });
 
-        Assert.IsType<RenderOutcome.Unsupported>(await renderer.RenderAsync(Files(), TestContext.Current.CancellationToken));
+        Assert.IsType<RenderOutcome.Unsupported>(await renderer.RenderAsync(Files(),
+            TestContext.Current.CancellationToken));
         Assert.False(File.Exists(Path.Combine(_workspace, "reports", "disclose-args.txt")));
     }
 
@@ -133,8 +137,10 @@ public sealed class DisclosureRendererTests : IDisposable
 
         Assert.Equal("00000000-0000-4000-8000-000000000002", envelope.ReportUuid);
         Assert.Equal("Example SAS", envelope.Organisation);
-        Assert.Equal(("calendar-quarter", "2026-07-01", "2026-09-30"), (envelope.PeriodType, envelope.PeriodFrom, envelope.PeriodTo));
-        Assert.Equal(("official", "public", "signed"), (envelope.Intent, envelope.Confidentiality, envelope.IntegrityLevel));
+        Assert.Equal(("calendar-quarter", "2026-07-01", "2026-09-30"),
+            (envelope.PeriodType, envelope.PeriodFrom, envelope.PeriodTo));
+        Assert.Equal(("official", "public", "signed"),
+            (envelope.Intent, envelope.Confidentiality, envelope.IntegrityLevel));
         Assert.Equal("sha256:aaaa", envelope.ContentHash);
         Assert.False(envelope.Internal);
         Assert.Equal(
@@ -190,13 +196,16 @@ public sealed class DisclosureRendererTests : IDisposable
         return new DisclosureFiles(Encoding.UTF8.GetBytes(Report), "attestation"u8.ToArray(), null);
     }
 
-    private async Task<DisclosureRenderer> RendererAsync(FakeEngine engine, string? identity = null, string? issuer = null)
+    private async Task<DisclosureRenderer> RendererAsync(FakeEngine engine, string? identity = null,
+        string? issuer = null)
     {
         var options = Options.Create(new HubOptions
         {
             Analysis = new AnalysisOptions
             {
-                EngineBinaryPath = (engine with { Version = "perf-sentinel 0.31.0" }).WriteTo(Path.Combine(_workspace, "perf-sentinel")),
+                EngineBinaryPath =
+                    (engine with { Version = "perf-sentinel 0.31.0" }).WriteTo(
+                        Path.Combine(_workspace, "perf-sentinel")),
                 ReportDirectory = Path.Combine(_workspace, "reports")
             },
             Disclosures = new DisclosuresOptions { ExpectedIdentity = identity, ExpectedIssuer = issuer }

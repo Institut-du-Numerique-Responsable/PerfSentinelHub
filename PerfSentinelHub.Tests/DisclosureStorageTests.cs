@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
@@ -15,7 +16,9 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
 {
     private const long NowMs = 1_800_000_000_000;
 
-    private readonly string _backupPath = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-dbak-{Guid.NewGuid():N}.db");
+    private readonly string _backupPath =
+        Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-dbak-{Guid.NewGuid():N}.db");
+
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-disc-{Guid.NewGuid():N}.db");
     private HubDatabase _database = null!;
 
@@ -87,7 +90,8 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
         var list = await _database.ListDisclosuresAsync(cancellationToken);
 
         Assert.Equal(["q3", "q2", "q1"], list.Select(item => item.Id));
-        Assert.DoesNotContain(typeof(DisclosureSummary).GetProperties(), property => property.PropertyType == typeof(byte[]));
+        Assert.DoesNotContain(typeof(DisclosureSummary).GetProperties(),
+            property => property.PropertyType == typeof(byte[]));
     }
 
     [Fact]
@@ -97,7 +101,8 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
         await _database.InsertDisclosureAsync(Record("d1", "uuid-1"), cancellationToken);
         var signed = new DisclosureFiles(Encoding.UTF8.GetBytes("{\"signed\":true}"), [7], [8]);
 
-        await _database.ReplaceSignedCopyAsync("d1", signed, "signed-with-attestation", (new byte[] { 9 }, null), "0.31.0", NowMs + 5,
+        await _database.ReplaceSignedCopyAsync("d1", signed, "signed-with-attestation", (new byte[] { 9 }, null),
+            "0.31.0", NowMs + 5,
             cancellationToken);
 
         var summary = (await _database.GetDisclosureAsync("d1", cancellationToken))!;
@@ -164,7 +169,8 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await _database.InsertDisclosureAsync(Record("d1", "uuid-1"), cancellationToken);
-        await _database.InsertShareLinkAsync(Link("expired", "d1", Hash("a")) with { ExpiresAtMs = NowMs }, cancellationToken);
+        await _database.InsertShareLinkAsync(Link("expired", "d1", Hash("a")) with { ExpiresAtMs = NowMs },
+            cancellationToken);
         await _database.InsertShareLinkAsync(Link("revoked", "d1", Hash("b")), cancellationToken);
 
         Assert.True(await _database.RevokeShareLinkAsync("d1", "revoked", "alice", NowMs, cancellationToken));
@@ -207,8 +213,10 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
 
         Assert.Equal(["auditors", "mail"], due.Select(delivery => delivery.Webhook).Order(StringComparer.Ordinal));
         Assert.All(due, delivery => Assert.Equal("published", delivery.Event));
-        await reopened.RecordDeliveryAttemptAsync(due[0].Id, 0, 204, DeliveryStates.Delivered, NowMs, null, cancellationToken);
-        await reopened.RecordDeliveryAttemptAsync(due[1].Id, 0, 500, DeliveryStates.Pending, NowMs, NowMs + 60_000, cancellationToken);
+        await reopened.RecordDeliveryAttemptAsync(due[0].Id, 0, 204, DeliveryStates.Delivered, NowMs, null,
+            cancellationToken);
+        await reopened.RecordDeliveryAttemptAsync(due[1].Id, 0, 500, DeliveryStates.Pending, NowMs, NowMs + 60_000,
+            cancellationToken);
         Assert.Empty(await reopened.DueDeliveriesAsync(NowMs + 59_999, cancellationToken));
         var retried = Assert.Single(await reopened.DueDeliveriesAsync(NowMs + 60_000, cancellationToken));
         Assert.Equal(1, retried.Attempts);
@@ -220,7 +228,8 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
     public async Task A_backup_carries_the_files()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await _database.InsertDisclosureAsync(Record("d1", "uuid-1") with { Pdf = [37, 80, 68, 70] }, cancellationToken);
+        await _database.InsertDisclosureAsync(Record("d1", "uuid-1") with { Pdf = [37, 80, 68, 70] },
+            cancellationToken);
 
         Assert.Equal(0, await HubBackup.RunAsync(_path, _backupPath, cancellationToken));
 
@@ -252,6 +261,6 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
 
     private static byte[] Hash(string token)
     {
-        return System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return SHA256.HashData(Encoding.UTF8.GetBytes(token));
     }
 }

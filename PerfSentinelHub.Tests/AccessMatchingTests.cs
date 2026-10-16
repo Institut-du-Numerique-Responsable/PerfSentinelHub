@@ -7,7 +7,9 @@ namespace PerfSentinelHub.Tests;
 
 public sealed class AccessMatchingTests
 {
-    private const string Token = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+    private const string
+        Token = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
     private static readonly DateTimeOffset Now = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Theory]
@@ -75,7 +77,8 @@ public sealed class AccessMatchingTests
 
         string[] failures = [.. new HubOptionsValidator().Validate(null, options).Failures ?? []];
 
-        Assert.Contains(failures, failure => failure.StartsWith("Hub:Access:Projects:0:Patterns:0:", StringComparison.Ordinal));
+        Assert.Contains(failures,
+            failure => failure.StartsWith("Hub:Access:Projects:0:Patterns:0:", StringComparison.Ordinal));
     }
 
     // A copy seen under team=shop and team=billing stays visible to both, and writable by neither.
@@ -149,7 +152,8 @@ public sealed class AccessMatchingTests
         // A source or service part needs no copy at all.
         Assert.True(AccessPattern.Compile(new PatternOptions { Source = "tem*" }).CoversSubject("tempo", "cart", []));
         Assert.True(AccessPattern.Compile(new PatternOptions { Service = "cart" }).CoversSubject("tempo", "cart", []));
-        Assert.False(AccessPattern.Compile(new PatternOptions { Service = "cart" }).CoversSubject("tempo", "billing", []));
+        Assert.False(AccessPattern.Compile(new PatternOptions { Service = "cart" })
+            .CoversSubject("tempo", "billing", []));
         Assert.False(AccessPattern.Compile(new PatternOptions { Source = "jaeger" })
             .CoversSubject("tempo", "cart", [shopCopy]));
         // The copies' own source is not the subject's: a source part reads T alone.
@@ -206,7 +210,7 @@ public sealed class AccessMatchingTests
         var shopper = Person("shop-sub", "/teams/shop");
 
         var read = policy.Scope(shopper, AccessPermissions.FindingsRead);
-        Assert.Equal<string?>(["team", null], read.Patterns!.Select(pattern => pattern.Key));
+        Assert.Equal(["team", null], read.Patterns!.Select(pattern => pattern.Key));
         Assert.True(read.Reads(Copy("lab", "anything")));
         Assert.True(read.HoldsAtSource("lab"));
         Assert.False(read.HoldsAtSource("prod"));
@@ -217,7 +221,8 @@ public sealed class AccessMatchingTests
 
         Assert.Equal(AccessScope.Nothing, policy.Scope(shopper, AccessPermissions.AcksWrite));
         Assert.Equal(AccessScope.Nothing, policy.Scope(shopper, AccessPermissions.AccessAdmin));
-        Assert.Equal(AccessScope.Nothing, policy.Scope(Person("stranger", "/teams/billing"), AccessPermissions.FindingsRead));
+        Assert.Equal(AccessScope.Nothing,
+            policy.Scope(Person("stranger", "/teams/billing"), AccessPermissions.FindingsRead));
         Assert.Equal(AccessScope.Unrestricted, policy.Scope(Person("oncall-sub"), AccessPermissions.AcksWrite));
         Assert.Equal(AccessScope.Nothing, policy.Scope(Person("oncall-sub"), AccessPermissions.AccessAdmin));
         Assert.True(AccessScope.Unrestricted.HoldsAtSource("anything"));

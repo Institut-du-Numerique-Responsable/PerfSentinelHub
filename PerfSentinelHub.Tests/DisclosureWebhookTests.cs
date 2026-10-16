@@ -18,12 +18,14 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class DisclosureWebhookTests : IAsyncLifetime
 {
-    private const string ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+    private const string
+        ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+
     private const string Secret = "webhook-secret-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+    private readonly List<WebApplicationFactory<Program>> _hubs = [];
 
     private readonly ConcurrentQueue<Received> _received = new();
     private readonly ConcurrentQueue<int> _statuses = new();
-    private readonly List<WebApplicationFactory<Program>> _hubs = [];
     private Func<Task>? _onReceive;
     private FakeDaemon _receiver = null!;
     private int _redirectTargetHits;
@@ -70,12 +72,13 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
     [Fact]
     public async Task A_receiver_gets_a_signed_published_event_with_a_share_link()
     {
-        var hub = await PublishedAsync(includeShareLink: true);
+        var hub = await PublishedAsync(true);
 
         await RunAsync(hub);
 
         var received = Assert.Single(_received);
-        Assert.Equal(WebhookDelivery.Sign(Secret, long.Parse(received.Timestamp), Encoding.UTF8.GetBytes(received.Body)),
+        Assert.Equal(
+            WebhookDelivery.Sign(Secret, long.Parse(received.Timestamp), Encoding.UTF8.GetBytes(received.Body)),
             received.Signature);
         using var body = JsonDocument.Parse(received.Body);
         Assert.Equal("published", body.RootElement.GetProperty("event").GetString());
@@ -86,7 +89,8 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         var token = body.RootElement.GetProperty("share_url").GetString()!.Split('/')[4];
         Assert.NotNull(await Database(hub).FindShareLinkAsync(
             SHA256.HashData(Encoding.UTF8.GetBytes(token)), 10_000, CancellationToken.None));
-        Assert.Equal(DeliveryStates.Delivered, Assert.Single(await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None)).State);
+        Assert.Equal(DeliveryStates.Delivered,
+            Assert.Single(await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None)).State);
     }
 
     [Fact]
@@ -112,7 +116,7 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
     [Fact]
     public async Task A_redirect_is_a_failure_and_is_never_followed()
     {
-        var hub = await PublishedAsync(includeShareLink: true);
+        var hub = await PublishedAsync(true);
         _statuses.Enqueue(StatusCodes.Status302Found);
 
         await RunAsync(hub);
@@ -122,7 +126,8 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         Assert.Equal(DeliveryStates.Pending, delivery.State);
         Assert.Equal(302, delivery.LastStatus);
         // The link that went nowhere died with the attempt.
-        Assert.NotNull(Assert.Single(await Database(hub).ListShareLinksAsync("d1", CancellationToken.None)).RevokedAtMs);
+        Assert.NotNull(Assert.Single(await Database(hub).ListShareLinksAsync("d1", CancellationToken.None))
+            .RevokedAtMs);
     }
 
     [Fact]
@@ -132,12 +137,14 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         var database = Database(hub);
         var delivery = Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None));
         for (var i = 0; i < DeliveryWorker.MaxAttempts - 1; i++)
-            await database.RecordDeliveryAttemptAsync(delivery.Id, i, 500, DeliveryStates.Pending, 10_000, 10_000, CancellationToken.None);
+            await database.RecordDeliveryAttemptAsync(delivery.Id, i, 500, DeliveryStates.Pending, 10_000, 10_000,
+                CancellationToken.None);
         _statuses.Enqueue(StatusCodes.Status500InternalServerError);
 
         await RunAsync(hub);
 
-        Assert.Equal(DeliveryStates.Failed, Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None)).State);
+        Assert.Equal(DeliveryStates.Failed,
+            Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None)).State);
         Assert.Contains("perf_sentinel_hub_disclosure_deliveries_failed_total 1",
             await hub.CreateClient().GetStringAsync("/metrics", TestContext.Current.CancellationToken));
     }
@@ -149,7 +156,8 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         var database = Database(hub);
         var delivery = Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None));
         for (var i = 0; i < DeliveryWorker.MaxAttempts - 1; i++)
-            await database.RecordDeliveryAttemptAsync(delivery.Id, i, 500, DeliveryStates.Pending, 10_000, 10_000, CancellationToken.None);
+            await database.RecordDeliveryAttemptAsync(delivery.Id, i, 500, DeliveryStates.Pending, 10_000, 10_000,
+                CancellationToken.None);
         _statuses.Enqueue(StatusCodes.Status500InternalServerError);
         // The operator retries while the worker waits on the receiver.
         _onReceive = () => database.RetryDeliveryAsync(delivery.Id, 10_000, CancellationToken.None);
@@ -175,7 +183,8 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
 
         Assert.Equal(["published", "withdrawn"], _received.Select(received =>
             JsonDocument.Parse(received.Body).RootElement.GetProperty("event").GetString()));
-        var published = (await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None)).First(d => d.Event == "published");
+        var published =
+            (await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None)).First(d => d.Event == "published");
         Assert.Equal(DeliveryStates.Failed, published.State);
     }
 
@@ -207,7 +216,7 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
     [Fact]
     public async Task A_withdrawn_event_carries_no_share_link()
     {
-        var hub = await PublishedAsync(includeShareLink: true);
+        var hub = await PublishedAsync(true);
         await RunAsync(hub);
         await Database(hub).WithdrawAsync("d1", "wrong", "alice", 10_000, ["auditors"], CancellationToken.None);
 
@@ -218,7 +227,8 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         Assert.Equal(JsonValueKind.Null, body.RootElement.GetProperty("share_url").ValueKind);
     }
 
-    private async Task<WebApplicationFactory<Program>> PublishedAsync(bool includeShareLink = false, string? databasePath = null)
+    private async Task<WebApplicationFactory<Program>> PublishedAsync(bool includeShareLink = false,
+        string? databasePath = null)
     {
         var hub = Hub(includeShareLink, databasePath);
         await DisclosuresApiTests.SeedAsync(hub, "d1", "u1", "2026-09-30");

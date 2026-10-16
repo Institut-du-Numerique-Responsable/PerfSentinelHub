@@ -50,7 +50,9 @@ public sealed class FindingIngestionTests : IDisposable
 
     // The daemon files a finding under its first grouping attribute, the one its own filter matches.
     [Theory]
-    [InlineData("[{\"key\": \"k8s.namespace.name\", \"value\": \"test\"}, {\"key\": \"service.namespace\", \"value\": \"other\"}]", "test")]
+    [InlineData(
+        "[{\"key\": \"k8s.namespace.name\", \"value\": \"test\"}, {\"key\": \"service.namespace\", \"value\": \"other\"}]",
+        "test")]
     [InlineData("[]", null)]
     [InlineData("[{\"key\": \"k8s.namespace.name\", \"value\": \"\"}]", null)]
     [InlineData("[{\"key\": \"k8s.namespace.name\"}]", null)]
@@ -1038,7 +1040,10 @@ public sealed class FindingIngestionTests : IDisposable
         var database = CreateDatabase();
         await database.InitializeAsync(cancellationToken);
         await using (var connection = await database.OpenConnectionAsync(cancellationToken))
-            Assert.Equal(0L, await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_attributes;", cancellationToken));
+        {
+            Assert.Equal(0L,
+                await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_attributes;", cancellationToken));
+        }
 
         Assert.True(await database.CatchUpAttributesAsync(cancellationToken));
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
@@ -1077,9 +1082,11 @@ public sealed class FindingIngestionTests : IDisposable
 
         await BootAsync(cancellationToken);
         await using (var connection = await CreateDatabase().OpenConnectionAsync(cancellationToken))
+        {
             Assert.Equal(
                 "covered = = 700,own team=shop team=shop 800",
                 await AttributesAsync(connection, cancellationToken));
+        }
 
         // A second boot finds nothing left to write.
         await ExecuteAsync(
@@ -1131,7 +1138,8 @@ public sealed class FindingIngestionTests : IDisposable
             new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"), batch, 1500, cancellationToken));
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
-        Assert.Equal("other-svc", await TextScalarAsync(connection, "SELECT service FROM findings;", cancellationToken));
+        Assert.Equal("other-svc",
+            await TextScalarAsync(connection, "SELECT service FROM findings;", cancellationToken));
         Assert.Equal(
             "production-a rider-smoke,staging-a other-svc",
             await TextScalarAsync(

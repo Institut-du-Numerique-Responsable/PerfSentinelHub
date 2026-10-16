@@ -61,6 +61,53 @@ public sealed partial class HubDatabase
                                             last_seen_hub_ms = excluded.last_seen_hub_ms;
                                           """;
 
+    // What an open episode is served as once its daemon has said nothing of it for its gap
+    // plus 15 minutes, most likely a daemon stopped before it could close it: ended at its
+    // last co-occurrence. The row keeps its NULL, so a late close still lands.
+    private const string EpisodeServedEnd = """
+                                            CASE WHEN ce.ended_at_ms IS NOT NULL THEN ce.ended_at_ms
+                                                 WHEN $now - ce.last_seen_ms > ce.gap_ms + 900000 THEN ce.last_seen_ms END
+                                            """;
+
+    private const string EpisodeListWhere = $"""
+                                             SELECT ce.id, ce.source_id, ce.pair_key, ce.source_type, ce.source_service,
+                                                    ce.source_template, ce.source_grouping, ce.source_grouping_value,
+                                                    ce.target_type, ce.target_service, ce.target_template,
+                                                    ce.target_grouping, ce.target_grouping_value,
+                                                    ce.started_at_ms, ce.last_seen_ms, {EpisodeServedEnd},
+                                                    ce.ended_at_ms IS NULL, ce.gap_ms, ce.peak_confidence,
+                                                    ce.peak_co_occurrences, ce.last_confidence, ce.last_co_occurrences,
+                                                    ce.median_lag_ms, ce.sample_trace_id, ce.source_sample_trace_id,
+                                                    ce.first_seen_ms, ce.last_seen_hub_ms
+                                             FROM correlation_episodes AS ce
+                                             WHERE ($source_ids IS NULL OR ce.source_id IN (SELECT value FROM json_each($source_ids)))
+                                               AND ($service IS NULL OR ce.source_service = $service OR ce.target_service = $service)
+                                               AND ($pair_key IS NULL OR ce.pair_key = $pair_key)
+                                               AND ($to IS NULL OR ce.started_at_ms <= $to)
+                                               AND ($from IS NULL OR ({EpisodeServedEnd}) IS NULL OR ({EpisodeServedEnd}) >= $from)
+                                               AND ($active = 0 OR ({EpisodeServedEnd}) IS NULL)
+                                             """;
+
+    private const string EpisodeListPage = """
+                                           ORDER BY ce.started_at_ms DESC, ce.id ASC, ce.source_id ASC
+                                           LIMIT $limit OFFSET $offset;
+                                           """;
+
+    private const string EpisodeList = $"{EpisodeListWhere} {EpisodeListPage}";
+
+    // An episode names both services and both templates, so a scope reads it only where it
+    // reads each side at that source. It carries no attribute, so a pattern keyed on one
+    // never reads it: the subquery is empty and the value it compares is NULL.
+    private const string NoEpisodeAttribute = "SELECT 1 WHERE 0";
+
+    private static readonly string EpisodeAccess =
+        Access("ce.source_id", "ce.source_service", NoEpisodeAttribute, "NULL") + " AND " +
+        Access("ce.source_id", "ce.target_service", NoEpisodeAttribute, "NULL");
+
+    // Declared after EpisodeAccess: static fields initialize in order.
+    private static readonly string ScopedEpisodeList =
+        $"WITH {AccessPatternsCte}\n{EpisodeListWhere} AND {EpisodeAccess}\n{EpisodeListPage}";
+
     /// <summary>
     ///     Stores a daemon's pushed episodes under the merge rule. Waits for the write lock
     ///     as long as the two other imports do, then gives up: a 503 the daemon retries beats
@@ -80,9 +127,7 @@ public sealed partial class HubDatabase
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
             foreach (var episode in episodes)
-            {
                 await UpsertEpisodeAsync(connection, transaction, sourceId, episode, observedAtMs, cancellationToken);
-            }
 
             await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -135,53 +180,6 @@ public sealed partial class HubDatabase
         parameters.AddWithValue("$" + side + "_grouping_value", (object?)value.GroupingValue ?? DBNull.Value);
     }
 
-    // What an open episode is served as once its daemon has said nothing of it for its gap
-    // plus 15 minutes, most likely a daemon stopped before it could close it: ended at its
-    // last co-occurrence. The row keeps its NULL, so a late close still lands.
-    private const string EpisodeServedEnd = """
-                                            CASE WHEN ce.ended_at_ms IS NOT NULL THEN ce.ended_at_ms
-                                                 WHEN $now - ce.last_seen_ms > ce.gap_ms + 900000 THEN ce.last_seen_ms END
-                                            """;
-
-    private const string EpisodeListWhere = $"""
-                                             SELECT ce.id, ce.source_id, ce.pair_key, ce.source_type, ce.source_service,
-                                                    ce.source_template, ce.source_grouping, ce.source_grouping_value,
-                                                    ce.target_type, ce.target_service, ce.target_template,
-                                                    ce.target_grouping, ce.target_grouping_value,
-                                                    ce.started_at_ms, ce.last_seen_ms, {EpisodeServedEnd},
-                                                    ce.ended_at_ms IS NULL, ce.gap_ms, ce.peak_confidence,
-                                                    ce.peak_co_occurrences, ce.last_confidence, ce.last_co_occurrences,
-                                                    ce.median_lag_ms, ce.sample_trace_id, ce.source_sample_trace_id,
-                                                    ce.first_seen_ms, ce.last_seen_hub_ms
-                                             FROM correlation_episodes AS ce
-                                             WHERE ($source_ids IS NULL OR ce.source_id IN (SELECT value FROM json_each($source_ids)))
-                                               AND ($service IS NULL OR ce.source_service = $service OR ce.target_service = $service)
-                                               AND ($pair_key IS NULL OR ce.pair_key = $pair_key)
-                                               AND ($to IS NULL OR ce.started_at_ms <= $to)
-                                               AND ($from IS NULL OR ({EpisodeServedEnd}) IS NULL OR ({EpisodeServedEnd}) >= $from)
-                                               AND ($active = 0 OR ({EpisodeServedEnd}) IS NULL)
-                                             """;
-
-    private const string EpisodeListPage = """
-                                           ORDER BY ce.started_at_ms DESC, ce.id ASC, ce.source_id ASC
-                                           LIMIT $limit OFFSET $offset;
-                                           """;
-
-    private const string EpisodeList = $"{EpisodeListWhere} {EpisodeListPage}";
-
-    // An episode names both services and both templates, so a scope reads it only where it
-    // reads each side at that source. It carries no attribute, so a pattern keyed on one
-    // never reads it: the subquery is empty and the value it compares is NULL.
-    private const string NoEpisodeAttribute = "SELECT 1 WHERE 0";
-
-    private static readonly string EpisodeAccess =
-        Access("ce.source_id", "ce.source_service", NoEpisodeAttribute, "NULL") + " AND " +
-        Access("ce.source_id", "ce.target_service", NoEpisodeAttribute, "NULL");
-
-    // Declared after EpisodeAccess: static fields initialize in order.
-    private static readonly string ScopedEpisodeList =
-        $"WITH {AccessPatternsCte}\n{EpisodeListWhere} AND {EpisodeAccess}\n{EpisodeListPage}";
-
     /// <summary>
     ///     Newest start first, with the stale rule applied as the rows are read and the
     ///     caller's scope applied before the page, so pages are slices of what they read.
@@ -207,10 +205,7 @@ public sealed partial class HubDatabase
 
         var rows = new List<StoredEpisode>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            rows.Add(ReadEpisode(reader));
-        }
+        while (await reader.ReadAsync(cancellationToken)) rows.Add(ReadEpisode(reader));
 
         return rows;
     }

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PerfSentinelHub.Api;
@@ -11,7 +12,9 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     private const string FixtureId = "d650edad80ac5c2d99b8d1dde07100c2";
     private const string EmptyId = "0000000000000000000000000000000e";
     private const string CompleteId = "0000000000000000000000000000000c";
+
     private const string EndedId = "0000000000000000000000000000000d";
+
     // The fixture's at_ms plus 45 s.
     private const long EndedAtMs = 1_788_607_484_029;
 
@@ -49,7 +52,8 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     public async Task One_incident_carries_its_findings()
     {
         await SeedAsync();
-        using var response = await _client.GetAsync($"/api/incidents/{FixtureId}", TestContext.Current.CancellationToken);
+        using var response =
+            await _client.GetAsync($"/api/incidents/{FixtureId}", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var document = JsonDocument.Parse(
@@ -111,7 +115,7 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     {
         await SeedAsync();
         var rows = await factory.Database.ListIncidentsAsync(
-            new IncidentQuery(Service: null, Namespace: null, Kind: null, SourceIds: [], Offset: 0, Limit: 100),
+            new IncidentQuery(null, null, null, [], 0, 100),
             TestContext.Current.CancellationToken);
         Assert.Empty(rows);
     }
@@ -244,7 +248,7 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
 
     private async Task UpsertAsync(string payload, CancellationToken cancellationToken)
     {
-        var page = IncidentParser.Parse(System.Text.Encoding.UTF8.GetBytes(payload));
+        var page = IncidentParser.Parse(Encoding.UTF8.GetBytes(payload));
         Assert.Equal(0, page.RejectedCount);
         await factory.Database.UpsertIncidentsAsync("test", page.Incidents, 5000, cancellationToken);
     }

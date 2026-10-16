@@ -42,6 +42,31 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                            AND sa.signature = f.signature AND {ActiveAck}
                                          """;
 
+    // Whether AttributesBackfill has anything to write, each arm its read-only mirror: the
+    // backfill takes the write lock for as long as it scans, so it runs only when this says so.
+    private const string AttributesBackfillNeeded =
+        """
+        SELECT EXISTS (
+                 SELECT 1 FROM finding_sources
+                 WHERE service IS NULL
+                   AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text')
+            OR EXISTS (
+                 SELECT 1 FROM finding_sources AS fs
+                 WHERE json_valid(fs.finding_json)
+                   AND NOT EXISTS (
+                     SELECT 1 FROM finding_attributes AS fa
+                     WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
+                       AND fa.last_seen_ms >= fs.last_seen_ms))
+            OR EXISTS (
+                 SELECT 1 FROM incident_attributes AS ia
+                 WHERE ia.last_seen_ms IS NOT (
+                   SELECT i.last_seen_ms FROM incidents AS i WHERE i.id = ia.id AND i.source_id = ia.source_id))
+            OR EXISTS (
+                 SELECT 1 FROM incidents AS i
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM incident_attributes AS ia WHERE ia.id = i.id AND ia.source_id = i.source_id));
+        """;
+
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
 
     // A predecessor must still be a live problem when its successor appears:
@@ -71,31 +96,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             WHERE i.id = incident_attributes.id AND i.source_id = incident_attributes.source_id);
           """
         + IncidentAttributesWhere("true");
-
-    // Whether AttributesBackfill has anything to write, each arm its read-only mirror: the
-    // backfill takes the write lock for as long as it scans, so it runs only when this says so.
-    private const string AttributesBackfillNeeded =
-        """
-        SELECT EXISTS (
-                 SELECT 1 FROM finding_sources
-                 WHERE service IS NULL
-                   AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text')
-            OR EXISTS (
-                 SELECT 1 FROM finding_sources AS fs
-                 WHERE json_valid(fs.finding_json)
-                   AND NOT EXISTS (
-                     SELECT 1 FROM finding_attributes AS fa
-                     WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
-                       AND fa.last_seen_ms >= fs.last_seen_ms))
-            OR EXISTS (
-                 SELECT 1 FROM incident_attributes AS ia
-                 WHERE ia.last_seen_ms IS NOT (
-                   SELECT i.last_seen_ms FROM incidents AS i WHERE i.id = ia.id AND i.source_id = ia.source_id))
-            OR EXISTS (
-                 SELECT 1 FROM incidents AS i
-                 WHERE NOT EXISTS (
-                   SELECT 1 FROM incident_attributes AS ia WHERE ia.id = i.id AND ia.source_id = i.source_id));
-        """;
 
     // The write path's own observation, in the shape FindingAttributesFrom reads.
     private static readonly string FindingAttributesUpsert =

@@ -43,14 +43,13 @@ public sealed partial class AnalysisRunner(
     ILogger<AnalysisRunner> logger,
     CgroupMemory? memory = null)
 {
-    private readonly CgroupMemory _memory = memory ?? CgroupMemory.Container;
-
     // The intermediate report JSON. Well past any real run, small enough that
     // a runaway engine cannot exhaust the container's memory.
     private const long MaxReportJsonBytes = 256L * 1024 * 1024;
     private static readonly string[] ScratchFilePatterns = ["*.input.json", "*.config.toml"];
 
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
+    private readonly CgroupMemory _memory = memory ?? CgroupMemory.Container;
 
     public string ReportPath(string runId)
     {

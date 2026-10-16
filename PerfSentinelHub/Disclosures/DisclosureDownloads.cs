@@ -38,13 +38,16 @@ public static class DisclosureDownloads
             var sums = new StringBuilder();
             foreach (var (fileName, file, _) in Stored)
                 if (await database.ReadFileAsync(id, file, cancellationToken) is { } bytes)
-                    sums.Append(Convert.ToHexStringLower(SHA256.HashData(bytes))).Append("  ").Append(fileName).Append('\n');
+                    sums.Append(Convert.ToHexStringLower(SHA256.HashData(bytes))).Append("  ").Append(fileName)
+                        .Append('\n');
             return sums.Length == 0 ? null : (Encoding.UTF8.GetBytes(sums.ToString()), "text/plain; charset=utf-8");
         }
 
         foreach (var (fileName, file, contentType) in Stored)
             if (fileName == name)
-                return await database.ReadFileAsync(id, file, cancellationToken) is { } bytes ? (bytes, contentType) : null;
+                return await database.ReadFileAsync(id, file, cancellationToken) is { } bytes
+                    ? (bytes, contentType)
+                    : null;
         return null;
     }
 }

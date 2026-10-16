@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
@@ -259,12 +260,10 @@ public sealed class MetricsEndpointTests : IDisposable
         Assert.Contains("# TYPE perf_sentinel_hub_correlation_import_rejected_total counter", body,
             StringComparison.Ordinal);
         foreach (var reason in new[] { "bad_request", "unauthorized", "gate_full", "write_timeout", "too_large" })
-        {
             Assert.Contains(
                 $"perf_sentinel_hub_correlation_import_rejected_total{{reason=\"{reason}\"}} 0",
                 body,
                 StringComparison.Ordinal);
-        }
     }
 
     [Fact]
@@ -334,7 +333,6 @@ public sealed class MetricsEndpointTests : IDisposable
         Assert.Equal(1, Sample(body, FindingsSeries("staging", "other", "critical", "not_observed")));
 
         foreach (var environment in new[] { "production", "staging" })
-        {
             foreach (var status in new[] { "active", "likely_resolved", "not_observed" })
             {
                 using var response = await _client.GetAsync(
@@ -343,7 +341,6 @@ public sealed class MetricsEndpointTests : IDisposable
                     await response.Content.ReadAsStringAsync(cancellationToken));
                 Assert.Equal(document.RootElement.GetArrayLength(), Findings(body, environment, status));
             }
-        }
     }
 
     [Fact]
@@ -453,7 +450,8 @@ public sealed class MetricsEndpointTests : IDisposable
     [InlineData("/health/live", 8080, HttpStatusCode.OK)]
     public async Task With_a_metrics_port_metrics_answer_there_alone(string path, int port, HttpStatusCode expected)
     {
-        await using var dedicated = _factory.WithWebHostBuilder(builder => builder.UseSetting("Hub:MetricsPort", "9464"));
+        await using var dedicated =
+            _factory.WithWebHostBuilder(builder => builder.UseSetting("Hub:MetricsPort", "9464"));
 
         var context = await dedicated.Server.SendAsync(request =>
         {
@@ -484,7 +482,7 @@ public sealed class MetricsEndpointTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         var output = AppContext.BaseDirectory;
         var database = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-exit-{Guid.NewGuid():N}.db");
-        var start = new System.Diagnostics.ProcessStartInfo(
+        var start = new ProcessStartInfo(
             Path.Combine(output, OperatingSystem.IsWindows() ? "PerfSentinelHub.exe" : "PerfSentinelHub"))
         {
             WorkingDirectory = output,
@@ -504,7 +502,7 @@ public sealed class MetricsEndpointTests : IDisposable
                 ["Hub__Sources__0__BaseUrl"] = "http://127.0.0.1:1"
             }
         };
-        using var hub = System.Diagnostics.Process.Start(start)!;
+        using var hub = Process.Start(start)!;
         var stdout = hub.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = hub.StandardError.ReadToEndAsync(cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

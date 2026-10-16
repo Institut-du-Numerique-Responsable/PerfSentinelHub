@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,9 +29,14 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class AccessRoutesTests : IAsyncLifetime
 {
-    internal const string CiToken = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
-    internal const string CiAdminToken = "ci-all-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
-    internal const string CiOldToken = "ci-old-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+    internal const string
+        CiToken = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
+    internal const string
+        CiAdminToken = "ci-all-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
+    internal const string
+        CiOldToken = "ci-old-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
 
     // F1 is cart at shop-d under team=shop and at lab-d under team=billing; F2 invoice under
     // team=billing; F3 cart with no grouping; F4 cart seen under team=shop and under no
@@ -44,14 +49,19 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     private const string Orphan = "slow_sql:gone:0000000000000000000000000000000000000009";
     private const string Incident = "0000000000000000000000000000000a";
     private const string MixedIncident = "0000000000000000000000000000000b";
-    private const string ImportKey = "lab-import-0123456789abcdef0123456789"; // gitleaks:allow -- synthetic test credential
-    private const string DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+
+    private const string
+        ImportKey = "lab-import-0123456789abcdef0123456789"; // gitleaks:allow -- synthetic test credential
+
+    private const string
+        DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
     private static readonly Dictionary<string, string> Users = new(StringComparer.Ordinal)
     {
         ["admin"] = """{"sub":"u-admin","email":"admin@example.internal","groups":[]}""",
         ["svc"] = """{"sub":"u-svc","email":"svc@example.internal","groups":["/svc"]}""",
-        ["attr"] = """{"sub":"u-attr","email":"attr@example.internal","groups":["/shop","/unrelated","INTERNAL:ci",7]}""",
+        ["attr"] =
+            """{"sub":"u-attr","email":"attr@example.internal","groups":["/shop","/unrelated","INTERNAL:ci",7]}""",
         ["ss"] = """{"sub":"u-ss","email":"ss@example.internal","groups":"/ss"}""",
         ["lab"] = """{"sub":"u-lab","email":"lab@example.internal","groups":["/lab"]}""",
         ["tempo"] = """{"sub":"u-tempo","email":"tempo@example.internal","groups":["/tempo"]}""",
@@ -65,11 +75,15 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         ["machineid"] = """{"sub":"u-m","email":"MACHINE:ci","groups":["/shop"]}"""
     };
 
-    private readonly ConcurrentQueue<AckRelayApiTests.DaemonCall> _labCalls = new();
-    private readonly ConcurrentQueue<AckRelayApiTests.DaemonCall> _shopCalls = new();
     private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
     private readonly HubApplicationFactory _hub = new();
-    private readonly string _reports = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-reports-{Guid.NewGuid():N}");
+
+    private readonly ConcurrentQueue<AckRelayApiTests.DaemonCall> _labCalls = new();
+
+    private readonly string _reports =
+        Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-reports-{Guid.NewGuid():N}");
+
+    private readonly ConcurrentQueue<AckRelayApiTests.DaemonCall> _shopCalls = new();
     private FakeDaemon _labDaemon = null!;
     private FakeProvider _provider = null!;
     private FakeDaemon _shopDaemon = null!;
@@ -182,7 +196,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         using var client = await SignedInAsync("attr");
         using var request = Request("GET", "/api/status");
         request.Headers.Add("X-Forwarded-User", "mallory@example.internal");
-        using var run = Post("/api/analyses", """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""");
+        using var run = Post("/api/analyses",
+            """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""");
         run.Headers.Add("X-Forwarded-User", "mallory@example.internal");
         using var ack = Post("/api/sources/shop-d/acks", AckBody(F5));
         ack.Headers.Add("X-Forwarded-User", "mallory@example.internal");
@@ -204,11 +219,13 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("attr", "lab-d:findings.read,acks.write;shop-d:findings.read,acks.write;tempo:traces.read,analyses.run;test:findings.read,acks.write")]
+    [InlineData("attr",
+        "lab-d:findings.read,acks.write;shop-d:findings.read,acks.write;tempo:traces.read,analyses.run;test:findings.read,acks.write")]
     [InlineData("ss", "shop-d:findings.read,acks.write")]
     [InlineData("lab", "lab-d:findings.read,sources.read,analyses.run,acks.write")]
     [InlineData("tempo", "tempo:traces.read,analyses.run")]
-    [InlineData("admin", "lab-d:findings.read,sources.read,analyses.run,acks.write;shop-d:findings.read,sources.read,analyses.run,acks.write;tempo:traces.read,analyses.run;test:findings.read,sources.read,analyses.run,acks.write")]
+    [InlineData("admin",
+        "lab-d:findings.read,sources.read,analyses.run,acks.write;shop-d:findings.read,sources.read,analyses.run,acks.write;tempo:traces.read,analyses.run;test:findings.read,sources.read,analyses.run,acks.write")]
     public async Task Sources_lists_what_each_caller_may_do_at_each_source(string user, string expected)
     {
         using var client = await SignedInAsync(user);
@@ -287,7 +304,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         // team=billing is F1's grouping at lab-d, a copy attr does not read.
         Assert.DoesNotContain(F1, (await FindingsAsync(attr, "/api/findings?grouping=billing")).Select(Signature));
         Assert.Contains(F1, (await FindingsAsync(svc, "/api/findings?grouping=billing")).Select(Signature));
-        Assert.Equal(3, (await FindingsAsync(attr, $"/api/findings?from={NowMs - 60_000}&to={NowMs}&status=active")).Count);
+        Assert.Equal(3,
+            (await FindingsAsync(attr, $"/api/findings?from={NowMs - 60_000}&to={NowMs}&status=active")).Count);
     }
 
     [Fact]
@@ -337,7 +355,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
 
         // findings.service now reads cart, but shop-d's own copy is still invoice.
         var finding = Assert.Single(await FindingsAsync(client, "/api/findings"), item => Signature(item) == F2);
-        Assert.Equal("lab-d", Assert.Single(finding.GetProperty("sources").EnumerateArray()).GetProperty("id").GetString());
+        Assert.Equal("lab-d",
+            Assert.Single(finding.GetProperty("sources").EnumerateArray()).GetProperty("id").GetString());
     }
 
     [Fact]
@@ -395,12 +414,14 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         // Past the 10 s debounce the seeded incident reads started.
         _clock.Advance(TimeSpan.FromSeconds(11));
 
-        using var response = await client.SendAsync(Post("/api/incidents/refresh"), TestContext.Current.CancellationToken);
+        using var response =
+            await client.SendAsync(Post("/api/incidents/refresh"), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains(_shopCalls, call => call.Target.Contains("incidents", StringComparison.Ordinal));
         Assert.DoesNotContain(_labCalls, call => call.Target.Contains("incidents", StringComparison.Ordinal));
-        using var listed = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var listed =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Equal($"{Incident} shop-d,{MixedIncident} shop-d", string.Join(',', listed.RootElement.EnumerateArray()
             .Select(item => item.GetProperty("id").GetString() + " " + item.GetProperty("source_id").GetString())));
     }
@@ -414,7 +435,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         Assert.True(gate.TryEnter());
         try
         {
-            using var response = await client.SendAsync(Post("/api/incidents/refresh"), TestContext.Current.CancellationToken);
+            using var response =
+                await client.SendAsync(Post("/api/incidents/refresh"), TestContext.Current.CancellationToken);
 
             // A 503 would mean the request queued for a slot before anything judged it.
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -449,10 +471,12 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     {
         using var client = await SignedInAsync("attr");
 
-        using var response = await client.SendAsync(Post("/api/sources/shop-d/acks", AckBody(F4)), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Post("/api/sources/shop-d/acks", AckBody(F4)),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal("You can read this finding at this source but not acknowledge it there.", await DetailAsync(response));
+        Assert.Equal("You can read this finding at this source but not acknowledge it there.",
+            await DetailAsync(response));
         Assert.DoesNotContain(_shopCalls, call => call.Method != "GET");
     }
 
@@ -465,7 +489,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         Assert.True(gate.TryEnter());
         try
         {
-            using var response = await client.SendAsync(Post("/api/sources/shop-d/acks", AckBody(F1)), TestContext.Current.CancellationToken);
+            using var response = await client.SendAsync(Post("/api/sources/shop-d/acks", AckBody(F1)),
+                TestContext.Current.CancellationToken);
 
             // A 503 would mean the request queued for a slot before anything judged it.
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -483,7 +508,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     {
         using var client = await SignedInAsync("attr");
 
-        using var response = await client.SendAsync(Post("/api/sources/shop-d/acks", AckBody(F5)), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Post("/api/sources/shop-d/acks", AckBody(F5)),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using var sent = JsonDocument.Parse(Assert.Single(_shopCalls, call => call.Method == "POST").Body);
@@ -587,7 +613,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     {
         using var client = await SignedInAsync(user);
 
-        using var status = JsonDocument.Parse(await client.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
+        using var status =
+            JsonDocument.Parse(await client.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
 
         Assert.Equal(expected, status.RootElement.TryGetProperty("disclosures", out _));
     }
@@ -639,13 +666,17 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [Theory]
     [InlineData("attr", """{"source_id":"shop-d"}""", HttpStatusCode.Forbidden)]
     [InlineData("lab", """{"source_id":"lab-d"}""", HttpStatusCode.Accepted)]
-    [InlineData("attr", """{"source_id":"tempo","request":{"service":"cart","lookback":"1h"}}""", HttpStatusCode.Forbidden)]
-    [InlineData("attr", """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""", HttpStatusCode.Accepted)]
-    [InlineData("attr", """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h","trace_id":null}}""", HttpStatusCode.Accepted)]
+    [InlineData("attr", """{"source_id":"tempo","request":{"service":"cart","lookback":"1h"}}""",
+        HttpStatusCode.Forbidden)]
+    [InlineData("attr", """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""",
+        HttpStatusCode.Accepted)]
+    [InlineData("attr", """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h","trace_id":null}}""",
+        HttpStatusCode.Accepted)]
     [InlineData("attr", """{"source_id":"tempo","request":{"trace_id":"abc"}}""", HttpStatusCode.Forbidden)]
     [InlineData("tempo", """{"source_id":"tempo","request":{"trace_id":"abc"}}""", HttpStatusCode.Accepted)]
     [InlineData("viewer", """{"source_id":"tempo","request":{"trace_id":"abc"}}""", HttpStatusCode.BadRequest)]
-    public async Task Starting_a_run_needs_its_permissions_on_its_subject(string user, string body, HttpStatusCode expected)
+    public async Task Starting_a_run_needs_its_permissions_on_its_subject(string user, string body,
+        HttpStatusCode expected)
     {
         using var client = await SignedInAsync(user);
 
@@ -662,7 +693,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     public async Task A_service_report_is_read_on_the_requested_service_by_whoever_holds_traces_read_there()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var id = await SeedRunAsync("tempo", "tempo", """{"service":"checkout","lookback":"1h"}""", "tempo@example.internal");
+        var id = await SeedRunAsync("tempo", "tempo", """{"service":"checkout","lookback":"1h"}""",
+            "tempo@example.internal");
         using var attr = await SignedInAsync("attr");
         using var viewer = await SignedInAsync("viewer");
 
@@ -685,7 +717,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     {
         var trace = await SeedRunAsync("tempo", "tempo", """{"trace_id":"abc"}""", "tempo@example.internal");
         // Requested by attr, on a service whose copies attr cannot write: no requester clause.
-        var cart = await SeedRunAsync("tempo", "tempo", """{"service":"cart","lookback":"1h"}""", "attr@example.internal");
+        var cart = await SeedRunAsync("tempo", "tempo", """{"service":"cart","lookback":"1h"}""",
+            "attr@example.internal");
         var daemon = await SeedRunAsync("lab-d", "daemon", "{}", "lab@example.internal");
         var checkout = await SeedRunAsync("tempo", "tempo", """{"service":"checkout","lookback":"1h"}""", "x");
         // The newest run is one attr cannot see, so a LIMIT taken before the rule would hide checkout.
@@ -799,7 +832,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         Assert.Equal("/shop", Assert.Single(claims, claim => claim.Type == "hub:group").Value);
         Assert.Equal("1", Assert.Single(claims, claim => claim.Type == "hub:access").Value);
         Assert.Equal("session", Assert.Single(claims, claim => claim.Type == "hub:caller").Value);
-        Assert.Equal("attr@example.internal", Assert.Single(claims, claim => claim.Type == System.Security.Claims.ClaimTypes.Name).Value);
+        Assert.Equal("attr@example.internal", Assert.Single(claims, claim => claim.Type == ClaimTypes.Name).Value);
     }
 
     [Theory]
@@ -822,7 +855,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("blanksub", "lacks a string Hub:Auth:SubjectClaim field")]
     [InlineData("localsub", "reserved prefix")]
     [InlineData("machineid", "reserved prefix")]
-    public async Task A_sign_in_without_a_usable_subject_or_with_a_reserved_prefix_is_refused(string user, string reason)
+    public async Task A_sign_in_without_a_usable_subject_or_with_a_reserved_prefix_is_refused(string user,
+        string reason)
     {
         var logger = new ListLogger<Program>();
         await using var logged = Factory.WithWebHostBuilder(builder =>
@@ -854,7 +888,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         Assert.Contains(claims, claim => claim.Type == "hub:subject");
         Assert.Contains(claims, claim => claim.Type == "hub:group");
 
-        await using var dropped = Factory.WithWebHostBuilder(builder => builder.UseSetting("Hub:Auth:RequiredGroups:0", "/ss"));
+        await using var dropped =
+            Factory.WithWebHostBuilder(builder => builder.UseSetting("Hub:Auth:RequiredGroups:0", "/ss"));
         using var after = await WithCookieAsync(dropped, FakeProvider.SessionCookie(callback), "/api/status");
         Assert.Equal(HttpStatusCode.Unauthorized, after.StatusCode);
     }
@@ -866,10 +901,13 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     {
         using var client = Bearer(CiToken);
 
-        Assert.Equal(F5 + "," + F4 + "," + F1, string.Join(',', (await FindingsAsync(client, "/api/findings")).Select(Signature)));
-        Assert.Equal("lab-d:findings.read;shop-d:findings.read;test:findings.read", await SourcePermissionsAsync(client));
+        Assert.Equal(F5 + "," + F4 + "," + F1,
+            string.Join(',', (await FindingsAsync(client, "/api/findings")).Select(Signature)));
+        Assert.Equal("lab-d:findings.read;shop-d:findings.read;test:findings.read",
+            await SourcePermissionsAsync(client));
         using var status = await client.GetAsync("/api/status", TestContext.Current.CancellationToken);
-        using var payload = JsonDocument.Parse(await status.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var payload =
+            JsonDocument.Parse(await status.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Equal("machine:ci", payload.RootElement.GetProperty("identity").GetString());
     }
 
@@ -945,7 +983,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                     services.Remove(worker);
                 services.PostConfigure<HubOptions>(options =>
                 {
-                    options.Analysis = new AnalysisOptions { EngineBinaryPath = "/usr/bin/false", ReportDirectory = _reports };
+                    options.Analysis = new AnalysisOptions
+                    { EngineBinaryPath = "/usr/bin/false", ReportDirectory = _reports };
                     options.Sources =
                     [
                         .. options.Sources,
@@ -976,7 +1015,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             [
                 new ProjectOptions { Name = "cart-svc", Patterns = [new PatternOptions { Service = "cart" }] },
                 new ProjectOptions { Name = "shop", Patterns = [new PatternOptions { Attribute = "team=shop" }] },
-                new ProjectOptions { Name = "shop-cart", Patterns = [new PatternOptions { Source = "shop-d", Service = "cart" }] },
+                new ProjectOptions
+                    { Name = "shop-cart", Patterns = [new PatternOptions { Source = "shop-d", Service = "cart" }] },
                 new ProjectOptions { Name = "lab", Patterns = [new PatternOptions { Source = "lab-d" }] },
                 new ProjectOptions { Name = "tempo-all", Patterns = [new PatternOptions { Source = "tempo" }] }
             ],
@@ -1002,9 +1042,14 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             ],
             MachineTokens =
             [
-                new MachineTokenOptions { Name = "ci", Group = "internal:ci", Token = CiToken, ExpiresAt = now.AddDays(30) },
-                new MachineTokenOptions { Name = "ci-admin", Group = "internal:ci-admin", Token = CiAdminToken, ExpiresAt = now.AddDays(30) },
-                new MachineTokenOptions { Name = "ci-old", Group = "internal:ci", Token = CiOldToken, ExpiresAt = now.AddDays(-1) }
+                new MachineTokenOptions
+                    { Name = "ci", Group = "internal:ci", Token = CiToken, ExpiresAt = now.AddDays(30) },
+                new MachineTokenOptions
+                {
+                    Name = "ci-admin", Group = "internal:ci-admin", Token = CiAdminToken, ExpiresAt = now.AddDays(30)
+                },
+                new MachineTokenOptions
+                    { Name = "ci-old", Group = "internal:ci", Token = CiOldToken, ExpiresAt = now.AddDays(-1) }
             ]
         };
     }
@@ -1039,7 +1084,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     // Each finding is seen a millisecond after the previous one, so the order is fixed.
-    private async Task SeedFindingAsync(string source, string environment, string signature, string service, string grouping)
+    private async Task SeedFindingAsync(string source, string environment, string signature, string service,
+        string grouping)
     {
         _clock.Advance(TimeSpan.FromMilliseconds(1));
         await Database.UpsertBatchAsync(
@@ -1090,10 +1136,14 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     {
         var findings = string.Join(',', teams.Select(team => Envelope(F1, "cart",
             team is null ? "[]" : $$"""[{"key":"team","value":"{{team}}"}]""")));
-        var incident = $$"""{"id":"{{id}}","service":"cart","kind":"oom_kill","at_ms":1000,"window_from_ms":900,"window_to_ms":1100}""";
+        var incident =
+            $$"""{"id":"{{id}}","service":"cart","kind":"oom_kill","at_ms":1000,"window_from_ms":900,"window_to_ms":1100}""";
         await Database.UpsertIncidentsAsync(
             source,
-            [new ParsedIncident(id, "cart", "oom_kill", 1000, null, 900, 1100, null, teams.Length, incident, $"[{findings}]")],
+            [
+                new ParsedIncident(id, "cart", "oom_kill", 1000, null, 900, 1100, null, teams.Length, incident,
+                    $"[{findings}]")
+            ],
             NowMs,
             TestContext.Current.CancellationToken);
     }
@@ -1151,7 +1201,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     {
         using var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var document =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         return [.. document.RootElement.EnumerateArray().Select(item => item.Clone())];
     }
 
@@ -1160,14 +1211,16 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         return string.Join(';', (await FindingsAsync(client, "/api/sources"))
             .OrderBy(source => source.GetProperty("id").GetString(), StringComparer.Ordinal)
             .Select(source => source.GetProperty("id").GetString() + ":" +
-                              string.Join(',', source.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()))));
+                              string.Join(',',
+                                  source.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()))));
     }
 
     private static async Task<string?> IncidentSourceAsync(HttpClient client, string id)
     {
         using var response = await client.GetAsync($"/api/incidents/{id}", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var document =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         return document.RootElement.GetProperty("source_id").GetString();
     }
 
@@ -1178,11 +1231,13 @@ public sealed class AccessRoutesTests : IAsyncLifetime
 
     internal static async Task<string> DetailAsync(HttpResponseMessage response)
     {
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var document =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         return document.RootElement.GetProperty("detail").GetString()!;
     }
 
-    private static async Task<HttpResponseMessage> WithCookieAsync(WebApplicationFactory<Program> factory, string cookie, string path)
+    private static async Task<HttpResponseMessage> WithCookieAsync(WebApplicationFactory<Program> factory,
+        string cookie, string path)
     {
         using var client = FakeProvider.Client(factory);
         using var request = Request("GET", path);
@@ -1197,7 +1252,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     // What the session cookie a sign-in set carries, read back through the cookie handler's own format.
-    internal static List<System.Security.Claims.Claim> Claims(WebApplicationFactory<Program> factory, HttpResponseMessage callback)
+    internal static List<Claim> Claims(WebApplicationFactory<Program> factory, HttpResponseMessage callback)
     {
         var cookie = FakeProvider.SessionCookie(callback)["hub_session=".Length..];
         var ticket = CookieOptions(factory).TicketDataFormat.Unprotect(cookie);

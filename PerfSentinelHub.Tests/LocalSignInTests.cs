@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,7 +9,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
@@ -100,7 +100,8 @@ public sealed class LocalSignInTests : IAsyncLifetime
 
         using var sso = await client.GetAsync("/auth/sign-in/sso?return_url=%2Fapp.js%3Fv%3D1", Cancel);
         Assert.Equal(HttpStatusCode.Redirect, sso.StatusCode);
-        Assert.StartsWith("https://idp.example.internal/authorize?", sso.Headers.Location!.ToString(), StringComparison.Ordinal);
+        Assert.StartsWith("https://idp.example.internal/authorize?", sso.Headers.Location!.ToString(),
+            StringComparison.Ordinal);
         var state = QueryHelpers.ParseQuery(sso.Headers.Location.Query)["state"];
         using var callback = await client.GetAsync(
             $"/auth/callback?code=member&state={Uri.EscapeDataString(state!)}", Cancel);
@@ -197,7 +198,8 @@ public sealed class LocalSignInTests : IAsyncLifetime
         Assert.Contains("role=\"alert\"", page, StringComparison.Ordinal);
         Assert.DoesNotContain("nobody", page, StringComparison.Ordinal);
         Assert.Contains($"Local sign-in refused for ops from {Here} after 1 consecutive failures.", _log.Messages);
-        Assert.Contains($"Local sign-in refused for (unknown name) from {Elsewhere} after 1 consecutive failures.", _log.Messages);
+        Assert.Contains($"Local sign-in refused for (unknown name) from {Elsewhere} after 1 consecutive failures.",
+            _log.Messages);
         Assert.DoesNotContain(_log.Messages, message => message.Contains("nobody", StringComparison.Ordinal));
     }
 
@@ -224,10 +226,10 @@ public sealed class LocalSignInTests : IAsyncLifetime
 
         static async Task<TimeSpan> TimedAsync(HttpClient client, string name)
         {
-            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var started = Stopwatch.GetTimestamp();
             using var response = await SignInAsync(client, name, Password + "!");
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-            return System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            return Stopwatch.GetElapsedTime(started);
         }
     }
 
@@ -242,7 +244,8 @@ public sealed class LocalSignInTests : IAsyncLifetime
         using var wrong = await SignInAsync(client, "ops", Password);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Equal(await wrong.Content.ReadAsByteArrayAsync(Cancel), await response.Content.ReadAsByteArrayAsync(Cancel));
+        Assert.Equal(await wrong.Content.ReadAsByteArrayAsync(Cancel),
+            await response.Content.ReadAsByteArrayAsync(Cancel));
     }
 
     [Fact]
@@ -258,7 +261,8 @@ public sealed class LocalSignInTests : IAsyncLifetime
         using var throttled = await SignInAsync(client, "ops", Password);
         Assert.Equal(HttpStatusCode.TooManyRequests, throttled.StatusCode);
         Assert.Equal(TimeSpan.FromSeconds(30), throttled.Headers.RetryAfter?.Delta);
-        Assert.Contains("Too many failed attempts. Try again in 30 seconds.", await throttled.Content.ReadAsStringAsync(Cancel),
+        Assert.Contains("Too many failed attempts. Try again in 30 seconds.",
+            await throttled.Content.ReadAsStringAsync(Cancel),
             StringComparison.Ordinal);
 
         // The backoff is over, the address's minute is not: still refused, without hashing.
@@ -303,7 +307,10 @@ public sealed class LocalSignInTests : IAsyncLifetime
         // A fresh minute: the budget is back, and only the name's backoff remains.
         _clock.Advance(TimeSpan.FromSeconds(60));
         using (var sixth = await SignInAsync(client, "nobody", Password))
+        {
             Assert.Equal(HttpStatusCode.Forbidden, sixth.StatusCode);
+        }
+
         using var seventh = await SignInAsync(client, "nobody", Password);
 
         Assert.Equal(HttpStatusCode.TooManyRequests, seventh.StatusCode);
@@ -378,11 +385,14 @@ public sealed class LocalSignInTests : IAsyncLifetime
         using var client = Client(Here);
         using var json = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local")
         {
-            Content = new StringContent("""{"name":"ops"}""", System.Text.Encoding.UTF8, "application/json")
+            Content = new StringContent("""{"name":"ops"}""", Encoding.UTF8, "application/json")
         };
         using var large = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local")
         {
-            Content = new FormUrlEncodedContent([new("name", "ops"), new("password", new string('p', 4096))])
+            Content = new FormUrlEncodedContent([
+                new KeyValuePair<string, string>("name", "ops"),
+                new KeyValuePair<string, string>("password", new string('p', 4096))
+            ])
         };
 
         using var unsupported = await client.SendAsync(json, Cancel);
@@ -399,7 +409,9 @@ public sealed class LocalSignInTests : IAsyncLifetime
     {
         using var client = Client(Here);
         using (var signIn = await SignInAsync(client, "ops", Password))
+        {
             Assert.Equal(HttpStatusCode.Redirect, signIn.StatusCode);
+        }
 
         _clock.Advance(TimeSpan.FromHours(5));
         using (var atFive = await client.GetAsync("/api/status", Cancel))
@@ -473,7 +485,10 @@ public sealed class LocalSignInTests : IAsyncLifetime
     {
         using var client = Client(Here);
         using (var signIn = await SignInAsync(client, "ops", Password))
+        {
             Assert.Equal(HttpStatusCode.Redirect, signIn.StatusCode);
+        }
+
         _clock.Advance(TimeSpan.FromHours(7) + TimeSpan.FromMinutes(1));
 
         using var device = await client.GetAsync("/device", Cancel);
@@ -501,8 +516,10 @@ public sealed class LocalSignInTests : IAsyncLifetime
         using var root = await client.GetAsync("/", Cancel);
         using var page = await client.GetAsync("/auth/sign-in", Cancel);
 
-        Assert.StartsWith("https://idp.example.internal/authorize?", root.Headers.Location!.ToString(), StringComparison.Ordinal);
-        Assert.StartsWith("https://idp.example.internal/authorize?", page.Headers.Location!.ToString(), StringComparison.Ordinal);
+        Assert.StartsWith("https://idp.example.internal/authorize?", root.Headers.Location!.ToString(),
+            StringComparison.Ordinal);
+        Assert.StartsWith("https://idp.example.internal/authorize?", page.Headers.Location!.ToString(),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -514,9 +531,11 @@ public sealed class LocalSignInTests : IAsyncLifetime
         using var root = await client.GetAsync("/", Cancel);
         using var signIn = await SignInAsync(client, "ops", Password);
 
-        Assert.StartsWith("https://idp.example.internal/authorize?", root.Headers.Location!.ToString(), StringComparison.Ordinal);
+        Assert.StartsWith("https://idp.example.internal/authorize?", root.Headers.Location!.ToString(),
+            StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.Redirect, signIn.StatusCode);
-        Assert.StartsWith("https://idp.example.internal/authorize?", signIn.Headers.Location!.ToString(), StringComparison.Ordinal);
+        Assert.StartsWith("https://idp.example.internal/authorize?", signIn.Headers.Location!.ToString(),
+            StringComparison.Ordinal);
     }
 
     // ------------------------------------------------------------ the gate and the throttle
@@ -679,7 +698,10 @@ public sealed class LocalSignInTests : IAsyncLifetime
         var request = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local")
         {
             Content = new FormUrlEncodedContent(
-                [new("name", name), new("password", password), new("return_url", returnUrl)])
+            [
+                new KeyValuePair<string, string>("name", name), new KeyValuePair<string, string>("password", password),
+                new KeyValuePair<string, string>("return_url", returnUrl)
+            ])
         };
         if (site is not null) request.Headers.Add("Sec-Fetch-Site", site);
         if (origin is not null) request.Headers.Add("Origin", origin);
@@ -694,7 +716,8 @@ public sealed class LocalSignInTests : IAsyncLifetime
         return FakeProvider.SessionCookie(signIn);
     }
 
-    private static async Task<HttpResponseMessage> WithCookieAsync(WebApplicationFactory<Program> hub, string cookie, string path)
+    private static async Task<HttpResponseMessage> WithCookieAsync(WebApplicationFactory<Program> hub, string cookie,
+        string path)
     {
         using var client = FakeProvider.Client(hub);
         using var request = new HttpRequestMessage(HttpMethod.Get, path);

@@ -10,7 +10,7 @@ public sealed partial class HubOptionsValidator
         if (disclosures.AllowInternal && !options.Access.Enabled)
             errors.Add("Hub:Disclosures:AllowInternal requires Hub:Access:Enabled: an internal report would be "
                        + "open to anyone who reaches the Hub.");
-        if ((disclosures.ExpectedIdentity is null) != (disclosures.ExpectedIssuer is null))
+        if (disclosures.ExpectedIdentity is null != disclosures.ExpectedIssuer is null)
             errors.Add("Hub:Disclosures:ExpectedIdentity and ExpectedIssuer go together or not at all.");
         if (disclosures.ShareLinkDays is < 1 or > 30)
             errors.Add("Hub:Disclosures:ShareLinkDays must be between 1 and 30.");
@@ -40,7 +40,8 @@ public sealed partial class HubOptionsValidator
         if (publicUrl is not null && IsInvalidSourceUrl(publicUrl))
             errors.Add("Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL " + UrlShape);
         else if (publicUrl is { AbsolutePath: not "/" })
-            errors.Add("Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.");
+            errors.Add(
+                "Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.");
     }
 
     private static void ValidateWebhook(WebhookOptions webhook, string path, HashSet<string> names, List<string> errors)

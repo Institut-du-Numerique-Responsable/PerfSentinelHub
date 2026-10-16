@@ -90,7 +90,8 @@ public sealed class DisclosureRenderer(EngineProbe engine, IOptions<HubOptions> 
         }
     }
 
-    private async Task<List<string>> WriteInputsAsync(string directory, DisclosureFiles files, CancellationToken cancellationToken)
+    private async Task<List<string>> WriteInputsAsync(string directory, DisclosureFiles files,
+        CancellationToken cancellationToken)
     {
         var report = Path.Combine(directory, "report.json");
         await File.WriteAllBytesAsync(report, files.Report, cancellationToken);
@@ -114,7 +115,8 @@ public sealed class DisclosureRenderer(EngineProbe engine, IOptions<HubOptions> 
         return arguments;
     }
 
-    private static async Task<RenderOutcome> OutcomeAsync(EngineResult result, string output, CancellationToken cancellationToken)
+    private static async Task<RenderOutcome> OutcomeAsync(EngineResult result, string output,
+        CancellationToken cancellationToken)
     {
         if (result.ExitCode == 0)
             return File.Exists(output) && new FileInfo(output).Length is > 0 and <= MaxPdfBytes

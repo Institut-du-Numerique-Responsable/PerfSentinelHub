@@ -51,9 +51,14 @@ public static partial class ApiEndpoints
                     summary.HashChecked == true ? "checked" : "not_checked",
                     BindingCheck(summary),
                     // What the report says of itself: signed, signed-with-attestation or audited.
-                    summary.IntegrityLevel is "signed" or "signed-with-attestation" or "audited" ? "declared" : "absent",
+                    summary.IntegrityLevel is "signed" or "signed-with-attestation" or "audited"
+                        ? "declared"
+                        : "absent",
                     summary.EngineVersion),
-                [.. (await database.ListShareLinksAsync(id, cancellationToken)).Select(link => LinkView(link, summary, nowMs))],
+                [
+                    .. (await database.ListShareLinksAsync(id, cancellationToken)).Select(link =>
+                        LinkView(link, summary, nowMs))
+                ],
                 [
                     .. (await database.ListDeliveriesAsync(id, cancellationToken)).Select(delivery => new DeliveryView(
                         delivery.Id, delivery.Webhook, delivery.Event, delivery.State, delivery.Attempts,
@@ -121,7 +126,8 @@ public static partial class ApiEndpoints
 
         var created = await IssueShareLinkAsync(
             database, id, RelayIdentity(request, options.Value)!, days, timeProvider, cancellationToken);
-        return TypedResults.Json(created, HubJsonContext.Default.ShareLinkCreated, statusCode: StatusCodes.Status201Created);
+        return TypedResults.Json(created, HubJsonContext.Default.ShareLinkCreated,
+            statusCode: StatusCodes.Status201Created);
     }
 
     /// <summary>A link of its own token, shown once and stored as its SHA-256. Shared with the webhooks.</summary>
@@ -136,7 +142,7 @@ public static partial class ApiEndpoints
         var token = "pshare_" + Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
         var linkId = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-        var expiresAtMs = nowMs + (days * DayMs);
+        var expiresAtMs = nowMs + days * DayMs;
         await database.InsertShareLinkAsync(
             new ShareLinkRecord(linkId, disclosureId, SHA256.HashData(Encoding.UTF8.GetBytes(token)), createdBy, nowMs,
                 expiresAtMs),
@@ -192,7 +198,8 @@ public static partial class ApiEndpoints
             .ToHashSet(StringComparer.Ordinal);
         return await database.WithdrawAsync(
             id, reason, RelayIdentity(request, options.Value)!, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
-            [.. options.Value.Disclosures.Webhooks.Select(webhook => webhook.Name).Where(told.Contains)], cancellationToken)
+            [.. options.Value.Disclosures.Webhooks.Select(webhook => webhook.Name).Where(told.Contains)],
+            cancellationToken)
             ? TypedResults.NoContent()
             : Problem(StatusCodes.Status409Conflict, "This disclosure is already withdrawn.");
     }
@@ -218,7 +225,8 @@ public static partial class ApiEndpoints
             return TypedResults.NotFound();
         if (delivery.State == DeliveryStates.Delivered)
             return Problem(StatusCodes.Status409Conflict, "This delivery already went through.");
-        await database.RetryDeliveryAsync(deliveryId, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
+        await database.RetryDeliveryAsync(deliveryId, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
+            cancellationToken);
         return TypedResults.NoContent();
     }
 
@@ -246,7 +254,8 @@ public static partial class ApiEndpoints
         if (!gate.TryEnter())
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
-            return Problem(StatusCodes.Status503ServiceUnavailable, "A disclosure is being published; try again in a moment.");
+            return Problem(StatusCodes.Status503ServiceUnavailable,
+                "A disclosure is being published; try again in a moment.");
         }
 
         try
@@ -282,14 +291,17 @@ public static partial class ApiEndpoints
     }
 
     // Disclosures off is a 404, so an off Hub tells nothing; then the Hub-level permission.
-    private static IResult? DisclosureRefusal(HttpContext context, AccessPolicy access, HubOptions options, string permission)
+    private static IResult? DisclosureRefusal(HttpContext context, AccessPolicy access, HubOptions options,
+        string permission)
     {
         if (!options.Disclosures.Enabled)
             return TypedResults.NotFound();
         if (!access.Scope(context, permission).IsNothing)
             return null;
         return Problem(StatusCodes.Status403Forbidden,
-            permission == AccessPermissions.DisclosuresRead ? "You may not read disclosures." : "You may not manage disclosures.");
+            permission == AccessPermissions.DisclosuresRead
+                ? "You may not read disclosures."
+                : "You may not manage disclosures.");
     }
 
     // A write names its author, and is held to the same-origin rule the ack relay follows.
@@ -319,7 +331,9 @@ public static partial class ApiEndpoints
             new DisclosureFilesPresent(true, summary.HasAttestation, summary.HasBundle, summary.HasPdf),
             summary.HasPdf ? "rendered" : "not_checked", summary.RenderReason, summary.PublishedAtMs,
             summary.SignatureAddedAtMs,
-            summary.WithdrawnAtMs is { } at ? new DisclosureWithdrawal(at, summary.WithdrawnReason, summary.WithdrawnBy) : null);
+            summary.WithdrawnAtMs is { } at
+                ? new DisclosureWithdrawal(at, summary.WithdrawnReason, summary.WithdrawnBy)
+                : null);
     }
 
     private static string BindingCheck(DisclosureSummary summary)
@@ -341,7 +355,8 @@ public static partial class ApiEndpoints
 
     private static ShareLinkView LinkView(ShareLinkSummary link, DisclosureSummary disclosure, long nowMs)
     {
-        return new ShareLinkView(link.Id, LinkState(link, disclosure, nowMs), link.CreatedBy, link.CreatedAtMs, link.ExpiresAtMs, link.RevokedAtMs,
+        return new ShareLinkView(link.Id, LinkState(link, disclosure, nowMs), link.CreatedBy, link.CreatedAtMs,
+            link.ExpiresAtMs, link.RevokedAtMs,
             link.RevokedBy, link.Downloads, link.LastUsedAtMs);
     }
 

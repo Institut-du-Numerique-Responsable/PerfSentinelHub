@@ -88,12 +88,10 @@ public sealed class CorrelationsApiTests(HubApplicationFactory factory) : IClass
     {
         var pair = EpisodeJson.Id(0xd1);
         for (var batch = 0; batch < 3; batch++)
-        {
             await SeedAsync([
                 .. Enumerable.Range(0x1000 + batch * 70, 70)
                     .Select(index => EpisodeJson.Episode(EpisodeJson.Id(index), pairKey: pair))
             ]);
-        }
 
         Assert.Equal(200, (await GetAsync($"pair_key={pair}")).GetArrayLength());
         Assert.Equal(210, (await GetAsync($"pair_key={pair}&limit=1000")).GetArrayLength());

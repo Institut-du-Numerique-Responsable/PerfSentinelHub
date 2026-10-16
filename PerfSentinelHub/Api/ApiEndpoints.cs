@@ -17,6 +17,7 @@ public static partial class ApiEndpoints
 
     // One incident carries up to a thousand frozen findings: the cap of one daemon page.
     private const int IncidentImportMaxBytes = 4 * 1024 * 1024;
+
     // A hundred episodes of two templates each: the daemon's own cap per batch.
     private const int CorrelationImportMaxBytes = 1024 * 1024;
 
@@ -306,7 +307,7 @@ public static partial class ApiEndpoints
             return refused;
         try
         {
-            var (import, rejected) = await ReadImportAsync<ParsedIncidentImport>(
+            var (import, rejected) = await ReadImportAsync(
                 request, IncidentImportMaxBytes, IncidentParser.ParseImport, admission.Refuse, cancellationToken);
             if (rejected is not null)
                 return rejected;
@@ -345,7 +346,7 @@ public static partial class ApiEndpoints
             return refused;
         try
         {
-            var (import, rejected) = await ReadImportAsync<ParsedEpisodeImport>(
+            var (import, rejected) = await ReadImportAsync(
                 request, CorrelationImportMaxBytes, CorrelationParser.ParseImport, admission.Refuse, cancellationToken);
             if (rejected is not null)
                 return rejected;

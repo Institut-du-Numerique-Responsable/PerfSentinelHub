@@ -122,7 +122,9 @@ public sealed class AnalysisApiTests : IDisposable
         await using (var body = new BrotliStream(await report.Content.ReadAsStreamAsync(cancellationToken),
                          CompressionMode.Decompress))
         using (var reader = new StreamReader(body))
+        {
             Assert.Contains("<html>", await reader.ReadToEndAsync(cancellationToken), StringComparison.Ordinal);
+        }
 
         // JSON stays plain: an answer may carry a token, and compressing a secret
         // beside reflected input is what BREACH reads.

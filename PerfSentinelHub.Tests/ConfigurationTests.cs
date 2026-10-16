@@ -14,6 +14,110 @@ public sealed class ConfigurationTests
 {
     private const string AckSecret = "ack-secret"; // gitleaks:allow -- synthetic test credential
 
+    private const string
+        DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+
+    private const string
+        WebhookSecret = "webhook-secret-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+
+    private const string WebhookUrl =
+        "Hub:Disclosures:Webhooks:0:Url must be an absolute https URL, or http to a loopback address, without credentials or fragment.";
+
+    private const string
+        MachineTokenValue = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
+    private const string AttributeShape =
+        "Hub:Access:Projects:0:Patterns:0:Attribute must read key=value: a key of 1 to 256 characters with no "
+        + "control character and no '*', and a value of 1 to 256, exact or a prefix ending in a single '*'.";
+
+    private const string RoleName =
+        "Hub:Access:Roles:0:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored, "
+        + "and not reader, member or admin.";
+
+    private const string RolePermissions =
+        "Hub:Access:Roles:0:Permissions must list one or more of findings.read, traces.read, sources.read, "
+        + "analyses.run, acks.write, disclosures.read and disclosures.manage, each once.";
+
+    private const string TokenName =
+        "Hub:Access:MachineTokens:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
+
+    private const string TokenShape =
+        "Hub:Access:MachineTokens:0:Token must be 32 to 512 characters of A-Z, a-z, 0-9, '-', '.', '_', '~', '+' "
+        + "and '/', with trailing '=' allowed, and must not start with pshub_.";
+
+    private const string TokenExpiry = "Hub:Access:MachineTokens:0:ExpiresAt must be set, at most 365 days from now.";
+
+    private const string LocalPasswordHash =
+        "$pbkdf2-sha256$i=600000$AAECAwQFBgcICQoLDA0ODw$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY";
+
+    private const string LocalName =
+        "Hub:Access:LocalAccounts:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
+
+    private const string LocalHash =
+        "Hub:Access:LocalAccounts:0:PasswordHash must be the PHC string PerfSentinelHub hash-password prints: "
+        + "$pbkdf2-sha256$i=600000$<salt>$<key>.";
+
+    private static readonly DateTimeOffset Now = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+
+    public static TheoryData<string, string> InvalidDisclosures => new()
+    {
+        { "short key", "Hub:Disclosures:ImportKey must be at least 32 characters with no control character." },
+        { "source key", "Hub:Disclosures:ImportKey must differ from every source import API key and machine token." },
+        { "days", "Hub:Disclosures:ShareLinkDays must be between 1 and 30." },
+        { "remote http", WebhookUrl },
+        {
+            "internal webhook",
+            "Hub:Disclosures:Webhooks:0:Confidentiality must be public: an internal report never leaves the Hub."
+        },
+        {
+            "short secret",
+            "Hub:Disclosures:Webhooks:0:Secret must be at least 32 characters with no control character."
+        },
+        {
+            "webhook name",
+            "Hub:Disclosures:Webhooks:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', and unique."
+        },
+        { "webhook days", "Hub:Disclosures:Webhooks:0:ShareLinkDays must be between 1 and 30." },
+        { "identity alone", "Hub:Disclosures:ExpectedIdentity and ExpectedIssuer go together or not at all." },
+        {
+            "share link without a public url",
+            "Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: the link it sends must name the Hub."
+        },
+        {
+            "public url query",
+            "Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL without credentials, query, or fragment."
+        },
+        {
+            "public url path",
+            "Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /."
+        }
+    };
+
+    public static TheoryData<DbStatOptions, string> InvalidDatabaseStatistics => new()
+    {
+        { new DbStatOptions { Metric = "m" }, "Source 'prod' pg_stat requires a Prometheus URL." },
+        {
+            new DbStatOptions { Prometheus = new Uri("ftp://vm") },
+            "Source 'prod' pg_stat Prometheus must be an absolute HTTP(S) URL without credentials, query, or fragment."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Unit = "picoseconds" },
+            "Source 'prod' pg_stat unit must be seconds or milliseconds."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Top = 0 },
+            "Source 'prod' pg_stat top must be between 1 and 1000."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Selector = "a=\"b\"\n" },
+            "Source 'prod' pg_stat selector must not contain control characters."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), AuthHeaderName = "Authorization" },
+            "Source 'prod' must provide both pg_stat auth header name and value."
+        }
+    };
+
     [Fact]
     public void Indexed_source_configuration_binds_to_the_options_model()
     {
@@ -159,9 +263,6 @@ public sealed class ConfigurationTests
         Assert.Equal(message, Assert.Single(Failures(source)));
     }
 
-    private const string DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
-    private const string WebhookSecret = "webhook-secret-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
-
     [Fact]
     public void Disclosures_bind_trimmed_and_are_off_without_an_import_key()
     {
@@ -190,33 +291,12 @@ public sealed class ConfigurationTests
         Assert.Empty(DisclosureFailures(new DisclosuresOptions()));
     }
 
-    public static TheoryData<string, string> InvalidDisclosures => new()
-    {
-        { "short key", "Hub:Disclosures:ImportKey must be at least 32 characters with no control character." },
-        { "source key", "Hub:Disclosures:ImportKey must differ from every source import API key and machine token." },
-        { "days", "Hub:Disclosures:ShareLinkDays must be between 1 and 30." },
-        { "remote http", WebhookUrl },
-        { "internal webhook", "Hub:Disclosures:Webhooks:0:Confidentiality must be public: an internal report never leaves the Hub." },
-        { "short secret", "Hub:Disclosures:Webhooks:0:Secret must be at least 32 characters with no control character." },
-        { "webhook name", "Hub:Disclosures:Webhooks:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', and unique." },
-        { "webhook days", "Hub:Disclosures:Webhooks:0:ShareLinkDays must be between 1 and 30." },
-        { "identity alone", "Hub:Disclosures:ExpectedIdentity and ExpectedIssuer go together or not at all." },
-        {
-            "share link without a public url",
-            "Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: the link it sends must name the Hub."
-        },
-        { "public url query", "Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL without credentials, query, or fragment." },
-        { "public url path", "Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /." }
-    };
-
-    private const string WebhookUrl =
-        "Hub:Disclosures:Webhooks:0:Url must be an absolute https URL, or http to a loopback address, without credentials or fragment.";
-
     [Theory]
     [MemberData(nameof(InvalidDisclosures))]
     public void Invalid_disclosures_are_refused(string rule, string expected)
     {
-        var webhook = new WebhookOptions { Name = "auditors", Url = new Uri("https://hooks.example/x"), Secret = WebhookSecret };
+        var webhook = new WebhookOptions
+        { Name = "auditors", Url = new Uri("https://hooks.example/x"), Secret = WebhookSecret };
         var disclosures = new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] };
         var options = ValidOptions() with { Disclosures = disclosures };
         options = rule switch
@@ -224,18 +304,42 @@ public sealed class ConfigurationTests
             "short key" => options with { Disclosures = disclosures with { ImportKey = new string('k', 31) } },
             "source key" => options with { Sources = [ValidSource() with { ImportApiKey = DisclosureKey }] },
             "days" => options with { Disclosures = disclosures with { ShareLinkDays = 31 } },
-            "remote http" => options with { Disclosures = disclosures with { Webhooks = [webhook with { Url = new Uri("http://hooks.example/x") }] } },
-            "internal webhook" => options with { Disclosures = disclosures with { Webhooks = [webhook with { Confidentiality = "internal" }] } },
-            "short secret" => options with { Disclosures = disclosures with { Webhooks = [webhook with { Secret = new string('s', 31) }] } },
+            "remote http" => options with
+            {
+                Disclosures = disclosures with
+                {
+                    Webhooks = [webhook with { Url = new Uri("http://hooks.example/x") }]
+                }
+            },
+            "internal webhook" => options with
+            {
+                Disclosures = disclosures with { Webhooks = [webhook with { Confidentiality = "internal" }] }
+            },
+            "short secret" => options with
+            {
+                Disclosures = disclosures with { Webhooks = [webhook with { Secret = new string('s', 31) }] }
+            },
             "webhook name" => options with { Disclosures = disclosures with { Webhooks = [webhook, webhook] } },
-            "webhook days" => options with { Disclosures = disclosures with { Webhooks = [webhook with { ShareLinkDays = 0 }] } },
-            "identity alone" => options with { Disclosures = disclosures with { ExpectedIdentity = "https://github.com/acme/x" } },
+            "webhook days" => options with
+            {
+                Disclosures = disclosures with { Webhooks = [webhook with { ShareLinkDays = 0 }] }
+            },
+            "identity alone" => options with
+            {
+                Disclosures = disclosures with { ExpectedIdentity = "https://github.com/acme/x" }
+            },
             "share link without a public url" => options with
             {
                 Disclosures = disclosures with { Webhooks = [webhook with { IncludeShareLink = true }] }
             },
-            "public url query" => options with { Disclosures = disclosures with { PublicUrl = new Uri("https://hub.example/?x=1") } },
-            "public url path" => options with { Disclosures = disclosures with { PublicUrl = new Uri("https://corp.example/perf-hub/") } },
+            "public url query" => options with
+            {
+                Disclosures = disclosures with { PublicUrl = new Uri("https://hub.example/?x=1") }
+            },
+            "public url path" => options with
+            {
+                Disclosures = disclosures with { PublicUrl = new Uri("https://corp.example/perf-hub/") }
+            },
             _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, null)
         };
 
@@ -245,7 +349,8 @@ public sealed class ConfigurationTests
     [Fact]
     public void A_webhook_to_a_loopback_address_may_use_http()
     {
-        var webhook = new WebhookOptions { Name = "local", Url = new Uri("http://127.0.0.1:9000/hook"), Secret = WebhookSecret };
+        var webhook = new WebhookOptions
+        { Name = "local", Url = new Uri("http://127.0.0.1:9000/hook"), Secret = WebhookSecret };
 
         Assert.Empty(DisclosureFailures(new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] }));
     }
@@ -266,7 +371,8 @@ public sealed class ConfigurationTests
         Assert.Equal(
             "Hub:Disclosures:AllowInternal requires Hub:Access:Enabled: an internal report would be open to "
             + "anyone who reaches the Hub.",
-            Assert.Single(DisclosureFailures(new DisclosuresOptions { ImportKey = DisclosureKey, AllowInternal = true })));
+            Assert.Single(
+                DisclosureFailures(new DisclosuresOptions { ImportKey = DisclosureKey, AllowInternal = true })));
         Assert.Empty(AccessFailures(AccessOn() with
         {
             Disclosures = new DisclosuresOptions { ImportKey = DisclosureKey, AllowInternal = true }
@@ -279,7 +385,10 @@ public sealed class ConfigurationTests
         var options = AccessOn(access => access with
         {
             Roles = [.. access.Roles, new RoleOptions { Name = "publisher", Permissions = ["disclosures.read"] }],
-            Grants = [.. access.Grants, new GrantOptions { Group = "/teams/shop", Project = "shop", Role = "publisher" }]
+            Grants =
+            [
+                .. access.Grants, new GrantOptions { Group = "/teams/shop", Project = "shop", Role = "publisher" }
+            ]
         });
 
         Assert.Equal(
@@ -302,14 +411,21 @@ public sealed class ConfigurationTests
 
         Assert.Equal(["disclosures.read", "disclosures.manage"], disclosures);
         Assert.All(disclosures, permission => Assert.Contains(permission, AccessPermissions.BuiltInRoles["admin"]));
-        Assert.All(disclosures, permission => Assert.DoesNotContain(permission, AccessPermissions.BuiltInRoles["reader"]));
-        Assert.All(disclosures, permission => Assert.DoesNotContain(permission, AccessPermissions.BuiltInRoles["member"]));
-        Assert.All(disclosures, permission => Assert.DoesNotContain(permission, AccessPermissions.MachineTokenPermissions));
+        Assert.All(disclosures,
+            permission => Assert.DoesNotContain(permission, AccessPermissions.BuiltInRoles["reader"]));
+        Assert.All(disclosures,
+            permission => Assert.DoesNotContain(permission, AccessPermissions.BuiltInRoles["member"]));
+        Assert.All(disclosures,
+            permission => Assert.DoesNotContain(permission, AccessPermissions.MachineTokenPermissions));
     }
 
     private static string[] DisclosureFailures(DisclosuresOptions disclosures)
     {
-        return [.. new HubOptionsValidator().Validate(null, ValidOptions() with { Disclosures = disclosures }).Failures ?? []];
+        return
+        [
+            .. new HubOptionsValidator().Validate(null, ValidOptions() with { Disclosures = disclosures }).Failures ??
+               []
+        ];
     }
 
     [Fact]
@@ -368,31 +484,6 @@ public sealed class ConfigurationTests
 
         Assert.Empty(Failures(ValidSource() with { PgStat = stats, MySqlStat = stats with { Unit = "picoseconds" } }));
     }
-
-    public static TheoryData<DbStatOptions, string> InvalidDatabaseStatistics => new()
-    {
-        { new DbStatOptions { Metric = "m" }, "Source 'prod' pg_stat requires a Prometheus URL." },
-        {
-            new DbStatOptions { Prometheus = new Uri("ftp://vm") },
-            "Source 'prod' pg_stat Prometheus must be an absolute HTTP(S) URL without credentials, query, or fragment."
-        },
-        {
-            new DbStatOptions { Prometheus = new Uri("http://vm"), Unit = "picoseconds" },
-            "Source 'prod' pg_stat unit must be seconds or milliseconds."
-        },
-        {
-            new DbStatOptions { Prometheus = new Uri("http://vm"), Top = 0 },
-            "Source 'prod' pg_stat top must be between 1 and 1000."
-        },
-        {
-            new DbStatOptions { Prometheus = new Uri("http://vm"), Selector = "a=\"b\"\n" },
-            "Source 'prod' pg_stat selector must not contain control characters."
-        },
-        {
-            new DbStatOptions { Prometheus = new Uri("http://vm"), AuthHeaderName = "Authorization" },
-            "Source 'prod' must provide both pg_stat auth header name and value."
-        }
-    };
 
     [Theory]
     [MemberData(nameof(InvalidDatabaseStatistics), DisableDiscoveryEnumeration = true)]
@@ -583,7 +674,10 @@ public sealed class ConfigurationTests
     [Fact]
     public void Trusted_proxy_networks_must_each_be_a_CIDR_network()
     {
-        Assert.Empty(AuthFailures(ValidAuth() with { TrustedProxyNetworks = ["10.42.0.0/16", "127.0.0.1/32", "fd00::/8"] }));
+        Assert.Empty(AuthFailures(ValidAuth() with
+        {
+            TrustedProxyNetworks = ["10.42.0.0/16", "127.0.0.1/32", "fd00::/8"]
+        }));
         Assert.Equal(
             "Hub:Auth:TrustedProxyNetworks entry 'ingress' is not a CIDR network.",
             Assert.Single(AuthFailures(ValidAuth() with { TrustedProxyNetworks = ["10.42.0.0/16", "ingress"] })));
@@ -763,10 +857,6 @@ public sealed class ConfigurationTests
         Assert.Throws<OptionsValidationException>(factory.CreateClient);
     }
 
-    private const string MachineTokenValue = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
-
-    private static readonly DateTimeOffset Now = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
-
     [Fact]
     public void A_valid_access_configuration_is_accepted()
     {
@@ -787,7 +877,12 @@ public sealed class ConfigurationTests
         options = options with { Auth = options.Auth with { SubjectClaim = claim } };
 
         Assert.Equal(
-            accepted ? [] : [$"Hub:Auth:SubjectClaim must name an immutable account id (sub, oid, uuid or account_id) when Hub:Access:Enabled; '{claim}' can be changed or reused at the provider."],
+            accepted
+                ? []
+                :
+                [
+                    $"Hub:Auth:SubjectClaim must name an immutable account id (sub, oid, uuid or account_id) when Hub:Access:Enabled; '{claim}' can be changed or reused at the provider."
+                ],
             AccessFailures(options));
     }
 
@@ -796,7 +891,9 @@ public sealed class ConfigurationTests
     public void Access_needs_a_metrics_port()
     {
         Assert.Equal(
-            ["Hub:Access:Enabled needs Hub:MetricsPort: with access on, /metrics answers only on its own port, and without one it would stop answering everywhere."],
+            [
+                "Hub:Access:Enabled needs Hub:MetricsPort: with access on, /metrics answers only on its own port, and without one it would stop answering everywhere."
+            ],
             AccessFailures(AccessOn() with { MetricsPort = null }));
     }
 
@@ -808,7 +905,8 @@ public sealed class ConfigurationTests
     [InlineData(65536, false)]
     public void A_metrics_port_is_a_tcp_port(int port, bool accepted)
     {
-        var failures = new HubOptionsValidator().Validate(null, ValidOptions() with { MetricsPort = port }).Failures ?? [];
+        var failures = new HubOptionsValidator().Validate(null, ValidOptions() with { MetricsPort = port }).Failures ??
+                       [];
 
         Assert.Equal(accepted ? [] : ["Hub:MetricsPort must be between 1 and 65535."], failures);
     }
@@ -895,7 +993,8 @@ public sealed class ConfigurationTests
     [InlineData("A9 source character",
         "Hub:Access:Projects:0:Patterns:0:Source must be a source id, or a prefix of one ending in a single '*'.")]
     [InlineData("A9 unknown source", "Hub:Access:Projects:0:Patterns:0:Source 'nope' matches no configured source.")]
-    [InlineData("A9 prefix of no source", "Hub:Access:Projects:0:Patterns:0:Source 'zz*' matches no configured source.")]
+    [InlineData("A9 prefix of no source",
+        "Hub:Access:Projects:0:Patterns:0:Source 'zz*' matches no configured source.")]
     [InlineData("A9 service control",
         "Hub:Access:Projects:0:Patterns:0:Service must be 1 to 256 characters with no control character, exact or a prefix ending in a single '*'.")]
     [InlineData("A9 service long",
@@ -914,25 +1013,31 @@ public sealed class ConfigurationTests
     [InlineData("A10 access.admin",
         "Role 'auditor': access.admin is held only through the built-in admin role, Hub:Access:Admins or Hub:Access:AdminGroups.")]
     [InlineData("A11 blank", "Hub:Access:Grants:0 needs Group, Project and Role.")]
-    [InlineData("A11 project", "Hub:Access:Grants:0:Project 'nope' is neither '*' nor a project in Hub:Access:Projects.")]
-    [InlineData("A11 project case", "Hub:Access:Grants:0:Project 'Shop' is neither '*' nor a project in Hub:Access:Projects.")]
+    [InlineData("A11 project",
+        "Hub:Access:Grants:0:Project 'nope' is neither '*' nor a project in Hub:Access:Projects.")]
+    [InlineData("A11 project case",
+        "Hub:Access:Grants:0:Project 'Shop' is neither '*' nor a project in Hub:Access:Projects.")]
     [InlineData("A11 role", "Hub:Access:Grants:0:Role 'nope' is neither a built-in role nor one in Hub:Access:Roles.")]
     [InlineData("A11 admin on a project",
         "Grant 0: the admin role applies to the whole Hub; grant it on '*', or use Hub:Access:Admins or Hub:Access:AdminGroups.")]
     [InlineData("A12 name", TokenName)]
-    [InlineData("A12 duplicate name", "Hub:Access:MachineTokens:1:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.")]
+    [InlineData("A12 duplicate name",
+        "Hub:Access:MachineTokens:1:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.")]
     [InlineData("A12 group with members",
         "Group 'oncall' backs machine token 'ci-shop' and must have no members: its grants are sized for a machine.")]
     [InlineData("A12 no token", TokenShape)]
     [InlineData("A12 short token", TokenShape)]
     [InlineData("A12 token alphabet", TokenShape)]
     [InlineData("A12 terminal prefix", TokenShape)]
-    [InlineData("A12 token twice", "Hub:Access:MachineTokens:1:Token must differ from every other machine token and every import API key.")]
-    [InlineData("A12 import key", "Hub:Access:MachineTokens:0:Token must differ from every other machine token and every import API key.")]
+    [InlineData("A12 token twice",
+        "Hub:Access:MachineTokens:1:Token must differ from every other machine token and every import API key.")]
+    [InlineData("A12 import key",
+        "Hub:Access:MachineTokens:0:Token must differ from every other machine token and every import API key.")]
     [InlineData("A12 no expiry", TokenExpiry)]
     [InlineData("A12 beyond a year", TokenExpiry)]
     [InlineData("A13 name", LocalName)]
-    [InlineData("A13 duplicate", "Hub:Access:LocalAccounts:1:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.")]
+    [InlineData("A13 duplicate",
+        "Hub:Access:LocalAccounts:1:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.")]
     [InlineData("A13 no hash", LocalHash)]
     [InlineData("A13 iterations", LocalHash)]
     [InlineData("A13 unlisted",
@@ -941,7 +1046,7 @@ public sealed class ConfigurationTests
         "Hub:Access:LocalAccounts needs Hub:Auth:TrustedProxyNetworks: without it every client behind a proxy shares one address, and anyone could keep the break-glass account throttled. A Hub with no proxy in front lists 127.0.0.1/32.")]
     public void Each_access_rule_names_the_key_it_refuses(string rule, string message)
     {
-        string[] failures = AccessFailures(AccessCase(rule));
+        var failures = AccessFailures(AccessCase(rule));
 
         Assert.Contains(message, failures);
     }
@@ -962,7 +1067,7 @@ public sealed class ConfigurationTests
     {
         var hash = LocalPasswordHash.Replace("i=600000", "i=1", StringComparison.Ordinal);
 
-        string[] failures = AccessFailures(LocalOn(access => access with
+        var failures = AccessFailures(LocalOn(access => access with
         {
             LocalAccounts = [access.LocalAccounts[0] with { PasswordHash = hash }]
         }));
@@ -983,7 +1088,7 @@ public sealed class ConfigurationTests
             ]
         });
 
-        string[] failures = AccessFailures(options);
+        var failures = AccessFailures(options);
         Assert.True(failures.Length > 1);
         Assert.DoesNotContain(failures, failure => failure.Contains(MachineTokenValue, StringComparison.Ordinal));
     }
@@ -1071,35 +1176,6 @@ public sealed class ConfigurationTests
             reference => Assert.Contains('/', reference));
     }
 
-    private const string AttributeShape =
-        "Hub:Access:Projects:0:Patterns:0:Attribute must read key=value: a key of 1 to 256 characters with no "
-        + "control character and no '*', and a value of 1 to 256, exact or a prefix ending in a single '*'.";
-
-    private const string RoleName =
-        "Hub:Access:Roles:0:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', unique with case ignored, "
-        + "and not reader, member or admin.";
-
-    private const string RolePermissions =
-        "Hub:Access:Roles:0:Permissions must list one or more of findings.read, traces.read, sources.read, "
-        + "analyses.run, acks.write, disclosures.read and disclosures.manage, each once.";
-
-    private const string TokenName = "Hub:Access:MachineTokens:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
-
-    private const string TokenShape =
-        "Hub:Access:MachineTokens:0:Token must be 32 to 512 characters of A-Z, a-z, 0-9, '-', '.', '_', '~', '+' "
-        + "and '/', with trailing '=' allowed, and must not start with pshub_.";
-
-    private const string TokenExpiry = "Hub:Access:MachineTokens:0:ExpiresAt must be set, at most 365 days from now.";
-
-    private const string LocalPasswordHash =
-        "$pbkdf2-sha256$i=600000$AAECAwQFBgcICQoLDA0ODw$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY";
-
-    private const string LocalName = "Hub:Access:LocalAccounts:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
-
-    private const string LocalHash =
-        "Hub:Access:LocalAccounts:0:PasswordHash must be the PHC string PerfSentinelHub hash-password prints: "
-        + "$pbkdf2-sha256$i=600000$<salt>$<key>.";
-
     private static HubOptions AccessCase(string rule)
     {
         return rule switch
@@ -1151,7 +1227,8 @@ public sealed class ConfigurationTests
             }),
             "A10 no permission" => FirstRole(role => role with { Permissions = [] }),
             "A10 unknown permission" => FirstRole(role => role with { Permissions = ["findings.write"] }),
-            "A10 repeated permission" => FirstRole(role => role with { Permissions = ["findings.read", "findings.read"] }),
+            "A10 repeated permission" => FirstRole(role =>
+                role with { Permissions = ["findings.read", "findings.read"] }),
             "A10 access.admin" => FirstRole(role => role with { Permissions = ["findings.read", "access.admin"] }),
             "A11 blank" => FirstGrant(grant => grant with { Role = "" }),
             "A11 project" => FirstGrant(grant => grant with { Project = "nope" }),
@@ -1161,7 +1238,8 @@ public sealed class ConfigurationTests
             "A12 name" => FirstToken(token => token with { Name = "CI" }),
             "A12 duplicate name" => AccessOn(access => access with
             {
-                MachineTokens = [.. access.MachineTokens, access.MachineTokens[0] with { Token = MachineTokenValue + "2" }]
+                MachineTokens =
+                [.. access.MachineTokens, access.MachineTokens[0] with { Token = MachineTokenValue + "2" }]
             }),
             "A12 group with members" => FirstToken(token => token with { Group = "internal:oncall" }),
             "A12 no token" => FirstToken(token => token with { Token = null }),
@@ -1180,7 +1258,8 @@ public sealed class ConfigurationTests
             "A12 beyond a year" => FirstToken(token => token with { ExpiresAt = Now.AddDays(366) }),
             "A6 local case" => LocalOn(access => access with { Admins = ["Local:ops"] }),
             "A13 name" => LocalOn(access => Local(access, local => local with { Name = "Ops" }, "local:Ops")),
-            "A13 duplicate" => LocalOn(access => access with { LocalAccounts = [access.LocalAccounts[0], access.LocalAccounts[0]] }),
+            "A13 duplicate" => LocalOn(access =>
+                access with { LocalAccounts = [access.LocalAccounts[0], access.LocalAccounts[0]] }),
             "A13 no hash" => LocalOn(access => Local(access, local => local with { PasswordHash = null })),
             "A13 iterations" => LocalOn(access => Local(access, local => local with
             {
@@ -1194,12 +1273,15 @@ public sealed class ConfigurationTests
             _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, null)
         };
 
-        static AccessOptions Local(AccessOptions access, Func<LocalAccountOptions, LocalAccountOptions> change, string? member = null)
+        static AccessOptions Local(AccessOptions access, Func<LocalAccountOptions, LocalAccountOptions> change,
+            string? member = null)
         {
             return access with
             {
                 LocalAccounts = [change(access.LocalAccounts[0])],
-                Groups = member is null ? access.Groups : [access.Groups[0] with { Members = [member] }, .. access.Groups.Skip(1)]
+                Groups = member is null
+                    ? access.Groups
+                    : [access.Groups[0] with { Members = [member] }, .. access.Groups.Skip(1)]
             };
         }
 
@@ -1285,7 +1367,12 @@ public sealed class ConfigurationTests
                 }
             ]
         };
-        return ValidOptions() with { Auth = ValidAuth(), MetricsPort = 9464, Access = change?.Invoke(access) ?? access };
+        return ValidOptions() with
+        {
+            Auth = ValidAuth(),
+            MetricsPort = 9464,
+            Access = change?.Invoke(access) ?? access
+        };
     }
 
     // A local account ops in the oncall group, behind a known proxy.
@@ -1293,7 +1380,10 @@ public sealed class ConfigurationTests
     {
         var options = AccessOn(access => access with
         {
-            Groups = [access.Groups[0] with { Members = [.. access.Groups[0].Members, "local:ops"] }, .. access.Groups.Skip(1)],
+            Groups =
+            [
+                access.Groups[0] with { Members = [.. access.Groups[0].Members, "local:ops"] }, .. access.Groups.Skip(1)
+            ],
             LocalAccounts = [new LocalAccountOptions { Name = "ops", PasswordHash = LocalPasswordHash }]
         });
         options = options with
