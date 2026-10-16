@@ -140,33 +140,33 @@ public sealed partial class HubDatabase
 
     public async Task<DisclosureSummary?> FindDisclosureByUuidAsync(string reportUuid, CancellationToken cancellationToken)
     {
-        return (await ReadSummariesAsync("WHERE report_uuid = $key", reportUuid, cancellationToken)).FirstOrDefault();
+        return (await ReadSummariesAsync(SelectDisclosures + "WHERE report_uuid = $key;", reportUuid, cancellationToken))
+            .FirstOrDefault();
     }
 
     public async Task<DisclosureSummary?> GetDisclosureAsync(string id, CancellationToken cancellationToken)
     {
-        return (await ReadSummariesAsync("WHERE id = $key", id, cancellationToken)).FirstOrDefault();
+        return (await ReadSummariesAsync(SelectDisclosures + "WHERE id = $key;", id, cancellationToken)).FirstOrDefault();
     }
 
     /// <summary>Newest period first, withdrawn ones included.</summary>
     public Task<IReadOnlyList<DisclosureSummary>> ListDisclosuresAsync(CancellationToken cancellationToken)
     {
-        return ReadSummariesAsync("ORDER BY period_to DESC, id", null, cancellationToken);
+        return ReadSummariesAsync(SelectDisclosures + "ORDER BY period_to DESC, id;", null, cancellationToken);
     }
 
     /// <summary>One file as received, or null when the disclosure or that file does not exist.</summary>
     public async Task<byte[]?> ReadFileAsync(string id, DisclosureFile file, CancellationToken cancellationToken)
     {
-        var column = file switch
-        {
-            DisclosureFile.Report => "report",
-            DisclosureFile.Attestation => "attestation",
-            DisclosureFile.Bundle => "bundle",
-            _ => "pdf"
-        };
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT {column} FROM disclosures WHERE id = $id;";
+        command.CommandText = file switch
+        {
+            DisclosureFile.Report => "SELECT report FROM disclosures WHERE id = $id;",
+            DisclosureFile.Attestation => "SELECT attestation FROM disclosures WHERE id = $id;",
+            DisclosureFile.Bundle => "SELECT bundle FROM disclosures WHERE id = $id;",
+            _ => "SELECT pdf FROM disclosures WHERE id = $id;"
+        };
         command.Parameters.AddWithValue("$id", id);
         return await command.ExecuteScalarAsync(cancellationToken) as byte[];
     }
@@ -374,12 +374,14 @@ public sealed partial class HubDatabase
     public Task<IReadOnlyList<DeliveryRecord>> DueDeliveriesAsync(long nowMs, CancellationToken cancellationToken)
     {
         return ReadDeliveriesAsync(
-            "WHERE state = 'pending' AND next_attempt_ms <= $key ORDER BY next_attempt_ms, id", nowMs, cancellationToken);
+            SelectDeliveries + "WHERE state = 'pending' AND next_attempt_ms <= $key ORDER BY next_attempt_ms, id;",
+            nowMs, cancellationToken);
     }
 
     public Task<IReadOnlyList<DeliveryRecord>> ListDeliveriesAsync(string disclosureId, CancellationToken cancellationToken)
     {
-        return ReadDeliveriesAsync("WHERE disclosure_id = $key ORDER BY created_at_ms, rowid", disclosureId, cancellationToken);
+        return ReadDeliveriesAsync(
+            SelectDeliveries + "WHERE disclosure_id = $key ORDER BY created_at_ms, rowid;", disclosureId, cancellationToken);
     }
 
     /// <summary>
@@ -428,14 +430,20 @@ public sealed partial class HubDatabase
         }, cancellationToken);
     }
 
+    private const string SelectDisclosures = $"SELECT {DisclosureColumns} FROM disclosures ";
+
+    private const string SelectDeliveries =
+        "SELECT id, disclosure_id, webhook, event, state, attempts, last_attempt_ms, next_attempt_ms, last_status " +
+        "FROM disclosure_deliveries ";
+
     private async Task<IReadOnlyList<DisclosureSummary>> ReadSummariesAsync(
-        string clause,
+        string query,
         string? key,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT {DisclosureColumns} FROM disclosures {clause};";
+        command.CommandText = query;
         if (key is not null)
             command.Parameters.AddWithValue("$key", key);
         var summaries = new List<DisclosureSummary>();
@@ -453,17 +461,13 @@ public sealed partial class HubDatabase
     }
 
     private async Task<IReadOnlyList<DeliveryRecord>> ReadDeliveriesAsync(
-        string clause,
+        string query,
         object key,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-                               SELECT id, disclosure_id, webhook, event, state, attempts, last_attempt_ms,
-                                      next_attempt_ms, last_status
-                               FROM disclosure_deliveries {clause};
-                               """;
+        command.CommandText = query;
         command.Parameters.AddWithValue("$key", key);
         var deliveries = new List<DeliveryRecord>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
