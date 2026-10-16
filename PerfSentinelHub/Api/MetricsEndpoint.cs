@@ -75,30 +75,39 @@ public static partial class MetricsEndpoint
     public static void MapMetrics(this WebApplication app)
     {
         var version = HubVersion.Current;
+        // Every parameter is a collaborator the router injects, one per metric family source.
+#pragma warning disable S107
         app.MapGet("/metrics", async (
             HubDatabase database,
             IOptions<HubOptions> options,
             ImportMetrics imports,
             IncidentImportMetrics incidentImports,
+            CorrelationImportMetrics correlationImports,
             FindingMetrics findings,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
+#pragma warning restore S107
         {
             var body = await RenderAsync(
-                database, options.Value, imports, incidentImports, findings, timeProvider, version, cancellationToken);
+                database, options.Value, imports, incidentImports, correlationImports, findings, timeProvider, version,
+                cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
     }
 
+    // Every parameter is a collaborator the router injects, one per metric family source.
+#pragma warning disable S107
     private static async Task<string> RenderAsync(
         HubDatabase database,
         HubOptions options,
         ImportMetrics imports,
         IncidentImportMetrics incidentImports,
+        CorrelationImportMetrics correlationImports,
         FindingMetrics findings,
         TimeProvider timeProvider,
         string version,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         var (states, pushes) = await database.QuerySourceObservationsAsync(cancellationToken);
         var runs = await database.CountRunsByStatusAsync(cancellationToken);
@@ -180,6 +189,11 @@ public static partial class MetricsEndpoint
             "Incident imports the Hub refused, by reason, published from startup like the findings ones.");
         foreach (var (reason, count) in incidentImports.Snapshot())
             Line(text, "perf_sentinel_hub_incident_import_rejected_total", $"reason=\"{reason}\"", count);
+
+        Counter(text, "perf_sentinel_hub_correlation_import_rejected_total",
+            "Correlation imports the Hub refused, by reason, published from startup like the findings ones.");
+        foreach (var (reason, count) in correlationImports.Snapshot())
+            Line(text, "perf_sentinel_hub_correlation_import_rejected_total", $"reason=\"{reason}\"", count);
 
         Family(text, "perf_sentinel_hub_analysis_queue_depth",
             "Analysis runs accepted and not yet claimed by a worker.");

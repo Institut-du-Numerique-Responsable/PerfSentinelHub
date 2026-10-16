@@ -78,6 +78,8 @@ builder.Services.AddSingleton<FindingMetrics>();
 builder.Services.AddSingleton<ImportAdmission>();
 builder.Services.AddSingleton<IncidentImportMetrics>();
 builder.Services.AddSingleton<IncidentImportAdmission>();
+builder.Services.AddSingleton<CorrelationImportMetrics>();
+builder.Services.AddSingleton<CorrelationImportAdmission>();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();

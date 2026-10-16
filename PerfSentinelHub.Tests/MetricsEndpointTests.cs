@@ -251,6 +251,21 @@ public sealed class MetricsEndpointTests : IDisposable
     }
 
     [Fact]
+    public async Task Refused_correlation_imports_are_published_by_reason_from_startup()
+    {
+        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("# TYPE perf_sentinel_hub_correlation_import_rejected_total counter", body,
+            StringComparison.Ordinal);
+        foreach (var reason in new[] { "bad_request", "unauthorized", "gate_full", "write_timeout", "too_large" })
+        {
+            Assert.Contains(
+                $"perf_sentinel_hub_correlation_import_rejected_total{{reason=\"{reason}\"}} 0",
+                body,
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task A_refused_import_advances_its_own_reason_and_no_other()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
