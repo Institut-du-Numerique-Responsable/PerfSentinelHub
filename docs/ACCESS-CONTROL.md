@@ -111,6 +111,8 @@ scope, and the answer is built from in-scope copies only.
 | `sources.read`  | A daemon's settings view, and with `findings.read` and `analyses.run` a daemon run; source level only |
 | `analyses.run`  | Starting a run                                                                  |
 | `acks.write`    | Acknowledging a finding, or revoking an ack                                     |
+| `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
+| `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
 
 | Built-in role | Permissions                                                     |
 |---------------|-----------------------------------------------------------------|
@@ -123,6 +125,11 @@ instance `auditor: [findings.read, traces.read]`.
 
 `sources.read` is source level: it counts only on `*` or through a pattern that sets
 `source` alone. So do `analyses.run` and `findings.read` for a daemon run.
+
+`disclosures.read` and `disclosures.manage` are Hub level: a disclosure belongs to no source.
+The built-in `admin` role carries them, `reader` and `member` never do, and a machine token
+never holds them. A configured role may carry them, granted on `*` only: the Hub refuses to
+start on a grant of such a role to a project.
 
 ### Grants and admins
 
@@ -149,7 +156,10 @@ does not depend on the provider at all.
 | `GET /reports/{id}.html`                                               | the run's read rule                                             | `404`                   |
 | `GET /metrics`                                                         | anonymous, on `Hub:MetricsPort` only                            | `404` elsewhere         |
 | `GET /api/access`                                                      | any caller, even one no grant reaches; more for an admin, below |                         |
-| `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `/health/*` | unchanged                                                       |                         |
+| `GET /api/disclosures`, `GET /api/disclosures/{id}` and its files      | `disclosures.read` on `*`                                       | `403`                   |
+| `POST` and `DELETE` under `/api/disclosures/{id}/`                     | `disclosures.manage` on `*`, and somebody to name               | `403`                   |
+| `GET /share/{token}/{name}`                                            | anonymous, the token alone                                      | `404`                   |
+| `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/disclosures`, `/health/*` | unchanged                                                       |                         |
 
 `GET /api/sources` lists only the sources where the caller holds something, each with a
 `permissions` array (absent with access off). A source missing from that list is

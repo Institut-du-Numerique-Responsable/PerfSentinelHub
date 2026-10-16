@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -83,14 +84,15 @@ public static partial class MetricsEndpoint
             ImportMetrics imports,
             IncidentImportMetrics incidentImports,
             CorrelationImportMetrics correlationImports,
+            DisclosureMetrics disclosures,
             FindingMetrics findings,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
 #pragma warning restore S107
         {
             var body = await RenderAsync(
-                database, options.Value, imports, incidentImports, correlationImports, findings, timeProvider, version,
-                cancellationToken);
+                database, options.Value, imports, incidentImports, correlationImports, disclosures, findings, timeProvider,
+                version, cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
     }
@@ -103,6 +105,7 @@ public static partial class MetricsEndpoint
         ImportMetrics imports,
         IncidentImportMetrics incidentImports,
         CorrelationImportMetrics correlationImports,
+        DisclosureMetrics disclosures,
         FindingMetrics findings,
         TimeProvider timeProvider,
         string version,
@@ -194,6 +197,18 @@ public static partial class MetricsEndpoint
             "Correlation imports the Hub refused, by reason, published from startup like the findings ones.");
         foreach (var (reason, count) in correlationImports.Snapshot())
             Line(text, "perf_sentinel_hub_correlation_import_rejected_total", $"reason=\"{reason}\"", count);
+
+        // Only while disclosures are on: a Hub without them scrapes as it did before.
+        if (options.Disclosures.Enabled)
+        {
+            Counter(text, "perf_sentinel_hub_disclosure_import_rejected_total",
+                "Disclosure publications the Hub refused, by reason, published from startup like the findings ones.");
+            foreach (var (reason, count) in disclosures.Snapshot())
+                Line(text, "perf_sentinel_hub_disclosure_import_rejected_total", $"reason=\"{reason}\"", count);
+            Counter(text, "perf_sentinel_hub_disclosure_deliveries_failed_total",
+                "Disclosure webhook deliveries that gave up after their last attempt.");
+            Line(text, "perf_sentinel_hub_disclosure_deliveries_failed_total", null, disclosures.DeliveriesFailed);
+        }
 
         Family(text, "perf_sentinel_hub_analysis_queue_depth",
             "Analysis runs accepted and not yet claimed by a worker.");

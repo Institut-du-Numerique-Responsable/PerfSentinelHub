@@ -476,6 +476,7 @@ public sealed class IncidentPollingTests : IDisposable
             cancellationToken);
 
         var (_, rebooted) = await BuildAsync(TimeProvider.System, cancellationToken);
+        Assert.True(await rebooted.CatchUpAttributesAsync(cancellationToken));
 
         Assert.Equal(
             "current a team=kept 500,garbled a = 500,missing b team=billing 500,stale a team=shop 500,string a = 500",
@@ -489,7 +490,8 @@ public sealed class IncidentPollingTests : IDisposable
             BEGIN SELECT RAISE(ABORT, 'pairs derived again'); END;
             """,
             cancellationToken);
-        await BuildAsync(TimeProvider.System, cancellationToken);
+        var (_, again) = await BuildAsync(TimeProvider.System, cancellationToken);
+        Assert.False(await again.CatchUpAttributesAsync(cancellationToken));
     }
 
     // The fixture incident's first frozen finding, once per grouping array given.

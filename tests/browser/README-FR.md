@@ -128,6 +128,19 @@ conflits. Seul le groupement est inventé ; chaque finding est capturé. La
 source apparaît injoignable sur l'onglet Sources, puisque ses findings sont
 poussés, jamais interrogés.
 
+## Les divulgations sont publiées, pas semées
+
+Les écrans des divulgations lisent ce qu'une CI publie. `demo/fixtures/disclosure-report.json`
+est le rapport officiel d'exemple du moteur lui-même, tiré de son `docs/schemas/examples/`. Le
+setup fait varier son uuid, sa période et ses chiffres d'énergie sur trois trimestres, fait
+calculer chaque empreinte par le moteur avec `hash-bake`, et les publie par
+`POST /api/import/disclosures`, deux d'entre elles avec l'attestation qu'écrirait
+`disclose --emit-attestation`, qui nomme le rapport par cette empreinte. Le Hub lance ensuite le
+vrai `disclose-pdf` sur chacune, si bien que chaque PDF, chaque vérification d'empreinte et de
+lien sur les écrans vient du moteur. La plus ancienne est retirée et la plus récente partagée, au
+nom que donne l'en-tête d'identité, que les captures du détail envoient aussi pour que ses
+actions s'affichent.
+
 ## Deux choses qu'elle attend de l'extérieur
 
 **Un binaire perf-sentinel.** Sans lui le Hub répond `503` à

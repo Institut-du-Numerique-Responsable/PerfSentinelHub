@@ -44,7 +44,10 @@ public sealed class CachedCountTests
         waiting = cache.GetAsync(cancellationToken);
         _clock.Advance(CachedCount<int>.Budget);
         Assert.Equal(7, (await waiting)?.Value);
-        Assert.Equal(2, calls);
+        // The count starts on a thread of its own, maybe after the budget ran out.
+        for (var attempt = 0; attempt < 500 && Volatile.Read(ref calls) < 2; attempt++)
+            await Task.Delay(10, cancellationToken);
+        Assert.Equal(2, Volatile.Read(ref calls));
 
         slow.SetResult(9);
         Assert.Equal(9, (await cache.GetAsync(cancellationToken))?.Value);
@@ -91,6 +94,23 @@ public sealed class CachedCountTests
         Assert.Equal(1, calls);
         _clock.Advance(TimeSpan.FromSeconds(1));
         Assert.Equal(9, (await cache.GetAsync(cancellationToken))?.Value);
+    }
+
+    [Fact]
+    public async Task The_count_runs_on_a_thread_of_its_own_and_not_the_pool()
+    {
+        // SQLite runs its Async methods synchronously, so a count on the pool holds a
+        // pool thread for as long as it reads, which a probe then queues behind.
+        bool? onPool = null;
+        var cache = new CachedCount<int>(_ =>
+        {
+            onPool = Thread.CurrentThread.IsThreadPoolThread;
+            return Task.FromResult(1);
+        }, _clock, _logger);
+
+        await cache.GetAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(onPool);
     }
 
     [Fact]

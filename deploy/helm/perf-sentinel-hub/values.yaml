@@ -10,6 +10,9 @@ hub:
   resolutionGrace: "7.00:00:00"
   defaultReadLimit: 1000
   maxReadLimit: 10000
+  # A daemon that first sees more signatures than this in an hour is flagged on
+  # /api/sources and logged once. 0 turns the check off.
+  newSignaturesPerHourWarning: 1000
   # The one port /metrics answers on, and nothing else answers there; the chart
   # adds it to ASPNETCORE_HTTP_PORTS, the container and the Service (port name
   # metrics). Null answers /metrics on 8080 with everything else. Required with
@@ -23,6 +26,10 @@ hub:
     workers: 2
     maxTracesCap: 2000
     timeout: "00:05:00"
+    # Free memory, in MiB, the container needs for a run to start the engine,
+    # which runs inside it. Below it the run fails with hub_memory_low instead of
+    # getting the Hub OOM-killed. 0 turns the check off.
+    minFreeMemoryMiB: 256
     reportRetention: "1.00:00:00"
     # How long a finished run's row survives, well past the report it
     # produced: an expired run keeps its parameters so it can be relaunched
@@ -81,6 +88,28 @@ hub:
     # proxy that sets the header itself and strips the one a client sent.
     # With neither, the relay refuses every caller.
     trustIdentityHeader: false
+  # Periodic disclosures a CI publishes to POST /api/import/disclosures, off
+  # until importSecretName names the Secret holding the import key (32+
+  # characters, distinct from every source import key and machine token).
+  # Once on, the Hub keeps its request log above Information so share-link
+  # tokens stay out of it; the ingress access log still sees them, see
+  # docs/OPERATIONS.md. allowInternal needs hub.access.enabled.
+  # expectedIdentity and expectedIssuer go together, printed in the PDF's
+  # verify command for the reader: the Hub never checks a signature. shareLinkDays: 1 to 30. Webhooks are
+  # items { name, secretName, urlKey, secretKey, includeShareLink,
+  # shareLinkDays }: the URL and the HMAC secret both come from that Secret,
+  # since a chat webhook URL carries its own secret. See docs/CONFIGURATION.md.
+  disclosures:
+    importSecretName: ""
+    importSecretKey: ""
+    allowInternal: false
+    expectedIdentity: ""
+    expectedIssuer: ""
+    shareLinkDays: 7
+    # The Hub's own address as a receiver reaches it, required by a webhook
+    # with includeShareLink: the link it sends must name the Hub.
+    publicUrl: ""
+    webhooks: []
   access:
     # Who reaches which findings, sources and runs: projects, roles, grants,
     # internal groups, admins and machine tokens, passed to the Hub as is. On,
@@ -127,7 +156,12 @@ hub:
 # that address asks for, when it is not authHeaderName). A daemon the Hub
 # relays acks to also takes ackHeaderName with ackSecretName and ackSecretKey,
 # the daemon's [daemon.ack] api_key: a Secret apart from the read one, since
-# the daemon refuses its read key on a write.
+# the daemon refuses its read key on a write. pgStat and mysqlStat fill a
+# report's pg_stat and mysql_stat tabs from a Prometheus the engine scrapes at
+# render time: { prometheus, metric, queryLabel, callsMetric, unit, selector,
+# top }, each the engine flag of the same name, plus authHeaderName with
+# authSecretName and authSecretKey for an authenticated Prometheus. selector
+# takes label matchers, such as namespace="shop",db_role="primary".
 sources: []
 # Annotations on the Service. Left empty because a scrape is opted into, not
 # assumed: set prometheus.io/scrape, /port and /path here, or point a
@@ -164,6 +198,20 @@ ingress:
 persistence:
   size: 1Gi
   storageClassName: ""
+# How the kubelet watches the Hub. The startup budget is periodSeconds times
+# failureThreshold, 5 minutes by default: a first start after an upgrade can
+# migrate a large database before /health/ready answers, and a kill midway
+# rolls the migration back, so every restart would start it over. Liveness
+# allows 5 seconds and 6 misses, so only a Hub that is really stuck restarts.
+probes:
+  startup: { periodSeconds: 5, failureThreshold: 60 }
+  readiness: { periodSeconds: 10, timeoutSeconds: 1, failureThreshold: 3 }
+  liveness: { periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 6 }
+# The analysis binary runs inside this container, so the memory limit covers the
+# Hub, an analysis in full flight and the page cache the database leaves. 256Mi
+# was too tight once the database passed a few hundred MB: a Hub already at 190 MB
+# got OOM-killed rendering an 8 MB report, every request with it. Below
+# hub.analysis.minFreeMemoryMiB of headroom a run is refused with hub_memory_low.
 resources:
   requests: { cpu: 50m, memory: 64Mi }
-  limits: { cpu: 500m, memory: 256Mi }
+  limits: { cpu: 500m, memory: 1Gi }

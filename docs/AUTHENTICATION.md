@@ -19,6 +19,9 @@ calls:
 | `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
 | `POST /api/import/incidents`                                     | the same `X-API-Key` as the findings import                             |
 | `POST /api/import/correlations`                                  | the same `X-API-Key` as the findings import                             |
+| `POST /api/import/disclosures`                                   | its own `X-API-Key`, `Hub:Disclosures:ImportKey`                        |
+| `/api/disclosures`                                               | session, otherwise `401`                                                |
+| `GET /share/{token}/{name}`                                      | open, the share link's token is the credential                          |
 | `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape; `/metrics` on `Hub:MetricsPort` if set |
 
 The API answers `401` rather than a redirect because a fetch cannot follow a

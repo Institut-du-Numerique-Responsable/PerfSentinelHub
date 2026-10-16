@@ -121,6 +121,8 @@ seules copies dans le périmètre.
 | `sources.read`  | La vue des réglages d'un démon, et avec `findings.read` et `analyses.run` un run de démon ; source seulement |
 | `analyses.run`  | Lancer un run                                                                          |
 | `acks.write`    | Acquitter un finding, ou révoquer un ack                                               |
+| `disclosures.read` | L'onglet Disclosures, le détail de chaque divulgation et ses fichiers               |
+| `disclosures.manage` | Les liens de partage, les retraits, les relances de livraison et les rendus d'une divulgation |
 
 | Rôle intégré | Permissions                                                  |
 |--------------|--------------------------------------------------------------|
@@ -134,6 +136,11 @@ configure, par exemple `auditor: [findings.read, traces.read]`.
 `sources.read` est au niveau de la source : il ne compte que sur `*` ou par un motif qui
 ne renseigne que `source`. De même pour `analyses.run` et `findings.read` pour un run de
 démon.
+
+`disclosures.read` et `disclosures.manage` sont au niveau du Hub : une divulgation
+n'appartient à aucune source. Le rôle intégré `admin` les porte, `reader` et `member` jamais,
+et un jeton machine ne les détient jamais. Un rôle configuré peut les porter, attribué sur `*`
+seulement : le Hub refuse de démarrer sur l'attribution d'un tel rôle à un projet.
 
 ### Grants et admins
 
@@ -160,7 +167,10 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `GET /reports/{id}.html`                                               | la règle de lecture du run                                         | `404`                       |
 | `GET /metrics`                                                         | anonyme, sur `Hub:MetricsPort` seulement                           | `404` ailleurs              |
 | `GET /api/access`                                                      | tout appelant, même sans grant ; davantage pour un admin, plus bas |                             |
-| `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `/health/*` | inchangé                                                           |                             |
+| `GET /api/disclosures`, `GET /api/disclosures/{id}` et ses fichiers    | `disclosures.read` sur `*`                                         | `403`                       |
+| `POST` et `DELETE` sous `/api/disclosures/{id}/`                       | `disclosures.manage` sur `*`, et quelqu'un à nommer                | `403`                       |
+| `GET /share/{token}/{name}`                                            | anonyme, le jeton seul                                             | `404`                       |
+| `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/disclosures`, `/health/*` | inchangé                                                           |                             |
 
 `GET /api/sources` ne liste que les sources où l'appelant détient quelque chose, chacune
 avec un tableau `permissions` (absent sans contrôle d'accès). Une source absente de cette

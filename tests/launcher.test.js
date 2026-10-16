@@ -1339,3 +1339,127 @@ test("a source minting signatures is flagged while it answers", () => {
     assert.deepEqual(PSL.sourceHealth({reachable: true, last_attempt_ms: null}, 1),
         {tone: "ok", text: "not yet observed"});
 });
+
+test("only a 404 makes a run unknown, any other failure is asked again", () => {
+    assert.equal(PSL.runReadOutcome({status: 404}), "unknown");
+    for (const status of [502, 503, 504, 500, undefined]) {
+        assert.equal(PSL.runReadOutcome(status === undefined ? new TypeError("fetch failed") : {status}), "retry");
+    }
+});
+
+test("a run read that keeps failing backs off up to fifteen seconds", () => {
+    assert.deepEqual([1, 2, 3, 4, 5, 9].map(PSL.retryDelay), [1000, 2000, 4000, 8000, 15000, 15000]);
+});
+
+// ------------------------------------------------------------ disclosures
+
+const DAY = 86_400_000;
+const disclosure = (id, from, to, extra) => Object.assign({
+    id, period: {type: "calendar-quarter", from, to}, confidentiality: "public",
+    integrity_level: "signed", withdrawn: null
+}, extra);
+
+test("the period rail runs from the first disclosed quarter to the current one", () => {
+    const now = Date.UTC(2026, 8, 18);
+    const rail = PSL.periodRail([
+        disclosure("q1", "2026-01-01", "2026-03-31"),
+        disclosure("q4", "2025-10-01", "2025-12-31", {withdrawn: {at_ms: 1}}),
+        disclosure("q2", "2026-04-01", "2026-06-30", {confidentiality: "internal", integrity_level: "hash-only"})
+    ], now);
+
+    assert.deepEqual(rail.map((cell) => [cell.label, cell.state]), [
+        ["2025 Q4", "withdrawn"], ["2026 Q1", "published"], ["2026 Q2", "internal"], ["2026 Q3", "current"]
+    ]);
+    assert.equal(rail[1].level, "signed");
+    assert.equal(rail[1].id, "q1");
+    assert.equal(rail[3].daysLeft, 13);
+});
+
+test("a gap in the rail is a missing quarter, and a published copy beats a withdrawn one", () => {
+    const now = Date.UTC(2026, 6, 2);
+    const rail = PSL.periodRail([
+        disclosure("old", "2025-07-01", "2025-09-30"),
+        disclosure("bad", "2026-01-01", "2026-03-31", {withdrawn: {at_ms: 1}}),
+        disclosure("good", "2026-01-01", "2026-03-31")
+    ], now);
+
+    assert.deepEqual(rail.map((cell) => cell.state), ["published", "missing", "published", "missing", "current"]);
+    assert.equal(rail[2].id, "good");
+    assert.deepEqual(PSL.periodRail([], now), []);
+});
+
+test("coverage is drawn against the 75 % official notch", () => {
+    assert.deepEqual(PSL.coverageNotch(0.91), {percent: 91, below: false});
+    assert.deepEqual(PSL.coverageNotch(0.71), {percent: 71, below: true});
+    assert.deepEqual(PSL.coverageNotch(0.75), {percent: 75, below: false});
+    assert.equal(PSL.coverageNotch(null), null);
+});
+
+test("who checked what never says the Hub checked a signature", () => {
+    const rows = PSL.checkRows({
+        disclosure: {integrity_level: "signed-with-attestation"},
+        checks: {content_hash: "checked", binding: "checked", signature: "declared", engine_version: "0.31.0"}
+    });
+
+    assert.deepEqual(rows.map((row) => row.outcome), ["checked", "checked", "declared", "none"]);
+    assert.match(rows[0].by, /this Hub, perf-sentinel 0\.31\.0/);
+    assert.ok(rows.slice(2).every((row) => row.outcome !== "checked"));
+
+    const unchecked = PSL.checkRows({
+        disclosure: {integrity_level: "audited"},
+        checks: {content_hash: "not_checked", binding: "no_attestation", signature: "absent", engine_version: null}
+    });
+    assert.deepEqual(unchecked.map((row) => row.outcome), ["not_checked", "absent", "absent", "declared"]);
+});
+
+test("the verify command names the expected signer only when the Hub knows one", () => {
+    assert.equal(PSL.verifyCommand({expected_identity: null, expected_issuer: null}),
+        "perf-sentinel verify-hash --report report.pdf");
+    assert.equal(
+        PSL.verifyCommand({
+            expected_identity: "https://github.com/acme/infra/.github/workflows/disclose.yml@refs/heads/main",
+            expected_issuer: "https://token.actions.githubusercontent.com"
+        }),
+        "perf-sentinel verify-hash --report report.pdf \\\n"
+        + "  --expected-identity https://github.com/acme/infra/.github/workflows/disclose.yml@refs/heads/main \\\n"
+        + "  --expected-issuer https://token.actions.githubusercontent.com");
+    assert.equal(
+        PSL.verifyCommand({expected_identity: "x'; rm -rf /", expected_issuer: "i"}).split("\n")[1],
+        "  --expected-identity 'x'\\''; rm -rf /' \\");
+});
+
+test("the publish command posts the three files as multipart to this Hub", () => {
+    const command = PSL.publishCommand("https://hub.example");
+    assert.match(command, /-F report=@report\.json/);
+    assert.match(command, /-F attestation=@attestation\.intoto\.jsonl/);
+    assert.match(command, /-F bundle=@bundle\.sig/);
+    assert.match(command, /https:\/\/hub\.example\/api\/import\/disclosures$/);
+    assert.match(command, /cosign sign-blob --bundle bundle\.sig --new-bundle-format attestation\.intoto\.jsonl/);
+});
+
+test("disclosures route to their own screens", () => {
+    assert.equal(PSL.screenOf("#/disclosures", false, false), "disclosures");
+    assert.equal(PSL.screenOf("#/disclosures/0123456789abcdef", false, false), "disclosure");
+    assert.equal(PSL.readDisclosureId("#/disclosures/0123456789abcdef"), "0123456789abcdef");
+    assert.equal(PSL.readDisclosureId("#/disclosures/../x"), null);
+});
+
+test("a download goes through fetch, and a 401 signs back in instead of saving the body", async () => {
+    const saved = [];
+    let reloaded = false;
+    const env = {
+        fetch: async (url) => url.endsWith("expired")
+            ? {status: 401, ok: false}
+            : {status: 200, ok: true, blob: async () => "bytes"},
+        reload: () => {
+            reloaded = true;
+        },
+        save: (blob, name) => saved.push([blob, name])
+    };
+
+    assert.equal(await PSL.downloadAs("/api/disclosures/d1/files/report.pdf", "report.pdf", env), true);
+    assert.deepEqual(saved, [["bytes", "report.pdf"]]);
+    assert.equal(await PSL.downloadAs("/expired", "report.json", env), false);
+    assert.equal(reloaded, true);
+    assert.equal(saved.length, 1);
+});

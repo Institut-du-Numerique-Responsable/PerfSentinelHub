@@ -132,8 +132,10 @@ machine token too and every read is trimmed to the caller's grants, see
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md) and
 [What access control does not cover](#what-access-control-does-not-cover).
 
-Three endpoints ask for a credential, `POST /api/import/findings`,
-`POST /api/import/incidents` and `POST /api/import/correlations`, whose `X-API-Key` is compared by fingerprint. Every other one asks for nothing:
+Four endpoints ask for a credential, `POST /api/import/findings`,
+`POST /api/import/incidents`, `POST /api/import/correlations` and
+`POST /api/import/disclosures`, whose `X-API-Key` is compared by fingerprint, and `/share/`
+serves a disclosure's files to whoever holds a live token. Every other one asks for nothing:
 `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses` for both the
 listing and the request that starts a run, `/reports/`, `/metrics`, and the
 launcher itself. Whoever reaches the port reads every finding of every tenant,
@@ -274,7 +276,9 @@ Outside the model:
 
 ## What sits outside the Hub
 
-A live report needs two things the Hub does not control: the daemon's
+A daemon source with an ack credential needs none of what follows: with engine 0.31.0 or
+later its report acks through the Hub. Otherwise, a live report needs two things the Hub
+does not control: the daemon's
 `[daemon.cors] allowed_origins` must carry the origin the Hub serves reports
 from, and the viewer must be able to reach that daemon directly, at its `PublicUrl`
 when the Hub reads it by a name only the cluster resolves. A daemon behind

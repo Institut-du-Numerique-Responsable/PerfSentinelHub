@@ -9,6 +9,44 @@ public static partial class ApiEndpoints
 {
     private const int MaxAckBodyBytes = 8 * 1024;
 
+    // The daemon's own listing stops there, and the report says so past it.
+    private const int MaxListedAcks = 1000;
+
+    /// <summary>
+    ///     The daemon acks the Hub mirrors at one source, for a report the Hub serves:
+    ///     the list its Ack and Revoke buttons start from. Read from the mirror, which the
+    ///     relay refreshes after each write, so the daemon is not asked. With access on, an
+    ///     ack shows when the caller reads its copy there, or the whole source when the Hub
+    ///     no longer holds the finding, the rule a revoke of it follows.
+    /// </summary>
+    private static async Task<IResult> GetSourceAcksAsync(
+        string sourceId,
+        HttpContext context,
+        HubDatabase database,
+        AccessPolicy access,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var reads = access.Scope(context, AccessPermissions.FindingsRead);
+        if (access.Sources(context, options.Value.Sources).FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, sourceId, StringComparison.Ordinal))
+            is not { Kind: SourceKinds.Daemon, HasAckCredential: true } source || !reads.ReachesSource(source.Id))
+            return Problem(StatusCodes.Status404NotFound, "This source relays no acknowledgments.");
+
+        var listed = await database.ReadSourceAcksAsync(
+            source.Id, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), MaxListedAcks, cancellationToken);
+        IReadOnlyList<SourceAckResponse> visible =
+        [
+            .. listed
+                .Where(ack => ack.Held
+                    ? reads.Reads(new AccessCopy(source.Id, ack.Service, ack.Rows))
+                    : reads.HoldsAtSource(source.Id))
+                .Select(ack => new SourceAckResponse(ack.Signature, ack.By, ack.Reason, ack.At, ack.ExpiresAt))
+        ];
+        return TypedResults.Json(visible, HubJsonContext.Default.IReadOnlyListSourceAckResponse);
+    }
+
     private static Task<IResult> CreateAckAsync(
         string sourceId,
         HttpRequest request,

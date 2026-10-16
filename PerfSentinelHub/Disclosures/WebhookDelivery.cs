@@ -1,0 +1,52 @@
+using System.Buffers;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using PerfSentinelHub.Storage;
+
+namespace PerfSentinelHub.Disclosures;
+
+/// <summary>
+///     What a webhook receives: a small JSON body and an HMAC-SHA256 of the timestamp and
+///     that body under the webhook's secret, so a receiver checks both the sender and the age.
+/// </summary>
+public static class WebhookDelivery
+{
+    public const string TimestampHeader = "X-PerfSentinel-Timestamp";
+    public const string SignatureHeader = "X-PerfSentinel-Signature";
+
+    /// <summary><c>sha256=</c> and the lowercase hex HMAC-SHA256 of <c>"&lt;timestamp&gt;.&lt;body&gt;"</c>.</summary>
+    public static string Sign(string secret, long timestamp, ReadOnlySpan<byte> body)
+    {
+        var prefix = Encoding.UTF8.GetBytes(timestamp.ToString(CultureInfo.InvariantCulture) + ".");
+        var message = new byte[prefix.Length + body.Length];
+        prefix.CopyTo(message, 0);
+        body.CopyTo(message.AsSpan(prefix.Length));
+        return "sha256=" + Convert.ToHexStringLower(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), message));
+    }
+
+    public static byte[] Body(DisclosureSummary disclosure, string eventName, string? shareUrl)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("event", eventName);
+            writer.WriteString("disclosure_id", disclosure.Id);
+            writer.WriteString("organisation", disclosure.Organisation);
+            writer.WriteStartObject("period");
+            writer.WriteString("type", disclosure.PeriodType);
+            writer.WriteString("from", disclosure.PeriodFrom);
+            writer.WriteString("to", disclosure.PeriodTo);
+            writer.WriteEndObject();
+            writer.WriteString("content_hash", disclosure.ContentHash);
+            writer.WriteString("intent", disclosure.Intent);
+            writer.WriteString("integrity_level", disclosure.IntegrityLevel);
+            writer.WriteString("share_url", shareUrl);
+            writer.WriteEndObject();
+        }
+
+        return buffer.WrittenSpan.ToArray();
+    }
+}

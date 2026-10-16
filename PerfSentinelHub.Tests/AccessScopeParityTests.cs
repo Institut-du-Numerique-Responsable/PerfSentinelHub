@@ -195,6 +195,7 @@ public sealed class AccessScopeParityTests : IDisposable
                 cancellationToken);
 
         await Database().InitializeAsync(cancellationToken);
+        await Database().CatchUpAttributesAsync(cancellationToken);
 
         // The same copy observed later under a second grouping, as a poll records it.
         await using var reopened = await Database().OpenConnectionAsync(cancellationToken);

@@ -159,6 +159,258 @@ public sealed class ConfigurationTests
         Assert.Equal(message, Assert.Single(Failures(source)));
     }
 
+    private const string DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+    private const string WebhookSecret = "webhook-secret-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+
+    [Fact]
+    public void Disclosures_bind_trimmed_and_are_off_without_an_import_key()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Disclosures:ImportKey"] = DisclosureKey + "\n",
+                ["Hub:Disclosures:ShareLinkDays"] = "14",
+                ["Hub:Disclosures:Webhooks:0:Name"] = "auditors",
+                ["Hub:Disclosures:Webhooks:0:Url"] = "https://hooks.example/disclosures",
+                ["Hub:Disclosures:Webhooks:0:Secret"] = WebhookSecret + "\n",
+                ["Hub:Disclosures:Webhooks:0:IncludeShareLink"] = "true"
+            })
+            .Build();
+
+        var disclosures = configuration.GetSection(HubOptions.SectionName).Get<HubOptions>()!.Disclosures;
+
+        Assert.True(disclosures.Enabled);
+        Assert.Equal(DisclosureKey, disclosures.ImportKey);
+        Assert.Equal(14, disclosures.ShareLinkDays);
+        var webhook = Assert.Single(disclosures.Webhooks);
+        Assert.Equal(WebhookSecret, webhook.Secret);
+        Assert.Equal("public", webhook.Confidentiality);
+        Assert.Equal(7, webhook.ShareLinkDays);
+        Assert.False(new DisclosuresOptions().Enabled);
+        Assert.Empty(DisclosureFailures(new DisclosuresOptions()));
+    }
+
+    public static TheoryData<string, string> InvalidDisclosures => new()
+    {
+        { "short key", "Hub:Disclosures:ImportKey must be at least 32 characters with no control character." },
+        { "source key", "Hub:Disclosures:ImportKey must differ from every source import API key and machine token." },
+        { "days", "Hub:Disclosures:ShareLinkDays must be between 1 and 30." },
+        { "remote http", WebhookUrl },
+        { "internal webhook", "Hub:Disclosures:Webhooks:0:Confidentiality must be public: an internal report never leaves the Hub." },
+        { "short secret", "Hub:Disclosures:Webhooks:0:Secret must be at least 32 characters with no control character." },
+        { "webhook name", "Hub:Disclosures:Webhooks:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', and unique." },
+        { "webhook days", "Hub:Disclosures:Webhooks:0:ShareLinkDays must be between 1 and 30." },
+        { "identity alone", "Hub:Disclosures:ExpectedIdentity and ExpectedIssuer go together or not at all." },
+        {
+            "share link without a public url",
+            "Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: the link it sends must name the Hub."
+        },
+        { "public url query", "Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL without credentials, query, or fragment." },
+        { "public url path", "Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /." }
+    };
+
+    private const string WebhookUrl =
+        "Hub:Disclosures:Webhooks:0:Url must be an absolute https URL, or http to a loopback address, without credentials or fragment.";
+
+    [Theory]
+    [MemberData(nameof(InvalidDisclosures))]
+    public void Invalid_disclosures_are_refused(string rule, string expected)
+    {
+        var webhook = new WebhookOptions { Name = "auditors", Url = new Uri("https://hooks.example/x"), Secret = WebhookSecret };
+        var disclosures = new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] };
+        var options = ValidOptions() with { Disclosures = disclosures };
+        options = rule switch
+        {
+            "short key" => options with { Disclosures = disclosures with { ImportKey = new string('k', 31) } },
+            "source key" => options with { Sources = [ValidSource() with { ImportApiKey = DisclosureKey }] },
+            "days" => options with { Disclosures = disclosures with { ShareLinkDays = 31 } },
+            "remote http" => options with { Disclosures = disclosures with { Webhooks = [webhook with { Url = new Uri("http://hooks.example/x") }] } },
+            "internal webhook" => options with { Disclosures = disclosures with { Webhooks = [webhook with { Confidentiality = "internal" }] } },
+            "short secret" => options with { Disclosures = disclosures with { Webhooks = [webhook with { Secret = new string('s', 31) }] } },
+            "webhook name" => options with { Disclosures = disclosures with { Webhooks = [webhook, webhook] } },
+            "webhook days" => options with { Disclosures = disclosures with { Webhooks = [webhook with { ShareLinkDays = 0 }] } },
+            "identity alone" => options with { Disclosures = disclosures with { ExpectedIdentity = "https://github.com/acme/x" } },
+            "share link without a public url" => options with
+            {
+                Disclosures = disclosures with { Webhooks = [webhook with { IncludeShareLink = true }] }
+            },
+            "public url query" => options with { Disclosures = disclosures with { PublicUrl = new Uri("https://hub.example/?x=1") } },
+            "public url path" => options with { Disclosures = disclosures with { PublicUrl = new Uri("https://corp.example/perf-hub/") } },
+            _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, null)
+        };
+
+        Assert.Equal(expected, Assert.Single(new HubOptionsValidator().Validate(null, options).Failures ?? []));
+    }
+
+    [Fact]
+    public void A_webhook_to_a_loopback_address_may_use_http()
+    {
+        var webhook = new WebhookOptions { Name = "local", Url = new Uri("http://127.0.0.1:9000/hook"), Secret = WebhookSecret };
+
+        Assert.Empty(DisclosureFailures(new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] }));
+    }
+
+    [Fact]
+    public void An_import_key_equal_to_a_machine_token_is_refused()
+    {
+        var options = AccessOn() with { Disclosures = new DisclosuresOptions { ImportKey = MachineTokenValue } };
+
+        Assert.Contains(
+            "Hub:Disclosures:ImportKey must differ from every source import API key and machine token.",
+            AccessFailures(options));
+    }
+
+    [Fact]
+    public void Internal_reports_need_access_control()
+    {
+        Assert.Equal(
+            "Hub:Disclosures:AllowInternal requires Hub:Access:Enabled: an internal report would be open to "
+            + "anyone who reaches the Hub.",
+            Assert.Single(DisclosureFailures(new DisclosuresOptions { ImportKey = DisclosureKey, AllowInternal = true })));
+        Assert.Empty(AccessFailures(AccessOn() with
+        {
+            Disclosures = new DisclosuresOptions { ImportKey = DisclosureKey, AllowInternal = true }
+        }));
+    }
+
+    [Fact]
+    public void Disclosure_permissions_on_a_project_grant_are_refused()
+    {
+        var options = AccessOn(access => access with
+        {
+            Roles = [.. access.Roles, new RoleOptions { Name = "publisher", Permissions = ["disclosures.read"] }],
+            Grants = [.. access.Grants, new GrantOptions { Group = "/teams/shop", Project = "shop", Role = "publisher" }]
+        });
+
+        Assert.Equal(
+            $"Grant {options.Access.Grants.Count - 1}: disclosures.read and disclosures.manage apply to the whole Hub; "
+            + "grant a role carrying them on '*'.",
+            Assert.Single(AccessFailures(options)));
+        Assert.Empty(AccessFailures(options with
+        {
+            Access = options.Access with
+            {
+                Grants = [.. options.Access.Grants.SkipLast(1), options.Access.Grants[^1] with { Project = "*" }]
+            }
+        }));
+    }
+
+    [Fact]
+    public void Only_admin_holds_the_disclosure_permissions_and_never_a_machine_token()
+    {
+        string[] disclosures = [AccessPermissions.DisclosuresRead, AccessPermissions.DisclosuresManage];
+
+        Assert.Equal(["disclosures.read", "disclosures.manage"], disclosures);
+        Assert.All(disclosures, permission => Assert.Contains(permission, AccessPermissions.BuiltInRoles["admin"]));
+        Assert.All(disclosures, permission => Assert.DoesNotContain(permission, AccessPermissions.BuiltInRoles["reader"]));
+        Assert.All(disclosures, permission => Assert.DoesNotContain(permission, AccessPermissions.BuiltInRoles["member"]));
+        Assert.All(disclosures, permission => Assert.DoesNotContain(permission, AccessPermissions.MachineTokenPermissions));
+    }
+
+    private static string[] DisclosureFailures(DisclosuresOptions disclosures)
+    {
+        return [.. new HubOptionsValidator().Validate(null, ValidOptions() with { Disclosures = disclosures }).Failures ?? []];
+    }
+
+    [Fact]
+    public void Database_statistics_bind_per_source()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Sources:0:Id"] = "test",
+                ["Hub:Sources:0:PgStat:Prometheus"] = "http://vm.svc:8428",
+                ["Hub:Sources:0:PgStat:Metric"] = "pg_stat_statements_total_exec_time",
+                ["Hub:Sources:0:PgStat:Selector"] = "namespace=\"shop\",db_role=\"primary\"",
+                ["Hub:Sources:0:PgStat:Unit"] = "milliseconds",
+                ["Hub:Sources:0:PgStat:Top"] = "20",
+                ["Hub:Sources:0:MySqlStat:Prometheus"] = "http://vm.svc:8428"
+            })
+            .Build();
+
+        var source = Assert.Single(configuration.GetSection(HubOptions.SectionName).Get<HubOptions>()!.Sources);
+
+        Assert.Equal(new Uri("http://vm.svc:8428"), source.PgStat!.Prometheus);
+        Assert.Equal("pg_stat_statements_total_exec_time", source.PgStat.Metric);
+        Assert.Equal("namespace=\"shop\",db_role=\"primary\"", source.PgStat.Selector);
+        Assert.Equal("milliseconds", source.PgStat.Unit);
+        Assert.Equal(20, source.PgStat.Top);
+        Assert.Equal(new Uri("http://vm.svc:8428"), source.MySqlStat!.Prometheus);
+    }
+
+    [Fact]
+    public void The_chart_s_database_statistics_shape_binds_and_validates()
+    {
+        // The chart writes every key, absent ones as null.
+        using var json = new MemoryStream(Encoding.UTF8.GetBytes(
+            """{"Hub":{"Sources":[{"Id":"prod","Name":"P","Environment":"prod","BaseUrl":"https://d.example","PgStat":{"AuthHeaderName":null,"CallsMetric":null,"Metric":null,"Prometheus":"http://vm:8428","QueryLabel":null,"Selector":null,"Top":null,"Unit":null}}]}}"""));
+
+        var source = Assert.Single(new ConfigurationBuilder().AddJsonStream(json).Build()
+            .GetSection(HubOptions.SectionName).Get<HubOptions>()!.Sources);
+
+        Assert.Equal(new Uri("http://vm:8428"), source.PgStat!.Prometheus);
+        Assert.Null(source.PgStat.Top);
+        Assert.Empty(Failures(source));
+    }
+
+    [Fact]
+    public void Valid_database_statistics_pass()
+    {
+        var stats = new DbStatOptions
+        {
+            Prometheus = new Uri("https://vm.example"),
+            Unit = "milliseconds",
+            Top = 1000,
+            Selector = "db_role=\"primary\"",
+            AuthHeaderName = "Authorization",
+            AuthHeaderValue = "Bearer token" // gitleaks:allow -- synthetic test credential
+        };
+
+        Assert.Empty(Failures(ValidSource() with { PgStat = stats, MySqlStat = stats with { Unit = "picoseconds" } }));
+    }
+
+    public static TheoryData<DbStatOptions, string> InvalidDatabaseStatistics => new()
+    {
+        { new DbStatOptions { Metric = "m" }, "Source 'prod' pg_stat requires a Prometheus URL." },
+        {
+            new DbStatOptions { Prometheus = new Uri("ftp://vm") },
+            "Source 'prod' pg_stat Prometheus must be an absolute HTTP(S) URL without credentials, query, or fragment."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Unit = "picoseconds" },
+            "Source 'prod' pg_stat unit must be seconds or milliseconds."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Top = 0 },
+            "Source 'prod' pg_stat top must be between 1 and 1000."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Selector = "a=\"b\"\n" },
+            "Source 'prod' pg_stat selector must not contain control characters."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), AuthHeaderName = "Authorization" },
+            "Source 'prod' must provide both pg_stat auth header name and value."
+        }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidDatabaseStatistics))]
+    public void Invalid_database_statistics_are_rejected(DbStatOptions stats, string expected)
+    {
+        Assert.Equal(expected, Assert.Single(Failures(ValidSource() with { PgStat = stats })));
+    }
+
+    [Fact]
+    public void A_mysql_unit_also_takes_picoseconds_and_names_its_own_family()
+    {
+        var stats = new DbStatOptions { Prometheus = new Uri("http://vm"), Unit = "minutes" };
+
+        Assert.Equal(
+            "Source 'prod' mysql_stat unit must be seconds, milliseconds or picoseconds.",
+            Assert.Single(Failures(ValidSource() with { MySqlStat = stats })));
+    }
+
     [Fact]
     public void Only_a_daemon_can_carry_an_ack_credential()
     {
@@ -829,7 +1081,7 @@ public sealed class ConfigurationTests
 
     private const string RolePermissions =
         "Hub:Access:Roles:0:Permissions must list one or more of findings.read, traces.read, sources.read, "
-        + "analyses.run and acks.write, each once.";
+        + "analyses.run, acks.write, disclosures.read and disclosures.manage, each once.";
 
     private const string TokenName = "Hub:Access:MachineTokens:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
 

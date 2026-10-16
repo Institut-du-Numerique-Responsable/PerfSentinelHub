@@ -16,6 +16,9 @@ se lise avant de déployer quoi que ce soit.
 | Hub vers backend de traces | sortant | pendant un run, et jamais autrement                                                                             |
 | navigateur vers Hub        | entrant | le lanceur et les rapports qu'il ouvre                                                                          |
 | greffon d'IDE ou job de CI | entrant | `GET /api/findings`, rien d'autre                                                                               |
+| job de CI vers Hub, divulgations | entrant | `POST /api/import/disclosures` avec sa propre `X-API-Key`, une fois par période, quand les divulgations sont actives |
+| Hub vers destinataires de webhook | sortant | un `POST` signé par divulgation publiée ou retirée, vers chaque entrée de `Hub:Disclosures:Webhooks` |
+| n'importe qui vers Hub, liens de partage | entrant | `GET /share/{token}/{name}`, les fichiers d'une divulgation sous un jeton qui expire |
 | Hub vers api.github.com    | sortant | la vérification de version, que `Hub:UpdateCheck:Enabled` désactive                                             |
 
 Le Hub n'initie jamais rien vers une CI. Un build lance le moteur en mode
@@ -123,7 +126,8 @@ contrôleur : ses cookies sont `Secure`, un navigateur les écarte en HTTP simpl
 et chaque connexion est refusée. L'import accepte des corps jusqu'à 2 Mio,
 au-delà du 1 Mio qu'ingress-nginx laisse passer par défaut, donc un daemon qui
 pousse par cet hôte demande de relever
-`nginx.ingress.kubernetes.io/proxy-body-size` en conséquence.
+`nginx.ingress.kubernetes.io/proxy-body-size` en conséquence. Un import de divulgation prend
+jusqu'à 8 Mio, donc une CI qui publie par cet hôte demande `8m`.
 
 ## La CI lit, elle n'alimente pas
 
@@ -134,6 +138,11 @@ branche. En importer un rendrait `status` faux et ferait passer les findings
 d'une branche pour ceux de la production. Un job de CI qui veut l'état de la
 flotte appelle `GET /api/findings` comme n'importe quel autre lecteur. Voir
 [API-FR.md](API-FR.md).
+
+Une divulgation périodique est la seule chose qu'une CI publie, et ce n'est pas un finding.
+C'est un rapport sur une période close, produit et signé dans la CI par
+`perf-sentinel disclose`, que le Hub garde et montre tel qu'il est arrivé, voir
+[API-FR.md](API-FR.md#divulgations).
 
 ## Les attributs de regroupement se choisissent sur chaque daemon
 

@@ -51,11 +51,16 @@ public static partial class ApiEndpoints
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded,
                     hubOptions.Value.MaxReadLimit),
-                [.. DetectionOverrides.SchemaFor(engine.Version)]));
+                [.. DetectionOverrides.SchemaFor(engine.Version)],
+                hubOptions.Value.Disclosures.Enabled &&
+                !access.Scope(request.HttpContext, AccessPermissions.DisclosuresRead).IsNothing
+                    ? true
+                    : null));
         });
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
         // Never anonymous: each of the two spends a daemon's write key in the caller's name.
+        app.MapGet("/api/sources/{sourceId}/acks", GetSourceAcksAsync);
         app.MapPost("/api/sources/{sourceId}/acks", CreateAckAsync);
         app.MapPost("/api/sources/{sourceId}/acks/revoke", RevokeAckAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
@@ -81,6 +86,15 @@ public static partial class ApiEndpoints
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
+        app.MapPost("/api/import/disclosures", ImportDisclosuresAsync).AllowAnonymous();
+        app.MapGet("/api/disclosures", GetDisclosuresAsync);
+        app.MapGet("/api/disclosures/{id}", GetDisclosureAsync);
+        app.MapGet("/api/disclosures/{id}/files/{name}", GetDisclosureFileAsync);
+        app.MapPost("/api/disclosures/{id}/share-links", CreateShareLinkAsync);
+        app.MapDelete("/api/disclosures/{id}/share-links/{linkId}", RevokeShareLinkAsync);
+        app.MapPost("/api/disclosures/{id}/withdraw", WithdrawDisclosureAsync);
+        app.MapPost("/api/disclosures/{id}/deliveries/{deliveryId}/retry", RetryDeliveryAsync);
+        app.MapPost("/api/disclosures/{id}/render", RenderDisclosureAsync);
         app.MapGet("/health/live", TypedResults.Ok).AllowAnonymous();
         app.MapGet("/health/ready", (HubDatabase database) =>
                 database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable))

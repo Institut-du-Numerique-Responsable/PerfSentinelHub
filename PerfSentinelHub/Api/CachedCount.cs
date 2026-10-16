@@ -65,7 +65,14 @@ public sealed partial class CachedCount<T>(
         await Task.Yield();
         try
         {
-            var counted = new Counted<T>(await count(CancellationToken.None), at);
+            // A thread of its own: SQLite runs its Async methods synchronously, so on
+            // the pool a long count would hold a pool thread the probes queue behind.
+            var value = await Task.Factory.StartNew(
+                () => count(CancellationToken.None),
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default).Unwrap();
+            var counted = new Counted<T>(value, at);
             lock (_gate)
             {
                 _last = counted;

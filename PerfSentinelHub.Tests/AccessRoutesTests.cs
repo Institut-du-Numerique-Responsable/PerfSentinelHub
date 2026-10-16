@@ -45,6 +45,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     private const string Incident = "0000000000000000000000000000000a";
     private const string MixedIncident = "0000000000000000000000000000000b";
     private const string ImportKey = "lab-import-0123456789abcdef0123456789"; // gitleaks:allow -- synthetic test credential
+    private const string DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
     private static readonly Dictionary<string, string> Users = new(StringComparer.Ordinal)
     {
@@ -112,6 +113,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("POST", "/api/incidents/refresh")]
     [InlineData("GET", "/api/correlations")]
     [InlineData("POST", "/api/sources/shop-d/acks")]
+    [InlineData("GET", "/api/sources/shop-d/acks")]
+    [InlineData("GET", "/api/disclosures")]
     [InlineData("GET", "/api/analyses")]
     [InlineData("POST", "/api/analyses")]
     [InlineData("GET", "/api/analyses/0123456789abcdef")]
@@ -489,6 +492,107 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("ss", "shop-d", F1)]
+    [InlineData("attr", "shop-d", F1)]
+    [InlineData("lab", "lab-d", Orphan)]
+    // An ack whose finding the Hub no longer holds names no service: the source as a whole.
+    [InlineData("attr", "lab-d", "")]
+    public async Task The_ack_listing_holds_what_the_caller_reads_at_the_source(
+        string user,
+        string sourceId,
+        string expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = await SignedInAsync(user);
+
+        using var response = await client.GetAsync($"/api/sources/{sourceId}/acks", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var listing = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        Assert.Equal(expected, string.Join(',', listing.RootElement.EnumerateArray()
+            .Select(ack => ack.GetProperty("signature").GetString())));
+    }
+
+    [Fact]
+    public async Task A_caller_who_reads_no_finding_at_the_source_gets_no_ack_listing()
+    {
+        using var client = await SignedInAsync("tempo");
+
+        using var response = await client.GetAsync("/api/sources/shop-d/acks", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ------------------------------------------------------------ disclosures
+
+    [Theory]
+    [InlineData("/share/pshare_unknown0123456789abcdef0123456789abcdef/report.json")]
+    [InlineData("/share/anything/")]
+    public async Task The_share_route_answers_strangers_without_a_sign_in(string path)
+    {
+        using var client = FakeProvider.Client(Factory);
+
+        using var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
+
+        // A 404, never the redirect to sign-in every other route gives a stranger.
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("svc", HttpStatusCode.Forbidden)]
+    [InlineData("viewer", HttpStatusCode.OK)]
+    [InlineData("admin", HttpStatusCode.OK)]
+    public async Task Disclosures_are_read_with_disclosures_read_only(string user, HttpStatusCode expected)
+    {
+        using var client = await SignedInAsync(user);
+
+        using var response = await client.GetAsync("/api/disclosures", TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_disclosures_reader_cannot_manage_and_an_admin_can()
+    {
+        await DisclosuresApiTests.SeedAsync(Factory, "d1", "u1", "2026-09-30");
+        using var viewer = await SignedInAsync("viewer");
+        using var admin = await SignedInAsync("admin");
+
+        using var refused = await viewer.SendAsync(
+            Post("/api/disclosures/d1/withdraw", """{"reason":"wrong"}"""), TestContext.Current.CancellationToken);
+        using var withdrawn = await admin.SendAsync(
+            Post("/api/disclosures/d1/withdraw", """{"reason":"wrong"}"""), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("You may not manage disclosures.", await DetailAsync(refused));
+        Assert.Equal(HttpStatusCode.NoContent, withdrawn.StatusCode);
+        Assert.Equal("admin@example.internal",
+            (await Database.GetDisclosureAsync("d1", TestContext.Current.CancellationToken))!.WithdrawnBy);
+    }
+
+    [Fact]
+    public async Task A_machine_token_never_reads_disclosures_even_through_an_admin_group()
+    {
+        using var client = Bearer(CiAdminToken);
+
+        using var response = await client.GetAsync("/api/disclosures", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("viewer", true)]
+    [InlineData("svc", false)]
+    public async Task Status_offers_the_disclosures_tab_to_a_reader_of_them_only(string user, bool expected)
+    {
+        using var client = await SignedInAsync(user);
+
+        using var status = JsonDocument.Parse(await client.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
+
+        Assert.Equal(expected, status.RootElement.TryGetProperty("disclosures", out _));
+    }
+
+    [Theory]
     [InlineData("lab", HttpStatusCode.NoContent)]
     [InlineData("attr", HttpStatusCode.NotFound)]
     public async Task An_orphan_revoke_needs_the_source_as_a_whole(string user, HttpStatusCode expected)
@@ -854,6 +958,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                         }
                     ];
                     options.Access = Access(_clock.GetUtcNow());
+                    options.Disclosures = new DisclosuresOptions { ImportKey = DisclosureKey };
                 });
             });
         });
@@ -879,7 +984,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             [
                 new RoleOptions { Name = "viewer", Permissions = ["findings.read"] },
                 new RoleOptions { Name = "operator", Permissions = ["findings.read", "sources.read"] },
-                new RoleOptions { Name = "tracer", Permissions = ["traces.read"] }
+                new RoleOptions { Name = "tracer", Permissions = ["traces.read"] },
+                new RoleOptions { Name = "disclosure-reader", Permissions = ["disclosures.read"] }
             ],
             Grants =
             [
@@ -890,6 +996,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                 new GrantOptions { Group = "/lab", Project = "lab", Role = "operator" },
                 new GrantOptions { Group = "/tempo", Project = "tempo-all", Role = "reader" },
                 new GrantOptions { Group = "/viewers", Project = "shop", Role = "viewer" },
+                new GrantOptions { Group = "/viewers", Project = "*", Role = "disclosure-reader" },
                 new GrantOptions { Group = "/tracers", Project = "tempo-all", Role = "tracer" },
                 new GrantOptions { Group = "internal:ci", Project = "shop", Role = "viewer" }
             ],

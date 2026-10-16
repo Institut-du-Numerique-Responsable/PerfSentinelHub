@@ -21,7 +21,11 @@ public sealed record StatusResponse(
     StatusLimits Limits,
     // The detection thresholds a run may override, with the engine's own
     // defaults and the bounds a submission is held to.
-    IReadOnlyList<DetectionKnob> DetectionKnobs);
+    IReadOnlyList<DetectionKnob> DetectionKnobs,
+    // True when disclosures are on and the caller may read them, which is when the launcher
+    // shows the tab. Omitted otherwise, so a Hub without disclosures answers as it did.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? Disclosures = null);
 
 /// <summary>
 ///     What a run costs, reported rather than assumed: the launcher shows these
@@ -154,6 +158,88 @@ public sealed record CorrelationQuery(
 public sealed record SubmittedAnalysis(string Id, string Status);
 
 public sealed record AnalysisProblem(string Detail);
+
+/// <summary>A publication the Hub refused, with the reason from the closed set.</summary>
+public sealed record DisclosureRefusal(string Reason);
+
+/// <summary>A publication the Hub took: its id, whether it rendered, and what was checked here.</summary>
+public sealed record DisclosurePeriod(string Type, string From, string To);
+
+public sealed record DisclosureWithdrawal(long AtMs, string? Reason, string? By);
+
+public sealed record DisclosureFilesPresent(bool Report, bool Attestation, bool Bundle, bool Pdf);
+
+/// <summary>One disclosure as the list and the detail show it, its files named, never carried.</summary>
+public sealed record DisclosureItem(
+    string Id,
+    string ReportUuid,
+    string Organisation,
+    DisclosurePeriod Period,
+    string Intent,
+    string Confidentiality,
+    string ContentHash,
+    string? IntegrityLevel,
+    JsonElement? Figures,
+    DisclosureFilesPresent Files,
+    string Pdf,
+    string? RenderReason,
+    long PublishedAtMs,
+    long? SignatureAddedAtMs,
+    DisclosureWithdrawal? Withdrawn);
+
+/// <summary>
+///     Who checked what. The Hub checks the content hash and the binding with its engine, and
+///     never the signature, which it only reports as declared or absent.
+/// </summary>
+public sealed record DisclosureChecks(string ContentHash, string Binding, string Signature, string? EngineVersion);
+
+/// <summary>A share link without its token, which was shown once and is stored as a hash.</summary>
+public sealed record ShareLinkView(
+    string Id,
+    string State,
+    string CreatedBy,
+    long CreatedAtMs,
+    long ExpiresAtMs,
+    long? RevokedAtMs,
+    string? RevokedBy,
+    long Downloads,
+    long? LastUsedAtMs);
+
+/// <summary>A webhook delivery by the webhook's name: its URL carries a secret and is never shown.</summary>
+public sealed record DeliveryView(
+    string Id,
+    string Webhook,
+    string Event,
+    string State,
+    int Attempts,
+    long? LastAttemptMs,
+    long? NextAttemptMs,
+    int? LastStatus);
+
+public sealed record DisclosureDetail(
+    DisclosureItem Disclosure,
+    DisclosureChecks Checks,
+    IReadOnlyList<ShareLinkView> ShareLinks,
+    IReadOnlyList<DeliveryView> Deliveries,
+    string? ExpectedIdentity,
+    string? ExpectedIssuer,
+    bool CanManage);
+
+/// <summary>A new share link, its token shown this once.</summary>
+public sealed record ShareLinkCreated(string Id, string Token, string Path, long ExpiresAtMs);
+
+public sealed record DisclosureImportResponse(
+    string Id,
+    string Pdf,
+    string? Reason,
+    bool ContentHashChecked,
+    bool? BindingChecked);
+
+/// <summary>
+///     One entry of GET /api/sources/{id}/acks: a daemon ack as the mirror holds it, in
+///     the shape the daemon's own GET /api/acks lists, which a report reads either way.
+/// </summary>
+public sealed record SourceAckResponse(string Signature, string By, string? Reason, string At, string? ExpiresAt);
 
 /// <summary>
 ///     GET /api/access, with Hub:Access:Enabled only: who the caller is and what they

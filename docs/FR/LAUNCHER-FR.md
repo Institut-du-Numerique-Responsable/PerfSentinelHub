@@ -9,9 +9,11 @@ Six écrans : démarrer une analyse, suivre un run, lister les runs récents, li
 de la flotte, lire les incidents enregistrés par les daemons, suivre les corrélations
 qu'ils ont poussées. Avec `Hub:Access` actif, la
 pastille d'identité en haut à droite ouvre [Votre accès](#votre-accès), et un
-administrateur dispose d'un septième onglet, [Couverture](#lécran-couverture). Un autre
-écran n'a pas d'onglet et ne s'atteint que par un lien, voir
-[La page d'acquittement](#la-page-dacquittement).
+administrateur dispose d'un septième onglet, [Couverture](#lécran-couverture). Un onglet
+Disclosures apparaît quand `/api/status` dit `disclosures`, c'est-à-dire tant que les
+divulgations sont actives et que l'appelant les lit, voir
+[L'écran des divulgations](#lécran-des-divulgations). Un autre écran n'a pas d'onglet et ne
+s'atteint que par un lien, voir [La page d'acquittement](#la-page-dacquittement).
 
 Chaque changement de route nomme l'écran dans l'onglet du navigateur et place le focus sur
 son titre, pour qu'un lecteur d'écran annonce où le lecteur est arrivé. Sous 1400 px, les
@@ -123,7 +125,14 @@ commande nomme le fichier au lieu de s'en remettre à cette découverte.
 
 ## Les rapports live
 
-Un rapport rendu depuis une source daemon devient live quand le `PublicUrl` de ce daemon,
+Un rapport rendu depuis une source daemon qui a un identifiant d'acquittement devient live
+à travers ce Hub : le rendu passe `--hub-relay` (moteur 0.31.0 ou plus récent), et les
+contrôles Ack et Revoke du dashboard appellent le [relais d'acquittement](API-FR.md#relais-dacquittement)
+à l'origine même du Hub, au nom du lecteur et selon ses droits. Aucune clé du daemon
+n'arrive dans le navigateur, le daemon n'a besoin d'aucune entrée CORS, et le lecteur ne
+le joint jamais. C'est vrai avec ou sans contrôle d'accès.
+
+Sinon, sans contrôle d'accès, un rapport devient live directement sur le daemon quand le `PublicUrl` de ce daemon,
 ou son `BaseUrl` quand il n'en déclare pas, est une origine nue. Le rendu passe `--daemon-url`, et les contrôles de rafraîchissement et
 d'acquittement du dashboard parlent alors à ce daemon depuis le navigateur du lecteur.
 
@@ -262,6 +271,56 @@ dans leur cadre, comme ceux des incidents, et la page ne défile pas.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations-dark.png">
   <img alt="Un incident déplié qui liste les corrélations actives pendant sa durée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations.png">
+</picture>
+
+## L'écran des divulgations
+
+Les divulgations périodiques qu'une CI a publiées, voir [API-FR.md](API-FR.md#divulgations).
+Une frise des douze derniers trimestres au plus, jusqu'au trimestre en cours, ouvre l'écran :
+chaque case lit le niveau d'intégrité de la divulgation du trimestre, interne, retirée,
+"not published", ou le nombre de jours qui restent au trimestre en cours. Une légende dessous
+distingue les deux sortes de marque. Un niveau en pointillé est ce que le rapport déclare de
+lui-même. Une marque pleine est ce que ce Hub a recalculé à l'arrivée du rapport, l'empreinte
+et une attestation qui la nomme. La signature se vérifie sur la machine du lecteur, jamais
+ici.
+
+Une carte par divulgation suit, période la plus récente d'abord : la période et ses dates, ses
+pastilles, ses chiffres principaux, quand elle a été publiée et quand une copie signée l'a
+remplacée, si le PDF a été rendu ici, et des boutons pour télécharger le PDF et chaque
+fichier. Un bandeau dit quand une divulgation a été retirée, par qui et pourquoi, quand une
+divulgation officielle ne porte aucune signature, et quand le Hub ne l'a pas rendue, avec la
+raison. L'écran se termine sur les commandes qu'un job de CI lance pour produire, signer et
+publier la suivante.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures-dark.png">
+  <img alt="L'écran des divulgations : la frise des trimestres, puis une carte par divulgation, dont une retirée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures.png">
+</picture>
+
+Une carte ouvre l'écran propre à la divulgation :
+
+- **Intégrité**, qui a vérifié quoi : l'empreinte et le lien de l'attestation, vérifiés par ce
+  Hub et la version de son moteur, la signature, que le lecteur vérifie avec `verify-hash`
+  contre le signataire attendu, et l'audit, seulement déclaré. Puis le `content_hash`, le
+  `report_uuid`, le signataire attendu et la commande de vérification à copier.
+- **Fichiers**, chacun téléchargeable, avec `SHA256SUMS` pour `sha256sum -c`.
+- **Liens de partage**, avec leur état, leur auteur, leur expiration et leur nombre de
+  téléchargements. Un nouveau lien s'affiche une seule fois, avec l'adresse de son PDF et le
+  `report.json` à côté, que lit `verify-hash --url`.
+- **Livraisons**, chaque événement de webhook par le nom du webhook, son état, ses tentatives
+  et son dernier statut.
+- **Applications**, et **Méthode et limites** avec les avertissements, lus dans `report.json`
+  tels que le rapport les énonce.
+
+Un détenteur de `disclosures.manage` que le Hub sait nommer, par une session ou par l'en-tête
+d'identité de confiance, dispose aussi de New share link, de Render again sur une divulgation
+non rendue, de Retry sur une livraison qui n'est pas passée, et de Withdraw, qui demande une
+raison et dit que l'étape est définitive. Sur un Hub sans contrôle d'accès, c'est quiconque le
+Hub sait nommer. Une divulgation interne ou retirée n'offre aucun lien de partage.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure-dark.png">
+  <img alt="Une divulgation : ses chiffres, ses applications, qui a vérifié quoi, ses fichiers et son lien de partage" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure.png">
 </picture>
 
 ## La page d'acquittement

@@ -21,6 +21,7 @@ public static class AnalysisErrorCodes
     public const string OutputTooLarge = "output_too_large";
     public const string BinaryFailed = "binary_failed";
     public const string InvalidRequest = "invalid_request";
+    public const string HubMemoryLow = "hub_memory_low";
     public const string Internal = "internal";
 }
 
@@ -39,8 +40,11 @@ public sealed partial class AnalysisRunner(
     DaemonClient daemonClient,
     EngineProbe engine,
     IOptions<HubOptions> options,
-    ILogger<AnalysisRunner> logger)
+    ILogger<AnalysisRunner> logger,
+    CgroupMemory? memory = null)
 {
+    private readonly CgroupMemory _memory = memory ?? CgroupMemory.Container;
+
     // The intermediate report JSON. Well past any real run, small enough that
     // a runaway engine cannot exhaust the container's memory.
     private const long MaxReportJsonBytes = 256L * 1024 * 1024;
@@ -86,6 +90,8 @@ public sealed partial class AnalysisRunner(
     {
         if (_analysis.EngineBinaryPath is null)
             return Failed(AnalysisErrorCodes.Internal);
+        if (LacksMemory(run.Id))
+            return Failed(AnalysisErrorCodes.HubMemoryLow);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_analysis.Timeout);
@@ -98,17 +104,14 @@ public sealed partial class AnalysisRunner(
             if (reportJson is null)
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
+            // Checked again before the render: the report now sits in the Hub's own memory.
+            if (LacksMemory(run.Id))
+                return Failed(AnalysisErrorCodes.HubMemoryLow);
+
             var summary = ReportSummary.TryParse(reportJson, out var binaryVersion);
             // Short-circuit kept on purpose: output that is not a report must
             // never reach the renderer.
-            if (summary is null ||
-                !await RenderAsync(
-                    run.Id,
-                    reportJson,
-                    configPath,
-                    // A live report acks at the daemon directly, around acks.write.
-                    LiveDaemonUrl(source, engine.SupportsDaemonUrl && !options.Value.Access.Enabled),
-                    timeout.Token))
+            if (summary is null || !await RenderWithDbStatAsync(run.Id, reportJson, configPath, source, timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             summary.ReportBytes = RenderedBytes(run.Id);
@@ -129,6 +132,15 @@ public sealed partial class AnalysisRunner(
             if (configPath is not null)
                 TryDelete(configPath);
         }
+    }
+
+    private bool LacksMemory(string runId)
+    {
+        var floor = _analysis.MinFreeMemoryMiB * 1024L * 1024;
+        if (floor == 0 || _memory.HeadroomBytes() is not { } headroom || headroom >= floor)
+            return false;
+        LogMemoryLow(logger, runId, headroom / (1024 * 1024), _analysis.MinFreeMemoryMiB);
+        return true;
     }
 
     /// <summary>
@@ -192,11 +204,76 @@ public sealed partial class AnalysisRunner(
             : null;
     }
 
+    /// <summary>
+    ///     How a daemon-source report goes live, or nothing for a static one. Through
+    ///     this Hub's relay when the source holds an ack key and the engine takes
+    ///     `--hub-relay`: the reader acks in their own name, under acks.write, with no
+    ///     key in the browser and no CORS entry at the daemon. Otherwise straight at the
+    ///     daemon, which only access off allows, since that path goes around acks.write.
+    /// </summary>
+    private string[] LiveArguments(SourceOptions source)
+    {
+        // The engine refuses the two ids a browser would read as path segments.
+        if (engine.SupportsHubRelay && source is { Kind: SourceKinds.Daemon, HasAckCredential: true } &&
+            source.Id is not ("." or ".."))
+            return ["--hub-relay", source.Id];
+        return LiveDaemonUrl(source, engine.SupportsDaemonUrl && !options.Value.Access.Enabled) is { } url
+            ? ["--daemon-url", url]
+            : [];
+    }
+
+    // The engine fails a whole render on a scrape it cannot make, so a Prometheus that
+    // is down or a selector it refuses costs the tab, and not the report, on a second try.
+    private async Task<bool> RenderWithDbStatAsync(
+        string runId,
+        byte[] reportJson,
+        string? configPath,
+        SourceOptions source,
+        CancellationToken cancellationToken)
+    {
+        var live = LiveArguments(source);
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal);
+        string[] dbStat =
+        [
+            .. DbStatArguments("pg-stat", source.PgStat, "PERF_SENTINEL_PGSTAT_AUTH_HEADER", environment),
+            .. DbStatArguments("mysql-stat", source.MySqlStat, "PERF_SENTINEL_MYSQLSTAT_AUTH_HEADER", environment)
+        ];
+        if (await RenderAsync(runId, reportJson, configPath, [.. live, .. dbStat], environment, cancellationToken))
+            return true;
+        if (dbStat.Length == 0)
+            return false;
+        LogRenderedWithoutDbStat(logger, runId, source.Id);
+        return await RenderAsync(runId, reportJson, configPath, live, null, cancellationToken);
+    }
+
+    private static string[] DbStatArguments(
+        string family,
+        DbStatOptions? stats,
+        string authVariable,
+        Dictionary<string, string> environment)
+    {
+        if (stats?.Prometheus is not { } prometheus)
+            return [];
+        if (stats is { AuthHeaderName: { } headerName, AuthHeaderValue: { } headerValue })
+            environment[authVariable] = $"{headerName}: {headerValue}";
+        var arguments = new List<string> { $"--{family}-prometheus", prometheus.ToString().TrimEnd('/') };
+        foreach (var (flag, value) in new[]
+                 {
+                     ("metric", stats.Metric), ("query-label", stats.QueryLabel), ("calls-metric", stats.CallsMetric),
+                     ("unit", stats.Unit), ("selector", stats.Selector),
+                     ("top", stats.Top?.ToString(CultureInfo.InvariantCulture))
+                 })
+            if (value is not null)
+                arguments.AddRange($"--{family}-{flag}", value);
+        return [.. arguments];
+    }
+
     private async Task<bool> RenderAsync(
         string runId,
         byte[] reportJson,
         string? configPath,
-        string? daemonUrl,
+        string[] extraArguments,
+        IReadOnlyDictionary<string, string>? environment,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_analysis.ReportDirectory);
@@ -220,16 +297,11 @@ public sealed partial class AnalysisRunner(
                 "--max-traces-embedded",
                 _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture)
             };
-            if (daemonUrl is not null)
-            {
-                // The report's own Refresh and acknowledgment controls talk to
-                // this daemon from the viewer's browser. That only works when
-                // the daemon's [daemon.cors] allowed_origins carries the origin
-                // this Hub serves reports from; without it the dashboard shows
-                // itself disconnected and stays a static report.
-                arguments.Add("--daemon-url");
-                arguments.Add(daemonUrl);
-            }
+            // With --daemon-url the report's controls talk to the daemon from the
+            // viewer's browser, which only works when [daemon.cors] allowed_origins
+            // carries this Hub's origin; without it the report shows itself
+            // disconnected and stays static.
+            arguments.AddRange(extraArguments);
 
             if (configPath is not null)
             {
@@ -242,7 +314,8 @@ public sealed partial class AnalysisRunner(
                 arguments,
                 MaxReportJsonBytes,
                 _analysis.ReportDirectory,
-                cancellationToken);
+                cancellationToken,
+                environment);
             // A refused render is deterministic (bad flag, unreadable input),
             // and its stderr names the cause. Without this line the run is
             // stored as binary_failed with zero diagnostic anywhere.
@@ -350,6 +423,13 @@ public sealed partial class AnalysisRunner(
         }
     }
 
+    [LoggerMessage(
+        1602,
+        LogLevel.Warning,
+        "Analysis run {RunId} refused: the container has {HeadroomMiB} MiB free, under the {FloorMiB} MiB of "
+        + "Hub:Analysis:MinFreeMemoryMiB. Raise the Hub's memory limit, or run the analysis when it is quieter.")]
+    private static partial void LogMemoryLow(ILogger logger, string runId, long headroomMiB, int floorMiB);
+
     [LoggerMessage(1600, LogLevel.Warning, "Analysis run {RunId} failed with {ErrorCode}.")]
     private static partial void LogRunFailed(ILogger logger, Exception exception, string runId, string errorCode);
 
@@ -359,6 +439,12 @@ public sealed partial class AnalysisRunner(
         "Render for run {RunId} exited {ExitCode}: {StandardError}")]
     private static partial void LogRenderFailed(
         ILogger logger, string runId, int exitCode, string standardError);
+
+    [LoggerMessage(
+        1603,
+        LogLevel.Warning,
+        "Render for run {RunId} failed with the database statistics of source {SourceId}: rendering without them.")]
+    private static partial void LogRenderedWithoutDbStat(ILogger logger, string runId, string sourceId);
 }
 
 internal sealed class EngineFailedException(string errorCode)

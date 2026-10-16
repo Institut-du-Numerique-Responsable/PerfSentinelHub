@@ -8,6 +8,7 @@ using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
@@ -41,6 +42,11 @@ if (args is ["backup", ..])
 }
 
 var builder = WebApplication.CreateSlimBuilder(args);
+
+// A share-link token sits in the request path, which the hosting layer logs at Information.
+// Above Warning it never reaches the Hub's logs, wherever the Hub is deployed.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Hub:Disclosures:ImportKey"]))
+    builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting", LogLevel.Warning);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -80,6 +86,19 @@ builder.Services.AddSingleton<IncidentImportMetrics>();
 builder.Services.AddSingleton<IncidentImportAdmission>();
 builder.Services.AddSingleton<CorrelationImportMetrics>();
 builder.Services.AddSingleton<CorrelationImportAdmission>();
+builder.Services.AddSingleton<DisclosureImportGate>();
+builder.Services.AddSingleton<ShareGate>();
+builder.Services.AddSingleton<DisclosureMetrics>();
+builder.Services.AddSingleton<DisclosureRenderer>();
+builder.Services.AddSingleton<ShareDownloadCounter>();
+builder.Services.AddHostedService<ShareDownloadFlusher>();
+builder.Services.AddSingleton<DeliveryWorker>();
+builder.Services.AddHostedService<DeliveryLoop>();
+// Its own client: a webhook is a destination of its own, never followed elsewhere. No
+// request logging: the factory would log each URL, and a chat webhook URL is a secret.
+builder.Services.AddHttpClient(DeliveryWorker.ClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+    .RemoveAllLoggers();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();
@@ -166,6 +185,8 @@ var accessPolicy = app.Services.GetRequiredService<AccessPolicy>();
 if (accessPolicy.Enabled) app.MapTerminalAccess();
 if (accessPolicy.HasLocalAccounts) app.MapLocalSignIn();
 app.MapMetrics();
+// Mapped with disclosures on only: off, /share/ stays whatever the Hub answered before.
+if (hubOptions.Disclosures.Enabled) app.MapShare();
 
 await app.RunAsync();
 return exitCode;

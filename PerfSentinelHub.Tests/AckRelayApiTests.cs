@@ -526,6 +526,58 @@ public sealed class AckRelayApiTests(HubApplicationFactory factory) : IClassFixt
         Assert.Equal("POST,GET", Methods(calls));
     }
 
+    [Fact]
+    public async Task The_listing_serves_the_mirror_s_daemon_acks_and_no_baseline_or_expired_one()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var calls = new ConcurrentQueue<DaemonCall>();
+        await using var daemon = await DaemonAsync(calls, StatusCodes.Status201Created);
+        await using var scoped = Scoped(factory, Relayed("listed", daemon));
+        await SeedFindingAsync(factory.Database, "listed", Signature, "0.24.0");
+        await factory.Database.ReplaceSourceAcksAsync(
+            "listed",
+            [
+                new ParsedAck(Signature, "daemon", "robin", "known", "2026-09-20T10:00:00Z", "2027-01-01T00:00:00Z",
+                    1_798_761_600_000),
+                new ParsedAck("baseline", "toml", "ci", null, "2026-09-20T10:00:00Z", null, null),
+                // Five seconds after the epoch, behind the factory's clock.
+                new ParsedAck("expired", "daemon", "robin", "old", "1970-01-01T00:00:01Z", "1970-01-01T00:00:05Z", 5_000)
+            ],
+            AckReadStates.Ok,
+            NowMs,
+            cancellationToken);
+        using var client = scoped.CreateClient();
+
+        using var response = await client.GetAsync("/api/sources/listed/acks", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            $$"""[{"signature":"{{Signature}}","by":"robin","reason":"known","at":"2026-09-20T10:00:00Z","expires_at":"2027-01-01T00:00:00Z"}]""",
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        // Served from the mirror: the daemon is not asked.
+        Assert.Empty(calls);
+    }
+
+    [Theory]
+    [InlineData("no-such-source")]
+    [InlineData("never")]
+    [InlineData("test")]
+    public async Task The_listing_of_a_source_that_relays_nothing_is_the_relay_s_404(string sourceId)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var calls = new ConcurrentQueue<DaemonCall>();
+        await using var daemon = await DaemonAsync(calls, StatusCodes.Status201Created);
+        await using var scoped = Scoped(factory, Relayed($"listing-{sourceId}", daemon));
+        using var client = scoped.CreateClient();
+
+        using var response = await client.GetAsync($"/api/sources/{sourceId}/acks", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(
+            """{"detail":"This source relays no acknowledgments."}""",
+            await response.Content.ReadAsStringAsync(cancellationToken));
+    }
+
     // One whole relay the daemon accepts, and what reached that daemon as the write.
     private async Task<DaemonCall> RelayedAsync(string sourceId, JsonObject body, string identity, bool revoke)
     {

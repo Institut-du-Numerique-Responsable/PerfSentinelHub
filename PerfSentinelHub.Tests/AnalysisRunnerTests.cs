@@ -68,6 +68,40 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_run_is_refused_before_the_engine_when_the_container_lacks_memory()
+    {
+        // 1 GiB limit, 1,000,000,000 bytes in use and no reclaimable cache: 73 MiB left.
+        var memory = Cgroup("1073741824", "1000000000", "anon 990000000\ninactive_file 0\n");
+        var runner = Runner(StubEngine(ReportJson, 0), memory: memory);
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
+        Assert.Equal(AnalysisErrorCodes.HubMemoryLow, outcome.ErrorCode);
+        Assert.False(File.Exists(runner.ReportPath("run-1")));
+    }
+
+    [Fact]
+    public async Task Reclaimable_page_cache_counts_as_free_memory()
+    {
+        // The same usage, 800 MB of it cache the kernel drops under pressure.
+        var memory = Cgroup("1073741824", "1000000000", "anon 190000000\ninactive_file 800000000\n");
+        Assert.Equal(873_741_824, memory.HeadroomBytes());
+
+        var outcome = await Runner(StubEngine(ReportJson, 0), memory: memory)
+            .RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+    }
+
+    [Fact]
+    public void A_container_without_a_memory_limit_is_not_checked()
+    {
+        Assert.Null(Cgroup("max", "1000000000", "inactive_file 0\n").HeadroomBytes());
+        Assert.Null(new CgroupMemory(Path.Combine(_workspace, "no-cgroup")).HeadroomBytes());
+    }
+
+    [Fact]
     public async Task The_render_always_caps_embedded_traces_so_no_finding_is_dropped()
     {
         var runner = Runner(StubEngine(ReportJson, 0));
@@ -177,6 +211,131 @@ public sealed class AnalysisRunnerTests : IDisposable
         Assert.Equal(
             !accessOn,
             arguments.Contains($"--daemon-url {source.EndpointArgument}", StringComparison.Ordinal));
+    }
+
+    // The relay acks in the reader's name with the Hub's key and checks acks.write, so
+    // it serves access on and off alike, and needs no CORS entry at the daemon.
+    [Theory]
+    [InlineData(false, "--daemon-url <URL>  live mode\n      --hub-relay <SOURCE_ID>  relay", "--hub-relay relayed")]
+    [InlineData(true, "--daemon-url <URL>  live mode\n      --hub-relay <SOURCE_ID>  relay", "--hub-relay relayed")]
+    // An engine before 0.31.0 keeps the direct live mode where it is allowed.
+    [InlineData(false, "--daemon-url <URL>  live mode", "--daemon-url ")]
+    [InlineData(true, "--daemon-url <URL>  live mode", "")]
+    public async Task A_daemon_with_an_ack_credential_is_rendered_through_the_hub_relay(
+        bool accessOn,
+        string help,
+        string expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(ReportJson, cancellationToken);
+        }, cancellationToken);
+        var options = RunnerOptions(StubEngine(ReportJson, 0, help: "      " + help));
+        options.Value.Access.Enabled = accessOn;
+        var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
+        await probe.StartAsync(cancellationToken);
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(), options),
+            probe,
+            options,
+            NullLogger<AnalysisRunner>.Instance);
+        var source = new SourceOptions
+        {
+            Id = "relayed",
+            Name = "Relayed",
+            Environment = "production",
+            Kind = SourceKinds.Daemon,
+            BaseUrl = daemon.BaseUrl,
+            AckHeaderName = "X-API-Key",
+            AckHeaderValue = "ack-key" // gitleaks:allow -- synthetic test credential
+        };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var arguments = await File.ReadAllTextAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        if (expected.Length == 0)
+        {
+            Assert.DoesNotContain("--hub-relay", arguments, StringComparison.Ordinal);
+            Assert.DoesNotContain("--daemon-url", arguments, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains(expected, arguments, StringComparison.Ordinal);
+            Assert.False(arguments.Contains("--hub-relay", StringComparison.Ordinal) &&
+                         arguments.Contains("--daemon-url", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task A_source_with_database_statistics_renders_its_tabs_and_keeps_the_header_off_the_command_line()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var runner = Runner(StubEngine(ReportJson, 0));
+        var source = Source() with
+        {
+            PgStat = new DbStatOptions
+            {
+                Prometheus = new Uri("http://vm.svc:8428/"),
+                Metric = "pg_stat_statements_total_exec_time",
+                QueryLabel = "query_sample",
+                CallsMetric = "pg_stat_statements_calls",
+                Unit = "milliseconds",
+                Selector = "namespace=\"shop\"",
+                Top = 20,
+                AuthHeaderName = "Authorization",
+                AuthHeaderValue = "Bearer pg-token" // gitleaks:allow -- synthetic test credential
+            },
+            MySqlStat = new DbStatOptions { Prometheus = new Uri("http://vm.svc:8428") }
+        };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var arguments = await File.ReadAllTextAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        Assert.Contains(
+            "--pg-stat-prometheus http://vm.svc:8428 --pg-stat-metric pg_stat_statements_total_exec_time " +
+            "--pg-stat-query-label query_sample --pg-stat-calls-metric pg_stat_statements_calls " +
+            "--pg-stat-unit milliseconds --pg-stat-selector namespace=\"shop\" --pg-stat-top 20 " +
+            "--mysql-stat-prometheus http://vm.svc:8428",
+            arguments,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("pg-token", arguments, StringComparison.Ordinal);
+        Assert.Equal(
+            "Authorization: Bearer pg-token",
+            (await File.ReadAllTextAsync(
+                Path.Combine(_workspace, "reports", "render-env.txt"),
+                cancellationToken)).Trim());
+    }
+
+    [Fact]
+    public async Task A_render_that_fails_with_database_statistics_is_tried_again_without_them()
+    {
+        // A Prometheus that is down fails the engine's whole render, and a report
+        // without its pg_stat tab is worth more than a failed run.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var runner = Runner(new FakeEngine
+        {
+            Output = ReportJson,
+            RenderFailsOn = "--pg-stat-prometheus"
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel")));
+        var source = Source() with { PgStat = new DbStatOptions { Prometheus = new Uri("http://vm.svc:8428") } };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var renders = await File.ReadAllLinesAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        Assert.Equal(2, renders.Length);
+        Assert.Contains("--pg-stat-prometheus", renders[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("--pg-stat-prometheus", renders[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -297,7 +456,7 @@ public sealed class AnalysisRunnerTests : IDisposable
         });
     }
 
-    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null)
+    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null, CgroupMemory? memory = null)
     {
         var options = RunnerOptions(binaryPath, timeout);
         return new AnalysisRunner(
@@ -306,7 +465,19 @@ public sealed class AnalysisRunnerTests : IDisposable
             // ones, where the flag never applies anyway.
             new EngineProbe(options, NullLogger<EngineProbe>.Instance),
             options,
-            NullLogger<AnalysisRunner>.Instance);
+            NullLogger<AnalysisRunner>.Instance,
+            memory ?? new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
+    }
+
+    /// <summary>A cgroup v2 directory holding the three files the Hub reads.</summary>
+    private CgroupMemory Cgroup(string max, string current, string stat)
+    {
+        var root = Path.Combine(_workspace, "cgroup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "memory.max"), max + "\n");
+        File.WriteAllText(Path.Combine(root, "memory.current"), current + "\n");
+        File.WriteAllText(Path.Combine(root, "memory.stat"), stat);
+        return new CgroupMemory(root);
     }
 
     /// <summary>

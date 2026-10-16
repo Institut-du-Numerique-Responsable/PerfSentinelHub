@@ -94,6 +94,27 @@ spec:
                   key: {{ $account.secretKey }}
             {{- end }}
             {{- end }}
+            {{- with .Values.hub.disclosures }}
+            {{- if .importSecretName }}
+            - name: Hub__Disclosures__ImportKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .importSecretName }}
+                  key: {{ .importSecretKey }}
+            {{- range $index, $webhook := .webhooks | default list }}
+            - name: Hub__Disclosures__Webhooks__{{ $index }}__Url
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $webhook.secretName }}
+                  key: {{ $webhook.urlKey }}
+            - name: Hub__Disclosures__Webhooks__{{ $index }}__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $webhook.secretName }}
+                  key: {{ $webhook.secretKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
             {{- range $index, $source := .Values.sources }}
             {{- if $source.authSecretName }}
             - name: Hub__Sources__{{ $index }}__AuthHeaderValue
@@ -109,6 +130,15 @@ spec:
                   name: {{ $source.ackSecretName }}
                   key: {{ $source.ackSecretKey }}
             {{- end }}
+            {{- range $key, $stats := dict "PgStat" $source.pgStat "MySqlStat" $source.mysqlStat }}
+            {{- if and $stats $stats.authSecretName }}
+            - name: Hub__Sources__{{ $index }}__{{ $key }}__AuthHeaderValue
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $stats.authSecretName }}
+                  key: {{ $stats.authSecretKey }}
+            {{- end }}
+            {{- end }}
             {{- if $source.importSecretName }}
             - name: Hub__Sources__{{ $index }}__ImportApiKey
               valueFrom:
@@ -121,9 +151,11 @@ spec:
             - { name: data, mountPath: /data }
             - { name: tmp, mountPath: /tmp }
             - { name: config, mountPath: /app/appsettings.Production.json, subPath: appsettings.Production.json }
-          startupProbe: { httpGet: { path: /health/ready, port: http }, failureThreshold: 30, periodSeconds: 2 }
-          readinessProbe: { httpGet: { path: /health/ready, port: http } }
-          livenessProbe: { httpGet: { path: /health/live, port: http } }
+          {{- with .Values.probes }}
+          startupProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: {{ .startup.periodSeconds }}, failureThreshold: {{ .startup.failureThreshold }} }
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: {{ .readiness.periodSeconds }}, timeoutSeconds: {{ .readiness.timeoutSeconds }}, failureThreshold: {{ .readiness.failureThreshold }} }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: {{ .liveness.periodSeconds }}, timeoutSeconds: {{ .liveness.timeoutSeconds }}, failureThreshold: {{ .liveness.failureThreshold }} }
+          {{- end }}
           resources: {{- toYaml .Values.resources | nindent 12 }}
       volumes:
         - name: data

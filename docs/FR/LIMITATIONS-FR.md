@@ -146,8 +146,11 @@ lecture est réduite aux grants de l'appelant, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) et
 [Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
-Trois endpoints réclament une preuve, `POST /api/import/findings`,
-`POST /api/import/incidents` et `POST /api/import/correlations`, dont la `X-API-Key` est comparée par empreinte. Tous les autres ne réclament rien :
+Quatre endpoints réclament une preuve, `POST /api/import/findings`,
+`POST /api/import/incidents`, `POST /api/import/correlations` et
+`POST /api/import/disclosures`, dont la `X-API-Key` est comparée par empreinte, et `/share/`
+sert les fichiers d'une divulgation à quiconque détient un jeton valide. Tous les autres ne
+réclament rien :
 `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses` aussi bien pour
 la liste que pour la requête qui lance un run, `/reports/`, `/metrics`, et le
 lanceur lui-même. Qui joint le port lit tous les findings de tous les tenants,
@@ -297,7 +300,9 @@ Hors du modèle :
 
 ## Ce qui se joue hors du Hub
 
-Un rapport vivant exige deux choses que le Hub ne contrôle pas : le
+Une source daemon qui a un identifiant d'acquittement n'a besoin de rien de ce qui suit :
+avec un moteur 0.31.0 ou plus récent, son rapport acquitte à travers le Hub. Sinon, un
+rapport vivant exige deux choses que le Hub ne contrôle pas : le
 `[daemon.cors] allowed_origins` du daemon doit porter l'origine depuis laquelle
 le Hub sert ses rapports, et le lecteur doit pouvoir joindre ce daemon
 directement, à son `PublicUrl` quand le Hub le lit par un nom que seul le cluster

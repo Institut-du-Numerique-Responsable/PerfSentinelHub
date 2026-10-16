@@ -7,8 +7,10 @@ typefaces are base64 in `wwwroot/fonts.css` and every icon is inline SVG.
 Six screens: start an analysis, follow one run, list recent runs, read fleet health, read
 the incidents the daemons recorded, follow the correlations they pushed. With `Hub:Access` on, the identity chip at the top
 right opens [Your access](#your-access), and an administrator gets a seventh tab,
-[Coverage](#the-coverage-screen). Another screen has no tab and is reached by link only,
-see [The ack page](#the-ack-page).
+[Coverage](#the-coverage-screen). A Disclosures tab shows when `/api/status` says
+`disclosures`, that is while disclosures are on and the caller reads them, see
+[The disclosures screen](#the-disclosures-screen). Another screen has no tab and is reached
+by link only, see [The ack page](#the-ack-page).
 
 Every route change names the screen in the browser tab and moves the focus to its
 heading, so a screen reader announces where the reader landed. Below 1400px the tab icons
@@ -111,7 +113,13 @@ rather than relying on that discovery.
 
 ## Live reports
 
-A report rendered from a daemon source goes live when the daemon's `PublicUrl`, or its
+A report rendered from a daemon source that has an ack credential goes live through this
+Hub: the render passes `--hub-relay` (engine 0.31.0 or later), and the dashboard's Ack and
+Revoke controls call the [ack relay](API.md#ack-relay) at the Hub's own origin, in the
+reader's name and under their rights. No daemon key reaches the browser, the daemon needs
+no CORS entry, and the viewer never reaches it. This holds with access control on or off.
+
+Otherwise, with access control off, a report goes live straight at the daemon when the daemon's `PublicUrl`, or its
 `BaseUrl` when it declares none, is a bare origin. The render passes `--daemon-url`, and the dashboard's own Refresh and
 acknowledgment controls then talk to that daemon from the viewer's browser.
 
@@ -238,6 +246,53 @@ the page does not.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations-dark.png">
   <img alt="An unfolded incident listing the correlations active during it" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations.png">
+</picture>
+
+## The disclosures screen
+
+The periodic disclosures a CI published, see [API.md](API.md#disclosures). A rail of the last
+twelve quarters at most, up to the current one, opens the screen: each cell reads the
+integrity level of the quarter's disclosure, internal, withdrawn, "not published", or how many
+days the current quarter has left. A legend under it tells the two kinds of mark apart. A
+dashed level is what the report declares about itself. A solid mark is what this Hub
+recomputed when the report arrived, the content hash and an attestation that names it. The
+signature is checked on the reader's machine, never here.
+
+One card per disclosure follows, newest period first: the period and its dates, its chips, its
+headline figures, when it was published and when a signed copy replaced it, whether the PDF
+rendered here, and buttons to download the PDF and each file. A banner says when a disclosure
+was withdrawn, by whom and why, when an official one carries no signature, and when the Hub has
+not rendered it, with the reason. The screen ends on the commands a CI job runs to produce,
+sign and publish the next one.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures-dark.png">
+  <img alt="The disclosures screen: the rail of quarters, then one card per disclosure, one of them withdrawn" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures.png">
+</picture>
+
+A card opens the disclosure's own screen:
+
+- **Integrity**, who checked what: the content hash and the binding, checked by this Hub and
+  its engine version, the signature, for the reader to check with `verify-hash` against the
+  expected signer, and the audit, only ever declared. Then the `content_hash`, the
+  `report_uuid`, the expected signer and the verify command to copy.
+- **Files**, each one downloadable, with `SHA256SUMS` for `sha256sum -c`.
+- **Share links**, with their state, author, expiry and download count. A new link is shown
+  once, with its PDF address and the `report.json` beside it, which `verify-hash --url` reads.
+- **Deliveries**, each webhook event by the webhook's name, its state, attempts and last
+  status.
+- **Applications**, and **Method and limits** with the disclaimers, read from `report.json` as
+  the report states them.
+
+A holder of `disclosures.manage` the Hub can name, through a session or the trusted identity
+header, also gets New share link, Render again on a disclosure not rendered, Retry on a
+delivery that has not gone through, and Withdraw, which asks for a reason and says the step is
+final. On a Hub without access control, that is whoever the Hub can name. An internal or
+withdrawn disclosure offers no share link.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure-dark.png">
+  <img alt="One disclosure: its figures, applications, who checked what, its files and its share link" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure.png">
 </picture>
 
 ## The ack page

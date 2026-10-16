@@ -17,6 +17,7 @@ export type ErrorCode =
     | "output_too_large"
     | "binary_failed"
     | "invalid_request"
+    | "hub_memory_low"
     | "internal";
 
 /** What a source is read through. Mirrors the `kind` column. */

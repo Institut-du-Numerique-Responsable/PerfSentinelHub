@@ -28,6 +28,7 @@ public sealed record HubOptions
     public AuthOptions Auth { get; set; } = new();
     public AckRelayOptions AckRelay { get; set; } = new();
     public AccessOptions Access { get; set; } = new();
+    public DisclosuresOptions Disclosures { get; set; } = new();
 
     // The one port /metrics answers on, and nothing else answers there. Unset, /metrics
     // answers on every port as it always has; access control needs one (A14).
@@ -124,7 +125,7 @@ public sealed record LocalAccountOptions
     }
 }
 
-/// <summary>The six permissions, the three built-in roles and what a machine token may hold.</summary>
+/// <summary>The eight permissions, the three built-in roles and what a machine token may hold.</summary>
 public static class AccessPermissions
 {
     public const string FindingsRead = "findings.read";
@@ -134,12 +135,16 @@ public static class AccessPermissions
     public const string AcksWrite = "acks.write";
     public const string AccessAdmin = "access.admin";
 
+    // Hub-level, granted on '*' only: a disclosure belongs to no source.
+    public const string DisclosuresRead = "disclosures.read";
+    public const string DisclosuresManage = "disclosures.manage";
+
     public const string ReaderRole = "reader";
     public const string MemberRole = "member";
     public const string AdminRole = "admin";
 
     public static readonly IReadOnlyList<string> All =
-        [FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin];
+        [FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin, DisclosuresRead, DisclosuresManage];
 
     // reader is not read-only: it starts analyses.
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> BuiltInRoles =
@@ -157,6 +162,60 @@ public static class AccessPermissions
     {
         return permission is AnalysesRun or AcksWrite;
     }
+}
+
+/// <summary>
+///     Periodic disclosures a CI publishes to the Hub. On when ImportKey is set: the import
+///     route, the Disclosures screen, the share links and the webhooks all answer only then.
+/// </summary>
+public sealed record DisclosuresOptions
+{
+    // Trimmed on binding, like a source's import key, so a key mounted from a file with a
+    // trailing newline compares equal to the one the CI sends.
+    public string? ImportKey
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    // An internal report carries G1 detail. Shown to disclosures.read holders only, never
+    // shared nor pushed, and refused at startup on a Hub without access control.
+    public bool AllowInternal { get; set; }
+
+    // Passed to disclose-pdf, which prints them in the PDF's verify command and checks nothing
+    // with them: the signature is the reader's to check. Both or neither.
+    public string? ExpectedIdentity { get; set; }
+    public string? ExpectedIssuer { get; set; }
+
+    public int ShareLinkDays { get; set; } = 7;
+    public IReadOnlyList<WebhookOptions> Webhooks { get; set; } = [];
+
+    // The Hub's own address as a receiver reaches it, for the share link a webhook with
+    // IncludeShareLink carries: the delivery runs outside any request to read it from.
+    public Uri? PublicUrl { get; set; }
+
+    public bool Enabled => ImportKey is not null;
+}
+
+/// <summary>
+///     A receiver of the published and withdrawn events. Its URL is never stored nor shown:
+///     Slack and Teams URLs carry their own secret.
+/// </summary>
+public sealed record WebhookOptions
+{
+    public string Name { get; set; } = "";
+    public Uri? Url { get; set; }
+
+    public string? Secret
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    // Only public: the field states the rule in one place, an internal report never leaves.
+    public string Confidentiality { get; set; } = "public";
+    public bool IncludeShareLink { get; set; }
+    public int ShareLinkDays { get; set; } = 7;
 }
 
 public sealed record AckRelayOptions
@@ -198,6 +257,11 @@ public sealed record AnalysisOptions
     // operator came for. The trees are what gets capped instead.
     public int MaxTracesEmbedded { get; set; } = 50;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
+
+    // Memory the container's cgroup must still have free for a run to start the
+    // engine, which runs inside it: a run that cannot fit is refused with
+    // hub_memory_low instead of getting the whole Hub OOM-killed. 0 turns it off.
+    public int MinFreeMemoryMiB { get; set; } = 256;
 
     public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
 
@@ -346,6 +410,12 @@ public sealed record SourceOptions
 
     public bool HasAckCredential => AckHeaderName is not null;
 
+    // The rankings a report of this source carries in its pg_stat and mysql_stat tabs,
+    // scraped by the engine at render time. Null leaves the tab empty.
+    public DbStatOptions? PgStat { get; set; }
+
+    public DbStatOptions? MySqlStat { get; set; }
+
     // Trimmed on binding: the daemon trims its key file, so a secret mounted from a file with a
     // trailing newline must hash to the same bytes on both halves of the contract.
     public string? ImportApiKey
@@ -353,6 +423,32 @@ public sealed record SourceOptions
         get;
         set => field = value?.Trim();
     }
+}
+
+/// <summary>
+///     A Prometheus the engine scrapes for `pg_stat_statements` or Performance Schema
+///     rankings when it renders a report, the `--pg-stat-prometheus` or
+///     `--mysql-stat-prometheus` family of flags. Each value is the flag of the same name,
+///     and a null one keeps the engine's default.
+/// </summary>
+public sealed record DbStatOptions
+{
+    public Uri? Prometheus { get; set; }
+    public string? Metric { get; set; }
+    public string? QueryLabel { get; set; }
+    public string? CallsMetric { get; set; }
+    public string? Unit { get; set; }
+
+    // Label matchers such as namespace="shop",db_role="primary", for an exporter that
+    // serves several tenants or a primary with its replicas. Engine 0.31.0 and later.
+    public string? Selector { get; set; }
+
+    public int? Top { get; set; }
+
+    // Handed to the engine in an environment variable, never on its command line.
+    public string? AuthHeaderName { get; set; }
+
+    public string? AuthHeaderValue { get; set; }
 }
 
 public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = null) : IValidateOptions<HubOptions>
@@ -366,6 +462,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         var errors = new List<string>();
         ValidateHubSettings(options, errors);
         ValidateAccessSettings(options, _timeProvider.GetUtcNow(), errors);
+        ValidateDisclosures(options, errors);
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in options.Sources)
@@ -459,6 +556,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Analysis:MaxTracesEmbedded must be between 0 and 10000.");
         if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))
             errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
+        if (analysis.MinFreeMemoryMiB is < 0 or > 65_536)
+            errors.Add("Hub:Analysis:MinFreeMemoryMiB must be between 0 and 65536, 0 turning the check off.");
         if (analysis.ReportRetention <= TimeSpan.Zero)
             errors.Add("Hub:Analysis:ReportRetention must be positive.");
         if (analysis.RunRetention <= analysis.ReportRetention)
@@ -512,6 +611,35 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         ValidatePublicAuthHeader(source, errors);
         if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
             errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
+        ValidateDbStat(source.Id, "pg_stat", source.PgStat, ["seconds", "milliseconds"],
+            "seconds or milliseconds", errors);
+        ValidateDbStat(source.Id, "mysql_stat", source.MySqlStat, ["seconds", "milliseconds", "picoseconds"],
+            "seconds, milliseconds or picoseconds", errors);
+    }
+
+    // The engine checks the names and the selector grammar itself, and a render it
+    // refuses is tried again without the tab. What it would never reach is checked here.
+    private static void ValidateDbStat(
+        string sourceId,
+        string family,
+        DbStatOptions? stats,
+        string[] units,
+        string unitsText,
+        List<string> errors)
+    {
+        if (stats is null)
+            return;
+        if (stats.Prometheus is null)
+            errors.Add($"Source '{sourceId}' {family} requires a Prometheus URL.");
+        else if (IsInvalidSourceUrl(stats.Prometheus))
+            errors.Add($"Source '{sourceId}' {family} Prometheus must be an absolute HTTP(S) URL " + UrlShape);
+        if (stats.Unit is { } unit && !units.Contains(unit))
+            errors.Add($"Source '{sourceId}' {family} unit must be {unitsText}.");
+        if (stats.Top is < 1 or > 1000)
+            errors.Add($"Source '{sourceId}' {family} top must be between 1 and 1000.");
+        if (stats.Selector is { } selector && selector.Any(char.IsControl))
+            errors.Add($"Source '{sourceId}' {family} selector must not contain control characters.");
+        ValidateHeaderPair(sourceId, $"{family} auth", stats.AuthHeaderName, stats.AuthHeaderValue, errors);
     }
 
     private static void ValidateRetentionHours(SourceOptions source, List<string> errors)

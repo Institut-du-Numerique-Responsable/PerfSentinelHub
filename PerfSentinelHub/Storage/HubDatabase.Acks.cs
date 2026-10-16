@@ -142,6 +142,59 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
+    ///     The daemon acks the mirror lists at one source and that have not expired, the
+    ///     first <paramref name="cap" /> by signature, each with its held copy for the
+    ///     access check. The CI baseline is left out: no route revokes it.
+    /// </summary>
+    public async Task<IReadOnlyList<ListedAck>> ReadSourceAcksAsync(
+        string sourceId,
+        long nowMs,
+        int cap,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT sa.signature, sa.acked_by, sa.reason, sa.acked_at, sa.expires_at,
+                                     fs.signature IS NOT NULL, fs.service,
+                                     fa.grouping_key, fa.grouping_value, fa.attr_key, fa.attr_value
+                              FROM source_acks AS sa
+                              LEFT JOIN finding_sources AS fs ON fs.source_id = sa.source_id AND fs.signature = sa.signature
+                              LEFT JOIN finding_attributes AS fa
+                                ON fa.signature = fs.signature AND fa.source_id = fs.source_id
+                              WHERE sa.source_id = $source_id AND sa.origin = 'daemon'
+                                AND (sa.expires_at_ms IS NULL OR sa.expires_at_ms > $now)
+                              ORDER BY sa.signature;
+                              """;
+        command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        command.Parameters.AddWithValue("$now", nowMs);
+
+        var acks = new List<ListedAck>();
+        var rows = new List<AccessAttribute>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var signature = reader.GetString(0);
+            if (acks.Count == 0 || acks[^1].Signature != signature)
+            {
+                if (acks.Count == cap)
+                    break;
+                rows = [];
+                acks.Add(new ListedAck(
+                    signature, reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.GetBoolean(5), reader.IsDBNull(6) ? null : reader.GetString(6), rows));
+            }
+
+            if (!reader.IsDBNull(7))
+                rows.Add(new AccessAttribute(
+                    reader.GetString(7), reader.GetString(8), reader.GetString(9), reader.GetString(10)));
+        }
+
+        return acks;
+    }
+
+    /// <summary>
     ///     The last ack read per source, keyed by source id. A source with no
     ///     row has never had its acks read.
     /// </summary>
@@ -153,3 +206,14 @@ public sealed partial class HubDatabase
 
 /// <summary>An ack's target at one source: the held copy, if any, and whether the mirror lists an ack of it.</summary>
 public sealed record AckTarget(bool Held, string? Service, bool Mirrored, IReadOnlyList<AccessAttribute> Rows);
+
+/// <summary>A mirrored daemon ack as the listing reads it, with its held copy at that source, if any.</summary>
+public sealed record ListedAck(
+    string Signature,
+    string By,
+    string? Reason,
+    string At,
+    string? ExpiresAt,
+    bool Held,
+    string? Service,
+    IReadOnlyList<AccessAttribute> Rows);

@@ -12,7 +12,7 @@ internal sealed record FakeEngine
 
     public int VersionExitCode { get; init; }
 
-    /// <summary>Printed for <c>report --help</c>, which the probe reads for <c>--daemon-url</c>.</summary>
+    /// <summary>Printed for <c>report --help</c>, which the probe reads for <c>--daemon-url</c> and <c>--hub-relay</c>.</summary>
     public string Help { get; init; } = "";
 
     public int HelpExitCode { get; init; }
@@ -26,11 +26,26 @@ internal sealed record FakeEngine
 
     public int SleepSeconds { get; init; }
 
+    /// <summary>A <c>report</c> argument that makes the render exit 75, as a failed scrape does.</summary>
+    public string? RenderFailsOn { get; init; }
+
+    /// <summary>Whether <c>disclose-pdf</c> exists: its <c>--help</c> exits 0, or 2 as clap does for an unknown one.</summary>
+    public bool DisclosePdf { get; init; }
+
+    public int DisclosePdfExitCode { get; init; }
+
+    /// <summary>The reason line <c>disclose-pdf</c> prints on stdout.</summary>
+    public string DisclosePdfOutput { get; init; } = "";
+
+    /// <summary>Exits 0 without writing the PDF, which breaks the contract.</summary>
+    public bool DisclosePdfWritesNoPdf { get; init; }
+
     /// <summary>
     ///     Writes the engine at <paramref name="path" /> and returns what to launch, which on
-    ///     Windows carries a <c>.cmd</c> extension. <c>report</c> records its arguments in
-    ///     <c>render-args.txt</c> in its working directory and writes an HTML file wherever
-    ///     <c>--output</c> points, the two-step shape the real binary imposes.
+    ///     Windows carries a <c>.cmd</c> extension. <c>report</c> appends its arguments, one
+    ///     render a line, to <c>render-args.txt</c> in its working directory, writes the
+    ///     <c>pg_stat</c> auth header it was handed to <c>render-env.txt</c>, and writes an
+    ///     HTML file wherever <c>--output</c> points, the two-step shape the real binary imposes.
     /// </summary>
     public string WriteTo(string path)
     {
@@ -40,6 +55,8 @@ internal sealed record FakeEngine
         File.WriteAllText($"{path}.out", Output);
         File.WriteAllText($"{path}.err", Error);
         File.WriteAllText($"{path}.html", "<html>report</html>");
+        File.WriteAllText($"{path}.disclose", DisclosePdfOutput);
+        File.WriteAllText($"{path}.pdf", "%PDF-1.7 fake");
 
         if (OperatingSystem.IsWindows())
         {
@@ -66,8 +83,23 @@ internal sealed record FakeEngine
                 P={Quote(path)}
                 {version}
                 if [ "$1" = "report" ] && [ "$2" = "--help" ]; then cat "$P.help"; exit {HelpExitCode}; fi
+                if [ "$1" = "disclose-pdf" ]; then
+                  if [ "$2" = "--help" ]; then exit {(DisclosePdf ? 0 : 2)}; fi
+                  echo "$@" > disclose-args.txt
+                  sleep {SleepSeconds}
+                  cat "$P.disclose"
+                  if [ {DisclosePdfExitCode} = 0 ] && [ {(DisclosePdfWritesNoPdf ? 1 : 0)} = 0 ]; then
+                    while [ $# -gt 0 ]; do
+                      if [ "$1" = "--output" ]; then shift; cat "$P.pdf" > "$1"; fi
+                      shift
+                    done
+                  fi
+                  exit {DisclosePdfExitCode}
+                fi
                 if [ "$1" = "report" ]; then
-                  echo "$@" > render-args.txt
+                  echo "$@" >> render-args.txt
+                  printf '%s' "$PERF_SENTINEL_PGSTAT_AUTH_HEADER" > render-env.txt
+                  {(RenderFailsOn is null ? "" : $"case \" $* \" in *\" {RenderFailsOn} \"*) exit 75;; esac")}
                   while [ $# -gt 0 ]; do
                     if [ "$1" = "--output" ]; then shift; cat "$P.html" > "$1"; fi
                     shift
@@ -94,13 +126,27 @@ internal sealed record FakeEngine
                 set "P={path}"
                 {version}
                 if "%~1"=="report" if "%~2"=="--help" (type "%P%.help" & exit /b {HelpExitCode})
+                if "%~1"=="disclose-pdf" goto disclose
                 if not "%~1"=="report" goto query
-                >render-args.txt echo %*
+                >>render-args.txt echo %*
+                >render-env.txt echo(%PERF_SENTINEL_PGSTAT_AUTH_HEADER%
+                {(RenderFailsOn is null ? "" : $"echo %* | find \"{RenderFailsOn}\" >nul && exit /b 75")}
                 :next
                 if "%~1"=="" exit /b 0
                 if "%~1"=="--output" copy /y "%P%.html" "%~2" >nul
                 shift
                 goto next
+                :disclose
+                if "%~2"=="--help" exit /b {(DisclosePdf ? 0 : 2)}
+                >disclose-args.txt echo %*
+                {sleep}
+                type "%P%.disclose"
+                if not "{DisclosePdfExitCode}{(DisclosePdfWritesNoPdf ? 1 : 0)}"=="00" exit /b {DisclosePdfExitCode}
+                :dnext
+                if "%~1"=="" exit /b 0
+                if "%~1"=="--output" copy /y "%P%.pdf" "%~2" >nul
+                shift
+                goto dnext
                 :query
                 {sleep}
                 type "%P%.err" 1>&2

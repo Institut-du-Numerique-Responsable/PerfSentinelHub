@@ -158,6 +158,9 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `incident_reads`, `ack_reads`  | source                                                         | never                                      |
 | `analysis_runs`                | run                                                            | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | terminal token, by the SHA-256 of its value                    | revocation, or retention past `expires_at_ms` |
+| `disclosures`                  | published disclosure, its files in BLOBs                       | never, a withdrawal keeps it               |
+| `disclosure_share_links`       | share link, by the SHA-256 of its token                        | never, revocation and expiry only mark it  |
+| `disclosure_deliveries`        | webhook event of a disclosure                                  | never                                      |
 
 `finding_attributes` keeps every grouping attribute a daemon captured, up to the engine's
 eight, each under the grouping identity it came with: the first pair of that observation,
@@ -241,6 +244,41 @@ branch and every place it tested a source tests the `(signature, source_id)` pai
 `ApiEndpoints.Analysis.cs`, reads the copies of the requested service in the run's
 environment through `ReadServiceCopiesAsync`, once per environment and service for a
 request, and the listing walks `analysis_runs` newest first until it has its limit.
+
+## Disclosures
+
+A periodic disclosure is made and signed outside the Hub, by `perf-sentinel disclose` and
+cosign in a CI job, then published to the Hub. The Hub adds no figure to it. Its code lives in
+`Disclosures/` and in three route files of `Api/`.
+
+**Publishing.** `ApiEndpoints.Disclosures.cs` admits a request on the import key, its size, its
+media type and a gate of one, reads the three parts, and has `DisclosureEnvelope` read the
+report's identity, period, confidentiality and headline figures. `DisclosureRenderer` writes
+the files to a private temporary directory and runs the embedded engine's `disclose-pdf` on
+them, reading only its exit code and its one reason line, never its stderr. Exit 0 stores the
+PDF, the content hash checked and the binding too when an attestation came. Exit 1 and 3
+refuse the publication and store nothing, save `output_unwritable`, the Hub's own trouble.
+That one, exit 5, a timeout and an engine without `disclose-pdf` store the files without a
+PDF. The publication's
+`published` events are queued in the same request.
+
+**Storage.** Schema V13 (`Storage/Schema.cs`) adds the three tables above. The files sit in
+BLOB columns exactly as received, so the backup's `VACUUM INTO` carries them, and a listing
+never selects those columns. A share link is stored as the SHA-256 of its token. A delivery row
+holds the webhook's name, never its URL.
+
+**Reading and sharing.** `ApiEndpoints.DisclosureReads.cs` serves the list, the detail, the
+files and the manage actions behind `disclosures.read` and `disclosures.manage`.
+`DisclosureDownloads` names the five files both it and `ApiEndpoints.Share.cs` serve, and
+computes `SHA256SUMS`. `/share/` stands outside the access policy and answers one bare `404`
+for everything it does not serve. `ShareDownloadCounter` counts downloads in memory, so an
+anonymous request never writes to SQLite, and `ShareDownloadFlusher` adds them to the links
+once a minute.
+
+**Webhooks.** `DeliveryLoop` runs `DeliveryWorker` every 15 seconds over the due rows of
+`disclosure_deliveries`. `WebhookDelivery` writes the body and its HMAC. The worker posts
+through a named HTTP client of its own, which follows no redirect, keeps no cookie and logs
+nothing, so a webhook URL never reaches a log line.
 
 ## A run always reaches a terminal state
 

@@ -2,6 +2,93 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.7.0] - 2026-10-16
+
+### Added
+
+- A report of a daemon source that has an ack credential acknowledges through the Hub. The
+  render passes `--hub-relay` when the engine takes it (0.31.0 and later), and the report's Ack
+  and Revoke buttons call the ack relay at the Hub's own origin, in the reader's name and under
+  their rights, with access control on or off. No daemon key in the browser, no CORS entry at
+  the daemon, and no route from the viewer to the daemon. Before, such a report showed
+  "Unreachable" wherever the daemon was not exposed, and rendered static with access on.
+- `PgStat` and `MySqlStat` on a source fill a report's `pg_stat` and `mysql_stat` tabs from a
+  Prometheus the engine scrapes at render time, with a `Selector` for an exporter that serves
+  several tenants or a primary with its replicas. Before, the Hub never passed those flags and
+  the tabs stayed empty. A render the scrape fails is tried again without the tab (event 1603),
+  and the chart takes `pgStat` and `mysqlStat` per source, the auth header from a Secret.
+- `GET /api/sources/{sourceId}/acks` lists the daemon acks the Hub mirrors at a source, in
+  the shape of the daemon's own `GET /api/acks`, filtered by what the caller reads there.
+- Periodic disclosures. A CI publishes the report `perf-sentinel disclose` wrote, with its
+  attestation and Sigstore bundle when signed, to `POST /api/import/disclosures` with
+  `Hub:Disclosures:ImportKey`. The embedded engine's `disclose-pdf` checks the content hash and
+  the attestation's binding and renders a PDF/A-3b before anything is stored, and a refusal
+  stores nothing. An engine that cannot render stores the files without a PDF, to render again
+  later. A signed copy of a report stored unsigned replaces it, and is refused with a `409` when
+  its organisation, period, intent, confidentiality or figures differ. The Hub never checks a signature: it says the report declares one, and prints the
+  `verify-hash` command with `ExpectedIdentity` and `ExpectedIssuer`.
+- The Disclosures tab lists them by period, with who checked what, the files, `SHA256SUMS`, the
+  method and the disclaimers. It needs `disclosures.read`, and sharing, withdrawing, retrying
+  and rendering need `disclosures.manage`. Of the built-in roles only `admin` carries them, a
+  configured role carries them on `*` only, and a machine token never holds them.
+- Share links serve a public disclosure's files at `/share/<token>/<name>` for 1 to 30 days,
+  anonymously, the token shown once and stored as its SHA-256, so
+  `verify-hash --url https://hub/share/<token>/report.json` works from anywhere. A withdrawal
+  is final and kills every link.
+- Webhooks receive a `published` and a `withdrawn` event, signed with HMAC-SHA256 over the
+  timestamp and the body, optionally with a share link of their own, retried for 8 attempts.
+  Their URLs are never stored, shown or logged.
+- `perf_sentinel_hub_disclosure_import_rejected_total{reason}` and
+  `perf_sentinel_hub_disclosure_deliveries_failed_total`, published while disclosures are on.
+  Schema V13 keeps the files in the database, so the backup carries them, and the chart takes
+  the whole section as `hub.disclosures`, its keys and webhook URLs from Secrets.
+
+### Changed
+
+- The image ships perf-sentinel `0.31.0` as its analysis engine, repinned by digest from
+  `0.30.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.30.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.31.0` brings what the disclosures and the ack relay above run on: `disclose-pdf`, which
+  checks and renders a published report, and `report --hub-relay`. It also takes the
+  `--pg-stat-selector` and `--mysql-stat-selector` the `Selector` settings pass. No detector,
+  normalizer or finding signature changes, so every stored finding keeps its signature.
+- An analysis is refused with the new `hub_memory_low` when the container has too little memory
+  left, rather than getting the whole Hub OOM-killed: the analysis binary runs inside the Hub's
+  container, and a Hub already at 190 MB of a 256Mi limit was killed rendering an 8 MB report,
+  every request in flight with it. Before each engine run the Hub reads its cgroup v2 headroom,
+  the reclaimable page cache counted as free, against `Hub:Analysis:MinFreeMemoryMiB`, 256 by
+  default, 0 turning it off. A container without a memory limit is not checked.
+- The chart's memory limit is `1Gi` by default instead of `256Mi`, to hold the Hub, an analysis
+  and the database's page cache. Requests stay at `64Mi`.
+- The chart exposes `hub.analysis.minFreeMemoryMiB` and `hub.newSignaturesPerHourWarning`. The
+  signature-rate threshold 0.6.0 added could only be changed through the environment.
+- The chart's probes are values: `probes.startup` allows 5 minutes by default (5 seconds times
+  60) instead of 60 seconds, for a first start that migrates a large database, and
+  `probes.liveness` allows 5 seconds and 6 misses instead of 1 second and 3. `probes.readiness`
+  keeps Kubernetes' own timings.
+
+### Fixed
+
+- On a phone, the tab row scrolls to the tab of the open screen. It scrolls on its own below
+  760 pixels, so a screen opened by a link or a reload had its tab off to the right, hidden or
+  half cut.
+- A Hub on a large database no longer restarts in a loop. Its start derived, in one
+  transaction before it answered, the attribute rows that copies written by a build older than
+  0.4.0 lack, which scanned every copy: 41 to 53 seconds on a 1 GB database, against a 60-second
+  startup probe, and a kill rolled it back so every start began again. The derivation now runs
+  after the Hub answers, in the retention worker's first pass, and takes the write lock only when
+  a read-only check finds something to write.
+- An analysis page no longer says "No analysis with that ID." when the Hub merely failed to
+  answer. Any failed read of a run, a 503 while the Hub restarted included, read as an unknown ID
+  and stopped the page from asking again, so a run interrupted by that restart never showed as
+  such. Only a 404 now means an unknown run. Any other failure keeps what the page last read,
+  says the Hub is not answering, and asks again after 1 second, doubling up to 15.
+- The `/metrics` findings count runs on a thread of its own. SQLite runs its Async methods
+  synchronously, so a count of a minute held a thread pool thread for that minute, which a
+  liveness probe could then wait behind.
+
 ## [0.6.0] - 2026-10-16
 
 ### Added
