@@ -44,7 +44,10 @@ public sealed class CachedCountTests
         waiting = cache.GetAsync(cancellationToken);
         _clock.Advance(CachedCount<int>.Budget);
         Assert.Equal(7, (await waiting)?.Value);
-        Assert.Equal(2, calls);
+        // The count starts on a thread of its own, maybe after the budget ran out.
+        for (var attempt = 0; attempt < 500 && Volatile.Read(ref calls) < 2; attempt++)
+            await Task.Delay(10, cancellationToken);
+        Assert.Equal(2, Volatile.Read(ref calls));
 
         slow.SetResult(9);
         Assert.Equal(9, (await cache.GetAsync(cancellationToken))?.Value);
