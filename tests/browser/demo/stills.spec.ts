@@ -192,6 +192,8 @@ test("correlations on a phone", async ({page}, info) => {
     await openPair(page);
     // The tables scroll inside their frame. The page itself must not.
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    const tab = await page.locator('.shell-tab[aria-current="page"]').boundingBox();
+    expect(tab && tab.x >= 0 && tab.x + tab.width <= 390).toBe(true);
     await page.screenshot({
         path: nameFor("launcher-correlations-phone", info.project.name),
         fullPage: true,

@@ -70,6 +70,9 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Fixed
 
+- On a phone, the tab row scrolls to the tab of the open screen. It scrolls on its own below
+  760 pixels, so a screen opened by a link or a reload had its tab off to the right, hidden or
+  half cut.
 - A Hub on a large database no longer restarts in a loop. Its start derived, in one
   transaction before it answered, the attribute rows that copies written by a build older than
   0.4.0 lack, which scanned every copy: 41 to 53 seconds on a 1 GB database, against a 60-second

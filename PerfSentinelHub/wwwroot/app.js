@@ -612,6 +612,18 @@
         state.liveDurations = [];
     }
 
+    // On a phone the tab row scrolls on its own, and a screen opened by a link or a reload has its
+    // tab off to the right. Only the row moves: scrollIntoView would scroll the page too.
+    function revealCurrentTab() {
+        const tab = document.querySelector('.shell-tab[aria-current="page"]');
+        const row = tab && tab.closest('.shell-tabs');
+        if (!row) return;
+        const rowBox = row.getBoundingClientRect();
+        const tabBox = tab.getBoundingClientRect();
+        if (tabBox.left < rowBox.left) row.scrollLeft -= rowBox.left - tabBox.left;
+        else if (tabBox.right > rowBox.right) row.scrollLeft += tabBox.right - rowBox.right;
+    }
+
     function render() {
         // A tip whose anchor is about to be replaced would never see its mouseleave.
         closeTip();
@@ -625,6 +637,7 @@
             if (tab.getAttribute('data-screen') === screen) tab.setAttribute('aria-current', 'page');
             else tab.removeAttribute('aria-current');
         });
+        revealCurrentTab();
         const identity = document.getElementById('identity');
         if (state.screen === 'access') identity.setAttribute('aria-current', 'page');
         else identity.removeAttribute('aria-current');
