@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
@@ -138,7 +139,7 @@ public static partial class ApiEndpoints
             : null;
     }
 
-    private static IResult Rejected(DisclosureMetrics metrics, DisclosureRejection rejection, string reason)
+    private static JsonHttpResult<DisclosureRefusal> Rejected(DisclosureMetrics metrics, DisclosureRejection rejection, string reason)
     {
         return metrics.Refuse(rejection, TypedResults.Json(
             new DisclosureRefusal(reason), HubJsonContext.Default.DisclosureRefusal,
@@ -146,14 +147,14 @@ public static partial class ApiEndpoints
     }
 
     // Another report under a published uuid: a new report gets a new uuid.
-    private static IResult Conflict(DisclosureMetrics metrics)
+    private static JsonHttpResult<DisclosureRefusal> Conflict(DisclosureMetrics metrics)
     {
         return metrics.Refuse(DisclosureRejection.Conflict, TypedResults.Json(
             new DisclosureRefusal("conflict"), HubJsonContext.Default.DisclosureRefusal,
             statusCode: StatusCodes.Status409Conflict));
     }
 
-    private static IResult Accepted(DisclosureSummary summary, int status)
+    private static JsonHttpResult<DisclosureImportResponse> Accepted(DisclosureSummary summary, int status)
     {
         return TypedResults.Json(
             new DisclosureImportResponse(
@@ -238,7 +239,7 @@ public static partial class ApiEndpoints
                 return refusal;
             var (pdf, reason) = Rendering(outcome);
             await database.ReplaceSignedCopyAsync(
-                existing.Id, files, envelope.IntegrityLevel, pdf, reason, engine.Version,
+                existing.Id, files, envelope.IntegrityLevel, (pdf, reason), engine.Version,
                 timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
             return Accepted((await database.GetDisclosureAsync(existing.Id, cancellationToken))!, StatusCodes.Status200OK);
         }
@@ -251,7 +252,7 @@ public static partial class ApiEndpoints
                        envelope.Confidentiality, envelope.FiguresJson);
         }
 
-        private IResult? Refusal(RenderOutcome outcome)
+        private JsonHttpResult<DisclosureRefusal>? Refusal(RenderOutcome outcome)
         {
             return outcome switch
             {

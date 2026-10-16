@@ -57,9 +57,8 @@ public sealed partial class DeliveryWorker(
             ? await ApiEndpoints.IssueShareLinkAsync(
                 database, disclosure.Id, "webhook:" + webhook.Name, webhook.ShareLinkDays, timeProvider, cancellationToken)
             : null;
-        var shareUrl = link is null
-            ? null
-            : new Uri(publicUrl!, link.Path + (disclosure.HasPdf ? "report.pdf" : "report.json")).ToString();
+        var file = disclosure.HasPdf ? "report.pdf" : "report.json";
+        var shareUrl = link is null ? null : new Uri(publicUrl!, link.Path + file).ToString();
         var status = await SendAsync(webhook, WebhookDelivery.Body(disclosure, delivery.Event, shareUrl), cancellationToken);
 
         if (status is >= 200 and < 300)

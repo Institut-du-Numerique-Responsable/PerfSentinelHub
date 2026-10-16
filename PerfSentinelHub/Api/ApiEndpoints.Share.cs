@@ -19,7 +19,10 @@ public static partial class ApiEndpoints
     public static void MapShare(this WebApplication app)
     {
         app.MapGet("/share/{token}/{name}", ServeSharedFileAsync).AllowAnonymous();
+        // The catch-all only matches: nothing under it is read, let alone reflected.
+#pragma warning disable ASP0018
         app.MapMethods("/share/{**rest}", [HttpMethods.Get, HttpMethods.Head], NotShared).AllowAnonymous();
+#pragma warning restore ASP0018
     }
 
     // Every parameter is the route's own or a collaborator the router injects.
@@ -64,7 +67,7 @@ public static partial class ApiEndpoints
         return served;
     }
 
-    private static IResult NotShared(HttpContext context)
+    private static NotFound NotShared(HttpContext context)
     {
         Guard(context.Response);
         return TypedResults.NotFound();

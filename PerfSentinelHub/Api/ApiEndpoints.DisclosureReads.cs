@@ -49,7 +49,7 @@ public static partial class ApiEndpoints
                 Item(summary),
                 new DisclosureChecks(
                     summary.HashChecked == true ? "checked" : "not_checked",
-                    summary.HasAttestation ? summary.BindingChecked == true ? "checked" : "not_checked" : "no_attestation",
+                    BindingCheck(summary),
                     // What the report says of itself: signed, signed-with-attestation or audited.
                     summary.IntegrityLevel is "signed" or "signed-with-attestation" or "audited" ? "declared" : "absent",
                     summary.EngineVersion),
@@ -144,6 +144,8 @@ public static partial class ApiEndpoints
         return new ShareLinkCreated(linkId, token, $"/share/{token}/", expiresAtMs);
     }
 
+    // Every parameter is the route's own or a collaborator the router injects.
+#pragma warning disable S107
     private static async Task<IResult> RevokeShareLinkAsync(
         string id,
         string linkId,
@@ -153,6 +155,7 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (ManageRefusal(request, access, options.Value) is { } refused)
             return refused;
@@ -194,6 +197,8 @@ public static partial class ApiEndpoints
             : Problem(StatusCodes.Status409Conflict, "This disclosure is already withdrawn.");
     }
 
+    // Every parameter is the route's own or a collaborator the router injects.
+#pragma warning disable S107
     private static async Task<IResult> RetryDeliveryAsync(
         string id,
         string deliveryId,
@@ -203,6 +208,7 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (ManageRefusal(request, access, options.Value) is { } refused)
             return refused;
@@ -280,12 +286,10 @@ public static partial class ApiEndpoints
     {
         if (!options.Disclosures.Enabled)
             return TypedResults.NotFound();
-        return access.Scope(context, permission).IsNothing
-            ? Problem(StatusCodes.Status403Forbidden,
-                permission == AccessPermissions.DisclosuresRead
-                    ? "You may not read disclosures."
-                    : "You may not manage disclosures.")
-            : null;
+        if (!access.Scope(context, permission).IsNothing)
+            return null;
+        return Problem(StatusCodes.Status403Forbidden,
+            permission == AccessPermissions.DisclosuresRead ? "You may not read disclosures." : "You may not manage disclosures.");
     }
 
     // A write names its author, and is held to the same-origin rule the ack relay follows.
@@ -318,13 +322,26 @@ public static partial class ApiEndpoints
             summary.WithdrawnAtMs is { } at ? new DisclosureWithdrawal(at, summary.WithdrawnReason, summary.WithdrawnBy) : null);
     }
 
+    private static string BindingCheck(DisclosureSummary summary)
+    {
+        if (!summary.HasAttestation)
+            return "no_attestation";
+        return summary.BindingChecked == true ? "checked" : "not_checked";
+    }
+
+    // A withdrawal kills every link at once, whatever each row still says.
+    private static string LinkState(ShareLinkSummary link, DisclosureSummary disclosure, long nowMs)
+    {
+        if (link.RevokedAtMs is not null)
+            return "revoked";
+        if (disclosure.Withdrawn)
+            return "withdrawn";
+        return link.ExpiresAtMs <= nowMs ? "expired" : "active";
+    }
+
     private static ShareLinkView LinkView(ShareLinkSummary link, DisclosureSummary disclosure, long nowMs)
     {
-        // A withdrawal kills every link at once, whatever each row still says.
-        var state = link.RevokedAtMs is not null ? "revoked"
-            : disclosure.Withdrawn ? "withdrawn"
-            : link.ExpiresAtMs <= nowMs ? "expired" : "active";
-        return new ShareLinkView(link.Id, state, link.CreatedBy, link.CreatedAtMs, link.ExpiresAtMs, link.RevokedAtMs,
+        return new ShareLinkView(link.Id, LinkState(link, disclosure, nowMs), link.CreatedBy, link.CreatedAtMs, link.ExpiresAtMs, link.RevokedAtMs,
             link.RevokedBy, link.Downloads, link.LastUsedAtMs);
     }
 
