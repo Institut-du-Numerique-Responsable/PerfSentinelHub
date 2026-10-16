@@ -351,6 +351,12 @@ public sealed record SourceOptions
 
     public bool HasAckCredential => AckHeaderName is not null;
 
+    // The rankings a report of this source carries in its pg_stat and mysql_stat tabs,
+    // scraped by the engine at render time. Null leaves the tab empty.
+    public DbStatOptions? PgStat { get; set; }
+
+    public DbStatOptions? MySqlStat { get; set; }
+
     // Trimmed on binding: the daemon trims its key file, so a secret mounted from a file with a
     // trailing newline must hash to the same bytes on both halves of the contract.
     public string? ImportApiKey
@@ -358,6 +364,32 @@ public sealed record SourceOptions
         get;
         set => field = value?.Trim();
     }
+}
+
+/// <summary>
+///     A Prometheus the engine scrapes for `pg_stat_statements` or Performance Schema
+///     rankings when it renders a report, the `--pg-stat-prometheus` or
+///     `--mysql-stat-prometheus` family of flags. Each value is the flag of the same name,
+///     and a null one keeps the engine's default.
+/// </summary>
+public sealed record DbStatOptions
+{
+    public Uri? Prometheus { get; set; }
+    public string? Metric { get; set; }
+    public string? QueryLabel { get; set; }
+    public string? CallsMetric { get; set; }
+    public string? Unit { get; set; }
+
+    // Label matchers such as namespace="shop",db_role="primary", for an exporter that
+    // serves several tenants or a primary with its replicas. Engine 0.31.0 and later.
+    public string? Selector { get; set; }
+
+    public int? Top { get; set; }
+
+    // Handed to the engine in an environment variable, never on its command line.
+    public string? AuthHeaderName { get; set; }
+
+    public string? AuthHeaderValue { get; set; }
 }
 
 public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = null) : IValidateOptions<HubOptions>
@@ -519,6 +551,35 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         ValidatePublicAuthHeader(source, errors);
         if (source.ImportApiKey is { } importApiKey && IsInvalidImportApiKey(importApiKey))
             errors.Add($"Source '{source.Id}' import API key must contain at least 32 characters and no controls.");
+        ValidateDbStat(source.Id, "pg_stat", source.PgStat, ["seconds", "milliseconds"],
+            "seconds or milliseconds", errors);
+        ValidateDbStat(source.Id, "mysql_stat", source.MySqlStat, ["seconds", "milliseconds", "picoseconds"],
+            "seconds, milliseconds or picoseconds", errors);
+    }
+
+    // The engine checks the names and the selector grammar itself, and a render it
+    // refuses is tried again without the tab. What it would never reach is checked here.
+    private static void ValidateDbStat(
+        string sourceId,
+        string family,
+        DbStatOptions? stats,
+        string[] units,
+        string unitsText,
+        List<string> errors)
+    {
+        if (stats is null)
+            return;
+        if (stats.Prometheus is null)
+            errors.Add($"Source '{sourceId}' {family} requires a Prometheus URL.");
+        else if (IsInvalidSourceUrl(stats.Prometheus))
+            errors.Add($"Source '{sourceId}' {family} Prometheus must be an absolute HTTP(S) URL " + UrlShape);
+        if (stats.Unit is { } unit && !units.Contains(unit))
+            errors.Add($"Source '{sourceId}' {family} unit must be {unitsText}.");
+        if (stats.Top is < 1 or > 1000)
+            errors.Add($"Source '{sourceId}' {family} top must be between 1 and 1000.");
+        if (stats.Selector is { } selector && selector.Any(char.IsControl))
+            errors.Add($"Source '{sourceId}' {family} selector must not contain control characters.");
+        ValidateHeaderPair(sourceId, $"{family} auth", stats.AuthHeaderName, stats.AuthHeaderValue, errors);
     }
 
     private static void ValidateRetentionHours(SourceOptions source, List<string> errors)

@@ -26,11 +26,15 @@ internal sealed record FakeEngine
 
     public int SleepSeconds { get; init; }
 
+    /// <summary>A <c>report</c> argument that makes the render exit 75, as a failed scrape does.</summary>
+    public string? RenderFailsOn { get; init; }
+
     /// <summary>
     ///     Writes the engine at <paramref name="path" /> and returns what to launch, which on
-    ///     Windows carries a <c>.cmd</c> extension. <c>report</c> records its arguments in
-    ///     <c>render-args.txt</c> in its working directory and writes an HTML file wherever
-    ///     <c>--output</c> points, the two-step shape the real binary imposes.
+    ///     Windows carries a <c>.cmd</c> extension. <c>report</c> appends its arguments, one
+    ///     render a line, to <c>render-args.txt</c> in its working directory, writes the
+    ///     <c>pg_stat</c> auth header it was handed to <c>render-env.txt</c>, and writes an
+    ///     HTML file wherever <c>--output</c> points, the two-step shape the real binary imposes.
     /// </summary>
     public string WriteTo(string path)
     {
@@ -67,7 +71,9 @@ internal sealed record FakeEngine
                 {version}
                 if [ "$1" = "report" ] && [ "$2" = "--help" ]; then cat "$P.help"; exit {HelpExitCode}; fi
                 if [ "$1" = "report" ]; then
-                  echo "$@" > render-args.txt
+                  echo "$@" >> render-args.txt
+                  printf '%s' "$PERF_SENTINEL_PGSTAT_AUTH_HEADER" > render-env.txt
+                  {(RenderFailsOn is null ? "" : $"case \" $* \" in *\" {RenderFailsOn} \"*) exit 75;; esac")}
                   while [ $# -gt 0 ]; do
                     if [ "$1" = "--output" ]; then shift; cat "$P.html" > "$1"; fi
                     shift
@@ -95,7 +101,9 @@ internal sealed record FakeEngine
                 {version}
                 if "%~1"=="report" if "%~2"=="--help" (type "%P%.help" & exit /b {HelpExitCode})
                 if not "%~1"=="report" goto query
-                >render-args.txt echo %*
+                >>render-args.txt echo %*
+                >render-env.txt echo(%PERF_SENTINEL_PGSTAT_AUTH_HEADER%
+                {(RenderFailsOn is null ? "" : $"echo %* | find \"{RenderFailsOn}\" >nul && exit /b 75")}
                 :next
                 if "%~1"=="" exit /b 0
                 if "%~1"=="--output" copy /y "%P%.html" "%~2" >nul

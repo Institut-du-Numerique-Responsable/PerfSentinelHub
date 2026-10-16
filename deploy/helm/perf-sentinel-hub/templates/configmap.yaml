@@ -6,7 +6,15 @@ data:
   appsettings.Production.json: |-
     {{- $sources := list }}
     {{- range .Values.sources }}
-    {{- $sources = append $sources (dict "Id" .id "Name" .name "Environment" .environment "Kind" (default "daemon" .kind) "RetentionHours" .retentionHours "BaseUrl" .baseUrl "PublicUrl" .publicUrl "AuthHeaderName" .authHeaderName "PublicAuthHeaderName" .publicAuthHeaderName "AckHeaderName" .ackHeaderName) }}
+    {{- $source := dict "Id" .id "Name" .name "Environment" .environment "Kind" (default "daemon" .kind) "RetentionHours" .retentionHours "BaseUrl" .baseUrl "PublicUrl" .publicUrl "AuthHeaderName" .authHeaderName "PublicAuthHeaderName" .publicAuthHeaderName "AckHeaderName" .ackHeaderName }}
+    {{- /* The secret of an authenticated Prometheus is not here: it reaches the pod
+           as an environment variable, like the source's own credentials. */}}
+    {{- range $key, $stats := dict "PgStat" .pgStat "MySqlStat" .mysqlStat }}
+    {{- with $stats }}
+    {{- $_ := set $source $key (dict "Prometheus" .prometheus "Metric" .metric "QueryLabel" .queryLabel "CallsMetric" .callsMetric "Unit" .unit "Selector" .selector "Top" .top "AuthHeaderName" .authHeaderName) }}
+    {{- end }}
+    {{- end }}
+    {{- $sources = append $sources $source }}
     {{- end }}
     {{- $analysis := dict "EngineBinaryPath" .Values.hub.analysis.engineBinaryPath "ReportDirectory" "/data/reports" "IdentityHeader" .Values.hub.analysis.identityHeader "Workers" .Values.hub.analysis.workers "MaxTracesCap" .Values.hub.analysis.maxTracesCap "Timeout" .Values.hub.analysis.timeout "MinFreeMemoryMiB" .Values.hub.analysis.minFreeMemoryMiB "ReportRetention" .Values.hub.analysis.reportRetention "RunRetention" .Values.hub.analysis.runRetention }}
     {{- /* Nil-safe and false-safe. An upgrade with --reuse-values carries values

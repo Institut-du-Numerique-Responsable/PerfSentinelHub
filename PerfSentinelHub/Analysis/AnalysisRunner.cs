@@ -111,13 +111,7 @@ public sealed partial class AnalysisRunner(
             var summary = ReportSummary.TryParse(reportJson, out var binaryVersion);
             // Short-circuit kept on purpose: output that is not a report must
             // never reach the renderer.
-            if (summary is null ||
-                !await RenderAsync(
-                    run.Id,
-                    reportJson,
-                    configPath,
-                    LiveArguments(source),
-                    timeout.Token))
+            if (summary is null || !await RenderWithDbStatAsync(run.Id, reportJson, configPath, source, timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
             summary.ReportBytes = RenderedBytes(run.Id);
@@ -228,11 +222,58 @@ public sealed partial class AnalysisRunner(
             : [];
     }
 
+    // The engine fails a whole render on a scrape it cannot make, so a Prometheus that
+    // is down or a selector it refuses costs the tab, and not the report, on a second try.
+    private async Task<bool> RenderWithDbStatAsync(
+        string runId,
+        byte[] reportJson,
+        string? configPath,
+        SourceOptions source,
+        CancellationToken cancellationToken)
+    {
+        var live = LiveArguments(source);
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal);
+        string[] dbStat =
+        [
+            .. DbStatArguments("pg-stat", source.PgStat, "PERF_SENTINEL_PGSTAT_AUTH_HEADER", environment),
+            .. DbStatArguments("mysql-stat", source.MySqlStat, "PERF_SENTINEL_MYSQLSTAT_AUTH_HEADER", environment)
+        ];
+        if (await RenderAsync(runId, reportJson, configPath, [.. live, .. dbStat], environment, cancellationToken))
+            return true;
+        if (dbStat.Length == 0)
+            return false;
+        LogRenderedWithoutDbStat(logger, runId, source.Id);
+        return await RenderAsync(runId, reportJson, configPath, live, null, cancellationToken);
+    }
+
+    private static string[] DbStatArguments(
+        string family,
+        DbStatOptions? stats,
+        string authVariable,
+        Dictionary<string, string> environment)
+    {
+        if (stats?.Prometheus is not { } prometheus)
+            return [];
+        if (stats is { AuthHeaderName: { } headerName, AuthHeaderValue: { } headerValue })
+            environment[authVariable] = $"{headerName}: {headerValue}";
+        var arguments = new List<string> { $"--{family}-prometheus", prometheus.ToString().TrimEnd('/') };
+        foreach (var (flag, value) in new[]
+                 {
+                     ("metric", stats.Metric), ("query-label", stats.QueryLabel), ("calls-metric", stats.CallsMetric),
+                     ("unit", stats.Unit), ("selector", stats.Selector),
+                     ("top", stats.Top?.ToString(CultureInfo.InvariantCulture))
+                 })
+            if (value is not null)
+                arguments.AddRange($"--{family}-{flag}", value);
+        return [.. arguments];
+    }
+
     private async Task<bool> RenderAsync(
         string runId,
         byte[] reportJson,
         string? configPath,
-        string[] liveArguments,
+        string[] extraArguments,
+        IReadOnlyDictionary<string, string>? environment,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_analysis.ReportDirectory);
@@ -260,7 +301,7 @@ public sealed partial class AnalysisRunner(
             // viewer's browser, which only works when [daemon.cors] allowed_origins
             // carries this Hub's origin; without it the report shows itself
             // disconnected and stays static.
-            arguments.AddRange(liveArguments);
+            arguments.AddRange(extraArguments);
 
             if (configPath is not null)
             {
@@ -273,7 +314,8 @@ public sealed partial class AnalysisRunner(
                 arguments,
                 MaxReportJsonBytes,
                 _analysis.ReportDirectory,
-                cancellationToken);
+                cancellationToken,
+                environment);
             // A refused render is deterministic (bad flag, unreadable input),
             // and its stderr names the cause. Without this line the run is
             // stored as binary_failed with zero diagnostic anywhere.
@@ -397,6 +439,12 @@ public sealed partial class AnalysisRunner(
         "Render for run {RunId} exited {ExitCode}: {StandardError}")]
     private static partial void LogRenderFailed(
         ILogger logger, string runId, int exitCode, string standardError);
+
+    [LoggerMessage(
+        1603,
+        LogLevel.Warning,
+        "Render for run {RunId} failed with the database statistics of source {SourceId}: rendering without them.")]
+    private static partial void LogRenderedWithoutDbStat(ILogger logger, string runId, string sourceId);
 }
 
 internal sealed class EngineFailedException(string errorCode)

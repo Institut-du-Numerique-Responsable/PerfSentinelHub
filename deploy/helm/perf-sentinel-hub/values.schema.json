@@ -226,7 +226,9 @@
           "ackSecretName": { "type": "string", "minLength": 1 },
           "ackSecretKey": { "type": "string", "minLength": 1 },
           "importSecretName": { "type": "string", "minLength": 1 },
-          "importSecretKey": { "type": "string", "minLength": 1 }
+          "importSecretKey": { "type": "string", "minLength": 1 },
+          "pgStat": { "$ref": "#/$defs/dbStat" },
+          "mysqlStat": { "$ref": "#/$defs/dbStat" }
         }
       }
     },
@@ -287,6 +289,28 @@
         "periodSeconds": { "$ref": "#/$defs/probeSeconds" },
         "timeoutSeconds": { "$ref": "#/$defs/probeSeconds" },
         "failureThreshold": { "$ref": "#/$defs/probeCount" }
+      }
+    },
+    "dbStat": {
+      "type": "object",
+      "required": ["prometheus"],
+      "additionalProperties": false,
+      "dependentRequired": {
+        "authHeaderName": ["authSecretName", "authSecretKey"],
+        "authSecretName": ["authHeaderName", "authSecretKey"],
+        "authSecretKey": ["authHeaderName", "authSecretName"]
+      },
+      "properties": {
+        "prometheus": { "type": "string", "pattern": "^https?://" },
+        "metric": { "type": "string", "minLength": 1 },
+        "queryLabel": { "type": "string", "minLength": 1 },
+        "callsMetric": { "type": "string" },
+        "unit": { "enum": ["seconds", "milliseconds", "picoseconds"] },
+        "selector": { "type": "string", "minLength": 1 },
+        "top": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "authHeaderName": { "type": "string", "minLength": 1 },
+        "authSecretName": { "type": "string", "minLength": 1 },
+        "authSecretKey": { "type": "string", "minLength": 1 }
       }
     },
     "positiveQuantity": {

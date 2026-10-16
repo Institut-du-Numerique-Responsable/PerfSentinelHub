@@ -160,6 +160,105 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void Database_statistics_bind_per_source()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Sources:0:Id"] = "test",
+                ["Hub:Sources:0:PgStat:Prometheus"] = "http://vm.svc:8428",
+                ["Hub:Sources:0:PgStat:Metric"] = "pg_stat_statements_total_exec_time",
+                ["Hub:Sources:0:PgStat:Selector"] = "namespace=\"shop\",db_role=\"primary\"",
+                ["Hub:Sources:0:PgStat:Unit"] = "milliseconds",
+                ["Hub:Sources:0:PgStat:Top"] = "20",
+                ["Hub:Sources:0:MySqlStat:Prometheus"] = "http://vm.svc:8428"
+            })
+            .Build();
+
+        var source = Assert.Single(configuration.GetSection(HubOptions.SectionName).Get<HubOptions>()!.Sources);
+
+        Assert.Equal(new Uri("http://vm.svc:8428"), source.PgStat!.Prometheus);
+        Assert.Equal("pg_stat_statements_total_exec_time", source.PgStat.Metric);
+        Assert.Equal("namespace=\"shop\",db_role=\"primary\"", source.PgStat.Selector);
+        Assert.Equal("milliseconds", source.PgStat.Unit);
+        Assert.Equal(20, source.PgStat.Top);
+        Assert.Equal(new Uri("http://vm.svc:8428"), source.MySqlStat!.Prometheus);
+    }
+
+    [Fact]
+    public void The_chart_s_database_statistics_shape_binds_and_validates()
+    {
+        // The chart writes every key, absent ones as null.
+        using var json = new MemoryStream(Encoding.UTF8.GetBytes(
+            """{"Hub":{"Sources":[{"Id":"prod","Name":"P","Environment":"prod","BaseUrl":"https://d.example","PgStat":{"AuthHeaderName":null,"CallsMetric":null,"Metric":null,"Prometheus":"http://vm:8428","QueryLabel":null,"Selector":null,"Top":null,"Unit":null}}]}}"""));
+
+        var source = Assert.Single(new ConfigurationBuilder().AddJsonStream(json).Build()
+            .GetSection(HubOptions.SectionName).Get<HubOptions>()!.Sources);
+
+        Assert.Equal(new Uri("http://vm:8428"), source.PgStat!.Prometheus);
+        Assert.Null(source.PgStat.Top);
+        Assert.Empty(Failures(source));
+    }
+
+    [Fact]
+    public void Valid_database_statistics_pass()
+    {
+        var stats = new DbStatOptions
+        {
+            Prometheus = new Uri("https://vm.example"),
+            Unit = "milliseconds",
+            Top = 1000,
+            Selector = "db_role=\"primary\"",
+            AuthHeaderName = "Authorization",
+            AuthHeaderValue = "Bearer token" // gitleaks:allow -- synthetic test credential
+        };
+
+        Assert.Empty(Failures(ValidSource() with { PgStat = stats, MySqlStat = stats with { Unit = "picoseconds" } }));
+    }
+
+    public static TheoryData<DbStatOptions, string> InvalidDatabaseStatistics => new()
+    {
+        { new DbStatOptions { Metric = "m" }, "Source 'prod' pg_stat requires a Prometheus URL." },
+        {
+            new DbStatOptions { Prometheus = new Uri("ftp://vm") },
+            "Source 'prod' pg_stat Prometheus must be an absolute HTTP(S) URL without credentials, query, or fragment."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Unit = "picoseconds" },
+            "Source 'prod' pg_stat unit must be seconds or milliseconds."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Top = 0 },
+            "Source 'prod' pg_stat top must be between 1 and 1000."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), Selector = "a=\"b\"\n" },
+            "Source 'prod' pg_stat selector must not contain control characters."
+        },
+        {
+            new DbStatOptions { Prometheus = new Uri("http://vm"), AuthHeaderName = "Authorization" },
+            "Source 'prod' must provide both pg_stat auth header name and value."
+        }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidDatabaseStatistics))]
+    public void Invalid_database_statistics_are_rejected(DbStatOptions stats, string expected)
+    {
+        Assert.Equal(expected, Assert.Single(Failures(ValidSource() with { PgStat = stats })));
+    }
+
+    [Fact]
+    public void A_mysql_unit_also_takes_picoseconds_and_names_its_own_family()
+    {
+        var stats = new DbStatOptions { Prometheus = new Uri("http://vm"), Unit = "minutes" };
+
+        Assert.Equal(
+            "Source 'prod' mysql_stat unit must be seconds, milliseconds or picoseconds.",
+            Assert.Single(Failures(ValidSource() with { MySqlStat = stats })));
+    }
+
+    [Fact]
     public void Only_a_daemon_can_carry_an_ack_credential()
     {
         // A trace backend has no ack route: the credential would sit there for a

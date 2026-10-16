@@ -58,6 +58,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Sources[].PublicAuthHeaderName` | aucun    | Exige `PublicUrl`, sans espace ni caractère de contrôle. L'en-tête nommé par les commandes affichées à la place d'`AuthHeaderName` |
 | `Sources[].AckHeaderName/Value`  | aucun    | Daemons seulement, les deux ou aucun. Le `[daemon.ack] api_key` du daemon, envoyé sur les seuls acquittements relayés              |
 | `Sources[].ImportApiKey`         | aucune   | Identifiant de push optionnel, au moins 32 caractères, fourni via un Secret                                                        |
+| `Sources[].PgStat`, `MySqlStat`  | aucun    | Un Prometheus que le moteur interroge pour les onglets `pg_stat` et `mysql_stat` d'un rapport, voir plus bas                       |
 
 `Hub:DatabasePath` et `Hub:Analysis:ReportDirectory` valent par défaut `/data/hub.db` et
 `/data/reports`, qui sont les chemins du conteneur. Tous deux sont validés par
@@ -89,6 +90,37 @@ jamais la route publique et que le lecteur fournit son propre identifiant.
 Un Hub servi en HTTPS a besoin d'un `PublicUrl` en HTTPS pour que ses rapports soient
 live : les navigateurs bloquent les appels HTTP depuis une page HTTPS, sauf vers
 `localhost` pour la plupart d'entre eux.
+
+## Statistiques de base de données
+
+Les onglets `pg_stat` et `mysql_stat` d'un rapport classent les requêtes sur lesquelles une
+base a passé son temps, et les relient aux findings. Le Hub les remplit quand une source
+porte `PgStat` ou `MySqlStat` : au rendu, le moteur interroge ce Prometheus, avec les clés
+passées comme les options de `report` du même nom (`--pg-stat-prometheus`,
+`--pg-stat-metric`, etc.).
+
+| Clé             | Option du moteur                               | Notes                                                       |
+|-----------------|------------------------------------------------|-------------------------------------------------------------|
+| `Prometheus`    | `--pg-stat-prometheus`, `--mysql-stat-prometheus` | Obligatoire, une URL HTTP(S)                             |
+| `Metric`        | `-metric`                                      | La série de temps, quand l'exporteur nomme la sienne        |
+| `QueryLabel`    | `-query-label`                                 | Le label qui porte le texte de la requête                   |
+| `CallsMetric`   | `-calls-metric`                                | La série du compteur d'appels, vide pour la sauter          |
+| `Unit`          | `-unit`                                        | `seconds`, `milliseconds`, et `picoseconds` pour MySQL      |
+| `Selector`      | `-selector`                                    | Des matchers de labels, moteur 0.31.0 ou plus récent        |
+| `Top`           | `-top`                                         | De 1 à 1000 lignes par classement                           |
+| `AuthHeaderName/Value` | aucune                                  | Les deux ou aucun, pour un Prometheus authentifié          |
+
+`Selector` garde un seul tenant, ou le primaire seul, quand l'exporteur en sert plusieurs :
+`namespace="shop",db_role="primary"`. Sans lui, leurs requêtes sont classées ensemble.
+L'en-tête d'authentification arrive au moteur dans `PERF_SENTINEL_PGSTAT_AUTH_HEADER` ou
+`PERF_SENTINEL_MYSQLSTAT_AUTH_HEADER`, jamais sur sa ligne de commande, et sa valeur va dans
+un Secret : sous Helm, `pgStat.authSecretName` et `pgStat.authSecretKey`.
+
+Le moteur fait échouer tout le rendu quand il ne peut pas interroger Prometheus, donc le Hub
+rend alors le rapport une seconde fois sans l'onglet et journalise l'événement 1603 : un
+Prometheus en panne coûte l'onglet, pas l'analyse. Les compteurs sont cumulés depuis le
+dernier `pg_stat_statements_reset()`, donc le classement couvre cette durée et non la
+fenêtre de l'analyse.
 
 ## L'identifiant d'acquittement
 

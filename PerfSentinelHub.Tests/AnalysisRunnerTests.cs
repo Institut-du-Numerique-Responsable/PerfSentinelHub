@@ -272,6 +272,73 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_source_with_database_statistics_renders_its_tabs_and_keeps_the_header_off_the_command_line()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var runner = Runner(StubEngine(ReportJson, 0));
+        var source = Source() with
+        {
+            PgStat = new DbStatOptions
+            {
+                Prometheus = new Uri("http://vm.svc:8428/"),
+                Metric = "pg_stat_statements_total_exec_time",
+                QueryLabel = "query_sample",
+                CallsMetric = "pg_stat_statements_calls",
+                Unit = "milliseconds",
+                Selector = "namespace=\"shop\"",
+                Top = 20,
+                AuthHeaderName = "Authorization",
+                AuthHeaderValue = "Bearer pg-token" // gitleaks:allow -- synthetic test credential
+            },
+            MySqlStat = new DbStatOptions { Prometheus = new Uri("http://vm.svc:8428") }
+        };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var arguments = await File.ReadAllTextAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        Assert.Contains(
+            "--pg-stat-prometheus http://vm.svc:8428 --pg-stat-metric pg_stat_statements_total_exec_time " +
+            "--pg-stat-query-label query_sample --pg-stat-calls-metric pg_stat_statements_calls " +
+            "--pg-stat-unit milliseconds --pg-stat-selector namespace=\"shop\" --pg-stat-top 20 " +
+            "--mysql-stat-prometheus http://vm.svc:8428",
+            arguments,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("pg-token", arguments, StringComparison.Ordinal);
+        Assert.Equal(
+            "Authorization: Bearer pg-token",
+            (await File.ReadAllTextAsync(
+                Path.Combine(_workspace, "reports", "render-env.txt"),
+                cancellationToken)).Trim());
+    }
+
+    [Fact]
+    public async Task A_render_that_fails_with_database_statistics_is_tried_again_without_them()
+    {
+        // A Prometheus that is down fails the engine's whole render, and a report
+        // without its pg_stat tab is worth more than a failed run.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var runner = Runner(new FakeEngine
+        {
+            Output = ReportJson,
+            RenderFailsOn = "--pg-stat-prometheus"
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel")));
+        var source = Source() with { PgStat = new DbStatOptions { Prometheus = new Uri("http://vm.svc:8428") } };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var renders = await File.ReadAllLinesAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        Assert.Equal(2, renders.Length);
+        Assert.Contains("--pg-stat-prometheus", renders[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("--pg-stat-prometheus", renders[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_daemon_run_renders_static_when_the_engine_does_not_take_the_flag()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

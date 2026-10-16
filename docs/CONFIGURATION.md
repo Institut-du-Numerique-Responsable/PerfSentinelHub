@@ -57,6 +57,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Sources[].PublicAuthHeaderName` | none     | Requires `PublicUrl`, no spaces or controls. The header printed commands name instead of `AuthHeaderName`    |
 | `Sources[].AckHeaderName/Value`  | none     | Daemons only, both or neither. The daemon's `[daemon.ack] api_key`, sent on relayed acks alone, see below    |
 | `Sources[].ImportApiKey`         | none     | Optional push credential, at least 32 characters, supplied through a Secret                                  |
+| `Sources[].PgStat`, `MySqlStat`  | none     | A Prometheus the engine scrapes for a report's `pg_stat` and `mysql_stat` tabs, see below                   |
 
 `Hub:DatabasePath` and `Hub:Analysis:ReportDirectory` default to `/data/hub.db` and
 `/data/reports`, which are the container's paths. Both are validated with
@@ -84,6 +85,35 @@ public route and the reader supplies their own credential.
 
 A Hub served over HTTPS needs an HTTPS `PublicUrl` for its reports to go live: browsers
 block HTTP calls from an HTTPS page, with an exception for `localhost` in most of them.
+
+## Database statistics
+
+A report's `pg_stat` and `mysql_stat` tabs rank the statements a database spent its time on,
+and cross-link them with the findings. The Hub fills them when a source carries `PgStat` or
+`MySqlStat`: at render time the engine scrapes that Prometheus, with the keys passed as the
+`report` flags of the same name (`--pg-stat-prometheus`, `--pg-stat-metric`, and so on).
+
+| Key             | Engine flag                                    | Notes                                                    |
+|-----------------|------------------------------------------------|----------------------------------------------------------|
+| `Prometheus`    | `--pg-stat-prometheus`, `--mysql-stat-prometheus` | Required, an HTTP(S) URL                              |
+| `Metric`        | `-metric`                                      | The time series, when the exporter names its own         |
+| `QueryLabel`    | `-query-label`                                 | The label carrying the statement text                    |
+| `CallsMetric`   | `-calls-metric`                                | The call counter series, empty to skip it               |
+| `Unit`          | `-unit`                                        | `seconds`, `milliseconds`, and `picoseconds` for MySQL   |
+| `Selector`      | `-selector`                                    | Label matchers, engine 0.31.0 and later                  |
+| `Top`           | `-top`                                         | 1 to 1000 rows per ranking                               |
+| `AuthHeaderName/Value` | none                                    | Both or neither, for an authenticated Prometheus        |
+
+`Selector` keeps one tenant, or the primary alone, when the exporter serves several:
+`namespace="shop",db_role="primary"`. Without it, their statements are ranked together. The
+auth header reaches the engine in `PERF_SENTINEL_PGSTAT_AUTH_HEADER` or
+`PERF_SENTINEL_MYSQLSTAT_AUTH_HEADER`, never on its command line, and its value belongs in a
+Secret: under Helm, `pgStat.authSecretName` and `pgStat.authSecretKey`.
+
+The engine fails a whole render when it cannot scrape, so the Hub then renders the report
+again without the tab and logs event 1603: a Prometheus that is down costs the tab, not the
+analysis. The counters are cumulated since the last `pg_stat_statements_reset()`, so the
+ranking covers that span and not the window of the analysis.
 
 ## The ack credential
 

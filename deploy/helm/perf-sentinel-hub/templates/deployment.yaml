@@ -109,6 +109,15 @@ spec:
                   name: {{ $source.ackSecretName }}
                   key: {{ $source.ackSecretKey }}
             {{- end }}
+            {{- range $key, $stats := dict "PgStat" $source.pgStat "MySqlStat" $source.mysqlStat }}
+            {{- if and $stats $stats.authSecretName }}
+            - name: Hub__Sources__{{ $index }}__{{ $key }}__AuthHeaderValue
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $stats.authSecretName }}
+                  key: {{ $stats.authSecretKey }}
+            {{- end }}
+            {{- end }}
             {{- if $source.importSecretName }}
             - name: Hub__Sources__{{ $index }}__ImportApiKey
               valueFrom:

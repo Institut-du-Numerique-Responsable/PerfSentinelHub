@@ -12,6 +12,11 @@ All notable changes to PerfSentinelHub are recorded here.
   their rights, with access control on or off. No daemon key in the browser, no CORS entry at
   the daemon, and no route from the viewer to the daemon. Before, such a report showed
   "Unreachable" wherever the daemon was not exposed, and rendered static with access on.
+- `PgStat` and `MySqlStat` on a source fill a report's `pg_stat` and `mysql_stat` tabs from a
+  Prometheus the engine scrapes at render time, with a `Selector` for an exporter that serves
+  several tenants or a primary with its replicas. Before, the Hub never passed those flags and
+  the tabs stayed empty. A render the scrape fails is tried again without the tab (event 1603),
+  and the chart takes `pgStat` and `mysqlStat` per source, the auth header from a Secret.
 - `GET /api/sources/{sourceId}/acks` lists the daemon acks the Hub mirrors at a source, in
   the shape of the daemon's own `GET /api/acks`, filtered by what the caller reads there.
 
