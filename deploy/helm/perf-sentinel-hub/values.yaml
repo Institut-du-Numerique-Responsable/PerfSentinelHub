@@ -10,6 +10,9 @@ hub:
   resolutionGrace: "7.00:00:00"
   defaultReadLimit: 1000
   maxReadLimit: 10000
+  # A daemon that first sees more signatures than this in an hour is flagged on
+  # /api/sources and logged once. 0 turns the check off.
+  newSignaturesPerHourWarning: 1000
   # The one port /metrics answers on, and nothing else answers there; the chart
   # adds it to ASPNETCORE_HTTP_PORTS, the container and the Service (port name
   # metrics). Null answers /metrics on 8080 with everything else. Required with
@@ -23,6 +26,10 @@ hub:
     workers: 2
     maxTracesCap: 2000
     timeout: "00:05:00"
+    # Free memory, in MiB, the container needs for a run to start the engine,
+    # which runs inside it. Below it the run fails with hub_memory_low instead of
+    # getting the Hub OOM-killed. 0 turns the check off.
+    minFreeMemoryMiB: 256
     reportRetention: "1.00:00:00"
     # How long a finished run's row survives, well past the report it
     # produced: an expired run keeps its parameters so it can be relaunched
@@ -173,6 +180,11 @@ probes:
   startup: { periodSeconds: 5, failureThreshold: 60 }
   readiness: { periodSeconds: 10, timeoutSeconds: 1, failureThreshold: 3 }
   liveness: { periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 6 }
+# The analysis binary runs inside this container, so the memory limit covers the
+# Hub, an analysis in full flight and the page cache the database leaves. 256Mi
+# was too tight once the database passed a few hundred MB: a Hub already at 190 MB
+# got OOM-killed rendering an 8 MB report, every request with it. Below
+# hub.analysis.minFreeMemoryMiB of headroom a run is refused with hub_memory_low.
 resources:
   requests: { cpu: 50m, memory: 64Mi }
-  limits: { cpu: 500m, memory: 256Mi }
+  limits: { cpu: 500m, memory: 1Gi }

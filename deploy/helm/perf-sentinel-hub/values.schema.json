@@ -24,6 +24,7 @@
         "resolutionGrace": { "type": "string", "minLength": 1 },
         "defaultReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
         "maxReadLimit": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "newSignaturesPerHourWarning": { "type": "integer", "minimum": 0 },
         "metricsPort": {
           "$comment": "8080 is the main port: /metrics would answer there and nothing else would.",
           "type": ["integer", "null"], "minimum": 1, "maximum": 65535, "not": { "const": 8080 }

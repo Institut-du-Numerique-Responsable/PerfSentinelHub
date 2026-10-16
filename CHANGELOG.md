@@ -23,6 +23,16 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
+- An analysis is refused with the new `hub_memory_low` when the container has too little memory
+  left, rather than getting the whole Hub OOM-killed: the analysis binary runs inside the Hub's
+  container, and a Hub already at 190 MB of a 256Mi limit was killed rendering an 8 MB report,
+  every request in flight with it. Before each engine run the Hub reads its cgroup v2 headroom,
+  the reclaimable page cache counted as free, against `Hub:Analysis:MinFreeMemoryMiB`, 256 by
+  default, 0 turning it off. A container without a memory limit is not checked.
+- The chart's memory limit is `1Gi` by default instead of `256Mi`, to hold the Hub, an analysis
+  and the database's page cache. Requests stay at `64Mi`.
+- The chart exposes `hub.analysis.minFreeMemoryMiB` and `hub.newSignaturesPerHourWarning`. The
+  signature-rate threshold 0.6.0 added could only be changed through the environment.
 - The chart's probes are values: `probes.startup` allows 5 minutes by default (5 seconds times
   60) instead of 60 seconds, for a first start that migrates a large database, and
   `probes.liveness` allows 5 seconds and 6 misses instead of 1 second and 3. `probes.readiness`
