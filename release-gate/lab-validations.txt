@@ -145,3 +145,21 @@ v0.4.1	fd3e14c	2026-10-15	PASS
 # one was built from v0.29.0. Not run: hub-lineage-mutation and
 # hub-retention-purge, which neither the import nor the launcher touches.
 v0.5.0	6c7dfdb	2026-10-15	PASS
+# v0.6.0, 2026-10-16. The release adds POST /api/import/correlations and the
+# Correlations screen, the protections against a producer minting signatures
+# (bounded and spaced findings count, database size gauge, signature-rate
+# warning, database_full) and repins the engine to perf-sentinel 0.30.0.
+# Ten hub-* scenarios ran green on lab commit 7593c1e: hub-ingestion,
+# hub-derived-status, hub-source-reachability, hub-plugin-contract,
+# hub-incidents-mirror, hub-incidents-push, hub-correlations-push,
+# hub-lineage-mutation, hub-retention-purge (schema V12 index included) and
+# hub-access-control. The image perf-sentinel-hub:0.6.0-8bb5019 was built by
+# seed-hub-local from the release branch at 8bb5019 and answers 0.6.0 with
+# engine 0.30.0, the published perf-sentinel image pinned by digest. The
+# daemon was the published perf-sentinel 0.30.0 image, pinned by digest
+# sha256:0371d9b6, except in hub-incidents-push, whose isolated daemon runs
+# with imagePullPolicy Never: it ran on perf-sentinel:0.30.0-f9ae9f35, the
+# local build of the same source tree. hub-access-control used a local
+# release binary built from that tree. The lab ran with local, uncommitted
+# image pins in its daemon and Hub manifests.
+v0.6.0	7593c1e	2026-10-16	PASS
