@@ -28,7 +28,8 @@ which a pair of findings kept following each other. It takes the same key, the s
 and the same five-second write wait, 1 to 100 episodes and at most 1 MiB per request. Each episode
 is checked on its own: a 32-character hex `id` and `pair_key`, a known finding type on both sides,
 `started_at_ms` no later than `last_seen_ms`, an `ended_at_ms` absent or no earlier than the start,
-confidences between 0 and 1. An invalid one is counted in `rejected` while the others land, and a
+confidences between 0 and 1, a positive `gap_ms`, co-occurrence counts of 0 or more, and sample trace
+ids of at most 64 characters when present. An invalid one is counted in `rejected` while the others land, and a
 batch with none valid is a `400`. Copies of one episode merge in any order: the earliest start, the
 latest `last_seen_ms` and the highest peaks win, the rolling values come from the newer copy, and
 an end is kept once seen. Refusals count on `perf_sentinel_hub_correlation_import_rejected_total`.

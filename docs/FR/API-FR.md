@@ -29,8 +29,9 @@ pendant laquelle une paire de findings n'a pas cessé de se suivre. Il prend la 
 porte à quatre places et la même attente d'écriture de cinq secondes, de 1 à 100 épisodes et 1 Mio
 au plus par requête. Chaque épisode est vérifié seul : un `id` et une `pair_key` de 32 caractères
 hexadécimaux, un type de finding connu des deux côtés, un `started_at_ms` au plus égal à
-`last_seen_ms`, un `ended_at_ms` absent ou au moins égal au début, des confiances entre 0 et 1. Un
-épisode invalide est compté dans `rejected` pendant que les autres sont enregistrés, et un lot sans
+`last_seen_ms`, un `ended_at_ms` absent ou au moins égal au début, des confiances entre 0 et 1, un
+`gap_ms` positif, des nombres de co-occurrences d'au moins 0, et des identifiants de trace d'exemple
+de 64 caractères au plus quand ils sont présents. Un épisode invalide est compté dans `rejected` pendant que les autres sont enregistrés, et un lot sans
 aucun épisode valide est un `400`. Les copies d'un même épisode fusionnent dans n'importe quel
 ordre : le début le plus ancien, le `last_seen_ms` le plus récent et les pics les plus hauts
 l'emportent, les valeurs glissantes viennent de la copie la plus récente, et une fin est gardée une
