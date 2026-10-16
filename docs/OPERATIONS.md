@@ -281,8 +281,8 @@ alarming, which is a case for the fleet screen.
 
 ## Disclosures
 
-With `Hub:Disclosures:ImportKey` set, the Hub takes periodic disclosures from a CI, see
-[API.md](API.md#disclosures). Three things change in how it runs.
+With `Hub:Disclosures:ImportKey` set, the Hub takes periodic disclosures from a scheduled job,
+see [API.md](API.md#disclosures). Three things change in how it runs.
 
 **Request logs.** A share link's token travels in the request path, and ASP.NET Core's hosting
 layer logs every path at Information. While disclosures are on, the Hub raises

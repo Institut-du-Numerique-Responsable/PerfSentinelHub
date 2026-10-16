@@ -341,7 +341,7 @@ async function seedCorrelations(importKey: string): Promise<void> {
         {episodes: [episode(5, quiet, 0xa3, now - 9 * hour, now - 510 * minute, now - 510 * minute, 0.7)]});
 }
 
-// The disclosures screens read what a CI publishes, and nothing here publishes. So three
+// The disclosures screens read what a scheduled job publishes, and nothing here publishes. So three
 // quarters are published through the Hub's import the way a CI does: the engine's own
 // official example report, its uuid, period and figures varied per quarter, its hash baked
 // by the engine, and for two of them the attestation `disclose --emit-attestation` writes,

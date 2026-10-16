@@ -336,7 +336,7 @@ internal static class Schema
                                   ON finding_sources(source_id, first_seen_ms);
                                 """;
 
-    // Periodic disclosures a CI publishes. The files are kept exactly as received in BLOBs,
+    // Periodic disclosures a scheduled job publishes. The files are kept exactly as received in BLOBs,
     // so the backup's VACUUM INTO carries them, and a listing never selects those columns.
     internal const string V13 = """
                                 CREATE TABLE IF NOT EXISTS disclosures (

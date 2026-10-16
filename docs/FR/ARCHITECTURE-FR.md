@@ -269,9 +269,10 @@ ancien jusqu'à sa limite.
 
 ## Les divulgations
 
-Une divulgation périodique est produite et signée hors du Hub, par `perf-sentinel disclose`
-et cosign dans un job de CI, puis publiée sur le Hub. Le Hub n'y ajoute aucun chiffre. Son
-code vit dans `Disclosures/` et dans trois fichiers de routes d'`Api/`.
+Une divulgation périodique est produite et signée hors du Hub : une tâche planifiée, en pratique
+un workflow de CI, passe `perf-sentinel disclose` sur les archives des daemons de production et
+cosign sur sa sortie, puis la publie sur le Hub. Le Hub n'y ajoute aucun chiffre. Son code vit
+dans `Disclosures/` et dans trois fichiers de routes d'`Api/`.
 
 **Publication.** `ApiEndpoints.Disclosures.cs` admet une requête sur la clé d'import, sa
 taille, son type de média et une porte à une place, lit les trois parties, et fait lire à

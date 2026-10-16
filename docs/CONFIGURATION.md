@@ -40,7 +40,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:Auth:*`                       | off                                                                         | OAuth2 browser sign-in, can be limited to groups, see [AUTHENTICATION.md](AUTHENTICATION.md)    |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                     | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
 | `Hub:Access:*`                     | off                                                                         | Access control, see below and [ACCESS-CONTROL.md](ACCESS-CONTROL.md)                            |
-| `Hub:Disclosures:*`                | off                                                                         | Periodic disclosures a CI publishes, see [below](#disclosures)                                  |
+| `Hub:Disclosures:*`                | off                                                                         | Periodic disclosures a scheduled job publishes, see [below](#disclosures)                       |
 | `Hub:Sources`                      | none                                                                        | At least one source                                                                             |
 
 ## Per-source settings
@@ -233,7 +233,7 @@ accounts without `auth.trustedProxyNetworks`. No message ever echoes a hash.
 
 ## Disclosures
 
-`Hub:Disclosures` turns on the periodic disclosures a CI publishes, see
+`Hub:Disclosures` turns on the periodic disclosures a scheduled job publishes, see
 [API.md](API.md#disclosures). It is on when `ImportKey` is set, and off, the default, every
 disclosure route answers `404`, the launcher shows no Disclosures tab, and no webhook is
 called. Each rule below is checked at startup and its message names the key.
