@@ -279,9 +279,11 @@ A card opens the disclosure's own screen:
 - **Applications**, and **Method and limits** with the disclaimers, read from `report.json` as
   the report states them.
 
-A holder of `disclosures.manage`, or anyone on a Hub without access control, also gets New
-share link, Render again on a disclosure not rendered, Retry on a delivery that has not gone
-through, and Withdraw, which asks for a reason and says the step is final. An internal or withdrawn disclosure offers no share link.
+A holder of `disclosures.manage` the Hub can name, through a session or the trusted identity
+header, also gets New share link, Render again on a disclosure not rendered, Retry on a
+delivery that has not gone through, and Withdraw, which asks for a reason and says the step is
+final. On a Hub without access control, that is whoever the Hub can name. An internal or
+withdrawn disclosure offers no share link.
 
 ## The ack page
 

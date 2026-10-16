@@ -222,7 +222,8 @@ public sealed record DisclosureDetail(
     IReadOnlyList<ShareLinkView> ShareLinks,
     IReadOnlyList<DeliveryView> Deliveries,
     string? ExpectedIdentity,
-    string? ExpectedIssuer);
+    string? ExpectedIssuer,
+    bool CanManage);
 
 /// <summary>A new share link, its token shown this once.</summary>
 public sealed record ShareLinkCreated(string Id, string Token, string Path, long ExpiresAtMs);

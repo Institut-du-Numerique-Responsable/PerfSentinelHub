@@ -53,14 +53,17 @@ public static partial class ApiEndpoints
                     // What the report says of itself: signed, signed-with-attestation or audited.
                     summary.IntegrityLevel is "signed" or "signed-with-attestation" or "audited" ? "declared" : "absent",
                     summary.EngineVersion),
-                [.. (await database.ListShareLinksAsync(id, cancellationToken)).Select(link => LinkView(link, nowMs))],
+                [.. (await database.ListShareLinksAsync(id, cancellationToken)).Select(link => LinkView(link, summary, nowMs))],
                 [
                     .. (await database.ListDeliveriesAsync(id, cancellationToken)).Select(delivery => new DeliveryView(
                         delivery.Id, delivery.Webhook, delivery.Event, delivery.State, delivery.Attempts,
                         delivery.LastAttemptMs, delivery.NextAttemptMs, delivery.LastStatus))
                 ],
                 disclosures.ExpectedIdentity,
-                disclosures.ExpectedIssuer),
+                disclosures.ExpectedIssuer,
+                // What ManageRefusal checks before the request itself, so the screen offers what the Hub accepts.
+                DisclosureRefusal(context, access, options.Value, AccessPermissions.DisclosuresManage) is null &&
+                RelayIdentity(context.Request, options.Value) is not null),
             HubJsonContext.Default.DisclosureDetail);
     }
 
@@ -303,9 +306,12 @@ public static partial class ApiEndpoints
             summary.WithdrawnAtMs is { } at ? new DisclosureWithdrawal(at, summary.WithdrawnReason, summary.WithdrawnBy) : null);
     }
 
-    private static ShareLinkView LinkView(ShareLinkSummary link, long nowMs)
+    private static ShareLinkView LinkView(ShareLinkSummary link, DisclosureSummary disclosure, long nowMs)
     {
-        var state = link.RevokedAtMs is not null ? "revoked" : link.ExpiresAtMs <= nowMs ? "expired" : "active";
+        // A withdrawal kills every link at once, whatever each row still says.
+        var state = link.RevokedAtMs is not null ? "revoked"
+            : disclosure.Withdrawn ? "withdrawn"
+            : link.ExpiresAtMs <= nowMs ? "expired" : "active";
         return new ShareLinkView(link.Id, state, link.CreatedBy, link.CreatedAtMs, link.ExpiresAtMs, link.RevokedAtMs,
             link.RevokedBy, link.Downloads, link.LastUsedAtMs);
     }

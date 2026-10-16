@@ -634,12 +634,14 @@ engine recomputed it here, `not_checked` otherwise. `binding` is `checked`, `not
 `no_attestation`. `signature` is only ever `declared` or `absent`: what the report's
 `integrity_level` says of itself, since the Hub never checks a signature. `engine_version` is
 the engine that rendered it. `share_links` lists each link without its token: `id`, `state`
-(`active`, `expired` or `revoked`), `created_by`, `created_at_ms`, `expires_at_ms`,
-`revoked_at_ms`, `revoked_by`, `downloads` and `last_used_at_ms`. `deliveries` lists each
+(`active`, `expired`, `revoked`, or `withdrawn` once its disclosure is), `created_by`,
+`created_at_ms`, `expires_at_ms`, `revoked_at_ms`, `revoked_by`, `downloads` and
+`last_used_at_ms`. `deliveries` lists each
 webhook event by the webhook's name, never its URL: `id`, `webhook`, `event`, `state`
 (`pending`, `delivered` or `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` and
 `last_status`. `expected_identity` and `expected_issuer` are the configured signer, for the
-verify command.
+verify command. `can_manage` says whether this caller may take the actions below: it holds
+`disclosures.manage` and the Hub can name it.
 
 The file names are `report.json`, `attestation.intoto.jsonl`, `bundle.sig`, `report.pdf` and
 `SHA256SUMS`, computed on each request in the format `sha256sum -c` reads. Any other name, or

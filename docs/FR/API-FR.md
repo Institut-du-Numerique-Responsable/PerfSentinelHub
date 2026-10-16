@@ -679,12 +679,15 @@ moteur l'a recalculée ici, `not_checked` sinon. `binding` vaut `checked`, `not_
 `no_attestation`. `signature` ne vaut jamais que `declared` ou `absent` : ce que le
 `integrity_level` du rapport dit de lui-même, puisque le Hub ne vérifie jamais une signature.
 `engine_version` est le moteur qui l'a rendu. `share_links` liste chaque lien sans son jeton :
-`id`, `state` (`active`, `expired` ou `revoked`), `created_by`, `created_at_ms`,
+`id`, `state` (`active`, `expired`, `revoked`, ou `withdrawn` une fois sa divulgation
+retirée), `created_by`, `created_at_ms`,
 `expires_at_ms`, `revoked_at_ms`, `revoked_by`, `downloads` et `last_used_at_ms`.
 `deliveries` liste chaque événement de webhook par le nom du webhook, jamais son URL : `id`,
 `webhook`, `event`, `state` (`pending`, `delivered` ou `failed`), `attempts`,
 `last_attempt_ms`, `next_attempt_ms` et `last_status`. `expected_identity` et
 `expected_issuer` sont le signataire configuré, pour la commande de vérification.
+`can_manage` dit si cet appelant peut mener les actions ci-dessous : il détient
+`disclosures.manage` et le Hub sait le nommer.
 
 Les noms de fichier sont `report.json`, `attestation.intoto.jsonl`, `bundle.sig`,
 `report.pdf` et `SHA256SUMS`, calculé à chaque requête au format que lit `sha256sum -c`. Tout

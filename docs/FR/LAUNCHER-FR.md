@@ -307,10 +307,11 @@ Une carte ouvre l'écran propre à la divulgation :
 - **Applications**, et **Méthode et limites** avec les avertissements, lus dans `report.json`
   tels que le rapport les énonce.
 
-Un détenteur de `disclosures.manage`, ou n'importe qui sur un Hub sans contrôle d'accès,
-dispose aussi de New share link, de Render again sur une divulgation non rendue, de Retry sur
-une livraison qui n'est pas passée, et de Withdraw, qui demande une raison et dit que l'étape
-est définitive. Une divulgation interne ou retirée n'offre aucun lien de partage.
+Un détenteur de `disclosures.manage` que le Hub sait nommer, par une session ou par l'en-tête
+d'identité de confiance, dispose aussi de New share link, de Render again sur une divulgation
+non rendue, de Retry sur une livraison qui n'est pas passée, et de Withdraw, qui demande une
+raison et dit que l'étape est définitive. Sur un Hub sans contrôle d'accès, c'est quiconque le
+Hub sait nommer. Une divulgation interne ou retirée n'offre aucun lien de partage.
 
 ## La page d'acquittement
 

@@ -245,6 +245,38 @@ public sealed class DisclosuresApiTests : IDisposable
     }
 
     [Fact]
+    public async Task The_links_of_a_withdrawn_disclosure_read_withdrawn()
+    {
+        var hub = Hub();
+        await SeedAsync(hub, "d1", "u1", "2026-09-30");
+        using var client = hub.CreateClient();
+        (await client.SendAsync(Manage("/api/disclosures/d1/share-links", "{}"), TestContext.Current.CancellationToken)).Dispose();
+        await Database(hub).WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
+
+        using var detail = JsonDocument.Parse(await client.GetStringAsync("/api/disclosures/d1", TestContext.Current.CancellationToken));
+
+        Assert.Equal("withdrawn", detail.RootElement.GetProperty("share_links")[0].GetProperty("state").GetString());
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task The_detail_says_whether_the_caller_may_act_on_it(bool named, bool expected)
+    {
+        var hub = Hub();
+        await SeedAsync(hub, "d1", "u1", "2026-09-30");
+        using var client = hub.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/disclosures/d1");
+        if (named)
+            request.Headers.TryAddWithoutValidation("X-Forwarded-User", "alice");
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        using var detail = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(expected, detail.RootElement.GetProperty("can_manage").GetBoolean());
+    }
+
+    [Fact]
     public async Task A_failed_delivery_is_retried_and_a_delivered_one_is_not()
     {
         var hub = Hub();

@@ -5953,14 +5953,6 @@
         ['SHA256SUMS', 'one line per file, for sha256sum -c', 'report']
     ];
 
-    /** A holder of disclosures.manage, or anyone on a Hub without access control. */
-    function canManageDisclosures() {
-        if (!state.access) return true;
-        return state.access.admin || (state.access.reach || []).some(function (reach) {
-            return (reach.permissions || []).indexOf('disclosures.manage') >= 0;
-        });
-    }
-
     function loadDisclosures() {
         state.disclosures = null;
         state.disclosuresError = false;
@@ -6408,7 +6400,8 @@
 
     function linkState(link) {
         return link.state === 'active' ? 'expires in ' + PSL.dur(link.expires_at_ms - Date.now())
-            : link.state === 'revoked' ? 'revoked by ' + link.revoked_by : 'expired';
+            : link.state === 'revoked' ? 'revoked by ' + link.revoked_by
+                : link.state === 'withdrawn' ? 'dead with the withdrawal' : 'expired';
     }
 
     function shareLinksPanel(detail, manage) {
@@ -6571,7 +6564,8 @@
             return section;
         }
         const item = detail.disclosure;
-        const manage = canManageDisclosures();
+        // The Hub decides: an action needs disclosures.manage and a caller it can name.
+        const manage = detail.can_manage === true;
         [
             ruledOverline('// disclosure · ' + periodLabel(item.period)),
             el('h1', {class: 'page-title', text: item.organisation + ', ' + longDate(item.period.from) + ' to '
