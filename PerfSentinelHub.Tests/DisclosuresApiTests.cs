@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -242,6 +243,42 @@ public sealed class DisclosuresApiTests : IDisposable
         var summary = (await Database(hub).GetDisclosureAsync("d1", CancellationToken.None))!;
         Assert.True(summary.HasPdf);
         Assert.Null(summary.RenderReason);
+    }
+
+    [Fact]
+    public async Task Rendering_again_is_503_while_an_import_holds_the_engine()
+    {
+        var hub = Hub(new FakeEngine { DisclosePdf = true, DisclosePdfOutput = """{"result":"rendered"}""" });
+        await SeedAsync(hub, "d1", "u1", "2026-09-30", pdf: null, renderReason: "unsupported_engine");
+        var gate = hub.Services.GetRequiredService<DisclosureImportGate>();
+        Assert.True(gate.TryEnter());
+        using var client = hub.CreateClient();
+
+        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"), TestContext.Current.CancellationToken);
+
+        gate.Exit();
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.False((await Database(hub).GetDisclosureAsync("d1", CancellationToken.None))!.HasPdf);
+    }
+
+    [Fact]
+    public async Task A_render_again_the_engine_refuses_is_422_and_stays_on_the_disclosure()
+    {
+        var hub = Hub(new FakeEngine
+        {
+            DisclosePdf = true,
+            DisclosePdfExitCode = 1,
+            DisclosePdfOutput = """{"result":"refused","reason":"content_hash_mismatch"}"""
+        });
+        await SeedAsync(hub, "d1", "u1", "2026-09-30", pdf: null, renderReason: "unsupported_engine");
+        using var client = hub.CreateClient();
+
+        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var summary = (await Database(hub).GetDisclosureAsync("d1", CancellationToken.None))!;
+        Assert.Equal("content_hash_mismatch", summary.RenderReason);
+        Assert.False(summary.HashChecked);
     }
 
     [Fact]

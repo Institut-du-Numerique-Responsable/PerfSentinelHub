@@ -220,7 +220,11 @@ public static partial class ApiEndpoints
         return TypedResults.NoContent();
     }
 
-    /// <summary>Runs the engine again on the stored files, for a disclosure stored before it could render.</summary>
+    /// <summary>
+    ///     Runs the engine again on the stored files, for a disclosure stored before it could
+    ///     render. Under the import gate: a render racing a signed copy would write its PDF over
+    ///     the new one. A refusal stays on the disclosure, so a report found altered says so.
+    /// </summary>
     // Every parameter is the route's own or a collaborator the router injects.
 #pragma warning disable S107
     private static async Task<IResult> RenderDisclosureAsync(
@@ -228,6 +232,7 @@ public static partial class ApiEndpoints
         HttpRequest request,
         HubDatabase database,
         DisclosureRenderer renderer,
+        DisclosureImportGate gate,
         EngineProbe engine,
         AccessPolicy access,
         IOptions<HubOptions> options,
@@ -236,31 +241,42 @@ public static partial class ApiEndpoints
     {
         if (ManageRefusal(request, access, options.Value) is { } refused)
             return refused;
-        if (await database.ReadFileAsync(id, DisclosureFile.Report, cancellationToken) is not { } report)
-            return TypedResults.NotFound();
-        var files = new DisclosureFiles(
-            report,
-            await database.ReadFileAsync(id, DisclosureFile.Attestation, cancellationToken),
-            await database.ReadFileAsync(id, DisclosureFile.Bundle, cancellationToken));
-        var outcome = await renderer.RenderAsync(files, cancellationToken);
-        switch (outcome)
+        if (!gate.TryEnter())
         {
-            case RenderOutcome.Refused or RenderOutcome.Malformed:
-                return TypedResults.Json(
-                    new DisclosureRefusal(outcome is RenderOutcome.Refused r ? r.Reason : ((RenderOutcome.Malformed)outcome).Reason),
-                    HubJsonContext.Default.DisclosureRefusal, statusCode: StatusCodes.Status422UnprocessableEntity);
-            case RenderOutcome.Rendered rendered:
-                await database.SetPdfAsync(id, rendered.Pdf, null, engine.Version, true,
-                    files.Attestation is null ? null : true, cancellationToken);
-                break;
-            default:
-                await database.SetPdfAsync(id, null,
-                    outcome is RenderOutcome.Unrenderable u ? u.Reason : UnsupportedEngine, engine.Version, null, null,
-                    cancellationToken);
-                break;
+            request.HttpContext.Response.Headers.RetryAfter = "1";
+            return Problem(StatusCodes.Status503ServiceUnavailable, "A disclosure is being published; try again in a moment.");
         }
 
-        return Accepted((await database.GetDisclosureAsync(id, cancellationToken))!, StatusCodes.Status200OK);
+        try
+        {
+            if (await database.ReadFileAsync(id, DisclosureFile.Report, cancellationToken) is not { } report)
+                return TypedResults.NotFound();
+            var files = new DisclosureFiles(
+                report,
+                await database.ReadFileAsync(id, DisclosureFile.Attestation, cancellationToken),
+                await database.ReadFileAsync(id, DisclosureFile.Bundle, cancellationToken));
+            var outcome = await renderer.RenderAsync(files, cancellationToken);
+            // The engine checks the hash before the binding: a binding refusal means the hash held.
+            (byte[]? Pdf, string? Reason, bool? Hash, bool? Binding) render = outcome switch
+            {
+                RenderOutcome.Rendered rendered => (rendered.Pdf, null, true, files.Attestation is null ? null : true),
+                RenderOutcome.Refused { Reason: "binding_mismatch" } unbound => (null, unbound.Reason, true, false),
+                RenderOutcome.Refused altered => (null, altered.Reason, false, null),
+                RenderOutcome.Malformed malformed => (null, malformed.Reason, null, null),
+                RenderOutcome.Unrenderable unrenderable => (null, unrenderable.Reason, null, null),
+                _ => (null, UnsupportedEngine, null, null)
+            };
+            await database.SetPdfAsync(id, render.Pdf, render.Reason, engine.Version, render.Hash, render.Binding,
+                cancellationToken);
+            return outcome is RenderOutcome.Refused or RenderOutcome.Malformed
+                ? TypedResults.Json(new DisclosureRefusal(render.Reason!), HubJsonContext.Default.DisclosureRefusal,
+                    statusCode: StatusCodes.Status422UnprocessableEntity)
+                : Accepted((await database.GetDisclosureAsync(id, cancellationToken))!, StatusCodes.Status200OK);
+        }
+        finally
+        {
+            gate.Exit();
+        }
     }
 
     // Disclosures off is a 404, so an off Hub tells nothing; then the Hub-level permission.

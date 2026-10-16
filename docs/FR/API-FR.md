@@ -701,13 +701,13 @@ d'identité une fois `Hub:AckRelay:TrustIdentityHeader` posé. Elles suivent aus
 même origine : un `Sec-Fetch-Site` présent qui ne vaut pas `same-origin` est un `403`, et un
 type de contenu qui n'est pas du JSON un `415`, un `DELETE` compris.
 
-| Endpoint                                                   | Corps                | Réponses                                                   |
-|------------------------------------------------------------|----------------------|------------------------------------------------------------|
-| `POST /api/disclosures/{id}/share-links`                   | `{"days":n}` ou `{}` | `201` avec le jeton, une seule fois                        |
-| `DELETE /api/disclosures/{id}/share-links/{linkId}`        | aucun                | `204`, ou `404` pour un lien inconnu ou déjà révoqué       |
-| `POST /api/disclosures/{id}/withdraw`                      | `{"reason":"…"}`     | `204`, ou `409` si elle est déjà retirée                   |
-| `POST /api/disclosures/{id}/deliveries/{deliveryId}/retry` | `{}`                 | `204`, ou `409` pour une livraison déjà passée             |
-| `POST /api/disclosures/{id}/render`                        | `{}`                 | `200` avec la réponse d'une publication, ou `422` avec une raison |
+| Endpoint                                                   | Corps                | Réponses                                                                 |
+|------------------------------------------------------------|----------------------|--------------------------------------------------------------------------|
+| `POST /api/disclosures/{id}/share-links`                   | `{"days":n}` ou `{}` | `201` avec le jeton, une seule fois                                      |
+| `DELETE /api/disclosures/{id}/share-links/{linkId}`        | aucun                | `204`, ou `404` pour un lien inconnu ou déjà révoqué                     |
+| `POST /api/disclosures/{id}/withdraw`                      | `{"reason":"…"}`     | `204`, ou `409` si elle est déjà retirée                                 |
+| `POST /api/disclosures/{id}/deliveries/{deliveryId}/retry` | `{}`                 | `204`, ou `409` pour une livraison déjà passée                           |
+| `POST /api/disclosures/{id}/render`                        | `{}`                 | `200` avec la réponse d'une publication, `422` avec une raison, ou `503` |
 
 Un lien de partage dure `days`, de 1 à 30, `Hub:Disclosures:ShareLinkDays` quand le corps
 l'omet. La réponse,
@@ -725,7 +725,10 @@ sous un nouvel uuid.
 Une relance remet dans la file une livraison qui attend ou qui a abandonné, due au passage
 suivant. Elle repart d'un compte de tentatives à zéro, si bien qu'une livraison qui avait
 abandonné retrouve tout le délai de reprise. Un rendu relance le moteur sur les fichiers
-stockés, pour une divulgation stockée avant de pouvoir être rendue.
+stockés, pour une divulgation stockée avant de pouvoir être rendue. Il n'attend aucune
+publication : s'il y en a une en cours, il répond `503` avec `Retry-After: 1`. Un refus reste
+sur la divulgation, `pdf` valant `not_checked` et `render_reason` le nommant, si bien qu'un
+rapport que le moteur trouve altéré le dit.
 
 ### Liens de partage
 

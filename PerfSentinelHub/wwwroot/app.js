@@ -5943,7 +5943,9 @@
         unsupported_characters: 'the report holds text the PDF fonts cannot draw',
         pdf_export_failed: 'the engine could not write the PDF',
         output_unwritable: 'the Hub could not write the PDF',
-        timeout: 'the render took longer than the Hub allows'
+        timeout: 'the render took longer than the Hub allows',
+        content_hash_mismatch: 'the engine found the report altered since its hash was baked',
+        binding_mismatch: 'the engine found the attestation is not over this report'
     };
     const DISCLOSURE_FILES = [
         ['report.pdf', 'PDF/A-3b, carries the three files below as attachments', 'pdf'],
@@ -6160,10 +6162,14 @@
             })]));
         }
         if (item.pdf !== 'rendered') {
-            banners.push(el('div', {class: 'banner', 'data-tone': 'info'}, [el('div', {
-                text: 'Not checked here: ' + (RENDER_REASONS[item.render_reason] || item.render_reason || 'no render yet')
+            // A render again the engine refused: the files are suspect, not merely unchecked.
+            const refused = item.render_reason === 'content_hash_mismatch' || item.render_reason === 'binding_mismatch';
+            const text = el('div', {
+                text: (refused ? 'Refused here: ' : 'Not checked here: ')
+                    + (RENDER_REASONS[item.render_reason] || item.render_reason || 'no render yet')
                     + '. The files are kept as they arrived, and the figures are the report\'s own.'
-            })]));
+            });
+            banners.push(el('div', {class: 'banner', 'data-tone': refused ? 'crit' : 'info'}, refused ? [critGlyph(16), text] : [text]));
         }
         return banners;
     }

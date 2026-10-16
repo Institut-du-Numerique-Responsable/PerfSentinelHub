@@ -655,13 +655,13 @@ These routes need `disclosures.manage` and somebody to name, as the
 `Sec-Fetch-Site` that is present and not `same-origin` is a `403`, and a content type that is
 not JSON is a `415`, a `DELETE` included.
 
-| Endpoint                                                  | Body                | Answers                                                     |
-|-----------------------------------------------------------|---------------------|-------------------------------------------------------------|
-| `POST /api/disclosures/{id}/share-links`                  | `{"days":n}` or `{}` | `201` with the token, once                                  |
-| `DELETE /api/disclosures/{id}/share-links/{linkId}`       | none                | `204`, or `404` for an unknown or already revoked link      |
-| `POST /api/disclosures/{id}/withdraw`                     | `{"reason":"…"}`    | `204`, or `409` when already withdrawn                      |
-| `POST /api/disclosures/{id}/deliveries/{deliveryId}/retry` | `{}`               | `204`, or `409` for a delivery that went through            |
-| `POST /api/disclosures/{id}/render`                       | `{}`                | `200` with the publication answer, or `422` with a reason   |
+| Endpoint                                                   | Body                 | Answers                                                          |
+|------------------------------------------------------------|----------------------|------------------------------------------------------------------|
+| `POST /api/disclosures/{id}/share-links`                   | `{"days":n}` or `{}` | `201` with the token, once                                       |
+| `DELETE /api/disclosures/{id}/share-links/{linkId}`        | none                 | `204`, or `404` for an unknown or already revoked link           |
+| `POST /api/disclosures/{id}/withdraw`                      | `{"reason":"…"}`     | `204`, or `409` when already withdrawn                           |
+| `POST /api/disclosures/{id}/deliveries/{deliveryId}/retry` | `{}`                 | `204`, or `409` for a delivery that went through                 |
+| `POST /api/disclosures/{id}/render`                        | `{}`                 | `200` with the publication answer, `422` with a reason, or `503` |
 
 A share link lasts `days`, 1 to 30, `Hub:Disclosures:ShareLinkDays` when the body leaves it
 out. The answer, `{"id":"…","token":"pshare_…","path":"/share/pshare_…/","expires_at_ms":…}`, is
@@ -676,7 +676,9 @@ disclosure is replaced by a new one under a new uuid.
 A retry puts a delivery that waits or gave up back in the queue, due at the next pass. It
 starts a fresh run of attempts, so a delivery that had given up gets the whole backoff again.
 A render runs the engine again on the stored files, for a disclosure stored before it could
-render.
+render. It waits for no publication: one running answers `503` with `Retry-After: 1`. A
+refusal stays on the disclosure, `pdf` reading `not_checked` and `render_reason` naming it, so
+a report the engine finds altered says so.
 
 ### Share links
 
