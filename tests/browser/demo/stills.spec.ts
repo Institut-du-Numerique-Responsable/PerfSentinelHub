@@ -1,4 +1,4 @@
-import {expect, test} from "@playwright/test";
+import {expect, Page, test} from "@playwright/test";
 import {nameFor, settled, state} from "./capture";
 
 // One still per screen, in both themes. The light file keeps the bare name
@@ -121,4 +121,69 @@ test("the rendered report", async ({page}, info) => {
     await expect(page.frameLocator("iframe").locator("body"))
         .toContainText("Findings", {timeout: 30_000});
     await page.screenshot({path: nameFor("launcher-report", info.project.name), animations: "disabled"});
+});
+
+// The pair whose episodes run through the busy daemon's incidents, unfolded.
+async function openPair(page: Page): Promise<void> {
+    await page.goto("/#/correlations");
+    await settled(page, "Findings that keep following each other");
+    await page.locator("button.row-toggle", {hasText: "orders-svc"}).click();
+    await expect(page.locator(".daemon-detail:not([hidden]) .timeline-strip")).toBeVisible();
+}
+
+test("correlations", async ({page}, info) => {
+    await openPair(page);
+    const panel = page.locator(".daemon-detail:not([hidden]) .daemon-panel");
+    await expect(panel.locator("rect.timeline-incident").first()).toBeAttached();
+    await expect(panel.locator("tbody tr")).toHaveCount(3);
+    await expect(panel.locator("a.chip[data-kind]").first()).toBeVisible();
+    await expect(panel.getByRole("link", {name: "Explain the last pair"}).first()).toBeVisible();
+    await page.screenshot({
+        path: nameFor("launcher-correlations", info.project.name),
+        fullPage: true,
+        animations: "disabled"
+    });
+});
+
+test("correlations hand an episode's window to a new analysis", async ({page}) => {
+    await openPair(page);
+    await page.getByRole("link", {name: "Analyse this window"}).first().click();
+    await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=order-svc&pair=[0-9a-f]{32}$/);
+    await expect(page.locator(".banner", {hasText: "from the correlations screen"})).toBeVisible();
+});
+
+test("correlations hand the last pair's traces to a new analysis", async ({page}) => {
+    await openPair(page);
+    await page.getByRole("link", {name: "Explain the last pair"}).first().click();
+    await expect(page).toHaveURL(/#\/new\?trace=[0-9a-f]{32}&other=[0-9a-f]{32}$/);
+    await page.locator("button.source-row", {hasText: "Tempo EU"}).click();
+    const trace = page.locator('input[placeholder="4bf92f3577b34da6a3ce929d0e0e4736"]');
+    const first = await trace.inputValue();
+    await page.getByRole("button", {name: "Use the other trace"}).click();
+    await expect(trace).not.toHaveValue(first);
+});
+
+test("correlations open on the pair a link names", async ({page}) => {
+    await openPair(page);
+    const pairKey = await page.evaluate(() => fetch("/api/correlations?service=orders-svc&limit=1")
+        .then((response) => response.json()).then((rows) => rows[0].pair_key as string));
+    await page.goto(`/#/correlations?pair_key=${pairKey}`);
+    await settled(page, "Findings that keep following each other");
+    await expect(page.locator("button.row-toggle")).toHaveCount(1);
+    await expect(page.locator("button.row-toggle")).toHaveAttribute("aria-expanded", "true");
+    // Back on every pair, over the 180 days the link widened to: three pairs on two daemons.
+    await page.getByRole("link", {name: "Show every pair"}).click();
+    await expect(page.locator("button.row-toggle")).toHaveCount(3);
+});
+
+test("correlations on a phone", async ({page}, info) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await openPair(page);
+    // The tables scroll inside their frame. The page itself must not.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.screenshot({
+        path: nameFor("launcher-correlations-phone", info.project.name),
+        fullPage: true,
+        animations: "disabled"
+    });
 });

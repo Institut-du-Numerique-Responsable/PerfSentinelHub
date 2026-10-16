@@ -101,6 +101,19 @@
         incidentServices: [],
         incidentNamespaces: [],
         incidentDetails: {},
+        // The correlations screen: the episodes of the range, null until read, the incidents
+        // its strips draw, every service seen so the select outlives its own filter, and the
+        // filters. An unfolded incident's episodes sit apart, by incident key: 'loading',
+        // 'error', or {rows, pushes}.
+        correlations: null,
+        correlationsError: false,
+        correlationIncidents: [],
+        correlationServices: [],
+        // pair_key mirrors the route, `#/correlations?pair_key=…`, and is never set from a select.
+        correlationFilter: {range: '24h', service: '', source_id: '', active: false, pair_key: ''},
+        incidentCorrelations: {},
+        // A trace an episode handed to New analysis, with the pair's other one.
+        traceHandoff: null,
         // The ack page: the finding its link names, the form, and what the last
         // submit came to. Null until a link opens it.
         ack: null,
@@ -618,6 +631,7 @@
         else if (state.screen === 'coverage') main.replaceChildren(renderCoverageScreen());
         else if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
         else if (state.screen === 'incidents') main.replaceChildren(renderIncidentsScreen());
+        else if (state.screen === 'correlations') main.replaceChildren(renderCorrelationsScreen());
         else if (state.screen === 'ack') main.replaceChildren(renderAckScreen());
         else if (state.screen === 'new') main.replaceChildren(renderNewScreen());
         else if (state.screen === 'run') main.replaceChildren(renderRunScreen(currentRunId()));
@@ -1117,6 +1131,7 @@
         // First, before the render and before the loading guard: loadShell's own
         // onRoute has to apply it again, and loadRuns never re-renders New.
         applyHandoff(PSL.readHandoff(location.hash, Date.now()));
+        applyTraceHandoff(PSL.readTraceHandoff(location.hash));
         const screen = currentScreen();
         if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
@@ -1130,6 +1145,12 @@
         // coming back from a run that just finished shows its weight.
         if (screen === 'recent' || screen === 'new') loadRuns();
         else if (screen === 'incidents') loadIncidents();
+        else if (screen === 'correlations') {
+            // A link to one pair, from Grafana or an incident, reads it over the widest range.
+            state.correlationFilter.pair_key = PSL.readCorrelationPair(location.hash);
+            if (state.correlationFilter.pair_key) state.correlationFilter.range = PSL.CORRELATION_RANGES[PSL.CORRELATION_RANGES.length - 1];
+            loadCorrelations();
+        }
         else if (screen === 'ack') loadAck(false);
         else if (screen === 'run' || screen === 'report') {
             const id = currentRunId();
@@ -1178,6 +1199,25 @@
         handoff.kind = row.kind;
         handoff.namespace = row.namespace;
         handoff.atMs = row.at_ms;
+    }
+
+    /**
+     * Puts a trace an episode handed over in the form. A route without one keeps the banner
+     * while the form still holds one of the pair's two traces.
+     */
+    function applyTraceHandoff(handoff) {
+        if (!handoff) {
+            const kept = state.traceHandoff;
+            if (kept && state.form.traceId !== kept.traceId && state.form.traceId !== kept.otherTraceId) {
+                state.traceHandoff = null;
+            }
+            return;
+        }
+        state.traceHandoff = handoff;
+        state.form.mode = 'trace';
+        state.form.traceId = handoff.traceId;
+        state.form.service = '';
+        state.form.pickerOpen = false;
     }
 
     // -------------------------------------------------------- screen: sources
@@ -2454,7 +2494,8 @@
 
         const source = selectedSource();
         const skew = source && PSL.skew(source.producer_version);
-        const right = el('div', {class: 'new-column'}, [handoffBanner(source), parametersPanel(), costBand()]);
+        const right = el('div', {class: 'new-column'},
+            [handoffBanner(source), traceHandoffBanner(source), parametersPanel(), costBand()]);
         const advanced = source && source.kind !== 'daemon' ? advancedPanel() : null;
         if (advanced) right.appendChild(advanced);
         if (skew) right.appendChild(skewNotice(source, skew));
@@ -2619,17 +2660,47 @@
         // `other` is the daemon's catch-all, and "the other of cart-svc" is not
         // a sentence, so it reads as the incident a missing kind reads as.
         const kind = handoff.kind === 'other' ? null : PSL.INCIDENT_KIND_LABEL[handoff.kind];
+        // An episode's window names no incident: it is said as the episode it came from.
+        const origin = handoff.pairKey
+            ? 'a correlation episode of ' + name + ' from the correlations screen, '
+            : 'the ' + (kind || 'incident') + ' of ' + name + ' from the incidents screen, ';
         return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info'}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el('div', {
-                text: 'Window of the ' + (kind || 'incident') + ' of '
-                    + name + ' from the incidents screen, ' + span
+                text: 'Window of ' + origin + span
                     + (handoff.namespace
                         ? ' An analysis takes a service and no namespace, so this one covers '
                         + handoff.service + ' in every namespace.'
                         : '')
                     + (daemon ? ' A daemon takes no window. Pick a trace backend on the left to run it.' : '')
             })
+        ]);
+    }
+
+    /** Where a trace in the form came from, and the pair's other trace one click away. */
+    function traceHandoffBanner(source) {
+        const handoff = state.traceHandoff;
+        if (!handoff) return null;
+        const daemon = Boolean(source && source.kind === 'daemon');
+        const other = state.form.traceId === handoff.traceId ? handoff.otherTraceId : handoff.traceId;
+        const swap = other ? el('button', {type: 'button', class: 'pill-button pill-sm', text: 'Use the other trace'})
+            : null;
+        if (swap) {
+            swap.addEventListener('click', function () {
+                state.form.traceId = other;
+                render();
+            });
+        }
+        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info'}, [
+            daemon ? warningGlyph(16) : infoGlyph(16),
+            el('div', {}, [
+                el('p', {
+                    text: 'A trace of the last co-occurrence of a correlated pair, from the correlations screen.'
+                        + (other ? ' The pair\'s other trace is ' + other + '.' : '')
+                        + (daemon ? ' A daemon takes no trace ID. Pick a trace backend on the left to run it.' : '')
+                }),
+                swap
+            ])
         ]);
     }
 
@@ -3717,6 +3788,7 @@
         Object.assign(state.form, PSL.formFromRequest(run.request),
             {sourceId: run.source_id, ackUnreachable: false, ackHeavy: false});
         state.handoff = null;
+        state.traceHandoff = null;
         location.hash = '#/new';
     }
 
@@ -5039,6 +5111,345 @@
         });
         link.addEventListener('click', function () {
             state.ackReturn = location.hash;
+        });
+        return link;
+    }
+
+    // ---------------------------------------------------- screen: correlations
+
+    const CORRELATION_LIMIT = 1000;
+    const CORRELATION_COLUMNS = ['Pair', 'Episodes', 'Last active', 'Peak', 'Lag', 'Source'];
+    const CORRELATION_COLUMNS_RIGHT = ['Episodes', 'Peak', 'Lag'];
+    const EPISODE_COLUMNS = ['Episode', 'Lasted', 'Peak conf.', 'Peak co-occ.', 'Incidents', ''];
+    const EPISODE_COLUMNS_RIGHT = ['Lasted', 'Peak conf.', 'Peak co-occ.'];
+    const STRIP_WIDTH = 640;
+
+    function correlationsPath() {
+        const filter = state.correlationFilter;
+        return '/api/correlations?limit=' + CORRELATION_LIMIT
+            + '&from=' + (Date.now() - PSL.parseDur(filter.range))
+            + (filter.service ? '&service=' + encodeURIComponent(filter.service) : '')
+            + (filter.source_id ? '&source_id=' + encodeURIComponent(filter.source_id) : '')
+            + (filter.pair_key ? '&pair_key=' + encodeURIComponent(filter.pair_key) : '')
+            + (filter.active ? '&active=true' : '');
+    }
+
+    /**
+     * The episodes of the range and the incidents the strips draw beside them, both from the
+     * store: this screen never reads the fleet. The incidents are the store's newest page, so
+     * a strip over an older range draws the ones that page still holds.
+     */
+    function loadCorrelations() {
+        state.correlations = null;
+        state.correlationsError = false;
+        render();
+        Promise.all([
+            getJson(correlationsPath()),
+            getJson('/api/incidents?limit=' + incidentPage() + '&offset=0').catch(function () {
+                return [];
+            })
+        ]).then(function (results) {
+            state.correlations = results[0];
+            state.correlationIncidents = results[1];
+            // A link to one pair lands on it unfolded, on every daemon that saw it.
+            if (state.correlationFilter.pair_key) {
+                results[0].forEach(function (episode) {
+                    state.panelOpen['pair:' + episode.source_id + ':' + episode.pair_key] = true;
+                });
+            }
+            results[0].forEach(function (episode) {
+                [episode.source.service, episode.target.service].forEach(function (service) {
+                    if (state.correlationServices.indexOf(service) < 0) state.correlationServices.push(service);
+                });
+            });
+            state.correlationServices.sort();
+        }).catch(function () {
+            state.correlationsError = true;
+            state.correlations = [];
+        }).finally(function () {
+            if (currentScreen() === 'correlations') render();
+        });
+    }
+
+    function renderCorrelationsScreen() {
+        const section = el('section', {}, [
+            ruledOverline('// correlations'),
+            el('h1', {class: 'page-title', text: 'Findings that keep following each other'}),
+            el('p', {class: 'page-sub'}, [
+                document.createTextNode('Each pair is a finding that, again and again, fires within seconds after '
+                    + 'another one. Its periods of activity stay here after the daemon forgets them. '),
+                helpDot('A daemon with [daemon.correlation] on and [daemon.hub_export] set pushes each period a '
+                    + 'pair stays active as an episode, and closes it once the pair has not co-occurred for its '
+                    + 'gap, ten minutes by default. The Hub keeps what it is pushed and re-derives nothing. An '
+                    + 'episode whose daemon went silent past its gap and a quarter of an hour reads as ended '
+                    + 'where it was last seen.', 'correlations')
+            ]),
+            correlationFilterLine()
+        ]);
+        if (state.correlations === null) {
+            section.appendChild(el('div', {class: 'sources-wrap'}, [skeletonTable()]));
+            return section;
+        }
+        if (state.correlationsError) {
+            section.appendChild(el('div', {class: 'banner', 'data-tone': 'crit'}, [
+                critGlyph(16),
+                el('div', {text: 'The Hub did not return the correlations. This is the Hub itself, not any daemon.'})
+            ]));
+            return section;
+        }
+        const pairs = PSL.correlationPairs(state.correlations);
+        if (pairs.length === 0) {
+            section.appendChild(el('div', {class: 'empty-state'}, [
+                el('p', {class: 'empty-title', text: 'No correlation in this range.'}),
+                el('p', {
+                    text: 'A pair shows here once a daemon with [daemon.correlation] and [daemon.hub_export] on '
+                        + 'pushes an episode of it.'
+                })
+            ]));
+            return section;
+        }
+        section.appendChild(el('div', {class: 'sources-wrap'}, [correlationsTable(pairs)]));
+        if (state.correlations.length === CORRELATION_LIMIT) {
+            section.appendChild(el('p', {
+                class: 'sources-note',
+                text: 'The Hub returned the ' + CORRELATION_LIMIT + ' most recent episodes of this range and stopped '
+                    + 'there. Narrow the range or the filters to see the others.'
+            }));
+        }
+        section.appendChild(el('p', {class: 'sources-note'}, [
+            el('span', {text: 'Pushed by daemons with '}),
+            el('span', {class: 'code-inline', text: '[daemon.hub_export]'}),
+            el('span', {text: ' and '}),
+            el('span', {class: 'code-inline', text: '[daemon.correlation]'}),
+            el('span', {text: ' on. A daemon that pushes none has no rows here.'})
+        ]));
+        return section;
+    }
+
+    function correlationFilterLine() {
+        const filter = state.correlationFilter;
+        const set = function (key) {
+            return function (value) {
+                filter[key] = value;
+                loadCorrelations();
+            };
+        };
+        const range = el('select', {class: 'refresh-select', 'aria-label': 'range'},
+            PSL.CORRELATION_RANGES.map(function (value) {
+                const option = el('option', {value: value, text: 'last ' + PSL.humanDur(value)});
+                if (value === filter.range) option.selected = true;
+                return option;
+            }));
+        range.addEventListener('change', function () {
+            set('range')(range.value);
+        });
+        const daemons = (state.sources || []).filter(function (source) {
+            return source.kind === 'daemon';
+        });
+        // Shown only on a pair link: the way back to every pair is the plain route.
+        const pairOnly = filter.pair_key
+            ? el('a', {class: 'pill-button pill-sm', href: '#/correlations'}, [el('span', {text: 'Show every pair'})])
+            : null;
+        return el('div', {class: 'refresh'}, [
+            pairOnly,
+            el('span', {class: 'refresh-label', text: 'range'}),
+            range,
+            filterSelect('service', filter.service, state.correlationServices.map(function (service) {
+                return [service, service];
+            }), set('service')),
+            filterSelect('daemon', filter.source_id, daemons.map(function (source) {
+                return [source.id, source.name];
+            }), set('source_id')),
+            checkbox(filter.active, 'active now only', set('active'))
+        ]);
+    }
+
+    function correlationsTable(pairs) {
+        const head = el('tr', {}, CORRELATION_COLUMNS.map(function (name) {
+            return el('th', {
+                text: name, scope: 'col', 'data-align': CORRELATION_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
+            });
+        }));
+        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, pairs.flatMap(pairRow))]);
+    }
+
+    /** Where an incident's span stops: its end once the alerting sent one, its window's end before. */
+    function incidentEnd(incident) {
+        return incident.ended_at_ms == null ? incident.window_to_ms : incident.ended_at_ms;
+    }
+
+    function pairRow(pair) {
+        const fold = 'pair:' + pair.key;
+        const id = 'pair-detail-' + pair.key.replace(/[^A-Za-z0-9_-]/g, '-');
+        const open = state.panelOpen[fold] === true;
+        const button = el('button', {
+            type: 'button',
+            class: 'row-toggle',
+            'aria-expanded': open ? 'true' : 'false',
+            'aria-controls': id,
+            'aria-label': pair.last.source.service + ', then ' + pair.last.target.service
+        }, [pairCell(pair.last)]);
+        button.addEventListener('click', function () {
+            const next = button.getAttribute('aria-expanded') !== 'true';
+            button.setAttribute('aria-expanded', next ? 'true' : 'false');
+            state.panelOpen[fold] = next;
+            saveFolds();
+            const cell = document.getElementById(id);
+            if (cell) cell.parentNode.hidden = !next;
+        });
+        const row = el('tr', {}, [
+            el('td', {}, [button]),
+            el('td', {'data-align': 'right', class: 'table-mono', text: String(pair.episodes.length)}),
+            episodeSpanCell(pair.last),
+            el('td', {'data-align': 'right', class: 'table-mono', text: pair.peak.toFixed(2)}),
+            el('td', {'data-align': 'right', class: 'table-mono', text: PSL.lagText(pair.last.median_lag_ms)}),
+            el('td', {class: 'table-strong', text: sourceName(pair.source_id)})
+        ]);
+        const detail = el('tr', {class: 'daemon-detail'}, [
+            el('td', {id: id, colspan: String(CORRELATION_COLUMNS.length)}, [pairPanel(pair)])
+        ]);
+        detail.hidden = !open;
+        return [row, detail];
+    }
+
+    /** Both sides of a pair, the one that fires first on top, each template in its tooltip. */
+    function pairCell(episode) {
+        return el('span', {class: 'pair'}, [pairSide(episode.source, null), pairSide(episode.target, '↳ then')]);
+    }
+
+    function pairSide(side, lead) {
+        return el('span', {class: 'pair-side', title: side.template || null}, [
+            lead ? el('span', {class: 'pair-then', text: lead}) : null,
+            el('span', {
+                class: 'chip',
+                'data-type': side.finding_type,
+                text: PSL.FINDING_TYPE_LABEL[side.finding_type] || side.finding_type
+            }),
+            el('span', {class: 'table-strong', text: side.service})
+        ]);
+    }
+
+    function episodeSpanCell(episode) {
+        const cell = el('td', {
+            class: 'table-mono',
+            title: episode.ended_by === 'stale'
+                ? 'The daemon stopped reporting this episode before closing it, so it reads as ended where it was '
+                + 'last seen.'
+                : null
+        });
+        if (episode.ended_at_ms == null) {
+            cell.appendChild(document.createTextNode(PSL.dtHuman(episode.started_at_ms) + ' → '));
+            cell.appendChild(el('span', {class: 'chip', 'data-state': 'active', text: 'active'}));
+        } else {
+            cell.appendChild(document.createTextNode(PSL.episodeSpan(episode.started_at_ms, episode.ended_at_ms)));
+        }
+        return cell;
+    }
+
+    function pairPanel(pair) {
+        const toMs = Date.now();
+        const fromMs = toMs - PSL.parseDur(state.correlationFilter.range);
+        const incidents = state.correlationIncidents.filter(function (incident) {
+            return incident.source_id === pair.source_id
+                && PSL.spansOverlap(incident.window_from_ms, incidentEnd(incident), fromMs, toMs);
+        });
+        return el('div', {class: 'daemon-panel'}, [
+            timelineStrip(pair.episodes, incidents, fromMs, toMs),
+            el('div', {class: 'sources-wrap'}, [episodesTable(pair.episodes, incidents)])
+        ]);
+    }
+
+    /** The range as a strip: each episode in green, the same daemon's incidents in red behind them. */
+    function timelineStrip(episodes, incidents, fromMs, toMs) {
+        const ns = 'http://www.w3.org/2000/svg';
+        const strip = document.createElementNS(ns, 'svg');
+        strip.setAttribute('viewBox', '0 0 ' + STRIP_WIDTH + ' 30');
+        strip.setAttribute('preserveAspectRatio', 'none');
+        strip.setAttribute('class', 'timeline-strip');
+        strip.setAttribute('role', 'img');
+        strip.setAttribute('aria-label', episodes.length + ' episodes and ' + incidents.length
+            + ' incidents over the last ' + PSL.humanDur(state.correlationFilter.range));
+        const draw = function (marks, className, y, height) {
+            marks.forEach(function (mark) {
+                const rect = document.createElementNS(ns, 'rect');
+                rect.setAttribute('x', String(mark.x));
+                rect.setAttribute('width', String(mark.w));
+                rect.setAttribute('y', String(y));
+                rect.setAttribute('height', String(height));
+                rect.setAttribute('rx', '3');
+                rect.setAttribute('class', className);
+                strip.appendChild(rect);
+            });
+        };
+        draw(PSL.timelineMarks(incidents.map(function (incident) {
+            return {from: incident.window_from_ms, to: incidentEnd(incident)};
+        }), fromMs, toMs, STRIP_WIDTH), 'timeline-incident', 2, 26);
+        draw(PSL.timelineMarks(episodes.map(function (episode) {
+            return {from: episode.started_at_ms, to: episode.ended_at_ms};
+        }), fromMs, toMs, STRIP_WIDTH), 'timeline-episode', 9, 12);
+        return el('div', {class: 'timeline'}, [
+            strip,
+            el('div', {class: 'timeline-axis'}, [
+                el('span', {text: PSL.dtHuman(fromMs)}),
+                el('span', {text: 'now'})
+            ])
+        ]);
+    }
+
+    function episodesTable(episodes, incidents) {
+        // Explain asks for a trace ID, which only a trace backend can resolve.
+        const traceable = (state.sources || []).some(function (source) {
+            return source.kind !== 'daemon';
+        });
+        const now = Date.now();
+        const head = el('tr', {}, EPISODE_COLUMNS.map(function (name) {
+            return el('th', {
+                text: name, scope: 'col', 'data-align': EPISODE_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
+            });
+        }));
+        const rows = episodes.map(function (episode) {
+            const overlapped = incidents.filter(function (incident) {
+                return PSL.spansOverlap(episode.started_at_ms, episode.ended_at_ms,
+                    incident.window_from_ms, incidentEnd(incident));
+            });
+            const end = episode.ended_at_ms == null ? now : episode.ended_at_ms;
+            return el('tr', {}, [
+                episodeSpanCell(episode),
+                el('td', {'data-align': 'right', class: 'table-mono', text: PSL.dur(end - episode.started_at_ms)}),
+                el('td', {'data-align': 'right', class: 'table-mono', text: episode.peak_confidence.toFixed(2)}),
+                el('td', {'data-align': 'right', class: 'table-mono', text: String(episode.peak_co_occurrences)}),
+                el('td', {}, overlapped.length === 0
+                    ? [el('span', {class: 'table-muted', text: 'none'})]
+                    : overlapped.map(incidentChip)),
+                el('td', {}, [episodeActions(episode, traceable)])
+            ]);
+        });
+        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, rows)]);
+    }
+
+    function episodeActions(episode, traceable) {
+        const traces = traceable ? PSL.pairTraceHash(episode) : null;
+        return el('div', {class: 'refresh'}, [
+            el('a', {class: 'pill-button pill-sm', href: PSL.episodeHandoffHash(episode, Date.now())},
+                [el('span', {text: 'Analyse this window'})]),
+            traces ? el('a', {class: 'pill-button pill-sm', href: traces},
+                [el('span', {text: 'Explain the last pair'})]) : null
+        ]);
+    }
+
+    /** An incident an episode overlaps, as a link that opens it unfolded on the incidents screen. */
+    function incidentChip(incident) {
+        const link = el('a', {
+            class: 'chip',
+            'data-kind': incident.kind,
+            href: '#/incidents',
+            text: (PSL.INCIDENT_KIND_LABEL[incident.kind] || incident.kind) + ' · ' + incident.service + ' · '
+                + PSL.dtHuman(incident.at_ms)
+        });
+        link.addEventListener('click', function () {
+            state.incidentFilter = {service: '', namespace: '', kind: '', environment: '', source_id: incident.source_id};
+            state.panelOpen[foldKey(incident)] = true;
+            saveFolds();
         });
         return link;
     }
