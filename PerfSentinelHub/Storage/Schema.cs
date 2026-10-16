@@ -321,8 +321,8 @@ internal static class Schema
                                   last_seen_hub_ms INTEGER NOT NULL,
                                   PRIMARY KEY(id, source_id)
                                 );
-                                CREATE INDEX IF NOT EXISTS ix_episodes_started
-                                  ON correlation_episodes(started_at_ms DESC);
+                                CREATE INDEX IF NOT EXISTS ix_episodes_listing
+                                  ON correlation_episodes(started_at_ms DESC, id, source_id);
                                 CREATE INDEX IF NOT EXISTS ix_episodes_pair
                                   ON correlation_episodes(source_id, pair_key, started_at_ms);
                                 CREATE INDEX IF NOT EXISTS ix_episodes_last_seen

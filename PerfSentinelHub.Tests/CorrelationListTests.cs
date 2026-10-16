@@ -131,4 +131,15 @@ public sealed class CorrelationListTests : IAsyncLifetime
         Assert.Equal("", Ids(await ListAsync(All() with { SourceIds = ["daemon-b"] })));
         Assert.Equal("1,3,2", Ids(await ListAsync(All() with { SourceIds = ["daemon-a"] })));
     }
+
+    // The listing orders on these three columns, so the index serves it without a sort.
+    [Fact]
+    public async Task The_listing_index_covers_its_order()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT group_concat(name, ',') FROM pragma_index_info('ix_episodes_listing');";
+        Assert.Equal("started_at_ms,id,source_id", (string?)await command.ExecuteScalarAsync(cancellationToken));
+    }
 }
