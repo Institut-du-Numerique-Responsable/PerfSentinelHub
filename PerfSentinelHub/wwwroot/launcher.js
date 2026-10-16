@@ -1080,7 +1080,7 @@
      * the bare `#/new` the tab points at, read as null.
      * @param {string | null | undefined} hash
      * @param {number} nowMs
-     * @returns {{fromMs: number, toMs: number, service: string, incidentId: string} | null}
+     * @returns {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string} | null}
      */
     function readHandoff(hash, nowMs) {
         const text = String(hash || '');
@@ -1094,7 +1094,165 @@
         const toMs = Math.min(number('to'), nowMs);
         const service = (params.get('service') || '').trim();
         if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs || service === '') return null;
-        return {fromMs: fromMs, toMs: toMs, service: service, incidentId: params.get('incident') || ''};
+        return {
+            fromMs: fromMs,
+            toMs: toMs,
+            service: service,
+            incidentId: params.get('incident') || '',
+            pairKey: params.get('pair') || ''
+        };
+    }
+
+    /**
+     * The correlations screen's ranges. History is the point of the screen, so they reach
+     * past the week New analysis stops at, up to the 180 days the Hub keeps by default.
+     * @type {string[]}
+     */
+    const CORRELATION_RANGES = ['1h', '6h', '24h', '7d', '30d', '180d'];
+
+    /** How far past each end of an episode its analysis window reaches. */
+    const EPISODE_MARGIN_MS = 60000;
+
+    /**
+     * The pair a `#/correlations?pair_key=…` link names, the route the Grafana table and an
+     * incident's "All its episodes" link to, or '' for every pair. Blank is no filter.
+     * @param {string | null | undefined} hash
+     * @returns {string}
+     */
+    function readCorrelationPair(hash) {
+        const text = String(hash || '');
+        if (text.indexOf('#/correlations?') !== 0) return '';
+        return (new URLSearchParams(text.slice('#/correlations?'.length)).get('pair_key') || '').trim();
+    }
+
+    /**
+     * One row per pair and daemon, built from the episodes of one read, the pair whose last
+     * episode was seen most recently first. A row keeps its episodes in the route's order,
+     * newest start first, and names the latest started one as its last.
+     * @param {Array<{source_id: string, pair_key: string, started_at_ms: number, last_seen_ms: number,
+     *     ended_at_ms: number | null, peak_confidence: number}>} episodes
+     * @returns {Array<{key: string, source_id: string, pair_key: string, episodes: any[], active: boolean,
+     *     peak: number, last: any}>}
+     */
+    function correlationPairs(episodes) {
+        /** @type {Map<string, {key: string, source_id: string, pair_key: string, episodes: any[], active: boolean, peak: number, last: any}>} */
+        const pairs = new Map();
+        episodes.forEach(function (episode) {
+            const key = episode.source_id + ':' + episode.pair_key;
+            const pair = pairs.get(key) || {
+                key: key, source_id: episode.source_id, pair_key: episode.pair_key,
+                episodes: [], active: false, peak: 0, last: episode
+            };
+            pair.episodes.push(episode);
+            pair.active = pair.active || episode.ended_at_ms == null;
+            pair.peak = Math.max(pair.peak, episode.peak_confidence);
+            if (episode.started_at_ms > pair.last.started_at_ms) pair.last = episode;
+            pairs.set(key, pair);
+        });
+        return Array.from(pairs.values()).sort(function (a, b) {
+            return b.last.last_seen_ms - a.last.last_seen_ms || (a.key < b.key ? -1 : 1);
+        });
+    }
+
+    /**
+     * Whether two spans share a moment, bounds included. A null end is a span still running.
+     * @param {number} aFrom
+     * @param {number | null} aTo
+     * @param {number} bFrom
+     * @param {number | null} bTo
+     * @returns {boolean}
+     */
+    function spansOverlap(aFrom, aTo, bFrom, bTo) {
+        return aFrom <= (bTo == null ? Infinity : bTo) && bFrom <= (aTo == null ? Infinity : aTo);
+    }
+
+    /**
+     * New analysis on an episode's window, a minute wider on each side and held at now, on
+     * the service of the side that fires first, the way an incident hands over its own. The
+     * pair rides along for the banner's wording.
+     * @param {{started_at_ms: number, ended_at_ms: number | null, pair_key: string, source: {service: string}}} episode
+     * @param {number} nowMs
+     * @returns {string}
+     */
+    function episodeHandoffHash(episode, nowMs) {
+        const end = episode.ended_at_ms == null ? nowMs : episode.ended_at_ms + EPISODE_MARGIN_MS;
+        return '#/new?from=' + (episode.started_at_ms - EPISODE_MARGIN_MS)
+            + '&to=' + Math.min(end, nowMs)
+            + '&service=' + encodeURIComponent(episode.source.service)
+            + '&pair=' + encodeURIComponent(episode.pair_key);
+    }
+
+    /**
+     * New analysis on a trace of the episode's last co-occurrence: the first finding's, the
+     * second's carried for the banner, or the second's alone. Null when the daemon kept neither.
+     * @param {{sample_trace_id: string | null, source_sample_trace_id: string | null}} episode
+     * @returns {string | null}
+     */
+    function pairTraceHash(episode) {
+        const first = episode.source_sample_trace_id || episode.sample_trace_id;
+        if (!first) return null;
+        const other = episode.source_sample_trace_id && episode.sample_trace_id;
+        return '#/new?trace=' + encodeURIComponent(first) + (other ? '&other=' + encodeURIComponent(other) : '');
+    }
+
+    /**
+     * What a `#/new?trace=…&other=…` hash carries, or null for any other route.
+     * @param {string | null | undefined} hash
+     * @returns {{traceId: string, otherTraceId: string} | null}
+     */
+    function readTraceHandoff(hash) {
+        const text = String(hash || '');
+        if (text.indexOf('#/new?') !== 0) return null;
+        const params = new URLSearchParams(text.slice('#/new?'.length));
+        const traceId = (params.get('trace') || '').trim();
+        return traceId === '' ? null : {traceId: traceId, otherTraceId: (params.get('other') || '').trim()};
+    }
+
+    /**
+     * Where each span lands on a strip `width` wide covering [fromMs, toMs], clipped to it and
+     * never thinner than 3, so a one-minute episode in a month stays visible. A null end runs
+     * to the strip's end.
+     * @param {Array<{from: number, to: number | null}>} spans
+     * @param {number} fromMs
+     * @param {number} toMs
+     * @param {number} width
+     * @returns {Array<{x: number, w: number}>}
+     */
+    function timelineMarks(spans, fromMs, toMs, width) {
+        const scale = width / Math.max(1, toMs - fromMs);
+        return spans.map(function (span) {
+            const start = Math.max(fromMs, span.from);
+            const end = Math.min(toMs, span.to == null ? toMs : span.to);
+            return {
+                x: Math.min(Math.round((start - fromMs) * scale), width - 3),
+                w: Math.max(3, Math.round((end - start) * scale))
+            };
+        });
+    }
+
+    /**
+     * A median lag, often under a second and seldom over a minute: dur() rounds to whole
+     * seconds, which would print 1.2 s as 1 s.
+     * @param {number | null | undefined} ms
+     * @returns {string}
+     */
+    function lagText(ms) {
+        if (ms == null) return '—';
+        if (ms < 1000) return Math.round(ms) + ' ms';
+        if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+        return dur(ms);
+    }
+
+    /**
+     * A closed episode's span: its start whole, its end as a clock when it falls on the same day.
+     * @param {number} startMs
+     * @param {number} endMs
+     * @returns {string}
+     */
+    function episodeSpan(startMs, endMs) {
+        const start = dtHuman(startMs);
+        const end = dtHuman(endMs);
+        return start + ' → ' + (end.slice(0, 10) === start.slice(0, 10) ? end.slice(11) : end);
     }
 
     /**
@@ -1453,7 +1611,7 @@
         if (route === 'access' || route === 'coverage') return accessOn ? 'access' : 'missing';
         if (route === '') return 'new';
         // `ack` has no tab: it is reached by link only.
-        return ['new', 'recent', 'sources', 'incidents', 'ack'].indexOf(route) >= 0 ? route : 'missing';
+        return ['new', 'recent', 'sources', 'incidents', 'correlations', 'ack'].indexOf(route) >= 0 ? route : 'missing';
     }
 
     /**
@@ -1755,6 +1913,16 @@
         incidentsCopy,
         incidentHandoffHash,
         readHandoff,
+        CORRELATION_RANGES,
+        readCorrelationPair,
+        correlationPairs,
+        spansOverlap,
+        episodeHandoffHash,
+        pairTraceHash,
+        readTraceHandoff,
+        timelineMarks,
+        lagText,
+        episodeSpan,
         ackRouteHash,
         ackEntryHash,
         readAckRoute,
