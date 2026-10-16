@@ -644,7 +644,9 @@ les trois fichiers. Rien n'est stocké avant la réponse du moteur, et un refus 
 Une copie signée garde, octet pour octet, chaque fichier de signature déjà stocké et en ajoute
 un qui manquait : l'attestation que `disclose --emit-attestation` écrit avec le rapport, puis
 le bundle que cosign signe. Elle remplace le rapport stocké, son `integrity_level` compris,
-que l'empreinte laisse de côté. Une copie qui change ou retire un fichier stocké est un `409`.
+que l'empreinte laisse de côté. Une copie qui change ou retire un fichier stocké est un `409`,
+comme celle dont l'organisation, la période, l'intention, la confidentialité ou les chiffres
+diffèrent de ceux stockés, rendue ou non.
 
 Les raisons du `422` sont `content_hash_mismatch`, l'empreinte ne se recalcule pas,
 `binding_mismatch`, l'attestation nomme un autre rapport, `malformed_report`, un corps, une

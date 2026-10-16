@@ -602,7 +602,8 @@ three files. Nothing is stored before the engine answers, and a refusal stores n
 A signed copy keeps each signature file already stored, byte for byte, and adds one it lacks:
 the attestation `disclose --emit-attestation` writes with the report, then the bundle cosign
 signs. It replaces the stored report, its `integrity_level` included, which the hash leaves
-out. A copy that changes or drops a stored file is a `409`.
+out. A copy that changes or drops a stored file is a `409`, and so is one whose organisation,
+period, intent, confidentiality or figures differ from the stored ones, rendered or not.
 
 The `422` reasons are `content_hash_mismatch`, the hash does not recompute, `binding_mismatch`,
 the attestation names another report, `malformed_report`, a body, a part or a report the Hub or
