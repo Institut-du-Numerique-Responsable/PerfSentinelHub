@@ -205,7 +205,8 @@ public sealed class ConfigurationTests
             "share link without a public url",
             "Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: the link it sends must name the Hub."
         },
-        { "public url query", "Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL without credentials, query, or fragment." }
+        { "public url query", "Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL without credentials, query, or fragment." },
+        { "public url path", "Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /." }
     };
 
     private const string WebhookUrl =
@@ -234,6 +235,7 @@ public sealed class ConfigurationTests
                 Disclosures = disclosures with { Webhooks = [webhook with { IncludeShareLink = true }] }
             },
             "public url query" => options with { Disclosures = disclosures with { PublicUrl = new Uri("https://hub.example/?x=1") } },
+            "public url path" => options with { Disclosures = disclosures with { PublicUrl = new Uri("https://corp.example/perf-hub/") } },
             _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, null)
         };
 

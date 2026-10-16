@@ -245,7 +245,7 @@ called. Each rule below is checked at startup and its message names the key.
 | `Hub:Disclosures:ExpectedIdentity`       | none    | With `ExpectedIssuer`, both or neither. The signer passed to the engine and printed in the verify command                         |
 | `Hub:Disclosures:ExpectedIssuer`         | none    | With `ExpectedIdentity`                                                                                                            |
 | `Hub:Disclosures:ShareLinkDays`          | `7`     | 1 to 30. A share link's life when its creator names none                                                                          |
-| `Hub:Disclosures:PublicUrl`              | none    | Absolute HTTP(S) URL. The Hub's own address as a webhook receiver reaches it. Required by a webhook with `IncludeShareLink`        |
+| `Hub:Disclosures:PublicUrl`              | none    | Absolute HTTP(S) URL with no path. The Hub's own address as a webhook receiver reaches it. Required by a webhook with `IncludeShareLink` |
 | `Hub:Disclosures:Webhooks[]`             | none    | `{ Name, Url, Secret, Confidentiality, IncludeShareLink, ShareLinkDays }`, see below                                               |
 
 **The import key** opens one door only. A key equal to a source's import key or to a machine

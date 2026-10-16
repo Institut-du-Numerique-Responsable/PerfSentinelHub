@@ -25,6 +25,8 @@ public sealed partial class HubOptionsValidator
 
         if (disclosures.PublicUrl is { } publicUrl && IsInvalidSourceUrl(publicUrl))
             errors.Add("Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL " + UrlShape);
+        else if (disclosures.PublicUrl is { AbsolutePath: not "/" })
+            errors.Add("Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.");
         if (disclosures.PublicUrl is null && disclosures.Webhooks.Any(webhook => webhook.IncludeShareLink))
             errors.Add("Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: "
                        + "the link it sends must name the Hub.");

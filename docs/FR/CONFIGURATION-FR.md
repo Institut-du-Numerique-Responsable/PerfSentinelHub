@@ -264,7 +264,7 @@ démarrage et son message nomme la clé.
 | `Hub:Disclosures:ExpectedIdentity`       | aucun   | Avec `ExpectedIssuer`, les deux ou aucun. Le signataire transmis au moteur et imprimé dans la commande de vérification             |
 | `Hub:Disclosures:ExpectedIssuer`         | aucun   | Avec `ExpectedIdentity`                                                                                                             |
 | `Hub:Disclosures:ShareLinkDays`          | `7`     | De 1 à 30. La durée d'un lien de partage quand son auteur n'en donne pas                                                            |
-| `Hub:Disclosures:PublicUrl`              | aucun   | URL HTTP(S) absolue. L'adresse du Hub telle qu'un destinataire de webhook l'atteint. Exigée par un webhook avec `IncludeShareLink`  |
+| `Hub:Disclosures:PublicUrl`              | aucun   | URL HTTP(S) absolue, sans chemin. L'adresse du Hub telle qu'un destinataire de webhook l'atteint. Exigée par un webhook avec `IncludeShareLink` |
 | `Hub:Disclosures:Webhooks[]`             | aucun   | `{ Name, Url, Secret, Confidentiality, IncludeShareLink, ShareLinkDays }`, voir plus bas                                            |
 
 **La clé d'import** n'ouvre qu'une porte. Une clé égale à la clé d'import d'une source ou à un
