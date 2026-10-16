@@ -33,7 +33,7 @@ public sealed partial class SignatureRate(
     public bool IsAbnormal(string sourceId)
     {
         var threshold = options.Value.NewSignaturesPerHourWarning;
-        return threshold > 0 && NewSignaturesLastHour(sourceId) >= threshold;
+        return threshold > 0 && NewSignaturesLastHour(sourceId) > threshold;
     }
 
     public async Task EvaluateAsync(CancellationToken cancellationToken)

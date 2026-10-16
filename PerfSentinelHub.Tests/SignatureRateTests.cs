@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
@@ -43,17 +42,18 @@ public sealed class SignatureRateTests : IDisposable
         var now = _clock.GetUtcNow();
         // Known for a day, then a burst of new signatures inside the last hour.
         await StoreAsync("noisy", now.AddDays(-1), "old");
-        await StoreAsync("noisy", now.AddMinutes(-30), "a", "b", "c");
+        await StoreAsync("noisy", now.AddMinutes(-30), "a", "b", "c", "d");
         await StoreAsync("quiet", now.AddDays(-1), "old");
-        await StoreAsync("quiet", now.AddMinutes(-30), "a");
+        // At the threshold, not past it.
+        await StoreAsync("quiet", now.AddMinutes(-30), "a", "b", "c");
         var rate = new SignatureRate(_database, Options.Create(_options), _clock, _logger);
 
         await rate.EvaluateAsync(cancellationToken);
         await rate.EvaluateAsync(cancellationToken);
 
-        Assert.Equal(3, rate.NewSignaturesLastHour("noisy"));
+        Assert.Equal(4, rate.NewSignaturesLastHour("noisy"));
         Assert.True(rate.IsAbnormal("noisy"));
-        Assert.Equal(1, rate.NewSignaturesLastHour("quiet"));
+        Assert.Equal(3, rate.NewSignaturesLastHour("quiet"));
         Assert.False(rate.IsAbnormal("quiet"));
         Assert.Single(_logger.Messages, message => message.Contains("noisy", StringComparison.Ordinal));
     }
@@ -85,14 +85,6 @@ public sealed class SignatureRateTests : IDisposable
 
         Assert.False(rate.IsAbnormal("noisy"));
         Assert.Empty(_logger.Messages);
-    }
-
-    [Theory]
-    [InlineData(13, "database_full")]
-    [InlineData(5, "storage_error")]
-    public void A_storage_failure_names_a_full_database(int sqliteCode, string expected)
-    {
-        Assert.Equal(expected, SourcePoller.ErrorCode(new SqliteException("failed", sqliteCode)));
     }
 
     private async Task StoreAsync(string sourceId, DateTimeOffset firstSeen, params string[] signatures)

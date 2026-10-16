@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Api;
@@ -373,5 +374,13 @@ public sealed class PollingTests : IDisposable
         Assert.True(await reader.ReadAsync(cancellationToken));
         Assert.True(reader.IsDBNull(0));
         Assert.True(reader.IsDBNull(1));
+    }
+
+    [Theory]
+    [InlineData(13, "database_full")]
+    [InlineData(5, "storage_error")]
+    public void A_storage_failure_names_a_full_database(int sqliteCode, string expected)
+    {
+        Assert.Equal(expected, SourcePoller.ErrorCode(new SqliteException("failed", sqliteCode)));
     }
 }
