@@ -222,7 +222,8 @@ public static partial class ApiEndpoints
         /// </summary>
         public async Task<IResult> RepublishAsync(DisclosureSummary existing, DisclosureEnvelope envelope, DisclosureFiles files)
         {
-            if (existing.ContentHash != envelope.ContentHash)
+            // An unrendered copy has no hash check, so the card's own fields must match too.
+            if (existing.ContentHash != envelope.ContentHash || !SameCard(existing, envelope))
                 return Conflict(metrics);
             var attestation = await database.ReadFileAsync(existing.Id, DisclosureFile.Attestation, cancellationToken);
             var bundle = await database.ReadFileAsync(existing.Id, DisclosureFile.Bundle, cancellationToken);
@@ -240,6 +241,14 @@ public static partial class ApiEndpoints
                 existing.Id, files, envelope.IntegrityLevel, pdf, reason, engine.Version,
                 timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
             return Accepted((await database.GetDisclosureAsync(existing.Id, cancellationToken))!, StatusCodes.Status200OK);
+        }
+
+        private static bool SameCard(DisclosureSummary existing, DisclosureEnvelope envelope)
+        {
+            return (existing.Organisation, existing.PeriodType, existing.PeriodFrom, existing.PeriodTo, existing.Intent,
+                       existing.Confidentiality, existing.FiguresJson) ==
+                   (envelope.Organisation, envelope.PeriodType, envelope.PeriodFrom, envelope.PeriodTo, envelope.Intent,
+                       envelope.Confidentiality, envelope.FiguresJson);
         }
 
         private IResult? Refusal(RenderOutcome outcome)

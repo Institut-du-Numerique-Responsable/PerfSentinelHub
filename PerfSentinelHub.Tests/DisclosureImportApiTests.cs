@@ -247,6 +247,32 @@ public sealed class DisclosureImportApiTests : IDisposable
     }
 
     [Theory]
+    [InlineData("\"Example SAS\"", "\"Other SAS\"")]
+    [InlineData("\"2026-09-30\"", "\"2026-09-29\"")]
+    [InlineData("18.42", "99.5")]
+    public async Task A_signed_copy_the_engine_cannot_render_is_409_when_it_changes_the_card(string stored, string changed)
+    {
+        // Without a render nothing recomputes the hash, so the card's own fields must match.
+        var hub = Hub(new FakeEngine
+        {
+            DisclosePdf = true,
+            DisclosePdfExitCode = 5,
+            DisclosePdfOutput = """{"result":"unrenderable","reason":"unsupported_characters"}"""
+        });
+        using var client = hub.CreateClient();
+        using var unsigned = await client.SendAsync(Publish(HashOnly), TestContext.Current.CancellationToken);
+        var id = (await JsonAsync(unsigned)).RootElement.GetProperty("id").GetString()!;
+
+        using var signed = await client.SendAsync(
+            Publish(Report.Replace(stored, changed, StringComparison.Ordinal), ("attestation", "statement"u8.ToArray())),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Conflict, signed.StatusCode);
+        Assert.Equal(Encoding.UTF8.GetBytes(HashOnly),
+            await Database(hub).ReadFileAsync(id, DisclosureFile.Report, CancellationToken.None));
+    }
+
+    [Theory]
     [InlineData("other statement", "bundle")]
     [InlineData(null, "bundle")]
     public async Task A_copy_that_changes_or_drops_a_stored_file_is_409(string? attestation, string bundle)
