@@ -163,3 +163,20 @@ v0.5.0	6c7dfdb	2026-10-15	PASS
 # release binary built from that tree. The lab ran with local, uncommitted
 # image pins in its daemon and Hub manifests.
 v0.6.0	7593c1e	2026-10-16	PASS
+#
+# v0.7.0, 2026-10-16. The release adds the published disclosures (import with
+# an import key and a cosign attestation, the Disclosures screen, share links,
+# withdrawal and HMAC webhooks) and repins the engine to perf-sentinel 0.31.0.
+# Eleven hub-* scenarios ran green on lab commit bf31096: hub-ingestion,
+# hub-derived-status, hub-source-reachability, hub-plugin-contract,
+# hub-incidents-mirror, hub-incidents-push, hub-correlations-push,
+# hub-disclosures, hub-lineage-mutation, hub-retention-purge and
+# hub-access-control. The image perf-sentinel-hub:0.7.0-cea6465 was built by
+# seed-hub-local from the release branch at cea6465 and answers 0.7.0 with
+# engine 0.31.0, the published perf-sentinel image pinned by digest. Every
+# daemon, the isolated one in hub-incidents-push included, was the published
+# perf-sentinel 0.31.0 image, pinned by digest sha256:5dc83b9e.
+# hub-disclosures and hub-access-control used a local release binary of
+# perf-sentinel 0.31.0. The lab ran with local, uncommitted image pins in its
+# daemon and Hub manifests.
+v0.7.0	bf31096	2026-10-16	PASS
