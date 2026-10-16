@@ -73,6 +73,27 @@
      * @param {number} now
      * @returns {{tone: 'ok' | 'warn' | 'crit', text: string}}
      */
+    /**
+     * What a failed read of one run means. Only a 404 says the Hub holds no such run:
+     * a 503 while the Hub restarts, a gateway error or a dropped connection says
+     * nothing about the run, so the page keeps what it knows and asks again.
+     * @param {{status?: number}} error
+     * @returns {'unknown' | 'retry'}
+     */
+    function runReadOutcome(error) {
+        return error && error.status === 404 ? 'unknown' : 'retry';
+    }
+
+    /**
+     * How long to wait before asking again after `failures` reads in a row failed:
+     * one second, doubled each time, at most fifteen.
+     * @param {number} failures
+     * @returns {number}
+     */
+    function retryDelay(failures) {
+        return Math.min(1000 * Math.pow(2, failures - 1), 15000);
+    }
+
     function sourceHealth(source, now) {
         if (source.last_error_code === 'database_full' && !source.reachable)
             return {tone: 'crit', text: 'Hub database full'};
@@ -1911,6 +1932,8 @@
         READ_ERRORS,
         ERROR_TITLES,
         sourceHealth,
+        runReadOutcome,
+        retryDelay,
         KIND_LABEL,
         dur,
         durPrecise,

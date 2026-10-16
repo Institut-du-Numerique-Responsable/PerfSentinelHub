@@ -1339,3 +1339,14 @@ test("a source minting signatures is flagged while it answers", () => {
     assert.deepEqual(PSL.sourceHealth({reachable: true, last_attempt_ms: null}, 1),
         {tone: "ok", text: "not yet observed"});
 });
+
+test("only a 404 makes a run unknown, any other failure is asked again", () => {
+    assert.equal(PSL.runReadOutcome({status: 404}), "unknown");
+    for (const status of [502, 503, 504, 500, undefined]) {
+        assert.equal(PSL.runReadOutcome(status === undefined ? new TypeError("fetch failed") : {status}), "retry");
+    }
+});
+
+test("a run read that keeps failing backs off up to fifteen seconds", () => {
+    assert.deepEqual([1, 2, 3, 4, 5, 9].map(PSL.retryDelay), [1000, 2000, 4000, 8000, 15000, 15000]);
+});

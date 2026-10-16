@@ -43,6 +43,8 @@
         loading: true,
         run: null,
         runError: false,
+        // Reads of the open run that failed in a row, for a reason other than its absence.
+        runReadFailures: 0,
         runTimer: null,
         noteTimer: null,
         // Every node whose text is a duration measured against the current moment,
@@ -1154,7 +1156,10 @@
         else if (screen === 'ack') loadAck(false);
         else if (screen === 'run' || screen === 'report') {
             const id = currentRunId();
-            if (id && (!state.run || state.run.id !== id)) loadRun(id);
+            if (id && (!state.run || state.run.id !== id)) {
+                state.runReadFailures = 0;
+                loadRun(id);
+            }
             else if (id) {
                 // The render above already mounted the report frame: a second one would load it twice.
                 if (screen === 'run') render();
@@ -3746,6 +3751,7 @@
             section.appendChild(unknownRun());
             return section;
         }
+        if (state.runReadFailures > 0) section.appendChild(hubUnreachableBanner());
         if (!run || run.id !== id) {
             section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px;margin-top:16px'}));
             return section;
@@ -4246,19 +4252,37 @@
         return getJson('/api/analyses/' + id).then(function (run) {
             state.run = run;
             state.runError = false;
+            state.runReadFailures = 0;
             render();
-            if (run.status === 'pending' || run.status === 'running') scheduleRunPoll(id);
-        }).catch(function () {
-            state.runError = id;
+            if (run.status === 'pending' || run.status === 'running') scheduleRunPoll(id, 1000);
+        }).catch(function (error) {
+            if (PSL.runReadOutcome(error) === 'unknown') {
+                state.runError = id;
+                state.runReadFailures = 0;
+                render();
+                return;
+            }
+            // The Hub restarting, or a proxy in front of it: what the page shows stays
+            // true, so it keeps it and asks again until the Hub answers.
+            state.runReadFailures = (state.runReadFailures || 0) + 1;
             render();
+            scheduleRunPoll(id, PSL.retryDelay(state.runReadFailures));
         });
     }
 
-    function scheduleRunPoll(id) {
+    function scheduleRunPoll(id, delay) {
         clearTimeout(state.runTimer);
         state.runTimer = setTimeout(function () {
             if (currentRunId() === id) loadRun(id);
-        }, 1000);
+        }, delay);
+    }
+
+    /** Said while reads of this run fail for a reason other than its absence. */
+    function hubUnreachableBanner() {
+        return el('div', {class: 'banner', 'data-tone': 'warn', role: 'status'}, [
+            warningGlyph(16),
+            el('p', {text: 'The Hub is not answering. This page keeps what it last read and asks again.'})
+        ]);
     }
 
 
