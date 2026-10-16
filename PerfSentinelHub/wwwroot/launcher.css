@@ -890,6 +890,10 @@ a.shell-identity[aria-current="page"] {
     color: var(--ok-fg);
 }
 
+.health[data-health="warn"] {
+    color: var(--warn-fg);
+}
+
 .health[data-health="crit"] {
     color: var(--crit-fg);
 }
@@ -4188,4 +4192,88 @@ section > .banner + .banner,
 .report-gone {
     align-self: flex-start;
     padding: 30px 22px;
+}
+
+/* A correlated pair: the side that fires first, then the one that follows it. */
+.pair {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 3px;
+    text-align: left;
+}
+
+.pair-side {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+}
+
+.pair-then {
+    color: var(--text-3);
+    font-size: 12px;
+}
+
+/* A finding type takes the tone the incident kinds already use for its family. */
+.chip[data-type^="n_plus_one"] {
+    background: var(--info-bg);
+    color: var(--info-fg);
+}
+
+.chip[data-type="pool_saturation"] {
+    background: var(--crit-bg);
+    color: var(--crit-fg);
+}
+
+.chip[data-type^="slow_"] {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.chip[data-state="active"] {
+    background: var(--ok-bg);
+    color: var(--ok-fg);
+}
+
+a.chip {
+    text-decoration: none;
+}
+
+.timeline {
+    margin: 4px 0 14px;
+}
+
+.timeline-strip {
+    display: block;
+    width: 100%;
+    height: 30px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+}
+
+.timeline-incident {
+    fill: var(--crit-bg);
+}
+
+.timeline-episode {
+    fill: var(--brand);
+}
+
+.timeline-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+}
+
+/* An incident's correlations, under its frozen findings and set apart from them. */
+.incident-correlations {
+    display: grid;
+    gap: 10px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
 }

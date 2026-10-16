@@ -110,6 +110,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("GET", "/api/incidents")]
     [InlineData("GET", "/api/incidents/" + Incident)]
     [InlineData("POST", "/api/incidents/refresh")]
+    [InlineData("GET", "/api/correlations")]
     [InlineData("POST", "/api/sources/shop-d/acks")]
     [InlineData("GET", "/api/analyses")]
     [InlineData("POST", "/api/analyses")]
@@ -345,10 +346,12 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         using var list = await client.GetAsync("/api/findings", cancellationToken);
         using var trace = await client.GetAsync("/api/findings/trace-x", cancellationToken);
         using var incidents = await client.GetAsync("/api/incidents", cancellationToken);
+        using var correlations = await client.GetAsync("/api/correlations", cancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, list.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, trace.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, incidents.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, correlations.StatusCode);
     }
 
     // ------------------------------------------------------------ incidents
@@ -368,6 +371,18 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         // Only one of its two frozen findings carries team=shop.
         using var mixed = await attr.GetAsync($"/api/incidents/{MixedIncident}", cancellationToken);
         Assert.Equal(HttpStatusCode.NotFound, mixed.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_episode_is_read_only_where_both_its_services_are()
+    {
+        // svc reads cart anywhere, so not e2 whose target is invoice. ss reads cart at shop-d,
+        // lab reads all of lab-d, and attr reads only a team attribute an episode never carries.
+        Assert.Equal("e1 shop-d,e3 lab-d", await EpisodesAsync("svc"));
+        Assert.Equal("e1 shop-d", await EpisodesAsync("ss"));
+        Assert.Equal("e3 lab-d", await EpisodesAsync("lab"));
+        Assert.Equal("", await EpisodesAsync("attr"));
+        Assert.Equal("e1 shop-d,e2 shop-d,e3 lab-d", await EpisodesAsync("admin"));
     }
 
     [Fact]
@@ -913,6 +928,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         await SeedIncidentAsync("shop-d", Incident, ["shop", "shop", "shop"]);
         await SeedIncidentAsync("lab-d", Incident, ["billing", "billing", "billing", "billing", "billing"]);
         await SeedIncidentAsync("shop-d", MixedIncident, ["shop", null]);
+        await SeedEpisodesAsync();
     }
 
     // Each finding is seen a millisecond after the previous one, so the order is fixed.
@@ -938,6 +954,29 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     private static string ImportBody(string signature, string service, string grouping)
     {
         return $$"""{"producer_version":"0.26.2","findings":[{{Envelope(signature, service, grouping)}}]}""";
+    }
+
+    // e1 is cart then cart at shop-d, e2 cart then invoice at shop-d, e3 cart then cart at lab-d.
+    private async Task SeedEpisodesAsync()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await Database.TryUpsertEpisodesAsync("shop-d", EpisodeJson.Parsed(
+                EpisodeJson.Episode(EpisodeJson.Id(0xe1), 1_800_000_300_000, 1_800_000_360_000, null,
+                    EpisodeJson.Id(0xa1), "cart", "cart"),
+                EpisodeJson.Episode(EpisodeJson.Id(0xe2), 1_800_000_200_000, 1_800_000_260_000, null,
+                    EpisodeJson.Id(0xa2), "cart", "invoice")),
+            NowMs, cancellationToken);
+        await Database.TryUpsertEpisodesAsync("lab-d", EpisodeJson.Parsed(
+                EpisodeJson.Episode(EpisodeJson.Id(0xe3), 1_800_000_100_000, 1_800_000_160_000, null,
+                    EpisodeJson.Id(0xa1), "cart", "cart")),
+            NowMs, cancellationToken);
+    }
+
+    private async Task<string> EpisodesAsync(string user)
+    {
+        using var client = await SignedInAsync(user);
+        return string.Join(',', (await FindingsAsync(client, "/api/correlations")).Select(episode =>
+            episode.GetProperty("id").GetString()![^2..] + " " + episode.GetProperty("source_id").GetString()));
     }
 
     private async Task SeedIncidentAsync(string source, string id, string?[] teams)

@@ -4,9 +4,9 @@ The Hub serves a browser interface at `/`, from the same origin as the reports i
 Plain HTML, CSS and JavaScript. No framework, no build step, no network fetch: the two
 typefaces are base64 in `wwwroot/fonts.css` and every icon is inline SVG.
 
-Five screens: start an analysis, follow one run, list recent runs, read fleet health, read
-the incidents the daemons recorded. With `Hub:Access` on, the identity chip at the top
-right opens [Your access](#your-access), and an administrator gets a sixth tab,
+Six screens: start an analysis, follow one run, list recent runs, read fleet health, read
+the incidents the daemons recorded, follow the correlations they pushed. With `Hub:Access` on, the identity chip at the top
+right opens [Your access](#your-access), and an administrator gets a seventh tab,
 [Coverage](#the-coverage-screen). Another screen has no tab and is reached by link only,
 see [The ack page](#the-ack-page).
 
@@ -131,6 +131,11 @@ Report links share within network reach of the Hub and die with the retention wi
 
 ## The fleet health row
 
+A row's health reads `reachable`, `not yet observed` before the first poll, or
+`unreachable` with how long. `Hub database full` replaces the latter when the poll failed
+on the Hub's own volume rather than on the daemon, and a daemon that keeps minting new
+signatures reads its count for the last hour in the warning tone while it still answers.
+
 A daemon's row unfolds into the gauges it reports against their caps and the hints it
 writes about its own tuning, neither of which `/metrics` carries.
 
@@ -197,6 +202,42 @@ findings are acknowledged in each daemon instead.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
   <img alt="New analysis opened on an incident's window, under the banner naming it" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
+</picture>
+
+## The correlations screen
+
+Each row is a pair of findings that kept following each other, one firing within seconds after the
+other, as the daemons with `[daemon.correlation]` and `[daemon.hub_export]` on pushed it: the side
+that fires first, the one that follows it, how many episodes the pair had in the range, the last
+one, marked active while it runs, its peak confidence, the median lag between the two and the
+daemon. The rows are built in the browser from the episodes of the range, a thousand at most, and a
+line under the table says when the read stopped there. A range, the last 24 hours by default, a
+service matched on either side, a daemon and an "active now only" switch narrow the list.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-correlations-dark.png">
+  <img alt="The correlations screen with a pair unfolded on its strip and its episodes" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-correlations.png">
+</picture>
+
+A row unfolds into a strip of the range, each episode in green over the same daemon's incidents in
+red, then the list of its episodes: span, duration, peaks and the incidents each one overlaps,
+which open the incidents screen on that incident. Analyse this window opens New analysis on the
+episode's window, a minute wider on each side, and on the service of the side that fires first, as
+the incidents screen does. Explain the last pair, shown when the Hub has a trace backend, opens New
+analysis on the trace of one finding of the pair's last co-occurrence, with the other trace one
+click away in the banner.
+
+An unfolded incident lists the correlations active during it: the episodes of its daemon that
+overlap the incident's window, up to its end once it has one, each with a link to every episode of
+its pair. That link, `#/correlations?pair_key=<key>`, is the one the Grafana correlations table
+uses too: the screen opens on that pair over 180 days, unfolded, with a Show every pair button
+to leave it. A daemon that pushed no correlation at all says so, so an empty block never reads as
+a quiet one. On a phone the tables scroll sideways inside their frame, as the incident tables do, and
+the page does not.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations-dark.png">
+  <img alt="An unfolded incident listing the correlations active during it" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations.png">
 </picture>
 
 ## The ack page

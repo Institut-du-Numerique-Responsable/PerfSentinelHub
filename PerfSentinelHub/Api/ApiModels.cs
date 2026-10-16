@@ -94,6 +94,11 @@ public sealed record SourceResponse(
     // Whether the Hub holds a credential to write acks to this daemon. Neither
     // its header nor its value is published: no printed command ever acks.
     bool AckRelay,
+    // Signatures this daemon first saw in the last hour, null while the Hub has not
+    // judged it: see SignatureRate. The warning is that count past
+    // Hub:NewSignaturesPerHourWarning.
+    int? NewSignaturesLastHour,
+    bool SignatureRateWarning,
     // What the caller may do at this source, with Hub:Access:Enabled. Null and so
     // absent with access off, which leaves the payload as it was.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -127,6 +132,21 @@ public sealed record IncidentQuery(
     string? Namespace,
     string? Kind,
     IReadOnlyList<string>? SourceIds,
+    int Offset,
+    int Limit,
+    AccessScope? Access = null);
+
+// SourceIds is the resolved scope, as on IncidentQuery. FromMs and ToMs keep the episodes
+// whose activity overlaps the span, bounds included, a running one reaching every later
+// moment. NowMs dates the stale rule. Access null reads every episode, as with access off.
+public sealed record CorrelationQuery(
+    string? Service,
+    string? PairKey,
+    IReadOnlyList<string>? SourceIds,
+    long? FromMs,
+    long? ToMs,
+    bool Active,
+    long NowMs,
     int Offset,
     int Limit,
     AccessScope? Access = null);

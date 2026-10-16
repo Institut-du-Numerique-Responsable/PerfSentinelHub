@@ -78,6 +78,8 @@ builder.Services.AddSingleton<FindingMetrics>();
 builder.Services.AddSingleton<ImportAdmission>();
 builder.Services.AddSingleton<IncidentImportMetrics>();
 builder.Services.AddSingleton<IncidentImportAdmission>();
+builder.Services.AddSingleton<CorrelationImportMetrics>();
+builder.Services.AddSingleton<CorrelationImportAdmission>();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();
@@ -108,6 +110,8 @@ builder.Services.AddTransient<AckReader>();
 builder.Services.AddTransient<AckRelay>();
 builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
+builder.Services.AddSingleton<SignatureRate>();
+builder.Services.AddHostedService<SignatureRateWorker>();
 builder.Services.AddHostedService<RetentionWorker>();
 var authenticates = builder.AddHubAuthentication();
 // A report is several megabytes of repetitive HTML. Only the launcher's files and

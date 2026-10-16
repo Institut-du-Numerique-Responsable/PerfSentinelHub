@@ -284,4 +284,55 @@ internal static class Schema
                                 CREATE INDEX IF NOT EXISTS ix_terminal_tokens_subject
                                   ON terminal_tokens(subject, created_at_ms);
                                 """;
+
+    // The correlation episodes the daemons push: one row per period during which a pair of
+    // findings kept following each other, cut by the daemon, which alone knows whether the
+    // pair still co-occurs. Keyed on (id, source_id) like incidents, since two daemons can
+    // see one pair. Each side sits in columns so a read filters on a service. started_at_ms,
+    // last_seen_ms and ended_at_ms are the daemon's clock, first_seen_ms and
+    // last_seen_hub_ms the Hub's. A rowid table because the purge deletes by rowid.
+    internal const string V11 = """
+                                CREATE TABLE IF NOT EXISTS correlation_episodes (
+                                  id TEXT NOT NULL,
+                                  source_id TEXT NOT NULL,
+                                  pair_key TEXT NOT NULL,
+                                  source_type TEXT NOT NULL,
+                                  source_service TEXT NOT NULL,
+                                  source_template TEXT NOT NULL,
+                                  source_grouping TEXT,
+                                  source_grouping_value TEXT,
+                                  target_type TEXT NOT NULL,
+                                  target_service TEXT NOT NULL,
+                                  target_template TEXT NOT NULL,
+                                  target_grouping TEXT,
+                                  target_grouping_value TEXT,
+                                  started_at_ms INTEGER NOT NULL,
+                                  last_seen_ms INTEGER NOT NULL,
+                                  ended_at_ms INTEGER,
+                                  gap_ms INTEGER NOT NULL,
+                                  peak_confidence REAL NOT NULL,
+                                  peak_co_occurrences INTEGER NOT NULL,
+                                  last_confidence REAL NOT NULL,
+                                  last_co_occurrences INTEGER NOT NULL,
+                                  median_lag_ms REAL,
+                                  sample_trace_id TEXT,
+                                  source_sample_trace_id TEXT,
+                                  first_seen_ms INTEGER NOT NULL,
+                                  last_seen_hub_ms INTEGER NOT NULL,
+                                  PRIMARY KEY(id, source_id)
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_episodes_listing
+                                  ON correlation_episodes(started_at_ms DESC, id, source_id);
+                                CREATE INDEX IF NOT EXISTS ix_episodes_pair
+                                  ON correlation_episodes(source_id, pair_key, started_at_ms);
+                                CREATE INDEX IF NOT EXISTS ix_episodes_last_seen
+                                  ON correlation_episodes(last_seen_ms);
+                                """;
+
+    // The signatures a source first saw since a moment, which SignatureRate reads every
+    // five minutes: a range on this index rather than a scan of every row the source holds.
+    internal const string V12 = """
+                                CREATE INDEX IF NOT EXISTS ix_finding_sources_first_seen
+                                  ON finding_sources(source_id, first_seen_ms);
+                                """;
 }

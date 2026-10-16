@@ -73,7 +73,7 @@ d'identifiant d'acquittement n'en offre aucun, voir
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt
-qu'au travers d'une bibliothèque : neuf familles de métriques sur des données que
+qu'au travers d'une bibliothèque : treize familles de métriques sur des données que
 le Hub détient déjà ne justifient pas une dépendance dans un service dont les
 deux seuls paquets sont SQLite.
 
@@ -87,8 +87,11 @@ deux seuls paquets sont SQLite.
 | `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | Dernier push d'un daemon. Pas un battement de cœur, voir plus bas |
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refusés, par motif                                        |
 | `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Imports d'incidents refusés, par les motifs des findings          |
+| `perf_sentinel_hub_correlation_import_rejected_total{reason}`          | counter | Imports de corrélations refusés, par les motifs des findings      |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Les runs actuellement stockés, par statut                         |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Les signatures de findings distinctes stockées, par environnement |
+| `perf_sentinel_hub_findings_age_seconds`                               | gauge   | L'âge des comptes derrière `findings`                             |
+| `perf_sentinel_hub_database_bytes`                                     | gauge   | La taille du fichier de base et de son journal d'écriture         |
 
 Quatre partis pris dans cette forme.
 
@@ -122,10 +125,37 @@ sévérités compte sous `other` au lieu d'ouvrir une série à elle. À l'inver
 d'`analysis_runs`, une combinaison vide ne publie aucune série. Les zéros
 seraient chaque environnement multiplié par chaque type, sévérité et statut,
 presque tous vides pour de bon, et la famille se lit au travers de `sum()`, où
-une série absente vaut déjà zéro. Les comptes sont gardés 15 secondes, parce
+une série absente vaut déjà zéro. Les comptes sont gardés 15 secondes après la fin d'un compte, ou neuf fois sa
+durée quand c'est plus long, parce
 que l'endpoint est anonyme et qu'un compte lit tous les findings de son
 environnement. Une collecte dans cet intervalle reçoit les comptes précédents,
-et toutes les autres familles restent calculées à la collecte.
+et toutes les autres familles restent calculées à la collecte. Une collecte
+attend un nouveau compte cinq secondes au plus. Au-delà, elle reçoit les comptes
+précédents pendant que le compte se termine pour une collecte suivante, et
+`perf_sentinel_hub_findings_age_seconds` dit leur âge. Un compte grandit avec les
+signatures stockées : sans cette borne, une base de plusieurs millions de
+signatures le faisait durer plus que les 10 secondes du `scrape_timeout` de
+Prometheus, et toutes les familles disparaissaient avec lui. La pause de neuf fois
+la durée empêche un compte lent d'occuper la base plus d'un dixième du temps : avec
+un cache de pages plus petit que la base, chaque compte la relit sur le disque, et
+les imports concourent avec ces lectures.
+
+`perf_sentinel_hub_database_bytes` se lit sur le système de fichiers, le fichier de
+base plus son journal d'écriture. Un volume plein refuse toute écriture mais lit
+encore, donc la collecte continue de le servir dans le cas pour lequel il existe.
+Alertez sur sa croissance face au volume plutôt que sur les seules
+métriques de volume du kubelet : un Hub dont la base est pleine ne stocke plus rien,
+et ses sources montrent alors `database_full` comme dernière erreur, un code qui
+parle du volume du Hub et pas du daemon, qui a répondu.
+
+Un daemon qui voit pour la première fois plus de `Hub:NewSignaturesPerHourWarning`
+signatures en une heure, 1000 par défaut, est signalé sur `/api/sources` et journalisé
+une fois, jusqu'à ce qu'il repasse dessous. Une flotte saine se stabilise sur un
+ensemble de signatures, donc une source qui en crée sans cesse de nouvelles met
+quelque chose d'unique par trace dans une signature, et le Hub stocke une ligne par
+signature reçue. Le contrôle tourne toutes les cinq minutes et ignore une source dont
+tous les findings datent de la dernière heure, comme lors d'un premier contact. 0
+le désactive.
 
 La cardinalité est bornée par la configuration. `source` prend les identifiants
 de `Hub:Sources`, fixés au démarrage et restreints à 1 à 64 caractères ASCII
@@ -177,7 +207,7 @@ Quatre fichiers sous [`examples/`](../../examples), validés plutôt qu'esquiss�
 
 | Fichier                                                                       | Est                                                           |
 |-------------------------------------------------------------------------------|---------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des neuf familles, importable tel quel |
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des treize familles, importable tel quel |
 | [`FR/grafana-dashboard-FR.json`](../../examples/FR/grafana-dashboard-FR.json) | Le même tableau de bord, titres et descriptions en français   |
 | [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)               | Une règle, contrôlée par `promtool check rules`               |
 | [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)               | Un job de collecte pour un déploiement qui nomme ses cibles   |

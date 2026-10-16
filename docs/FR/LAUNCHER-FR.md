@@ -5,10 +5,11 @@ qu'elle ouvre. HTML, CSS et JavaScript simples. Sans framework, sans étape de b
 sans requête réseau : les deux polices sont en base64 dans `wwwroot/fonts.css` et chaque
 icône est un SVG en ligne.
 
-Cinq écrans : démarrer une analyse, suivre un run, lister les runs récents, lire la santé
-de la flotte, lire les incidents enregistrés par les daemons. Avec `Hub:Access` actif, la
+Six écrans : démarrer une analyse, suivre un run, lister les runs récents, lire la santé
+de la flotte, lire les incidents enregistrés par les daemons, suivre les corrélations
+qu'ils ont poussées. Avec `Hub:Access` actif, la
 pastille d'identité en haut à droite ouvre [Votre accès](#votre-accès), et un
-administrateur dispose d'un sixième onglet, [Couverture](#lécran-couverture). Un autre
+administrateur dispose d'un septième onglet, [Couverture](#lécran-couverture). Un autre
 écran n'a pas d'onglet et ne s'atteint que par un lien, voir
 [La page d'acquittement](#la-page-dacquittement).
 
@@ -144,6 +145,12 @@ rétention.
 
 ## La ligne de santé de la flotte
 
+La santé d'une ligne indique `reachable`, `not yet observed` avant le premier poll, ou
+`unreachable` avec sa durée. `Hub database full` remplace ce dernier quand le poll a
+échoué sur le volume du Hub lui-même plutôt que sur le daemon, et un daemon qui crée
+sans cesse de nouvelles signatures affiche son compte de la dernière heure en ton
+d'avertissement tant qu'il répond.
+
 La ligne d'un daemon se déplie sur les jauges qu'il rapporte face à leurs plafonds et les
 conseils qu'il écrit sur son propre tuning, dont `/metrics` ne porte ni les uns ni les
 autres.
@@ -218,6 +225,43 @@ daemon.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff-dark.png">
   <img alt="New analysis ouvert sur la fenêtre d'un incident, sous le bandeau qui le nomme" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-handoff.png">
+</picture>
+
+## L'écran des corrélations
+
+Chaque ligne est une paire de findings qui n'ont pas cessé de se suivre, l'un se déclenchant
+quelques secondes après l'autre, telle que l'ont poussée les daemons qui ont `[daemon.correlation]`
+et `[daemon.hub_export]` actifs : le côté qui se déclenche en premier, celui qui le suit, le nombre
+d'épisodes de la paire sur la période, le dernier, marqué actif tant qu'il dure, son pic de
+confiance, le délai médian entre les deux et le daemon. Les lignes sont construites dans le
+navigateur à partir des épisodes de la période, mille au plus, et une ligne sous le tableau dit
+quand la lecture s'est arrêtée là. Une période, les dernières 24 heures par défaut, un service
+cherché des deux côtés, un daemon et un interrupteur "active now only" resserrent la liste.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-correlations-dark.png">
+  <img alt="L'écran des corrélations avec une paire dépliée sur sa frise et ses épisodes" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-correlations.png">
+</picture>
+
+Une ligne se déplie en une frise de la période, chaque épisode en vert sur les incidents du même
+daemon en rouge, puis la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
+ouvrent l'écran des incidents sur cet incident. Analyse this window ouvre New analysis sur la
+fenêtre de l'épisode, élargie d'une minute de chaque côté, et sur le service du côté qui se
+déclenche en premier, comme le fait l'écran des incidents. Explain the last pair, affiché quand le
+Hub a un backend de traces, ouvre New analysis sur la trace d'un finding de la dernière
+co-occurrence de la paire, l'autre trace restant à un clic dans le bandeau.
+
+Un incident déplié liste les corrélations actives pendant sa durée : les épisodes de son daemon qui
+recouvrent la fenêtre de l'incident, jusqu'à sa fin dès qu'il en a une, chacun avec un lien vers
+tous les épisodes de sa paire. Ce lien, `#/correlations?pair_key=<clé>`, est aussi celui du tableau
+des corrélations de Grafana : l'écran s'ouvre sur cette paire sur 180 jours, dépliée, avec un
+bouton Show every pair pour en sortir. Un daemon qui n'a poussé aucune corrélation le dit, pour qu'un bloc
+vide ne se lise jamais comme un bloc calme. Sur un téléphone, les tableaux défilent latéralement
+dans leur cadre, comme ceux des incidents, et la page ne défile pas.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations-dark.png">
+  <img alt="Un incident déplié qui liste les corrélations actives pendant sa durée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations.png">
 </picture>
 
 ## La page d'acquittement

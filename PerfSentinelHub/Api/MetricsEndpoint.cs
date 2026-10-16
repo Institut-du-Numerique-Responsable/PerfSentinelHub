@@ -10,7 +10,7 @@ namespace PerfSentinelHub.Api;
 
 /// <summary>
 ///     The Prometheus exposition format, written by hand. The whole surface is
-///     nine metric families over data the Hub already holds, which is not worth a
+///     thirteen metric families over data the Hub already holds, which is not worth a
 ///     dependency in a NativeAOT service whose only two packages are SQLite.
 ///     Cardinality is bounded by configuration, not by requests: `source` takes the
 ///     ids and `environment` the environments in `Hub:Sources`, fixed at startup
@@ -75,34 +75,43 @@ public static partial class MetricsEndpoint
     public static void MapMetrics(this WebApplication app)
     {
         var version = HubVersion.Current;
+        // Every parameter is a collaborator the router injects, one per metric family source.
+#pragma warning disable S107
         app.MapGet("/metrics", async (
             HubDatabase database,
             IOptions<HubOptions> options,
             ImportMetrics imports,
             IncidentImportMetrics incidentImports,
+            CorrelationImportMetrics correlationImports,
             FindingMetrics findings,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
+#pragma warning restore S107
         {
             var body = await RenderAsync(
-                database, options.Value, imports, incidentImports, findings, timeProvider, version, cancellationToken);
+                database, options.Value, imports, incidentImports, correlationImports, findings, timeProvider, version,
+                cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
     }
 
+    // Every parameter is a collaborator the router injects, one per metric family source.
+#pragma warning disable S107
     private static async Task<string> RenderAsync(
         HubDatabase database,
         HubOptions options,
         ImportMetrics imports,
         IncidentImportMetrics incidentImports,
+        CorrelationImportMetrics correlationImports,
         FindingMetrics findings,
         TimeProvider timeProvider,
         string version,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         var (states, pushes) = await database.QuerySourceObservationsAsync(cancellationToken);
         var runs = await database.CountRunsByStatusAsync(cancellationToken);
-        var findingSeries = await findings.SeriesAsync(cancellationToken);
+        var counted = await findings.SeriesAsync(cancellationToken);
         var now = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         // Read from the same snapshot as the per-status series rather than from
         // a second query: two counts of the same rows taken a moment apart can
@@ -181,6 +190,11 @@ public static partial class MetricsEndpoint
         foreach (var (reason, count) in incidentImports.Snapshot())
             Line(text, "perf_sentinel_hub_incident_import_rejected_total", $"reason=\"{reason}\"", count);
 
+        Counter(text, "perf_sentinel_hub_correlation_import_rejected_total",
+            "Correlation imports the Hub refused, by reason, published from startup like the findings ones.");
+        foreach (var (reason, count) in correlationImports.Snapshot())
+            Line(text, "perf_sentinel_hub_correlation_import_rejected_total", $"reason=\"{reason}\"", count);
+
         Family(text, "perf_sentinel_hub_analysis_queue_depth",
             "Analysis runs accepted and not yet claimed by a worker.");
         Line(text, "perf_sentinel_hub_analysis_queue_depth", null, queued);
@@ -194,7 +208,20 @@ public static partial class MetricsEndpoint
             Line(text, "perf_sentinel_hub_analysis_runs", $"status=\"{status}\"",
                 Runs(runs, status));
 
-        AppendFindings(text, findingSeries);
+        AppendFindings(text, counted?.Value ?? []);
+        Family(text, "perf_sentinel_hub_findings_age_seconds",
+            "Age of the count behind perf_sentinel_hub_findings. A count that takes longer than a scrape "
+            + "can wait is served from the previous one, so this rises while the count lags. Absent until "
+            + "a first count lands.");
+        if (counted is not null)
+            Line(text, "perf_sentinel_hub_findings_age_seconds", null,
+                Seconds(now - counted.CountedAt.ToUnixTimeMilliseconds()));
+
+        // Read from the file system, not through SQLite: a full volume refuses every
+        // write but still reads, so this still answers in the case it exists for.
+        Family(text, "perf_sentinel_hub_database_bytes",
+            "Size of the Hub's database file and its write-ahead log, in bytes.");
+        Line(text, "perf_sentinel_hub_database_bytes", null, DatabaseBytes(options.DatabasePath));
         return text.ToString();
     }
 
@@ -260,6 +287,14 @@ public static partial class MetricsEndpoint
     private static double Seconds(long milliseconds)
     {
         return Math.Max(0, milliseconds) / 1000.0;
+    }
+
+    private static long DatabaseBytes(string databasePath)
+    {
+        return new[] { databasePath, databasePath + "-wal" }
+            .Select(path => new FileInfo(path))
+            .Where(file => file.Exists)
+            .Sum(file => file.Length);
     }
 
     private static int Runs(IReadOnlyDictionary<string, int> runs, string status)

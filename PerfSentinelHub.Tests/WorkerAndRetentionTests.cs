@@ -144,6 +144,27 @@ public sealed class WorkerAndRetentionTests : IDisposable
         Assert.Equal("staging", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    [Fact]
+    public async Task Purge_drops_an_episode_last_seen_before_the_cutoff()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        await database.TryUpsertEpisodesAsync("a", EpisodeJson.Parsed(
+                EpisodeJson.Episode(EpisodeJson.Id(1), lastSeenMs: 1_800_000_060_000),
+                EpisodeJson.Episode(EpisodeJson.Id(2), lastSeenMs: 1_800_000_960_000)),
+            1_800_001_000_000, cancellationToken);
+
+        await database.PurgeAsync(1_800_000_500_000, 0, 0, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT group_concat(id, ',') FROM correlation_episodes;";
+        Assert.Equal(EpisodeJson.Id(2), (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
     // An attribute rides its own last_seen_ms, an incident's pairs leave with the incident.
     [Fact]
     public async Task Purge_removes_attributes_no_source_saw_since_the_cutoff_and_the_pairs_of_purged_incidents()

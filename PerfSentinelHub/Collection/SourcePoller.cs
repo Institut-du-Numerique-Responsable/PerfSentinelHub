@@ -79,7 +79,7 @@ public sealed partial class SourcePoller(
     }
 
     // Shared with the daemon view: one classification for both readers.
-    internal static string ErrorCode(Exception exception)
+    public static string ErrorCode(Exception exception)
     {
         return exception switch
         {
@@ -87,6 +87,8 @@ public sealed partial class SourcePoller(
             ResponseTooLargeException => "response_too_large",
             InvalidStatusException => "invalid_status",
             InvalidDataException => "invalid_findings",
+            // SQLITE_FULL: the Hub's own volume, not the daemon, which answered.
+            SqliteException { SqliteErrorCode: 13 } => "database_full",
             SqliteException => "storage_error",
             HttpRequestException httpException => httpException.StatusCode is null ? "network_error" : "http_error",
             _ => "network_error"

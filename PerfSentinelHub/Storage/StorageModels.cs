@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using PerfSentinelHub.Api;
+using PerfSentinelHub.Collection;
 
 namespace PerfSentinelHub.Storage;
 
@@ -85,6 +86,36 @@ public sealed record StoredIncident(
     long LastSeenMs,
     // Null on the listing, which never reads the column.
     string? FindingsJson);
+
+/// <summary>
+///     One daemon's copy of a correlation episode as a read serves it. EndedAtMs is the
+///     served end: the daemon's, or the last co-occurrence of an episode silent past its
+///     gap plus 15 minutes, which is the only case EndedBy is set, to `stale`. SourceName
+///     is the configured name, filled by the route, since storage holds ids only.
+/// </summary>
+public sealed record StoredEpisode(
+    string Id,
+    string SourceId,
+    string PairKey,
+    EpisodeSide Source,
+    EpisodeSide Target,
+    long StartedAtMs,
+    long LastSeenMs,
+    long? EndedAtMs,
+    string? EndedBy,
+    long GapMs,
+    double PeakConfidence,
+    long PeakCoOccurrences,
+    double LastConfidence,
+    long LastCoOccurrences,
+    double? MedianLagMs,
+    string? SampleTraceId,
+    string? SourceSampleTraceId,
+    long FirstSeenMs,
+    long LastSeenHubMs)
+{
+    public string? SourceName { get; init; }
+}
 
 /// <summary>
 ///     The outcome of the last read of one source, as its ledger filed it:

@@ -17,6 +17,8 @@ public static partial class ApiEndpoints
 
     // One incident carries up to a thousand frozen findings: the cap of one daemon page.
     private const int IncidentImportMaxBytes = 4 * 1024 * 1024;
+    // A hundred episodes of two templates each: the daemon's own cap per batch.
+    private const int CorrelationImportMaxBytes = 1024 * 1024;
 
     public static void MapHubApi(this WebApplication app)
     {
@@ -75,8 +77,10 @@ public static partial class ApiEndpoints
         app.MapGet("/api/incidents", GetIncidentsAsync);
         app.MapGet("/api/incidents/{id}", GetIncidentAsync);
         app.MapPost("/api/incidents/refresh", RefreshIncidentsAsync);
+        app.MapGet("/api/correlations", GetCorrelationsAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
+        app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
         app.MapGet("/health/live", TypedResults.Ok).AllowAnonymous();
         app.MapGet("/health/ready", (HubDatabase database) =>
                 database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable))
@@ -101,6 +105,7 @@ public static partial class ApiEndpoints
         HubDatabase database,
         AccessPolicy access,
         IOptions<HubOptions> options,
+        SignatureRate rate,
         CancellationToken cancellationToken)
     {
         if (!access.ReachesAnything(context))
@@ -138,6 +143,8 @@ public static partial class ApiEndpoints
                     ackRead?.State,
                     ackRead?.LastReadMs,
                     source.HasAckCredential,
+                    rate.NewSignaturesLastHour(source.Id),
+                    rate.IsAbnormal(source.Id),
                     access.Permissions(context, source));
             })
         ];
@@ -240,6 +247,38 @@ public static partial class ApiEndpoints
         return null;
     }
 
+    /// <summary>
+    ///     An admitted import's body, read under its cap and parsed, or the refusal it earned,
+    ///     already counted: 413 past the cap or the batch limit, 400 for what the parser
+    ///     refuses. The incident and correlation imports share it, their parsers differ.
+    /// </summary>
+    private static async Task<(T Import, IResult? Rejected)> ReadImportAsync<T>(
+        HttpRequest request,
+        int maxBytes,
+        Func<ReadOnlyMemory<byte>, T> parse,
+        Func<ImportRejection, IResult, IResult> refuse,
+        CancellationToken cancellationToken)
+        where T : class
+    {
+        var payload = await ReadBodyAsync(request, cancellationToken, maxBytes);
+        if (payload is null)
+            return (null!, refuse(ImportRejection.TooLarge,
+                TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge)));
+        try
+        {
+            return (parse(payload), null);
+        }
+        catch (ImportBatchTooLargeException)
+        {
+            return (null!, refuse(ImportRejection.TooLarge,
+                TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge)));
+        }
+        catch (InvalidDataException)
+        {
+            return (null!, refuse(ImportRejection.BadRequest, TypedResults.BadRequest()));
+        }
+    }
+
     private static async Task<IResult> ImportIncidentsAsync(
         HttpRequest request,
         HubDatabase database,
@@ -253,25 +292,10 @@ public static partial class ApiEndpoints
             return refused;
         try
         {
-            var payload = await ReadBodyAsync(request, cancellationToken, IncidentImportMaxBytes);
-            if (payload is null)
-                return admission.Refuse(ImportRejection.TooLarge,
-                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
-
-            ParsedIncidentImport import;
-            try
-            {
-                import = IncidentParser.ParseImport(payload);
-            }
-            catch (ImportBatchTooLargeException)
-            {
-                return admission.Refuse(ImportRejection.TooLarge,
-                    TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
-            }
-            catch (InvalidDataException)
-            {
-                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-            }
+            var (import, rejected) = await ReadImportAsync<ParsedIncidentImport>(
+                request, IncidentImportMaxBytes, IncidentParser.ParseImport, admission.Refuse, cancellationToken);
+            if (rejected is not null)
+                return rejected;
 
             if (import.Page.Incidents.Count == 0)
                 return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
@@ -287,6 +311,43 @@ public static partial class ApiEndpoints
                 LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
                     import.Page.RejectedCount);
             return TypedResults.Ok(new ImportResponse(import.Page.Incidents.Count, import.Page.RejectedCount));
+        }
+        finally
+        {
+            admission.Gate.Exit();
+        }
+    }
+
+    private static async Task<IResult> ImportCorrelationsAsync(
+        HttpRequest request,
+        HubDatabase database,
+        CorrelationImportAdmission admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        if (AdmitImport(request, options, admission.Gate, admission.Refuse, out var source) is { } refused)
+            return refused;
+        try
+        {
+            var (import, rejected) = await ReadImportAsync<ParsedEpisodeImport>(
+                request, CorrelationImportMaxBytes, CorrelationParser.ParseImport, admission.Refuse, cancellationToken);
+            if (rejected is not null)
+                return rejected;
+            if (import.Episodes.Count == 0)
+                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
+            if (!await database.TryUpsertEpisodesAsync(source.Id, import.Episodes,
+                    timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
+            {
+                request.HttpContext.Response.Headers.RetryAfter = "1";
+                return admission.Refuse(ImportRejection.WriteTimeout,
+                    TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
+            }
+
+            if (import.RejectedCount > 0)
+                LogRejectedImportedEpisodes(loggerFactory.CreateLogger("ImportApi"), source.Id, import.RejectedCount);
+            return TypedResults.Ok(new ImportResponse(import.Episodes.Count, import.RejectedCount));
         }
         finally
         {
@@ -545,6 +606,13 @@ public static partial class ApiEndpoints
 
     [LoggerMessage(1302, LogLevel.Warning, "Source {SourceId} rejected {RejectedCount} imported incidents.")]
     private static partial void LogRejectedImportedIncidents(
+        ILogger logger,
+        string sourceId,
+        int rejectedCount);
+
+    [LoggerMessage(1303, LogLevel.Warning,
+        "Source {SourceId} rejected {RejectedCount} imported correlation episodes.")]
+    private static partial void LogRejectedImportedEpisodes(
         ILogger logger,
         string sourceId,
         int rejectedCount);

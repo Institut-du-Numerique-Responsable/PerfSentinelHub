@@ -39,6 +39,10 @@ Incidents follow the same split from perf-sentinel 0.29.0: the daemon pushes eac
 recorded, closed or completed, and the hourly poll still reads them as a safety net. Both write
 through one merge rule, so neither path can undo the other.
 
+Correlation episodes take the push alone from perf-sentinel 0.30.0: the daemon cuts each episode and
+pushes it when it opens, when a peak rises, when its last co-occurrence moves on by a minute and
+when it closes. Nothing polls them, so a daemon that does not push leaves the Hub without them.
+
 A daemon pushing successfully proves that the daemon can reach the Hub. It proves
 nothing about whether the Hub can reach the daemon, which is a different route through
 a different set of firewalls, and that is the direction an operator needs when a source
@@ -100,6 +104,9 @@ different mechanisms.
 Findings expire on a worker that runs once a day and purges in chunks, so a long purge
 cannot reject imports for its whole duration. Incidents copied from a daemon ride that
 same clock, purged on the Hub's own `last_seen_ms` and never on the alerting's `at_ms`.
+Correlation episodes ride it as well, purged on their own `last_seen_ms`, the daemon's stamp of
+the pair's last co-occurrence: an episode is history once it closes, and the Hub's clock only says
+when a copy arrived.
 Observation days, the record of which days each source saw a finding, ride it too, on
 the Hub clock and by whole day: a day leaves once it lies entirely before the cutoff, so
 the day the cutoff falls in is kept. They carry no foreign key, because a cascade from
@@ -146,6 +153,7 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `source_imports`               | source, its last push                                          | never                                      |
 | `incidents`                    | incident and source                                            | retention, on `last_seen_ms`               |
 | `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
+| `correlation_episodes`         | episode and source                                             | retention, on `last_seen_ms`               |
 | `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
 | `incident_reads`, `ack_reads`  | source                                                         | never                                      |
 | `analysis_runs`                | run                                                            | `Hub:Analysis:RunRetention`                |

@@ -83,6 +83,22 @@ public sealed record IncidentImportAdmission(ImportGate Gate, IncidentImportMetr
 }
 
 /// <summary>
+///     The correlation import's refusals, on a series of their own for the reason the
+///     incident import has one.
+/// </summary>
+public sealed class CorrelationImportMetrics : ImportMetrics;
+
+/// <summary>The correlation import's admission: the shared gate, its own refusal count.</summary>
+public sealed record CorrelationImportAdmission(ImportGate Gate, CorrelationImportMetrics Metrics)
+{
+    public T Refuse<T>(ImportRejection reason, T result)
+    {
+        Metrics.Rejected(reason);
+        return result;
+    }
+}
+
+/// <summary>
 ///     The import endpoint's admission control: the concurrency gate that decides
 ///     whether a request runs at all, and the counter that records every refusal.
 ///     One parameter rather than two because a refusal always touches both.

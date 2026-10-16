@@ -474,7 +474,7 @@ test("an incident's window travels to New analysis as a hash and back", () => {
     const hash = PSL.incidentHandoffHash(incident, 9000);
     assert.equal(hash, "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2");
     assert.deepEqual(PSL.readHandoff(hash, 9000),
-        {fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2"});
+        {fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2", pairKey: ""});
 });
 
 test("the window's end is held at now, in the hash and again when it is read", () => {
@@ -1005,6 +1005,7 @@ test("#/access is the access screen only when the Hub answered /api/access, New 
     assert.equal(PSL.screenOf("#/access", false, false), "missing", "access off, or /api/access failed");
     assert.equal(PSL.screenOf("", false, false), "new");
     assert.equal(PSL.screenOf("#/recent", false, false), "recent");
+    assert.equal(PSL.screenOf("#/correlations", false, false), "correlations");
     assert.equal(PSL.screenOf("#/new?from=1&to=2&service=s", false, false), "new");
     assert.equal(PSL.screenOf("#/run/0123456789abcdef", false, false), "run");
     assert.equal(PSL.screenOf("#/report/0123456789abcdef", true, false), "report");
@@ -1212,4 +1213,129 @@ test("a finding after the incident is placed after the event that kind names", (
     assert.equal(PSL.phaseLabel("after", "restart"), " after the restart");
     assert.equal(PSL.phaseLabel("after", "deploy"), " after the deploy");
     assert.equal(PSL.phaseLabel("after", "memory_saturation"), " after the incident");
+});
+
+// ------------------------------------------------------------ correlations
+
+const episode = (over) => Object.assign({
+    source_id: "checkout-prod",
+    pair_key: "a".repeat(32),
+    started_at_ms: 1_000_000,
+    last_seen_ms: 1_060_000,
+    ended_at_ms: 1_060_000,
+    peak_confidence: 0.8,
+    median_lag_ms: 1200,
+    source: {finding_type: "n_plus_one_sql", service: "order svc", template: "SELECT 1", grouping_key: null},
+    target: {finding_type: "pool_saturation", service: "orders-svc", template: "SELECT 2", grouping_key: null},
+    sample_trace_id: "b".repeat(32),
+    source_sample_trace_id: "c".repeat(32)
+}, over);
+
+test("episodes fold into one row per pair and daemon, the most recently active first", () => {
+    const pairs = PSL.correlationPairs([
+        episode({started_at_ms: 3_000_000, last_seen_ms: 3_100_000, ended_at_ms: null, peak_confidence: 0.7}),
+        episode({pair_key: "d".repeat(32), started_at_ms: 2_000_000, last_seen_ms: 2_050_000, ended_at_ms: 2_050_000}),
+        episode({peak_confidence: 0.92}),
+        episode({source_id: "orders-prod", started_at_ms: 500_000, last_seen_ms: 560_000, ended_at_ms: 560_000})
+    ]);
+    assert.deepEqual(pairs.map((pair) => [pair.source_id, pair.pair_key[0], pair.episodes.length, pair.active, pair.peak]),
+        [["checkout-prod", "a", 2, true, 0.92], ["checkout-prod", "d", 1, false, 0.8], ["orders-prod", "a", 1, false, 0.8]]);
+    assert.equal(pairs[0].last.started_at_ms, 3_000_000, "the last episode is the latest started");
+    assert.equal(pairs[0].key, "checkout-prod:" + "a".repeat(32));
+});
+
+test("two spans share a moment on their bounds, and a running one reaches every later moment", () => {
+    assert.equal(PSL.spansOverlap(0, 10, 10, 20), true, "an end on the other's start");
+    assert.equal(PSL.spansOverlap(0, 10, 11, 20), false);
+    assert.equal(PSL.spansOverlap(0, null, 1_000, 2_000), true, "still running");
+    assert.equal(PSL.spansOverlap(5_000, null, 1_000, 2_000), false, "started after the span");
+});
+
+test("an episode's window travels to New analysis a minute wider on each side, with its pair", () => {
+    const hash = PSL.episodeHandoffHash(episode({}), 9_000_000);
+    assert.equal(hash, "#/new?from=940000&to=1120000&service=order%20svc&pair=" + "a".repeat(32));
+    assert.deepEqual(PSL.readHandoff(hash, 9_000_000),
+        {fromMs: 940000, toMs: 1120000, service: "order svc", incidentId: "", pairKey: "a".repeat(32)});
+});
+
+test("a running episode's window ends now, never in a future the form refuses", () => {
+    assert.match(PSL.episodeHandoffHash(episode({ended_at_ms: null}), 1_500_000), /&to=1500000&/);
+    assert.match(PSL.episodeHandoffHash(episode({}), 1_100_000), /&to=1100000&/, "a minute past the end is not yet");
+});
+
+test("the last pair's traces open New analysis on the first one, the other carried along", () => {
+    assert.equal(PSL.pairTraceHash(episode({})), "#/new?trace=" + "c".repeat(32) + "&other=" + "b".repeat(32));
+    assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null})), "#/new?trace=" + "b".repeat(32));
+    assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null, sample_trace_id: null})), null);
+    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1&other=y2"), {traceId: "x1", otherTraceId: "y2"});
+    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1"), {traceId: "x1", otherTraceId: ""});
+    assert.equal(PSL.readTraceHandoff("#/new?from=1&to=2&service=s"), null);
+    assert.equal(PSL.readTraceHandoff("#/correlations?trace=x1"), null);
+    assert.equal(PSL.readTraceHandoff(null), null);
+});
+
+test("a strip places each span on its range, clipped, and never thinner than three", () => {
+    assert.deepEqual(PSL.timelineMarks(
+        [{from: 250, to: 500}, {from: -100, to: 50}, {from: 900, to: null}, {from: 400, to: 401}], 0, 1000, 640),
+    [{x: 160, w: 160}, {x: 0, w: 32}, {x: 576, w: 64}, {x: 256, w: 3}]);
+});
+
+test("a lag keeps its tenth of a second, which dur() would round away", () => {
+    assert.equal(PSL.lagText(850), "850 ms");
+    assert.equal(PSL.lagText(1200), "1.2 s");
+    assert.equal(PSL.lagText(90_000), "1 m 30 s");
+    assert.equal(PSL.lagText(null), "—");
+});
+
+test("an episode's span names its start whole and its end as a clock on the same day", () => {
+    const at = (day, hour, minute) => new Date(2026, 9, day, hour, minute).getTime();
+    assert.equal(PSL.episodeSpan(at(15, 11, 55), at(15, 12, 25)), "2026-10-15 11:55 → 12:25");
+    assert.equal(PSL.episodeSpan(at(15, 23, 50), at(16, 0, 20)), "2026-10-15 23:50 → 2026-10-16 00:20");
+});
+
+test("a link to one pair carries its key in the correlations route", () => {
+    assert.equal(PSL.readCorrelationPair("#/correlations?pair_key=" + "a".repeat(32)), "a".repeat(32));
+    assert.equal(PSL.readCorrelationPair("#/correlations?pair_key=%20"), "", "blank is no filter");
+    assert.equal(PSL.readCorrelationPair("#/correlations"), "");
+    assert.equal(PSL.readCorrelationPair("#/incidents?pair_key=x"), "");
+    assert.equal(PSL.readCorrelationPair(null), "");
+    assert.equal(PSL.screenOf("#/correlations?pair_key=x", false, false), "correlations");
+});
+
+test("an incident's correlations are cached per window, so a later end reads again", () => {
+    assert.equal(PSL.correlationWindowKey("k", 1000, 5000), PSL.correlationWindowKey("k", 1000, 5000));
+    assert.notEqual(PSL.correlationWindowKey("k", 1000, 5000), PSL.correlationWindowKey("k", 1000, 9000));
+});
+
+test("a pair's accessible name says both finding types and both services", () => {
+    const side = (type, service) => ({finding_type: type, service: service, template: "SELECT 1"});
+    assert.equal(
+        PSL.pairLabel({source: side("n_plus_one_sql", "order-svc"), target: side("pool_saturation", "payment-svc")}),
+        "N+1 SQL in order-svc, then Pool saturation in payment-svc");
+});
+
+test("a stale episode says so in plain text", () => {
+    assert.equal(PSL.episodeEndNote({ended_by: "stale"}), "stale");
+    assert.equal(PSL.episodeEndNote({ended_by: null}), "");
+});
+
+
+test("a full Hub database is said to be the Hub's, not the daemon's", () => {
+    const now = 10 * 60 * 1000;
+    const down = {reachable: false, unreachable_since_ms: 0, last_attempt_ms: now};
+    assert.deepEqual(PSL.sourceHealth({...down, last_error_code: "database_full"}, now),
+        {tone: "crit", text: "Hub database full"});
+    assert.deepEqual(PSL.sourceHealth({...down, last_error_code: "timeout"}, now),
+        {tone: "crit", text: "unreachable " + PSL.dur(now)});
+    assert.match(PSL.READ_ERRORS.database_full, /Hub's own/);
+    assert.match(PSL.READ_ERRORS.storage_error, /Hub's own/);
+});
+
+test("a source minting signatures is flagged while it answers", () => {
+    const up = {reachable: true, last_attempt_ms: 1};
+    assert.deepEqual(PSL.sourceHealth({...up, signature_rate_warning: true, new_signatures_last_hour: 9000}, 1),
+        {tone: "warn", text: "9000 new signatures in the last hour"});
+    assert.deepEqual(PSL.sourceHealth(up, 1), {tone: "ok", text: "reachable"});
+    assert.deepEqual(PSL.sourceHealth({reachable: true, last_attempt_ms: null}, 1),
+        {tone: "ok", text: "not yet observed"});
 });

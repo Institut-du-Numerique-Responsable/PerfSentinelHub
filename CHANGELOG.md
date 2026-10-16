@@ -2,6 +2,52 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.6.0] - 2026-10-16
+
+### Added
+
+- `perf_sentinel_hub_database_bytes` publishes the database file and its write-ahead log,
+  read from the file system, and `perf_sentinel_hub_findings_age_seconds` the age of the
+  counts behind `perf_sentinel_hub_findings`.
+- A daemon that first sees more than `Hub:NewSignaturesPerHourWarning` signatures in an hour,
+  1000 by default, is flagged on `/api/sources` (`new_signatures_last_hour`,
+  `signature_rate_warning`), in the launcher's health column and once in the logs. A producer
+  that puts something unique per trace into a signature filled a 1Gi volume in 17 hours.
+
+- A Correlations screen and `GET /api/correlations` keep the periods during which a pair of
+  findings kept following each other, as episodes a daemon on perf-sentinel 0.30.0 or later pushes
+  to the new `POST /api/import/correlations?source_id=<id>` with `[daemon.correlation]` and
+  `[daemon.hub_export]` on. The daemon cuts each episode, the Hub merges its copies in any order
+  and purges it with the findings retention. A pair unfolds into a strip of its episodes beside the
+  daemon's incidents, an episode hands its window to New analysis, and an unfolded incident lists
+  the correlations active during it. The import takes the same key and gate as the two others, at
+  most 100 episodes and 1 MiB per request, and refusals count on
+  `perf_sentinel_hub_correlation_import_rejected_total{reason}`.
+
+### Changed
+
+- The image ships perf-sentinel `0.30.0` as its analysis engine, repinned by digest from
+  `0.29.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.29.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.30.0` changes one family of signatures, once: an `excessive_fanout` whose parent span
+  is outside the trace no longer carries that span's id, so a run finds the same fanouts
+  under one stable signature each instead of one per trace. Its other change sits in the
+  daemon: with `[daemon.hub_export]` and `[daemon.correlation]` both on, a daemon pushes its
+  correlation episodes to `/api/import/correlations`.
+- A `/metrics` scrape waits at most five seconds for the findings counts and is otherwise served
+  the previous ones while the count finishes. A store of millions of signatures made the count
+  outlast a 10-second `scrape_timeout`, and every family of the Hub went missing with it. The
+  count runs on no request's token, so it lands even when the scraper gave up, one at a time,
+  and pauses nine times its own duration when slow: a cancelled count used to start over on
+  every scrape and kept the database read from disk, slowing the findings imports behind it.
+- A poll that fails because the Hub's own volume is full now records `database_full` instead of
+  `storage_error`, and the launcher shows `Hub database full` rather than the daemon as
+  unreachable. Any other storage failure keeps `storage_error`, now explained as the Hub's.
+- The first start after the upgrade indexes `finding_sources` by source and first sighting
+  before the Hub answers. On a large database it takes time in proportion to the rows and
+  needs room for the index on the volume: grow a full volume before upgrading.
 ## [0.5.0] - 2026-10-15
 
 ### Added

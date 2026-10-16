@@ -189,7 +189,8 @@ async function captureEmbedFixtures(runs: string[]): Promise<void> {
         // link of an unfolded incident lands on a page with something on it rather
         // than on an embed that has no answer for the route.
         `/api/findings?signature=${encodeURIComponent(ackSignature())}&include_acked=true&limit=1`,
-        incidents
+        incidents,
+        "/api/correlations",
     ]);
     await readAll((routes[incidents] as { id: string }[]).map((incident) => `/api/incidents/${incident.id}`));
 
@@ -238,6 +239,77 @@ async function pushGroupedFindings(importKey: string): Promise<void> {
         ...findings.slice(6).map((f) => grouped(f, "payments"))]);
     await push([grouped(findings[0], "payments")]);
     await push([grouped(findings[1])]);
+}
+
+// The correlations screen and an incident's correlations read episodes, which only a daemon
+// on perf-sentinel 0.30.0 or later pushes, and no fake daemon here does. So they are pushed
+// through the Hub's own import, as such a daemon would push them, around the busy daemon's
+// incidents: a pair active through them that also fired twice earlier in the day, and a
+// second pair that went quiet hours ago. The dead daemon gets one incident pushed with an
+// episode that ended long before it, the block that says no correlation was active. Billing
+// staging pushes none, the block that says so.
+async function seedCorrelations(importKey: string): Promise<void> {
+    const minute = 60_000;
+    const hour = 60 * minute;
+    const incidents = await poll(async () => {
+        const response = await fetch(`${BASE}/api/incidents?source_id=checkout-prod&limit=10`);
+        const rows = response.ok ? await response.json() as { window_from_ms: number }[] : [];
+        return rows.length > 0 ? rows : undefined;
+    }, Date.now() + 30_000, 300, "the Hub never read the busy daemon's incidents");
+    const now = Date.now();
+    const hex = (n: number) => n.toString(16).padStart(32, "0");
+    const fixture = (name: string) => JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", name), "utf8"));
+    const findings = fixture("daemon-findings.json") as
+        { finding: { type: string, service: string, pattern?: { template?: string } } }[];
+    // Each side is a finding the busy daemon really reports, template included.
+    const side = (type: string, service: string) => {
+        const found = findings.find((envelope) => envelope.finding.type === type && envelope.finding.service === service);
+        if (!found) throw new Error(`daemon-findings.json holds no ${type} on ${service}`);
+        return {finding_type: type, service, template: found.finding.pattern?.template ?? "", grouping_key: null};
+    };
+    const pool = {source: side("n_plus_one_sql", "order-svc"), target: side("pool_saturation", "orders-svc")};
+    const slow = {source: side("slow_http", "reports-svc"), target: side("n_plus_one_http", "order-svc")};
+    const quiet = {source: side("redundant_sql", "cache-svc"), target: side("slow_sql", "reports-svc")};
+    const episode = (n: number, pair: object, pairKey: number, startedAt: number, lastSeen: number,
+                     endedAt: number | null, peak: number) => ({
+        id: hex(0x100 + n), pair_key: hex(pairKey), ...pair,
+        started_at_ms: startedAt, last_seen_ms: lastSeen, ended_at_ms: endedAt,
+        peak_confidence: peak, peak_co_occurrences: Math.round(peak * 45),
+        last_confidence: Math.round((peak - 0.04) * 100) / 100, last_co_occurrences: Math.round(peak * 40),
+        median_lag_ms: 1200, sample_trace_id: hex(0xb00 + n), source_sample_trace_id: hex(0xc00 + n),
+        gap_ms: 10 * minute
+    });
+    const {version} = fixture("daemon-status-busy.json") as { version: string };
+    const push = async (route: string, source: string, body: object) => {
+        const response = await fetch(`${BASE}/api/import/${route}?source_id=${source}`, {
+            method: "POST",
+            headers: {"content-type": "application/json", "x-api-key": importKey},
+            body: JSON.stringify({producer_version: version, ...body})
+        });
+        if (!response.ok) throw new Error(`the ${route} push for ${source} answered ${response.status}`);
+    };
+    const firstWindow = Math.min(...incidents.map((incident) => incident.window_from_ms));
+    await push("correlations", "checkout-prod", {
+        episodes: [
+            episode(1, pool, 0xa1, now - 20 * hour, now - 1170 * minute, now - 1170 * minute, 0.88),
+            episode(2, pool, 0xa1, now - 8 * hour, now - 450 * minute, now - 450 * minute, 0.81),
+            episode(3, pool, 0xa1, firstWindow - 20 * minute, now - minute, null, 0.92),
+            episode(4, slow, 0xa2, now - 3 * hour, now - 156 * minute, now - 156 * minute, 0.74)
+        ]
+    });
+    // The dead daemon's incident, pushed: its own read fails, a push does not need it.
+    const busy = fixture("daemon-incidents-busy.json") as Record<string, unknown>[];
+    const delta = now - 5 * hour - (busy[0].at_ms as number);
+    const slide = (node: unknown): unknown => {
+        if (Array.isArray(node)) return node.map(slide);
+        if (node === null || typeof node !== "object") return node;
+        return Object.fromEntries(Object.entries(node).map(([key, value]) =>
+            [key, key.endsWith("_ms") && typeof value === "number" && value > IS_TIMESTAMP ? value + delta : slide(value)]));
+    };
+    await push("incidents", "search-prod",
+        {incidents: [{...(slide(busy[0]) as object), id: hex(0xd1), service: "search-svc"}]});
+    await push("correlations", "search-prod",
+        {episodes: [episode(5, quiet, 0xa3, now - 9 * hour, now - 510 * minute, now - 510 * minute, 0.7)]});
 }
 
 // The access-on Hub: sign-in against the fake provider, a local account (which puts
@@ -380,6 +452,8 @@ async function startAll(children: ChildProcess[]): Promise<void> {
     // and no page. Detached, because dotnet run puts the Hub in a grandchild that
     // survives a signal to its parent, and a Hub left holding the port makes the
     // next run read the previous run's data. Teardown signals the whole group.
+    // One key for the two daemons the correlations screens need pushes on.
+    const importKey = randomBytes(30).toString("base64url");
     const hub = spawn(DOTNET,
         ["run", "--project", join(ROOT, "PerfSentinelHub", "PerfSentinelHub.csproj"),
             "-c", "Release", "--no-build", "--no-launch-profile"],
@@ -399,11 +473,12 @@ async function startAll(children: ChildProcess[]): Promise<void> {
                 // not on every daemon: Billing staging has none, so the ack page has a row
                 // that says the Hub holds no write path to it.
                 ...source(0, "checkout-prod", "Checkout production", "production", "daemon", BUSY_PORT,
-                    ack("checkout")),
+                    {...ack("checkout"), ImportApiKey: importKey}),
                 ...source(1, "billing-stg", "Billing staging", "staging", "daemon", CALM_PORT),
                 ...source(2, "tempo-eu", "Tempo EU", "production", "tempo", 41402,
                     {RetentionHours: "168"}),
-                ...source(3, "search-prod", "Search production", "production", "daemon", DEAD_PORT),
+                ...source(3, "search-prod", "Search production", "production", "daemon", DEAD_PORT,
+                    {ImportApiKey: importKey}),
                 // Victoria Traces speaks the Jaeger query API, which is the kind the
                 // engine reads it with. Two backends rather than one so the group the
                 // list draws holds more than a single row.
@@ -418,6 +493,7 @@ async function startAll(children: ChildProcess[]): Promise<void> {
         });
     children.push(hub);
     await waitFor(`${BASE}/health/ready`, 90);
+    await seedCorrelations(importKey);
     await startAccessHub(engine, children);
 
     // Four runs, chosen for the states they end in rather than for variety:
