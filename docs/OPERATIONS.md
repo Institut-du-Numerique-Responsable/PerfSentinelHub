@@ -79,6 +79,7 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | When a daemon last pushed. Not a heartbeat, see below |
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refused, by reason                            |
 | `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Incident imports refused, by the findings reasons     |
+| `perf_sentinel_hub_correlation_import_rejected_total{reason}`          | counter | Correlation imports refused, by the findings reasons  |
 | `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Runs accepted and not yet claimed by a worker         |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Runs currently stored, per status                     |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Distinct finding signatures stored, per environment   |

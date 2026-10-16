@@ -13,12 +13,13 @@ une machine :
 | Route                                                            | Accès                                                                      |
 |------------------------------------------------------------------|----------------------------------------------------------------------------|
 | `/` et les fichiers du lanceur                                   | session, sinon redirection vers le fournisseur, ou vers la page de connexion du Hub avec un [compte local](#comptes-locaux) |
-| `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, sinon `401`                                                       |
+| `/api/status`, `/api/sources`, `/api/incidents`, `/api/correlations`, `/api/analyses` | session, sinon `401`                                                       |
 | `/reports/`                                                      | session, `401` dans le cadre du lanceur, redirection si ouvert directement |
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`            | session, sinon `401`, et l'acquittement est pris au nom de la session      |
 | `/api/findings`                                                  | ouvert, pour les plugins IDE et les jobs CI, sauf contrôle d'accès         |
 | `POST /api/import/findings`                                      | sa propre `X-API-Key`, comme avant                                         |
 | `POST /api/import/incidents`                                     | la même `X-API-Key` que l'import des findings                              |
+| `POST /api/import/correlations`                                  | la même `X-API-Key` que l'import des findings                              |
 | `/health/live`, `/health/ready`, `/metrics`                      | ouvert, pour les sondes et le scrape ; `/metrics` sur `Hub:MetricsPort` s'il est renseigné |
 
 L'API répond `401` plutôt qu'une redirection, car un fetch ne peut pas suivre

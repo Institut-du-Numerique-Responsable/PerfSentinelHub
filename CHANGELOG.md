@@ -2,6 +2,20 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- A Correlations screen and `GET /api/correlations` keep the periods during which a pair of
+  findings kept following each other, as episodes a daemon on perf-sentinel 0.30.0 or later pushes
+  to the new `POST /api/import/correlations?source_id=<id>` with `[daemon.correlation]` and
+  `[daemon.hub_export]` on. The daemon cuts each episode, the Hub merges its copies in any order
+  and purges it with the findings retention. A pair unfolds into a strip of its episodes beside the
+  daemon's incidents, an episode hands its window to New analysis, and an unfolded incident lists
+  the correlations active during it. The import takes the same key and gate as the two others, at
+  most 100 episodes and 1 MiB per request, and refusals count on
+  `perf_sentinel_hub_correlation_import_rejected_total{reason}`.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added

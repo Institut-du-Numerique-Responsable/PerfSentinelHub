@@ -22,6 +22,20 @@ fusionné comme un incident lu : la copie qui porte le plus de findings gelés l
 est gardée une fois vue, donc push et poll convergent dans n'importe quel ordre. Les refus se
 comptent sur `perf_sentinel_hub_incident_import_rejected_total`.
 
+`POST /api/import/correlations?source_id=<id>` accepte les épisodes de corrélation qu'un daemon en
+perf-sentinel 0.30.0 ou suivant pousse quand `[daemon.correlation]` est actif à côté de
+`[daemon.hub_export]` : `{"producer_version":"…","episodes":[…]}`, chaque épisode étant une période
+pendant laquelle une paire de findings n'a pas cessé de se suivre. Il prend la même clé, la même
+porte à quatre places et la même attente d'écriture de cinq secondes, de 1 à 100 épisodes et 1 Mio
+au plus par requête. Chaque épisode est vérifié seul : un `id` et une `pair_key` de 32 caractères
+hexadécimaux, un type de finding connu des deux côtés, un `started_at_ms` au plus égal à
+`last_seen_ms`, un `ended_at_ms` absent ou au moins égal au début, des confiances entre 0 et 1. Un
+épisode invalide est compté dans `rejected` pendant que les autres sont enregistrés, et un lot sans
+aucun épisode valide est un `400`. Les copies d'un même épisode fusionnent dans n'importe quel
+ordre : le début le plus ancien, le `last_seen_ms` le plus récent et les pics les plus hauts
+l'emportent, les valeurs glissantes viennent de la copie la plus récente, et une fin est gardée une
+fois vue. Les refus se comptent sur `perf_sentinel_hub_correlation_import_rejected_total`.
+
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit
@@ -47,6 +61,7 @@ push n'exerce pas.
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
 | `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                         |
 | `POST /api/incidents/refresh`        | Lit maintenant l'anneau d'incidents de chaque daemon, puis répond exactement comme `GET /api/incidents`. Mêmes paramètres. Voir plus bas                                                                           |
+| `GET /api/correlations`              | Les épisodes de corrélation poussés par les daemons, du plus récent au plus ancien, filtrés par `service`, `source_id`, `environment`, `pair_key`, `from`, `to` et `active`. Voir plus bas |
 | `GET /api/access`                    | Avec `Hub:Access:Enabled` seulement : qui est l'appelant et ce qu'il atteint, plus la configuration pour un admin. Voir [plus bas](#get-apiaccess)                                                                 |
 | `GET /metrics`                       | Format texte Prometheus, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)                                                                                                                                       |
 | `GET /health/live`                   | Si le process est debout                                                                                                                                                                                           |
@@ -251,6 +266,40 @@ au-delà, chaque rafraîchissement tamponnant une page par daemon sous le plafon
 de 4 Mio. `incidents_read_ms` sur `/api/sources` porte la date de chaque copie, null aux
 côtés d'un `incidents_state` null quand aucune n'a jamais été prise : sans elle, une flotte
 calme et une copie périmée se lisent pareil.
+
+### Corrélations
+
+Un daemon perf-sentinel à partir de 0.30.0, avec `[daemon.correlation]` actif et
+`[daemon.hub_export]` configuré, pousse comme un épisode chaque période pendant laquelle une paire
+de findings se suit, et le ferme une fois que la paire n'a plus coïncidé pendant son écart,
+`min(fenêtre, 30 min)` et 10 minutes par défaut. Le daemon découpe les épisodes et le Hub les
+garde tels qu'ils sont poussés, sous la clé de l'`id` de l'épisode et du `source_id`. Rien n'est lu
+par poll : un daemon sans `[daemon.hub_export]` ne laisse aucun historique de corrélation dans le
+Hub.
+
+`GET /api/correlations` répond un tableau JSON d'épisodes, du plus récent au plus ancien selon
+`started_at_ms`, sous la forme où le daemon les pousse : `id`, `pair_key`, `source` et `target`
+(chacun avec `finding_type`, `service`, `template`, `grouping_key` et `grouping_value`, ces deux
+derniers à null pour un finding sans regroupement), `started_at_ms`, `last_seen_ms`,
+`ended_at_ms`, `gap_ms`, les pics `peak_confidence` et `peak_co_occurrences`, les dernières
+valeurs `last_confidence`, `last_co_occurrences` et `median_lag_ms`, et les deux traces d'exemple
+`source_sample_trace_id` et `sample_trace_id`. Le Hub ajoute `source_id`, `source_name`,
+`ended_by`, et `first_seen_ms` et `last_seen_hub_ms` sur sa propre horloge. `ended_at_ms` vaut
+null tant que l'épisode dure. Un épisode ouvert dont le `last_seen_ms` est plus vieux que son
+`gap_ms` plus 15 minutes est servi comme terminé à son `last_seen_ms`, avec `ended_by` à `stale`,
+le plus souvent un daemon arrêté avant d'avoir pu le fermer, et `ended_by` vaut null sur tous les
+autres épisodes. La ligne stockée ne garde aucune fin, donc une fermeture tardive arrive quand
+même. Une même paire vue sous deux regroupements a deux `pair_key`.
+
+La liste se filtre sur `service`, cherché des deux côtés, `pair_key`, `source_id`,
+`environment`, `from` et `to`, qui gardent les épisodes dont l'activité recouvre l'intervalle,
+bornes comprises et épisode en cours compris, et `active=true`, qui garde ceux en cours. Un filtre
+vide ou fait d'espaces n'est pas un filtre, ce qu'envoie une variable Grafana réglée sur All. Elle
+se pagine avec `offset` et `limit`, 200 par défaut et 1000 au plus. `source_id` et `environment`
+sont des ensembles fermés comme sur `/api/incidents`, et `from` et `to` sont des millisecondes
+depuis l'epoch, donc une valeur que la route ne sait pas lire est un `400`. La route demande
+`findings.read` : avec le contrôle d'accès actif, un épisode n'est listé que si l'appelant lit ses
+deux services à sa source.
 
 ### Ce que le Hub ajoute à un finding
 

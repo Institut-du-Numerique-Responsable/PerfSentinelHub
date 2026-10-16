@@ -40,6 +40,11 @@ Les incidents suivent le même partage depuis perf-sentinel 0.29.0 : le daemon p
 il est enregistré, fermé ou complété, et le poll horaire les lit toujours comme filet de sécurité.
 Les deux écrivent par une même règle de fusion, donc aucun chemin ne peut défaire l'autre.
 
+Les épisodes de corrélation ne passent que par le push depuis perf-sentinel 0.30.0 : le daemon
+découpe chaque épisode et le pousse quand il s'ouvre, quand un pic monte, quand sa dernière
+co-occurrence avance d'une minute et quand il se ferme. Rien ne les lit par poll, donc un daemon
+qui ne pousse pas laisse le Hub sans eux.
+
 Un daemon qui pousse avec succès prouve qu'il peut joindre le Hub. Il ne prouve rien
 sur la capacité du Hub à le joindre, qui est une autre route à travers un autre jeu de
 pare-feux, et c'est cette direction dont un opérateur a besoin quand une source se tait.
@@ -106,6 +111,9 @@ Les findings expirent sur un worker qui tourne une fois par jour et purge par tr
 de sorte qu'une purge longue ne puisse pas rejeter les imports pendant toute sa durée. Les
 incidents copiés depuis un daemon suivent cette même horloge, purgés sur le `last_seen_ms`
 du Hub et jamais sur le `at_ms` de l'alerte.
+Les épisodes de corrélation la suivent aussi, purgés sur leur propre `last_seen_ms`, l'horodatage
+que le daemon donne à la dernière co-occurrence de la paire : un épisode devient de l'histoire une
+fois fermé, et l'horloge du Hub ne dit que le moment où une copie est arrivée.
 Les jours d'observation, le relevé des jours où chaque source a vu un finding, la suivent
 aussi, sur l'horloge du Hub et par jour entier : un jour part une fois qu'il se trouve
 tout entier avant la date limite, donc le jour où tombe cette limite est gardé. Ils ne
@@ -157,6 +165,7 @@ soit la source, et rien d'autre.
 | `source_imports`               | source, son dernier push                                             | jamais                                     |
 | `incidents`                    | incident et source                                                   | rétention, sur `last_seen_ms`              |
 | `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
+| `correlation_episodes`         | épisode et source                                                    | rétention, sur `last_seen_ms`              |
 | `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
 | `incident_reads`, `ack_reads`  | source                                                               | jamais                                     |
 | `analysis_runs`                | run                                                                  | `Hub:Analysis:RunRetention`                |

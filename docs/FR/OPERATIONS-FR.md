@@ -87,6 +87,7 @@ deux seuls paquets sont SQLite.
 | `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | Dernier push d'un daemon. Pas un battement de cœur, voir plus bas |
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refusés, par motif                                        |
 | `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Imports d'incidents refusés, par les motifs des findings          |
+| `perf_sentinel_hub_correlation_import_rejected_total{reason}`          | counter | Imports de corrélations refusés, par les motifs des findings      |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Les runs actuellement stockés, par statut                         |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Les signatures de findings distinctes stockées, par environnement |
 

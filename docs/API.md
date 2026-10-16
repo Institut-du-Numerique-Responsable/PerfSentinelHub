@@ -21,6 +21,18 @@ carries up to a thousand frozen findings. A pushed incident is merged as a polle
 with more frozen findings wins and an end is kept once seen, so push and poll converge in any
 order. Refusals count on `perf_sentinel_hub_incident_import_rejected_total`.
 
+`POST /api/import/correlations?source_id=<id>` accepts the correlation episodes a daemon on
+perf-sentinel 0.30.0 or later pushes when `[daemon.correlation]` is on beside
+`[daemon.hub_export]`: `{"producer_version":"…","episodes":[…]}`, each episode one period during
+which a pair of findings kept following each other. It takes the same key, the same four-slot gate
+and the same five-second write wait, 1 to 100 episodes and at most 1 MiB per request. Each episode
+is checked on its own: a 32-character hex `id` and `pair_key`, a known finding type on both sides,
+`started_at_ms` no later than `last_seen_ms`, an `ended_at_ms` absent or no earlier than the start,
+confidences between 0 and 1. An invalid one is counted in `rejected` while the others land, and a
+batch with none valid is a `400`. Copies of one episode merge in any order: the earliest start, the
+latest `last_seen_ms` and the highest peaks win, the rolling values come from the newer copy, and
+an end is kept once seen. Refusals count on `perf_sentinel_hub_correlation_import_rejected_total`.
+
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that
 cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon
@@ -44,6 +56,7 @@ the Hub's route to the daemon, which a push does not exercise.
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
 | `GET /api/incidents/{id}`            | One incident whole, the frozen findings included                                                                                                                                           |
 | `POST /api/incidents/refresh`        | Reads every daemon's incidents ring now, then answers exactly as `GET /api/incidents`. Same parameters. See below                                                                          |
+| `GET /api/correlations`              | The correlation episodes the daemons pushed, newest first, filtered by `service`, `source_id`, `environment`, `pair_key`, `from`, `to` and `active`. See below |
 | `GET /api/access`                    | With `Hub:Access:Enabled` only: who the caller is and what they reach, plus the configuration for an admin. See [below](#get-apiaccess)                                                    |
 | `GET /metrics`                       | Prometheus text format, see [OPERATIONS.md](OPERATIONS.md#metrics)                                                                                                                         |
 | `GET /health/live`                   | Whether the process is up                                                                                                                                                                  |
@@ -234,6 +247,37 @@ sits in front of it, a gate of two concurrent refreshes, which answers `503` wit
 body cap. `incidents_read_ms` on `/api/sources` carries when each copy was taken, null
 alongside a null `incidents_state` when none ever was: without it a quiet fleet and a stale
 copy read the same.
+
+### Correlations
+
+A perf-sentinel daemon from 0.30.0 with `[daemon.correlation]` on and `[daemon.hub_export]` set
+pushes each period during which a pair of findings keeps following each other as an episode, and
+closes it once the pair has not co-occurred for its gap, `min(window, 30 min)` and 10 minutes by
+default. The daemon cuts the episodes and the Hub stores them as pushed, keyed on the episode `id`
+and the `source_id`. Nothing is polled: a daemon without `[daemon.hub_export]` leaves no
+correlation history in the Hub.
+
+`GET /api/correlations` answers a JSON array of episodes, newest first by `started_at_ms`, in the
+shape the daemon pushes them: `id`, `pair_key`, `source` and `target` (each with `finding_type`,
+`service`, `template`, `grouping_key` and `grouping_value`, the last two null for a finding with
+no grouping), `started_at_ms`, `last_seen_ms`, `ended_at_ms`, `gap_ms`, the peaks
+`peak_confidence` and `peak_co_occurrences`, the latest `last_confidence`, `last_co_occurrences`
+and `median_lag_ms`, and the two sample traces `source_sample_trace_id` and `sample_trace_id`.
+The Hub adds `source_id`, `source_name`, `ended_by`, and `first_seen_ms` and `last_seen_hub_ms`
+on its own clock. `ended_at_ms` is null while the episode runs. An open episode whose
+`last_seen_ms` is older than its `gap_ms` plus 15 minutes is served as ended at its
+`last_seen_ms` with `ended_by` set to `stale`, most likely a daemon stopped before it could close
+it, and `ended_by` is null on every other episode. The stored row keeps no end, so a late close
+still lands. The same pair seen under two groupings has two `pair_key` values.
+
+The listing filters on `service`, matched on either side, `pair_key`, `source_id`,
+`environment`, `from` and `to`, which keep the episodes whose activity overlaps the span, bounds
+included and a running episode included, and `active=true`, which keeps the running ones. A
+filter given empty or as whitespace only is no filter, which is what a Grafana variable set to
+All sends. It pages with `offset` and `limit`, 200 by default and 1000 at most. `source_id` and
+`environment` are closed sets as on `/api/incidents`, and `from` and `to` are epoch
+milliseconds, so a value the route cannot read is a `400`. The route asks for `findings.read`: with access control on,
+an episode is listed only when the caller reads both its services at its source.
 
 ### What the Hub adds to a finding
 

@@ -12,12 +12,13 @@ calls:
 | Route                                                            | Access                                                                  |
 |------------------------------------------------------------------|-------------------------------------------------------------------------|
 | `/` and the launcher's files                                     | session, otherwise a redirect to the provider, or to the Hub's sign-in page with a [local account](#local-accounts) |
-| `/api/status`, `/api/sources`, `/api/incidents`, `/api/analyses` | session, otherwise `401`                                                |
+| `/api/status`, `/api/sources`, `/api/incidents`, `/api/correlations`, `/api/analyses` | session, otherwise `401`                                                |
 | `/reports/`                                                      | session, `401` in the launcher's frame, a redirect when opened directly |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`           | session, otherwise `401`, and the ack is taken in the session's name    |
 | `/api/findings`                                                  | open, for IDE plugins and CI jobs, unless access control is on          |
 | `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
 | `POST /api/import/incidents`                                     | the same `X-API-Key` as the findings import                             |
+| `POST /api/import/correlations`                                  | the same `X-API-Key` as the findings import                             |
 | `/health/live`, `/health/ready`, `/metrics`                      | open, for probes and the scrape; `/metrics` on `Hub:MetricsPort` if set |
 
 The API answers `401` rather than a redirect because a fetch cannot follow a

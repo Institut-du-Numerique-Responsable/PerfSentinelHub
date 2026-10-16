@@ -141,6 +141,7 @@ does not depend on the provider at all.
 | `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtered                                       | `403` when held nowhere |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtered; the richest copy in scope            | `403`; `404`            |
 | `POST /api/incidents/refresh`                                          | `findings.read`; reads only the daemons in scope                | `403`                   |
+| `GET /api/correlations`                                                | `findings.read`, filtered to the episodes whose two services the caller reads at that source | `403` when held nowhere |
 | `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` at that source as a whole                        | `404`                   |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`                 | `findings.read` and `acks.write` on the finding at that source  | `404`, `403`            |
 | `POST /api/analyses`                                                   | `analyses.run` and the run's read rule, below                   | `403`                   |
@@ -148,7 +149,7 @@ does not depend on the provider at all.
 | `GET /reports/{id}.html`                                               | the run's read rule                                             | `404`                   |
 | `GET /metrics`                                                         | anonymous, on `Hub:MetricsPort` only                            | `404` elsewhere         |
 | `GET /api/access`                                                      | any caller, even one no grant reaches; more for an admin, below |                         |
-| `POST /api/import/findings`, `POST /api/import/incidents`, `/health/*` | unchanged                                                       |                         |
+| `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `/health/*` | unchanged                                                       |                         |
 
 `GET /api/sources` lists only the sources where the caller holds something, each with a
 `permissions` array (absent with access off). A source missing from that list is
