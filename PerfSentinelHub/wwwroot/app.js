@@ -6275,7 +6275,8 @@
         if (state.disclosures.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
                 el('p', {class: 'empty-title', text: 'No disclosure published yet.'}),
-                el('p', {text: 'A CI job publishes one with the import key, as below. It shows here once the Hub '
+                el('p', {text: 'A scheduled job builds one from the daemons\' archives and publishes it '
+                    + 'with the import key, as below. It shows here once the Hub '
                     + 'has checked and kept it.'})
             ]));
             section.appendChild(publishPanel());
