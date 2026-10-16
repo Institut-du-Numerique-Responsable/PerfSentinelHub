@@ -28,7 +28,10 @@ All notable changes to PerfSentinelHub are recorded here.
 
 - A `/metrics` scrape waits at most five seconds for the findings counts and is otherwise served
   the previous ones while the count finishes. A store of millions of signatures made the count
-  outlast a 10-second `scrape_timeout`, and every family of the Hub went missing with it.
+  outlast a 10-second `scrape_timeout`, and every family of the Hub went missing with it. The
+  count runs on no request's token, so it lands even when the scraper gave up, one at a time,
+  and pauses nine times its own duration when slow: a cancelled count used to start over on
+  every scrape and kept the database read from disk, slowing the findings imports behind it.
 - A poll that fails because the Hub's own volume is full now records `database_full` instead of
   `storage_error`, and the launcher shows `Hub database full` rather than the daemon as
   unreachable. Any other storage failure keeps `storage_error`, now explained as the Hub's.

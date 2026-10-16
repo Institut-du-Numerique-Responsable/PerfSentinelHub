@@ -125,7 +125,8 @@ sévérités compte sous `other` au lieu d'ouvrir une série à elle. À l'inver
 d'`analysis_runs`, une combinaison vide ne publie aucune série. Les zéros
 seraient chaque environnement multiplié par chaque type, sévérité et statut,
 presque tous vides pour de bon, et la famille se lit au travers de `sum()`, où
-une série absente vaut déjà zéro. Les comptes sont gardés 15 secondes après la fin d'un compte, parce
+une série absente vaut déjà zéro. Les comptes sont gardés 15 secondes après la fin d'un compte, ou neuf fois sa
+durée quand c'est plus long, parce
 que l'endpoint est anonyme et qu'un compte lit tous les findings de son
 environnement. Une collecte dans cet intervalle reçoit les comptes précédents,
 et toutes les autres familles restent calculées à la collecte. Une collecte
@@ -134,7 +135,10 @@ précédents pendant que le compte se termine pour une collecte suivante, et
 `perf_sentinel_hub_findings_age_seconds` dit leur âge. Un compte grandit avec les
 signatures stockées : sans cette borne, une base de plusieurs millions de
 signatures le faisait durer plus que les 10 secondes du `scrape_timeout` de
-Prometheus, et toutes les familles disparaissaient avec lui.
+Prometheus, et toutes les familles disparaissaient avec lui. La pause de neuf fois
+la durée empêche un compte lent d'occuper la base plus d'un dixième du temps : avec
+un cache de pages plus petit que la base, chaque compte la relit sur le disque, et
+les imports concourent avec ces lectures.
 
 `perf_sentinel_hub_database_bytes` se lit sur le système de fichiers, le fichier de
 base plus son journal d'écriture. Un volume plein refuse toute écriture mais lit

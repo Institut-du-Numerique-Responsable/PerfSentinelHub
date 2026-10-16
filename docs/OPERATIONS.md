@@ -116,7 +116,8 @@ instead of opening a series of its own. Unlike `analysis_runs`, an empty
 combination publishes no series. The zeros would be every environment times
 every type, severity and status, nearly all of them empty for good, and the
 family is read through `sum()`, where an absent series already is a zero. The
-counts are kept for 15 seconds after a count ends, because the endpoint is anonymous and a count
+counts are kept for 15 seconds after a count ends, or nine times as long as it took when
+that is longer, because the endpoint is anonymous and a count
 reads every finding of its environment. A scrape inside that interval is served
 the previous counts, and every other family is still computed at scrape time. A
 scrape waits at most five seconds for a new count. Past that it gets the previous
@@ -124,7 +125,9 @@ counts while the count finishes for a later scrape, and
 `perf_sentinel_hub_findings_age_seconds` says how old they are. A count grows with
 the signatures stored, so without that bound a store of millions of them made it
 outlast Prometheus' 10-second `scrape_timeout`, and every family went missing with
-it.
+it. The nine-fold pause keeps a slow count from occupying the database more than a
+tenth of the time: on a page cache smaller than the database, each count reads it
+from disk again, and the imports compete with those reads.
 
 `perf_sentinel_hub_database_bytes` is read from the file system, the database file
 plus its write-ahead log. A full volume refuses every write but still reads, so the

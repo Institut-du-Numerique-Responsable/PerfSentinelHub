@@ -71,6 +71,29 @@ public sealed class CachedCountTests
     }
 
     [Fact]
+    public async Task A_slow_count_waits_nine_times_its_duration_before_the_next()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var slow = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var cache = new CachedCount<int>(_ => ++calls == 1 ? slow.Task : Task.FromResult(9), _clock, _logger);
+
+        // A count that takes 70 seconds, the time a scrape interval comes back in.
+        var waiting = cache.GetAsync(cancellationToken);
+        _clock.Advance(TimeSpan.FromSeconds(70));
+        Assert.Null(await waiting);
+        slow.SetResult(7);
+        Assert.Equal(7, (await cache.GetAsync(cancellationToken))?.Value);
+
+        // The base is not kept counting: at most a tenth of the time goes to it.
+        _clock.Advance(TimeSpan.FromSeconds(9 * 70) - TimeSpan.FromSeconds(1));
+        Assert.Equal(7, (await cache.GetAsync(cancellationToken))?.Value);
+        Assert.Equal(1, calls);
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(9, (await cache.GetAsync(cancellationToken))?.Value);
+    }
+
+    [Fact]
     public async Task Nothing_counted_yet_and_past_the_budget_serves_nothing()
     {
         var never = new TaskCompletionSource<int>();

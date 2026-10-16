@@ -4,8 +4,11 @@ namespace PerfSentinelHub.Api;
 public sealed record Counted<T>(T Value, DateTimeOffset CountedAt);
 
 /// <summary>
-///     A count served from memory for <see cref="Lifetime" /> after it lands, then
-///     taken again, one at a time. A failed count waits as long before the next try.
+///     A count served from memory for <see cref="Lifetime" /> after it lands, or nine
+///     times as long as it took when that is longer, then taken again, one at a time:
+///     a slow count never keeps the database busy more than a tenth of the time, which
+///     on a page cache smaller than the database means reads every import competes
+///     with. A failed count waits as long before the next try.
 ///     A caller waits for a new count at most <see cref="Budget" />: past it, it gets
 ///     the previous one and the count goes on, to land for a later caller. A count
 ///     that grows with the data can then never hold a request, a Prometheus scrape
@@ -25,9 +28,11 @@ public sealed partial class CachedCount<T>(
     private Task<Counted<T>?>? _counting;
     private Counted<T>? _last;
 
-    // When the last count ended, landed or failed. Measured from the end rather than
-    // the start, so a count slower than the lifetime does not start the next at once.
+    // When the last count ended, landed or failed, and how long to wait from there.
+    // Measured from the end rather than the start, so a slow count does not start
+    // the next at once.
     private long? _settledAt;
+    private TimeSpan _rest = Lifetime;
 
     public async Task<Counted<T>?> GetAsync(CancellationToken cancellationToken)
     {
@@ -36,7 +41,7 @@ public sealed partial class CachedCount<T>(
         lock (_gate)
         {
             last = _last;
-            if (_settledAt is { } settledAt && timeProvider.GetElapsedTime(settledAt) < Lifetime)
+            if (_settledAt is { } settledAt && timeProvider.GetElapsedTime(settledAt) < _rest)
                 return last;
             counting = _counting ??= CountAsync();
         }
@@ -53,10 +58,11 @@ public sealed partial class CachedCount<T>(
 
     private async Task<Counted<T>?> CountAsync()
     {
-        // Off the caller's lock, and on no caller's token: a caller that stops
-        // waiting leaves the count running.
-        await Task.Yield();
+        // The clock is read before leaving the caller, then the count runs off its
+        // lock and on no caller's token: a caller that stops waiting leaves it running.
         var at = timeProvider.GetUtcNow();
+        var started = timeProvider.GetTimestamp();
+        await Task.Yield();
         try
         {
             var counted = new Counted<T>(await count(CancellationToken.None), at);
@@ -76,6 +82,7 @@ public sealed partial class CachedCount<T>(
         {
             lock (_gate)
             {
+                _rest = TimeSpan.FromTicks(Math.Max(Lifetime.Ticks, timeProvider.GetElapsedTime(started).Ticks * 9));
                 _settledAt = timeProvider.GetTimestamp();
                 _counting = null;
             }
