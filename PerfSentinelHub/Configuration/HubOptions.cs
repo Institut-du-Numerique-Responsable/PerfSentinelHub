@@ -125,7 +125,7 @@ public sealed record LocalAccountOptions
     }
 }
 
-/// <summary>The six permissions, the three built-in roles and what a machine token may hold.</summary>
+/// <summary>The eight permissions, the three built-in roles and what a machine token may hold.</summary>
 public static class AccessPermissions
 {
     public const string FindingsRead = "findings.read";
@@ -182,8 +182,8 @@ public sealed record DisclosuresOptions
     // shared nor pushed, and refused at startup on a Hub without access control.
     public bool AllowInternal { get; set; }
 
-    // Passed to disclose-pdf, which checks the binding against them and prints them in the
-    // PDF's verify command. Both or neither.
+    // Passed to disclose-pdf, which prints them in the PDF's verify command and checks nothing
+    // with them: the signature is the reader's to check. Both or neither.
     public string? ExpectedIdentity { get; set; }
     public string? ExpectedIssuer { get; set; }
 
