@@ -144,6 +144,8 @@ public static partial class ApiEndpoints
         return new ShareLinkCreated(linkId, token, $"/share/{token}/", expiresAtMs);
     }
 
+    // Every parameter is the route's own or a collaborator the router injects.
+#pragma warning disable S107
     private static async Task<IResult> RevokeShareLinkAsync(
         string id,
         string linkId,
@@ -153,6 +155,7 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (ManageRefusal(request, access, options.Value) is { } refused)
             return refused;
@@ -194,6 +197,8 @@ public static partial class ApiEndpoints
             : Problem(StatusCodes.Status409Conflict, "This disclosure is already withdrawn.");
     }
 
+    // Every parameter is the route's own or a collaborator the router injects.
+#pragma warning disable S107
     private static async Task<IResult> RetryDeliveryAsync(
         string id,
         string deliveryId,
@@ -203,6 +208,7 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (ManageRefusal(request, access, options.Value) is { } refused)
             return refused;
