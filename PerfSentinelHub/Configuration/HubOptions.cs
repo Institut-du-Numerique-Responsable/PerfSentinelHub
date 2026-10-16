@@ -540,11 +540,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
 
     private static void ValidateAnalysisSettings(AnalysisOptions analysis, List<string> errors)
     {
-        if (analysis.EngineBinaryPath is { } path &&
-            (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)))
-            errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
-        if (!Path.IsPathFullyQualified(analysis.ReportDirectory))
-            errors.Add("Hub:Analysis:ReportDirectory must be absolute.");
+        ValidateAnalysisPaths(analysis, errors);
         if (IsInvalidHeaderName(analysis.IdentityHeader))
             errors.Add("Hub:Analysis:IdentityHeader must be a header name.");
         if (analysis.Workers is < 1 or > 16)
@@ -563,6 +559,15 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         if (analysis.RunRetention <= analysis.ReportRetention)
             errors.Add("Hub:Analysis:RunRetention must be longer than Hub:Analysis:ReportRetention, "
                        + "since an expired run keeps its parameters after its report is deleted.");
+    }
+
+    private static void ValidateAnalysisPaths(AnalysisOptions analysis, List<string> errors)
+    {
+        if (analysis.EngineBinaryPath is { } path &&
+            (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)))
+            errors.Add("Hub:Analysis:EngineBinaryPath must be absolute.");
+        if (!Path.IsPathFullyQualified(analysis.ReportDirectory))
+            errors.Add("Hub:Analysis:ReportDirectory must be absolute.");
     }
 
     private static void ValidateUpdateCheckSettings(UpdateCheckOptions update, List<string> errors)

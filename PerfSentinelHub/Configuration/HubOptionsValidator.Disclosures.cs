@@ -6,15 +6,7 @@ public sealed partial class HubOptionsValidator
     {
         var disclosures = options.Disclosures;
         if (disclosures.ImportKey is { } key)
-        {
-            if (key.Length < 32 || key.Any(char.IsControl))
-                errors.Add("Hub:Disclosures:ImportKey must be at least 32 characters with no control character.");
-            // One key per door: a key that opens two of them is leaked by either.
-            else if (options.Sources.Any(source => source.ImportApiKey == key) ||
-                     options.Access.MachineTokens.Any(token => token.Token == key))
-                errors.Add("Hub:Disclosures:ImportKey must differ from every source import API key and machine token.");
-        }
-
+            ValidateDisclosureImportKey(options, key, errors);
         if (disclosures.AllowInternal && !options.Access.Enabled)
             errors.Add("Hub:Disclosures:AllowInternal requires Hub:Access:Enabled: an internal report would be "
                        + "open to anyone who reaches the Hub.");
@@ -23,10 +15,7 @@ public sealed partial class HubOptionsValidator
         if (disclosures.ShareLinkDays is < 1 or > 30)
             errors.Add("Hub:Disclosures:ShareLinkDays must be between 1 and 30.");
 
-        if (disclosures.PublicUrl is { } publicUrl && IsInvalidSourceUrl(publicUrl))
-            errors.Add("Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL " + UrlShape);
-        else if (disclosures.PublicUrl is { AbsolutePath: not "/" })
-            errors.Add("Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.");
+        ValidateDisclosurePublicUrl(disclosures.PublicUrl, errors);
         if (disclosures.PublicUrl is null && disclosures.Webhooks.Any(webhook => webhook.IncludeShareLink))
             errors.Add("Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: "
                        + "the link it sends must name the Hub.");
@@ -34,6 +23,24 @@ public sealed partial class HubOptionsValidator
         var names = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < disclosures.Webhooks.Count; i++)
             ValidateWebhook(disclosures.Webhooks[i], $"Hub:Disclosures:Webhooks:{i}", names, errors);
+    }
+
+    private static void ValidateDisclosureImportKey(HubOptions options, string key, List<string> errors)
+    {
+        if (key.Length < 32 || key.Any(char.IsControl))
+            errors.Add("Hub:Disclosures:ImportKey must be at least 32 characters with no control character.");
+        // One key per door: a key that opens two of them is leaked by either.
+        else if (options.Sources.Any(source => source.ImportApiKey == key) ||
+                 options.Access.MachineTokens.Any(token => token.Token == key))
+            errors.Add("Hub:Disclosures:ImportKey must differ from every source import API key and machine token.");
+    }
+
+    private static void ValidateDisclosurePublicUrl(Uri? publicUrl, List<string> errors)
+    {
+        if (publicUrl is not null && IsInvalidSourceUrl(publicUrl))
+            errors.Add("Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL " + UrlShape);
+        else if (publicUrl is { AbsolutePath: not "/" })
+            errors.Add("Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.");
     }
 
     private static void ValidateWebhook(WebhookOptions webhook, string path, HashSet<string> names, List<string> errors)
