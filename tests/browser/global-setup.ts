@@ -365,7 +365,8 @@ function methodologySummary(report: Record<string, any>): object {
         core_patterns_count: core.length,
         enabled_patterns_count: (methodology.enabled_patterns ?? []).length,
         disabled_patterns_count: (methodology.disabled_patterns ?? []).length,
-        core_patterns_hash: createHash("sha256").update([...core].sort().join(":")).digest("hex")
+        // Code-point order, as the engine sorts, which localeCompare is not.
+        core_patterns_hash: createHash("sha256").update([...core].sort((a, b) => (a < b ? -1 : Number(a > b))).join(":")).digest("hex")
     };
 }
 
