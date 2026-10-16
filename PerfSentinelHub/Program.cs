@@ -43,6 +43,11 @@ if (args is ["backup", ..])
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
+// A share-link token sits in the request path, which the hosting layer logs at Information.
+// Above Warning it never reaches the Hub's logs, wherever the Hub is deployed.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Hub:Disclosures:ImportKey"]))
+    builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting", LogLevel.Warning);
+
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, HubJsonContext.Default);
@@ -86,6 +91,11 @@ builder.Services.AddSingleton<DisclosureMetrics>();
 builder.Services.AddSingleton<DisclosureRenderer>();
 builder.Services.AddSingleton<ShareDownloadCounter>();
 builder.Services.AddHostedService<ShareDownloadFlusher>();
+builder.Services.AddSingleton<DeliveryWorker>();
+builder.Services.AddHostedService<DeliveryLoop>();
+// Its own client: a webhook is a destination of its own, never followed elsewhere.
+builder.Services.AddHttpClient(DeliveryWorker.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
+    new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();

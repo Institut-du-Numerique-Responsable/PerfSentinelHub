@@ -190,6 +190,10 @@ public sealed record DisclosuresOptions
     public int ShareLinkDays { get; set; } = 7;
     public IReadOnlyList<WebhookOptions> Webhooks { get; set; } = [];
 
+    // The Hub's own address as a receiver reaches it, for the share link a webhook with
+    // IncludeShareLink carries: the delivery runs outside any request to read it from.
+    public Uri? PublicUrl { get; set; }
+
     public bool Enabled => ImportKey is not null;
 }
 

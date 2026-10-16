@@ -23,6 +23,12 @@ public sealed partial class HubOptionsValidator
         if (disclosures.ShareLinkDays is < 1 or > 30)
             errors.Add("Hub:Disclosures:ShareLinkDays must be between 1 and 30.");
 
+        if (disclosures.PublicUrl is { } publicUrl && IsInvalidSourceUrl(publicUrl))
+            errors.Add("Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL " + UrlShape);
+        if (disclosures.PublicUrl is null && disclosures.Webhooks.Any(webhook => webhook.IncludeShareLink))
+            errors.Add("Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: "
+                       + "the link it sends must name the Hub.");
+
         var names = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < disclosures.Webhooks.Count; i++)
             ValidateWebhook(disclosures.Webhooks[i], $"Hub:Disclosures:Webhooks:{i}", names, errors);

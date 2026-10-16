@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
@@ -73,7 +74,7 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
             descriptor.ServiceType == typeof(IHostedService) &&
             descriptor.ImplementationType is { } type &&
             (type == typeof(PollWorker) || type == typeof(RetentionWorker) ||
-             type == typeof(SignatureRateWorker))).ToArray();
+             type == typeof(SignatureRateWorker) || type == typeof(DeliveryLoop))).ToArray();
         foreach (var worker in workers)
             services.Remove(worker);
     }

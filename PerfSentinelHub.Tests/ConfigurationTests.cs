@@ -200,7 +200,12 @@ public sealed class ConfigurationTests
         { "short secret", "Hub:Disclosures:Webhooks:0:Secret must be at least 32 characters with no control character." },
         { "webhook name", "Hub:Disclosures:Webhooks:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', and unique." },
         { "webhook days", "Hub:Disclosures:Webhooks:0:ShareLinkDays must be between 1 and 30." },
-        { "identity alone", "Hub:Disclosures:ExpectedIdentity and ExpectedIssuer go together or not at all." }
+        { "identity alone", "Hub:Disclosures:ExpectedIdentity and ExpectedIssuer go together or not at all." },
+        {
+            "share link without a public url",
+            "Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: the link it sends must name the Hub."
+        },
+        { "public url query", "Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL without credentials, query, or fragment." }
     };
 
     private const string WebhookUrl =
@@ -224,6 +229,11 @@ public sealed class ConfigurationTests
             "webhook name" => options with { Disclosures = disclosures with { Webhooks = [webhook, webhook] } },
             "webhook days" => options with { Disclosures = disclosures with { Webhooks = [webhook with { ShareLinkDays = 0 }] } },
             "identity alone" => options with { Disclosures = disclosures with { ExpectedIdentity = "https://github.com/acme/x" } },
+            "share link without a public url" => options with
+            {
+                Disclosures = disclosures with { Webhooks = [webhook with { IncludeShareLink = true }] }
+            },
+            "public url query" => options with { Disclosures = disclosures with { PublicUrl = new Uri("https://hub.example/?x=1") } },
             _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, null)
         };
 

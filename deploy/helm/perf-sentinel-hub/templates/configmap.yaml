@@ -45,7 +45,6 @@ data:
     {{- /* Nil-safe for --reuse-values. The import key, the webhook URLs and their
            secrets reach the pod as environment variables, never here. */}}
     {{- $disclosures := .Values.hub.disclosures | default dict }}
-    {{- $settings := dict "Hub" $hub }}
     {{- if $disclosures.importSecretName }}
     {{- $webhooks := list }}
     {{- range $disclosures.webhooks | default list }}
@@ -54,7 +53,7 @@ data:
     {{- $section := dict "AllowInternal" (default false $disclosures.allowInternal) "ShareLinkDays" (default 7 $disclosures.shareLinkDays) "Webhooks" $webhooks }}
     {{- if $disclosures.expectedIdentity }}{{- $_ := set $section "ExpectedIdentity" $disclosures.expectedIdentity }}{{- end }}
     {{- if $disclosures.expectedIssuer }}{{- $_ := set $section "ExpectedIssuer" $disclosures.expectedIssuer }}{{- end }}
+    {{- if $disclosures.publicUrl }}{{- $_ := set $section "PublicUrl" $disclosures.publicUrl }}{{- end }}
     {{- $_ := set $hub "Disclosures" $section }}
-    {{- $_ := set $settings "Logging" (dict "LogLevel" (dict "Microsoft.AspNetCore.Hosting" "Warning")) }}
     {{- end }}
-    {{ $settings | toJson }}
+    {{ dict "Hub" $hub | toJson }}

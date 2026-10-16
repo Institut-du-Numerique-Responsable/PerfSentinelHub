@@ -91,9 +91,9 @@ hub:
   # Periodic disclosures a CI publishes to POST /api/import/disclosures, off
   # until importSecretName names the Secret holding the import key (32+
   # characters, distinct from every source import key and machine token).
-  # Once on, the ConfigMap also lowers the ASP.NET hosting log level to
-  # Warning, so share-link tokens stay out of the request logs; the ingress
-  # access log still sees them. allowInternal needs hub.access.enabled.
+  # Once on, the Hub keeps its request log above Information so share-link
+  # tokens stay out of it; the ingress access log still sees them, see
+  # docs/OPERATIONS.md. allowInternal needs hub.access.enabled.
   # expectedIdentity and expectedIssuer go together, checked against the
   # attestation and printed in the PDF. shareLinkDays: 1 to 30. Webhooks are
   # items { name, secretName, urlKey, secretKey, includeShareLink,
@@ -106,6 +106,9 @@ hub:
     expectedIdentity: ""
     expectedIssuer: ""
     shareLinkDays: 7
+    # The Hub's own address as a receiver reaches it, required by a webhook
+    # with includeShareLink: the link it sends must name the Hub.
+    publicUrl: ""
     webhooks: []
   access:
     # Who reaches which findings, sources and runs: projects, roles, grants,
