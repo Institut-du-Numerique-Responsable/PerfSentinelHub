@@ -733,7 +733,9 @@ Deliveries run every 15 seconds from the `disclosure_deliveries` table, so a res
 them. A `2xx` settles one. Any other status, a redirect included, which is never followed, or
 no answer within `Hub:HttpTimeout` is tried again after 30 seconds, then a doubling wait capped
 at one hour, 8 attempts in all, after which the delivery is `failed`. A delivery to a webhook
-no longer configured fails without a request.
+no longer configured fails without a request, and so does a `published` event still waiting
+when its disclosure is withdrawn: the receiver never hears of it after the `withdrawn` one. A
+retry taken during an attempt wins over that attempt's outcome.
 
 ## With access control
 

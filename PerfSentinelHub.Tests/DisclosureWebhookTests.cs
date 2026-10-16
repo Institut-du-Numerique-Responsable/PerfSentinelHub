@@ -24,6 +24,7 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
     private readonly ConcurrentQueue<Received> _received = new();
     private readonly ConcurrentQueue<int> _statuses = new();
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
+    private Func<Task>? _onReceive;
     private FakeDaemon _receiver = null!;
     private int _redirectTargetHits;
 
@@ -37,6 +38,8 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
                 return;
             }
 
+            if (_onReceive is { } onReceive)
+                await onReceive();
             using var reader = new StreamReader(context.Request.Body);
             _received.Enqueue(new Received(
                 context.Request.Headers[WebhookDelivery.TimestampHeader].ToString(),
@@ -129,7 +132,7 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         var database = Database(hub);
         var delivery = Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None));
         for (var i = 0; i < DeliveryWorker.MaxAttempts - 1; i++)
-            await database.RecordDeliveryAttemptAsync(delivery.Id, 500, DeliveryStates.Pending, 10_000, 10_000, CancellationToken.None);
+            await database.RecordDeliveryAttemptAsync(delivery.Id, i, 500, DeliveryStates.Pending, 10_000, 10_000, CancellationToken.None);
         _statuses.Enqueue(StatusCodes.Status500InternalServerError);
 
         await RunAsync(hub);
@@ -137,6 +140,43 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         Assert.Equal(DeliveryStates.Failed, Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None)).State);
         Assert.Contains("perf_sentinel_hub_disclosure_deliveries_failed_total 1",
             await hub.CreateClient().GetStringAsync("/metrics", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_retry_during_the_last_failing_attempt_starts_a_fresh_run()
+    {
+        var hub = await PublishedAsync();
+        var database = Database(hub);
+        var delivery = Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None));
+        for (var i = 0; i < DeliveryWorker.MaxAttempts - 1; i++)
+            await database.RecordDeliveryAttemptAsync(delivery.Id, i, 500, DeliveryStates.Pending, 10_000, 10_000, CancellationToken.None);
+        _statuses.Enqueue(StatusCodes.Status500InternalServerError);
+        // The operator retries while the worker waits on the receiver.
+        _onReceive = () => database.RetryDeliveryAsync(delivery.Id, 10_000, CancellationToken.None);
+
+        await RunAsync(hub);
+
+        var after = Assert.Single(await database.ListDeliveriesAsync("d1", CancellationToken.None));
+        Assert.Equal(DeliveryStates.Pending, after.State);
+        Assert.Equal(0, after.Attempts);
+    }
+
+    [Fact]
+    public async Task A_published_event_waiting_its_backoff_is_not_sent_once_withdrawn()
+    {
+        var hub = await PublishedAsync();
+        _statuses.Enqueue(StatusCodes.Status500InternalServerError);
+        await RunAsync(hub);
+        await Database(hub).WithdrawAsync("d1", "wrong", "alice", 10_000, ["auditors"], CancellationToken.None);
+
+        ((FakeTimeProvider)hub.Services.GetRequiredService<TimeProvider>()).Advance(TimeSpan.FromSeconds(30));
+        await RunAsync(hub);
+        await RunAsync(hub);
+
+        Assert.Equal(["published", "withdrawn"], _received.Select(received =>
+            JsonDocument.Parse(received.Body).RootElement.GetProperty("event").GetString()));
+        var published = (await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None)).First(d => d.Event == "published");
+        Assert.Equal(DeliveryStates.Failed, published.State);
     }
 
     [Fact]

@@ -32,11 +32,13 @@ public sealed partial class DeliveryWorker(
         {
             var webhook = disclosures.Webhooks.FirstOrDefault(candidate => candidate.Name == delivery.Webhook);
             var disclosure = await database.GetDisclosureAsync(delivery.DisclosureId, cancellationToken);
-            // A webhook removed from the configuration, or an internal report, is never sent.
-            if (webhook is null || disclosure is null || disclosure.Confidentiality != "public")
+            // A webhook removed from the configuration, an internal report, or a publication
+            // withdrawn while its event waited out a backoff, is never sent.
+            if (webhook is null || disclosure is null || disclosure.Confidentiality != "public" ||
+                (disclosure.Withdrawn && delivery.Event == "published"))
             {
                 await database.RecordDeliveryAttemptAsync(
-                    delivery.Id, null, DeliveryStates.Failed, Now(), null, cancellationToken);
+                    delivery.Id, delivery.Attempts, null, DeliveryStates.Failed, Now(), null, cancellationToken);
                 continue;
             }
 
@@ -62,8 +64,9 @@ public sealed partial class DeliveryWorker(
 
         if (status is >= 200 and < 300)
         {
-            await database.RecordDeliveryAttemptAsync(delivery.Id, status, DeliveryStates.Delivered, Now(), null,
-                cancellationToken);
+            // Past the stopping token: the receiver has it, and a restart must not send it again.
+            await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status, DeliveryStates.Delivered, Now(),
+                null, CancellationToken.None);
             return;
         }
 
@@ -73,15 +76,19 @@ public sealed partial class DeliveryWorker(
         var attempts = delivery.Attempts + 1;
         if (attempts >= MaxAttempts)
         {
-            metrics.DeliveryFailed();
-            LogGaveUp(logger, delivery.Id, webhook.Name, attempts);
-            await database.RecordDeliveryAttemptAsync(delivery.Id, status, DeliveryStates.Failed, Now(), null,
-                cancellationToken);
+            // False when an operator's retry reset the row meanwhile: that run of attempts is theirs.
+            if (await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status, DeliveryStates.Failed,
+                    Now(), null, cancellationToken))
+            {
+                metrics.DeliveryFailed();
+                LogGaveUp(logger, delivery.Id, webhook.Name, attempts);
+            }
+
             return;
         }
 
         var backoff = TimeSpan.FromTicks(Math.Min(MaxBackoff.Ticks, FirstBackoff.Ticks << (attempts - 1)));
-        await database.RecordDeliveryAttemptAsync(delivery.Id, status, DeliveryStates.Pending, Now(),
+        await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status, DeliveryStates.Pending, Now(),
             Now() + (long)backoff.TotalMilliseconds, cancellationToken);
     }
 

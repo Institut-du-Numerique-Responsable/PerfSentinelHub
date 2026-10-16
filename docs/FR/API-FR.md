@@ -785,7 +785,9 @@ bien qu'un redémarrage les reprend. Un `2xx` en règle une. Tout autre statut, 
 comprise, jamais suivie, ou aucune réponse dans `Hub:HttpTimeout` est retenté après 30
 secondes, puis après une attente qui double, plafonnée à une heure, 8 tentatives en tout,
 après quoi la livraison est `failed`. Une livraison vers un webhook qui n'est plus configuré
-échoue sans requête.
+échoue sans requête, tout comme un événement `published` qui attend encore quand sa
+divulgation est retirée : le destinataire n'en entend jamais parler après l'événement
+`withdrawn`. Une relance demandée pendant une tentative l'emporte sur l'issue de celle-ci.
 
 ## Avec le contrôle d'accès
 

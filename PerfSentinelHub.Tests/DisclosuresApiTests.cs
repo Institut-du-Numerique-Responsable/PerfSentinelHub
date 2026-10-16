@@ -321,8 +321,8 @@ public sealed class DisclosuresApiTests : IDisposable
         var database = Database(hub);
         await database.EnqueueDeliveriesAsync("d1", "published", ["auditors", "mail"], NowMs, CancellationToken.None);
         var deliveries = await database.ListDeliveriesAsync("d1", CancellationToken.None);
-        await database.RecordDeliveryAttemptAsync(deliveries[0].Id, 500, DeliveryStates.Failed, NowMs, null, CancellationToken.None);
-        await database.RecordDeliveryAttemptAsync(deliveries[1].Id, 204, DeliveryStates.Delivered, NowMs, null, CancellationToken.None);
+        await database.RecordDeliveryAttemptAsync(deliveries[0].Id, 0, 500, DeliveryStates.Failed, NowMs, null, CancellationToken.None);
+        await database.RecordDeliveryAttemptAsync(deliveries[1].Id, 0, 204, DeliveryStates.Delivered, NowMs, null, CancellationToken.None);
         using var client = hub.CreateClient();
 
         using var failed = await client.SendAsync(

@@ -207,8 +207,8 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
 
         Assert.Equal(["auditors", "mail"], due.Select(delivery => delivery.Webhook).Order(StringComparer.Ordinal));
         Assert.All(due, delivery => Assert.Equal("published", delivery.Event));
-        await reopened.RecordDeliveryAttemptAsync(due[0].Id, 204, DeliveryStates.Delivered, NowMs, null, cancellationToken);
-        await reopened.RecordDeliveryAttemptAsync(due[1].Id, 500, DeliveryStates.Pending, NowMs, NowMs + 60_000, cancellationToken);
+        await reopened.RecordDeliveryAttemptAsync(due[0].Id, 0, 204, DeliveryStates.Delivered, NowMs, null, cancellationToken);
+        await reopened.RecordDeliveryAttemptAsync(due[1].Id, 0, 500, DeliveryStates.Pending, NowMs, NowMs + 60_000, cancellationToken);
         Assert.Empty(await reopened.DueDeliveriesAsync(NowMs + 59_999, cancellationToken));
         var retried = Assert.Single(await reopened.DueDeliveriesAsync(NowMs + 60_000, cancellationToken));
         Assert.Equal(1, retried.Attempts);

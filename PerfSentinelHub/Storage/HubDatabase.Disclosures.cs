@@ -382,28 +382,34 @@ public sealed partial class HubDatabase
         return ReadDeliveriesAsync("WHERE disclosure_id = $key ORDER BY created_at_ms, rowid", disclosureId, cancellationToken);
     }
 
-    public Task RecordDeliveryAttemptAsync(
+    /// <summary>
+    ///     One attempt's outcome. Unless it delivered, it lands only if the row still holds the
+    ///     <paramref name="seenAttempts" /> the worker read: a retry reset during the attempt wins.
+    /// </summary>
+    public async Task<bool> RecordDeliveryAttemptAsync(
         string id,
+        int seenAttempts,
         int? status,
         string state,
         long attemptMs,
         long? nextAttemptMs,
         CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return await WriteAsync(async command =>
         {
             command.CommandText = """
                                   UPDATE disclosure_deliveries
                                   SET attempts = attempts + 1, last_attempt_ms = $attempt, last_status = $status,
                                       state = $state, next_attempt_ms = $next
-                                  WHERE id = $id;
+                                  WHERE id = $id AND (attempts = $seen OR $state = 'delivered');
                                   """;
             command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$seen", seenAttempts);
             command.Parameters.AddWithValue("$attempt", attemptMs);
             command.Parameters.AddWithValue("$status", Nullable(status));
             command.Parameters.AddWithValue("$state", state);
             command.Parameters.AddWithValue("$next", Nullable(nextAttemptMs));
-            return await command.ExecuteNonQueryAsync(cancellationToken);
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
         }, cancellationToken);
     }
 
