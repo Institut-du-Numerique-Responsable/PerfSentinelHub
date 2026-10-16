@@ -265,6 +265,11 @@ was withdrawn, by whom and why, when an official one carries no signature, and w
 not rendered it, with the reason. The screen ends on the commands a CI job runs to produce,
 sign and publish the next one.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures-dark.png">
+  <img alt="The disclosures screen: the rail of quarters, then one card per disclosure, one of them withdrawn" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures.png">
+</picture>
+
 A card opens the disclosure's own screen:
 
 - **Integrity**, who checked what: the content hash and the binding, checked by this Hub and
@@ -284,6 +289,11 @@ header, also gets New share link, Render again on a disclosure not rendered, Ret
 delivery that has not gone through, and Withdraw, which asks for a reason and says the step is
 final. On a Hub without access control, that is whoever the Hub can name. An internal or
 withdrawn disclosure offers no share link.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure-dark.png">
+  <img alt="One disclosure: its figures, applications, who checked what, its files and its share link" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure.png">
+</picture>
 
 ## The ack page
 

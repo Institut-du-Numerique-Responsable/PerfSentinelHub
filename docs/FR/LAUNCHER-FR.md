@@ -292,6 +292,11 @@ divulgation officielle ne porte aucune signature, et quand le Hub ne l'a pas ren
 raison. L'écran se termine sur les commandes qu'un job de CI lance pour produire, signer et
 publier la suivante.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures-dark.png">
+  <img alt="L'écran des divulgations : la frise des trimestres, puis une carte par divulgation, dont une retirée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosures.png">
+</picture>
+
 Une carte ouvre l'écran propre à la divulgation :
 
 - **Intégrité**, qui a vérifié quoi : l'empreinte et le lien de l'attestation, vérifiés par ce
@@ -312,6 +317,11 @@ d'identité de confiance, dispose aussi de New share link, de Render again sur u
 non rendue, de Retry sur une livraison qui n'est pas passée, et de Withdraw, qui demande une
 raison et dit que l'étape est définitive. Sur un Hub sans contrôle d'accès, c'est quiconque le
 Hub sait nommer. Une divulgation interne ou retirée n'offre aucun lien de partage.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure-dark.png">
+  <img alt="Une divulgation : ses chiffres, ses applications, qui a vérifié quoi, ses fichiers et son lien de partage" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-disclosure.png">
+</picture>
 
 ## La page d'acquittement
 
