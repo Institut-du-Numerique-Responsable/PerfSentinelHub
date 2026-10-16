@@ -95,10 +95,11 @@ hub:
   # tokens stay out of it; the ingress access log still sees them, see
   # docs/OPERATIONS.md. allowInternal needs hub.access.enabled.
   # expectedIdentity and expectedIssuer go together, printed in the PDF's
-  # verify command for the reader: the Hub never checks a signature. shareLinkDays: 1 to 30. Webhooks are
-  # items { name, secretName, urlKey, secretKey, includeShareLink,
-  # shareLinkDays }: the URL and the HMAC secret both come from that Secret,
-  # since a chat webhook URL carries its own secret. See docs/CONFIGURATION.md.
+  # verify command for the reader: the Hub never checks a signature.
+  # shareLinkDays: 1 to 30. Webhooks are items { name, secretName, urlKey,
+  # secretKey, includeShareLink, shareLinkDays }: the URL and the HMAC secret
+  # both come from that Secret, since a chat webhook URL carries its own
+  # secret. See docs/CONFIGURATION.md.
   disclosures:
     importSecretName: ""
     importSecretKey: ""
