@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace PerfSentinelHub.Tests;
 
 /// <summary>
@@ -66,7 +68,11 @@ internal sealed record FakeEngine
         }
 
         // LF, because a CRLF checkout would otherwise hand sh an interpreter named "/bin/sh\r".
-        File.WriteAllText(path, ShellScript(path).ReplaceLineEndings("\n"));
+        File.WriteAllText($"{path}.sh", ShellScript(path).ReplaceLineEndings("\n"));
+        // A child copies it into place: a test that forks while this process holds the file
+        // open for writing would keep it busy, and Linux refuses to exec it with ETXTBSY.
+        using (var copy = Process.Start("cp", [$"{path}.sh", path]))
+            copy.WaitForExit();
         File.SetUnixFileMode(
             path,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
