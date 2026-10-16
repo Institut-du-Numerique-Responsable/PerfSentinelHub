@@ -64,6 +64,22 @@ public sealed class EngineProbeTests : IDisposable
         Assert.Equal(expected, probe.SupportsDaemonUrl);
     }
 
+    [Theory]
+    // 0.31.0 and later: a report the Hub serves acks through the Hub's relay.
+    [InlineData("      --daemon-url <URL>\n      --hub-relay <SOURCE_ID>\n          Hub source id.", true)]
+    [InlineData("      --daemon-url <URL>\n          Daemon URL for the HTML live mode.", false)]
+    public async Task Whether_the_binary_takes_a_hub_relay_is_read_from_its_own_help(
+        string help,
+        bool expected)
+    {
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "perf-sentinel 0.31.0", Help = help }));
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, probe.SupportsHubRelay);
+        Assert.True(probe.SupportsDaemonUrl);
+    }
+
     [Fact]
     public async Task A_binary_whose_help_cannot_be_read_renders_static_rather_than_failing()
     {

@@ -274,7 +274,9 @@ Outside the model:
 
 ## What sits outside the Hub
 
-A live report needs two things the Hub does not control: the daemon's
+A daemon source with an ack credential needs none of what follows: with engine 0.31.0 or
+later its report acks through the Hub. Otherwise, a live report needs two things the Hub
+does not control: the daemon's
 `[daemon.cors] allowed_origins` must carry the origin the Hub serves reports
 from, and the viewer must be able to reach that daemon directly, at its `PublicUrl`
 when the Hub reads it by a name only the cluster resolves. A daemon behind

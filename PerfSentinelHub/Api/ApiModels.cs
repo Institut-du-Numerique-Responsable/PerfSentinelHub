@@ -156,6 +156,12 @@ public sealed record SubmittedAnalysis(string Id, string Status);
 public sealed record AnalysisProblem(string Detail);
 
 /// <summary>
+///     One entry of GET /api/sources/{id}/acks: a daemon ack as the mirror holds it, in
+///     the shape the daemon's own GET /api/acks lists, which a report reads either way.
+/// </summary>
+public sealed record SourceAckResponse(string Signature, string By, string? Reason, string At, string? ExpiresAt);
+
+/// <summary>
 ///     GET /api/access, with Hub:Access:Enabled only: who the caller is and what they
 ///     reach. Configuration, Unmatched and Conflicts are null except for an admin. Never
 ///     a machine token's value or fingerprint.

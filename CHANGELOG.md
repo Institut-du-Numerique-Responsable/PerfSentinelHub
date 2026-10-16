@@ -2,6 +2,19 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- A report of a daemon source that has an ack credential acknowledges through the Hub. The
+  render passes `--hub-relay` when the engine takes it (0.31.0 and later), and the report's Ack
+  and Revoke buttons call the ack relay at the Hub's own origin, in the reader's name and under
+  their rights, with access control on or off. No daemon key in the browser, no CORS entry at
+  the daemon, and no route from the viewer to the daemon. Before, such a report showed
+  "Unreachable" wherever the daemon was not exposed, and rendered static with access on.
+- `GET /api/sources/{sourceId}/acks` lists the daemon acks the Hub mirrors at a source, in
+  the shape of the daemon's own `GET /api/acks`, filtered by what the caller reads there.
+
 ## [0.6.1] - 2026-10-16
 
 ### Fixed

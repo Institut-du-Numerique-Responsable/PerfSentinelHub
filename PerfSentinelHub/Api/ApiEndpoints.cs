@@ -56,6 +56,7 @@ public static partial class ApiEndpoints
         app.MapGet("/api/sources", GetSourcesAsync);
         app.MapGet("/api/sources/{sourceId}/daemon", GetDaemonViewAsync);
         // Never anonymous: each of the two spends a daemon's write key in the caller's name.
+        app.MapGet("/api/sources/{sourceId}/acks", GetSourceAcksAsync);
         app.MapPost("/api/sources/{sourceId}/acks", CreateAckAsync);
         app.MapPost("/api/sources/{sourceId}/acks/revoke", RevokeAckAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a

@@ -426,6 +426,15 @@ daemon. Toutes deux sont un `POST` à corps JSON, et aucune n'est jamais ouverte
 `expires_at` est optionnel, et un acquittement qui n'en porte pas est permanent. Un `by`
 dans le corps est ignoré : le Hub nomme lui-même l'appelant.
 
+`GET /api/sources/{sourceId}/acks` liste les acquittements de daemon que le Hub copie pour
+cette source, sous la forme que donne le `GET /api/acks` du daemon lui-même
+(`[{"signature","by","reason","at","expires_at"}]`), non expirés, sans la baseline de CI,
+et 1000 au plus. Un rapport que le Hub rend avec `--hub-relay` y lit ses acquittements, et
+la copie est relue après chaque écriture du relais, donc la liste suit aussitôt. La source
+est jugée comme pour une écriture, même `404` compris. Avec le contrôle d'accès, un
+acquittement apparaît quand l'appelant lit son finding sur cette source, ou lit la source
+entière quand le Hub ne détient plus le finding, la règle que suit sa révocation.
+
 Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'atteint jamais le
 daemon. Avec le contrôle d'accès, des étapes propres s'y ajoutent, voir
 [Avec le contrôle d'accès](#avec-le-contrôle-daccès) :
@@ -642,8 +651,9 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   l'appelant est le `400` d'un `source_id` inconnu. `GET /api/analyses` ne liste que les
   runs visibles, jamais `403` ; un run caché et son rapport répondent `404`. Le JSON d'un
   run est inchangé. **Un rapport de traces montre chaque service que ses traces
-  traversent**, comptes de `result` compris. Les rapports sont rendus statiques : pas de
-  `--daemon-url`.
+  traversent**, comptes de `result` compris. Un rapport de daemon devient live à travers le
+  relais d'acquittement (`--hub-relay`) quand la source a un identifiant d'acquittement,
+  sous les contrôles ci-dessus. Les autres sont rendus statiques : pas de `--daemon-url`.
 
 Depuis la CI :
 

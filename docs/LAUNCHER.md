@@ -111,7 +111,13 @@ rather than relying on that discovery.
 
 ## Live reports
 
-A report rendered from a daemon source goes live when the daemon's `PublicUrl`, or its
+A report rendered from a daemon source that has an ack credential goes live through this
+Hub: the render passes `--hub-relay` (engine 0.31.0 or later), and the dashboard's Ack and
+Revoke controls call the [ack relay](API.md#ack-relay) at the Hub's own origin, in the
+reader's name and under their rights. No daemon key reaches the browser, the daemon needs
+no CORS entry, and the viewer never reaches it. This holds with access control on or off.
+
+Otherwise, with access control off, a report goes live straight at the daemon when the daemon's `PublicUrl`, or its
 `BaseUrl` when it declares none, is a bare origin. The render passes `--daemon-url`, and the dashboard's own Refresh and
 acknowledgment controls then talk to that daemon from the viewer's browser.
 

@@ -116,8 +116,7 @@ public sealed partial class AnalysisRunner(
                     run.Id,
                     reportJson,
                     configPath,
-                    // A live report acks at the daemon directly, around acks.write.
-                    LiveDaemonUrl(source, engine.SupportsDaemonUrl && !options.Value.Access.Enabled),
+                    LiveArguments(source),
                     timeout.Token))
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
@@ -211,11 +210,29 @@ public sealed partial class AnalysisRunner(
             : null;
     }
 
+    /// <summary>
+    ///     How a daemon-source report goes live, or nothing for a static one. Through
+    ///     this Hub's relay when the source holds an ack key and the engine takes
+    ///     `--hub-relay`: the reader acks in their own name, under acks.write, with no
+    ///     key in the browser and no CORS entry at the daemon. Otherwise straight at the
+    ///     daemon, which only access off allows, since that path goes around acks.write.
+    /// </summary>
+    private string[] LiveArguments(SourceOptions source)
+    {
+        // The engine refuses the two ids a browser would read as path segments.
+        if (engine.SupportsHubRelay && source is { Kind: SourceKinds.Daemon, HasAckCredential: true } &&
+            source.Id is not ("." or ".."))
+            return ["--hub-relay", source.Id];
+        return LiveDaemonUrl(source, engine.SupportsDaemonUrl && !options.Value.Access.Enabled) is { } url
+            ? ["--daemon-url", url]
+            : [];
+    }
+
     private async Task<bool> RenderAsync(
         string runId,
         byte[] reportJson,
         string? configPath,
-        string? daemonUrl,
+        string[] liveArguments,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_analysis.ReportDirectory);
@@ -239,16 +256,11 @@ public sealed partial class AnalysisRunner(
                 "--max-traces-embedded",
                 _analysis.MaxTracesEmbedded.ToString(CultureInfo.InvariantCulture)
             };
-            if (daemonUrl is not null)
-            {
-                // The report's own Refresh and acknowledgment controls talk to
-                // this daemon from the viewer's browser. That only works when
-                // the daemon's [daemon.cors] allowed_origins carries the origin
-                // this Hub serves reports from; without it the dashboard shows
-                // itself disconnected and stays a static report.
-                arguments.Add("--daemon-url");
-                arguments.Add(daemonUrl);
-            }
+            // With --daemon-url the report's controls talk to the daemon from the
+            // viewer's browser, which only works when [daemon.cors] allowed_origins
+            // carries this Hub's origin; without it the report shows itself
+            // disconnected and stays static.
+            arguments.AddRange(liveArguments);
 
             if (configPath is not null)
             {

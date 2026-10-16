@@ -112,6 +112,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("POST", "/api/incidents/refresh")]
     [InlineData("GET", "/api/correlations")]
     [InlineData("POST", "/api/sources/shop-d/acks")]
+    [InlineData("GET", "/api/sources/shop-d/acks")]
     [InlineData("GET", "/api/analyses")]
     [InlineData("POST", "/api/analyses")]
     [InlineData("GET", "/api/analyses/0123456789abcdef")]
@@ -486,6 +487,38 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         using var sent = JsonDocument.Parse(Assert.Single(_shopCalls, call => call.Method == "POST").Body);
         Assert.False(sent.RootElement.TryGetProperty("expires_at", out _));
         Assert.Equal("attr@example.internal", sent.RootElement.GetProperty("by").GetString());
+    }
+
+    [Theory]
+    [InlineData("ss", "shop-d", F1)]
+    [InlineData("attr", "shop-d", F1)]
+    [InlineData("lab", "lab-d", Orphan)]
+    // An ack whose finding the Hub no longer holds names no service: the source as a whole.
+    [InlineData("attr", "lab-d", "")]
+    public async Task The_ack_listing_holds_what_the_caller_reads_at_the_source(
+        string user,
+        string sourceId,
+        string expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = await SignedInAsync(user);
+
+        using var response = await client.GetAsync($"/api/sources/{sourceId}/acks", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var listing = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        Assert.Equal(expected, string.Join(',', listing.RootElement.EnumerateArray()
+            .Select(ack => ack.GetProperty("signature").GetString())));
+    }
+
+    [Fact]
+    public async Task A_caller_who_reads_no_finding_at_the_source_gets_no_ack_listing()
+    {
+        using var client = await SignedInAsync("tempo");
+
+        using var response = await client.GetAsync("/api/sources/shop-d/acks", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Theory]

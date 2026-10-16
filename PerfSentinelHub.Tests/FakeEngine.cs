@@ -12,7 +12,7 @@ internal sealed record FakeEngine
 
     public int VersionExitCode { get; init; }
 
-    /// <summary>Printed for <c>report --help</c>, which the probe reads for <c>--daemon-url</c>.</summary>
+    /// <summary>Printed for <c>report --help</c>, which the probe reads for <c>--daemon-url</c> and <c>--hub-relay</c>.</summary>
     public string Help { get; init; } = "";
 
     public int HelpExitCode { get; init; }

@@ -297,7 +297,9 @@ Hors du modèle :
 
 ## Ce qui se joue hors du Hub
 
-Un rapport vivant exige deux choses que le Hub ne contrôle pas : le
+Une source daemon qui a un identifiant d'acquittement n'a besoin de rien de ce qui suit :
+avec un moteur 0.31.0 ou plus récent, son rapport acquitte à travers le Hub. Sinon, un
+rapport vivant exige deux choses que le Hub ne contrôle pas : le
 `[daemon.cors] allowed_origins` du daemon doit porter l'origine depuis laquelle
 le Hub sert ses rapports, et le lecteur doit pouvoir joindre ce daemon
 directement, à son `PublicUrl` quand le Hub le lit par un nom que seul le cluster

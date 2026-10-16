@@ -213,6 +213,64 @@ public sealed class AnalysisRunnerTests : IDisposable
             arguments.Contains($"--daemon-url {source.EndpointArgument}", StringComparison.Ordinal));
     }
 
+    // The relay acks in the reader's name with the Hub's key and checks acks.write, so
+    // it serves access on and off alike, and needs no CORS entry at the daemon.
+    [Theory]
+    [InlineData(false, "--daemon-url <URL>  live mode\n      --hub-relay <SOURCE_ID>  relay", "--hub-relay relayed")]
+    [InlineData(true, "--daemon-url <URL>  live mode\n      --hub-relay <SOURCE_ID>  relay", "--hub-relay relayed")]
+    // An engine before 0.31.0 keeps the direct live mode where it is allowed.
+    [InlineData(false, "--daemon-url <URL>  live mode", "--daemon-url ")]
+    [InlineData(true, "--daemon-url <URL>  live mode", "")]
+    public async Task A_daemon_with_an_ack_credential_is_rendered_through_the_hub_relay(
+        bool accessOn,
+        string help,
+        string expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(ReportJson, cancellationToken);
+        }, cancellationToken);
+        var options = RunnerOptions(StubEngine(ReportJson, 0, help: "      " + help));
+        options.Value.Access.Enabled = accessOn;
+        var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
+        await probe.StartAsync(cancellationToken);
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(), options),
+            probe,
+            options,
+            NullLogger<AnalysisRunner>.Instance);
+        var source = new SourceOptions
+        {
+            Id = "relayed",
+            Name = "Relayed",
+            Environment = "production",
+            Kind = SourceKinds.Daemon,
+            BaseUrl = daemon.BaseUrl,
+            AckHeaderName = "X-API-Key",
+            AckHeaderValue = "ack-key" // gitleaks:allow -- synthetic test credential
+        };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        var arguments = await File.ReadAllTextAsync(
+            Path.Combine(_workspace, "reports", "render-args.txt"),
+            cancellationToken);
+        if (expected.Length == 0)
+        {
+            Assert.DoesNotContain("--hub-relay", arguments, StringComparison.Ordinal);
+            Assert.DoesNotContain("--daemon-url", arguments, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains(expected, arguments, StringComparison.Ordinal);
+            Assert.False(arguments.Contains("--hub-relay", StringComparison.Ordinal) &&
+                         arguments.Contains("--daemon-url", StringComparison.Ordinal));
+        }
+    }
+
     [Fact]
     public async Task A_daemon_run_renders_static_when_the_engine_does_not_take_the_flag()
     {

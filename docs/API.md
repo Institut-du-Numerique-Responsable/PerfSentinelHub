@@ -394,6 +394,15 @@ a `POST` with a JSON body, and neither is ever open: under `Hub:Auth` they need 
 `expires_at` is optional, and an ack without one is permanent. A `by` in the body is
 ignored: the Hub names the caller itself.
 
+`GET /api/sources/{sourceId}/acks` lists the daemon acks the Hub mirrors at that source,
+in the shape the daemon's own `GET /api/acks` lists them
+(`[{"signature","by","reason","at","expires_at"}]`), unexpired, without the CI baseline, and
+1000 at most. A report the Hub renders with `--hub-relay` reads its acknowledgments there,
+and the mirror is read again after each write the relay makes, so the list follows at
+once. The source is judged as for a write, the same `404` included. With access control
+on, an ack shows when the caller reads its finding at that source, or reads the source as a
+whole when the Hub no longer holds the finding, the rule a revoke of it follows.
+
 The Hub judges a request in this order, and a request it refuses never reaches the daemon.
 With access control on, steps of its own join these, see
 [With access control](#with-access-control).
@@ -594,8 +603,9 @@ token or a machine token, and each answer covers what the caller's grants cover.
   `403 {"detail":"You may not start this analysis."}`; a source outside the caller's list
   is the `400` of an unknown `source_id`. `GET /api/analyses` lists only visible runs, never
   `403`; a hidden run and its report answer `404`. The run JSON is unchanged. **A trace
-  report shows every service its traces cross**, `result` counts included. Reports render
-  static: no `--daemon-url`.
+  report shows every service its traces cross**, `result` counts included. A daemon
+  report goes live through the ack relay (`--hub-relay`) when the source has an ack
+  credential, under the checks above. The others render static: no `--daemon-url`.
 
 From CI:
 

@@ -123,7 +123,14 @@ commande nomme le fichier au lieu de s'en remettre à cette découverte.
 
 ## Les rapports live
 
-Un rapport rendu depuis une source daemon devient live quand le `PublicUrl` de ce daemon,
+Un rapport rendu depuis une source daemon qui a un identifiant d'acquittement devient live
+à travers ce Hub : le rendu passe `--hub-relay` (moteur 0.31.0 ou plus récent), et les
+contrôles Ack et Revoke du dashboard appellent le [relais d'acquittement](API-FR.md#relais-dacquittement)
+à l'origine même du Hub, au nom du lecteur et selon ses droits. Aucune clé du daemon
+n'arrive dans le navigateur, le daemon n'a besoin d'aucune entrée CORS, et le lecteur ne
+le joint jamais. C'est vrai avec ou sans contrôle d'accès.
+
+Sinon, sans contrôle d'accès, un rapport devient live directement sur le daemon quand le `PublicUrl` de ce daemon,
 ou son `BaseUrl` quand il n'en déclare pas, est une origine nue. Le rendu passe `--daemon-url`, et les contrôles de rafraîchissement et
 d'acquittement du dashboard parlent alors à ce daemon depuis le navigateur du lecteur.
 
