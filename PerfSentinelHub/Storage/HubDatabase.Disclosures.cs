@@ -302,11 +302,8 @@ public sealed partial class HubDatabase
     {
         if (downloads.Count == 0)
             return;
-        await _writeGate.WaitAsync(cancellationToken);
-        try
+        await WriteTransactionAsync(async (connection, transaction) =>
         {
-            await using var connection = await OpenConnectionAsync(cancellationToken);
-            await using var transaction = connection.BeginTransaction(false);
             foreach (var (linkId, counted) in downloads)
             {
                 await using var command = connection.CreateCommand();
@@ -325,12 +322,8 @@ public sealed partial class HubDatabase
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await transaction.CommitAsync(cancellationToken);
-        }
-        finally
-        {
-            _writeGate.Release();
-        }
+            return true;
+        }, cancellationToken);
     }
 
     public async Task EnqueueDeliveriesAsync(
