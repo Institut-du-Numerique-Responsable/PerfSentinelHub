@@ -77,6 +77,7 @@ public static partial class ApiEndpoints
         app.MapGet("/api/incidents", GetIncidentsAsync);
         app.MapGet("/api/incidents/{id}", GetIncidentAsync);
         app.MapPost("/api/incidents/refresh", RefreshIncidentsAsync);
+        app.MapGet("/api/correlations", GetCorrelationsAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();

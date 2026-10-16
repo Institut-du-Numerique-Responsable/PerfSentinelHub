@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
 
@@ -9,6 +10,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(DetectionKnob))]
 [JsonSerializable(typeof(ImportResponse))]
 [JsonSerializable(typeof(IReadOnlyList<SourceResponse>))]
+[JsonSerializable(typeof(IReadOnlyList<StoredEpisode>))]
 [JsonSerializable(typeof(SubmittedAnalysis))]
 [JsonSerializable(typeof(AnalysisProblem))]
 [JsonSerializable(typeof(AccessResponse))]
