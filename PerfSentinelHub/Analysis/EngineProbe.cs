@@ -50,6 +50,13 @@ public sealed partial class EngineProbe(
     /// </summary>
     public bool SupportsHubRelay { get; private set; }
 
+    /// <summary>
+    ///     Whether the binary has `disclose-pdf` (0.31.0 and later, `pdf` feature): its
+    ///     own `--help` exits 0. Without it a disclosure is stored unrendered, "not
+    ///     checked here", and rendered again once the engine is upgraded.
+    /// </summary>
+    public bool SupportsDisclosePdf { get; private set; }
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (_analysis.EngineBinaryPath is not { } path)
@@ -69,7 +76,9 @@ public sealed partial class EngineProbe(
             // render static. WhenAll observes both even when the first faults.
             var version = RunVersionAsync(path, _analysis.ReportDirectory, timeout.Token);
             var help = ReadReportHelpAsync(path, _analysis.ReportDirectory, timeout.Token);
-            await Task.WhenAll(version, help);
+            var disclosePdf = EngineProcess.RunAsync(
+                path, ["disclose-pdf", "--help"], MaxHelpBytes, _analysis.ReportDirectory, timeout.Token);
+            await Task.WhenAll(version, help, disclosePdf);
 
             Version = ParseVersion(version.Result);
             if (Version is null)
@@ -79,6 +88,7 @@ public sealed partial class EngineProbe(
 
             SupportsDaemonUrl = help.Result?.Contains(DaemonUrlFlag, StringComparison.Ordinal) == true;
             SupportsHubRelay = help.Result?.Contains(HubRelayFlag, StringComparison.Ordinal) == true;
+            SupportsDisclosePdf = disclosePdf.Result.Succeeded;
             if (!SupportsDaemonUrl)
                 LogNoDaemonUrl(logger, path);
         }

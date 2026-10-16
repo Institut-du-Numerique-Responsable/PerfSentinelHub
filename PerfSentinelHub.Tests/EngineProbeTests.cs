@@ -80,6 +80,18 @@ public sealed class EngineProbeTests : IDisposable
         Assert.True(probe.SupportsDaemonUrl);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Whether_the_binary_renders_disclosures_is_read_from_its_own_subcommand(bool supported)
+    {
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "perf-sentinel 0.31.0", DisclosePdf = supported }));
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(supported, probe.SupportsDisclosePdf);
+    }
+
     [Fact]
     public async Task A_binary_whose_help_cannot_be_read_renders_static_rather_than_failing()
     {
