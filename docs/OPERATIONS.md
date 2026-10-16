@@ -67,7 +67,7 @@ neither, see [LAUNCHER.md](LAUNCHER.md#the-ack-page).
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather
-than through a library: nine metric families over data the Hub already holds do
+than through a library: eleven metric families over data the Hub already holds do
 not justify a dependency in a service whose only two packages are SQLite.
 
 | Metric                                                                 | Type    | What it answers                                       |
@@ -165,7 +165,7 @@ Four files under [`examples/`](../examples), each validated rather than sketched
 
 | File                                                                       | Is                                                                     |
 |----------------------------------------------------------------------------|------------------------------------------------------------------------|
-| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Eleven panels over eight of the nine families, importable as it stands |
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Eleven panels over eight of the eleven families, importable as it stands |
 | [`FR/grafana-dashboard-FR.json`](../examples/FR/grafana-dashboard-FR.json) | The same dashboard with French titles and descriptions                 |
 | [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)               | One rule, checked with `promtool check rules`                          |
 | [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)               | A scrape job for a deployment that names its targets                   |

@@ -73,7 +73,7 @@ d'identifiant d'acquittement n'en offre aucun, voir
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt
-qu'au travers d'une bibliothèque : neuf familles de métriques sur des données que
+qu'au travers d'une bibliothèque : onze familles de métriques sur des données que
 le Hub détient déjà ne justifient pas une dépendance dans un service dont les
 deux seuls paquets sont SQLite.
 
@@ -178,7 +178,7 @@ Quatre fichiers sous [`examples/`](../../examples), validés plutôt qu'esquiss�
 
 | Fichier                                                                       | Est                                                           |
 |-------------------------------------------------------------------------------|---------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des neuf familles, importable tel quel |
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des onze familles, importable tel quel |
 | [`FR/grafana-dashboard-FR.json`](../../examples/FR/grafana-dashboard-FR.json) | Le même tableau de bord, titres et descriptions en français   |
 | [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)               | Une règle, contrôlée par `promtool check rules`               |
 | [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)               | Un job de collecte pour un déploiement qui nomme ses cibles   |
