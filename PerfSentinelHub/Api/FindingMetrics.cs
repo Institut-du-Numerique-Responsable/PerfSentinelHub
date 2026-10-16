@@ -14,45 +14,46 @@ public sealed record FindingSeries(string Environment, FindingCount Findings);
 ///     The findings family of /metrics, counted at most once per scrape interval.
 ///     The route is anonymous and ungated and a scoped count reads its whole
 ///     scope, so an uncached one would let any caller make the Hub count at will.
-///     Every other family is cheap and stays computed at scrape time.
+///     The count grows with the signatures stored, so a scrape waits for it only
+///     as long as <see cref="CachedCount{T}" /> allows and is otherwise served the
+///     previous one, its age published beside it. Every other family is cheap and
+///     stays computed at scrape time.
 /// </summary>
-public sealed class FindingMetrics(
-    HubDatabase database,
-    IOptions<HubOptions> options,
-    TimeProvider timeProvider)
+public sealed class FindingMetrics
 {
-    private static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(15);
+    private readonly CachedCount<IReadOnlyList<FindingSeries>> _cache;
+    private readonly HubDatabase _database;
+    private readonly IOptions<HubOptions> _options;
 
-    // Written and read on request threads. Volatile on both sides for the reason
-    // UpdateChecker gives: a plain reference store carries no barrier.
-    // Scrapes that find it stale at the same moment each count once,
-    // a SemaphoreSlim around the count if a burst of them ever shows up.
-    private Snapshot? _snapshot;
+    public FindingMetrics(
+        HubDatabase database,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        ILogger<FindingMetrics> logger)
+    {
+        _database = database;
+        _options = options;
+        _cache = new CachedCount<IReadOnlyList<FindingSeries>>(CountAsync, timeProvider, logger);
+    }
 
     /// <summary>
     ///     One sample per environment, type, severity and status that holds a
-    ///     finding. An environment is a group of `Hub:Sources`, never a stored
-    ///     row: that column goes stale when a source changes environment.
+    ///     finding, with the time it was counted. Null until a first count lands.
+    ///     An environment is a group of `Hub:Sources`, never a stored row: that
+    ///     column goes stale when a source changes environment.
     /// </summary>
-    public async Task<IReadOnlyList<FindingSeries>> SeriesAsync(CancellationToken cancellationToken)
+    public Task<Counted<IReadOnlyList<FindingSeries>>?> SeriesAsync(CancellationToken cancellationToken)
     {
-        if (Volatile.Read(ref _snapshot) is { } snapshot &&
-            timeProvider.GetElapsedTime(snapshot.CountedAt) < Lifetime)
-            return snapshot.Series;
-
-        var countedAt = timeProvider.GetTimestamp();
-        var series = await CountAsync(cancellationToken);
-        Volatile.Write(ref _snapshot, new Snapshot(countedAt, series));
-        return series;
+        return _cache.GetAsync(cancellationToken);
     }
 
     private async Task<IReadOnlyList<FindingSeries>> CountAsync(CancellationToken cancellationToken)
     {
         var series = new List<FindingSeries>();
-        var environments = options.Value.Sources.GroupBy(source => source.Environment, StringComparer.Ordinal);
+        var environments = _options.Value.Sources.GroupBy(source => source.Environment, StringComparer.Ordinal);
         foreach (var environment in environments)
         {
-            var counts = await database.CountFindingsAsync(
+            var counts = await _database.CountFindingsAsync(
                 [.. environment.Select(source => source.Id)], cancellationToken);
             // Two stored values can fold into one label, and a scrape that repeats
             // a series is rejected whole, so folded rows are summed.
@@ -69,6 +70,4 @@ public sealed class FindingMetrics(
 
         return series;
     }
-
-    private sealed record Snapshot(long CountedAt, IReadOnlyList<FindingSeries> Series);
 }

@@ -96,7 +96,9 @@ public sealed class MetricsEndpointTests : IDisposable
                      "perf_sentinel_hub_source_last_success_seconds",
                      "perf_sentinel_hub_analysis_queue_depth",
                      "perf_sentinel_hub_analysis_runs",
-                     "perf_sentinel_hub_findings"
+                     "perf_sentinel_hub_findings",
+                     "perf_sentinel_hub_findings_age_seconds",
+                     "perf_sentinel_hub_database_bytes"
                  })
         {
             Assert.Contains($"# HELP {family} ", body, StringComparison.Ordinal);
@@ -391,6 +393,30 @@ public sealed class MetricsEndpointTests : IDisposable
         _clock.Advance(TimeSpan.FromSeconds(1));
         var fresh = await ScrapeAsync(cancellationToken);
         Assert.Equal(1, Sample(fresh, FindingsSeries("production", "other", "critical", "active")));
+    }
+
+    [Fact]
+    public async Task The_findings_count_publishes_its_age()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Assert.Equal(0, Sample(await ScrapeAsync(cancellationToken), "perf_sentinel_hub_findings_age_seconds"));
+
+        _clock.Advance(TimeSpan.FromSeconds(14));
+        Assert.Equal(14, Sample(await ScrapeAsync(cancellationToken), "perf_sentinel_hub_findings_age_seconds"));
+    }
+
+    [Fact]
+    public async Task The_database_size_is_the_file_and_its_write_ahead_log()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await PushAsync("checkout", "production", _clock.GetUtcNow(), await FixtureFindingAsync());
+
+        var body = await ScrapeAsync(cancellationToken);
+        var expected = new[] { _databasePath, _databasePath + "-wal" }
+            .Where(File.Exists)
+            .Sum(path => new FileInfo(path).Length);
+        Assert.True(expected > 0);
+        Assert.Equal(expected, Sample(body, "perf_sentinel_hub_database_bytes"));
     }
 
     [Theory]
