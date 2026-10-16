@@ -4984,7 +4984,8 @@
             findings.length === 0
                 ? el('p', {class: 'daemon-lead', text: 'The daemon froze no finding for this incident.'})
                 : findingsFilter(detail),
-            findings.length === 0 ? null : el('div', {class: 'sources-wrap'}, [incidentFindingsTable(findings, detail)])
+            findings.length === 0 ? null : el('div', {class: 'sources-wrap'}, [incidentFindingsTable(findings, detail)]),
+            incidentCorrelationsBlock(incident)
         ]);
     }
 
@@ -5452,6 +5453,89 @@
             saveFolds();
         });
         return link;
+    }
+
+    /**
+     * The episodes of an incident's daemon active during it, read once per unfolded incident.
+     * An empty read asks once more whether the daemon pushes any at all, so a daemon without
+     * the push never reads as a quiet one.
+     */
+    function loadIncidentCorrelations(incident) {
+        const key = incidentKey(incident);
+        state.incidentCorrelations[key] = 'loading';
+        const scope = '/api/correlations?source_id=' + encodeURIComponent(incident.source_id);
+        getJson(scope + '&from=' + incident.window_from_ms + '&to=' + incidentEnd(incident))
+            .then(function (rows) {
+                if (rows.length > 0) return {rows: rows, pushes: true};
+                return getJson(scope + '&limit=1').then(function (any) {
+                    return {rows: rows, pushes: any.length > 0};
+                });
+            })
+            .then(function (result) {
+                state.incidentCorrelations[key] = result;
+            })
+            .catch(function () {
+                state.incidentCorrelations[key] = 'error';
+            })
+            .finally(function () {
+                const cell = document.getElementById('incident-detail-' + key);
+                if (cell) cell.replaceChildren(incidentPanel(incident));
+            });
+    }
+
+    function incidentCorrelationsBlock(incident) {
+        const held = state.incidentCorrelations[incidentKey(incident)];
+        if (held === undefined) {
+            queueMicrotask(function () {
+                loadIncidentCorrelations(incident);
+            });
+        }
+        const block = el('div', {class: 'incident-correlations'}, [
+            el('p', {class: 'overline daemon-audience', text: '// correlations'}),
+            el('h3', {class: 'daemon-lead', text: 'Correlations active during this incident'}),
+            el('p', {
+                class: 'daemon-source-note',
+                text: 'Episodes whose activity overlaps the incident\'s window, from the same daemon.'
+            })
+        ]);
+        if (held === undefined || held === 'loading') {
+            block.appendChild(el('p', {class: 'daemon-loading', role: 'status', text: 'Reading the correlations.'}));
+        } else if (held === 'error') {
+            block.appendChild(el('p', {class: 'table-muted', text: 'The Hub did not return the correlations of this window.'}));
+        } else if (held.rows.length > 0) {
+            block.appendChild(el('div', {class: 'sources-wrap'}, [incidentEpisodesTable(held.rows)]));
+        } else {
+            block.appendChild(el('p', {
+                class: 'empty-state',
+                text: held.pushes
+                    ? 'No correlation was active in this window.'
+                    : (incident.source_name || incident.source_id) + ' pushes no correlations, so none can show here.'
+            }));
+        }
+        return block;
+    }
+
+    function incidentEpisodesTable(episodes) {
+        const head = el('tr', {}, ['Pair', 'Episode', 'Peak', ''].map(function (name) {
+            return el('th', {text: name, scope: 'col', 'data-align': name === 'Peak' ? 'right' : null});
+        }));
+        const rows = episodes.map(function (episode) {
+            return el('tr', {}, [
+                el('td', {}, [pairCell(episode)]),
+                episodeSpanCell(episode),
+                el('td', {'data-align': 'right', class: 'table-mono', text: episode.peak_confidence.toFixed(2)}),
+                el('td', {}, [allEpisodesLink(episode)])
+            ]);
+        });
+        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, rows)]);
+    }
+
+    /** Every episode of an episode's pair, through the route the Grafana table links to. */
+    function allEpisodesLink(episode) {
+        return el('a', {
+            class: 'pill-button pill-sm',
+            href: '#/correlations?pair_key=' + encodeURIComponent(episode.pair_key)
+        }, [el('span', {text: 'All its episodes'})]);
     }
 
     // ------------------------------------------------- screen: ack one finding

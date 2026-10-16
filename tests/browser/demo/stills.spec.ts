@@ -187,3 +187,39 @@ test("correlations on a phone", async ({page}, info) => {
         animations: "disabled"
     });
 });
+
+test("correlations during an incident", async ({page}, info) => {
+    await page.goto("/#/incidents");
+    await settled(page, "What was already burning");
+    await page.locator("button.row-toggle", {hasText: "checkout-svc"}).click();
+    const block = page.locator(".daemon-detail:not([hidden]) .incident-correlations");
+    await expect(block.locator("tbody tr")).toHaveCount(1, {timeout: 15_000});
+    await expect(block.getByRole("link", {name: "All its episodes"})).toBeVisible();
+    await page.screenshot({
+        path: nameFor("launcher-incident-correlations", info.project.name),
+        fullPage: true,
+        animations: "disabled"
+    });
+});
+
+test("correlations an incident cannot show", async ({page}) => {
+    await page.goto("/#/incidents");
+    await settled(page, "What was already burning");
+    await page.locator("button.row-toggle", {hasText: "search-svc"}).click();
+    await expect(page.locator(".incident-correlations", {hasText: "No correlation was active in this window."}))
+        .toBeVisible({timeout: 15_000});
+    await page.locator("button.row-toggle", {hasText: "cache-svc"}).click();
+    await expect(page.locator(".incident-correlations",
+        {hasText: "Billing staging pushes no correlations, so none can show here."})).toBeVisible({timeout: 15_000});
+});
+
+test("correlations open every episode of an incident's pair", async ({page}) => {
+    await page.goto("/#/incidents");
+    await settled(page, "What was already burning");
+    await page.locator("button.row-toggle", {hasText: "checkout-svc"}).click();
+    await page.locator(".daemon-detail:not([hidden]) .incident-correlations")
+        .getByRole("link", {name: "All its episodes"}).click();
+    await expect(page).toHaveURL(/#\/correlations\?pair_key=[0-9a-f]{32}$/);
+    await settled(page, "Findings that keep following each other");
+    await expect(page.locator("button.row-toggle", {hasText: "orders-svc"})).toHaveAttribute("aria-expanded", "true");
+});
