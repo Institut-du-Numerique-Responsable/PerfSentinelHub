@@ -28,6 +28,7 @@ public sealed record HubOptions
     public AuthOptions Auth { get; set; } = new();
     public AckRelayOptions AckRelay { get; set; } = new();
     public AccessOptions Access { get; set; } = new();
+    public DisclosuresOptions Disclosures { get; set; } = new();
 
     // The one port /metrics answers on, and nothing else answers there. Unset, /metrics
     // answers on every port as it always has; access control needs one (A14).
@@ -134,12 +135,16 @@ public static class AccessPermissions
     public const string AcksWrite = "acks.write";
     public const string AccessAdmin = "access.admin";
 
+    // Hub-level, granted on '*' only: a disclosure belongs to no source.
+    public const string DisclosuresRead = "disclosures.read";
+    public const string DisclosuresManage = "disclosures.manage";
+
     public const string ReaderRole = "reader";
     public const string MemberRole = "member";
     public const string AdminRole = "admin";
 
     public static readonly IReadOnlyList<string> All =
-        [FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin];
+        [FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin, DisclosuresRead, DisclosuresManage];
 
     // reader is not read-only: it starts analyses.
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> BuiltInRoles =
@@ -157,6 +162,56 @@ public static class AccessPermissions
     {
         return permission is AnalysesRun or AcksWrite;
     }
+}
+
+/// <summary>
+///     Periodic disclosures a CI publishes to the Hub. On when ImportKey is set: the import
+///     route, the Disclosures screen, the share links and the webhooks all answer only then.
+/// </summary>
+public sealed record DisclosuresOptions
+{
+    // Trimmed on binding, like a source's import key, so a key mounted from a file with a
+    // trailing newline compares equal to the one the CI sends.
+    public string? ImportKey
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    // An internal report carries G1 detail. Shown to disclosures.read holders only, never
+    // shared nor pushed, and refused at startup on a Hub without access control.
+    public bool AllowInternal { get; set; }
+
+    // Passed to disclose-pdf, which checks the binding against them and prints them in the
+    // PDF's verify command. Both or neither.
+    public string? ExpectedIdentity { get; set; }
+    public string? ExpectedIssuer { get; set; }
+
+    public int ShareLinkDays { get; set; } = 7;
+    public IReadOnlyList<WebhookOptions> Webhooks { get; set; } = [];
+
+    public bool Enabled => ImportKey is not null;
+}
+
+/// <summary>
+///     A receiver of the published and withdrawn events. Its URL is never stored nor shown:
+///     Slack and Teams URLs carry their own secret.
+/// </summary>
+public sealed record WebhookOptions
+{
+    public string Name { get; set; } = "";
+    public Uri? Url { get; set; }
+
+    public string? Secret
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    // Only public: the field states the rule in one place, an internal report never leaves.
+    public string Confidentiality { get; set; } = "public";
+    public bool IncludeShareLink { get; set; }
+    public int ShareLinkDays { get; set; } = 7;
 }
 
 public sealed record AckRelayOptions
@@ -403,6 +458,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         var errors = new List<string>();
         ValidateHubSettings(options, errors);
         ValidateAccessSettings(options, _timeProvider.GetUtcNow(), errors);
+        ValidateDisclosures(options, errors);
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in options.Sources)
