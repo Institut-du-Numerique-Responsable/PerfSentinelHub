@@ -131,6 +131,21 @@ public sealed record IncidentQuery(
     int Limit,
     AccessScope? Access = null);
 
+// SourceIds is the resolved scope, as on IncidentQuery. FromMs and ToMs keep the episodes
+// whose activity overlaps the span, bounds included, a running one reaching every later
+// moment. NowMs dates the stale rule. Access null reads every episode, as with access off.
+public sealed record CorrelationQuery(
+    string? Service,
+    string? PairKey,
+    IReadOnlyList<string>? SourceIds,
+    long? FromMs,
+    long? ToMs,
+    bool Active,
+    long NowMs,
+    int Offset,
+    int Limit,
+    AccessScope? Access = null);
+
 public sealed record SubmittedAnalysis(string Id, string Status);
 
 public sealed record AnalysisProblem(string Detail);
