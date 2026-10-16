@@ -718,8 +718,8 @@ l'événement `published` était adressé. Une divulgation fausse est remplacée
 sous un nouvel uuid.
 
 Une relance remet dans la file une livraison qui attend ou qui a abandonné, due au passage
-suivant. Elle garde son nombre de tentatives, si bien qu'une livraison qui avait abandonné
-abandonne de nouveau à son échec suivant. Un rendu relance le moteur sur les fichiers
+suivant. Elle repart d'un compte de tentatives à zéro, si bien qu'une livraison qui avait
+abandonné retrouve tout le délai de reprise. Un rendu relance le moteur sur les fichiers
 stockés, pour une divulgation stockée avant de pouvoir être rendue.
 
 ### Liens de partage

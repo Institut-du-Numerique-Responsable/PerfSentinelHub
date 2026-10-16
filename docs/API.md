@@ -671,7 +671,7 @@ and a `withdrawn` event goes to each webhook the `published` event was addressed
 disclosure is replaced by a new one under a new uuid.
 
 A retry puts a delivery that waits or gave up back in the queue, due at the next pass. It
-keeps its attempt count, so a delivery that had given up gives up again on its next failure.
+starts a fresh run of attempts, so a delivery that had given up gets the whole backoff again.
 A render runs the engine again on the stored files, for a disclosure stored before it could
 render.
 
