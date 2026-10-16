@@ -262,7 +262,8 @@ public sealed class DisclosuresApiTests : IDisposable
 
         Assert.Equal(HttpStatusCode.NoContent, failed.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, delivered.StatusCode);
-        Assert.Single(await database.DueDeliveriesAsync(NowMs, CancellationToken.None));
+        // A retry starts a fresh run of attempts, or a delivery that gave up would give up again at once.
+        Assert.Equal(0, Assert.Single(await database.DueDeliveriesAsync(NowMs, CancellationToken.None)).Attempts);
     }
 
     [Fact]

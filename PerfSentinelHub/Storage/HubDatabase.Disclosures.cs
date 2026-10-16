@@ -370,13 +370,13 @@ public sealed partial class HubDatabase
         }, cancellationToken);
     }
 
-    /// <summary>Back to pending, due now, for a delivery that gave up or waits on a backoff.</summary>
+    /// <summary>Back to pending, due now, with a fresh run of attempts, for a delivery that gave up or waits.</summary>
     public Task RetryDeliveryAsync(string id, long nowMs, CancellationToken cancellationToken)
     {
         return WriteAsync(async command =>
         {
             command.CommandText = """
-                                  UPDATE disclosure_deliveries SET state = 'pending', next_attempt_ms = $now
+                                  UPDATE disclosure_deliveries SET state = 'pending', next_attempt_ms = $now, attempts = 0
                                   WHERE id = $id AND state != 'delivered';
                                   """;
             command.Parameters.AddWithValue("$id", id);
