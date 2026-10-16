@@ -462,7 +462,7 @@
     },
     "/api/sources/checkout-prod/daemon": {
       "source_id": "checkout-prod",
-      "observed_at_ms": 1756512000000,
+      "observed_at_ms": 1756512001000,
       "state": "near_capacity",
       "error_code": null,
       "version": "0.29.0",
@@ -602,7 +602,7 @@
     },
     "/api/sources/billing-stg/daemon": {
       "source_id": "billing-stg",
-      "observed_at_ms": 1756512001000,
+      "observed_at_ms": 1756512000000,
       "state": "advised",
       "error_code": null,
       "version": "0.23.0",
@@ -742,7 +742,7 @@
     },
     "/api/sources/search-prod/daemon": {
       "source_id": "search-prod",
-      "observed_at_ms": 1756512002000,
+      "observed_at_ms": 1756512000000,
       "state": "unreachable",
       "error_code": "network_error",
       "version": null,
@@ -807,7 +807,7 @@
     },
     "/api/sources/orders-prod/daemon": {
       "source_id": "orders-prod",
-      "observed_at_ms": 1756512000000,
+      "observed_at_ms": 1756512001000,
       "state": "advised",
       "error_code": null,
       "version": "0.29.0",
@@ -947,7 +947,7 @@
     },
     "/api/sources/ci-main/daemon": {
       "source_id": "ci-main",
-      "observed_at_ms": 1756512001000,
+      "observed_at_ms": 1756512002000,
       "state": "advised",
       "error_code": null,
       "version": "0.29.0",
@@ -1125,10 +1125,10 @@
           },
           "signature": "n_plus_one_sql:order-svc:POST__api_orders_42_submit:c69d2f3ae7f5c6cdb2c6762367852ec7"
         },
-        "stored_at_ms": 1756511871000,
-        "first_seen_ms": 1756425471000,
+        "stored_at_ms": 1756511875000,
+        "first_seen_ms": 1756425475000,
         "seen_count": 1,
-        "first_seen": 1756425471000,
+        "first_seen": 1756425475000,
         "last_seen": 1756511998000,
         "max_confidence": "local_batch",
         "status": "active",
@@ -1190,12 +1190,12 @@
         "service": "order-svc",
         "namespace": "shop",
         "kind": "restart",
-        "at_ms": 1756511871000,
+        "at_ms": 1756511875000,
         "detail": "pod restarted by the kubelet",
-        "window_from_ms": 1756511868000,
-        "window_to_ms": 1756511873000,
-        "oldest_finding_ms": 1756511872000,
-        "ended_at_ms": 1756511916000,
+        "window_from_ms": 1756511872000,
+        "window_to_ms": 1756511877000,
+        "oldest_finding_ms": 1756511876000,
+        "ended_at_ms": 1756511920000,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
         "environment": "staging",
@@ -1208,11 +1208,11 @@
         "id": "7731ebe4f36703d6875a19efc76c4d19",
         "service": "cache-svc",
         "kind": "other",
-        "at_ms": 1756511871000,
+        "at_ms": 1756511875000,
         "detail": "node under memory pressure, pod evicted",
-        "window_from_ms": 1756511868000,
-        "window_to_ms": 1756511873000,
-        "oldest_finding_ms": 1756511872000,
+        "window_from_ms": 1756511872000,
+        "window_to_ms": 1756511877000,
+        "oldest_finding_ms": 1756511876000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
@@ -1227,11 +1227,11 @@
         "service": "checkout-svc",
         "namespace": "shop",
         "kind": "oom_kill",
-        "at_ms": 1756511871000,
+        "at_ms": 1756511875000,
         "detail": "container exceeded its memory limit",
-        "window_from_ms": 1756511868000,
-        "window_to_ms": 1756511873000,
-        "oldest_finding_ms": 1756511868000,
+        "window_from_ms": 1756511872000,
+        "window_to_ms": 1756511877000,
+        "oldest_finding_ms": 1756511872000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
@@ -1246,11 +1246,11 @@
         "service": "reports-svc",
         "namespace": "reporting",
         "kind": "memory_saturation",
-        "at_ms": 1756511871000,
+        "at_ms": 1756511875000,
         "detail": "working set at 94 percent of the limit",
-        "window_from_ms": 1756511868000,
-        "window_to_ms": 1756511873000,
-        "oldest_finding_ms": 1756511868000,
+        "window_from_ms": 1756511872000,
+        "window_to_ms": 1756511877000,
+        "oldest_finding_ms": 1756511872000,
         "ended_at_ms": null,
         "source_id": "checkout-prod",
         "source_name": "Checkout production",
@@ -1265,10 +1265,10 @@
         "service": "gateway-svc",
         "namespace": "edge",
         "kind": "deploy",
-        "at_ms": 1756511866000,
+        "at_ms": 1756511870000,
         "detail": "rollout 4f21c8 reached every replica",
-        "window_from_ms": 1756511863000,
-        "window_to_ms": 1756511868000,
+        "window_from_ms": 1756511867000,
+        "window_to_ms": 1756511872000,
         "ended_at_ms": null,
         "source_id": "billing-stg",
         "source_name": "Billing staging",
@@ -1277,6 +1277,197 @@
         "last_seen": 1756511998000,
         "finding_count": 0,
         "capture": "empty"
+      },
+      {
+        "id": "000000000000000000000000000000d1",
+        "service": "search-svc",
+        "namespace": "reporting",
+        "kind": "memory_saturation",
+        "at_ms": 1756493998000,
+        "detail": "working set at 94 percent of the limit",
+        "window_from_ms": 1756493995000,
+        "window_to_ms": 1756494000000,
+        "oldest_finding_ms": 1756493994000,
+        "ended_at_ms": null,
+        "source_id": "search-prod",
+        "source_name": "Search production",
+        "environment": "production",
+        "first_seen": 1756511998000,
+        "last_seen": 1756511998000,
+        "finding_count": 1,
+        "capture": "complete"
+      }
+    ],
+    "/api/correlations": [
+      {
+        "id": "00000000000000000000000000000103",
+        "source_id": "checkout-prod",
+        "pair_key": "000000000000000000000000000000a1",
+        "source": {
+          "finding_type": "n_plus_one_sql",
+          "service": "order-svc",
+          "template": "SELECT * FROM order_item WHERE order_id = ?",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "target": {
+          "finding_type": "pool_saturation",
+          "service": "orders-svc",
+          "template": "orders-svc",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "started_at_ms": 1756510672000,
+        "last_seen_ms": 1756511938000,
+        "ended_at_ms": null,
+        "ended_by": null,
+        "gap_ms": 600000,
+        "peak_confidence": 0.92,
+        "peak_co_occurrences": 41,
+        "last_confidence": 0.88,
+        "last_co_occurrences": 37,
+        "median_lag_ms": 1200,
+        "sample_trace_id": "00000000000000000000000000000b03",
+        "source_sample_trace_id": "00000000000000000000000000000c03",
+        "first_seen_ms": 1756511998000,
+        "last_seen_hub_ms": 1756511998000,
+        "source_name": "Checkout production"
+      },
+      {
+        "id": "00000000000000000000000000000104",
+        "source_id": "checkout-prod",
+        "pair_key": "000000000000000000000000000000a2",
+        "source": {
+          "finding_type": "slow_http",
+          "service": "reports-svc",
+          "template": "GET analytics-svc/api/reports/quarterly/{id}",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "target": {
+          "finding_type": "n_plus_one_http",
+          "service": "order-svc",
+          "template": "GET user-svc/api/users/{id}",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "started_at_ms": 1756501198000,
+        "last_seen_ms": 1756502638000,
+        "ended_at_ms": 1756502638000,
+        "ended_by": null,
+        "gap_ms": 600000,
+        "peak_confidence": 0.74,
+        "peak_co_occurrences": 33,
+        "last_confidence": 0.7,
+        "last_co_occurrences": 30,
+        "median_lag_ms": 1200,
+        "sample_trace_id": "00000000000000000000000000000b04",
+        "source_sample_trace_id": "00000000000000000000000000000c04",
+        "first_seen_ms": 1756511998000,
+        "last_seen_hub_ms": 1756511998000,
+        "source_name": "Checkout production"
+      },
+      {
+        "id": "00000000000000000000000000000102",
+        "source_id": "checkout-prod",
+        "pair_key": "000000000000000000000000000000a1",
+        "source": {
+          "finding_type": "n_plus_one_sql",
+          "service": "order-svc",
+          "template": "SELECT * FROM order_item WHERE order_id = ?",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "target": {
+          "finding_type": "pool_saturation",
+          "service": "orders-svc",
+          "template": "orders-svc",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "started_at_ms": 1756483198000,
+        "last_seen_ms": 1756484998000,
+        "ended_at_ms": 1756484998000,
+        "ended_by": null,
+        "gap_ms": 600000,
+        "peak_confidence": 0.81,
+        "peak_co_occurrences": 36,
+        "last_confidence": 0.77,
+        "last_co_occurrences": 32,
+        "median_lag_ms": 1200,
+        "sample_trace_id": "00000000000000000000000000000b02",
+        "source_sample_trace_id": "00000000000000000000000000000c02",
+        "first_seen_ms": 1756511998000,
+        "last_seen_hub_ms": 1756511998000,
+        "source_name": "Checkout production"
+      },
+      {
+        "id": "00000000000000000000000000000105",
+        "source_id": "search-prod",
+        "pair_key": "000000000000000000000000000000a3",
+        "source": {
+          "finding_type": "redundant_sql",
+          "service": "cache-svc",
+          "template": "SELECT * FROM settings WHERE key = ?",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "target": {
+          "finding_type": "slow_sql",
+          "service": "reports-svc",
+          "template": "SELECT * FROM reports WHERE month = ?",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "started_at_ms": 1756479598000,
+        "last_seen_ms": 1756481398000,
+        "ended_at_ms": 1756481398000,
+        "ended_by": null,
+        "gap_ms": 600000,
+        "peak_confidence": 0.7,
+        "peak_co_occurrences": 31,
+        "last_confidence": 0.66,
+        "last_co_occurrences": 28,
+        "median_lag_ms": 1200,
+        "sample_trace_id": "00000000000000000000000000000b05",
+        "source_sample_trace_id": "00000000000000000000000000000c05",
+        "first_seen_ms": 1756511998000,
+        "last_seen_hub_ms": 1756511998000,
+        "source_name": "Search production"
+      },
+      {
+        "id": "00000000000000000000000000000101",
+        "source_id": "checkout-prod",
+        "pair_key": "000000000000000000000000000000a1",
+        "source": {
+          "finding_type": "n_plus_one_sql",
+          "service": "order-svc",
+          "template": "SELECT * FROM order_item WHERE order_id = ?",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "target": {
+          "finding_type": "pool_saturation",
+          "service": "orders-svc",
+          "template": "orders-svc",
+          "grouping_key": null,
+          "grouping_value": null
+        },
+        "started_at_ms": 1756439998000,
+        "last_seen_ms": 1756441798000,
+        "ended_at_ms": 1756441798000,
+        "ended_by": null,
+        "gap_ms": 600000,
+        "peak_confidence": 0.88,
+        "peak_co_occurrences": 40,
+        "last_confidence": 0.84,
+        "last_co_occurrences": 35,
+        "median_lag_ms": 1200,
+        "sample_trace_id": "00000000000000000000000000000b01",
+        "source_sample_trace_id": "00000000000000000000000000000c01",
+        "first_seen_ms": 1756511998000,
+        "last_seen_hub_ms": 1756511998000,
+        "source_name": "Checkout production"
       }
     ],
     "/api/incidents/4f5adcd734c89662084a4de03eb78a18": {
@@ -1284,11 +1475,11 @@
       "service": "order-svc",
       "namespace": "shop",
       "kind": "restart",
-      "at_ms": 1756511871000,
+      "at_ms": 1756511875000,
       "detail": "pod restarted by the kubelet",
-      "window_from_ms": 1756511868000,
-      "window_to_ms": 1756511873000,
-      "oldest_finding_ms": 1756511872000,
+      "window_from_ms": 1756511872000,
+      "window_to_ms": 1756511877000,
+      "oldest_finding_ms": 1756511876000,
       "findings": [
         {
           "finding": {
@@ -1317,12 +1508,12 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
           },
-          "stored_at_ms": 1756511872000,
-          "first_seen_ms": 1756511872000,
+          "stored_at_ms": 1756511876000,
+          "first_seen_ms": 1756511876000,
           "seen_count": 1
         }
       ],
-      "ended_at_ms": 1756511916000,
+      "ended_at_ms": 1756511920000,
       "source_id": "billing-stg",
       "source_name": "Billing staging",
       "environment": "staging",
@@ -1335,11 +1526,11 @@
       "id": "7731ebe4f36703d6875a19efc76c4d19",
       "service": "cache-svc",
       "kind": "other",
-      "at_ms": 1756511871000,
+      "at_ms": 1756511875000,
       "detail": "node under memory pressure, pod evicted",
-      "window_from_ms": 1756511868000,
-      "window_to_ms": 1756511873000,
-      "oldest_finding_ms": 1756511872000,
+      "window_from_ms": 1756511872000,
+      "window_to_ms": 1756511877000,
+      "oldest_finding_ms": 1756511876000,
       "findings": [
         {
           "finding": {
@@ -1368,8 +1559,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
           },
-          "stored_at_ms": 1756511872000,
-          "first_seen_ms": 1756511872000,
+          "stored_at_ms": 1756511876000,
+          "first_seen_ms": 1756511876000,
           "seen_count": 1
         }
       ],
@@ -1387,11 +1578,11 @@
       "service": "checkout-svc",
       "namespace": "shop",
       "kind": "oom_kill",
-      "at_ms": 1756511871000,
+      "at_ms": 1756511875000,
       "detail": "container exceeded its memory limit",
-      "window_from_ms": 1756511868000,
-      "window_to_ms": 1756511873000,
-      "oldest_finding_ms": 1756511868000,
+      "window_from_ms": 1756511872000,
+      "window_to_ms": 1756511877000,
+      "oldest_finding_ms": 1756511872000,
       "findings": [
         {
           "finding": {
@@ -1420,8 +1611,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:checkout-svc:POST__checkout:e1e0bf0f3636b95b2421e5e4a3c0832c"
           },
-          "stored_at_ms": 1756511870000,
-          "first_seen_ms": 1756511870000,
+          "stored_at_ms": 1756511874000,
+          "first_seen_ms": 1756511874000,
           "seen_count": 1
         }
       ],
@@ -1439,11 +1630,11 @@
       "service": "reports-svc",
       "namespace": "reporting",
       "kind": "memory_saturation",
-      "at_ms": 1756511871000,
+      "at_ms": 1756511875000,
       "detail": "working set at 94 percent of the limit",
-      "window_from_ms": 1756511868000,
-      "window_to_ms": 1756511873000,
-      "oldest_finding_ms": 1756511868000,
+      "window_from_ms": 1756511872000,
+      "window_to_ms": 1756511877000,
+      "oldest_finding_ms": 1756511872000,
       "findings": [
         {
           "finding": {
@@ -1472,8 +1663,8 @@
             "confidence": "daemon_staging",
             "signature": "n_plus_one_sql:reports-svc:GET__reports:eca589985f26e880cf5b71a71303e90f"
           },
-          "stored_at_ms": 1756511870000,
-          "first_seen_ms": 1756511870000,
+          "stored_at_ms": 1756511874000,
+          "first_seen_ms": 1756511874000,
           "seen_count": 1
         }
       ],
@@ -1491,10 +1682,10 @@
       "service": "gateway-svc",
       "namespace": "edge",
       "kind": "deploy",
-      "at_ms": 1756511866000,
+      "at_ms": 1756511870000,
       "detail": "rollout 4f21c8 reached every replica",
-      "window_from_ms": 1756511863000,
-      "window_to_ms": 1756511868000,
+      "window_from_ms": 1756511867000,
+      "window_to_ms": 1756511872000,
       "findings": [],
       "ended_at_ms": null,
       "source_id": "billing-stg",
@@ -1504,6 +1695,58 @@
       "last_seen": 1756511998000,
       "finding_count": 0,
       "capture": "empty"
+    },
+    "/api/incidents/000000000000000000000000000000d1": {
+      "id": "000000000000000000000000000000d1",
+      "service": "search-svc",
+      "namespace": "reporting",
+      "kind": "memory_saturation",
+      "at_ms": 1756493998000,
+      "detail": "working set at 94 percent of the limit",
+      "window_from_ms": 1756493995000,
+      "window_to_ms": 1756494000000,
+      "oldest_finding_ms": 1756493994000,
+      "findings": [
+        {
+          "finding": {
+            "type": "n_plus_one_sql",
+            "severity": "warning",
+            "trace_id": "hubd0000000000000000000000000000",
+            "service": "reports-svc",
+            "source_endpoint": "GET /reports",
+            "pattern": {
+              "template": "SELECT * FROM exports WHERE owner_id = ?",
+              "occurrences": 8,
+              "window_ms": 0,
+              "distinct_params": 8,
+              "span_duration_us_p50": 1500,
+              "span_duration_us_p99": 1500,
+              "span_duration_cv_x1000": 0
+            },
+            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+            "first_timestamp": "2026-09-20T19:57:33.471Z",
+            "last_timestamp": "2026-09-20T19:57:33.471Z",
+            "green_impact": {
+              "estimated_extra_io_ops": 7,
+              "io_intensity_score": 8,
+              "io_intensity_band": "high"
+            },
+            "confidence": "daemon_staging",
+            "signature": "n_plus_one_sql:reports-svc:GET__reports:eca589985f26e880cf5b71a71303e90f"
+          },
+          "stored_at_ms": 1756493997000,
+          "first_seen_ms": 1756493997000,
+          "seen_count": 1
+        }
+      ],
+      "ended_at_ms": null,
+      "source_id": "search-prod",
+      "source_name": "Search production",
+      "environment": "production",
+      "first_seen": 1756511998000,
+      "last_seen": 1756511998000,
+      "finding_count": 1,
+      "capture": "complete"
     }
   }
 }
