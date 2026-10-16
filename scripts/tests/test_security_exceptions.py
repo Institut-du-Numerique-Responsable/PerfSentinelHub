@@ -265,6 +265,7 @@ class SecurityWorkflowContractTests(unittest.TestCase):
             "b80ab61dc3f7cf165be9f6b30854463e4fa2962d:PerfSentinelHub.Tests/ImportApiTests.cs:generic-api-key:11",
             "b80ab61dc3f7cf165be9f6b30854463e4fa2962d:README.md:generic-api-key:18",
             "b14a80632c59156f46b37999d19f2e83928920c8:PerfSentinelHub.Tests/ConfigurationTests.cs:generic-api-key:119",
+            "af902991886c1f2c0aa004d610c18ed9c379a911:PerfSentinelHub.Tests/EpisodeJson.cs:generic-api-key:11",
         )
         fingerprints = tuple(GITLEAKS_IGNORE.read_text(encoding="utf-8").splitlines())
 
