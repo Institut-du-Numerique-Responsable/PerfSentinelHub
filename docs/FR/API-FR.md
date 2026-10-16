@@ -641,6 +641,11 @@ les trois fichiers. Rien n'est stocké avant la réponse du moteur, et un refus 
 | `422 {"reason":"…"}`        | Refusé, voir plus bas                                                                                         |
 | `503`                       | Une autre publication est en cours, avec `Retry-After: 1`                                                     |
 
+Une copie signée garde, octet pour octet, chaque fichier de signature déjà stocké et en ajoute
+un qui manquait : l'attestation que `disclose --emit-attestation` écrit avec le rapport, puis
+le bundle que cosign signe. Elle remplace le rapport stocké, son `integrity_level` compris,
+que l'empreinte laisse de côté. Une copie qui change ou retire un fichier stocké est un `409`.
+
 Les raisons du `422` sont `content_hash_mismatch`, l'empreinte ne se recalcule pas,
 `binding_mismatch`, l'attestation nomme un autre rapport, `malformed_report`, un corps, une
 partie ou un rapport que le Hub ou le moteur ne sait pas lire, dont une confidentialité autre

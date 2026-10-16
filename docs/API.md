@@ -599,6 +599,11 @@ three files. Nothing is stored before the engine answers, and a refusal stores n
 | `422 {"reason":"…"}`        | Refused, see below                                                                                     |
 | `503`                       | Another publication is running, with `Retry-After: 1`                                                  |
 
+A signed copy keeps each signature file already stored, byte for byte, and adds one it lacks:
+the attestation `disclose --emit-attestation` writes with the report, then the bundle cosign
+signs. It replaces the stored report, its `integrity_level` included, which the hash leaves
+out. A copy that changes or drops a stored file is a `409`.
+
 The `422` reasons are `content_hash_mismatch`, the hash does not recompute, `binding_mismatch`,
 the attestation names another report, `malformed_report`, a body, a part or a report the Hub or
 the engine cannot read, a confidentiality other than `public` or `internal` among them, or a

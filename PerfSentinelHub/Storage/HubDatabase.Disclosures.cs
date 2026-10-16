@@ -55,12 +55,14 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
-    ///     The signed copy of a report already stored unsigned: each file as received, the
-    ///     render it got, and when the signature arrived. A rendered PDF stands for both checks.
+    ///     The signed copy of a report already stored unsigned: each file as received, the level
+    ///     it now declares, the render it got, and when the signature arrived. A rendered PDF
+    ///     stands for both checks.
     /// </summary>
     public Task ReplaceSignedCopyAsync(
         string id,
         DisclosureFiles files,
+        string? integrityLevel,
         byte[]? pdf,
         string? renderReason,
         string? engineVersion,
@@ -72,13 +74,15 @@ public sealed partial class HubDatabase
             command.CommandText = """
                                   UPDATE disclosures
                                   SET report = $report, attestation = $attestation, bundle = $bundle, pdf = $pdf,
-                                      render_reason = $render_reason, engine_version = $engine_version,
+                                      integrity_level = $integrity_level, render_reason = $render_reason,
+                                      engine_version = $engine_version,
                                       hash_checked = $checked, binding_checked = $binding_checked,
                                       signature_added_at_ms = $now
                                   WHERE id = $id;
                                   """;
             command.Parameters.AddWithValue("$id", id);
             AddFiles(command, files);
+            command.Parameters.AddWithValue("$integrity_level", Nullable(integrityLevel));
             command.Parameters.AddWithValue("$pdf", Nullable(pdf));
             command.Parameters.AddWithValue("$render_reason", Nullable(renderReason));
             command.Parameters.AddWithValue("$engine_version", Nullable(engineVersion));

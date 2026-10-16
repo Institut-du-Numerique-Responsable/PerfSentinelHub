@@ -97,10 +97,12 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
         await _database.InsertDisclosureAsync(Record("d1", "uuid-1"), cancellationToken);
         var signed = new DisclosureFiles(Encoding.UTF8.GetBytes("{\"signed\":true}"), [7], [8]);
 
-        await _database.ReplaceSignedCopyAsync("d1", signed, [9], null, "0.31.0", NowMs + 5, cancellationToken);
+        await _database.ReplaceSignedCopyAsync("d1", signed, "signed-with-attestation", [9], null, "0.31.0", NowMs + 5,
+            cancellationToken);
 
         var summary = (await _database.GetDisclosureAsync("d1", cancellationToken))!;
         Assert.Equal(NowMs + 5, summary.SignatureAddedAtMs);
+        Assert.Equal("signed-with-attestation", summary.IntegrityLevel);
         Assert.True(summary.HasBundle);
         Assert.Equal(signed.Report, await _database.ReadFileAsync("d1", DisclosureFile.Report, cancellationToken));
         Assert.Equal([9], await _database.ReadFileAsync("d1", DisclosureFile.Pdf, cancellationToken));

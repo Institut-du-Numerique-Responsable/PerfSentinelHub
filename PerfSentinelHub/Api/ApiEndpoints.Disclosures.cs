@@ -168,6 +168,15 @@ public static partial class ApiEndpoints
         return stored is null ? received is null : received is not null && stored.AsSpan().SequenceEqual(received);
     }
 
+    // A signed copy keeps each signature file the stored one has, byte for byte, and adds one
+    // it lacks: --emit-attestation sends the attestation first, cosign the bundle later.
+    private static bool AddsSignature(byte[]? attestation, byte[]? bundle, DisclosureFiles files)
+    {
+        return (attestation is null || SameBytes(attestation, files.Attestation)) &&
+               (bundle is null || SameBytes(bundle, files.Bundle)) &&
+               ((attestation is null && files.Attestation is not null) || (bundle is null && files.Bundle is not null));
+    }
+
     /// <summary>One publication's collaborators, so its two paths read as two short methods.</summary>
     private sealed partial class Publication(
         HubDatabase database,
@@ -218,11 +227,12 @@ public static partial class ApiEndpoints
         {
             if (existing.ContentHash != envelope.ContentHash)
                 return Conflict(metrics);
+            var attestation = await database.ReadFileAsync(existing.Id, DisclosureFile.Attestation, cancellationToken);
+            var bundle = await database.ReadFileAsync(existing.Id, DisclosureFile.Bundle, cancellationToken);
             if (SameBytes(await database.ReadFileAsync(existing.Id, DisclosureFile.Report, cancellationToken), files.Report) &&
-                SameBytes(await database.ReadFileAsync(existing.Id, DisclosureFile.Attestation, cancellationToken), files.Attestation) &&
-                SameBytes(await database.ReadFileAsync(existing.Id, DisclosureFile.Bundle, cancellationToken), files.Bundle))
+                SameBytes(attestation, files.Attestation) && SameBytes(bundle, files.Bundle))
                 return Accepted(existing, StatusCodes.Status200OK);
-            if (existing.HasAttestation || files.Attestation is null)
+            if (!AddsSignature(attestation, bundle, files))
                 return Conflict(metrics);
 
             var outcome = await renderer.RenderAsync(files, cancellationToken);
@@ -230,8 +240,8 @@ public static partial class ApiEndpoints
                 return refusal;
             var (pdf, reason) = Rendering(outcome);
             await database.ReplaceSignedCopyAsync(
-                existing.Id, files, pdf, reason, engine.Version, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
-                cancellationToken);
+                existing.Id, files, envelope.IntegrityLevel, pdf, reason, engine.Version,
+                timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
             return Accepted((await database.GetDisclosureAsync(existing.Id, cancellationToken))!, StatusCodes.Status200OK);
         }
 

@@ -19,6 +19,7 @@ public sealed class DisclosureImportApiTests : IDisposable
     private const string ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
     private static readonly string Report = DisclosureRendererTests.Report;
+    private static readonly string HashOnly = Report.Replace("\"signed\"", "\"hash-only\"", StringComparison.Ordinal);
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-dimport-{Guid.NewGuid():N}");
 
@@ -206,13 +207,12 @@ public sealed class DisclosureImportApiTests : IDisposable
     {
         var hub = Hub(Rendering());
         using var client = hub.CreateClient();
-        using var unsigned = await client.SendAsync(Publish(Report), TestContext.Current.CancellationToken);
+        // content_hash leaves integrity_level out, so the signed report keeps the unsigned one's hash.
+        using var unsigned = await client.SendAsync(Publish(HashOnly), TestContext.Current.CancellationToken);
         var id = (await JsonAsync(unsigned)).RootElement.GetProperty("id").GetString()!;
-        // content_hash leaves the signature fields out, so the signed report keeps the same hash.
-        var signedReport = Report.Replace("\"signed\"", "\"signed\" ", StringComparison.Ordinal);
 
         using var signed = await client.SendAsync(
-            Publish(signedReport, ("attestation", "statement"u8.ToArray()), ("bundle", "bundle"u8.ToArray())),
+            Publish(Report, ("attestation", "statement"u8.ToArray()), ("bundle", "bundle"u8.ToArray())),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, signed.StatusCode);
@@ -220,8 +220,48 @@ public sealed class DisclosureImportApiTests : IDisposable
         var summary = (await database.GetDisclosureAsync(id, CancellationToken.None))!;
         Assert.NotNull(summary.SignatureAddedAtMs);
         Assert.True(summary.HasAttestation);
-        Assert.Equal(Encoding.UTF8.GetBytes(signedReport), await database.ReadFileAsync(id, DisclosureFile.Report, CancellationToken.None));
+        Assert.Equal("signed", summary.IntegrityLevel);
+        Assert.Equal(Encoding.UTF8.GetBytes(Report), await database.ReadFileAsync(id, DisclosureFile.Report, CancellationToken.None));
         Assert.Single(await database.ListDeliveriesAsync(id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_signed_copy_adds_the_bundle_to_an_attestation_published_first()
+    {
+        // disclose --emit-attestation writes the statement with the report; cosign adds the bundle later.
+        var hub = Hub(Rendering());
+        using var client = hub.CreateClient();
+        using var unsigned = await client.SendAsync(
+            Publish(HashOnly, ("attestation", "statement"u8.ToArray())), TestContext.Current.CancellationToken);
+        var id = (await JsonAsync(unsigned)).RootElement.GetProperty("id").GetString()!;
+
+        using var signed = await client.SendAsync(
+            Publish(Report, ("attestation", "statement"u8.ToArray()), ("bundle", "bundle"u8.ToArray())),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, signed.StatusCode);
+        var summary = (await Database(hub).GetDisclosureAsync(id, CancellationToken.None))!;
+        Assert.True(summary.HasBundle);
+        Assert.Equal("signed", summary.IntegrityLevel);
+        Assert.Single(await Database(hub).ListDeliveriesAsync(id, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("other statement", "bundle")]
+    [InlineData(null, "bundle")]
+    public async Task A_copy_that_changes_or_drops_a_stored_file_is_409(string? attestation, string bundle)
+    {
+        var hub = Hub(Rendering());
+        using var client = hub.CreateClient();
+        await client.SendAsync(Publish(HashOnly, ("attestation", "statement"u8.ToArray())), TestContext.Current.CancellationToken);
+        (string, byte[])[] parts = attestation is null
+            ? [("bundle", Encoding.UTF8.GetBytes(bundle))]
+            : [("attestation", Encoding.UTF8.GetBytes(attestation)), ("bundle", Encoding.UTF8.GetBytes(bundle))];
+
+        using var response = await client.SendAsync(Publish(Report, parts), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.False(Assert.Single(await Database(hub).ListDisclosuresAsync(CancellationToken.None)).HasBundle);
     }
 
     [Theory]
