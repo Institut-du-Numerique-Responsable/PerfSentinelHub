@@ -82,6 +82,7 @@ public static partial class ApiEndpoints
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
+        app.MapPost("/api/import/disclosures", ImportDisclosuresAsync).AllowAnonymous();
         app.MapGet("/health/live", TypedResults.Ok).AllowAnonymous();
         app.MapGet("/health/ready", (HubDatabase database) =>
                 database.IsReady ? Results.Ok() : Results.StatusCode(StatusCodes.Status503ServiceUnavailable))

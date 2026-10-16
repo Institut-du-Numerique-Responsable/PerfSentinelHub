@@ -8,6 +8,7 @@ using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
@@ -80,6 +81,9 @@ builder.Services.AddSingleton<IncidentImportMetrics>();
 builder.Services.AddSingleton<IncidentImportAdmission>();
 builder.Services.AddSingleton<CorrelationImportMetrics>();
 builder.Services.AddSingleton<CorrelationImportAdmission>();
+builder.Services.AddSingleton<DisclosureImportGate>();
+builder.Services.AddSingleton<DisclosureMetrics>();
+builder.Services.AddSingleton<DisclosureRenderer>();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();

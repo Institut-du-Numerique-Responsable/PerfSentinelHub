@@ -155,6 +155,17 @@ public sealed record SubmittedAnalysis(string Id, string Status);
 
 public sealed record AnalysisProblem(string Detail);
 
+/// <summary>A publication the Hub refused, with the reason from the closed set.</summary>
+public sealed record DisclosureRefusal(string Reason);
+
+/// <summary>A publication the Hub took: its id, whether it rendered, and what was checked here.</summary>
+public sealed record DisclosureImportResponse(
+    string Id,
+    string Pdf,
+    string? Reason,
+    bool ContentHashChecked,
+    bool? BindingChecked);
+
 /// <summary>
 ///     One entry of GET /api/sources/{id}/acks: a daemon ack as the mirror holds it, in
 ///     the shape the daemon's own GET /api/acks lists, which a report reads either way.
