@@ -266,3 +266,6 @@ public static partial class ApiEndpoints
 
 /// <summary>One publication at a time: each runs the engine, and two would race on the same uuid.</summary>
 public sealed class DisclosureImportGate() : RequestGate(1);
+
+/// <summary>Anonymous share downloads at once: each holds a file of up to the PDF's size in memory.</summary>
+public sealed class ShareGate() : RequestGate(4);

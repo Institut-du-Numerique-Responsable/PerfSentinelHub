@@ -682,7 +682,8 @@ revoked, not expired, and of a disclosure not withdrawn. Everything else under `
 whatever the reason, gets one identical `404` with no body. Every answer carries
 `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and
 `X-Robots-Tag: noindex`. The route stands outside sign-in and access control, and the token is
-the whole credential.
+the whole credential. Four downloads run at once at most, each holding its file in memory: a
+fifth answers `503` with `Retry-After: 1`. With disclosures off, the route is not there at all.
 
 A link counts its downloads in memory and writes them once a minute and at shutdown, so a
 crash loses a minute of counts at most. The client address is recorded with the count only

@@ -30,14 +30,27 @@ public static partial class ApiEndpoints
         HttpContext context,
         HubDatabase database,
         ShareDownloadCounter counter,
+        ShareGate gate,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
 #pragma warning restore S107
     {
         Guard(context.Response);
-        if (!options.Value.Disclosures.Enabled || !IsShareToken(token) || !DisclosureDownloads.IsServed(name))
+        if (!IsShareToken(token) || !DisclosureDownloads.IsServed(name))
             return TypedResults.NotFound();
+        // Released once the file is sent, not when this returns: its bytes live until then.
+        if (!gate.TryEnter())
+        {
+            context.Response.Headers.RetryAfter = "1";
+            return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        context.Response.OnCompleted(() =>
+        {
+            gate.Exit();
+            return Task.CompletedTask;
+        });
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         if (await database.FindShareLinkAsync(SHA256.HashData(Encoding.UTF8.GetBytes(token)), nowMs, cancellationToken)
             is not var (linkId, disclosureId))

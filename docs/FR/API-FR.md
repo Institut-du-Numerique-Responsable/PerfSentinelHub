@@ -729,7 +729,9 @@ authentification : ni révoqué, ni expiré, et d'une divulgation non retirée. 
 `/share/`, quelle qu'en soit la raison, reçoit un même `404` sans corps. Chaque réponse porte
 `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` et
 `X-Robots-Tag: noindex`. La route se tient hors de la connexion et du contrôle d'accès, et le
-jeton est tout l'identifiant.
+jeton est tout l'identifiant. Quatre téléchargements au plus tournent à la fois, chacun avec
+son fichier en mémoire : un cinquième reçoit `503` avec `Retry-After: 1`. Divulgations
+coupées, la route n'existe pas du tout.
 
 Un lien compte ses téléchargements en mémoire et les écrit une fois par minute et à l'arrêt,
 si bien qu'un plantage perd au plus une minute de comptes. L'adresse du client n'est

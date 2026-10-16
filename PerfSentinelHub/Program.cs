@@ -87,6 +87,7 @@ builder.Services.AddSingleton<IncidentImportAdmission>();
 builder.Services.AddSingleton<CorrelationImportMetrics>();
 builder.Services.AddSingleton<CorrelationImportAdmission>();
 builder.Services.AddSingleton<DisclosureImportGate>();
+builder.Services.AddSingleton<ShareGate>();
 builder.Services.AddSingleton<DisclosureMetrics>();
 builder.Services.AddSingleton<DisclosureRenderer>();
 builder.Services.AddSingleton<ShareDownloadCounter>();
@@ -184,7 +185,8 @@ var accessPolicy = app.Services.GetRequiredService<AccessPolicy>();
 if (accessPolicy.Enabled) app.MapTerminalAccess();
 if (accessPolicy.HasLocalAccounts) app.MapLocalSignIn();
 app.MapMetrics();
-app.MapShare();
+// Mapped with disclosures on only: off, /share/ stays whatever the Hub answered before.
+if (hubOptions.Disclosures.Enabled) app.MapShare();
 
 await app.RunAsync();
 return exitCode;

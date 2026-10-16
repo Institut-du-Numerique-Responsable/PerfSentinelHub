@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Storage;
@@ -134,6 +135,27 @@ public sealed class DisclosureShareTests : IDisposable
         using var response = await client.GetAsync($"/share/{Token}/report.json", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        // Not mapped at all: the route's own guarded 404 never answers.
+        Assert.False(response.Headers.Contains("X-Robots-Tag"));
+    }
+
+    [Fact]
+    public async Task A_busy_share_route_is_503_before_any_lookup()
+    {
+        var hub = await SharedAsync();
+        var gate = hub.Services.GetRequiredService<ShareGate>();
+        var held = 0;
+        while (gate.TryEnter())
+            held++;
+        using var client = hub.CreateClient();
+
+        using var response = await client.GetAsync($"/share/{Token}/report.pdf", TestContext.Current.CancellationToken);
+
+        for (var i = 0; i < held; i++)
+            gate.Exit();
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        AssertGuarded(response);
+        Assert.Equal("1", response.Headers.RetryAfter?.ToString());
     }
 
     private static void AssertGuarded(HttpResponseMessage response)
