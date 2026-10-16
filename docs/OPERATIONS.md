@@ -64,6 +64,23 @@ ack page, a relaying source whose state is neither `ok` nor `truncated` has it n
 row and keeps both buttons, while a source the Hub holds no ack credential for offers
 neither, see [LAUNCHER.md](LAUNCHER.md#the-ack-page).
 
+## Starting on a large database
+
+Before it answers, the Hub applies the schema migrations a new version brings, in
+one transaction. Most cost nothing, but one that builds an index over
+`finding_sources` reads the whole table, which on a database of a gigabyte or more
+takes from seconds to minutes. A kill midway rolls the migration back, so the next
+start begins it again. The chart's startup probe therefore allows 5 minutes,
+`probes.startup.periodSeconds` times `probes.startup.failureThreshold`: raise it
+for a larger database rather than let the kubelet restart the Hub in a loop.
+Liveness allows 5 seconds and 6 misses (`probes.liveness`), so only a Hub that is
+really stuck restarts.
+
+What a build older than 0.4.0 left without attribute rows is derived once the Hub
+answers, not before: the first pass of the retention worker checks, read-only,
+whether any copy or incident still lacks them, and takes the write lock only when
+one does. Until it lands, such a copy matches no attribute scope.
+
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather

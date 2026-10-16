@@ -1014,6 +1014,38 @@ public sealed class FindingIngestionTests : IDisposable
     }
 
     [Fact]
+    public async Task A_boot_leaves_the_attribute_backfill_to_the_catch_up_after_it()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await CreateDatabase().InitializeAsync(cancellationToken);
+        await ExecuteAsync(
+            """
+            INSERT INTO findings(
+              signature, finding_json, service, finding_type, severity, endpoint,
+              template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+              max_confidence, max_confidence_rank)
+            VALUES ('signature', '{}', 'checkout', 'slow_sql', 'warning', 'POST /checkout',
+              'template-hash', 'trace', 500, 800, 'daemon_production', 4);
+            INSERT INTO finding_sources(
+              signature, source_id, source_name, environment, producer_version,
+              first_seen_ms, last_seen_ms, finding_json)
+            VALUES ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
+              '{"finding":{"grouping":[{"key":"team","value":"shop"}]}}');
+            """,
+            cancellationToken);
+
+        // The boot runs before the Hub answers, so it no longer scans every copy.
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        await using (var connection = await database.OpenConnectionAsync(cancellationToken))
+            Assert.Equal(0L, await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_attributes;", cancellationToken));
+
+        Assert.True(await database.CatchUpAttributesAsync(cancellationToken));
+        await using var reopened = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal("own team=shop team=shop 800", await AttributesAsync(reopened, cancellationToken));
+    }
+
+    [Fact]
     public async Task The_attribute_backfill_covers_every_copy_last_written_without_rows_on_every_boot()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1043,7 +1075,7 @@ public sealed class FindingIngestionTests : IDisposable
             """,
             cancellationToken);
 
-        await CreateDatabase().InitializeAsync(cancellationToken);
+        await BootAsync(cancellationToken);
         await using (var connection = await CreateDatabase().OpenConnectionAsync(cancellationToken))
             Assert.Equal(
                 "covered = = 700,own team=shop team=shop 800",
@@ -1056,7 +1088,9 @@ public sealed class FindingIngestionTests : IDisposable
             BEGIN SELECT RAISE(ABORT, 'attributes backfilled twice'); END;
             """,
             cancellationToken);
-        await CreateDatabase().InitializeAsync(cancellationToken);
+        var idle = CreateDatabase();
+        await idle.InitializeAsync(cancellationToken);
+        Assert.False(await idle.CatchUpAttributesAsync(cancellationToken));
         await ExecuteAsync("DROP TRIGGER fail_attribute_write;", cancellationToken);
 
         // An image rolled back below this build observes the copy again, without rows.
@@ -1067,7 +1101,7 @@ public sealed class FindingIngestionTests : IDisposable
             WHERE source_id = 'own';
             """,
             cancellationToken);
-        await CreateDatabase().InitializeAsync(cancellationToken);
+        await BootAsync(cancellationToken);
 
         await using var reopened = await CreateDatabase().OpenConnectionAsync(cancellationToken);
         Assert.Equal(
@@ -1135,7 +1169,7 @@ public sealed class FindingIngestionTests : IDisposable
             """,
             cancellationToken);
 
-        await CreateDatabase().InitializeAsync(cancellationToken);
+        await BootAsync(cancellationToken);
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         Assert.Equal(
@@ -1239,5 +1273,13 @@ public sealed class FindingIngestionTests : IDisposable
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         return (string)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    // A start: the migrations before the Hub answers, then the catch-up after it.
+    private async Task BootAsync(CancellationToken cancellationToken)
+    {
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        await database.CatchUpAttributesAsync(cancellationToken);
     }
 }

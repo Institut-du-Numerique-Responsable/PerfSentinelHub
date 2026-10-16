@@ -72,6 +72,31 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
           """
         + IncidentAttributesWhere("true");
 
+    // Whether AttributesBackfill has anything to write, each arm its read-only mirror: the
+    // backfill takes the write lock for as long as it scans, so it runs only when this says so.
+    private const string AttributesBackfillNeeded =
+        """
+        SELECT EXISTS (
+                 SELECT 1 FROM finding_sources
+                 WHERE service IS NULL
+                   AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text')
+            OR EXISTS (
+                 SELECT 1 FROM finding_sources AS fs
+                 WHERE json_valid(fs.finding_json)
+                   AND NOT EXISTS (
+                     SELECT 1 FROM finding_attributes AS fa
+                     WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
+                       AND fa.last_seen_ms >= fs.last_seen_ms))
+            OR EXISTS (
+                 SELECT 1 FROM incident_attributes AS ia
+                 WHERE ia.last_seen_ms IS NOT (
+                   SELECT i.last_seen_ms FROM incidents AS i WHERE i.id = ia.id AND i.source_id = ia.source_id))
+            OR EXISTS (
+                 SELECT 1 FROM incidents AS i
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM incident_attributes AS ia WHERE ia.id = i.id AND ia.source_id = i.source_id));
+        """;
+
     // The write path's own observation, in the shape FindingAttributesFrom reads.
     private static readonly string FindingAttributesUpsert =
         FindingAttributesFrom("SELECT $finding_json, $signature, $source_id, $observed_at");
@@ -165,7 +190,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceServiceColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
-            await BackfillAttributesAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
             {
@@ -299,8 +323,40 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     }
 
     /// <summary>
+    ///     The version 9 derivation below, run after the Hub answers rather than in
+    ///     InitializeAsync: it scans every copy, which on a large database outlasted
+    ///     the startup probe and got the boot killed and started over. A read-only
+    ///     check runs first, and the write gate is taken only when there is
+    ///     something to write. Until it lands, a copy an older build wrote matches no
+    ///     attribute scope. True when it wrote.
+    /// </summary>
+    public async Task<bool> CatchUpAttributesAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using (var check = connection.CreateCommand())
+        {
+            check.CommandText = AttributesBackfillNeeded;
+            if ((long)(await check.ExecuteScalarAsync(cancellationToken))! == 0)
+                return false;
+        }
+
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var transaction = connection.BeginTransaction(false);
+            await BackfillAttributesAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    /// <summary>
     ///     What version 9 derives from rows an older build may have written. Run
-    ///     on every boot rather than once, because an image rolled back below it
+    ///     on every start rather than once, because an image rolled back below it
     ///     and forward again writes copies and incidents without it in between.
     ///     A copy's service and attributes come from its own envelope, so a row
     ///     without one keeps none until its source observes it again, and an

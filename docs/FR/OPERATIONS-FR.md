@@ -70,6 +70,25 @@ et garde les deux boutons, quand une source pour laquelle le Hub ne détient pas
 d'identifiant d'acquittement n'en offre aucun, voir
 [LAUNCHER-FR.md](LAUNCHER-FR.md#la-page-dacquittement).
 
+## Démarrer sur une grosse base
+
+Avant de répondre, le Hub applique en une transaction les migrations de schéma
+qu'apporte une nouvelle version. La plupart ne coûtent rien, mais celle qui
+construit un index sur `finding_sources` lit toute la table, ce qui prend de
+quelques secondes à quelques minutes sur une base d'un gigaoctet ou plus. Un arrêt
+en cours de route annule la migration, et le démarrage suivant la recommence. La
+sonde de démarrage du chart laisse donc 5 minutes, `probes.startup.periodSeconds`
+fois `probes.startup.failureThreshold` : augmentez-la pour une base plus grosse
+plutôt que de laisser le kubelet redémarrer le Hub en boucle. La sonde de vivacité
+laisse 5 secondes et 6 échecs (`probes.liveness`), pour que seul un Hub vraiment
+bloqué redémarre.
+
+Ce qu'une version antérieure à 0.4.0 a laissé sans lignes d'attributs est dérivé
+une fois le Hub en route, pas avant : le premier passage du worker de rétention
+vérifie en lecture seule s'il reste une copie ou un incident sans elles, et ne
+prend le verrou d'écriture que s'il y en a. D'ici là, une telle copie ne
+correspond à aucune portée par attribut.
+
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt

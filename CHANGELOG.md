@@ -2,6 +2,24 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- A Hub on a large database no longer restarts in a loop. Its start derived, in one
+  transaction before it answered, the attribute rows that copies written by a build older than
+  0.4.0 lack, which scanned every copy: 41 to 53 seconds on a 1 GB database, against a 60-second
+  startup probe, and a kill rolled it back so every start began again. The derivation now runs
+  after the Hub answers, in the retention worker's first pass, and takes the write lock only when
+  a read-only check finds something to write.
+
+### Changed
+
+- The chart's probes are values: `probes.startup` allows 5 minutes by default (5 seconds times
+  60) instead of 60 seconds, for a first start that migrates a large database, and
+  `probes.liveness` allows 5 seconds and 6 misses instead of 1 second and 3. `probes.readiness`
+  keeps Kubernetes' own timings.
+
 ## [0.6.0] - 2026-10-16
 
 ### Added
