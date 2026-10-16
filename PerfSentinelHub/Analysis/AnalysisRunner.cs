@@ -21,6 +21,7 @@ public static class AnalysisErrorCodes
     public const string OutputTooLarge = "output_too_large";
     public const string BinaryFailed = "binary_failed";
     public const string InvalidRequest = "invalid_request";
+    public const string HubMemoryLow = "hub_memory_low";
     public const string Internal = "internal";
 }
 
@@ -39,8 +40,11 @@ public sealed partial class AnalysisRunner(
     DaemonClient daemonClient,
     EngineProbe engine,
     IOptions<HubOptions> options,
-    ILogger<AnalysisRunner> logger)
+    ILogger<AnalysisRunner> logger,
+    CgroupMemory? memory = null)
 {
+    private readonly CgroupMemory _memory = memory ?? CgroupMemory.Container;
+
     // The intermediate report JSON. Well past any real run, small enough that
     // a runaway engine cannot exhaust the container's memory.
     private const long MaxReportJsonBytes = 256L * 1024 * 1024;
@@ -86,6 +90,8 @@ public sealed partial class AnalysisRunner(
     {
         if (_analysis.EngineBinaryPath is null)
             return Failed(AnalysisErrorCodes.Internal);
+        if (LacksMemory(run.Id))
+            return Failed(AnalysisErrorCodes.HubMemoryLow);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_analysis.Timeout);
@@ -97,6 +103,10 @@ public sealed partial class AnalysisRunner(
                 : await QueryBackendAsync(request, source, configPath, timeout.Token);
             if (reportJson is null)
                 return Failed(AnalysisErrorCodes.BinaryFailed);
+
+            // Checked again before the render: the report now sits in the Hub's own memory.
+            if (LacksMemory(run.Id))
+                return Failed(AnalysisErrorCodes.HubMemoryLow);
 
             var summary = ReportSummary.TryParse(reportJson, out var binaryVersion);
             // Short-circuit kept on purpose: output that is not a report must
@@ -129,6 +139,15 @@ public sealed partial class AnalysisRunner(
             if (configPath is not null)
                 TryDelete(configPath);
         }
+    }
+
+    private bool LacksMemory(string runId)
+    {
+        var floor = _analysis.MinFreeMemoryMiB * 1024L * 1024;
+        if (floor == 0 || _memory.HeadroomBytes() is not { } headroom || headroom >= floor)
+            return false;
+        LogMemoryLow(logger, runId, headroom / (1024 * 1024), _analysis.MinFreeMemoryMiB);
+        return true;
     }
 
     /// <summary>
@@ -349,6 +368,13 @@ public sealed partial class AnalysisRunner(
             return false;
         }
     }
+
+    [LoggerMessage(
+        1602,
+        LogLevel.Warning,
+        "Analysis run {RunId} refused: the container has {HeadroomMiB} MiB free, under the {FloorMiB} MiB of "
+        + "Hub:Analysis:MinFreeMemoryMiB. Raise the Hub's memory limit, or run the analysis when it is quieter.")]
+    private static partial void LogMemoryLow(ILogger logger, string runId, long headroomMiB, int floorMiB);
 
     [LoggerMessage(1600, LogLevel.Warning, "Analysis run {RunId} failed with {ErrorCode}.")]
     private static partial void LogRunFailed(ILogger logger, Exception exception, string runId, string errorCode);

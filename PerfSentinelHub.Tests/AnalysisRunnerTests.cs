@@ -68,6 +68,40 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_run_is_refused_before_the_engine_when_the_container_lacks_memory()
+    {
+        // 1 GiB limit, 1,000,000,000 bytes in use and no reclaimable cache: 73 MiB left.
+        var memory = Cgroup("1073741824", "1000000000", "anon 990000000\ninactive_file 0\n");
+        var runner = Runner(StubEngine(ReportJson, 0), memory: memory);
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
+        Assert.Equal(AnalysisErrorCodes.HubMemoryLow, outcome.ErrorCode);
+        Assert.False(File.Exists(runner.ReportPath("run-1")));
+    }
+
+    [Fact]
+    public async Task Reclaimable_page_cache_counts_as_free_memory()
+    {
+        // The same usage, 800 MB of it cache the kernel drops under pressure.
+        var memory = Cgroup("1073741824", "1000000000", "anon 190000000\ninactive_file 800000000\n");
+        Assert.Equal(873_741_824, memory.HeadroomBytes());
+
+        var outcome = await Runner(StubEngine(ReportJson, 0), memory: memory)
+            .RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+    }
+
+    [Fact]
+    public void A_container_without_a_memory_limit_is_not_checked()
+    {
+        Assert.Null(Cgroup("max", "1000000000", "inactive_file 0\n").HeadroomBytes());
+        Assert.Null(new CgroupMemory(Path.Combine(_workspace, "no-cgroup")).HeadroomBytes());
+    }
+
+    [Fact]
     public async Task The_render_always_caps_embedded_traces_so_no_finding_is_dropped()
     {
         var runner = Runner(StubEngine(ReportJson, 0));
@@ -297,7 +331,7 @@ public sealed class AnalysisRunnerTests : IDisposable
         });
     }
 
-    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null)
+    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null, CgroupMemory? memory = null)
     {
         var options = RunnerOptions(binaryPath, timeout);
         return new AnalysisRunner(
@@ -306,7 +340,19 @@ public sealed class AnalysisRunnerTests : IDisposable
             // ones, where the flag never applies anyway.
             new EngineProbe(options, NullLogger<EngineProbe>.Instance),
             options,
-            NullLogger<AnalysisRunner>.Instance);
+            NullLogger<AnalysisRunner>.Instance,
+            memory ?? new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
+    }
+
+    /// <summary>A cgroup v2 directory holding the three files the Hub reads.</summary>
+    private CgroupMemory Cgroup(string max, string current, string stat)
+    {
+        var root = Path.Combine(_workspace, "cgroup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "memory.max"), max + "\n");
+        File.WriteAllText(Path.Combine(root, "memory.current"), current + "\n");
+        File.WriteAllText(Path.Combine(root, "memory.stat"), stat);
+        return new CgroupMemory(root);
     }
 
     /// <summary>

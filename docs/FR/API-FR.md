@@ -562,9 +562,16 @@ résultat le dit au-dessus du lien.
 
 ### Échec et expiration
 
-Chaque échec est l'un de huit codes : `source_unreachable`, `source_auth_failed`,
+Chaque échec est l'un de neuf codes : `source_unreachable`, `source_auth_failed`,
 `source_rejected_request`, `timeout`, `output_too_large`, `binary_failed`,
-`invalid_request`, `internal`.
+`invalid_request`, `hub_memory_low`, `internal`.
+
+`hub_memory_low` est un refus du Hub lui-même. Le moteur tourne dans le conteneur du Hub :
+avant chacune de ses deux exécutions, le Hub lit ce que sa cgroup peut encore donner, le
+cache de pages récupérable compté comme libre, et fait échouer le run quand c'est sous
+`Hub:Analysis:MinFreeMemoryMiB`. Un moteur qui ne tient pas ferait tuer tout le Hub pour
+manque de mémoire, avec toutes ses requêtes en cours. Un conteneur sans limite de
+mémoire, ou hors cgroup v2, n'est pas vérifié.
 
 La sortie d'erreur brute ne quitte jamais le process. Elle est lue pour nommer un
 responsable, puisque "le backend nous a refusés" et "le binaire a cassé" n'ont pas le même

@@ -199,6 +199,11 @@ public sealed record AnalysisOptions
     public int MaxTracesEmbedded { get; set; } = 50;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(300);
 
+    // Memory the container's cgroup must still have free for a run to start the
+    // engine, which runs inside it: a run that cannot fit is refused with
+    // hub_memory_low instead of getting the whole Hub OOM-killed. 0 turns it off.
+    public int MinFreeMemoryMiB { get; set; } = 256;
+
     public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
 
     // How long a finished run's row survives. Far longer than ReportRetention on
@@ -459,6 +464,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Analysis:MaxTracesEmbedded must be between 0 and 10000.");
         if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))
             errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
+        if (analysis.MinFreeMemoryMiB is < 0 or > 65_536)
+            errors.Add("Hub:Analysis:MinFreeMemoryMiB must be between 0 and 65536, 0 turning the check off.");
         if (analysis.ReportRetention <= TimeSpan.Zero)
             errors.Add("Hub:Analysis:ReportRetention must be positive.");
         if (analysis.RunRetention <= analysis.ReportRetention)

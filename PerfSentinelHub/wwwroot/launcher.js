@@ -45,6 +45,7 @@
         output_too_large: 'the source returned more than one run is allowed to hold. Narrow the window or lower the trace cap so less comes back, then run it again.',
         binary_failed: 'the analysis binary failed for a reason none of the other codes covers, and nothing was stored. Run it once more. If it repeats, send this analysis ID to whoever operates the Hub.',
         invalid_request: 'the arguments were rejected before the run started, so nothing was read and nothing was spent. Fix the trace ID or the lookback value and submit again.',
+        hub_memory_low: 'the Hub refused to start the analysis binary: its container had too little memory left for it, and running it anyway would have got the whole Hub killed. Retry when the Hub is quieter, or have whoever operates it raise its memory limit.',
         internal: 'the Hub itself failed and never touched the source. Retry now. If it fails the same way, the Hub needs attention rather than your request.'
     };
 
@@ -113,6 +114,7 @@
         output_too_large: 'The source returned too much data.',
         binary_failed: 'The analysis binary failed.',
         invalid_request: 'The arguments were rejected before the run started.',
+        hub_memory_low: 'The Hub had too little memory left to run it.',
         internal: 'The Hub failed on its own side.'
     };
 
