@@ -6153,7 +6153,9 @@
         if (item.withdrawn) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'crit'}, [critGlyph(16), el('div', {
                 text: 'Withdrawn ' + PSL.dur(Date.now() - item.withdrawn.at_ms) + ' ago by ' + (item.withdrawn.by || 'someone')
-                    + ': ' + (item.withdrawn.reason || 'no reason given') + '. Its files stay, its share links are dead.'
+                    // A reason typed as a sentence brings its own full stop, and the banner adds one.
+                    + ': ' + ((item.withdrawn.reason || '').replace(/\.+\s*$/, '') || 'no reason given')
+                    + '. Its files stay, its share links are dead.'
             })]));
         } else if (item.intent === 'official' && (item.integrity_level === 'hash-only' || item.integrity_level === 'none')) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'warn'}, [warningGlyph(16), el('div', {
