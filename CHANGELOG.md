@@ -26,6 +26,16 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
+- The image ships perf-sentinel `0.30.0` as its analysis engine, repinned by digest from
+  `0.29.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.29.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.30.0` changes one family of signatures, once: an `excessive_fanout` whose parent span
+  is outside the trace no longer carries that span's id, so a run finds the same fanouts
+  under one stable signature each instead of one per trace. Its other change sits in the
+  daemon: with `[daemon.hub_export]` and `[daemon.correlation]` both on, a daemon pushes its
+  correlation episodes to `/api/import/correlations`.
 - A `/metrics` scrape waits at most five seconds for the findings counts and is otherwise served
   the previous ones while the count finishes. A store of millions of signatures made the count
   outlast a 10-second `scrape_timeout`, and every family of the Hub went missing with it. The

@@ -12,7 +12,7 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
 # The engine the Hub runs for an analysis. Pinned by digest like every other
 # image here, and copied rather than downloaded so the build reaches no host
 # outside the registry.
-FROM ghcr.io/institut-du-numerique-responsable/perf-sentinel:0.29.0@sha256:67b1ec9c2608851cfc09822f13229ba119bc5169cdf86df9eed4997a1395d75e AS engine
+FROM ghcr.io/institut-du-numerique-responsable/perf-sentinel:0.30.0@sha256:0371d9b6b985a6dac020557e8fbcb445babca64bc42060aaeef1c919a2536157 AS engine
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-resolute-chiseled-extra@sha256:2b0f7a348127985b5accc794e1304b0f3f9ab9c8db652096514db4b831dc3ce4
 ARG SOURCE_COMMIT=unknown
