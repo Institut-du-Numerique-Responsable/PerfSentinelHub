@@ -42,6 +42,18 @@ All notable changes to PerfSentinelHub are recorded here.
   Schema V13 keeps the files in the database, so the backup carries them, and the chart takes
   the whole section as `hub.disclosures`, its keys and webhook URLs from Secrets.
 
+### Changed
+
+- The image ships perf-sentinel `0.31.0` as its analysis engine, repinned by digest from
+  `0.30.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.30.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  `0.31.0` brings what the disclosures and the ack relay above run on: `disclose-pdf`, which
+  checks and renders a published report, and `report --hub-relay`. It also takes the
+  `--pg-stat-selector` and `--mysql-stat-selector` the `Selector` settings pass. No detector,
+  normalizer or finding signature changes, so every stored finding keeps its signature.
+
 ## [0.6.1] - 2026-10-16
 
 ### Fixed
