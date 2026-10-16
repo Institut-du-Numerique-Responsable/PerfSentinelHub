@@ -51,6 +51,26 @@ public sealed class CachedCountTests
     }
 
     [Fact]
+    public async Task A_count_slower_than_its_lifetime_is_kept_for_a_lifetime_from_when_it_lands()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var slow = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var cache = new CachedCount<int>(_ => ++calls == 1 ? slow.Task : Task.FromResult(9), _clock, _logger);
+
+        var waiting = cache.GetAsync(cancellationToken);
+        _clock.Advance(CachedCount<int>.Budget);
+        Assert.Null(await waiting);
+        _clock.Advance(CachedCount<int>.Lifetime);
+        slow.SetResult(7);
+        Assert.Equal(7, (await cache.GetAsync(cancellationToken))?.Value);
+
+        // Landed twenty seconds after it started: still fresh, no second count.
+        Assert.Equal(7, (await cache.GetAsync(cancellationToken))?.Value);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
     public async Task Nothing_counted_yet_and_past_the_budget_serves_nothing()
     {
         var never = new TaskCompletionSource<int>();
@@ -75,5 +95,10 @@ public sealed class CachedCountTests
 
         Assert.Equal(7, (await cache.GetAsync(cancellationToken))?.Value);
         Assert.Contains(_logger.Messages, message => message.Contains("count failed", StringComparison.Ordinal));
+
+        // A failure waits a lifetime before the next try, like a success.
+        Assert.Equal(7, (await cache.GetAsync(cancellationToken))?.Value);
+        Assert.Equal(2, calls);
+        Assert.Single(_logger.Messages);
     }
 }

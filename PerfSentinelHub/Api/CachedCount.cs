@@ -4,9 +4,10 @@ namespace PerfSentinelHub.Api;
 public sealed record Counted<T>(T Value, DateTimeOffset CountedAt);
 
 /// <summary>
-///     A count served from memory for <see cref="Lifetime" />, then taken again, one at
-///     a time. A caller waits for a new count at most <see cref="Budget" />: past it, it
-///     gets the previous one and the count goes on, to land for a later caller. A count
+///     A count served from memory for <see cref="Lifetime" /> after it lands, then
+///     taken again, one at a time. A failed count waits as long before the next try.
+///     A caller waits for a new count at most <see cref="Budget" />: past it, it gets
+///     the previous one and the count goes on, to land for a later caller. A count
 ///     that grows with the data can then never hold a request, a Prometheus scrape
 ///     included, past its timeout.
 /// </summary>
@@ -23,7 +24,10 @@ public sealed partial class CachedCount<T>(
     private readonly Lock _gate = new();
     private Task<Counted<T>?>? _counting;
     private Counted<T>? _last;
-    private long _lastTimestamp;
+
+    // When the last count ended, landed or failed. Measured from the end rather than
+    // the start, so a count slower than the lifetime does not start the next at once.
+    private long? _settledAt;
 
     public async Task<Counted<T>?> GetAsync(CancellationToken cancellationToken)
     {
@@ -32,13 +36,16 @@ public sealed partial class CachedCount<T>(
         lock (_gate)
         {
             last = _last;
-            if (last is not null && timeProvider.GetElapsedTime(_lastTimestamp) < Lifetime)
+            if (_settledAt is { } settledAt && timeProvider.GetElapsedTime(settledAt) < Lifetime)
                 return last;
             counting = _counting ??= CountAsync();
         }
 
-        var waited = Task.Delay(Budget, timeProvider, cancellationToken);
-        if (await Task.WhenAny(counting, waited) == counting)
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var waited = Task.Delay(Budget, timeProvider, budget.Token);
+        var first = await Task.WhenAny(counting, waited);
+        await budget.CancelAsync();
+        if (first == counting)
             return await counting ?? last;
         cancellationToken.ThrowIfCancellationRequested();
         return last;
@@ -49,7 +56,6 @@ public sealed partial class CachedCount<T>(
         // Off the caller's lock, and on no caller's token: a caller that stops
         // waiting leaves the count running.
         await Task.Yield();
-        var timestamp = timeProvider.GetTimestamp();
         var at = timeProvider.GetUtcNow();
         try
         {
@@ -57,7 +63,6 @@ public sealed partial class CachedCount<T>(
             lock (_gate)
             {
                 _last = counted;
-                _lastTimestamp = timestamp;
             }
 
             return counted;
@@ -71,6 +76,7 @@ public sealed partial class CachedCount<T>(
         {
             lock (_gate)
             {
+                _settledAt = timeProvider.GetTimestamp();
                 _counting = null;
             }
         }
