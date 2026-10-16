@@ -217,8 +217,8 @@ public static partial class MetricsEndpoint
             Line(text, "perf_sentinel_hub_findings_age_seconds", null,
                 Seconds(now - counted.CountedAt.ToUnixTimeMilliseconds()));
 
-        // Read from the file system, not through SQLite: the one family that still
-        // answers when the database itself is what failed.
+        // Read from the file system, not through SQLite: a full volume refuses every
+        // write but still reads, so this still answers in the case it exists for.
         Family(text, "perf_sentinel_hub_database_bytes",
             "Size of the Hub's database file and its write-ahead log, in bytes.");
         Line(text, "perf_sentinel_hub_database_bytes", null, DatabaseBytes(options.DatabasePath));

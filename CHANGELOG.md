@@ -32,6 +32,9 @@ All notable changes to PerfSentinelHub are recorded here.
 - A poll that fails because the Hub's own volume is full now records `database_full` instead of
   `storage_error`, and the launcher shows `Hub database full` rather than the daemon as
   unreachable. Any other storage failure keeps `storage_error`, now explained as the Hub's.
+- The first start after the upgrade indexes `finding_sources` by source and first sighting
+  before the Hub answers. On a large database it takes time in proportion to the rows and
+  needs room for the index on the volume: grow a full volume before upgrading.
 ## [0.5.0] - 2026-10-15
 
 ### Added

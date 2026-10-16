@@ -116,7 +116,7 @@ instead of opening a series of its own. Unlike `analysis_runs`, an empty
 combination publishes no series. The zeros would be every environment times
 every type, severity and status, nearly all of them empty for good, and the
 family is read through `sum()`, where an absent series already is a zero. The
-counts are kept for 15 seconds, because the endpoint is anonymous and a count
+counts are kept for 15 seconds after a count ends, because the endpoint is anonymous and a count
 reads every finding of its environment. A scrape inside that interval is served
 the previous counts, and every other family is still computed at scrape time. A
 scrape waits at most five seconds for a new count. Past that it gets the previous
@@ -127,7 +127,8 @@ outlast Prometheus' 10-second `scrape_timeout`, and every family went missing wi
 it.
 
 `perf_sentinel_hub_database_bytes` is read from the file system, the database file
-plus its write-ahead log, so it still answers when SQLite itself is what fails. Alert
+plus its write-ahead log. A full volume refuses every write but still reads, so the
+scrape keeps answering with it in the case it exists for. Alert
 on its growth against the volume rather than on the kubelet's volume metrics alone: a
 Hub whose database fills stops storing anything, and its sources then show
 `database_full` as their last error, a code about the Hub's own volume and not about
