@@ -29,6 +29,40 @@
           "$comment": "8080 is the main port: /metrics would answer there and nothing else would.",
           "type": ["integer", "null"], "minimum": 1, "maximum": 65535, "not": { "const": 8080 }
         },
+        "disclosures": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "values.yaml sets every key to an empty string, so the pairs are checked on non-empty values.",
+          "allOf": [
+            { "if": { "properties": { "importSecretName": { "minLength": 1 } }, "required": ["importSecretName"] }, "then": { "properties": { "importSecretKey": { "minLength": 1 } }, "required": ["importSecretKey"] } },
+            { "if": { "properties": { "expectedIdentity": { "minLength": 1 } }, "required": ["expectedIdentity"] }, "then": { "properties": { "expectedIssuer": { "minLength": 1 } }, "required": ["expectedIssuer"] } },
+            { "if": { "properties": { "expectedIssuer": { "minLength": 1 } }, "required": ["expectedIssuer"] }, "then": { "properties": { "expectedIdentity": { "minLength": 1 } }, "required": ["expectedIdentity"] } }
+          ],
+          "properties": {
+            "importSecretName": { "type": "string" },
+            "importSecretKey": { "type": "string" },
+            "allowInternal": { "type": "boolean" },
+            "expectedIdentity": { "type": "string" },
+            "expectedIssuer": { "type": "string" },
+            "shareLinkDays": { "type": "integer", "minimum": 1, "maximum": 30 },
+            "webhooks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "secretName", "urlKey", "secretKey"],
+                "properties": {
+                  "name": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+                  "secretName": { "type": "string", "minLength": 1 },
+                  "urlKey": { "type": "string", "minLength": 1 },
+                  "secretKey": { "type": "string", "minLength": 1 },
+                  "includeShareLink": { "type": "boolean" },
+                  "shareLinkDays": { "type": "integer", "minimum": 1, "maximum": 30 }
+                }
+              }
+            }
+          }
+        },
         "ackRelay": {
           "type": "object",
           "properties": {

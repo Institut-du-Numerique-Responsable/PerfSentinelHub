@@ -526,6 +526,19 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     // ------------------------------------------------------------ disclosures
 
     [Theory]
+    [InlineData("/share/pshare_unknown0123456789abcdef0123456789abcdef/report.json")]
+    [InlineData("/share/anything/")]
+    public async Task The_share_route_answers_strangers_without_a_sign_in(string path)
+    {
+        using var client = FakeProvider.Client(Factory);
+
+        using var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
+
+        // A 404, never the redirect to sign-in every other route gives a stranger.
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
     [InlineData("svc", HttpStatusCode.Forbidden)]
     [InlineData("viewer", HttpStatusCode.OK)]
     [InlineData("admin", HttpStatusCode.OK)]

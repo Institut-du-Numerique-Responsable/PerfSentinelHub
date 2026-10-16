@@ -88,6 +88,25 @@ hub:
     # proxy that sets the header itself and strips the one a client sent.
     # With neither, the relay refuses every caller.
     trustIdentityHeader: false
+  # Periodic disclosures a CI publishes to POST /api/import/disclosures, off
+  # until importSecretName names the Secret holding the import key (32+
+  # characters, distinct from every source import key and machine token).
+  # Once on, the ConfigMap also lowers the ASP.NET hosting log level to
+  # Warning, so share-link tokens stay out of the request logs; the ingress
+  # access log still sees them. allowInternal needs hub.access.enabled.
+  # expectedIdentity and expectedIssuer go together, checked against the
+  # attestation and printed in the PDF. shareLinkDays: 1 to 30. Webhooks are
+  # items { name, secretName, urlKey, secretKey, includeShareLink,
+  # shareLinkDays }: the URL and the HMAC secret both come from that Secret,
+  # since a chat webhook URL carries its own secret. See docs/CONFIGURATION.md.
+  disclosures:
+    importSecretName: ""
+    importSecretKey: ""
+    allowInternal: false
+    expectedIdentity: ""
+    expectedIssuer: ""
+    shareLinkDays: 7
+    webhooks: []
   access:
     # Who reaches which findings, sources and runs: projects, roles, grants,
     # internal groups, admins and machine tokens, passed to the Hub as is. On,

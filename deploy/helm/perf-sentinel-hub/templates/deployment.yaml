@@ -94,6 +94,27 @@ spec:
                   key: {{ $account.secretKey }}
             {{- end }}
             {{- end }}
+            {{- with .Values.hub.disclosures }}
+            {{- if .importSecretName }}
+            - name: Hub__Disclosures__ImportKey
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .importSecretName }}
+                  key: {{ .importSecretKey }}
+            {{- range $index, $webhook := .webhooks | default list }}
+            - name: Hub__Disclosures__Webhooks__{{ $index }}__Url
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $webhook.secretName }}
+                  key: {{ $webhook.urlKey }}
+            - name: Hub__Disclosures__Webhooks__{{ $index }}__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $webhook.secretName }}
+                  key: {{ $webhook.secretKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
             {{- range $index, $source := .Values.sources }}
             {{- if $source.authSecretName }}
             - name: Hub__Sources__{{ $index }}__AuthHeaderValue

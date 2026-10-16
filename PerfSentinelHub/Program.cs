@@ -84,6 +84,8 @@ builder.Services.AddSingleton<CorrelationImportAdmission>();
 builder.Services.AddSingleton<DisclosureImportGate>();
 builder.Services.AddSingleton<DisclosureMetrics>();
 builder.Services.AddSingleton<DisclosureRenderer>();
+builder.Services.AddSingleton<ShareDownloadCounter>();
+builder.Services.AddHostedService<ShareDownloadFlusher>();
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();
@@ -170,6 +172,7 @@ var accessPolicy = app.Services.GetRequiredService<AccessPolicy>();
 if (accessPolicy.Enabled) app.MapTerminalAccess();
 if (accessPolicy.HasLocalAccounts) app.MapLocalSignIn();
 app.MapMetrics();
+app.MapShare();
 
 await app.RunAsync();
 return exitCode;
