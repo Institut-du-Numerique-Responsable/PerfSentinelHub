@@ -395,7 +395,7 @@ public sealed class ConfigurationTests
     };
 
     [Theory]
-    [MemberData(nameof(InvalidDatabaseStatistics))]
+    [MemberData(nameof(InvalidDatabaseStatistics), DisableDiscoveryEnumeration = true)]
     public void Invalid_database_statistics_are_rejected(DbStatOptions stats, string expected)
     {
         Assert.Equal(expected, Assert.Single(Failures(ValidSource() with { PgStat = stats })));
