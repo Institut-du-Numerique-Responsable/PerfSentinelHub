@@ -342,7 +342,7 @@ public sealed partial class HubDatabase
 
     public Task<IReadOnlyList<DeliveryRecord>> ListDeliveriesAsync(string disclosureId, CancellationToken cancellationToken)
     {
-        return ReadDeliveriesAsync("WHERE disclosure_id = $key ORDER BY created_at_ms, id", disclosureId, cancellationToken);
+        return ReadDeliveriesAsync("WHERE disclosure_id = $key ORDER BY created_at_ms, rowid", disclosureId, cancellationToken);
     }
 
     public Task RecordDeliveryAttemptAsync(
@@ -366,6 +366,21 @@ public sealed partial class HubDatabase
             command.Parameters.AddWithValue("$status", Nullable(status));
             command.Parameters.AddWithValue("$state", state);
             command.Parameters.AddWithValue("$next", Nullable(nextAttemptMs));
+            return await command.ExecuteNonQueryAsync(cancellationToken);
+        }, cancellationToken);
+    }
+
+    /// <summary>Back to pending, due now, for a delivery that gave up or waits on a backoff.</summary>
+    public Task RetryDeliveryAsync(string id, long nowMs, CancellationToken cancellationToken)
+    {
+        return WriteAsync(async command =>
+        {
+            command.CommandText = """
+                                  UPDATE disclosure_deliveries SET state = 'pending', next_attempt_ms = $now
+                                  WHERE id = $id AND state != 'delivered';
+                                  """;
+            command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$now", nowMs);
             return await command.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
     }
