@@ -182,7 +182,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 migration.Transaction = transaction;
                 migration.CommandText =
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
-                    Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12;
+                    Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12 + Schema.V13;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -199,7 +199,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                       VALUES (1, $applied_at_ms), (2, $applied_at_ms), (3, $applied_at_ms),
                                              (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms),
                                              (7, $applied_at_ms), (8, $applied_at_ms), (9, $applied_at_ms),
-                                             (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms);
+                                             (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms),
+                                             (13, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",

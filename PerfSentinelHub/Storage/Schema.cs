@@ -335,4 +335,68 @@ internal static class Schema
                                 CREATE INDEX IF NOT EXISTS ix_finding_sources_first_seen
                                   ON finding_sources(source_id, first_seen_ms);
                                 """;
+
+    // Periodic disclosures a CI publishes. The files are kept exactly as received in BLOBs,
+    // so the backup's VACUUM INTO carries them, and a listing never selects those columns.
+    internal const string V13 = """
+                                CREATE TABLE IF NOT EXISTS disclosures (
+                                  id TEXT PRIMARY KEY,
+                                  report_uuid TEXT NOT NULL UNIQUE,
+                                  organisation TEXT NOT NULL,
+                                  period_type TEXT NOT NULL,
+                                  period_from TEXT NOT NULL,
+                                  period_to TEXT NOT NULL,
+                                  intent TEXT NOT NULL,
+                                  confidentiality TEXT NOT NULL,
+                                  content_hash TEXT NOT NULL,
+                                  integrity_level TEXT,
+                                  figures_json TEXT,
+                                  report BLOB NOT NULL,
+                                  attestation BLOB,
+                                  bundle BLOB,
+                                  pdf BLOB,
+                                  render_reason TEXT,
+                                  engine_version TEXT,
+                                  hash_checked INTEGER,
+                                  binding_checked INTEGER,
+                                  published_at_ms INTEGER NOT NULL,
+                                  signature_added_at_ms INTEGER,
+                                  withdrawn_at_ms INTEGER,
+                                  withdrawn_reason TEXT,
+                                  withdrawn_by TEXT
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_disclosures_period
+                                  ON disclosures(period_to DESC, id);
+                                CREATE TABLE IF NOT EXISTS disclosure_share_links (
+                                  id TEXT PRIMARY KEY,
+                                  disclosure_id TEXT NOT NULL,
+                                  token_hash BLOB NOT NULL UNIQUE,
+                                  created_by TEXT NOT NULL,
+                                  created_at_ms INTEGER NOT NULL,
+                                  expires_at_ms INTEGER NOT NULL,
+                                  revoked_at_ms INTEGER,
+                                  revoked_by TEXT,
+                                  downloads INTEGER NOT NULL DEFAULT 0,
+                                  last_used_at_ms INTEGER,
+                                  last_client TEXT
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_share_links_disclosure
+                                  ON disclosure_share_links(disclosure_id);
+                                CREATE TABLE IF NOT EXISTS disclosure_deliveries (
+                                  id TEXT PRIMARY KEY,
+                                  disclosure_id TEXT NOT NULL,
+                                  webhook TEXT NOT NULL,
+                                  event TEXT NOT NULL,
+                                  state TEXT NOT NULL,
+                                  attempts INTEGER NOT NULL DEFAULT 0,
+                                  created_at_ms INTEGER NOT NULL,
+                                  last_attempt_ms INTEGER,
+                                  next_attempt_ms INTEGER,
+                                  last_status INTEGER
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_deliveries_due
+                                  ON disclosure_deliveries(state, next_attempt_ms);
+                                CREATE INDEX IF NOT EXISTS ix_deliveries_disclosure
+                                  ON disclosure_deliveries(disclosure_id);
+                                """;
 }
