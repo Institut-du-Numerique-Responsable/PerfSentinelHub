@@ -252,7 +252,7 @@ public static partial class ApiEndpoints
                        envelope.Confidentiality, envelope.FiguresJson);
         }
 
-        private IResult? Refusal(RenderOutcome outcome)
+        private JsonHttpResult<DisclosureRefusal>? Refusal(RenderOutcome outcome)
         {
             return outcome switch
             {
