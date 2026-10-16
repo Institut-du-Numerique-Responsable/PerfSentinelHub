@@ -4,8 +4,9 @@ Quatre surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'im
 greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse et
 le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et ne lit
 `/api/findings` que sur la page d'acquittement, par signature. Les divulgations périodiques
-se tiennent à part des quatre : une CI les publie sur une route qui leur est propre, et le
-lanceur, un lien de partage ou un webhook les transmet, voir [Divulgations](#divulgations).
+se tiennent à part des quatre : une tâche planifiée les publie sur une route qui leur est
+propre, et le lanceur, un lien de partage ou un webhook les transmet, voir
+[Divulgations](#divulgations).
 
 ## API d'import
 
@@ -602,8 +603,10 @@ que personne n'a demandé d'interroger deux fois.
 
 ## Divulgations
 
-Une divulgation périodique est le rapport que `perf-sentinel disclose` écrit pour une
-période, signé ou non, qu'une CI publie sur le Hub. Le Hub le vérifie et le rend avec le
+Une divulgation périodique est le rapport que `perf-sentinel disclose` construit pour une
+période à partir des archives des daemons de production, signé ou non. Une tâche planifiée
+le publie sur le Hub, en pratique un workflow de CI, car la signature sans clé a besoin de
+l'identité OIDC que la CI lui donne. Le Hub le vérifie et le rend avec le
 `disclose-pdf` de son moteur embarqué, garde les fichiers tels qu'ils sont arrivés, les sert
 aux détenteurs de `disclosures.read` et les partage par des liens qui expirent. Chaque route
 ci-dessous répond `404` tant que `Hub:Disclosures:ImportKey` n'est pas posé, voir

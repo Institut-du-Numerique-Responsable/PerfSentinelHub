@@ -120,7 +120,7 @@ cookies are `Secure`, a browser drops them over plain HTTP, and every sign-in
 is refused. The import accepts bodies up to 2 MiB, above the 1 MiB ingress-nginx
 lets through by default, so a daemon that pushes through this host needs
 `nginx.ingress.kubernetes.io/proxy-body-size` raised to match. A disclosure import takes up
-to 8 MiB, so a CI that publishes through this host needs `8m`.
+to 8 MiB, so the job that publishes disclosures through this host needs `8m`.
 
 ## The CI reads, it does not feed
 
@@ -131,9 +131,10 @@ one would make `status` false and would let a branch's findings read as
 production's. A CI job that wants the fleet's state calls `GET /api/findings`
 like any other reader. See [API.md](API.md).
 
-A periodic disclosure is the one thing a CI publishes, and it is not a finding. It is a
-report for a closed period, produced and signed in the CI by `perf-sentinel disclose`, which
-the Hub keeps and shows as it arrived, see [API.md](API.md#disclosures).
+A periodic disclosure is not a build output either, and it is not a finding. It is a report
+for a closed period, built by `perf-sentinel disclose` from the production daemons' archives
+and signed by a scheduled job, often a CI workflow for its OIDC identity. The Hub keeps and
+shows it as it arrived, see [API.md](API.md#disclosures).
 
 ## Grouping attributes are chosen at each daemon
 

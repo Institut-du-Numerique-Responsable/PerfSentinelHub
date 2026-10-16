@@ -41,7 +41,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:Auth:*`                       | désactivé                                                                      | Connexion OAuth2 du navigateur, limitable par groupe, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md) |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                        | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
 | `Hub:Access:*`                     | désactivé                                                                      | Contrôle d'accès, voir plus bas et [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md)                          |
-| `Hub:Disclosures:*`                | désactivé                                                                      | Divulgations périodiques qu'une CI publie, voir [plus bas](#divulgations)                                |
+| `Hub:Disclosures:*`                | désactivé                                                                      | Divulgations périodiques qu'une tâche planifiée publie, voir [plus bas](#divulgations)                   |
 | `Hub:Sources`                      | aucune                                                                         | Au moins une source                                                                                     |
 
 ## Réglages par source
@@ -251,7 +251,7 @@ formé et une référence de Secret manquante ; le schéma refuse des comptes lo
 
 ## Divulgations
 
-`Hub:Disclosures` active les divulgations périodiques qu'une CI publie, voir
+`Hub:Disclosures` active les divulgations périodiques qu'une tâche planifiée publie, voir
 [API-FR.md](API-FR.md#divulgations). Elles sont actives quand `ImportKey` est posé.
 Désactivées, le défaut, chaque route de divulgation répond `404`, le lanceur n'affiche pas
 d'onglet Disclosures, et aucun webhook n'est appelé. Chaque règle ci-dessous est contrôlée au

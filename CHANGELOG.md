@@ -19,14 +19,16 @@ All notable changes to PerfSentinelHub are recorded here.
   and the chart takes `pgStat` and `mysqlStat` per source, the auth header from a Secret.
 - `GET /api/sources/{sourceId}/acks` lists the daemon acks the Hub mirrors at a source, in
   the shape of the daemon's own `GET /api/acks`, filtered by what the caller reads there.
-- Periodic disclosures. A CI publishes the report `perf-sentinel disclose` wrote, with its
-  attestation and Sigstore bundle when signed, to `POST /api/import/disclosures` with
-  `Hub:Disclosures:ImportKey`. The embedded engine's `disclose-pdf` checks the content hash and
-  the attestation's binding and renders a PDF/A-3b before anything is stored, and a refusal
-  stores nothing. An engine that cannot render stores the files without a PDF, to render again
-  later. A signed copy of a report stored unsigned replaces it, and is refused with a `409` when
-  its organisation, period, intent, confidentiality or figures differ. The Hub never checks a signature: it says the report declares one, and prints the
-  `verify-hash` command with `ExpectedIdentity` and `ExpectedIssuer`.
+- Periodic disclosures. A scheduled job publishes the report `perf-sentinel disclose` built
+  from the production daemons' archives, with its attestation and Sigstore bundle when signed,
+  to `POST /api/import/disclosures` with `Hub:Disclosures:ImportKey`. The embedded engine's
+  `disclose-pdf` checks the content hash and the attestation's binding and renders a PDF/A-3b
+  before anything is stored, and a refusal stores nothing. An engine that cannot render stores
+  the files without a PDF, to render again later. A signed copy of a report stored unsigned
+  replaces it, and is refused with a `409` when its organisation, period, intent,
+  confidentiality or figures differ. The Hub never checks a signature: it says the report
+  declares one, and prints the `verify-hash` command with `ExpectedIdentity` and
+  `ExpectedIssuer`.
 - The Disclosures tab lists them by period, with who checked what, the files, `SHA256SUMS`, the
   method and the disclaimers. It needs `disclosures.read`, and sharing, withdrawing, retrying
   and rendering need `disclosures.manage`. Of the built-in roles only `admin` carries them, a

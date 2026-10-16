@@ -3,8 +3,8 @@
 Four surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
 plugin or a CI job reads the read API. The browser uses the analysis API and the ack relay,
 reads `/api/incidents` for its incidents screen, and reads `/api/findings` only on the ack
-page, by signature. Periodic disclosures sit apart from all four: a CI publishes them to a
-route of their own, and the launcher, a share link or a webhook carries them on, see
+page, by signature. Periodic disclosures sit apart from all four: a scheduled job publishes
+them to a route of their own, and the launcher, a share link or a webhook carries them on, see
 [Disclosures](#disclosures).
 
 ## Import API
@@ -560,11 +560,12 @@ query twice.
 
 ## Disclosures
 
-A periodic disclosure is the report `perf-sentinel disclose` writes for one period, signed or
-not, which a CI publishes to the Hub. The Hub checks and renders it with its embedded engine's
-`disclose-pdf`, keeps the files exactly as they arrived, serves them to the holders of
-`disclosures.read` and shares them through expiring links. Every route below answers `404`
-while `Hub:Disclosures:ImportKey` is unset, see
+A periodic disclosure is the report `perf-sentinel disclose` builds for one period from the
+production daemons' archives, signed or not. A scheduled job publishes it to the Hub, in
+practice a CI workflow, since keyless signing needs the OIDC identity the CI gives it. The Hub
+checks and renders it with its embedded engine's `disclose-pdf`, keeps the files exactly as they
+arrived, serves them to the holders of `disclosures.read` and shares them through expiring
+links. Every route below answers `404` while `Hub:Disclosures:ImportKey` is unset, see
 [CONFIGURATION.md](CONFIGURATION.md#disclosures).
 
 ### Publishing

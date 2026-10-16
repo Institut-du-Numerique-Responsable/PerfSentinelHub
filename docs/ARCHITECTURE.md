@@ -247,8 +247,9 @@ request, and the listing walks `analysis_runs` newest first until it has its lim
 
 ## Disclosures
 
-A periodic disclosure is made and signed outside the Hub, by `perf-sentinel disclose` and
-cosign in a CI job, then published to the Hub. The Hub adds no figure to it. Its code lives in
+A periodic disclosure is made and signed outside the Hub: a scheduled job, in practice a CI
+workflow, runs `perf-sentinel disclose` over the production daemons' archives and cosign over
+its output, then publishes it to the Hub. The Hub adds no figure to it. Its code lives in
 `Disclosures/` and in three route files of `Api/`.
 
 **Publishing.** `ApiEndpoints.Disclosures.cs` admits a request on the import key, its size, its

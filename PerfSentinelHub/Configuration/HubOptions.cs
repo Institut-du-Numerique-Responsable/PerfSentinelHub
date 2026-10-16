@@ -165,7 +165,7 @@ public static class AccessPermissions
 }
 
 /// <summary>
-///     Periodic disclosures a CI publishes to the Hub. On when ImportKey is set: the import
+///     Periodic disclosures a scheduled job publishes to the Hub. On when ImportKey is set: the import
 ///     route, the Disclosures screen, the share links and the webhooks all answer only then.
 /// </summary>
 public sealed record DisclosuresOptions

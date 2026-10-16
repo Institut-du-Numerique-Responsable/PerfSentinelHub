@@ -553,7 +553,7 @@ public enum DisclosureFile
     Pdf
 }
 
-/// <summary>The three files a CI publishes, each exactly as received.</summary>
+/// <summary>The three files a scheduled job publishes, each exactly as received.</summary>
 public sealed record DisclosureFiles(byte[] Report, byte[]? Attestation, byte[]? Bundle);
 
 public sealed record DisclosureRecord(
