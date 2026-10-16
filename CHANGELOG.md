@@ -12,6 +12,14 @@ All notable changes to PerfSentinelHub are recorded here.
   startup probe, and a kill rolled it back so every start began again. The derivation now runs
   after the Hub answers, in the retention worker's first pass, and takes the write lock only when
   a read-only check finds something to write.
+- An analysis page no longer says "No analysis with that ID." when the Hub merely failed to
+  answer. Any failed read of a run, a 503 while the Hub restarted included, read as an unknown ID
+  and stopped the page from asking again, so a run interrupted by that restart never showed as
+  such. Only a 404 now means an unknown run. Any other failure keeps what the page last read,
+  says the Hub is not answering, and asks again after 1 second, doubling up to 15.
+- The `/metrics` findings count runs on a thread of its own. SQLite runs its Async methods
+  synchronously, so a count of a minute held a thread pool thread for that minute, which a
+  liveness probe could then wait behind.
 
 ### Changed
 

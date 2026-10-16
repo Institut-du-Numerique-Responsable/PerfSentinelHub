@@ -94,6 +94,23 @@ public sealed class CachedCountTests
     }
 
     [Fact]
+    public async Task The_count_runs_on_a_thread_of_its_own_and_not_the_pool()
+    {
+        // SQLite runs its Async methods synchronously, so a count on the pool holds a
+        // pool thread for as long as it reads, which a probe then queues behind.
+        bool? onPool = null;
+        var cache = new CachedCount<int>(_ =>
+        {
+            onPool = Thread.CurrentThread.IsThreadPoolThread;
+            return Task.FromResult(1);
+        }, _clock, _logger);
+
+        await cache.GetAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(onPool);
+    }
+
+    [Fact]
     public async Task Nothing_counted_yet_and_past_the_budget_serves_nothing()
     {
         var never = new TaskCompletionSource<int>();
