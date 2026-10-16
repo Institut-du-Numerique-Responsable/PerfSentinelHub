@@ -160,10 +160,10 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
         ...disclosures.map((id, i): [string, string] => [id, (0xd1 + i).toString(16).padStart(16, "0")])
     ]);
     // A share link's id is the Hub's own random hex too, read off the detail that lists it.
-    for (const id of disclosures) {
-        const detail = await (await fetch(`${BASE}/api/disclosures/${id}`)).json() as { share_links: { id: string }[] };
+    const details = await Promise.all(disclosures.map(async id =>
+        await (await fetch(`${BASE}/api/disclosures/${id}`)).json() as { share_links: { id: string }[] }));
+    for (const detail of details)
         for (const link of detail.share_links) stable.set(link.id, (0xe1 + stable.size).toString(16).padStart(16, "0"));
-    }
     const renumber = (text: string) =>
         [...stable].reduce((acc, [from, to]) => acc.split(from).join(to), text);
     const read = async (path: string): Promise<[string, unknown]> => {
@@ -389,6 +389,7 @@ async function seedDisclosures(engine: string): Promise<string[]> {
     const dir = join(WORK, "disclosures");
     mkdirSync(dir, {recursive: true});
     const ids: string[] = [];
+    // One at a time: the Hub admits a single publication and answers 503 to a second.
     for (const quarter of quarters) {
         const report = scaled(base, quarter.scale) as Record<string, any>;
         report.report_metadata.report_uuid = `00000000-0000-4000-8000-0000000000a${quarter.n}`;
@@ -420,9 +421,9 @@ async function seedDisclosures(engine: string): Promise<string[]> {
             };
             form.append("attestation", new Blob([JSON.stringify(statement) + "\n"]), "attestation.intoto.jsonl");
         }
-        const response = await fetch(`${BASE}/api/import/disclosures`,
+        const response = await fetch(`${BASE}/api/import/disclosures`, // NOSONAR: one publication at a time
             {method: "POST", headers: {"x-api-key": DISCLOSURE_KEY}, body: form});
-        const answer = await response.json() as { id?: string, pdf?: string };
+        const answer = await response.json() as { id?: string, pdf?: string }; // NOSONAR: same publication
         if (response.status !== 201 || answer.pdf !== "rendered" || !answer.id)
             throw new Error(`quarter ${quarter.n} was not published and rendered: ${response.status} ${JSON.stringify(answer)}`);
         ids.push(answer.id);
