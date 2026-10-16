@@ -1301,3 +1301,21 @@ test("a link to one pair carries its key in the correlations route", () => {
     assert.equal(PSL.readCorrelationPair(null), "");
     assert.equal(PSL.screenOf("#/correlations?pair_key=x", false, false), "correlations");
 });
+
+test("an incident's correlations are cached per window, so a later end reads again", () => {
+    assert.equal(PSL.correlationWindowKey("k", 1000, 5000), PSL.correlationWindowKey("k", 1000, 5000));
+    assert.notEqual(PSL.correlationWindowKey("k", 1000, 5000), PSL.correlationWindowKey("k", 1000, 9000));
+});
+
+test("a pair's accessible name says both finding types and both services", () => {
+    const side = (type, service) => ({finding_type: type, service: service, template: "SELECT 1"});
+    assert.equal(
+        PSL.pairLabel({source: side("n_plus_one_sql", "order-svc"), target: side("pool_saturation", "payment-svc")}),
+        "N+1 SQL in order-svc, then Pool saturation in payment-svc");
+});
+
+test("a stale episode says so in plain text", () => {
+    assert.equal(PSL.episodeEndNote({ended_by: "stale"}), "stale");
+    assert.equal(PSL.episodeEndNote({ended_by: null}), "");
+});
+

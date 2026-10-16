@@ -1214,6 +1214,8 @@
             return;
         }
         state.traceHandoff = handoff;
+        // A trace replaces a window handed over before it, banner included.
+        state.handoff = null;
         state.form.mode = 'trace';
         state.form.traceId = handoff.traceId;
         state.form.service = '';
@@ -4513,6 +4515,8 @@
      */
     function loadIncidents() {
         state.incidents = null;
+        // A re-read may bring episodes pushed since: an unfolded incident asks again.
+        state.incidentCorrelations = {};
         state.incidentsError = false;
         state.incidentsDone = false;
         state.incidentsReading = true;
@@ -5288,7 +5292,7 @@
             class: 'row-toggle',
             'aria-expanded': open ? 'true' : 'false',
             'aria-controls': id,
-            'aria-label': pair.last.source.service + ', then ' + pair.last.target.service
+            'aria-label': PSL.pairLabel(pair.last)
         }, [pairCell(pair.last)]);
         button.addEventListener('click', function () {
             const next = button.getAttribute('aria-expanded') !== 'true';
@@ -5343,6 +5347,8 @@
             cell.appendChild(el('span', {class: 'chip', 'data-state': 'active', text: 'active'}));
         } else {
             cell.appendChild(document.createTextNode(PSL.episodeSpan(episode.started_at_ms, episode.ended_at_ms)));
+            const note = PSL.episodeEndNote(episode);
+            if (note) cell.appendChild(el('span', {class: 'table-muted', text: ' (' + note + ')'}));
         }
         return cell;
     }
@@ -5462,7 +5468,8 @@
      */
     function loadIncidentCorrelations(incident) {
         const key = incidentKey(incident);
-        state.incidentCorrelations[key] = 'loading';
+        const cacheKey = PSL.correlationWindowKey(key, incident.window_from_ms, incidentEnd(incident));
+        state.incidentCorrelations[cacheKey] = 'loading';
         const scope = '/api/correlations?source_id=' + encodeURIComponent(incident.source_id);
         getJson(scope + '&from=' + incident.window_from_ms + '&to=' + incidentEnd(incident))
             .then(function (rows) {
@@ -5472,10 +5479,10 @@
                 });
             })
             .then(function (result) {
-                state.incidentCorrelations[key] = result;
+                state.incidentCorrelations[cacheKey] = result;
             })
             .catch(function () {
-                state.incidentCorrelations[key] = 'error';
+                state.incidentCorrelations[cacheKey] = 'error';
             })
             .finally(function () {
                 const cell = document.getElementById('incident-detail-' + key);
@@ -5484,7 +5491,8 @@
     }
 
     function incidentCorrelationsBlock(incident) {
-        const held = state.incidentCorrelations[incidentKey(incident)];
+        const cacheKey = PSL.correlationWindowKey(incidentKey(incident), incident.window_from_ms, incidentEnd(incident));
+        const held = state.incidentCorrelations[cacheKey];
         if (held === undefined) {
             queueMicrotask(function () {
                 loadIncidentCorrelations(incident);
@@ -5501,6 +5509,8 @@
         if (held === undefined || held === 'loading') {
             block.appendChild(el('p', {class: 'daemon-loading', role: 'status', text: 'Reading the correlations.'}));
         } else if (held === 'error') {
+            // Shown once: the next render of this panel, a refold or a re-read, asks again.
+            delete state.incidentCorrelations[cacheKey];
             block.appendChild(el('p', {class: 'table-muted', text: 'The Hub did not return the correlations of this window.'}));
         } else if (held.rows.length > 0) {
             block.appendChild(el('div', {class: 'sources-wrap'}, [incidentEpisodesTable(held.rows)]));
@@ -5509,7 +5519,7 @@
                 class: 'empty-state',
                 text: held.pushes
                     ? 'No correlation was active in this window.'
-                    : (incident.source_name || incident.source_id) + ' pushes no correlations, so none can show here.'
+                    : (incident.source_name || incident.source_id) + ' pushes no correlation you can read, so none can show here.'
             }));
         }
         return block;

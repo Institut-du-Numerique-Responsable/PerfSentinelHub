@@ -1256,6 +1256,41 @@
     }
 
     /**
+     * The cache key of an incident's correlations: the window it was read for, so an incident
+     * that ended since, or a wider read, asks again instead of serving the first answer.
+     * @param {string} incidentKey
+     * @param {number} fromMs
+     * @param {number} toMs
+     * @returns {string}
+     */
+    function correlationWindowKey(incidentKey, fromMs, toMs) {
+        return incidentKey + '@' + fromMs + '-' + toMs;
+    }
+
+    /**
+     * A pair's accessible name: both finding types and both services, so two pairs between
+     * the same services read apart.
+     * @param {{source: {finding_type: string, service: string}, target: {finding_type: string, service: string}}} episode
+     * @returns {string}
+     */
+    function pairLabel(episode) {
+        const side = function (end) {
+            return (FINDING_TYPE_LABEL[end.finding_type] || end.finding_type) + ' in ' + end.service;
+        };
+        return side(episode.source) + ', then ' + side(episode.target);
+    }
+
+    /**
+     * What an ended episode says beside its span: `stale` when the Hub ended it because its
+     * daemon went quiet, nothing when the daemon closed it.
+     * @param {{ended_by?: string | null}} episode
+     * @returns {string}
+     */
+    function episodeEndNote(episode) {
+        return episode.ended_by === 'stale' ? 'stale' : '';
+    }
+
+    /**
      * The route of the ack page. The environment and the source only decide
      * which rows start checked, so a link without them is whole. A blank one is
      * left out: Grafana sends a single space for the All choice of a variable.
@@ -1915,6 +1950,9 @@
         readHandoff,
         CORRELATION_RANGES,
         readCorrelationPair,
+        correlationWindowKey,
+        pairLabel,
+        episodeEndNote,
         correlationPairs,
         spansOverlap,
         episodeHandoffHash,

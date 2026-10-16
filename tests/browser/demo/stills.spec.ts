@@ -163,6 +163,17 @@ test("correlations hand the last pair's traces to a new analysis", async ({page}
     await expect(trace).not.toHaveValue(first);
 });
 
+test("correlations keep one banner from a window to a trace", async ({page}) => {
+    await openPair(page);
+    await page.getByRole("link", {name: "Analyse this window"}).first().click();
+    await expect(page.locator(".banner", {hasText: "from the correlations screen"})).toBeVisible();
+    await page.goBack();
+    await expect(page.locator(".daemon-detail:not([hidden]) .timeline-strip")).toBeVisible();
+    await page.getByRole("link", {name: "Explain the last pair"}).first().click();
+    await expect(page.locator(".banner", {hasText: "A trace of the last co-occurrence"})).toBeVisible();
+    await expect(page.locator(".banner", {hasText: "Window of"})).toHaveCount(0);
+});
+
 test("correlations open on the pair a link names", async ({page}) => {
     await openPair(page);
     const pairKey = await page.evaluate(() => fetch("/api/correlations?service=orders-svc&limit=1")
@@ -210,7 +221,7 @@ test("correlations an incident cannot show", async ({page}) => {
         .toBeVisible({timeout: 15_000});
     await page.locator("button.row-toggle", {hasText: "cache-svc"}).click();
     await expect(page.locator(".incident-correlations",
-        {hasText: "Billing staging pushes no correlations, so none can show here."})).toBeVisible({timeout: 15_000});
+        {hasText: "Billing staging pushes no correlation you can read, so none can show here."})).toBeVisible({timeout: 15_000});
 });
 
 test("correlations open every episode of an incident's pair", async ({page}) => {
