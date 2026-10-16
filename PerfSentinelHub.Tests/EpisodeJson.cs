@@ -8,7 +8,8 @@ namespace PerfSentinelHub.Tests;
 /// <summary>An episode as a daemon pushes it, each field valid until a test overrides it.</summary>
 internal static class EpisodeJson
 {
-    public const string PairKey = "0123456789abcdef0123456789abcdef";
+    // Low-entropy on purpose: a secret scanner reads a random-looking value here as a key.
+    public const string PairKey = "000000000000000000000000000000aa";
 
     public static string Id(int index)
     {
