@@ -145,6 +145,21 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_publication_and_a_withdrawal_each_land_with_their_events_and_only_once()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        Assert.True(await _database.InsertDisclosureAsync(Record("d1", "uuid-1"), ["auditors"], cancellationToken));
+        Assert.False(await _database.InsertDisclosureAsync(Record("d2", "uuid-1"), ["auditors"], cancellationToken));
+        Assert.True(await _database.WithdrawAsync("d1", "wrong", "alice", NowMs, ["auditors"], cancellationToken));
+        Assert.False(await _database.WithdrawAsync("d1", "again", "bob", NowMs, ["auditors"], cancellationToken));
+
+        Assert.Equal(["published", "withdrawn"],
+            (await _database.ListDeliveriesAsync("d1", cancellationToken)).Select(delivery => delivery.Event));
+        Assert.Empty(await _database.ListDeliveriesAsync("d2", cancellationToken));
+    }
+
+    [Fact]
     public async Task An_expired_or_revoked_link_is_not_found()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

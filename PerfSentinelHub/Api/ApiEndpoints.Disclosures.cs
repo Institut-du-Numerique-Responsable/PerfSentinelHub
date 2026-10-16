@@ -199,22 +199,19 @@ public static partial class ApiEndpoints
             var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
             var (pdf, reason) = Rendering(outcome);
             var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-            var stored = await database.InsertDisclosureAsync(
-                new DisclosureRecord(
-                    id, envelope.ReportUuid, envelope.Organisation, envelope.PeriodType, envelope.PeriodFrom,
-                    envelope.PeriodTo, envelope.Intent, envelope.Confidentiality, envelope.ContentHash,
-                    envelope.IntegrityLevel, envelope.FiguresJson, files, pdf, reason, engine.Version,
-                    pdf is null ? null : true, pdf is null || files.Attestation is null ? null : true, nowMs),
-                cancellationToken);
-            if (!stored)
+            // Internal reports never leave the Hub, and a webhook takes public ones only.
+            string[] webhooks = envelope.Internal
+                ? []
+                : [.. disclosures.Webhooks.Where(webhook => webhook.Confidentiality == "public").Select(webhook => webhook.Name)];
+            if (!await database.InsertDisclosureAsync(
+                    new DisclosureRecord(
+                        id, envelope.ReportUuid, envelope.Organisation, envelope.PeriodType, envelope.PeriodFrom,
+                        envelope.PeriodTo, envelope.Intent, envelope.Confidentiality, envelope.ContentHash,
+                        envelope.IntegrityLevel, envelope.FiguresJson, files, pdf, reason, engine.Version,
+                        pdf is null ? null : true, pdf is null || files.Attestation is null ? null : true, nowMs),
+                    webhooks, cancellationToken))
                 return Conflict(metrics);
 
-            // Internal reports never leave the Hub, and a webhook takes public ones only.
-            if (!envelope.Internal)
-                await database.EnqueueDeliveriesAsync(
-                    id, "published",
-                    [.. disclosures.Webhooks.Where(webhook => webhook.Confidentiality == "public").Select(webhook => webhook.Name)],
-                    nowMs, cancellationToken);
             LogPublished(logger, id, envelope.Organisation, envelope.PeriodFrom, envelope.PeriodTo, pdf is not null);
             return Accepted((await database.GetDisclosureAsync(id, cancellationToken))!, StatusCodes.Status201Created);
         }

@@ -14,11 +14,24 @@ public sealed partial class HubDatabase
                                              withdrawn_reason, withdrawn_by
                                              """;
 
-    /// <summary>False when the report's uuid is already stored: the caller decides between 200 and 409.</summary>
-    public async Task<bool> InsertDisclosureAsync(DisclosureRecord record, CancellationToken cancellationToken)
+    public Task<bool> InsertDisclosureAsync(DisclosureRecord record, CancellationToken cancellationToken)
     {
-        return await WriteAsync(async command =>
+        return InsertDisclosureAsync(record, [], cancellationToken);
+    }
+
+    /// <summary>
+    ///     False when the report's uuid is already stored: the caller decides between 200 and 409.
+    ///     The published event to each webhook lands in the same transaction, or nothing does.
+    /// </summary>
+    public Task<bool> InsertDisclosureAsync(
+        DisclosureRecord record,
+        IReadOnlyList<string> webhooks,
+        CancellationToken cancellationToken)
+    {
+        return WriteTransactionAsync(async (connection, transaction) =>
         {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
             command.CommandText = """
                                   INSERT INTO disclosures(
                                     id, report_uuid, organisation, period_type, period_from, period_to, intent,
@@ -50,7 +63,11 @@ public sealed partial class HubDatabase
             command.Parameters.AddWithValue("$hash_checked", Nullable(record.HashChecked));
             command.Parameters.AddWithValue("$binding_checked", Nullable(record.BindingChecked));
             command.Parameters.AddWithValue("$published_at", record.PublishedAtMs);
-            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+                return false;
+            await InsertDeliveriesAsync(connection, transaction, record.Id, "published", webhooks, record.PublishedAtMs,
+                cancellationToken);
+            return true;
         }, cancellationToken);
     }
 
@@ -154,11 +171,27 @@ public sealed partial class HubDatabase
         return await command.ExecuteScalarAsync(cancellationToken) as byte[];
     }
 
-    /// <summary>False when it does not exist or was already withdrawn: a withdrawal is final.</summary>
-    public async Task<bool> WithdrawAsync(string id, string reason, string by, long nowMs, CancellationToken cancellationToken)
+    public Task<bool> WithdrawAsync(string id, string reason, string by, long nowMs, CancellationToken cancellationToken)
     {
-        return await WriteAsync(async command =>
+        return WithdrawAsync(id, reason, by, nowMs, [], cancellationToken);
+    }
+
+    /// <summary>
+    ///     False when it does not exist or was already withdrawn: a withdrawal is final. The
+    ///     withdrawn event to each webhook in <paramref name="tell" /> lands in the same transaction.
+    /// </summary>
+    public Task<bool> WithdrawAsync(
+        string id,
+        string reason,
+        string by,
+        long nowMs,
+        IReadOnlyList<string> tell,
+        CancellationToken cancellationToken)
+    {
+        return WriteTransactionAsync(async (connection, transaction) =>
         {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
             command.CommandText = """
                                   UPDATE disclosures
                                   SET withdrawn_at_ms = $now, withdrawn_reason = $reason, withdrawn_by = $by
@@ -168,7 +201,10 @@ public sealed partial class HubDatabase
             command.Parameters.AddWithValue("$reason", reason);
             command.Parameters.AddWithValue("$by", by);
             command.Parameters.AddWithValue("$now", nowMs);
-            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+            if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+                return false;
+            await InsertDeliveriesAsync(connection, transaction, id, "withdrawn", tell, nowMs, cancellationToken);
+            return true;
         }, cancellationToken);
     }
 
@@ -306,34 +342,38 @@ public sealed partial class HubDatabase
     {
         if (webhooks.Count == 0)
             return;
-        await _writeGate.WaitAsync(cancellationToken);
-        try
+        await WriteTransactionAsync(async (connection, transaction) =>
         {
-            await using var connection = await OpenConnectionAsync(cancellationToken);
-            await using var transaction = connection.BeginTransaction(false);
-            foreach (var webhook in webhooks)
-            {
-                await using var command = connection.CreateCommand();
-                command.Transaction = transaction;
-                command.CommandText = """
-                                      INSERT INTO disclosure_deliveries(
-                                        id, disclosure_id, webhook, event, state, created_at_ms, next_attempt_ms)
-                                      VALUES ($id, $disclosure_id, $webhook, $event, $state, $now, $now);
-                                      """;
-                command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-                command.Parameters.AddWithValue("$disclosure_id", disclosureId);
-                command.Parameters.AddWithValue("$webhook", webhook);
-                command.Parameters.AddWithValue("$event", eventName);
-                command.Parameters.AddWithValue("$state", DeliveryStates.Pending);
-                command.Parameters.AddWithValue("$now", nowMs);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
+            await InsertDeliveriesAsync(connection, transaction, disclosureId, eventName, webhooks, nowMs, cancellationToken);
+            return true;
+        }, cancellationToken);
+    }
 
-            await transaction.CommitAsync(cancellationToken);
-        }
-        finally
+    private static async Task InsertDeliveriesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string disclosureId,
+        string eventName,
+        IReadOnlyList<string> webhooks,
+        long nowMs,
+        CancellationToken cancellationToken)
+    {
+        foreach (var webhook in webhooks)
         {
-            _writeGate.Release();
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                                  INSERT INTO disclosure_deliveries(
+                                    id, disclosure_id, webhook, event, state, created_at_ms, next_attempt_ms)
+                                  VALUES ($id, $disclosure_id, $webhook, $event, $state, $now, $now);
+                                  """;
+            command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
+            command.Parameters.AddWithValue("$disclosure_id", disclosureId);
+            command.Parameters.AddWithValue("$webhook", webhook);
+            command.Parameters.AddWithValue("$event", eventName);
+            command.Parameters.AddWithValue("$state", DeliveryStates.Pending);
+            command.Parameters.AddWithValue("$now", nowMs);
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
     }
 
@@ -445,6 +485,26 @@ public sealed partial class HubDatabase
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             return await write(command);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    // Several writes under the gate, committed together or not at all.
+    private async Task<T> WriteTransactionAsync<T>(
+        Func<SqliteConnection, SqliteTransaction, Task<T>> write,
+        CancellationToken cancellationToken)
+    {
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var transaction = connection.BeginTransaction(false);
+            var result = await write(connection, transaction);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
         }
         finally
         {

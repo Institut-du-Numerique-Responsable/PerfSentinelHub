@@ -183,19 +183,15 @@ public static partial class ApiEndpoints
                 $"reason is required, {MaxWithdrawReasonChars} characters at most and no control character.");
         if (await database.GetDisclosureAsync(id, cancellationToken) is null)
             return TypedResults.NotFound();
-        var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
-        if (!await database.WithdrawAsync(id, reason, RelayIdentity(request, options.Value)!, nowMs, cancellationToken))
-            return Problem(StatusCodes.Status409Conflict, "This disclosure is already withdrawn.");
-
         var told = (await database.ListDeliveriesAsync(id, cancellationToken))
             .Where(delivery => delivery.Event == "published")
             .Select(delivery => delivery.Webhook)
             .ToHashSet(StringComparer.Ordinal);
-        await database.EnqueueDeliveriesAsync(
-            id, "withdrawn",
-            [.. options.Value.Disclosures.Webhooks.Select(webhook => webhook.Name).Where(told.Contains)],
-            nowMs, cancellationToken);
-        return TypedResults.NoContent();
+        return await database.WithdrawAsync(
+            id, reason, RelayIdentity(request, options.Value)!, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
+            [.. options.Value.Disclosures.Webhooks.Select(webhook => webhook.Name).Where(told.Contains)], cancellationToken)
+            ? TypedResults.NoContent()
+            : Problem(StatusCodes.Status409Conflict, "This disclosure is already withdrawn.");
     }
 
     private static async Task<IResult> RetryDeliveryAsync(

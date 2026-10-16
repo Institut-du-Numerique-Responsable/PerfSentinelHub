@@ -169,8 +169,7 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
     {
         var hub = await PublishedAsync(includeShareLink: true);
         await RunAsync(hub);
-        await Database(hub).WithdrawAsync("d1", "wrong", "alice", 10_000, CancellationToken.None);
-        await Database(hub).EnqueueDeliveriesAsync("d1", "withdrawn", ["auditors"], 10_000, CancellationToken.None);
+        await Database(hub).WithdrawAsync("d1", "wrong", "alice", 10_000, ["auditors"], CancellationToken.None);
 
         await RunAsync(hub);
 
