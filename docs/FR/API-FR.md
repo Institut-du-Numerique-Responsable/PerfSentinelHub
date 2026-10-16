@@ -3,7 +3,9 @@
 Quatre surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'import. Un
 greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse et
 le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et ne lit
-`/api/findings` que sur la page d'acquittement, par signature.
+`/api/findings` que sur la page d'acquittement, par signature. Les divulgations périodiques
+se tiennent à part des quatre : une CI les publie sur une route qui leur est propre, et le
+lanceur, un lien de partage ou un webhook les transmet, voir [Divulgations](#divulgations).
 
 ## API d'import
 
@@ -54,7 +56,7 @@ push n'exerce pas.
 
 | Endpoint                             | Renvoie                                                                                                                                                                                                            |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport    |
+| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport. `disclosures: true` seulement tant que les divulgations sont actives et que l'appelant les lit |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
 | `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                   |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
@@ -598,9 +600,181 @@ Un run encore en cours à l'arrêt du service revient `interrupted` et n'est jam
 de lui-même. Une reprise silencieuse lancerait une seconde requête lourde vers un backend
 que personne n'a demandé d'interroger deux fois.
 
+## Divulgations
+
+Une divulgation périodique est le rapport que `perf-sentinel disclose` écrit pour une
+période, signé ou non, qu'une CI publie sur le Hub. Le Hub le vérifie et le rend avec le
+`disclose-pdf` de son moteur embarqué, garde les fichiers tels qu'ils sont arrivés, les sert
+aux détenteurs de `disclosures.read` et les partage par des liens qui expirent. Chaque route
+ci-dessous répond `404` tant que `Hub:Disclosures:ImportKey` n'est pas posé, voir
+[CONFIGURATION-FR.md](CONFIGURATION-FR.md#divulgations).
+
+### Publier
+
+`POST /api/import/disclosures` prend `X-API-Key` avec `Hub:Disclosures:ImportKey`, jamais une
+session, et un corps `multipart/form-data` de 8 Mio au plus. Ses parties sont `report`,
+obligatoire, puis `attestation` et `bundle`, chacune envoyée une fois et jamais vide. Toute
+autre partie refuse le corps entier. Une seule publication tourne à la fois, et la requête a
+60 secondes, dont 45 pour le moteur.
+
+```sh
+curl --fail -H "X-API-Key: $HUB_DISCLOSURES_KEY" \
+  -F report=@report.json \
+  -F attestation=@attestation.intoto.jsonl \
+  -F bundle=@bundle.sig \
+  https://hub.example.com/api/import/disclosures
+```
+
+Le Hub lit l'identité du rapport, sa période et sa confidentialité, puis lance le moteur sur
+les trois fichiers. Rien n'est stocké avant la réponse du moteur, et un refus ne stocke rien.
+
+| Réponse                     | Quand                                                                                                         |
+|-----------------------------|---------------------------------------------------------------------------------------------------------------|
+| `201`                       | Une nouvelle divulgation, stockée                                                                             |
+| `200`                       | Les mêmes octets à nouveau, ou la copie signée d'un rapport stocké sans signature, qui le remplace. Pas de second événement |
+| `401`                       | Une clé absente ou fausse                                                                                     |
+| `404`                       | Les divulgations sont coupées                                                                                 |
+| `408`                       | Au-delà de 60 secondes                                                                                        |
+| `409 {"reason":"conflict"}` | Un autre rapport sous un `report_uuid` déjà publié. Un nouveau rapport prend un nouvel uuid                    |
+| `413`                       | Un corps de plus de 8 Mio                                                                                     |
+| `415`                       | Pas du `multipart/form-data` avec une frontière                                                               |
+| `422 {"reason":"…"}`        | Refusé, voir plus bas                                                                                         |
+| `503`                       | Une autre publication est en cours, avec `Retry-After: 1`                                                     |
+
+Les raisons du `422` sont `content_hash_mismatch`, l'empreinte ne se recalcule pas,
+`binding_mismatch`, l'attestation nomme un autre rapport, `malformed_report`, un corps, une
+partie ou un rapport que le Hub ou le moteur ne sait pas lire, `file_too_large`,
+`missing_file`, `internal_refused`, un rapport interne alors que
+`Hub:Disclosures:AllowInternal` est coupé, et `engine_contract`, une réponse du moteur hors de
+son contrat.
+
+Une publication prise répond
+`{"id":"…","pdf":"rendered","reason":null,"content_hash_checked":true,"binding_checked":true}`.
+`binding_checked` vaut null sans attestation. Un moteur qui ne sait pas dessiner le rapport
+(sa sortie 5, un dépassement de délai) ou qui n'a pas `disclose-pdf` le stocke quand même,
+`pdf` à `not_checked`, les deux contrôles à faux ou null, et `reason` dit pourquoi : la raison
+du moteur, ou `unsupported_engine`. La route de rendu plus bas réessaie une fois que le moteur
+le peut.
+
+### Lire
+
+| Endpoint                                 | Renvoie                                                                          |
+|------------------------------------------|----------------------------------------------------------------------------------|
+| `GET /api/disclosures`                   | Chaque divulgation, période la plus récente d'abord, les retirées marquées. Aucun fichier |
+| `GET /api/disclosures/{id}`              | Une divulgation avec ses contrôles, ses liens de partage et ses livraisons       |
+| `GET /api/disclosures/{id}/files/{name}` | Un de ses fichiers, en pièce jointe, avec `X-Content-Type-Options: nosniff`      |
+
+Elles exigent `disclosures.read`, sinon `403 {"detail":"You may not read disclosures."}`.
+
+Une divulgation listée porte `id`, `report_uuid`, `organisation`, `period` (`type`, `from`,
+`to`), `intent`, `confidentiality`, `content_hash`, `integrity_level`, `figures`, les quelques
+totaux qu'une carte affiche, lus dans le rapport, `files` (`report`, `attestation`, `bundle`
+et `pdf` en booléens), `pdf` (`rendered` ou `not_checked`), `render_reason`,
+`published_at_ms`, `signature_added_at_ms` et `withdrawn` (`at_ms`, `reason`, `by`, ou null).
+
+Le détail ajoute `checks`, qui dit qui a vérifié quoi. `content_hash` vaut `checked` quand le
+moteur l'a recalculée ici, `not_checked` sinon. `binding` vaut `checked`, `not_checked` ou
+`no_attestation`. `signature` ne vaut jamais que `declared` ou `absent` : ce que le
+`integrity_level` du rapport dit de lui-même, puisque le Hub ne vérifie jamais une signature.
+`engine_version` est le moteur qui l'a rendu. `share_links` liste chaque lien sans son jeton :
+`id`, `state` (`active`, `expired` ou `revoked`), `created_by`, `created_at_ms`,
+`expires_at_ms`, `revoked_at_ms`, `revoked_by`, `downloads` et `last_used_at_ms`.
+`deliveries` liste chaque événement de webhook par le nom du webhook, jamais son URL : `id`,
+`webhook`, `event`, `state` (`pending`, `delivered` ou `failed`), `attempts`,
+`last_attempt_ms`, `next_attempt_ms` et `last_status`. `expected_identity` et
+`expected_issuer` sont le signataire configuré, pour la commande de vérification.
+
+Les noms de fichier sont `report.json`, `attestation.intoto.jsonl`, `bundle.sig`,
+`report.pdf` et `SHA256SUMS`, calculé à chaque requête au format que lit `sha256sum -c`. Tout
+autre nom, ou un fichier que la divulgation n'a pas, est un `404`.
+
+### Partager et retirer
+
+Ces routes exigent `disclosures.manage` et quelqu'un à nommer, comme le
+[relais d'acquittement](#relais-dacquittement) : une session `Hub:Auth`, ou l'en-tête
+d'identité une fois `Hub:AckRelay:TrustIdentityHeader` posé. Elles suivent aussi sa règle de
+même origine : un `Sec-Fetch-Site` présent qui ne vaut pas `same-origin` est un `403`, et un
+type de contenu qui n'est pas du JSON un `415`, un `DELETE` compris.
+
+| Endpoint                                                   | Corps                | Réponses                                                   |
+|------------------------------------------------------------|----------------------|------------------------------------------------------------|
+| `POST /api/disclosures/{id}/share-links`                   | `{"days":n}` ou `{}` | `201` avec le jeton, une seule fois                        |
+| `DELETE /api/disclosures/{id}/share-links/{linkId}`        | aucun                | `204`, ou `404` pour un lien inconnu ou déjà révoqué       |
+| `POST /api/disclosures/{id}/withdraw`                      | `{"reason":"…"}`     | `204`, ou `409` si elle est déjà retirée                   |
+| `POST /api/disclosures/{id}/deliveries/{deliveryId}/retry` | `{}`                 | `204`, ou `409` pour une livraison déjà passée             |
+| `POST /api/disclosures/{id}/render`                        | `{}`                 | `200` avec la réponse d'une publication, ou `422` avec une raison |
+
+Un lien de partage dure `days`, de 1 à 30, `Hub:Disclosures:ShareLinkDays` quand le corps
+l'omet. La réponse,
+`{"id":"…","token":"pshare_…","path":"/share/pshare_…/","expires_at_ms":…}`, est le seul
+endroit où le jeton apparaît : le Hub en stocke le SHA-256. Une divulgation interne n'est
+jamais partagée (`422 {"reason":"internal_not_shareable"}`), une divulgation retirée non plus
+(`409`).
+
+Un retrait est définitif. Sa raison, de 1 à 500 caractères sans caractère de contrôle, est
+gardée avec le nom de l'appelant. Les fichiers restent et restent lisibles, chaque lien de
+partage cesse de répondre, et un événement `withdrawn` part vers chaque webhook à qui
+l'événement `published` était adressé. Une divulgation fausse est remplacée par une nouvelle,
+sous un nouvel uuid.
+
+Une relance remet dans la file une livraison qui attend ou qui a abandonné, due au passage
+suivant. Elle garde son nombre de tentatives, si bien qu'une livraison qui avait abandonné
+abandonne de nouveau à son échec suivant. Un rendu relance le moteur sur les fichiers
+stockés, pour une divulgation stockée avant de pouvoir être rendue.
+
+### Liens de partage
+
+`GET /share/{token}/{name}` sert les cinq noms ci-dessus sous un jeton valide, sans
+authentification : ni révoqué, ni expiré, et d'une divulgation non retirée. Tout le reste sous
+`/share/`, quelle qu'en soit la raison, reçoit un même `404` sans corps. Chaque réponse porte
+`Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` et
+`X-Robots-Tag: noindex`. La route se tient hors de la connexion et du contrôle d'accès, et le
+jeton est tout l'identifiant.
+
+Un lien compte ses téléchargements en mémoire et les écrit une fois par minute et à l'arrêt,
+si bien qu'un plantage perd au plus une minute de comptes. L'adresse du client n'est
+enregistrée avec le compte que lorsque `Hub:Auth:TrustedProxyNetworks` est posé, puisque le
+Hub ne sait pas sinon distinguer un client de son proxy, et aucune route ne la sert.
+
+Le moteur vérifie une divulgation partagée depuis son lien, en allant chercher l'attestation
+et le bundle à côté :
+
+```sh
+perf-sentinel verify-hash --url https://hub.example.com/share/pshare_…/report.json \
+  --expected-identity release@example.com --expected-issuer https://accounts.google.com
+```
+
+### Webhooks
+
+Chaque webhook de `Hub:Disclosures:Webhooks` reçoit un `POST` à corps JSON quand une
+divulgation publique est publiée, et quand elle est retirée si la publication lui était
+adressée. Une divulgation interne n'est jamais envoyée.
+
+```json
+{"event":"published","disclosure_id":"…","organisation":"…",
+ "period":{"type":"calendar-quarter","from":"2026-07-01","to":"2026-09-30"},
+ "content_hash":"…","intent":"official","integrity_level":"signed-with-attestation",
+ "share_url":null}
+```
+
+`X-PerfSentinel-Timestamp` porte l'heure Unix en secondes, et `X-PerfSentinel-Signature`
+`sha256=` suivi du HMAC-SHA256 en hexadécimal minuscule de `<timestamp>.<body>` sous le
+`Secret` du webhook. Un destinataire le recalcule sur le corps brut, compare en temps
+constant, et refuse un horodatage plus ancien que ce qu'il accepte. Avec `IncludeShareLink`,
+un événement `published` porte dans `share_url` un lien qui lui est propre, émis pour cette
+tentative pour les `ShareLinkDays` du webhook, nommé `webhook:<name>` dans `created_by`, vers
+`report.pdf` une fois rendu et `report.json` sinon. Une tentative qui échoue révoque son lien.
+
+Les livraisons tournent toutes les 15 secondes depuis la table `disclosure_deliveries`, si
+bien qu'un redémarrage les reprend. Un `2xx` en règle une. Tout autre statut, une redirection
+comprise, jamais suivie, ou aucune réponse dans `Hub:HttpTimeout` est retenté après 30
+secondes, puis après une attente qui double, plafonnée à une heure, 8 tentatives en tout,
+après quoi la livraison est `failed`. Une livraison vers un webhook qui n'est plus configuré
+échoue sans requête.
+
 ## Avec le contrôle d'accès
 
-Avec `Hub:Access:Enabled`, chaque route sauf l'import, `/health`, `/metrics` (anonyme,
+Avec `Hub:Access:Enabled`, chaque route sauf les imports, `/share/`, `/health`, `/metrics` (anonyme,
 sur `Hub:MetricsPort` seulement) et les `POST /auth/device`, `POST /auth/device/token` et
 `POST /auth/revoke` de la CLI ([Connexion du terminal](#connexion-du-terminal)), et les
 routes de la page de connexion ([Connexion locale](#connexion-locale)), exige une
@@ -654,6 +828,10 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   traversent**, comptes de `result` compris. Un rapport de daemon devient live à travers le
   relais d'acquittement (`--hub-relay`) quand la source a un identifiant d'acquittement,
   sous les contrôles ci-dessus. Les autres sont rendus statiques : pas de `--daemon-url`.
+- **Les divulgations** exigent `disclosures.read` ou `disclosures.manage` sur `*`, qu'aucun
+  jeton machine ne détient. Un appelant qui ne l'a pas reçoit `403`, jamais une liste
+  filtrée, puisqu'une divulgation n'appartient à aucune source. L'import garde sa propre clé
+  et `/share/` son jeton, tous deux hors du contrôle d'accès.
 
 Depuis la CI :
 

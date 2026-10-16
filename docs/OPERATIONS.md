@@ -84,7 +84,7 @@ one does. Until it lands, such a copy matches no attribute scope.
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather
-than through a library: thirteen metric families over data the Hub already holds do
+than through a library: fifteen metric families over data the Hub already holds do
 not justify a dependency in a service whose only two packages are SQLite.
 
 | Metric                                                                 | Type    | What it answers                                       |
@@ -102,6 +102,15 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Distinct finding signatures stored, per environment   |
 | `perf_sentinel_hub_findings_age_seconds`                               | gauge   | Age of the counts behind `findings`                   |
 | `perf_sentinel_hub_database_bytes`                                     | gauge   | Size of the database file and its write-ahead log     |
+| `perf_sentinel_hub_disclosure_import_rejected_total{reason}`           | counter | Disclosure publications refused, by reason            |
+| `perf_sentinel_hub_disclosure_deliveries_failed_total`                 | counter | Webhook deliveries that gave up after their last attempt |
+
+The two disclosure families appear only while disclosures are on, so a Hub without them
+scrapes as it did before. `reason` takes eight constants: `unauthorized`, `gate_full`,
+`too_large`, `unsupported_media_type`, `malformed_report`, `render_refused`,
+`internal_refused` and `conflict`. `render_refused` is the engine's refusal, a hash that does
+not recompute or an attestation that names another report. Both counters start from zero at
+each start, as the findings import counter does.
 
 Four things the shape is deliberate about.
 
@@ -209,7 +218,7 @@ Four files under [`examples/`](../examples), each validated rather than sketched
 
 | File                                                                       | Is                                                                     |
 |----------------------------------------------------------------------------|------------------------------------------------------------------------|
-| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Eleven panels over eight of the thirteen families, importable as it stands |
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Eleven panels over eight of the fifteen families, importable as it stands |
 | [`FR/grafana-dashboard-FR.json`](../examples/FR/grafana-dashboard-FR.json) | The same dashboard with French titles and descriptions                 |
 | [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)               | One rule, checked with `promtool check rules`                          |
 | [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)               | A scrape job for a deployment that names its targets                   |
@@ -270,6 +279,33 @@ provenance the Hub does not store. And Prometheus holds no list of the sources
 that ought to exist, so a daemon the Hub has never reached is silent rather than
 alarming, which is a case for the fleet screen.
 
+## Disclosures
+
+With `Hub:Disclosures:ImportKey` set, the Hub takes periodic disclosures from a CI, see
+[API.md](API.md#disclosures). Three things change in how it runs.
+
+**Request logs.** A share link's token travels in the request path, and ASP.NET Core's hosting
+layer logs every path at Information. While disclosures are on, the Hub raises
+`Microsoft.AspNetCore.Hosting` to Warning, so no token reaches its own logs. The ingress
+controller's access log still records each path, tokens included: keep it as private as the
+links, or strip `/share/` paths from it. A token is revoked from the launcher or with
+`DELETE /api/disclosures/{id}/share-links/{linkId}`.
+
+**Webhooks.** Deliveries run every 15 seconds and resume after a restart. A webhook URL never
+reaches a log line, the HTTP client's own request logging included, since a chat webhook URL
+carries its own secret. A delivery that gives up after 8 attempts counts on
+`perf_sentinel_hub_disclosure_deliveries_failed_total` and can be sent again from the launcher.
+
+**Log events.**
+
+| Event  | Level       | Says                                                                       |
+|--------|-------------|----------------------------------------------------------------------------|
+| `2401` | Information | A disclosure was published, with its organisation, period and whether it rendered |
+| `2402` | Warning     | Share-link download counts could not be written and are lost                |
+| `2403` | Warning     | A webhook could not be reached, by name. The delivery is retried            |
+| `2404` | Warning     | A delivery gave up after its last attempt                                   |
+| `2405` | Warning     | A delivery pass failed as a whole. The next one retries                     |
+
 ## Backup
 
 `first_seen` history is the one thing the Hub stores that nothing upstream can
@@ -285,7 +321,9 @@ own size free on the PVC before starting one. The chart default is 1Gi total. Th
 grows with the observation days the Hub keeps, one row of about 300 bytes per finding,
 daemon and observed day for the length of `Hub:Retention`: 2,000 signatures seen daily on
 three daemons at the 180-day default come to roughly 300 MB, so size the volume for the
-fleet rather than for the default.
+fleet rather than for the default. Disclosures add their files: the report, the attestation,
+the bundle and the PDF are kept in the database, never purged, so the backup carries them
+and grows with each one published.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

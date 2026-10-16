@@ -41,6 +41,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:Auth:*`                       | désactivé                                                                      | Connexion OAuth2 du navigateur, limitable par groupe, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md) |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                        | Laisse le relais d'acquittement lire son appelant dans `Analysis:IdentityHeader`, voir plus bas         |
 | `Hub:Access:*`                     | désactivé                                                                      | Contrôle d'accès, voir plus bas et [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md)                          |
+| `Hub:Disclosures:*`                | désactivé                                                                      | Divulgations périodiques qu'une CI publie, voir [plus bas](#divulgations)                                |
 | `Hub:Sources`                      | aucune                                                                         | Au moins une source                                                                                     |
 
 ## Réglages par source
@@ -181,9 +182,11 @@ service.
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, voir plus bas                                                                                                                                         |
 
 **Permissions et rôles.** Les permissions sont `findings.read`, `traces.read`,
-`sources.read`, `analyses.run` et `acks.write`, plus `access.admin`, que seul le rôle
-intégré `admin` porte. Les rôles intégrés sont `reader` (`findings.read`, `traces.read`,
-`analyses.run`), `member` (`reader` et `acks.write`) et `admin` (les six, sur `*`
+`sources.read`, `analyses.run`, `acks.write`, `disclosures.read` et `disclosures.manage`,
+plus `access.admin`, que seul le rôle intégré `admin` porte. Les deux permissions de
+divulgation valent pour le Hub entier, donc un rôle qui porte l'une d'elles s'attribue sur
+`*` seulement. Les rôles intégrés sont `reader` (`findings.read`, `traces.read`,
+`analyses.run`), `member` (`reader` et `acks.write`) et `admin` (les huit, sur `*`
 seulement). `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture
 seule est un rôle configuré, comme `auditor` avec `findings.read` et `traces.read`.
 
@@ -245,6 +248,56 @@ doit pas être vide. Sous Helm, un élément est `{ name, secretName, secretKey 
 `Hub__Access__LocalAccounts__<index>__PasswordHash`, et refuse un nom dupliqué ou mal
 formé et une référence de Secret manquante ; le schéma refuse des comptes locaux sans
 `auth.trustedProxyNetworks`. Aucun message ne reprend jamais un hash.
+
+## Divulgations
+
+`Hub:Disclosures` active les divulgations périodiques qu'une CI publie, voir
+[API-FR.md](API-FR.md#divulgations). Elles sont actives quand `ImportKey` est posé.
+Désactivées, le défaut, chaque route de divulgation répond `404`, le lanceur n'affiche pas
+d'onglet Disclosures, et aucun webhook n'est appelé. Chaque règle ci-dessous est contrôlée au
+démarrage et son message nomme la clé.
+
+| Réglage                                  | Défaut  | Validation                                                                                                                          |
+|------------------------------------------|---------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Disclosures:ImportKey`              | aucun   | Au moins 32 caractères sans caractère de contrôle, distincte de chaque `ImportApiKey` de source et de chaque jeton machine. Rognée, fournie par un Secret |
+| `Hub:Disclosures:AllowInternal`          | `false` | Accepte les rapports dont la confidentialité vaut `internal`. Exige `Hub:Access:Enabled`                                            |
+| `Hub:Disclosures:ExpectedIdentity`       | aucun   | Avec `ExpectedIssuer`, les deux ou aucun. Le signataire transmis au moteur et imprimé dans la commande de vérification             |
+| `Hub:Disclosures:ExpectedIssuer`         | aucun   | Avec `ExpectedIdentity`                                                                                                             |
+| `Hub:Disclosures:ShareLinkDays`          | `7`     | De 1 à 30. La durée d'un lien de partage quand son auteur n'en donne pas                                                            |
+| `Hub:Disclosures:PublicUrl`              | aucun   | URL HTTP(S) absolue. L'adresse du Hub telle qu'un destinataire de webhook l'atteint. Exigée par un webhook avec `IncludeShareLink`  |
+| `Hub:Disclosures:Webhooks[]`             | aucun   | `{ Name, Url, Secret, Confidentiality, IncludeShareLink, ShareLinkDays }`, voir plus bas                                            |
+
+**La clé d'import** n'ouvre qu'une porte. Une clé égale à la clé d'import d'une source ou à un
+jeton machine fuirait par l'un ou l'autre, donc le Hub la refuse. Une CI l'envoie en
+`X-API-Key`.
+
+**Un rapport interne** porte un détail réservé à l'organisation. Avec `AllowInternal`, le Hub
+le garde pour les détenteurs de `disclosures.read`, et ne le partage jamais ni ne l'envoie à
+un webhook. Sans contrôle d'accès, un rapport interne serait ouvert à quiconque atteint le Hub,
+donc le Hub y refuse le réglage. Désactivé, l'import répond `422 internal_refused`.
+
+**Le signataire attendu.** `ExpectedIdentity` et `ExpectedIssuer` sont l'identité et
+l'émetteur qu'un lecteur passe à `perf-sentinel verify-hash`. Le Hub les transmet à
+`disclose-pdf`, qui les imprime dans la commande de vérification du PDF, et le lanceur les
+imprime dans la sienne. Le Hub ne vérifie jamais une signature.
+
+**Webhooks.** `Name` compte de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`, est unique,
+et c'est tout ce que le Hub affiche ou journalise d'un webhook. `Url` est une URL `https`
+absolue, ou `http` vers une adresse de bouclage, sans identifiants ni fragment, et n'est
+jamais stockée ni affichée, puisque l'URL d'un webhook de messagerie porte son propre secret.
+`Secret` compte au moins 32 caractères sans caractère de contrôle, la clé HMAC que vérifie le
+destinataire. `Confidentiality` vaut `public`, la seule valeur acceptée : un rapport interne
+ne quitte jamais le Hub. `IncludeShareLink` ajoute un lien de partage à chaque événement
+`published`, valable `ShareLinkDays`, de 1 à 30, 7 par défaut, et exige
+`Hub:Disclosures:PublicUrl`, puisque le lien doit nommer le Hub. Le corps et les relances sont
+dans [API-FR.md](API-FR.md#webhooks).
+
+Sous Helm le bloc est `hub.disclosures` : `importSecretName` et `importSecretKey` nomment le
+Secret qui tient la clé d'import, et le chart n'écrit le reste de la section qu'une fois
+celui-ci posé. `allowInternal`, `expectedIdentity`, `expectedIssuer`, `shareLinkDays` et
+`publicUrl` suivent les réglages ci-dessus. Un webhook vaut `{ name, secretName, urlKey,
+secretKey, includeShareLink, shareLinkDays }` : son URL et son secret viennent tous deux de ce
+Secret.
 
 ## Ce qu'est une source, et ce qui est mesuré
 

@@ -170,6 +170,9 @@ soit la source, et rien d'autre.
 | `incident_reads`, `ack_reads`  | source                                                               | jamais                                     |
 | `analysis_runs`                | run                                                                  | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | jeton de terminal, par le SHA-256 de sa valeur                       | révocation, ou rétention passé `expires_at_ms` |
+| `disclosures`                  | divulgation publiée, ses fichiers en BLOB                            | jamais, un retrait la garde                    |
+| `disclosure_share_links`       | lien de partage, par le SHA-256 de son jeton                         | jamais, révocation et expiration le marquent seulement |
+| `disclosure_deliveries`        | événement de webhook d'une divulgation                               | jamais                                         |
 
 `finding_attributes` garde chaque attribut de regroupement qu'un daemon a capté, jusqu'aux
 huit du moteur, chacun sous l'identité de regroupement avec laquelle il est arrivé : la
@@ -263,6 +266,42 @@ run, `RunRule` dans `ApiEndpoints.Analysis.cs`, lit les copies du service demand
 l'environnement du run par `ReadServiceCopiesAsync`, une fois par environnement et par
 service pour une requête, et le listing parcourt `analysis_runs` du plus récent au plus
 ancien jusqu'à sa limite.
+
+## Les divulgations
+
+Une divulgation périodique est produite et signée hors du Hub, par `perf-sentinel disclose`
+et cosign dans un job de CI, puis publiée sur le Hub. Le Hub n'y ajoute aucun chiffre. Son
+code vit dans `Disclosures/` et dans trois fichiers de routes d'`Api/`.
+
+**Publication.** `ApiEndpoints.Disclosures.cs` admet une requête sur la clé d'import, sa
+taille, son type de média et une porte à une place, lit les trois parties, et fait lire à
+`DisclosureEnvelope` l'identité du rapport, sa période, sa confidentialité et ses chiffres
+principaux. `DisclosureRenderer` écrit les fichiers dans un répertoire temporaire privé et y
+lance le `disclose-pdf` du moteur embarqué, dont il ne lit que le code de sortie et l'unique
+ligne de raison, jamais la sortie d'erreur. La sortie 0 stocke le PDF, l'empreinte vérifiée et
+le lien aussi quand une attestation est venue. Les sorties 1 et 3 refusent la publication et
+ne stockent rien, sauf `output_unwritable`, un ennui du Hub lui-même. Celle-ci, la sortie 5, un
+dépassement de délai et un moteur sans `disclose-pdf` stockent les fichiers sans PDF. Les
+événements `published` de la publication sont mis en file dans la même requête.
+
+**Stockage.** Le schéma V13 (`Storage/Schema.cs`) ajoute les trois tables ci-dessus. Les
+fichiers sont dans des colonnes BLOB tels que reçus, si bien que le `VACUUM INTO` de la
+sauvegarde les emporte, et une liste ne sélectionne jamais ces colonnes. Un lien de partage
+est stocké comme le SHA-256 de son jeton. Une ligne de livraison garde le nom du webhook,
+jamais son URL.
+
+**Lecture et partage.** `ApiEndpoints.DisclosureReads.cs` sert la liste, le détail, les
+fichiers et les actions de gestion derrière `disclosures.read` et `disclosures.manage`.
+`DisclosureDownloads` nomme les cinq fichiers que lui et `ApiEndpoints.Share.cs` servent, et
+calcule `SHA256SUMS`. `/share/` se tient hors de la politique d'accès et répond un même `404`
+nu pour tout ce qu'il ne sert pas. `ShareDownloadCounter` compte les téléchargements en
+mémoire, si bien qu'une requête anonyme n'écrit jamais dans SQLite, et
+`ShareDownloadFlusher` les ajoute aux liens une fois par minute.
+
+**Webhooks.** `DeliveryLoop` lance `DeliveryWorker` toutes les 15 secondes sur les lignes dues
+de `disclosure_deliveries`. `WebhookDelivery` écrit le corps et son HMAC. Le worker poste par
+un client HTTP nommé qui lui est propre, qui ne suit aucune redirection, ne garde aucun cookie
+et ne journalise rien, si bien qu'une URL de webhook n'atteint jamais une ligne de journal.
 
 ## Un run atteint toujours un état terminal
 

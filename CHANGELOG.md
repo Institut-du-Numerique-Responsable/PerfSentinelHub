@@ -19,6 +19,28 @@ All notable changes to PerfSentinelHub are recorded here.
   and the chart takes `pgStat` and `mysqlStat` per source, the auth header from a Secret.
 - `GET /api/sources/{sourceId}/acks` lists the daemon acks the Hub mirrors at a source, in
   the shape of the daemon's own `GET /api/acks`, filtered by what the caller reads there.
+- Periodic disclosures. A CI publishes the report `perf-sentinel disclose` wrote, with its
+  attestation and Sigstore bundle when signed, to `POST /api/import/disclosures` with
+  `Hub:Disclosures:ImportKey`. The embedded engine's `disclose-pdf` checks the content hash and
+  the attestation's binding and renders a PDF/A-3b before anything is stored, and a refusal
+  stores nothing. An engine that cannot render stores the files without a PDF, to render again
+  later. The Hub never checks a signature: it says the report declares one, and prints the
+  `verify-hash` command with `ExpectedIdentity` and `ExpectedIssuer`.
+- The Disclosures tab lists them by period, with who checked what, the files, `SHA256SUMS`, the
+  method and the disclaimers. It needs `disclosures.read`, and sharing, withdrawing, retrying
+  and rendering need `disclosures.manage`. Of the built-in roles only `admin` carries them, a
+  configured role carries them on `*` only, and a machine token never holds them.
+- Share links serve a public disclosure's files at `/share/<token>/<name>` for 1 to 30 days,
+  anonymously, the token shown once and stored as its SHA-256, so
+  `verify-hash --url https://hub/share/<token>/report.json` works from anywhere. A withdrawal
+  is final and kills every link.
+- Webhooks receive a `published` and a `withdrawn` event, signed with HMAC-SHA256 over the
+  timestamp and the body, optionally with a share link of their own, retried for 8 attempts.
+  Their URLs are never stored, shown or logged.
+- `perf_sentinel_hub_disclosure_import_rejected_total{reason}` and
+  `perf_sentinel_hub_disclosure_deliveries_failed_total`, published while disclosures are on.
+  Schema V13 keeps the files in the database, so the backup carries them, and the chart takes
+  the whole section as `hub.disclosures`, its keys and webhook URLs from Secrets.
 
 ## [0.6.1] - 2026-10-16
 

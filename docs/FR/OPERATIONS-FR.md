@@ -92,7 +92,7 @@ correspond à aucune portée par attribut.
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt
-qu'au travers d'une bibliothèque : treize familles de métriques sur des données que
+qu'au travers d'une bibliothèque : quinze familles de métriques sur des données que
 le Hub détient déjà ne justifient pas une dépendance dans un service dont les
 deux seuls paquets sont SQLite.
 
@@ -111,6 +111,15 @@ deux seuls paquets sont SQLite.
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Les signatures de findings distinctes stockées, par environnement |
 | `perf_sentinel_hub_findings_age_seconds`                               | gauge   | L'âge des comptes derrière `findings`                             |
 | `perf_sentinel_hub_database_bytes`                                     | gauge   | La taille du fichier de base et de son journal d'écriture         |
+| `perf_sentinel_hub_disclosure_import_rejected_total{reason}`           | counter | Publications de divulgation refusées, par motif                   |
+| `perf_sentinel_hub_disclosure_deliveries_failed_total`                 | counter | Livraisons de webhook abandonnées après leur dernière tentative   |
+
+Les deux familles de divulgation n'apparaissent que tant que les divulgations sont actives,
+si bien qu'un Hub qui n'en a pas est collecté comme avant. `reason` prend huit constantes :
+`unauthorized`, `gate_full`, `too_large`, `unsupported_media_type`, `malformed_report`,
+`render_refused`, `internal_refused` et `conflict`. `render_refused` est le refus du moteur,
+une empreinte qui ne se recalcule pas ou une attestation qui nomme un autre rapport. Les deux
+compteurs repartent de zéro à chaque démarrage, comme celui de l'import des findings.
 
 Quatre partis pris dans cette forme.
 
@@ -226,7 +235,7 @@ Quatre fichiers sous [`examples/`](../../examples), validés plutôt qu'esquiss�
 
 | Fichier                                                                       | Est                                                           |
 |-------------------------------------------------------------------------------|---------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des treize familles, importable tel quel |
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des quinze familles, importable tel quel |
 | [`FR/grafana-dashboard-FR.json`](../../examples/FR/grafana-dashboard-FR.json) | Le même tableau de bord, titres et descriptions en français   |
 | [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)               | Une règle, contrôlée par `promtool check rules`               |
 | [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)               | Un job de collecte pour un déploiement qui nomme ses cibles   |
@@ -292,6 +301,35 @@ par finding que le Hub ne stocke pas. Et Prometheus ne détient aucune liste des
 sources qui devraient exister, donc un daemon que le Hub n'a jamais joint est
 silencieux plutôt qu'alarmant, ce qui relève de l'écran de flotte.
 
+## Divulgations
+
+Avec `Hub:Disclosures:ImportKey` posé, le Hub reçoit des divulgations périodiques d'une CI,
+voir [API-FR.md](API-FR.md#divulgations). Trois choses changent dans son fonctionnement.
+
+**Journaux de requêtes.** Le jeton d'un lien de partage voyage dans le chemin de la requête,
+et la couche d'hébergement d'ASP.NET Core journalise chaque chemin en Information. Tant que
+les divulgations sont actives, le Hub relève `Microsoft.AspNetCore.Hosting` à Warning, si bien
+qu'aucun jeton n'atteint ses propres journaux. Le journal d'accès du contrôleur d'ingress
+enregistre toujours chaque chemin, jetons compris : gardez-le aussi privé que les liens, ou
+retirez-en les chemins `/share/`. Un jeton se révoque depuis le lanceur ou par
+`DELETE /api/disclosures/{id}/share-links/{linkId}`.
+
+**Webhooks.** Les livraisons tournent toutes les 15 secondes et reprennent après un
+redémarrage. Une URL de webhook n'atteint jamais une ligne de journal, la journalisation des
+requêtes du client HTTP comprise, puisque l'URL d'un webhook de messagerie porte son propre
+secret. Une livraison qui abandonne après 8 tentatives compte sur
+`perf_sentinel_hub_disclosure_deliveries_failed_total` et peut être renvoyée depuis le lanceur.
+
+**Événements de journal.**
+
+| Événement | Niveau      | Dit                                                                        |
+|-----------|-------------|----------------------------------------------------------------------------|
+| `2401`    | Information | Une divulgation a été publiée, avec son organisation, sa période et si elle a été rendue |
+| `2402`    | Warning     | Les comptes de téléchargement des liens n'ont pu être écrits et sont perdus |
+| `2403`    | Warning     | Un webhook n'a pu être joint, par son nom. La livraison est retentée        |
+| `2404`    | Warning     | Une livraison a abandonné après sa dernière tentative                       |
+| `2405`    | Warning     | Un passage de livraison a échoué en entier. Le suivant réessaie             |
+
 ## Sauvegarde
 
 L'historique `first_seen` est la seule chose que le Hub stocke qu'aucun amont ne peut
@@ -309,7 +347,9 @@ est de 1 Gio au total. Cette taille croît avec les jours d'observation que le H
 une ligne d'environ 300 octets par finding, par daemon et par jour observé pendant la durée
 de `Hub:Retention` : 2 000 signatures vues chaque jour sur trois daemons, au défaut de
 180 jours, font environ 300 Mo, donc dimensionnez le volume pour la flotte plutôt que pour
-le défaut.
+le défaut. Les divulgations ajoutent leurs fichiers : le rapport, l'attestation, le bundle et
+le PDF sont gardés dans la base, jamais purgés, si bien que la sauvegarde les emporte et
+grossit à chaque publication.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

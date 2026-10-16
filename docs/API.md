@@ -3,7 +3,9 @@
 Four surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
 plugin or a CI job reads the read API. The browser uses the analysis API and the ack relay,
 reads `/api/incidents` for its incidents screen, and reads `/api/findings` only on the ack
-page, by signature.
+page, by signature. Periodic disclosures sit apart from all four: a CI publishes them to a
+route of their own, and the launcher, a share link or a webhook carries them on, see
+[Disclosures](#disclosures).
 
 ## Import API
 
@@ -49,7 +51,7 @@ the Hub's route to the daemon, which a push does not exercise.
 
 | Endpoint                             | Returns                                                                                                                                                                                    |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention |
+| `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention. `disclosures: true` only while disclosures are on and the caller reads them |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`               |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
@@ -556,9 +558,175 @@ A run still running when the service stops comes back `interrupted` and is never
 on its own. A silent retry would fire a second heavy query at a backend nobody asked to
 query twice.
 
+## Disclosures
+
+A periodic disclosure is the report `perf-sentinel disclose` writes for one period, signed or
+not, which a CI publishes to the Hub. The Hub checks and renders it with its embedded engine's
+`disclose-pdf`, keeps the files exactly as they arrived, serves them to the holders of
+`disclosures.read` and shares them through expiring links. Every route below answers `404`
+while `Hub:Disclosures:ImportKey` is unset, see
+[CONFIGURATION.md](CONFIGURATION.md#disclosures).
+
+### Publishing
+
+`POST /api/import/disclosures` takes `X-API-Key` with `Hub:Disclosures:ImportKey`, never a
+session, and a `multipart/form-data` body of at most 8 MiB. Its parts are `report`, required,
+then `attestation` and `bundle`, each sent once and never empty. Any other part refuses the
+whole body. One publication runs at a time, and the request has 60 seconds, the engine 45 of
+them.
+
+```sh
+curl --fail -H "X-API-Key: $HUB_DISCLOSURES_KEY" \
+  -F report=@report.json \
+  -F attestation=@attestation.intoto.jsonl \
+  -F bundle=@bundle.sig \
+  https://hub.example.com/api/import/disclosures
+```
+
+The Hub reads the report's identity, period and confidentiality, then runs the engine on the
+three files. Nothing is stored before the engine answers, and a refusal stores nothing.
+
+| Answer                      | When                                                                                                   |
+|-----------------------------|--------------------------------------------------------------------------------------------------------|
+| `201`                       | A new disclosure, stored                                                                               |
+| `200`                       | The same bytes again, or a signed copy of a report stored unsigned, which replaces it. No second event |
+| `401`                       | A missing or wrong key                                                                                 |
+| `404`                       | Disclosures are off                                                                                    |
+| `408`                       | Past 60 seconds                                                                                        |
+| `409 {"reason":"conflict"}` | Another report under a `report_uuid` already published. A new report takes a new uuid                 |
+| `413`                       | A body over 8 MiB                                                                                      |
+| `415`                       | Not `multipart/form-data` with a boundary                                                              |
+| `422 {"reason":"…"}`        | Refused, see below                                                                                     |
+| `503`                       | Another publication is running, with `Retry-After: 1`                                                  |
+
+The `422` reasons are `content_hash_mismatch`, the hash does not recompute, `binding_mismatch`,
+the attestation names another report, `malformed_report`, a body, a part or a report the Hub or
+the engine cannot read, `file_too_large`, `missing_file`, `internal_refused`, an internal
+report while `Hub:Disclosures:AllowInternal` is off, and `engine_contract`, an engine answer
+outside its contract.
+
+A taken publication answers
+`{"id":"…","pdf":"rendered","reason":null,"content_hash_checked":true,"binding_checked":true}`.
+`binding_checked` is null without an attestation. An engine that cannot draw the report (its
+exit 5, a timeout) or that has no `disclose-pdf` stores it all the same, with `pdf` reading
+`not_checked`, both checks false or null, and `reason` naming why: the engine's reason, or
+`unsupported_engine`. The render route below tries again once the engine can.
+
+### Reading
+
+| Endpoint                                 | Returns                                                                 |
+|------------------------------------------|-------------------------------------------------------------------------|
+| `GET /api/disclosures`                   | Every disclosure, newest period first, withdrawn ones marked. No file   |
+| `GET /api/disclosures/{id}`              | One disclosure with its checks, its share links and its deliveries      |
+| `GET /api/disclosures/{id}/files/{name}` | One of its files, as an attachment, with `X-Content-Type-Options: nosniff` |
+
+They need `disclosures.read`, otherwise `403 {"detail":"You may not read disclosures."}`.
+
+A listed disclosure carries `id`, `report_uuid`, `organisation`, `period` (`type`, `from`,
+`to`), `intent`, `confidentiality`, `content_hash`, `integrity_level`, `figures`, the few
+totals a card shows, read from the report, `files` (`report`, `attestation`, `bundle` and `pdf`
+as booleans), `pdf` (`rendered` or `not_checked`), `render_reason`, `published_at_ms`,
+`signature_added_at_ms` and `withdrawn` (`at_ms`, `reason`, `by`, or null).
+
+The detail adds `checks`, which says who checked what. `content_hash` is `checked` when the
+engine recomputed it here, `not_checked` otherwise. `binding` is `checked`, `not_checked` or
+`no_attestation`. `signature` is only ever `declared` or `absent`: what the report's
+`integrity_level` says of itself, since the Hub never checks a signature. `engine_version` is
+the engine that rendered it. `share_links` lists each link without its token: `id`, `state`
+(`active`, `expired` or `revoked`), `created_by`, `created_at_ms`, `expires_at_ms`,
+`revoked_at_ms`, `revoked_by`, `downloads` and `last_used_at_ms`. `deliveries` lists each
+webhook event by the webhook's name, never its URL: `id`, `webhook`, `event`, `state`
+(`pending`, `delivered` or `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` and
+`last_status`. `expected_identity` and `expected_issuer` are the configured signer, for the
+verify command.
+
+The file names are `report.json`, `attestation.intoto.jsonl`, `bundle.sig`, `report.pdf` and
+`SHA256SUMS`, computed on each request in the format `sha256sum -c` reads. Any other name, or
+a file the disclosure lacks, is a `404`.
+
+### Sharing and withdrawing
+
+These routes need `disclosures.manage` and somebody to name, as the
+[ack relay](#ack-relay) does: a `Hub:Auth` session, or the identity header once
+`Hub:AckRelay:TrustIdentityHeader` is set. They hold to its same-origin rule as well: a
+`Sec-Fetch-Site` that is present and not `same-origin` is a `403`, and a content type that is
+not JSON is a `415`, a `DELETE` included.
+
+| Endpoint                                                  | Body                | Answers                                                     |
+|-----------------------------------------------------------|---------------------|-------------------------------------------------------------|
+| `POST /api/disclosures/{id}/share-links`                  | `{"days":n}` or `{}` | `201` with the token, once                                  |
+| `DELETE /api/disclosures/{id}/share-links/{linkId}`       | none                | `204`, or `404` for an unknown or already revoked link      |
+| `POST /api/disclosures/{id}/withdraw`                     | `{"reason":"…"}`    | `204`, or `409` when already withdrawn                      |
+| `POST /api/disclosures/{id}/deliveries/{deliveryId}/retry` | `{}`               | `204`, or `409` for a delivery that went through            |
+| `POST /api/disclosures/{id}/render`                       | `{}`                | `200` with the publication answer, or `422` with a reason   |
+
+A share link lasts `days`, 1 to 30, `Hub:Disclosures:ShareLinkDays` when the body leaves it
+out. The answer, `{"id":"…","token":"pshare_…","path":"/share/pshare_…/","expires_at_ms":…}`, is
+the only place the token appears: the Hub stores its SHA-256. An internal disclosure is never
+shared (`422 {"reason":"internal_not_shareable"}`), and a withdrawn one neither (`409`).
+
+A withdrawal is final. Its `reason`, 1 to 500 characters with no control character, is kept
+with the caller's name. The files stay and stay readable, every share link stops answering,
+and a `withdrawn` event goes to each webhook the `published` event was addressed to. A wrong
+disclosure is replaced by a new one under a new uuid.
+
+A retry puts a delivery that waits or gave up back in the queue, due at the next pass. It
+keeps its attempt count, so a delivery that had given up gives up again on its next failure.
+A render runs the engine again on the stored files, for a disclosure stored before it could
+render.
+
+### Share links
+
+`GET /share/{token}/{name}` serves the five names above under a live token, anonymously: not
+revoked, not expired, and of a disclosure not withdrawn. Everything else under `/share/`,
+whatever the reason, gets one identical `404` with no body. Every answer carries
+`Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and
+`X-Robots-Tag: noindex`. The route stands outside sign-in and access control, and the token is
+the whole credential.
+
+A link counts its downloads in memory and writes them once a minute and at shutdown, so a
+crash loses a minute of counts at most. The client address is recorded with the count only
+when `Hub:Auth:TrustedProxyNetworks` is set, since the Hub cannot otherwise tell a client from
+its proxy, and no route serves it.
+
+The engine verifies a shared disclosure from its link, fetching the attestation and the bundle
+beside it:
+
+```sh
+perf-sentinel verify-hash --url https://hub.example.com/share/pshare_…/report.json \
+  --expected-identity release@example.com --expected-issuer https://accounts.google.com
+```
+
+### Webhooks
+
+Each webhook in `Hub:Disclosures:Webhooks` receives a `POST` with a JSON body when a public
+disclosure is published, and when it is withdrawn if the publication was addressed to it. An
+internal disclosure is never sent.
+
+```json
+{"event":"published","disclosure_id":"…","organisation":"…",
+ "period":{"type":"calendar-quarter","from":"2026-07-01","to":"2026-09-30"},
+ "content_hash":"…","intent":"official","integrity_level":"signed-with-attestation",
+ "share_url":null}
+```
+
+`X-PerfSentinel-Timestamp` carries the Unix time in seconds, and `X-PerfSentinel-Signature`
+`sha256=` followed by the lowercase hex HMAC-SHA256 of `<timestamp>.<body>` under the
+webhook's `Secret`. A receiver recomputes it over the raw body, compares in constant time, and
+refuses a timestamp older than it accepts. With `IncludeShareLink`, a `published` event carries
+in `share_url` a link of its own, issued for that attempt for the webhook's `ShareLinkDays`,
+named `webhook:<name>` in `created_by`, to `report.pdf` when rendered and `report.json`
+otherwise. An attempt that fails revokes its link.
+
+Deliveries run every 15 seconds from the `disclosure_deliveries` table, so a restart resumes
+them. A `2xx` settles one. Any other status, a redirect included, which is never followed, or
+no answer within `Hub:HttpTimeout` is tried again after 30 seconds, then a doubling wait capped
+at one hour, 8 attempts in all, after which the delivery is `failed`. A delivery to a webhook
+no longer configured fails without a request.
+
 ## With access control
 
-With `Hub:Access:Enabled` every route but the import, `/health`, `/metrics` (anonymous,
+With `Hub:Access:Enabled` every route but the imports, `/share/`, `/health`, `/metrics` (anonymous,
 on `Hub:MetricsPort` only) and the CLI's `POST /auth/device`, `POST /auth/device/token`
 and `POST /auth/revoke` ([Terminal sign-in](#terminal-sign-in)), and the sign-in page
 routes ([Local sign-in](#local-sign-in)), needs a session, a terminal
@@ -606,6 +774,10 @@ token or a machine token, and each answer covers what the caller's grants cover.
   report shows every service its traces cross**, `result` counts included. A daemon
   report goes live through the ack relay (`--hub-relay`) when the source has an ack
   credential, under the checks above. The others render static: no `--daemon-url`.
+- **Disclosures** need `disclosures.read` or `disclosures.manage` on `*`, which no machine
+  token holds. A caller without it gets `403`, never a filtered list, since a disclosure
+  belongs to no source. The import keeps its own key and `/share/` its token, both outside
+  access control.
 
 From CI:
 

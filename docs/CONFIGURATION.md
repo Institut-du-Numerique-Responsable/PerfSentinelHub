@@ -40,6 +40,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:Auth:*`                       | off                                                                         | OAuth2 browser sign-in, can be limited to groups, see [AUTHENTICATION.md](AUTHENTICATION.md)    |
 | `Hub:AckRelay:TrustIdentityHeader` | `false`                                                                     | Lets the ack relay take its caller from `Analysis:IdentityHeader`, see below                    |
 | `Hub:Access:*`                     | off                                                                         | Access control, see below and [ACCESS-CONTROL.md](ACCESS-CONTROL.md)                            |
+| `Hub:Disclosures:*`                | off                                                                         | Periodic disclosures a CI publishes, see [below](#disclosures)                                  |
 | `Hub:Sources`                      | none                                                                        | At least one source                                                                             |
 
 ## Per-source settings
@@ -169,10 +170,11 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, see below                                                                                                                           |
 
 **Permissions and roles.** The permissions are `findings.read`, `traces.read`,
-`sources.read`, `analyses.run` and `acks.write`, plus `access.admin`, which only the
-built-in `admin` role carries. The built-in roles are `reader` (`findings.read`,
-`traces.read`, `analyses.run`), `member` (`reader` and `acks.write`) and `admin` (all six,
-on `*` only). `reader` is not read-only: it starts analyses. A read-only role is a
+`sources.read`, `analyses.run`, `acks.write`, `disclosures.read` and `disclosures.manage`,
+plus `access.admin`, which only the built-in `admin` role carries. The two disclosure
+permissions apply to the whole Hub, so a role carrying either is granted on `*` only. The
+built-in roles are `reader` (`findings.read`, `traces.read`, `analyses.run`), `member`
+(`reader` and `acks.write`) and `admin` (all eight, on `*` only). `reader` is not read-only: it starts analyses. A read-only role is a
 configured one, such as `auditor` with `findings.read` and `traces.read`.
 
 **Patterns.** A record is in a project when one of its patterns matches. A part is exact,
@@ -228,6 +230,52 @@ Under Helm an item is `{ name, secretName, secretKey }`: with `enabled` the char
 hash from that Secret into `Hub__Access__LocalAccounts__<index>__PasswordHash`, and refuses
 a duplicate or malformed name and a missing Secret reference; the schema refuses local
 accounts without `auth.trustedProxyNetworks`. No message ever echoes a hash.
+
+## Disclosures
+
+`Hub:Disclosures` turns on the periodic disclosures a CI publishes, see
+[API.md](API.md#disclosures). It is on when `ImportKey` is set, and off, the default, every
+disclosure route answers `404`, the launcher shows no Disclosures tab, and no webhook is
+called. Each rule below is checked at startup and its message names the key.
+
+| Setting                                  | Default | Validation                                                                                                                         |
+|------------------------------------------|---------|------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Disclosures:ImportKey`              | none    | At least 32 characters with no control character, distinct from every source `ImportApiKey` and machine token. Trimmed, supplied through a Secret |
+| `Hub:Disclosures:AllowInternal`          | `false` | Takes reports whose confidentiality is `internal`. Requires `Hub:Access:Enabled`                                                   |
+| `Hub:Disclosures:ExpectedIdentity`       | none    | With `ExpectedIssuer`, both or neither. The signer passed to the engine and printed in the verify command                         |
+| `Hub:Disclosures:ExpectedIssuer`         | none    | With `ExpectedIdentity`                                                                                                            |
+| `Hub:Disclosures:ShareLinkDays`          | `7`     | 1 to 30. A share link's life when its creator names none                                                                          |
+| `Hub:Disclosures:PublicUrl`              | none    | Absolute HTTP(S) URL. The Hub's own address as a webhook receiver reaches it. Required by a webhook with `IncludeShareLink`        |
+| `Hub:Disclosures:Webhooks[]`             | none    | `{ Name, Url, Secret, Confidentiality, IncludeShareLink, ShareLinkDays }`, see below                                               |
+
+**The import key** opens one door only. A key equal to a source's import key or to a machine
+token would be leaked by either, so the Hub refuses it. A CI sends it as `X-API-Key`.
+
+**An internal report** carries detail meant for the organisation alone. With
+`AllowInternal`, the Hub keeps it for the holders of `disclosures.read`, and never shares it
+nor sends it to a webhook. Without access control, anyone who reaches the Hub would read it,
+so the Hub refuses the setting there. Off, the import answers `422 internal_refused`.
+
+**The expected signer.** `ExpectedIdentity` and `ExpectedIssuer` are the identity and issuer a
+reader passes to `perf-sentinel verify-hash`. The Hub hands them to `disclose-pdf`, which
+prints them in the PDF's verify command, and the launcher prints them in its own. The Hub
+never checks a signature.
+
+**Webhooks.** `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, unique, and it is the
+only thing the Hub shows or logs about a webhook. `Url` is an absolute `https` URL, or `http`
+to a loopback address, with no credentials and no fragment, and is never stored nor shown,
+since a chat webhook URL carries its own secret. `Secret` is at least 32 characters with no
+control character, the HMAC key the receiver checks. `Confidentiality` is `public`, the only
+value taken: an internal report never leaves the Hub. `IncludeShareLink` adds a share link to
+each `published` event, valid `ShareLinkDays`, 1 to 30, 7 by default, and needs
+`Hub:Disclosures:PublicUrl`, since the link has to name the Hub. The payload and the retries
+are in [API.md](API.md#webhooks).
+
+Under Helm the block is `hub.disclosures`: `importSecretName` and `importSecretKey` name the
+Secret holding the import key, and the chart writes the rest of the section only once that is
+set. `allowInternal`, `expectedIdentity`, `expectedIssuer`, `shareLinkDays` and `publicUrl`
+follow the settings above. A webhook is `{ name, secretName, urlKey, secretKey,
+includeShareLink, shareLinkDays }`: its URL and its secret both come from that Secret.
 
 ## What a source is, and what is measured
 
