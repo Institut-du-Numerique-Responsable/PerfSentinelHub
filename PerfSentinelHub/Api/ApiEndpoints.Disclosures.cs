@@ -239,7 +239,7 @@ public static partial class ApiEndpoints
                 return refusal;
             var (pdf, reason) = Rendering(outcome);
             await database.ReplaceSignedCopyAsync(
-                existing.Id, files, envelope.IntegrityLevel, pdf, reason, engine.Version,
+                existing.Id, files, envelope.IntegrityLevel, (pdf, reason), engine.Version,
                 timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
             return Accepted((await database.GetDisclosureAsync(existing.Id, cancellationToken))!, StatusCodes.Status200OK);
         }

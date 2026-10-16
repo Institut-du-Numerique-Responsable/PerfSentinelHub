@@ -80,12 +80,14 @@ public sealed partial class HubDatabase
         string id,
         DisclosureFiles files,
         string? integrityLevel,
-        byte[]? pdf,
-        string? renderReason,
+        (byte[]? Pdf, string? Reason) rendering,
         string? engineVersion,
         long nowMs,
         CancellationToken cancellationToken)
     {
+        var (pdf, renderReason) = rendering;
+        bool? hashChecked = pdf is null ? null : true;
+        bool? bindingChecked = pdf is null || files.Attestation is null ? null : true;
         return WriteAsync(async command =>
         {
             command.CommandText = """
@@ -103,9 +105,8 @@ public sealed partial class HubDatabase
             command.Parameters.AddWithValue("$pdf", Nullable(pdf));
             command.Parameters.AddWithValue("$render_reason", Nullable(renderReason));
             command.Parameters.AddWithValue("$engine_version", Nullable(engineVersion));
-            command.Parameters.AddWithValue("$checked", pdf is null ? DBNull.Value : true);
-            command.Parameters.AddWithValue(
-                "$binding_checked", pdf is null || files.Attestation is null ? DBNull.Value : true);
+            command.Parameters.AddWithValue("$checked", Nullable(hashChecked));
+            command.Parameters.AddWithValue("$binding_checked", Nullable(bindingChecked));
             command.Parameters.AddWithValue("$now", nowMs);
             return await command.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
@@ -140,13 +141,12 @@ public sealed partial class HubDatabase
 
     public async Task<DisclosureSummary?> FindDisclosureByUuidAsync(string reportUuid, CancellationToken cancellationToken)
     {
-        return (await ReadSummariesAsync(SelectDisclosures + "WHERE report_uuid = $key;", reportUuid, cancellationToken))
-            .FirstOrDefault();
+        return First(await ReadSummariesAsync(SelectDisclosures + "WHERE report_uuid = $key;", reportUuid, cancellationToken));
     }
 
     public async Task<DisclosureSummary?> GetDisclosureAsync(string id, CancellationToken cancellationToken)
     {
-        return (await ReadSummariesAsync(SelectDisclosures + "WHERE id = $key;", id, cancellationToken)).FirstOrDefault();
+        return First(await ReadSummariesAsync(SelectDisclosures + "WHERE id = $key;", id, cancellationToken));
     }
 
     /// <summary>Newest period first, withdrawn ones included.</summary>
@@ -218,7 +218,7 @@ public sealed partial class HubDatabase
                                   VALUES ($id, $disclosure_id, $token_hash, $created_by, $created_at, $expires_at);
                                   """;
             command.Parameters.AddWithValue("$id", link.Id);
-            command.Parameters.AddWithValue("$disclosure_id", link.DisclosureId);
+            command.Parameters.AddWithValue(DisclosureIdParameter, link.DisclosureId);
             command.Parameters.AddWithValue("$token_hash", link.TokenHash);
             command.Parameters.AddWithValue("$created_by", link.CreatedBy);
             command.Parameters.AddWithValue("$created_at", link.CreatedAtMs);
@@ -265,7 +265,7 @@ public sealed partial class HubDatabase
                                   WHERE id = $id AND disclosure_id = $disclosure_id AND revoked_at_ms IS NULL;
                                   """;
             command.Parameters.AddWithValue("$id", linkId);
-            command.Parameters.AddWithValue("$disclosure_id", disclosureId);
+            command.Parameters.AddWithValue(DisclosureIdParameter, disclosureId);
             command.Parameters.AddWithValue("$by", by);
             command.Parameters.AddWithValue("$now", nowMs);
             return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
@@ -284,7 +284,7 @@ public sealed partial class HubDatabase
                               FROM disclosure_share_links WHERE disclosure_id = $disclosure_id
                               ORDER BY created_at_ms DESC, id;
                               """;
-        command.Parameters.AddWithValue("$disclosure_id", disclosureId);
+        command.Parameters.AddWithValue(DisclosureIdParameter, disclosureId);
         var links = new List<ShareLinkSummary>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -361,7 +361,7 @@ public sealed partial class HubDatabase
                                   VALUES ($id, $disclosure_id, $webhook, $event, $state, $now, $now);
                                   """;
             command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
-            command.Parameters.AddWithValue("$disclosure_id", disclosureId);
+            command.Parameters.AddWithValue(DisclosureIdParameter, disclosureId);
             command.Parameters.AddWithValue("$webhook", webhook);
             command.Parameters.AddWithValue("$event", eventName);
             command.Parameters.AddWithValue("$state", DeliveryStates.Pending);
@@ -428,6 +428,13 @@ public sealed partial class HubDatabase
             command.Parameters.AddWithValue("$now", nowMs);
             return await command.ExecuteNonQueryAsync(cancellationToken);
         }, cancellationToken);
+    }
+
+    private const string DisclosureIdParameter = "$disclosure_id";
+
+    private static DisclosureSummary? First(IReadOnlyList<DisclosureSummary> summaries)
+    {
+        return summaries.Count > 0 ? summaries[0] : null;
     }
 
     private const string SelectDisclosures = $"SELECT {DisclosureColumns} FROM disclosures ";

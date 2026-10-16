@@ -181,9 +181,8 @@ public sealed partial class HubDatabase
                     break;
                 rows = [];
                 acks.Add(new ListedAck(
-                    signature, reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4),
-                    reader.GetBoolean(5), reader.IsDBNull(6) ? null : reader.GetString(6), rows));
+                    signature, reader.GetString(1), NullableString(reader, 2), reader.GetString(3),
+                    NullableString(reader, 4), reader.GetBoolean(5), NullableString(reader, 6), rows));
             }
 
             if (!reader.IsDBNull(7))
