@@ -250,13 +250,13 @@ the page does not.
 
 ## The disclosures screen
 
-The periodic disclosures a CI published, see [API.md](API.md#disclosures). A rail of the last
-twelve quarters at most, up to the current one, opens the screen: each cell reads the
+The periodic disclosures a scheduled job published, see [API.md](API.md#disclosures). A rail of
+the last twelve quarters at most, up to the current one, opens the screen: each cell reads the
 integrity level of the quarter's disclosure, internal, withdrawn, "not published", or how many
-days the current quarter has left. A legend under it tells the two kinds of mark apart. A
-dashed level is what the report declares about itself. A solid mark is what this Hub
-recomputed when the report arrived, the content hash and an attestation that names it. The
-signature is checked on the reader's machine, never here.
+days the current quarter has left. A legend under it tells the two kinds of mark apart. A dashed
+level is what the report declares about itself. A solid mark is what this Hub recomputed when
+the report arrived, the content hash and an attestation that names it. The signature is checked
+on the reader's machine, never here.
 
 One card per disclosure follows, newest period first: the period and its dates, its chips, its
 headline figures, when it was published and when a signed copy replaced it, whether the PDF

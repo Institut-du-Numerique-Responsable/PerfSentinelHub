@@ -275,14 +275,14 @@ dans leur cadre, comme ceux des incidents, et la page ne défile pas.
 
 ## L'écran des divulgations
 
-Les divulgations périodiques qu'une CI a publiées, voir [API-FR.md](API-FR.md#divulgations).
-Une frise des douze derniers trimestres au plus, jusqu'au trimestre en cours, ouvre l'écran :
-chaque case lit le niveau d'intégrité de la divulgation du trimestre, interne, retirée,
-"not published", ou le nombre de jours qui restent au trimestre en cours. Une légende dessous
-distingue les deux sortes de marque. Un niveau en pointillé est ce que le rapport déclare de
-lui-même. Une marque pleine est ce que ce Hub a recalculé à l'arrivée du rapport, l'empreinte
-et une attestation qui la nomme. La signature se vérifie sur la machine du lecteur, jamais
-ici.
+Les divulgations périodiques qu'une tâche planifiée a publiées, voir
+[API-FR.md](API-FR.md#divulgations). Une frise des douze derniers trimestres au plus, jusqu'au
+trimestre en cours, ouvre l'écran : chaque case lit le niveau d'intégrité de la divulgation du
+trimestre, interne, retirée, "not published", ou le nombre de jours qui restent au trimestre en
+cours. Une légende dessous distingue les deux sortes de marque. Un niveau en pointillé est ce
+que le rapport déclare de lui-même. Une marque pleine est ce que ce Hub a recalculé à l'arrivée
+du rapport, l'empreinte et une attestation qui la nomme. La signature se vérifie sur la machine
+du lecteur, jamais ici.
 
 Une carte par divulgation suit, période la plus récente d'abord : la période et ses dates, ses
 pastilles, ses chiffres principaux, quand elle a été publiée et quand une copie signée l'a

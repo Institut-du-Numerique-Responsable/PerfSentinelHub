@@ -18,7 +18,7 @@ public static partial class ApiEndpoints
     private static readonly string[] DisclosureParts = ["report", "attestation", "bundle"];
 
     /// <summary>
-    ///     A CI publishes a disclosure: the report, and its attestation and bundle when signed.
+    ///     A scheduled job publishes a disclosure: the report, and its attestation and bundle when signed.
     ///     The engine checks and renders it before anything is stored, and a refusal stores nothing.
     /// </summary>
     // Every parameter is a collaborator the router injects.

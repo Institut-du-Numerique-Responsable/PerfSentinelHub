@@ -303,8 +303,9 @@ silencieux plutôt qu'alarmant, ce qui relève de l'écran de flotte.
 
 ## Divulgations
 
-Avec `Hub:Disclosures:ImportKey` posé, le Hub reçoit des divulgations périodiques d'une CI,
-voir [API-FR.md](API-FR.md#divulgations). Trois choses changent dans son fonctionnement.
+Avec `Hub:Disclosures:ImportKey` posé, le Hub reçoit des divulgations périodiques d'une tâche
+planifiée, voir [API-FR.md](API-FR.md#divulgations). Trois choses changent dans son
+fonctionnement.
 
 **Journaux de requêtes.** Le jeton d'un lien de partage voyage dans le chemin de la requête,
 et la couche d'hébergement d'ASP.NET Core journalise chaque chemin en Information. Tant que
