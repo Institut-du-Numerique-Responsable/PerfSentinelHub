@@ -13,6 +13,11 @@ public sealed class DeviceAuthorizationsTests
 {
     private const string Here = "203.0.113.7";
 
+    // One instance: the record compares its group list by reference.
+    private static readonly DeviceApproval Approval = new(
+        "u-member", "member@example.internal", ["/teams/shop"], null,
+        DateTimeOffset.FromUnixTimeMilliseconds(30_000_000), false);
+
     private readonly FakeTimeProvider _clock = new(DateTimeOffset.FromUnixTimeMilliseconds(1_000_000));
     private readonly DeviceAuthorizations _devices;
 
@@ -21,15 +26,10 @@ public sealed class DeviceAuthorizationsTests
         _devices = new DeviceAuthorizations(_clock);
     }
 
-    // One instance: the record compares its group list by reference.
-    private static readonly DeviceApproval Approval = new(
-        "u-member", "member@example.internal", ["/teams/shop"], null,
-        DateTimeOffset.FromUnixTimeMilliseconds(30_000_000), false);
-
     [Fact]
     public void A_device_code_is_256_bits_and_a_user_code_eight_letters_of_the_alphabet()
     {
-        var codes = Enumerable.Range(0, 50).Select(index => _devices.Start("198.51.100." + (index % 20))!).ToList();
+        var codes = Enumerable.Range(0, 50).Select(index => _devices.Start("198.51.100." + index % 20)!).ToList();
 
         foreach (var code in codes)
         {
@@ -55,7 +55,9 @@ public sealed class DeviceAuthorizationsTests
         Assert.NotNull(_devices.Start("198.51.100.1"));
 
         for (var address = 2; _devices.Count < TerminalAccess.MaxPending; address++)
-            for (var index = 0; index < TerminalAccess.MaxPendingPerAddress && _devices.Count < TerminalAccess.MaxPending; index++)
+            for (var index = 0;
+                 index < TerminalAccess.MaxPendingPerAddress && _devices.Count < TerminalAccess.MaxPending;
+                 index++)
                 Assert.NotNull(_devices.Start("198.51.100." + address));
         Assert.Null(_devices.Start("192.0.2.1"));
     }

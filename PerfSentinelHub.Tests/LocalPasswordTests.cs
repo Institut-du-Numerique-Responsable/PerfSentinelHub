@@ -11,7 +11,8 @@ public sealed class LocalPasswordTests
     private const string Password = "correct horse battery staple";
 
     // From Python's hashlib.pbkdf2_hmac, with salt bytes 00 01 ... 0F.
-    private const string Vector = "$pbkdf2-sha256$i=600000$AAECAwQFBgcICQoLDA0ODw$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY";
+    private const string Vector =
+        "$pbkdf2-sha256$i=600000$AAECAwQFBgcICQoLDA0ODw$7xdxRO7JQgy8EJPSqLNEqSvFBtDU7JwCjdGfgyTYweY";
 
     [Fact]
     public void The_known_vector_parses_and_verifies()

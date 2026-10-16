@@ -78,10 +78,8 @@ public static class CorrelationParser
 
             var parsed = new List<ParsedEpisode>(count);
             foreach (var element in episodes.EnumerateArray())
-            {
                 if (TryParse(element, out var episode))
                     parsed.Add(episode);
-            }
 
             return new ParsedEpisodeImport(producerVersion, parsed, count - parsed.Count);
         }

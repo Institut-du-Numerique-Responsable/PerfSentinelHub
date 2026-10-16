@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
@@ -34,10 +35,8 @@ public sealed class CorrelationStorageTests : IAsyncLifetime
     {
         // One call per copy, so a test decides the order in which they land.
         foreach (var copy in copies)
-        {
             Assert.True(await _database.TryUpsertEpisodesAsync(
                 sourceId, EpisodeJson.Parsed(copy), ObservedAt, TestContext.Current.CancellationToken));
-        }
     }
 
     // One line per row, so a failure prints every merged column at once.
@@ -61,7 +60,7 @@ public sealed class CorrelationStorageTests : IAsyncLifetime
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$source_id", sourceId);
         return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken),
-            System.Globalization.CultureInfo.InvariantCulture)!;
+            CultureInfo.InvariantCulture)!;
     }
 
     [Fact]

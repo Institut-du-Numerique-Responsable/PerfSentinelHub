@@ -82,7 +82,8 @@ public sealed class HashPasswordCommandTests
         Assert.Contains("The two entries differ.", error, StringComparison.Ordinal);
     }
 
-    private static (int Exit, string Output, string Error) Run(string[] args, string input, Func<ConsoleKeyInfo>? readKey = null)
+    private static (int Exit, string Output, string Error) Run(string[] args, string input,
+        Func<ConsoleKeyInfo>? readKey = null)
     {
         using var output = new StringWriter { NewLine = "\n" };
         using var error = new StringWriter { NewLine = "\n" };

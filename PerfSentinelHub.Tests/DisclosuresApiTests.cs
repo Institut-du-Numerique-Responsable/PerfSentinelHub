@@ -16,7 +16,9 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class DisclosuresApiTests : IDisposable
 {
-    private const string ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+    private const string
+        ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+
     private const long NowMs = 10_000;
 
     private static readonly byte[] ReportBytes = Encoding.UTF8.GetBytes(DisclosureRendererTests.Report);
@@ -50,7 +52,8 @@ public sealed class DisclosuresApiTests : IDisposable
         using var on = Hub().CreateClient();
         using var off = Hub(importKey: null).CreateClient();
 
-        using var onStatus = JsonDocument.Parse(await on.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
+        using var onStatus =
+            JsonDocument.Parse(await on.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
         var offStatus = await off.GetStringAsync("/api/status", TestContext.Current.CancellationToken);
 
         Assert.True(onStatus.RootElement.GetProperty("disclosures").GetBoolean());
@@ -66,7 +69,8 @@ public sealed class DisclosuresApiTests : IDisposable
         await Database(hub).WithdrawAsync("q2", "wrong quarter", "alice", NowMs, CancellationToken.None);
         using var client = hub.CreateClient();
 
-        using var list = JsonDocument.Parse(await client.GetStringAsync("/api/disclosures", TestContext.Current.CancellationToken));
+        using var list =
+            JsonDocument.Parse(await client.GetStringAsync("/api/disclosures", TestContext.Current.CancellationToken));
 
         var items = list.RootElement.EnumerateArray().ToArray();
         Assert.Equal(["q3", "q2"], items.Select(item => item.GetProperty("id").GetString()));
@@ -80,10 +84,11 @@ public sealed class DisclosuresApiTests : IDisposable
     public async Task The_detail_carries_the_checks_links_and_deliveries_never_a_url()
     {
         var hub = Hub();
-        await SeedAsync(hub, "d1", "u1", "2026-09-30", attestation: [1]);
+        await SeedAsync(hub, "d1", "u1", "2026-09-30", [1]);
         await Database(hub).EnqueueDeliveriesAsync("d1", "published", ["auditors"], NowMs, CancellationToken.None);
         using var client = hub.CreateClient();
-        using var created = await client.SendAsync(Manage("/api/disclosures/d1/share-links", "{}"), TestContext.Current.CancellationToken);
+        using var created = await client.SendAsync(Manage("/api/disclosures/d1/share-links", "{}"),
+            TestContext.Current.CancellationToken);
 
         var detail = await client.GetStringAsync("/api/disclosures/d1", TestContext.Current.CancellationToken);
 
@@ -103,14 +108,19 @@ public sealed class DisclosuresApiTests : IDisposable
     public async Task Files_come_back_byte_for_byte_with_their_type_and_sha256sums_verifies()
     {
         var hub = Hub();
-        await SeedAsync(hub, "d1", "u1", "2026-09-30", attestation: [1, 2], pdf: Encoding.ASCII.GetBytes("%PDF-1.7 x"));
+        await SeedAsync(hub, "d1", "u1", "2026-09-30", [1, 2], Encoding.ASCII.GetBytes("%PDF-1.7 x"));
         using var client = hub.CreateClient();
 
-        using var report = await client.GetAsync("/api/disclosures/d1/files/report.json", TestContext.Current.CancellationToken);
-        using var pdf = await client.GetAsync("/api/disclosures/d1/files/report.pdf", TestContext.Current.CancellationToken);
-        using var bundle = await client.GetAsync("/api/disclosures/d1/files/bundle.sig", TestContext.Current.CancellationToken);
-        using var other = await client.GetAsync("/api/disclosures/d1/files/hub.db", TestContext.Current.CancellationToken);
-        var sums = await client.GetStringAsync("/api/disclosures/d1/files/SHA256SUMS", TestContext.Current.CancellationToken);
+        using var report = await client.GetAsync("/api/disclosures/d1/files/report.json",
+            TestContext.Current.CancellationToken);
+        using var pdf =
+            await client.GetAsync("/api/disclosures/d1/files/report.pdf", TestContext.Current.CancellationToken);
+        using var bundle = await client.GetAsync("/api/disclosures/d1/files/bundle.sig",
+            TestContext.Current.CancellationToken);
+        using var other =
+            await client.GetAsync("/api/disclosures/d1/files/hub.db", TestContext.Current.CancellationToken);
+        var sums = await client.GetStringAsync("/api/disclosures/d1/files/SHA256SUMS",
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(ReportBytes, await report.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
         Assert.Equal("application/json", report.Content.Headers.ContentType?.MediaType);
@@ -136,11 +146,12 @@ public sealed class DisclosuresApiTests : IDisposable
             Manage("/api/disclosures/d1/share-links", """{"days":3}"""), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var body =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var token = body.RootElement.GetProperty("token").GetString()!;
         Assert.StartsWith("pshare_", token, StringComparison.Ordinal);
         Assert.Equal($"/share/{token}/", body.RootElement.GetProperty("path").GetString());
-        Assert.Equal(NowMs + (3 * 86_400_000L), body.RootElement.GetProperty("expires_at_ms").GetInt64());
+        Assert.Equal(NowMs + 3 * 86_400_000L, body.RootElement.GetProperty("expires_at_ms").GetInt64());
         Assert.NotNull(await Database(hub).FindShareLinkAsync(
             SHA256.HashData(Encoding.UTF8.GetBytes(token)), NowMs, CancellationToken.None));
     }
@@ -163,7 +174,8 @@ public sealed class DisclosuresApiTests : IDisposable
             await Database(hub).WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
         using var client = hub.CreateClient();
 
-        using var response = await client.SendAsync(Manage("/api/disclosures/d1/share-links", body), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Manage("/api/disclosures/d1/share-links", body),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, response.StatusCode);
         if (expected == HttpStatusCode.UnprocessableEntity)
@@ -177,13 +189,16 @@ public sealed class DisclosuresApiTests : IDisposable
         var hub = Hub();
         await SeedAsync(hub, "d1", "u1", "2026-09-30");
         using var client = hub.CreateClient();
-        using var created = await client.SendAsync(Manage("/api/disclosures/d1/share-links", "{}"), TestContext.Current.CancellationToken);
+        using var created = await client.SendAsync(Manage("/api/disclosures/d1/share-links", "{}"),
+            TestContext.Current.CancellationToken);
         var id = JsonDocument.Parse(await created.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
             .RootElement.GetProperty("id").GetString();
 
-        using var first = await client.SendAsync(Manage($"/api/disclosures/d1/share-links/{id}", "{}", HttpMethod.Delete),
+        using var first = await client.SendAsync(
+            Manage($"/api/disclosures/d1/share-links/{id}", "{}", HttpMethod.Delete),
             TestContext.Current.CancellationToken);
-        using var second = await client.SendAsync(Manage($"/api/disclosures/d1/share-links/{id}", "{}", HttpMethod.Delete),
+        using var second = await client.SendAsync(
+            Manage($"/api/disclosures/d1/share-links/{id}", "{}", HttpMethod.Delete),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
@@ -193,7 +208,8 @@ public sealed class DisclosuresApiTests : IDisposable
     [Theory]
     [InlineData(true, "auditors:published,auditors:withdrawn")]
     [InlineData(false, "")]
-    public async Task A_withdrawal_tells_only_the_webhooks_that_were_told_of_the_publication(bool published, string expected)
+    public async Task A_withdrawal_tells_only_the_webhooks_that_were_told_of_the_publication(bool published,
+        string expected)
     {
         var hub = Hub();
         await SeedAsync(hub, "d1", "u1", "2026-09-30");
@@ -202,7 +218,8 @@ public sealed class DisclosuresApiTests : IDisposable
         using var client = hub.CreateClient();
 
         using var response = await client.SendAsync(
-            Manage("/api/disclosures/d1/withdraw", """{"reason":"replaced by Q3 v2"}"""), TestContext.Current.CancellationToken);
+            Manage("/api/disclosures/d1/withdraw", """{"reason":"replaced by Q3 v2"}"""),
+            TestContext.Current.CancellationToken);
         using var again = await client.SendAsync(
             Manage("/api/disclosures/d1/withdraw", """{"reason":"again"}"""), TestContext.Current.CancellationToken);
 
@@ -211,7 +228,8 @@ public sealed class DisclosuresApiTests : IDisposable
         var summary = (await Database(hub).GetDisclosureAsync("d1", CancellationToken.None))!;
         Assert.Equal("alice", summary.WithdrawnBy);
         Assert.Equal(expected, string.Join(',',
-            (await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None)).Select(d => $"{d.Webhook}:{d.Event}")));
+            (await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None))
+            .Select(d => $"{d.Webhook}:{d.Event}")));
     }
 
     [Theory]
@@ -224,7 +242,8 @@ public sealed class DisclosuresApiTests : IDisposable
         await SeedAsync(hub, "d1", "u1", "2026-09-30");
         using var client = hub.CreateClient();
 
-        using var response = await client.SendAsync(Manage("/api/disclosures/d1/withdraw", body), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Manage("/api/disclosures/d1/withdraw", body),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.False((await Database(hub).GetDisclosureAsync("d1", CancellationToken.None))!.Withdrawn);
@@ -237,7 +256,8 @@ public sealed class DisclosuresApiTests : IDisposable
         await SeedAsync(hub, "d1", "u1", "2026-09-30", pdf: null, renderReason: "unsupported_engine");
         using var client = hub.CreateClient();
 
-        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var summary = (await Database(hub).GetDisclosureAsync("d1", CancellationToken.None))!;
@@ -254,7 +274,8 @@ public sealed class DisclosuresApiTests : IDisposable
         Assert.True(gate.TryEnter());
         using var client = hub.CreateClient();
 
-        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"),
+            TestContext.Current.CancellationToken);
 
         gate.Exit();
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
@@ -273,7 +294,8 @@ public sealed class DisclosuresApiTests : IDisposable
         await SeedAsync(hub, "d1", "u1", "2026-09-30", pdf: null, renderReason: "unsupported_engine");
         using var client = hub.CreateClient();
 
-        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"), TestContext.Current.CancellationToken);
+        using var response = await client.SendAsync(Manage("/api/disclosures/d1/render", "{}"),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var summary = (await Database(hub).GetDisclosureAsync("d1", CancellationToken.None))!;
@@ -287,10 +309,13 @@ public sealed class DisclosuresApiTests : IDisposable
         var hub = Hub();
         await SeedAsync(hub, "d1", "u1", "2026-09-30");
         using var client = hub.CreateClient();
-        (await client.SendAsync(Manage("/api/disclosures/d1/share-links", "{}"), TestContext.Current.CancellationToken)).Dispose();
+        (await client.SendAsync(Manage("/api/disclosures/d1/share-links", "{}"), TestContext.Current.CancellationToken))
+            .Dispose();
         await Database(hub).WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
 
-        using var detail = JsonDocument.Parse(await client.GetStringAsync("/api/disclosures/d1", TestContext.Current.CancellationToken));
+        using var detail =
+            JsonDocument.Parse(
+                await client.GetStringAsync("/api/disclosures/d1", TestContext.Current.CancellationToken));
 
         Assert.Equal("withdrawn", detail.RootElement.GetProperty("share_links")[0].GetProperty("state").GetString());
     }
@@ -309,7 +334,8 @@ public sealed class DisclosuresApiTests : IDisposable
 
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
-        using var detail = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var detail =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Equal(expected, detail.RootElement.GetProperty("can_manage").GetBoolean());
     }
 
@@ -321,14 +347,18 @@ public sealed class DisclosuresApiTests : IDisposable
         var database = Database(hub);
         await database.EnqueueDeliveriesAsync("d1", "published", ["auditors", "mail"], NowMs, CancellationToken.None);
         var deliveries = await database.ListDeliveriesAsync("d1", CancellationToken.None);
-        await database.RecordDeliveryAttemptAsync(deliveries[0].Id, 0, 500, DeliveryStates.Failed, NowMs, null, CancellationToken.None);
-        await database.RecordDeliveryAttemptAsync(deliveries[1].Id, 0, 204, DeliveryStates.Delivered, NowMs, null, CancellationToken.None);
+        await database.RecordDeliveryAttemptAsync(deliveries[0].Id, 0, 500, DeliveryStates.Failed, NowMs, null,
+            CancellationToken.None);
+        await database.RecordDeliveryAttemptAsync(deliveries[1].Id, 0, 204, DeliveryStates.Delivered, NowMs, null,
+            CancellationToken.None);
         using var client = hub.CreateClient();
 
         using var failed = await client.SendAsync(
-            Manage($"/api/disclosures/d1/deliveries/{deliveries[0].Id}/retry", "{}"), TestContext.Current.CancellationToken);
+            Manage($"/api/disclosures/d1/deliveries/{deliveries[0].Id}/retry", "{}"),
+            TestContext.Current.CancellationToken);
         using var delivered = await client.SendAsync(
-            Manage($"/api/disclosures/d1/deliveries/{deliveries[1].Id}/retry", "{}"), TestContext.Current.CancellationToken);
+            Manage($"/api/disclosures/d1/deliveries/{deliveries[1].Id}/retry", "{}"),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NoContent, failed.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, delivered.StatusCode);
@@ -377,7 +407,8 @@ public sealed class DisclosuresApiTests : IDisposable
                         {
                             Name = "auditors",
                             Url = new Uri("http://127.0.0.1:9/hook"),
-                            Secret = "webhook-secret-0123456789abcdef0123" // gitleaks:allow -- synthetic test credential
+                            Secret =
+                                "webhook-secret-0123456789abcdef0123" // gitleaks:allow -- synthetic test credential
                         }
                     ]
                 };

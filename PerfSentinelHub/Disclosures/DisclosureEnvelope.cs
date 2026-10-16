@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 namespace PerfSentinelHub.Disclosures;
@@ -50,11 +51,13 @@ public sealed record DisclosureEnvelope(
             return null;
         var metadata = Child(root, "report_metadata");
         var period = Child(root, "period");
-        if (Text(root, "schema_version") is not { } schema || !schema.StartsWith("perf-sentinel-report/", StringComparison.Ordinal) ||
+        if (Text(root, "schema_version") is not { } schema ||
+            !schema.StartsWith("perf-sentinel-report/", StringComparison.Ordinal) ||
             Text(metadata, "report_uuid") is not { } uuid ||
             Text(metadata, "intent") is not { } intent ||
             // The schema has two levels: anything else would pass the internal check as public.
-            Text(metadata, "confidentiality_level") is not { } confidentiality || confidentiality is not ("public" or "internal") ||
+            Text(metadata, "confidentiality_level") is not { } confidentiality ||
+            confidentiality is not ("public" or "internal") ||
             Text(Child(root, "organisation"), "name") is not { } organisation ||
             Text(period, "period_type") is not { } periodType ||
             Text(period, "from_date") is not { } from || !IsDate(from) ||
@@ -62,7 +65,8 @@ public sealed record DisclosureEnvelope(
             Text(Child(root, "integrity"), "content_hash") is not { } contentHash)
             return null;
         return new DisclosureEnvelope(
-            schema, uuid, intent, confidentiality, Text(metadata, "integrity_level"), organisation, periodType, from, to,
+            schema, uuid, intent, confidentiality, Text(metadata, "integrity_level"), organisation, periodType, from,
+            to,
             contentHash, Figures(root));
     }
 
@@ -79,12 +83,14 @@ public sealed record DisclosureEnvelope(
             WriteNumber(writer, "energy_kwh", Number(aggregate, "total_energy_kwh"));
             WriteNumber(writer, "carbon_kgco2eq", Number(aggregate, "total_carbon_kgco2eq"));
             WriteNumber(writer, "avoidable_ratio",
-                Number(Child(aggregate, "canonical_waste"), "waste_ratio") ?? Number(aggregate, "aggregate_waste_ratio"));
+                Number(Child(aggregate, "canonical_waste"), "waste_ratio") ??
+                Number(aggregate, "aggregate_waste_ratio"));
             WriteNumber(writer, "coverage", Number(aggregate, "period_coverage"));
             WriteNumber(writer, "applications_declared", Number(scope, "total_applications_declared"));
             WriteNumber(writer, "applications_measured", Number(scope, "applications_measured"));
             writer.WriteStartArray("applications");
-            if (root.TryGetProperty("applications", out var applications) && applications.ValueKind == JsonValueKind.Array)
+            if (root.TryGetProperty("applications", out var applications) &&
+                applications.ValueKind == JsonValueKind.Array)
                 foreach (var application in applications.EnumerateArray().Take(MaxApplications))
                 {
                     if (application.ValueKind != JsonValueKind.Object ||
@@ -100,7 +106,7 @@ public sealed record DisclosureEnvelope(
             writer.WriteEndObject();
         }
 
-        return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     private static JsonElement Child(JsonElement parent, string name)

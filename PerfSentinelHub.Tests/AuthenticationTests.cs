@@ -32,7 +32,8 @@ public sealed class AuthenticationTests : IAsyncLifetime
         ["Bearer shouting"] = """{"email":"erin@example.internal","groups":["/HUB-USERS"]}""",
         ["Bearer nested"] = """{"email":"frank@example.internal","groups":[["/hub-users"],null]}""",
         ["Bearer malformed"] = """{"email":"grace@example.internal","groups":42}""",
-        ["Bearer near"] = """{"email":"heidi@example.internal","groups":["/parent/hub-users","/hub-users/readers","hub-users","/hub-users "]}""",
+        ["Bearer near"] =
+            """{"email":"heidi@example.internal","groups":["/parent/hub-users","/hub-users/readers","hub-users","/hub-users "]}""",
         ["Bearer renamed"] = """{"email":"ivan@example.internal","hub_groups":["/hub-users"],"groups":["/other"]}"""
     };
 

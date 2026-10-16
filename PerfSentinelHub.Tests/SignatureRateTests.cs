@@ -9,13 +9,13 @@ namespace PerfSentinelHub.Tests;
 public sealed class SignatureRateTests : IDisposable
 {
     private readonly FakeTimeProvider _clock = new(DateTimeOffset.UnixEpoch.AddDays(30));
+    private readonly HubDatabase _database;
 
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(), $"perf-sentinel-hub-rate-{Guid.NewGuid():N}.db");
 
     private readonly ListLogger<SignatureRate> _logger = new();
     private readonly HubOptions _options;
-    private readonly HubDatabase _database;
 
     public SignatureRateTests()
     {

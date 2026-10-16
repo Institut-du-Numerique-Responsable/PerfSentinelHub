@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -34,12 +33,12 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
     private const string JsonUtf8 = "Content-Type: application/json; charset=utf-8";
 
     private static readonly DateTimeOffset SignInAt = DateTimeOffset.UtcNow;
+    private readonly FakeTimeProvider _clock = new(SignInAt);
 
     private readonly HubApplicationFactory _hub = new();
-    private readonly FakeTimeProvider _clock = new(SignInAt);
     private WebApplicationFactory<Program> _off = null!;
-    private WebApplicationFactory<Program> _signedIn = null!;
     private FakeProvider _provider = null!;
+    private WebApplicationFactory<Program> _signedIn = null!;
 
     public async ValueTask InitializeAsync()
     {
@@ -111,7 +110,9 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
             .TrimEnd('\n').Replace("{hub_version}", HubVersion.Current, StringComparison.Ordinal);
         // A source's age is the session clock, today, less the time it was last seen.
         golden = AgePlaceholder().Replace(golden, match => ((SignInAt.ToUnixTimeMilliseconds() -
-            long.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)) / 1000).ToString(CultureInfo.InvariantCulture));
+                                                             long.Parse(match.Groups[1].Value,
+                                                                 CultureInfo.InvariantCulture)) / 1000)
+            .ToString(CultureInfo.InvariantCulture));
         Assert.Equal(golden, actual);
         Assert.Equal(headers, Headers(response));
     }
@@ -192,7 +193,8 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
     [InlineData("POST", "/api/incidents/refresh", HttpStatusCode.OK)]
     [InlineData("GET", "/health/live", HttpStatusCode.OK)]
     [InlineData("GET", "/health/ready", HttpStatusCode.OK)]
-    public async Task Every_route_answers_as_before_to_a_session_with_auth_on(string method, string path, HttpStatusCode expected)
+    public async Task Every_route_answers_as_before_to_a_session_with_auth_on(string method, string path,
+        HttpStatusCode expected)
     {
         using var client = await SignedInClientAsync();
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
@@ -258,7 +260,8 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
     private static async Task SeedAsync(HubDatabase database)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        foreach (var (source, environment, team, at) in new[] { ("test", "test", "shop", 4_000L), ("lab", "lab", "billing", 5_000L) })
+        foreach (var (source, environment, team, at) in new[]
+                     { ("test", "test", "shop", 4_000L), ("lab", "lab", "billing", 5_000L) })
         {
             var finding = $$"""
                             {"finding":{"type":"slow_sql","severity":"warning","trace_id":"rider-trace","service":"cart",
@@ -269,10 +272,14 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
             await database.UpsertBatchAsync(
                 new SourceSnapshot(source, source, environment, "0.26.2"),
                 FindingParser.Parse(Encoding.UTF8.GetBytes($"[{finding}]")), at, cancellationToken);
-            var incident = $$"""{"id":"{{IncidentId}}","service":"cart","kind":"oom_kill","at_ms":1000,"window_from_ms":900,"window_to_ms":1100}""";
+            var incident =
+                $$"""{"id":"{{IncidentId}}","service":"cart","kind":"oom_kill","at_ms":1000,"window_from_ms":900,"window_to_ms":1100}""";
             await database.UpsertIncidentsAsync(
                 source,
-                [new ParsedIncident(IncidentId, "cart", "oom_kill", 1000, null, 900, 1100, null, 1, incident, $"[{finding}]")],
+                [
+                    new ParsedIncident(IncidentId, "cart", "oom_kill", 1000, null, 900, 1100, null, 1, incident,
+                        $"[{finding}]")
+                ],
                 at, cancellationToken);
         }
 

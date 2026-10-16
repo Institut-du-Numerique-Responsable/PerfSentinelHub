@@ -16,11 +16,15 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class DisclosureShareTests : IDisposable
 {
-    private const string ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+    private const string
+        ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
+
     private const string Token = "pshare_live0123456789abcdef0123456789abcdef0123";
     private const long NowMs = 10_000;
 
-    private static readonly string[] Files = ["report.json", "attestation.intoto.jsonl", "bundle.sig", "report.pdf", "SHA256SUMS"];
+    private static readonly string[] Files =
+        ["report.json", "attestation.intoto.jsonl", "bundle.sig", "report.pdf", "SHA256SUMS"];
+
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
 
     public void Dispose()
@@ -42,7 +46,9 @@ public sealed class DisclosureShareTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             AssertGuarded(response);
             Assert.Equal("attachment", response.Content.Headers.ContentDisposition?.DispositionType);
-            Assert.Equal(name, response.Content.Headers.ContentDisposition?.FileNameStar ?? response.Content.Headers.ContentDisposition?.FileName);
+            Assert.Equal(name,
+                response.Content.Headers.ContentDisposition?.FileNameStar ??
+                response.Content.Headers.ContentDisposition?.FileName);
         }
     }
 
@@ -69,7 +75,7 @@ public sealed class DisclosureShareTests : IDisposable
     [InlineData("withdrawn")]
     public async Task A_dead_link_is_the_same_bare_404(string death)
     {
-        var hub = await SharedAsync(expiresAtMs: death == "expired" ? NowMs : NowMs + 86_400_000);
+        var hub = await SharedAsync(death == "expired" ? NowMs : NowMs + 86_400_000);
         var database = Database(hub);
         if (death == "revoked")
             await database.RevokeShareLinkAsync("d1", "l1", "alice", NowMs, CancellationToken.None);
@@ -77,7 +83,8 @@ public sealed class DisclosureShareTests : IDisposable
             await database.WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
         using var client = hub.CreateClient();
 
-        using var response = await client.GetAsync($"/share/{Token}/report.json", TestContext.Current.CancellationToken);
+        using var response =
+            await client.GetAsync($"/share/{Token}/report.json", TestContext.Current.CancellationToken);
 
         await AssertBare404Async(response);
     }
@@ -109,7 +116,8 @@ public sealed class DisclosureShareTests : IDisposable
 
         await Database(hub).WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
 
-        await AssertBare404Async(await client.GetAsync($"/share/{Token}/report.json", TestContext.Current.CancellationToken));
+        await AssertBare404Async(await client.GetAsync($"/share/{Token}/report.json",
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -132,7 +140,8 @@ public sealed class DisclosureShareTests : IDisposable
         var hub = await SharedAsync(importKey: null);
         using var client = hub.CreateClient();
 
-        using var response = await client.GetAsync($"/share/{Token}/report.json", TestContext.Current.CancellationToken);
+        using var response =
+            await client.GetAsync($"/share/{Token}/report.json", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         // Not mapped at all: the route's own guarded 404 never answers.
@@ -176,13 +185,14 @@ public sealed class DisclosureShareTests : IDisposable
         }
     }
 
-    private async Task<WebApplicationFactory<Program>> SharedAsync(long expiresAtMs = NowMs + 86_400_000, string? importKey = ImportKey)
+    private async Task<WebApplicationFactory<Program>> SharedAsync(long expiresAtMs = NowMs + 86_400_000,
+        string? importKey = ImportKey)
     {
         var hub = new HubApplicationFactory().WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Disclosures = new DisclosuresOptions { ImportKey = importKey })));
         _hubs.Add(hub);
-        await DisclosuresApiTests.SeedAsync(hub, "d1", "u1", "2026-09-30", attestation: [1], pdf: [37, 80, 68, 70]);
+        await DisclosuresApiTests.SeedAsync(hub, "d1", "u1", "2026-09-30", [1], [37, 80, 68, 70]);
         var database = Database(hub);
         await using (var connection = await database.OpenConnectionAsync(CancellationToken.None))
         await using (var bundle = connection.CreateCommand())
@@ -192,7 +202,8 @@ public sealed class DisclosureShareTests : IDisposable
         }
 
         await database.InsertShareLinkAsync(
-            new ShareLinkRecord("l1", "d1", SHA256.HashData(Encoding.UTF8.GetBytes(Token)), "alice", NowMs, expiresAtMs),
+            new ShareLinkRecord("l1", "d1", SHA256.HashData(Encoding.UTF8.GetBytes(Token)), "alice", NowMs,
+                expiresAtMs),
             CancellationToken.None);
         return hub;
     }

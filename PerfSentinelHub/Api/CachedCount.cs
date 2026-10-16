@@ -27,12 +27,12 @@ public sealed partial class CachedCount<T>(
     private readonly Lock _gate = new();
     private Task<Counted<T>?>? _counting;
     private Counted<T>? _last;
+    private TimeSpan _rest = Lifetime;
 
     // When the last count ended, landed or failed, and how long to wait from there.
     // Measured from the end rather than the start, so a slow count does not start
     // the next at once.
     private long? _settledAt;
-    private TimeSpan _rest = Lifetime;
 
     public async Task<Counted<T>?> GetAsync(CancellationToken cancellationToken)
     {

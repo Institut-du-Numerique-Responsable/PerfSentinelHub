@@ -79,19 +79,20 @@ public static partial class MetricsEndpoint
         // Every parameter is a collaborator the router injects, one per metric family source.
 #pragma warning disable S107
         app.MapGet("/metrics", async (
-            HubDatabase database,
-            IOptions<HubOptions> options,
-            ImportMetrics imports,
-            IncidentImportMetrics incidentImports,
-            CorrelationImportMetrics correlationImports,
-            DisclosureMetrics disclosures,
-            FindingMetrics findings,
-            TimeProvider timeProvider,
-            CancellationToken cancellationToken) =>
+                HubDatabase database,
+                IOptions<HubOptions> options,
+                ImportMetrics imports,
+                IncidentImportMetrics incidentImports,
+                CorrelationImportMetrics correlationImports,
+                DisclosureMetrics disclosures,
+                FindingMetrics findings,
+                TimeProvider timeProvider,
+                CancellationToken cancellationToken) =>
 #pragma warning restore S107
         {
             var body = await RenderAsync(
-                database, options.Value, imports, incidentImports, correlationImports, disclosures, findings, timeProvider,
+                database, options.Value, imports, incidentImports, correlationImports, disclosures, findings,
+                timeProvider,
                 version, cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();

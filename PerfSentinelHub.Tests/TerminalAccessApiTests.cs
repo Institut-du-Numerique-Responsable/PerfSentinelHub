@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -28,7 +27,11 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
 {
     private const string Here = "203.0.113.7";
     private const string Elsewhere = "198.51.100.1";
-    private const string CiToken = "ci-terminal-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
+    private const string
+        CiToken = "ci-terminal-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
+    private const string Peer = "X-Test-Peer";
 
     private static readonly Dictionary<string, string> Users = new(StringComparer.Ordinal)
     {
@@ -38,6 +41,18 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         ["lab"] = """{"sub":"u-lab","email":"lab@example.internal","groups":["/teams/lab"]}""",
         ["forger"] = """{"sub":"u-forger","email":"forger\r\nforged line","groups":["/teams/shop"]}"""
     };
+
+    private static readonly (HttpMethod Method, string Path)[] Routes =
+    [
+        (HttpMethod.Post, "/auth/device"),
+        (HttpMethod.Post, "/auth/device/token"),
+        (HttpMethod.Post, "/auth/revoke"),
+        (HttpMethod.Get, "/device"),
+        (HttpMethod.Post, "/api/device/verify"),
+        (HttpMethod.Post, "/api/device/approve"),
+        (HttpMethod.Get, "/api/tokens"),
+        (HttpMethod.Delete, "/api/tokens/0123456789abcdef0123456789abcdef")
+    ];
 
     private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
     private readonly HubApplicationFactory _hub = new();
@@ -72,7 +87,10 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
                     Enabled = true,
                     AdminGroups = ["/hub-admins"],
                     Groups = [new InternalGroupOptions { Name = "ci" }],
-                    Projects = [new ProjectOptions { Name = "lab", Patterns = [new PatternOptions { Source = "test" }] }],
+                    Projects =
+                    [
+                        new ProjectOptions { Name = "lab", Patterns = [new PatternOptions { Source = "test" }] }
+                    ],
                     Grants =
                     [
                         new GrantOptions { Group = "/teams/shop", Project = "*", Role = "member" },
@@ -82,7 +100,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
                     [
                         new MachineTokenOptions
                         {
-                            Name = "ci", Group = "internal:ci", Token = CiToken, ExpiresAt = _clock.GetUtcNow().AddDays(30)
+                            Name = "ci", Group = "internal:ci", Token = CiToken,
+                            ExpiresAt = _clock.GetUtcNow().AddDays(30)
                         }
                     ]
                 });
@@ -140,7 +159,9 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var cli = FakeProvider.Client(hub);
         using var browser = FakeProvider.Client(hub);
         using (var callback = await FakeProvider.SignInAsync(browser, "member"))
+        {
             Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        }
 
         using var device = await FormAsync(cli, "/auth/device", "client_id=perf-sentinel");
         using var poll = await FormAsync(cli, "/auth/device/token", "client_id=perf-sentinel");
@@ -174,7 +195,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         Assert.Equal(
             ["device_code", "user_code", "verification_uri", "expires_in", "interval"],
             body.EnumerateObject().Select(property => property.Name));
-        Assert.Matches("^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$", body.GetProperty("user_code").GetString());
+        Assert.Matches("^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$",
+            body.GetProperty("user_code").GetString());
         Assert.Equal("https://localhost/device", body.GetProperty("verification_uri").GetString());
         Assert.Equal(600, body.GetProperty("expires_in").GetInt32());
         Assert.Equal(5, body.GetProperty("interval").GetInt32());
@@ -192,17 +214,25 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
 
         Assert.Equal("invalid_client", await OAuthErrorAsync(cli, "/auth/device", "client_id=other"));
         Assert.Equal("invalid_request", await OAuthErrorAsync(cli, "/auth/device", ""));
-        Assert.Equal("invalid_request", await OAuthErrorAsync(cli, "/auth/device", "client_id=perf-sentinel&client_id=perf-sentinel"));
-        Assert.Equal("invalid_request", await OAuthErrorAsync(cli, "/auth/device/token", $"client_id=perf-sentinel&device_code={device}"));
+        Assert.Equal("invalid_request",
+            await OAuthErrorAsync(cli, "/auth/device", "client_id=perf-sentinel&client_id=perf-sentinel"));
+        Assert.Equal("invalid_request",
+            await OAuthErrorAsync(cli, "/auth/device/token", $"client_id=perf-sentinel&device_code={device}"));
         Assert.Equal("unsupported_grant_type",
-            await OAuthErrorAsync(cli, "/auth/device/token", $"grant_type=password&client_id=perf-sentinel&device_code={device}"));
+            await OAuthErrorAsync(cli, "/auth/device/token",
+                $"grant_type=password&client_id=perf-sentinel&device_code={device}"));
         Assert.Equal("invalid_grant", await OAuthErrorAsync(cli, "/auth/device/token", Poll("unknown")));
         Assert.Equal("invalid_request", await OAuthErrorAsync(cli, "/auth/revoke", "token_type_hint=access_token"));
         using (var json = await cli.PostAsync("/auth/device",
                    new StringContent("""{"client_id":"perf-sentinel"}""", Encoding.UTF8, "application/json"), Cancel))
+        {
             Assert.Equal("""{"error":"invalid_request"}""", await json.Content.ReadAsStringAsync(Cancel));
+        }
+
         using (var large = await FormAsync(cli, "/auth/device", "client_id=perf-sentinel&pad=" + new string('a', 4096)))
+        {
             Assert.Equal(HttpStatusCode.RequestEntityTooLarge, large.StatusCode);
+        }
     }
 
     [Fact]
@@ -234,7 +264,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         Assert.Equal("text/html", page.Content.Headers.ContentType?.MediaType);
         Assert.Equal("no-store", page.Headers.CacheControl?.ToString());
-        Assert.Equal("default-src 'self'; font-src 'self' data:; frame-ancestors 'none'", string.Join(';', page.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal("default-src 'self'; font-src 'self' data:; frame-ancestors 'none'",
+            string.Join(';', page.Headers.GetValues("Content-Security-Policy")));
         Assert.Contains("Enter the code your terminal shows.", html, StringComparison.Ordinal);
         Assert.Contains("maxlength=\"9\"", html, StringComparison.Ordinal);
         Assert.Contains("autocomplete=\"off\"", html, StringComparison.Ordinal);
@@ -274,7 +305,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var page = await bearer.GetAsync("/device", Cancel);
 
         Assert.Equal(HttpStatusCode.Unauthorized, approve.StatusCode);
-        Assert.Contains("needs a browser session", await approve.Content.ReadAsStringAsync(Cancel), StringComparison.Ordinal);
+        Assert.Contains("needs a browser session", await approve.Content.ReadAsStringAsync(Cancel),
+            StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.Unauthorized, verify.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, list.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, page.StatusCode);
@@ -297,7 +329,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         foreach (var write in new[] { approve, verify, delete })
         {
             Assert.Equal(HttpStatusCode.Forbidden, write.StatusCode);
-            Assert.Contains("A machine token only reads.", await write.Content.ReadAsStringAsync(Cancel), StringComparison.Ordinal);
+            Assert.Contains("A machine token only reads.", await write.Content.ReadAsStringAsync(Cancel),
+                StringComparison.Ordinal);
         }
 
         Assert.Equal(HttpStatusCode.Unauthorized, list.StatusCode);
@@ -346,7 +379,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var browser = await SignedInAsync("member", Here);
         var start = await StartAsync(Cli(Here));
 
-        using var sameSite = new HttpRequestMessage(HttpMethod.Post, "/api/device/approve") { Content = Json(Decision(start, true)) };
+        using var sameSite = new HttpRequestMessage(HttpMethod.Post, "/api/device/approve")
+        { Content = Json(Decision(start, true)) };
         sameSite.Headers.Add("Sec-Fetch-Site", "same-site");
         using var sameSiteResponse = await browser.SendAsync(sameSite, Cancel);
         using var form = new HttpRequestMessage(HttpMethod.Post, "/api/device/approve")
@@ -371,7 +405,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var approve = await BrowserPostAsync(browser, "/api/device/approve", Decision(start, true));
 
         Assert.Equal(HttpStatusCode.Redirect, page.StatusCode);
-        Assert.StartsWith("https://idp.example.internal/authorize", page.Headers.Location!.ToString(), StringComparison.Ordinal);
+        Assert.StartsWith("https://idp.example.internal/authorize", page.Headers.Location!.ToString(),
+            StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.Conflict, approve.StatusCode);
     }
 
@@ -448,7 +483,9 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var cli = Cli(Here);
         var start = await StartAsync(cli);
         using (var approve = await BrowserPostAsync(browser, "/api/device/approve", Decision(start, true)))
+        {
             Assert.Equal(HttpStatusCode.NoContent, approve.StatusCode);
+        }
 
         using var issued = await FormAsync(cli, "/auth/device/token", Poll(start));
         var answer = JsonDocument.Parse(await issued.Content.ReadAsStringAsync(Cancel)).RootElement;
@@ -460,7 +497,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, issued.StatusCode);
         Assert.Equal("no-store", issued.Headers.CacheControl?.ToString());
-        Assert.Equal(["access_token", "token_type", "expires_in"], answer.EnumerateObject().Select(property => property.Name));
+        Assert.Equal(["access_token", "token_type", "expires_in"],
+            answer.EnumerateObject().Select(property => property.Name));
         Assert.Matches("^pshub_[A-Za-z0-9_-]{43}$", token);
         Assert.Equal("Bearer", answer.GetProperty("token_type").GetString());
         var expiresAtMs = session.GetProperty("expires_at_ms").GetInt64();
@@ -479,9 +517,15 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
             listed.EnumerateObject().Select(property => property.Name));
 
         using (var revoke = await FormAsync(cli, "/auth/revoke", "token=" + token + "&token_type_hint=access_token"))
+        {
             Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        }
+
         using (var again = await FormAsync(cli, "/auth/revoke", "token=" + token))
+        {
             Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        }
+
         using var after = await bearer.GetAsync("/api/findings", Cancel);
         Assert.Equal(HttpStatusCode.Unauthorized, after.StatusCode);
     }
@@ -500,7 +544,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
                     services.Remove(worker);
                 services.PostConfigure<HubOptions>(options =>
                 {
-                    options.Analysis = new AnalysisOptions { EngineBinaryPath = "/usr/bin/false", ReportDirectory = reports };
+                    options.Analysis = new AnalysisOptions
+                    { EngineBinaryPath = "/usr/bin/false", ReportDirectory = reports };
                     options.Sources =
                     [
                         .. options.Sources,
@@ -520,7 +565,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
             using var labRun = await lab.PostAsync("/api/analyses", Json(Run), Cancel);
             using var machineRun = await Bearer(CiToken, hub).PostAsync("/api/analyses", Json(Run), Cancel);
             using var memberRun = await member.PostAsync("/api/analyses", Json(Run), Cancel);
-            var id = JsonDocument.Parse(await memberRun.Content.ReadAsStringAsync(Cancel)).RootElement.GetProperty("id").GetString();
+            var id = JsonDocument.Parse(await memberRun.Content.ReadAsStringAsync(Cancel)).RootElement.GetProperty("id")
+                .GetString();
             using var run = await member.GetAsync("/api/analyses/" + id, Cancel);
 
             Assert.Equal(
@@ -530,7 +576,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.Forbidden, machineRun.StatusCode);
             Assert.Equal(HttpStatusCode.Accepted, memberRun.StatusCode);
             Assert.Equal("member@example.internal",
-                JsonDocument.Parse(await run.Content.ReadAsStringAsync(Cancel)).RootElement.GetProperty("requested_by").GetString());
+                JsonDocument.Parse(await run.Content.ReadAsStringAsync(Cancel)).RootElement.GetProperty("requested_by")
+                    .GetString());
         }
         finally
         {
@@ -547,7 +594,9 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         var listed = Assert.Single((await TokensAsync(browser)).EnumerateArray());
 
         Assert.Equal("u-forger", listed.GetProperty("identity").GetString());
-        Assert.Contains(_log.Messages, message => message.StartsWith("Terminal sign-in approved by u-forger (u-forger)", StringComparison.Ordinal));
+        Assert.Contains(_log.Messages,
+            message => message.StartsWith("Terminal sign-in approved by u-forger (u-forger)",
+                StringComparison.Ordinal));
         Assert.DoesNotContain(_log.Messages, message => message.Contains("forged line", StringComparison.Ordinal));
     }
 
@@ -559,14 +608,22 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         var start = await StartAsync(cli);
 
         using (var approve = await BrowserPostAsync(browser, "/api/device/approve", Decision(start, true)))
+        {
             Assert.Equal(HttpStatusCode.NoContent, approve.StatusCode);
-        var approved = Assert.Single(_log.Messages, message => message.StartsWith("Terminal sign-in approved", StringComparison.Ordinal));
+        }
+
+        var approved = Assert.Single(_log.Messages,
+            message => message.StartsWith("Terminal sign-in approved", StringComparison.Ordinal));
         Assert.Equal(
-            $"Terminal sign-in approved by member@example.internal (u-member) for {Here}, from another network: False.", approved);
+            $"Terminal sign-in approved by member@example.internal (u-member) for {Here}, from another network: False.",
+            approved);
         Assert.DoesNotContain(_log.Messages, message => message.StartsWith("Terminal token", StringComparison.Ordinal));
 
         using (var issued = await FormAsync(cli, "/auth/device/token", Poll(start)))
+        {
             Assert.Equal(HttpStatusCode.OK, issued.StatusCode);
+        }
+
         var id = Assert.Single((await TokensAsync(browser)).EnumerateArray()).GetProperty("id").GetString();
         Assert.Contains($"Terminal token {id} issued to {Here} for member@example.internal (u-member).", _log.Messages);
     }
@@ -650,7 +707,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
             if (value is byte[] bytes)
                 Assert.Equal(SHA256.HashData(Encoding.UTF8.GetBytes(token)), bytes);
             else
-                Assert.DoesNotContain(token["pshub_".Length..], Convert.ToString(value) ?? "", StringComparison.Ordinal);
+                Assert.DoesNotContain(token["pshub_".Length..], Convert.ToString(value) ?? "",
+                    StringComparison.Ordinal);
         }
 
         Assert.False(await reader.ReadAsync(Cancel));
@@ -683,15 +741,21 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
             using var browser = FakeProvider.Client(gated);
             browser.DefaultRequestHeaders.Add("X-Forwarded-For", Here);
             using (var callback = await FakeProvider.SignInAsync(browser, "member"))
+            {
                 Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+            }
+
             token = await IssueAsync(browser, gated);
             using var admitted = await Bearer(token, gated).GetAsync("/api/access", Cancel);
             Assert.Equal(HttpStatusCode.OK, admitted.StatusCode);
         }
 
-        const string Local = "pshub_local-break-glass-0123456789abcdefghijklmnopqrstu"; // gitleaks:allow -- synthetic test credential
+        const string
+            Local =
+                "pshub_local-break-glass-0123456789abcdefghijklmnopqrstu"; // gitleaks:allow -- synthetic test credential
         Assert.True(await Database.TryInsertTerminalTokenAsync(new TerminalToken(
-            "0123456789abcdef0123456789abcdef", SHA256.HashData(Encoding.UTF8.GetBytes(Local)), "local:ops", "local:ops",
+            "0123456789abcdef0123456789abcdef", SHA256.HashData(Encoding.UTF8.GetBytes(Local)), "local:ops",
+            "local:ops",
             [], null, Here, NowMs, NowMs + 3_600_000, null), NowMs, Cancel));
 
         await using var dropped = Factory.WithWebHostBuilder(builder =>
@@ -708,34 +772,26 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
     {
         using var browser = await SignedInAsync("member", Here);
         using var bearer = Bearer(await IssueAsync(browser));
-        var expiresAtMs = Assert.Single((await TokensAsync(browser)).EnumerateArray()).GetProperty("expires_at_ms").GetInt64();
+        var expiresAtMs = Assert.Single((await TokensAsync(browser)).EnumerateArray()).GetProperty("expires_at_ms")
+            .GetInt64();
 
         _clock.Advance(TimeSpan.FromMilliseconds(expiresAtMs - NowMs - 1));
         using (var live = await bearer.GetAsync("/api/findings", Cancel))
+        {
             Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        }
+
         _clock.Advance(TimeSpan.FromMilliseconds(1));
         using (var expired = await bearer.GetAsync("/api/findings", Cancel))
+        {
             Assert.Equal(HttpStatusCode.Unauthorized, expired.StatusCode);
+        }
 
         await Database.PurgeAsync(0, 0, expiresAtMs - 1, Cancel);
         Assert.Single(await Database.ListTerminalTokensAsync(null, 0, 100, Cancel));
         await Database.PurgeAsync(0, 0, expiresAtMs, Cancel);
         Assert.Empty(await Database.ListTerminalTokensAsync(null, 0, 100, Cancel));
     }
-
-    private static readonly (HttpMethod Method, string Path)[] Routes =
-    [
-        (HttpMethod.Post, "/auth/device"),
-        (HttpMethod.Post, "/auth/device/token"),
-        (HttpMethod.Post, "/auth/revoke"),
-        (HttpMethod.Get, "/device"),
-        (HttpMethod.Post, "/api/device/verify"),
-        (HttpMethod.Post, "/api/device/approve"),
-        (HttpMethod.Get, "/api/tokens"),
-        (HttpMethod.Delete, "/api/tokens/0123456789abcdef0123456789abcdef")
-    ];
-
-    private const string Peer = "X-Test-Peer";
 
     private HttpClient Cli(string address, WebApplicationFactory<Program>? hub = null)
     {
@@ -751,7 +807,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         return client;
     }
 
-    private async Task<HttpClient> SignedInAsync(string user, string address, WebApplicationFactory<Program>? hub = null)
+    private async Task<HttpClient> SignedInAsync(string user, string address,
+        WebApplicationFactory<Program>? hub = null)
     {
         var client = Cli(address, hub);
         using var callback = await FakeProvider.SignInAsync(client, user);
@@ -761,7 +818,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
 
     private static Task<HttpResponseMessage> FormAsync(HttpClient client, string path, string body)
     {
-        return client.PostAsync(path, new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded"), Cancel);
+        return client.PostAsync(path, new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded"),
+            Cancel);
     }
 
     private static StringContent Json(string body)
@@ -808,7 +866,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
 
     private static string Decision(JsonElement start, bool approve)
     {
-        return $$"""{"user_code":"{{start.GetProperty("user_code").GetString()!.ToLowerInvariant()}}","approve":{{(approve ? "true" : "false")}}}""";
+        return
+            $$"""{"user_code":"{{start.GetProperty("user_code").GetString()!.ToLowerInvariant()}}","approve":{{(approve ? "true" : "false")}}}""";
     }
 
     private static async Task<string> OAuthErrorAsync(HttpClient client, string path, string body)
@@ -816,7 +875,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var response = await FormAsync(client, path, body);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(Cancel)).RootElement.GetProperty("error").GetString()!;
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(Cancel)).RootElement.GetProperty("error")
+            .GetString()!;
     }
 
     // Approve from the browser, then poll as the CLI would from the same address.
@@ -825,7 +885,10 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var cli = Cli(Here, hub);
         var start = await StartAsync(cli);
         using (var approve = await BrowserPostAsync(browser, "/api/device/approve", Decision(start, true)))
+        {
             Assert.Equal(HttpStatusCode.NoContent, approve.StatusCode);
+        }
+
         using var issued = await FormAsync(cli, "/auth/device/token", Poll(start));
         Assert.Equal(HttpStatusCode.OK, issued.StatusCode);
         return JsonDocument.Parse(await issued.Content.ReadAsStringAsync(Cancel)).RootElement

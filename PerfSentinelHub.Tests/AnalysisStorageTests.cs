@@ -88,7 +88,8 @@ public sealed class AnalysisStorageTests : IDisposable
             // The listener opens once the hosted services have started. A run
             // still left to interrupt then would catch one submitted to this
             // very process, and fail a run nobody lost.
-            Assert.Equal(AnalysisStatuses.Interrupted, (await database.FindRunAsync("lost", cancellationToken))!.Status);
+            Assert.Equal(AnalysisStatuses.Interrupted,
+                (await database.FindRunAsync("lost", cancellationToken))!.Status);
         }
         finally
         {

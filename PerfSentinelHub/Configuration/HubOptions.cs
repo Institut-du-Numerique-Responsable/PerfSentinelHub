@@ -18,6 +18,7 @@ public sealed record HubOptions
     // with the endpoint still heartbeating from a reachable source =
     // likely_resolved; anything else = not_observed.
     public TimeSpan ResolutionGrace { get; set; } = TimeSpan.FromDays(7);
+
     // A daemon that first sees more signatures than this in an hour is flagged on
     // /api/sources and logged: see SignatureRate. 0 turns the check off.
     public int NewSignaturesPerHourWarning { get; set; } = 1000;
@@ -144,7 +145,9 @@ public static class AccessPermissions
     public const string AdminRole = "admin";
 
     public static readonly IReadOnlyList<string> All =
-        [FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin, DisclosuresRead, DisclosuresManage];
+    [
+        FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin, DisclosuresRead, DisclosuresManage
+    ];
 
     // reader is not read-only: it starts analyses.
     public static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> BuiltInRoles =

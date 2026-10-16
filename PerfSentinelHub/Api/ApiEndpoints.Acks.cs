@@ -30,8 +30,8 @@ public static partial class ApiEndpoints
     {
         var reads = access.Scope(context, AccessPermissions.FindingsRead);
         if (access.Sources(context, options.Value.Sources).FirstOrDefault(candidate =>
-                string.Equals(candidate.Id, sourceId, StringComparison.Ordinal))
-            is not { Kind: SourceKinds.Daemon, HasAckCredential: true } source || !reads.ReachesSource(source.Id))
+                    string.Equals(candidate.Id, sourceId, StringComparison.Ordinal))
+                is not { Kind: SourceKinds.Daemon, HasAckCredential: true } source || !reads.ReachesSource(source.Id))
             return Problem(StatusCodes.Status404NotFound, "This source relays no acknowledgments.");
 
         var listed = await database.ReadSourceAcksAsync(

@@ -17,12 +17,14 @@ public sealed class ShareDownloadCounter(HubDatabase database)
         _pending.AddOrUpdate(
             linkId,
             _ => new ShareDownloads(1, nowMs, client),
-            (_, counted) => new ShareDownloads(counted.Count + 1, Math.Max(counted.LastUsedAtMs, nowMs), client ?? counted.LastClient));
+            (_, counted) => new ShareDownloads(counted.Count + 1, Math.Max(counted.LastUsedAtMs, nowMs),
+                client ?? counted.LastClient));
     }
 
     public async Task FlushAsync(CancellationToken cancellationToken)
     {
-        var flushed = Interlocked.Exchange(ref _pending, new ConcurrentDictionary<string, ShareDownloads>(StringComparer.Ordinal));
+        var flushed = Interlocked.Exchange(ref _pending,
+            new ConcurrentDictionary<string, ShareDownloads>(StringComparer.Ordinal));
         await database.AddShareDownloadsAsync(flushed, cancellationToken);
     }
 }

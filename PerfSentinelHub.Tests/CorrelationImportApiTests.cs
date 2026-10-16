@@ -161,10 +161,7 @@ public sealed class CorrelationImportApiTests(HubApplicationFactory factory) : I
         }
         finally
         {
-            for (var slot = 0; slot < entered; slot++)
-            {
-                gate.Exit();
-            }
+            for (var slot = 0; slot < entered; slot++) gate.Exit();
         }
     }
 

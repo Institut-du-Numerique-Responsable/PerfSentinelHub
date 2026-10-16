@@ -19,10 +19,10 @@ public sealed partial class SignatureRate(
     ILogger<SignatureRate> logger)
 {
     private static readonly TimeSpan Window = TimeSpan.FromHours(1);
+    private readonly HashSet<string> _flagged = new(StringComparer.Ordinal);
 
     // Replaced whole on each evaluation, read on request threads.
     private IReadOnlyDictionary<string, int> _counts = new Dictionary<string, int>();
-    private readonly HashSet<string> _flagged = new(StringComparer.Ordinal);
 
     /// <summary>Null while the source is not judged: never evaluated, or still in its first hour.</summary>
     public int? NewSignaturesLastHour(string sourceId)

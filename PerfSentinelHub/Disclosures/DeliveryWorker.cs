@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Api;
@@ -53,25 +54,30 @@ public sealed partial class DeliveryWorker(
         Uri? publicUrl,
         CancellationToken cancellationToken)
     {
-        var link = webhook.IncludeShareLink && delivery.Event == "published" && publicUrl is not null && !disclosure.Withdrawn
+        var link = webhook.IncludeShareLink && delivery.Event == "published" && publicUrl is not null &&
+                   !disclosure.Withdrawn
             ? await ApiEndpoints.IssueShareLinkAsync(
-                database, disclosure.Id, "webhook:" + webhook.Name, webhook.ShareLinkDays, timeProvider, cancellationToken)
+                database, disclosure.Id, "webhook:" + webhook.Name, webhook.ShareLinkDays, timeProvider,
+                cancellationToken)
             : null;
         var file = disclosure.HasPdf ? "report.pdf" : "report.json";
         var shareUrl = link is null ? null : new Uri(publicUrl!, link.Path + file).ToString();
-        var status = await SendAsync(webhook, WebhookDelivery.Body(disclosure, delivery.Event, shareUrl), cancellationToken);
+        var status = await SendAsync(webhook, WebhookDelivery.Body(disclosure, delivery.Event, shareUrl),
+            cancellationToken);
 
         if (status is >= 200 and < 300)
         {
             // Past the stopping token: the receiver has it, and a restart must not send it again.
-            await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status, DeliveryStates.Delivered, Now(),
+            await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status, DeliveryStates.Delivered,
+                Now(),
                 null, CancellationToken.None);
             return;
         }
 
         // The link went nowhere: it dies with the attempt, and the next one gets its own.
         if (link is not null)
-            await database.RevokeShareLinkAsync(disclosure.Id, link.Id, "webhook:" + webhook.Name, Now(), cancellationToken);
+            await database.RevokeShareLinkAsync(disclosure.Id, link.Id, "webhook:" + webhook.Name, Now(),
+                cancellationToken);
         var attempts = delivery.Attempts + 1;
         if (attempts >= MaxAttempts)
         {
@@ -98,7 +104,7 @@ public sealed partial class DeliveryWorker(
         using var request = new HttpRequestMessage(HttpMethod.Post, webhook.Url);
         request.Content = new ByteArrayContent(body);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        request.Headers.Add(WebhookDelivery.TimestampHeader, timestamp.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        request.Headers.Add(WebhookDelivery.TimestampHeader, timestamp.ToString(CultureInfo.InvariantCulture));
         request.Headers.Add(WebhookDelivery.SignatureHeader, WebhookDelivery.Sign(webhook.Secret!, timestamp, body));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(options.Value.HttpTimeout);
@@ -108,7 +114,8 @@ public sealed partial class DeliveryWorker(
             return (int)response.StatusCode;
         }
         catch (Exception exception) when (exception is HttpRequestException ||
-                                          (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+                                          (exception is OperationCanceledException &&
+                                           !cancellationToken.IsCancellationRequested))
         {
             LogUnreachable(logger, webhook.Name);
             return null;
@@ -123,7 +130,8 @@ public sealed partial class DeliveryWorker(
     [LoggerMessage(2403, LogLevel.Warning, "Webhook {Webhook} could not be reached; the delivery is retried.")]
     private static partial void LogUnreachable(ILogger logger, string webhook);
 
-    [LoggerMessage(2404, LogLevel.Warning, "Delivery {DeliveryId} to webhook {Webhook} gave up after {Attempts} attempts.")]
+    [LoggerMessage(2404, LogLevel.Warning,
+        "Delivery {DeliveryId} to webhook {Webhook} gave up after {Attempts} attempts.")]
     private static partial void LogGaveUp(ILogger logger, string deliveryId, string webhook, int attempts);
 }
 

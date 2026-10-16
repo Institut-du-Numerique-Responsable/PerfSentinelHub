@@ -2,10 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
@@ -19,7 +19,8 @@ namespace PerfSentinelHub.Tests;
 /// </summary>
 public sealed class AccessApiTests : IAsyncLifetime
 {
-    private const string CiToken = "ci-page-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+    private const string
+        CiToken = "ci-page-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
 
     // F1 cart under team=shop; F2 invoice under team=billing; F3 cart with no grouping;
     // F4 cart under team=shop and under no grouping; F5 checkout under team=shop and under
@@ -153,7 +154,8 @@ public sealed class AccessApiTests : IAsyncLifetime
         Assert.Equal("machine:ci", access.GetProperty("identity").GetString());
         Assert.Equal("machine:ci", access.GetProperty("subject").GetString());
         Assert.Equal("machine_token", access.GetProperty("caller").GetString());
-        Assert.Equal(_clock.GetUtcNow().AddDays(30).ToUnixTimeMilliseconds(), access.GetProperty("expires_at_ms").GetInt64());
+        Assert.Equal(_clock.GetUtcNow().AddDays(30).ToUnixTimeMilliseconds(),
+            access.GetProperty("expires_at_ms").GetInt64());
         Assert.False(access.GetProperty("admin").GetBoolean());
         Assert.Equal("""[{"name":"ci","origin":"internal"}]""", access.GetProperty("groups").GetRawText());
         Assert.Equal(
@@ -276,11 +278,13 @@ public sealed class AccessApiTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         var many = Enumerable.Range(100, 201).ToArray();
         await Database.UpsertBatchAsync(Snapshot("shop-d", "prod"), Batch(many.Select(i =>
-            Envelope($"slow_sql:s{i}:{i:x40}", $"s{i}", $$"""[{"key":"team","value":"shop"}]"""))), NowMs, cancellationToken);
+                Envelope($"slow_sql:s{i}:{i:x40}", $"s{i}", """[{"key":"team","value":"shop"}]"""))), NowMs,
+            cancellationToken);
         await Database.UpsertBatchAsync(Snapshot("shop-d", "prod"), Batch(many.Select(i =>
             Envelope($"slow_sql:s{i}:{i:x40}", $"s{i}", "[]"))), NowMs, cancellationToken);
         await Database.UpsertBatchAsync(Snapshot("test", "test"), Batch(many.Select(i =>
-            Envelope($"slow_sql:u{i}:{i:x40}", $"u{i}", $$"""[{"key":"k{{i}}","value":"v"}]"""))), NowMs, cancellationToken);
+                Envelope($"slow_sql:u{i}:{i:x40}", $"u{i}", $$"""[{"key":"k{{i}}","value":"v"}]"""))), NowMs,
+            cancellationToken);
         using var client = await SignedInAsync("admin");
 
         var access = await AccessAsync(client);
@@ -346,10 +350,13 @@ public sealed class AccessApiTests : IAsyncLifetime
             ],
             MachineTokens =
             [
-                new MachineTokenOptions { Name = "ci", Group = "internal:ci", Token = CiToken, ExpiresAt = now.AddDays(30) },
+                new MachineTokenOptions
+                    { Name = "ci", Group = "internal:ci", Token = CiToken, ExpiresAt = now.AddDays(30) },
                 new MachineTokenOptions
                 {
-                    Name = "ci-old", Group = "internal:ci", Token = "ci-old-page-0123456789abcdef0123456789abcdef", // gitleaks:allow -- synthetic test credential
+                    Name = "ci-old", Group = "internal:ci",
+                    Token =
+                        "ci-old-page-0123456789abcdef0123456789abcdef", // gitleaks:allow -- synthetic test credential
                     ExpiresAt = now.AddDays(-1)
                 }
             ]
@@ -358,13 +365,14 @@ public sealed class AccessApiTests : IAsyncLifetime
 
     private static SourceOptions Daemon(string id, string environment)
     {
-        return new SourceOptions { Id = id, Name = id, Environment = environment, BaseUrl = new Uri("http://127.0.0.1:1") };
+        return new SourceOptions
+        { Id = id, Name = id, Environment = environment, BaseUrl = new Uri("http://127.0.0.1:1") };
     }
 
     private async Task SeedAsync()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var retention = Factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<HubOptions>>().Value.Retention;
+        var retention = Factory.Services.GetRequiredService<IOptions<HubOptions>>().Value.Retention;
         await Database.UpsertBatchAsync(Snapshot("shop-d", "prod"), Batch(
         [
             Envelope(Stale, "stale", "[]")
@@ -422,7 +430,8 @@ public sealed class AccessApiTests : IAsyncLifetime
     {
         using var response = await client.GetAsync("/api/access", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var document =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         return document.RootElement.Clone();
     }
 

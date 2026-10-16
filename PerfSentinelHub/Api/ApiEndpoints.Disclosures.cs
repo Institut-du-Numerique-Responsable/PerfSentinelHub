@@ -56,7 +56,8 @@ public static partial class ApiEndpoints
             var publication = new Publication(database, renderer, engine, metrics, timeProvider, budget.Token);
             return await database.FindDisclosureByUuidAsync(envelope.ReportUuid, budget.Token) is { } existing
                 ? await publication.RepublishAsync(existing, envelope, files)
-                : await publication.PublishAsync(envelope, files, disclosures, loggerFactory.CreateLogger("DisclosureImport"));
+                : await publication.PublishAsync(envelope, files, disclosures,
+                    loggerFactory.CreateLogger("DisclosureImport"));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -139,7 +140,8 @@ public static partial class ApiEndpoints
             : null;
     }
 
-    private static JsonHttpResult<DisclosureRefusal> Rejected(DisclosureMetrics metrics, DisclosureRejection rejection, string reason)
+    private static JsonHttpResult<DisclosureRefusal> Rejected(DisclosureMetrics metrics, DisclosureRejection rejection,
+        string reason)
     {
         return metrics.Refuse(rejection, TypedResults.Json(
             new DisclosureRefusal(reason), HubJsonContext.Default.DisclosureRefusal,
@@ -203,7 +205,11 @@ public static partial class ApiEndpoints
             // Internal reports never leave the Hub, and a webhook takes public ones only.
             string[] webhooks = envelope.Internal
                 ? []
-                : [.. disclosures.Webhooks.Where(webhook => webhook.Confidentiality == "public").Select(webhook => webhook.Name)];
+                :
+                [
+                    .. disclosures.Webhooks.Where(webhook => webhook.Confidentiality == "public")
+                        .Select(webhook => webhook.Name)
+                ];
             if (!await database.InsertDisclosureAsync(
                     new DisclosureRecord(
                         id, envelope.ReportUuid, envelope.Organisation, envelope.PeriodType, envelope.PeriodFrom,
@@ -221,14 +227,16 @@ public static partial class ApiEndpoints
         ///     The same uuid again: the same bytes change nothing, a signed copy of an unsigned
         ///     report replaces it with no second event, and anything else is a conflict.
         /// </summary>
-        public async Task<IResult> RepublishAsync(DisclosureSummary existing, DisclosureEnvelope envelope, DisclosureFiles files)
+        public async Task<IResult> RepublishAsync(DisclosureSummary existing, DisclosureEnvelope envelope,
+            DisclosureFiles files)
         {
             // An unrendered copy has no hash check, so the card's own fields must match too.
             if (existing.ContentHash != envelope.ContentHash || !SameCard(existing, envelope))
                 return Conflict(metrics);
             var attestation = await database.ReadFileAsync(existing.Id, DisclosureFile.Attestation, cancellationToken);
             var bundle = await database.ReadFileAsync(existing.Id, DisclosureFile.Bundle, cancellationToken);
-            if (SameBytes(await database.ReadFileAsync(existing.Id, DisclosureFile.Report, cancellationToken), files.Report) &&
+            if (SameBytes(await database.ReadFileAsync(existing.Id, DisclosureFile.Report, cancellationToken),
+                    files.Report) &&
                 SameBytes(attestation, files.Attestation) && SameBytes(bundle, files.Bundle))
                 return Accepted(existing, StatusCodes.Status200OK);
             if (!AddsSignature(attestation, bundle, files))
@@ -241,7 +249,8 @@ public static partial class ApiEndpoints
             await database.ReplaceSignedCopyAsync(
                 existing.Id, files, envelope.IntegrityLevel, (pdf, reason), engine.Version,
                 timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
-            return Accepted((await database.GetDisclosureAsync(existing.Id, cancellationToken))!, StatusCodes.Status200OK);
+            return Accepted((await database.GetDisclosureAsync(existing.Id, cancellationToken))!,
+                StatusCodes.Status200OK);
         }
 
         private static bool SameCard(DisclosureSummary existing, DisclosureEnvelope envelope)
@@ -257,7 +266,8 @@ public static partial class ApiEndpoints
             return outcome switch
             {
                 RenderOutcome.Refused refused => Rejected(metrics, DisclosureRejection.RenderRefused, refused.Reason),
-                RenderOutcome.Malformed malformed => Rejected(metrics, DisclosureRejection.MalformedReport, malformed.Reason),
+                RenderOutcome.Malformed malformed => Rejected(metrics, DisclosureRejection.MalformedReport,
+                    malformed.Reason),
                 _ => null
             };
         }

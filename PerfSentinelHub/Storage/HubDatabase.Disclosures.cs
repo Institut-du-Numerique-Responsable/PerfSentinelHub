@@ -14,6 +14,14 @@ public sealed partial class HubDatabase
                                              withdrawn_reason, withdrawn_by
                                              """;
 
+    private const string DisclosureIdParameter = "$disclosure_id";
+
+    private const string SelectDisclosures = $"SELECT {DisclosureColumns} FROM disclosures ";
+
+    private const string SelectDeliveries =
+        "SELECT id, disclosure_id, webhook, event, state, attempts, last_attempt_ms, next_attempt_ms, last_status " +
+        "FROM disclosure_deliveries ";
+
     public Task<bool> InsertDisclosureAsync(DisclosureRecord record, CancellationToken cancellationToken)
     {
         return InsertDisclosureAsync(record, [], cancellationToken);
@@ -139,9 +147,11 @@ public sealed partial class HubDatabase
         }, cancellationToken);
     }
 
-    public async Task<DisclosureSummary?> FindDisclosureByUuidAsync(string reportUuid, CancellationToken cancellationToken)
+    public async Task<DisclosureSummary?> FindDisclosureByUuidAsync(string reportUuid,
+        CancellationToken cancellationToken)
     {
-        return First(await ReadSummariesAsync(SelectDisclosures + "WHERE report_uuid = $key;", reportUuid, cancellationToken));
+        return First(await ReadSummariesAsync(SelectDisclosures + "WHERE report_uuid = $key;", reportUuid,
+            cancellationToken));
     }
 
     public async Task<DisclosureSummary?> GetDisclosureAsync(string id, CancellationToken cancellationToken)
@@ -171,7 +181,8 @@ public sealed partial class HubDatabase
         return await command.ExecuteScalarAsync(cancellationToken) as byte[];
     }
 
-    public Task<bool> WithdrawAsync(string id, string reason, string by, long nowMs, CancellationToken cancellationToken)
+    public Task<bool> WithdrawAsync(string id, string reason, string by, long nowMs,
+        CancellationToken cancellationToken)
     {
         return WithdrawAsync(id, reason, by, nowMs, [], cancellationToken);
     }
@@ -337,7 +348,8 @@ public sealed partial class HubDatabase
             return;
         await WriteTransactionAsync(async (connection, transaction) =>
         {
-            await InsertDeliveriesAsync(connection, transaction, disclosureId, eventName, webhooks, nowMs, cancellationToken);
+            await InsertDeliveriesAsync(connection, transaction, disclosureId, eventName, webhooks, nowMs,
+                cancellationToken);
             return true;
         }, cancellationToken);
     }
@@ -378,10 +390,12 @@ public sealed partial class HubDatabase
             nowMs, cancellationToken);
     }
 
-    public Task<IReadOnlyList<DeliveryRecord>> ListDeliveriesAsync(string disclosureId, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<DeliveryRecord>> ListDeliveriesAsync(string disclosureId,
+        CancellationToken cancellationToken)
     {
         return ReadDeliveriesAsync(
-            SelectDeliveries + "WHERE disclosure_id = $key ORDER BY created_at_ms, rowid;", disclosureId, cancellationToken);
+            SelectDeliveries + "WHERE disclosure_id = $key ORDER BY created_at_ms, rowid;", disclosureId,
+            cancellationToken);
     }
 
     /// <summary>
@@ -430,18 +444,10 @@ public sealed partial class HubDatabase
         }, cancellationToken);
     }
 
-    private const string DisclosureIdParameter = "$disclosure_id";
-
     private static DisclosureSummary? First(IReadOnlyList<DisclosureSummary> summaries)
     {
         return summaries.Count > 0 ? summaries[0] : null;
     }
-
-    private const string SelectDisclosures = $"SELECT {DisclosureColumns} FROM disclosures ";
-
-    private const string SelectDeliveries =
-        "SELECT id, disclosure_id, webhook, event, state, attempts, last_attempt_ms, next_attempt_ms, last_status " +
-        "FROM disclosure_deliveries ";
 
     private async Task<IReadOnlyList<DisclosureSummary>> ReadSummariesAsync(
         string query,
