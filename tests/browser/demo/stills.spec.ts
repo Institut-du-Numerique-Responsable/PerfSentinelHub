@@ -236,3 +236,46 @@ test("correlations open every episode of an incident's pair", async ({page}) => 
     await settled(page, "Findings that keep following each other");
     await expect(page.locator("button.row-toggle", {hasText: "orders-svc"})).toHaveAttribute("aria-expanded", "true");
 });
+
+test("disclosures", async ({page}, info) => {
+    await page.goto("/#/disclosures");
+    await settled(page, "Energy and carbon, period by period");
+    // Each card draws its figures from the listing, so the last card's arrival is the
+    // whole screen.
+    await expect(page.locator(".disc-open")).toHaveCount(3);
+    await page.screenshot({
+        path: nameFor("launcher-disclosures", info.project.name),
+        fullPage: true,
+        animations: "disabled"
+    });
+});
+
+test("one disclosure", async ({page}, info) => {
+    // The actions are offered to a caller the Hub can name, as the reverse proxy would.
+    await page.setExtraHTTPHeaders({"x-forwarded-user": state.manager});
+    await page.goto(`/#/disclosures/${state.disclosure}`);
+    await settled(page, "Back to disclosures");
+    // The applications table fills from the report itself, read after the detail.
+    await expect(page.locator(".disc .table").first()).toBeVisible({timeout: 15_000});
+    await page.screenshot({
+        path: nameFor("launcher-disclosure", info.project.name),
+        fullPage: true,
+        animations: "disabled"
+    });
+});
+
+test("disclosures on a phone", async ({page}, info) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto("/#/disclosures");
+    await settled(page, "Energy and carbon, period by period");
+    await expect(page.locator(".disc-open")).toHaveCount(3);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    // The tab row scrolls on its own on a phone, and must show the tab of the screen it is on.
+    const tab = await page.locator('.shell-tab[aria-current="page"]').boundingBox();
+    expect(tab && tab.x >= 0 && tab.x + tab.width <= 390).toBe(true);
+    await page.screenshot({
+        path: nameFor("launcher-disclosures-phone", info.project.name),
+        fullPage: true,
+        animations: "disabled"
+    });
+});

@@ -10,7 +10,9 @@ const OUT = join(__dirname, "..", "..", "..", "docs", "img", "hub");
 // module scope, so a setup that died earlier would otherwise fail every test
 // here with a bare ENOENT naming a temp path and nothing else.
 const STATE_FILE = join(tmpdir(), "perf-sentinel-hub-demo", "state.json");
-type DemoState = { succeeded: string, ackSignature: string, accessBaseUrl: string };
+type DemoState = {
+    succeeded: string, disclosure: string, manager: string, ackSignature: string, accessBaseUrl: string
+};
 function readState(): DemoState {
     try {
         return JSON.parse(readFileSync(STATE_FILE, "utf8")) as DemoState;

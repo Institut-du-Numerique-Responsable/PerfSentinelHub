@@ -116,6 +116,17 @@ conflicts. Only the grouping is invented; every finding is a captured one. The
 source shows as unreachable on the Sources tab, since its findings are pushed,
 never polled.
 
+## The disclosures are published, not seeded
+
+The disclosures screens read what a CI publishes. `demo/fixtures/disclosure-report.json` is the
+engine's own official example report, from its `docs/schemas/examples/`. Setup varies its uuid,
+period and energy figures over three quarters, has the engine bake each hash with `hash-bake`,
+and publishes them through `POST /api/import/disclosures`, two of them with the attestation
+`disclose --emit-attestation` would write, which names the report by that hash. The Hub then
+runs the real `disclose-pdf` on each, so every PDF, hash check and binding check on the screens
+is the engine's own. The oldest is withdrawn and the newest shared, in the name the identity
+header gives, which the stills of the detail send too so its actions show.
+
 ## Two things it needs from outside
 
 **A perf-sentinel binary.** Without one the Hub answers `503` to
