@@ -28,6 +28,8 @@ public sealed class CachedCountTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var slow = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var calls = 0;
+        // Read below by ref, through Volatile, to see the count thread's write.
+        // ReSharper disable once AccessToModifiedClosure
         var cache = new CachedCount<int>(_ => ++calls == 1 ? Task.FromResult(7) : slow.Task, _clock, _logger);
         var first = await cache.GetAsync(cancellationToken);
         _clock.Advance(CachedCount<int>.Lifetime);

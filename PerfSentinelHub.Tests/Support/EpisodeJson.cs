@@ -50,7 +50,7 @@ internal static class EpisodeJson
         return new JsonObject
         {
             ["producer_version"] = "0.30.0",
-            ["episodes"] = new JsonArray([.. episodes.Select(episode => (JsonNode?)episode.DeepClone())])
+            ["episodes"] = new JsonArray([.. episodes.Select(JsonNode? (episode) => episode.DeepClone())])
         }.ToJsonString();
     }
 

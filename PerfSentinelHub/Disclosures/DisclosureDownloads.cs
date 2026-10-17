@@ -11,7 +11,7 @@ namespace PerfSentinelHub.Disclosures;
 /// </summary>
 public static class DisclosureDownloads
 {
-    public const string Sums = "SHA256SUMS";
+    private const string Sums = "SHA256SUMS";
 
     private static readonly (string Name, DisclosureFile File, string ContentType)[] Stored =
     [

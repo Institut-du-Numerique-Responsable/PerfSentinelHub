@@ -124,10 +124,8 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
 
         foreach (var (method, path) in Routes)
         {
-            using var request = new HttpRequestMessage(method, path)
-            {
-                Content = new StringContent("{}", Encoding.UTF8, "application/json")
-            };
+            using var request = new HttpRequestMessage(method, path);
+            request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
             using var response = await client.SendAsync(request, Cancel);
             Assert.True(response.StatusCode == HttpStatusCode.NotFound, $"{method} {path}: {response.StatusCode}");
         }
@@ -379,14 +377,12 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var browser = await SignedInAsync("member", Here);
         var start = await StartAsync(Cli(Here));
 
-        using var sameSite = new HttpRequestMessage(HttpMethod.Post, "/api/device/approve")
-        { Content = Json(Decision(start, true)) };
+        using var sameSite = new HttpRequestMessage(HttpMethod.Post, "/api/device/approve");
+        sameSite.Content = Json(Decision(start, true));
         sameSite.Headers.Add("Sec-Fetch-Site", "same-site");
         using var sameSiteResponse = await browser.SendAsync(sameSite, Cancel);
-        using var form = new HttpRequestMessage(HttpMethod.Post, "/api/device/approve")
-        {
-            Content = new FormUrlEncodedContent([new KeyValuePair<string, string>("user_code", "x")])
-        };
+        using var form = new HttpRequestMessage(HttpMethod.Post, "/api/device/approve");
+        form.Content = new FormUrlEncodedContent([new KeyValuePair<string, string>("user_code", "x")]);
         form.Headers.Add("Sec-Fetch-Site", "same-origin");
         using var formResponse = await browser.SendAsync(form, Cancel);
 
@@ -559,12 +555,12 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
             }));
             using var lab = Bearer(await IssueAsync(await SignedInAsync("lab", Here, hub), hub), hub);
             using var member = Bearer(await IssueAsync(await SignedInAsync("member", Here, hub), hub), hub);
-            const string Run = """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""";
+            const string analysisRequest = """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""";
 
             var access = await AccessAsync(lab);
-            using var labRun = await lab.PostAsync("/api/analyses", Json(Run), Cancel);
-            using var machineRun = await Bearer(CiToken, hub).PostAsync("/api/analyses", Json(Run), Cancel);
-            using var memberRun = await member.PostAsync("/api/analyses", Json(Run), Cancel);
+            using var labRun = await lab.PostAsync("/api/analyses", Json(analysisRequest), Cancel);
+            using var machineRun = await Bearer(CiToken, hub).PostAsync("/api/analyses", Json(analysisRequest), Cancel);
+            using var memberRun = await member.PostAsync("/api/analyses", Json(analysisRequest), Cancel);
             var id = JsonDocument.Parse(await memberRun.Content.ReadAsStringAsync(Cancel)).RootElement.GetProperty("id")
                 .GetString();
             using var run = await member.GetAsync("/api/analyses/" + id, Cancel);
@@ -751,17 +747,17 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         }
 
         const string
-            Local =
+            breakGlassToken =
                 "pshub_local-break-glass-0123456789abcdefghijklmnopqrstu"; // gitleaks:allow -- synthetic test credential
         Assert.True(await Database.TryInsertTerminalTokenAsync(new TerminalToken(
-            "0123456789abcdef0123456789abcdef", SHA256.HashData(Encoding.UTF8.GetBytes(Local)), "local:ops",
+            "0123456789abcdef0123456789abcdef", SHA256.HashData(Encoding.UTF8.GetBytes(breakGlassToken)), "local:ops",
             "local:ops",
             [], null, Here, NowMs, NowMs + 3_600_000, null), NowMs, Cancel));
 
         await using var dropped = Factory.WithWebHostBuilder(builder =>
             builder.UseSetting("Hub:Auth:RequiredGroups:0", "/hub-admins"));
         using var refused = await Bearer(token, dropped).GetAsync("/api/access", Cancel);
-        using var local = await Bearer(Local, dropped).GetAsync("/api/access", Cancel);
+        using var local = await Bearer(breakGlassToken, dropped).GetAsync("/api/access", Cancel);
 
         Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
         Assert.Equal(HttpStatusCode.OK, local.StatusCode);

@@ -170,6 +170,8 @@ public static partial class LocalSignIn
             !string.Equals(contentType.MediaType, "application/x-www-form-urlencoded",
                 StringComparison.OrdinalIgnoreCase))
             return TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+        // Each refusal stays a guard of its own.
+        // ReSharper disable once ConvertIfStatementToReturnStatement
         if (request.ContentLength is not (>= 0 and <= MaxBodyBytes))
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
         return null;
@@ -180,6 +182,8 @@ public static partial class LocalSignIn
     {
         if (name.Length == 0 || password.Length is 0 or > LocalPassword.MaxLength)
             return false;
+        // The dummy hash is the exception, so it stays the guard.
+        // ReSharper disable once InvertIf
         if (account is null)
         {
             // The same cost as a declared name, and the result is thrown away.
@@ -280,31 +284,31 @@ public static partial class LocalSignIn
         var encoder = HtmlEncoder.Default;
         var pathBase = encoder.Encode(context.Request.PathBase.Value ?? "");
         var html =
-            $$"""
+            $"""
               <!doctype html>
               <html lang="en">
               <head>
               <meta charset="utf-8">
               <meta content="width=device-width, initial-scale=1" name="viewport">
               <title>Sign in · Perf Sentinel Hub</title>
-              <style>{{_style}}</style>
+              <style>{_style}</style>
               </head>
               <body>
               <main>
-              <div aria-label="Perf Sentinel Hub" class="brand" role="img">{{_logos}}<span aria-hidden="true" class="suffix">hub</span></div>
+              <div aria-label="Perf Sentinel Hub" class="brand" role="img">{_logos}<span aria-hidden="true" class="suffix">hub</span></div>
               <h1>Sign in to Perf Sentinel Hub</h1>
               <p class="lede">With your organisation's single sign-on. A local account is for when it is down.</p>
-              <a class="sso" href="{{pathBase}}/auth/sign-in/sso?return_url={{encoder.Encode(Uri.EscapeDataString(returnUrl))}}">Sign in with single sign-on</a>
-              <details{{(alert is null ? "" : " open")}}>
+              <a class="sso" href="{pathBase}/auth/sign-in/sso?return_url={encoder.Encode(Uri.EscapeDataString(returnUrl))}">Sign in with single sign-on</a>
+              <details{(alert is null ? "" : " open")}>
               <summary>Sign in with a local account</summary>
               <p>For when single sign-on is unavailable. Every local sign-in is logged.</p>
-              {{(alert is null ? "" : $"<p class=\"alert\" role=\"alert\">{encoder.Encode(alert)}</p>")}}
-              <form action="{{pathBase}}/auth/sign-in/local" method="post">
+              {(alert is null ? "" : $"<p class=\"alert\" role=\"alert\">{encoder.Encode(alert)}</p>")}
+              <form action="{pathBase}/auth/sign-in/local" method="post">
               <label for="name">Name</label>
-              <input autocapitalize="none" autocomplete="username"{{(alert is null ? "" : " autofocus")}} id="name" maxlength="64" name="name" required spellcheck="false">
+              <input autocapitalize="none" autocomplete="username"{(alert is null ? "" : " autofocus")} id="name" maxlength="64" name="name" required spellcheck="false">
               <label for="password">Password</label>
               <input autocomplete="current-password" id="password" maxlength="1024" name="password" required type="password">
-              <input name="return_url" type="hidden" value="{{encoder.Encode(returnUrl)}}">
+              <input name="return_url" type="hidden" value="{encoder.Encode(returnUrl)}">
               <button type="submit">Sign in</button>
               </form>
               </details>

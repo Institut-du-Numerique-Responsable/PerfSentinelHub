@@ -218,6 +218,7 @@ public sealed class LocalSignInTests : IAsyncLifetime
 
         // Skipping the hash would answer in a few milliseconds against hundreds for one.
         Assert.True(unknown * 4 >= wrong, $"unknown name {unknown}, wrong password {wrong}");
+        return;
 
         static TimeSpan Min(TimeSpan left, TimeSpan right)
         {
@@ -341,7 +342,7 @@ public sealed class LocalSignInTests : IAsyncLifetime
         using var operatorClient = Client(Elsewhere);
 
         var flood = Enumerable.Range(0, 20)
-            .Select(attempt => SignInAsync(attacker, Guid.NewGuid().ToString("N"), Password))
+            .Select(_ => SignInAsync(attacker, Guid.NewGuid().ToString("N"), Password))
             .ToList();
         var signIn = SignInAsync(operatorClient, "ops", Password);
         var answers = await Task.WhenAll(flood);
@@ -383,17 +384,13 @@ public sealed class LocalSignInTests : IAsyncLifetime
     public async Task Only_a_small_url_encoded_form_is_read()
     {
         using var client = Client(Here);
-        using var json = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local")
-        {
-            Content = new StringContent("""{"name":"ops"}""", Encoding.UTF8, "application/json")
-        };
-        using var large = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local")
-        {
-            Content = new FormUrlEncodedContent([
-                new KeyValuePair<string, string>("name", "ops"),
-                new KeyValuePair<string, string>("password", new string('p', 4096))
-            ])
-        };
+        using var json = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local");
+        json.Content = new StringContent("""{"name":"ops"}""", Encoding.UTF8, "application/json");
+        using var large = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local");
+        large.Content = new FormUrlEncodedContent([
+            new KeyValuePair<string, string>("name", "ops"),
+            new KeyValuePair<string, string>("password", new string('p', 4096))
+        ]);
 
         using var unsupported = await client.SendAsync(json, Cancel);
         using var tooLarge = await client.SendAsync(large, Cancel);

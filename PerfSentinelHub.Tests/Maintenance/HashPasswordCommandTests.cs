@@ -85,8 +85,10 @@ public sealed class HashPasswordCommandTests
     private static (int Exit, string Output, string Error) Run(string[] args, string input,
         Func<ConsoleKeyInfo>? readKey = null)
     {
-        using var output = new StringWriter { NewLine = "\n" };
-        using var error = new StringWriter { NewLine = "\n" };
+        using var output = new StringWriter();
+        output.NewLine = "\n";
+        using var error = new StringWriter();
+        error.NewLine = "\n";
         var exit = HashPasswordCommand.Run(args, new StringReader(input), readKey, output, error);
         return (exit, output.ToString(), error.ToString());
     }

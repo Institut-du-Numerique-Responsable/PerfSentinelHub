@@ -20,7 +20,7 @@ public sealed class DisclosureImportApiTests : IDisposable
     private const string
         ImportKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
-    private static readonly string Report = DisclosureRendererTests.Report;
+    private const string Report = DisclosureRendererTests.Report;
     private static readonly string HashOnly = Report.Replace("\"signed\"", "\"hash-only\"", StringComparison.Ordinal);
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
 
@@ -65,7 +65,7 @@ public sealed class DisclosureImportApiTests : IDisposable
         using var client = hub.CreateClient();
 
         using var response = await client.SendAsync(
-            Publish(Report, ("attestation", "statement"u8.ToArray()), ("bundle", "bundle"u8.ToArray())),
+            Publish(Report, ("attestation", [.. "statement"u8]), ("bundle", [.. "bundle"u8])),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -223,7 +223,7 @@ public sealed class DisclosureImportApiTests : IDisposable
         var id = (await JsonAsync(unsigned)).RootElement.GetProperty("id").GetString()!;
 
         using var signed = await client.SendAsync(
-            Publish(Report, ("attestation", "statement"u8.ToArray()), ("bundle", "bundle"u8.ToArray())),
+            Publish(Report, ("attestation", [.. "statement"u8]), ("bundle", [.. "bundle"u8])),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, signed.StatusCode);
@@ -244,11 +244,11 @@ public sealed class DisclosureImportApiTests : IDisposable
         var hub = Hub(Rendering());
         using var client = hub.CreateClient();
         using var unsigned = await client.SendAsync(
-            Publish(HashOnly, ("attestation", "statement"u8.ToArray())), TestContext.Current.CancellationToken);
+            Publish(HashOnly, ("attestation", [.. "statement"u8])), TestContext.Current.CancellationToken);
         var id = (await JsonAsync(unsigned)).RootElement.GetProperty("id").GetString()!;
 
         using var signed = await client.SendAsync(
-            Publish(Report, ("attestation", "statement"u8.ToArray()), ("bundle", "bundle"u8.ToArray())),
+            Publish(Report, ("attestation", [.. "statement"u8]), ("bundle", [.. "bundle"u8])),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, signed.StatusCode);
@@ -278,7 +278,7 @@ public sealed class DisclosureImportApiTests : IDisposable
 
         using var signed = await client.SendAsync(
             Publish(Report.Replace(stored, changed, StringComparison.Ordinal),
-                ("attestation", "statement"u8.ToArray())),
+                ("attestation", [.. "statement"u8])),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Conflict, signed.StatusCode);
@@ -293,7 +293,7 @@ public sealed class DisclosureImportApiTests : IDisposable
     {
         var hub = Hub(Rendering());
         using var client = hub.CreateClient();
-        await client.SendAsync(Publish(HashOnly, ("attestation", "statement"u8.ToArray())),
+        await client.SendAsync(Publish(HashOnly, ("attestation", [.. "statement"u8])),
             TestContext.Current.CancellationToken);
         (string, byte[])[] parts = attestation is null
             ? [("bundle", Encoding.UTF8.GetBytes(bundle))]
@@ -357,7 +357,7 @@ public sealed class DisclosureImportApiTests : IDisposable
         using var client = Hub(Rendering()).CreateClient();
 
         using var response = await client.SendAsync(
-            Publish(Report, (extraPart, "{}"u8.ToArray())), TestContext.Current.CancellationToken);
+            Publish(Report, (extraPart, [.. "{}"u8])), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal("""{"reason":"malformed_report"}""",
@@ -369,10 +369,8 @@ public sealed class DisclosureImportApiTests : IDisposable
     public async Task A_body_that_is_not_multipart_is_415()
     {
         using var client = Hub(Rendering()).CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/import/disclosures")
-        {
-            Content = new StringContent(Report, Encoding.UTF8, "application/json")
-        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/import/disclosures");
+        request.Content = new StringContent(Report, Encoding.UTF8, "application/json");
         request.Headers.Add("X-API-Key", ImportKey);
 
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);

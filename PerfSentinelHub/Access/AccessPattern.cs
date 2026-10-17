@@ -35,6 +35,8 @@ public sealed record AccessPattern(
         var (service, serviceIsPrefix) = Part(pattern.Service);
         string? key = null;
         (string? Stem, bool IsPrefix) value = (null, false);
+        // Inverted, the constructor call would be written twice.
+        // ReSharper disable once InvertIf
         if (pattern.Attribute is { } attribute)
         {
             var equals = attribute.IndexOf('=', StringComparison.Ordinal);

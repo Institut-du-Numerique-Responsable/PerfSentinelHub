@@ -152,6 +152,6 @@ public sealed class CorrelationParserTests
     public void An_import_that_is_not_json_is_invalid()
     {
         Assert.Throws<InvalidDataException>(() =>
-            CorrelationParser.ParseImport(Encoding.UTF8.GetBytes("{\"episodes\":")));
+            CorrelationParser.ParseImport("{\"episodes\":"u8.ToArray()));
     }
 }

@@ -10,7 +10,8 @@ namespace PerfSentinelHub.Configuration;
 /// </summary>
 public static class LocalPassword
 {
-    public const int Iterations = 600_000, SaltBytes = 16, KeyBytes = 32, MinLength = 15, MaxLength = 1024;
+    public const int SaltBytes = 16, KeyBytes = 32, MinLength = 15, MaxLength = 1024;
+    private const int Iterations = 600_000;
     private const string Algorithm = "pbkdf2-sha256";
     private const string Cost = "i=600000";
     private const int SaltChars = 22, KeyChars = 43;

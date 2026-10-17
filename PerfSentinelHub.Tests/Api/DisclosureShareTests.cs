@@ -77,10 +77,15 @@ public sealed class DisclosureShareTests : IDisposable
     {
         var hub = await SharedAsync(death == "expired" ? NowMs : NowMs + 86_400_000);
         var database = Database(hub);
-        if (death == "revoked")
-            await database.RevokeShareLinkAsync("d1", "l1", "alice", NowMs, CancellationToken.None);
-        if (death == "withdrawn")
-            await database.WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
+        switch (death)
+        {
+            case "revoked":
+                await database.RevokeShareLinkAsync("d1", "l1", "alice", NowMs, CancellationToken.None);
+                break;
+            case "withdrawn":
+                await database.WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
+                break;
+        }
         using var client = hub.CreateClient();
 
         using var response =
@@ -192,7 +197,7 @@ public sealed class DisclosureShareTests : IDisposable
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
                 options.Disclosures = new DisclosuresOptions { ImportKey = importKey })));
         _hubs.Add(hub);
-        await DisclosuresApiTests.SeedAsync(hub, "d1", "u1", "2026-09-30", [1], [37, 80, 68, 70]);
+        await DisclosuresApiTests.SeedAsync(hub, "d1", "u1", "2026-09-30", [1], [.. "%PDF"u8]);
         var database = Database(hub);
         await using (var connection = await database.OpenConnectionAsync(CancellationToken.None))
         await using (var bundle = connection.CreateCommand())

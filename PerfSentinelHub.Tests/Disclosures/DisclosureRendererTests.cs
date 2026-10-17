@@ -193,7 +193,7 @@ public sealed class DisclosureRendererTests : IDisposable
 
     private static DisclosureFiles Files()
     {
-        return new DisclosureFiles(Encoding.UTF8.GetBytes(Report), "attestation"u8.ToArray(), null);
+        return new DisclosureFiles(Encoding.UTF8.GetBytes(Report), [.. "attestation"u8], null);
     }
 
     private async Task<DisclosureRenderer> RendererAsync(FakeEngine engine, string? identity = null,

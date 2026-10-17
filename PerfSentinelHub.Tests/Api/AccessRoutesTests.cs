@@ -29,13 +29,13 @@ namespace PerfSentinelHub.Tests.Api;
 /// </summary>
 public sealed class AccessRoutesTests : IAsyncLifetime
 {
-    internal const string
+    private const string
         CiToken = "ci-shop-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
 
-    internal const string
+    private const string
         CiAdminToken = "ci-all-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
 
-    internal const string
+    private const string
         CiOldToken = "ci-old-0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
 
     // F1 is cart at shop-d under team=shop and at lab-d under team=billing; F2 invoice under
@@ -683,6 +683,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         using var response = await client.SendAsync(Post("/api/analyses", body), TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, response.StatusCode);
+        // Two checks of the expected status: a switch would ask for every other HttpStatusCode.
+        // ReSharper disable once ConvertIfStatementToSwitchStatement
         if (expected == HttpStatusCode.Forbidden)
             Assert.Equal("You may not start this analysis.", await DetailAsync(response));
         if (expected == HttpStatusCode.BadRequest)
@@ -966,7 +968,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
 
     // ------------------------------------------------------------ helpers
 
-    internal WebApplicationFactory<Program> Hub()
+    private WebApplicationFactory<Program> Hub()
     {
         return _hub.WithWebHostBuilder(builder =>
         {
@@ -1003,7 +1005,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         });
     }
 
-    internal static AccessOptions Access(DateTimeOffset now)
+    private static AccessOptions Access(DateTimeOffset now)
     {
         return new AccessOptions
         {
@@ -1169,7 +1171,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             .Select(run => run.GetProperty("id").GetString()));
     }
 
-    internal async Task<HttpClient> SignedInAsync(string user)
+    private async Task<HttpClient> SignedInAsync(string user)
     {
         var client = FakeProvider.Client(Factory);
         using var callback = await FakeProvider.SignInAsync(client, user);
@@ -1177,7 +1179,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         return client;
     }
 
-    internal static HttpRequestMessage Request(string method, string path, string? body = null)
+    private static HttpRequestMessage Request(string method, string path, string? body = null)
     {
         var request = new HttpRequestMessage(new HttpMethod(method), path);
         if (body is not null) request.Content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -1197,7 +1199,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         return $$"""{"signature":"{{signature}}","reason":"known"}""";
     }
 
-    internal static async Task<List<JsonElement>> FindingsAsync(HttpClient client, string path)
+    private static async Task<List<JsonElement>> FindingsAsync(HttpClient client, string path)
     {
         using var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -1206,7 +1208,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         return [.. document.RootElement.EnumerateArray().Select(item => item.Clone())];
     }
 
-    internal static async Task<string> SourcePermissionsAsync(HttpClient client)
+    private static async Task<string> SourcePermissionsAsync(HttpClient client)
     {
         return string.Join(';', (await FindingsAsync(client, "/api/sources"))
             .OrderBy(source => source.GetProperty("id").GetString(), StringComparer.Ordinal)
@@ -1229,7 +1231,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         return finding.GetProperty("finding").GetProperty("signature").GetString()!;
     }
 
-    internal static async Task<string> DetailAsync(HttpResponseMessage response)
+    private static async Task<string> DetailAsync(HttpResponseMessage response)
     {
         using var document =
             JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));

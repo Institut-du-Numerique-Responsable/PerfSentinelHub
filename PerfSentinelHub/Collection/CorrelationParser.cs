@@ -34,6 +34,8 @@ public static class CorrelationParser
                 throw new InvalidDataException("The import body is invalid.");
 
             var count = episodes.GetArrayLength();
+            // An explicit branch per refusal, as in FindingParser.
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (count > MaxImportEpisodes)
                 throw new ImportBatchTooLargeException();
             if (count == 0)

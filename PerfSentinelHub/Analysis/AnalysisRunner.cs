@@ -174,7 +174,7 @@ public sealed partial class AnalysisRunner(
     /// </summary>
     public static string? LiveDaemonUrl(SourceOptions source, bool engineTakesTheFlag)
     {
-        return engineTakesTheFlag && source.Kind == SourceKinds.Daemon && source.PublishedUrl.AbsolutePath == "/"
+        return engineTakesTheFlag && source is { Kind: SourceKinds.Daemon, PublishedUrl.AbsolutePath: "/" }
             ? source.PublicEndpointArgument
             : null;
     }
@@ -189,8 +189,8 @@ public sealed partial class AnalysisRunner(
     private string[] LiveArguments(SourceOptions source)
     {
         // The engine refuses the two ids a browser would read as path segments.
-        if (engine.SupportsHubRelay && source is { Kind: SourceKinds.Daemon, HasAckCredential: true } &&
-            source.Id is not ("." or ".."))
+        if (engine.SupportsHubRelay &&
+            source is { Kind: SourceKinds.Daemon, HasAckCredential: true, Id: not ("." or "..") })
             return ["--hub-relay", source.Id];
         return LiveDaemonUrl(source, engine.SupportsDaemonUrl && !options.Value.Access.Enabled) is { } url
             ? ["--daemon-url", url]

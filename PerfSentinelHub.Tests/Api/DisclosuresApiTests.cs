@@ -109,7 +109,7 @@ public sealed class DisclosuresApiTests : IDisposable
     public async Task Files_come_back_byte_for_byte_with_their_type_and_sha256sums_verifies()
     {
         var hub = Hub();
-        await SeedAsync(hub, "d1", "u1", "2026-09-30", [1, 2], Encoding.ASCII.GetBytes("%PDF-1.7 x"));
+        await SeedAsync(hub, "d1", "u1", "2026-09-30", [1, 2], [.. "%PDF-1.7 x"u8]);
         using var client = hub.CreateClient();
 
         using var report = await client.GetAsync("/api/disclosures/d1/files/report.json",
@@ -132,7 +132,7 @@ public sealed class DisclosuresApiTests : IDisposable
         Assert.Equal(
             $"{Convert.ToHexStringLower(SHA256.HashData(ReportBytes))}  report.json\n" +
             $"{Convert.ToHexStringLower(SHA256.HashData([1, 2]))}  attestation.intoto.jsonl\n" +
-            $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.ASCII.GetBytes("%PDF-1.7 x")))}  report.pdf\n",
+            $"{Convert.ToHexStringLower(SHA256.HashData("%PDF-1.7 x"u8))}  report.pdf\n",
             sums);
     }
 
@@ -428,7 +428,7 @@ public sealed class DisclosuresApiTests : IDisposable
         string? renderReason = null,
         string confidentiality = "public")
     {
-        pdf ??= renderReason is null ? [37, 80, 68, 70] : null;
+        pdf ??= renderReason is null ? [.. "%PDF"u8] : null;
         return Database(hub).InsertDisclosureAsync(
             new DisclosureRecord(
                 id, uuid, "Example SAS", "calendar-quarter", "2026-07-01", periodTo, "official", confidentiality,

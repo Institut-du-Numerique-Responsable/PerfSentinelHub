@@ -13,7 +13,7 @@ namespace PerfSentinelHub.Disclosures;
 /// </summary>
 public sealed class DisclosureRenderer(EngineProbe engine, IOptions<HubOptions> options)
 {
-    public const string EngineContract = "engine_contract";
+    private const string EngineContract = "engine_contract";
     private const int MaxReasonLineBytes = 4096;
     private const long MaxPdfBytes = 32L * 1024 * 1024;
 

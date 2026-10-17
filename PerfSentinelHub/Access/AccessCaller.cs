@@ -20,7 +20,7 @@ public sealed record AccessCaller(string Kind, string Subject, IReadOnlyList<str
     public const string CallerClaim = "hub:caller";
     public const string GroupClaim = "hub:group";
     public const string AccessClaim = "hub:access";
-    public const string MachineTokenClaim = "hub:machine_token";
+    private const string MachineTokenClaim = "hub:machine_token";
     public const string TokenIdClaim = "hub:token_id";
 
     // The step-1 group that admitted a provider session, which a terminal token carries on.

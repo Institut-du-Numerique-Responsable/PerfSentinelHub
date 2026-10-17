@@ -272,7 +272,7 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
             await database.UpsertBatchAsync(
                 new SourceSnapshot(source, source, environment, "0.26.2"),
                 FindingParser.Parse(Encoding.UTF8.GetBytes($"[{finding}]")), at, cancellationToken);
-            var incident =
+            const string incident =
                 $$"""{"id":"{{IncidentId}}","service":"cart","kind":"oom_kill","at_ms":1000,"window_from_ms":900,"window_to_ms":1100}""";
             await database.UpsertIncidentsAsync(
                 source,

@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -458,8 +457,9 @@ public sealed class ConfigurationTests
     public void The_chart_s_database_statistics_shape_binds_and_validates()
     {
         // The chart writes every key, absent ones as null.
-        using var json = new MemoryStream(Encoding.UTF8.GetBytes(
-            """{"Hub":{"Sources":[{"Id":"prod","Name":"P","Environment":"prod","BaseUrl":"https://d.example","PgStat":{"AuthHeaderName":null,"CallsMetric":null,"Metric":null,"Prometheus":"http://vm:8428","QueryLabel":null,"Selector":null,"Top":null,"Unit":null}}]}}"""));
+        var settings =
+            """{"Hub":{"Sources":[{"Id":"prod","Name":"P","Environment":"prod","BaseUrl":"https://d.example","PgStat":{"AuthHeaderName":null,"CallsMetric":null,"Metric":null,"Prometheus":"http://vm:8428","QueryLabel":null,"Selector":null,"Top":null,"Unit":null}}]}}"""u8;
+        using var json = new MemoryStream([.. settings]);
 
         var source = Assert.Single(new ConfigurationBuilder().AddJsonStream(json).Build()
             .GetSection(HubOptions.SectionName).Get<HubOptions>()!.Sources);
@@ -1106,6 +1106,7 @@ public sealed class ConfigurationTests
         // The validator takes its clock as a parameter, so the limit moves with it.
         var later = new FakeTimeProvider(Now.AddDays(10));
         Assert.Empty(new HubOptionsValidator(later).Validate(null, WithExpiry(Now.AddDays(370))).Failures ?? []);
+        return;
 
         static HubOptions WithExpiry(DateTimeOffset expiresAt)
         {
@@ -1121,7 +1122,7 @@ public sealed class ConfigurationTests
     {
         // The chart passes hub.access as is: camelCase keys, and the Secret's name and key,
         // which name a Secret, hold no secret and are ignored by the binder.
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(
+        var settings =
             """
             {"Hub": {"Access": {"enabled": false, "admins": [], "adminGroups": ["/hub-admins"],
               "groups": [{"name": "ci-a", "members": []}],
@@ -1131,7 +1132,8 @@ public sealed class ConfigurationTests
               "machineTokens": [{"name": "ci-shop", "group": "internal:ci-a", "expiresAt": "2027-06-30T00:00:00Z",
                                  "secretName": "hub-machine-tokens", "secretKey": "ci-shop"}],
               "localAccounts": [{"name": "ops", "secretName": "hub-break-glass", "secretKey": "ops"}]}}}
-            """));
+            """u8;
+        using var stream = new MemoryStream([.. settings]);
         var configuration = new ConfigurationBuilder()
             .AddJsonStream(stream)
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -1213,7 +1215,7 @@ public sealed class ConfigurationTests
             "A9 source character" => FirstPattern(new PatternOptions { Source = "prod/eu" }),
             "A9 unknown source" => FirstPattern(new PatternOptions { Source = "nope" }),
             "A9 prefix of no source" => FirstPattern(new PatternOptions { Source = "zz*" }),
-            "A9 service control" => FirstPattern(new PatternOptions { Service = "cart\u0007" }),
+            "A9 service control" => FirstPattern(new PatternOptions { Service = "cart\a" }),
             "A9 service long" => FirstPattern(new PatternOptions { Service = new string('s', 257) }),
             "A9 attribute without equals" => FirstPattern(new PatternOptions { Attribute = "team" }),
             "A9 attribute without key" => FirstPattern(new PatternOptions { Attribute = "=shop" }),

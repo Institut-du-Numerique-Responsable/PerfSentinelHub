@@ -318,12 +318,7 @@ public static partial class ApiEndpoints
 
     private static DisclosureItem Item(DisclosureSummary summary)
     {
-        JsonElement? figures = null;
-        if (summary.FiguresJson is { } json)
-        {
-            using var document = JsonDocument.Parse(json);
-            figures = document.RootElement.Clone();
-        }
+        JsonElement? figures = summary.FiguresJson is { } json ? JsonRead.Literal(json) : null;
 
         return new DisclosureItem(
             summary.Id, summary.ReportUuid, summary.Organisation,

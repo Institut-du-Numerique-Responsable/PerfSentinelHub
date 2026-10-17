@@ -137,8 +137,8 @@ public static class AccessPermissions
     public const string DisclosuresRead = "disclosures.read";
     public const string DisclosuresManage = "disclosures.manage";
 
-    public const string ReaderRole = "reader";
-    public const string MemberRole = "member";
+    private const string ReaderRole = "reader";
+    private const string MemberRole = "member";
     public const string AdminRole = "admin";
 
     public static readonly IReadOnlyList<string> All =
@@ -156,12 +156,6 @@ public static class AccessPermissions
         };
 
     public static readonly IReadOnlyList<string> MachineTokenPermissions = [FindingsRead];
-
-    // A write is matched against every grouping a copy was seen in, a read against any.
-    public static bool IsWrite(string permission)
-    {
-        return permission is AnalysesRun or AcksWrite;
-    }
 }
 
 /// <summary>

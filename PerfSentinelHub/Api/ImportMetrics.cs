@@ -23,8 +23,7 @@ public class ImportMetrics
     /// </summary>
     public IEnumerable<(string Reason, long Count)> Snapshot()
     {
-        foreach (var reason in Reasons)
-            yield return (Label(reason), Interlocked.Read(ref _counts[(int)reason]));
+        return Reasons.Select(reason => (Label(reason), Interlocked.Read(ref _counts[(int)reason])));
     }
 
     private static string Label(ImportRejection reason)

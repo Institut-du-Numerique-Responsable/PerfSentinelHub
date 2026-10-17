@@ -112,8 +112,9 @@ public sealed class AccessPolicy
             .Where(grant => groups.Contains(grant.Group) && grant.Permissions.Contains(permission))
             .Select(grant => grant.Patterns)
             .ToList();
-        if (granted.Exists(patterns => patterns is null)) return AccessScope.Unrestricted;
-        return AccessScope.Of([.. granted.SelectMany(patterns => patterns!)]);
+        return granted.Exists(patterns => patterns is null)
+            ? AccessScope.Unrestricted
+            : AccessScope.Of([.. granted.SelectMany(patterns => patterns!)]);
     }
 
     // Any permission anywhere: what /api/status and /api/sources ask of a caller.
@@ -187,6 +188,8 @@ public sealed class AccessPolicy
     {
         var fingerprint = SHA256.HashData(Encoding.UTF8.GetBytes(token));
         string? name = null;
+        // A plain loop keeps the full scan in sight and allocates no closure per request.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var machineToken in _machineTokens)
             if (CryptographicOperations.FixedTimeEquals(machineToken.Fingerprint, fingerprint) &&
                 machineToken.ExpiresAt > now)

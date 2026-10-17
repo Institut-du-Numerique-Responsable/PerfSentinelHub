@@ -78,7 +78,7 @@ public sealed class HubTokenHandler(
             new Claim(AccessCaller.SubjectClaim, row.Subject),
             new Claim(AccessCaller.CallerClaim, AccessCaller.TerminalToken),
             new Claim(AccessCaller.TokenIdClaim, row.Id),
-            .. row.ProviderGroups.Select(group => new Claim(AccessCaller.GroupClaim, group))
+            .. row.ProviderGroups.Select(providerGroup => new Claim(AccessCaller.GroupClaim, providerGroup))
         ], Scheme.Name);
         if (row.RequiredGroup is { } group)
             identity.AddClaim(new Claim(AccessCaller.RequiredGroupClaim, group));

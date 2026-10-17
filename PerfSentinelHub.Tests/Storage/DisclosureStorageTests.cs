@@ -46,11 +46,11 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         // Spacing and key order a re-serialisation would lose.
-        var report = Encoding.UTF8.GetBytes("{ \"z\" : 1,\n  \"a\": \"é\" }\n");
+        var report = "{ \"z\" : 1,\n  \"a\": \"é\" }\n"u8.ToArray();
         var record = Record("d1", "uuid-1") with
         {
             Files = new DisclosureFiles(report, [1, 2, 3], null),
-            Pdf = Encoding.ASCII.GetBytes("%PDF-1.7 fake")
+            Pdf = [.. "%PDF-1.7 fake"u8]
         };
 
         Assert.True(await _database.InsertDisclosureAsync(record, cancellationToken));
@@ -99,9 +99,9 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await _database.InsertDisclosureAsync(Record("d1", "uuid-1"), cancellationToken);
-        var signed = new DisclosureFiles(Encoding.UTF8.GetBytes("{\"signed\":true}"), [7], [8]);
+        var signed = new DisclosureFiles([.. "{\"signed\":true}"u8], [7], [8]);
 
-        await _database.ReplaceSignedCopyAsync("d1", signed, "signed-with-attestation", (new byte[] { 9 }, null),
+        await _database.ReplaceSignedCopyAsync("d1", signed, "signed-with-attestation", ([9], null),
             "0.31.0", NowMs + 5,
             cancellationToken);
 
@@ -228,7 +228,7 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
     public async Task A_backup_carries_the_files()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await _database.InsertDisclosureAsync(Record("d1", "uuid-1") with { Pdf = [37, 80, 68, 70] },
+        await _database.InsertDisclosureAsync(Record("d1", "uuid-1") with { Pdf = [.. "%PDF"u8] },
             cancellationToken);
 
         Assert.Equal(0, await HubBackup.RunAsync(_path, _backupPath, cancellationToken));
@@ -238,7 +238,8 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT pdf FROM disclosures WHERE id = 'd1';";
-        Assert.Equal([37, 80, 68, 70], (byte[])(await command.ExecuteScalarAsync(cancellationToken))!);
+        var pdf = (byte[])(await command.ExecuteScalarAsync(cancellationToken))!;
+        Assert.Equal([.. "%PDF"u8], pdf);
     }
 
     private HubDatabase Open()
@@ -251,7 +252,7 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
         return new DisclosureRecord(
             id, uuid, "Acme", "quarterly", "2026-07-01", "2026-09-30", "official", "public",
             "sha256:" + new string('a', 64), "G2", """{"energy_kwh":12.5}""",
-            new DisclosureFiles("{}"u8.ToArray(), null, null), [1], null, "0.31.0", true, null, NowMs);
+            new DisclosureFiles([.. "{}"u8], null, null), [1], null, "0.31.0", true, null, NowMs);
     }
 
     private static ShareLinkRecord Link(string id, string disclosureId, byte[] tokenHash)

@@ -61,7 +61,7 @@ public sealed partial class HubOptionsValidator
                 errors.Add($"{path}: a machine token is never a person; it gets its group through "
                            + "Hub:Access:MachineTokens.");
             else if (subject.StartsWith(LocalPrefix, StringComparison.OrdinalIgnoreCase) &&
-                     !access.LocalAccounts.Any(account => LocalPrefix + account.Name == subject))
+                     access.LocalAccounts.All(account => LocalPrefix + account.Name != subject))
                 errors.Add($"{path}: '{subject}' names no account in Hub:Access:LocalAccounts.");
     }
 
@@ -251,13 +251,13 @@ public sealed partial class HubOptionsValidator
             if (grant.Project != Wildcard && !projects.Contains(grant.Project))
                 errors.Add($"Hub:Access:Grants:{i}:Project '{grant.Project}' is neither '*' nor a project in "
                            + "Hub:Access:Projects.");
-            if (!roles.ContainsKey(grant.Role))
+            if (!roles.TryGetValue(grant.Role, out var permissions))
                 errors.Add($"Hub:Access:Grants:{i}:Role '{grant.Role}' is neither a built-in role nor one in "
                            + "Hub:Access:Roles.");
             else if (grant.Role == AccessPermissions.AdminRole && grant.Project != Wildcard)
                 errors.Add($"Grant {i}: the admin role applies to the whole Hub; grant it on '*', or use "
                            + "Hub:Access:Admins or Hub:Access:AdminGroups.");
-            else if (grant.Project != Wildcard && roles[grant.Role].Any(permission =>
+            else if (grant.Project != Wildcard && permissions.Any(permission =>
                          permission is AccessPermissions.DisclosuresRead or AccessPermissions.DisclosuresManage))
                 errors.Add($"Grant {i}: disclosures.read and disclosures.manage apply to the whole Hub; "
                            + "grant a role carrying them on '*'.");

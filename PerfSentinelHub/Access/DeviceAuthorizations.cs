@@ -80,6 +80,8 @@ public sealed class DeviceAuthorizations(TimeProvider timeProvider)
                 return new DevicePoll("slow_down");
             }
 
+            // Pending, and Issuing while a first poll writes the token, both still wait.
+            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             switch (entry.State)
             {
                 case State.Denied:

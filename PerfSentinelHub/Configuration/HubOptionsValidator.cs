@@ -59,7 +59,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
     {
         // Refused rather than ignored: a gate the operator believes is up would
         // leave the Hub open to every reader of the port.
-        if (!auth.Enabled && auth.RequiredGroups.Count > 0)
+        if (auth is { Enabled: false, RequiredGroups.Count: > 0 })
             errors.Add("Hub:Auth:RequiredGroups requires Hub:Auth:Enabled: off, the Hub signs nobody in "
                        + "and checks no group.");
         if (!auth.Enabled) return;
@@ -76,8 +76,9 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Auth:GroupsClaim must name a userinfo field when Hub:Auth:RequiredGroups is set.");
         if (auth.RequiredGroups.Any(string.IsNullOrWhiteSpace))
             errors.Add("Hub:Auth:RequiredGroups must not hold a blank entry.");
-        foreach (var network in auth.TrustedProxyNetworks.Where(network => !IPNetwork.TryParse(network, out _)))
-            errors.Add($"Hub:Auth:TrustedProxyNetworks entry '{network}' is not a CIDR network.");
+        errors.AddRange(auth.TrustedProxyNetworks
+            .Where(network => !IPNetwork.TryParse(network, out _))
+            .Select(network => $"Hub:Auth:TrustedProxyNetworks entry '{network}' is not a CIDR network."));
     }
 
     private static bool IsInvalidAuthEndpoint(Uri? endpoint)
