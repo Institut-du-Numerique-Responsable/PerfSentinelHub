@@ -24,19 +24,21 @@ public sealed class FakeEngineTests : IDisposable
         Assert.SkipUnless(OperatingSystem.IsLinux(), "Only Linux forks with the descriptor still open.");
         var failures = new ConcurrentBag<string>();
 
-        await Parallel.ForAsync(0, 2000, new ParallelOptions { MaxDegreeOfParallelism = 16 }, async (i, cancellationToken) =>
-        {
-            var path = new FakeEngine().WriteTo(Path.Combine(_workspace, $"{i}", "perf-sentinel"));
-            try
+        await Parallel.ForAsync(0, 2000, new ParallelOptions { MaxDegreeOfParallelism = 16 },
+            async (i, cancellationToken) =>
             {
-                using var process = Process.Start(new ProcessStartInfo(path, "--version") { RedirectStandardOutput = true })!;
-                await process.WaitForExitAsync(cancellationToken);
-            }
-            catch (Exception exception)
-            {
-                failures.Add(exception.Message);
-            }
-        });
+                var path = new FakeEngine().WriteTo(Path.Combine(_workspace, $"{i}", "perf-sentinel"));
+                try
+                {
+                    using var process = Process.Start(new ProcessStartInfo(path, "--version")
+                    { RedirectStandardOutput = true })!;
+                    await process.WaitForExitAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    failures.Add(exception.Message);
+                }
+            });
 
         Assert.Empty(failures);
     }

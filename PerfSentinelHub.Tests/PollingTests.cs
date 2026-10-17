@@ -257,13 +257,19 @@ public sealed class PollingTests : IDisposable
                 }, cancellationToken);
             }
             else if (context.Request.Path == "/api/config")
+            {
                 await context.Response.WriteAsJsonAsync(
                     new { hub_export_enabled = exportsToTheHub },
                     cancellationToken);
+            }
             else if (context.Request.Path == "/api/findings")
+            {
                 await context.Response.WriteAsync("[]", cancellationToken);
+            }
             else
+            {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
+            }
         }, cancellationToken);
         var options = new HubOptions { DatabasePath = _databasePath };
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);

@@ -72,7 +72,10 @@ internal sealed record FakeEngine
         // A child copies it into place: a test that forks while this process holds the file
         // open for writing would keep it busy, and Linux refuses to exec it with ETXTBSY.
         using (var copy = Process.Start("cp", [$"{path}.sh", path]))
+        {
             copy.WaitForExit();
+        }
+
         File.SetUnixFileMode(
             path,
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

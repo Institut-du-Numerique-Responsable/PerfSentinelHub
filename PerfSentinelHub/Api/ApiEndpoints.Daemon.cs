@@ -132,7 +132,7 @@ public static partial class ApiEndpoints
         var snapshot = ReadSnapshot(report.Value);
         var relayedConfig = ReadConfigObject(config.Value);
         // The Hub's own finding about this daemon, drawn and counted with its hints.
-        IReadOnlyList<ResultWarning> warnings = missedFindings > 0
+        var warnings = missedFindings > 0
             ? [.. snapshot.Warnings, RingWatch.Hint(missedFindings)]
             : snapshot.Warnings;
 
