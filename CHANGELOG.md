@@ -2,7 +2,7 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.7.1] - 2026-10-17
 
 ### Changed
 
@@ -18,6 +18,11 @@ All notable changes to PerfSentinelHub are recorded here.
   `unsupported_characters`. A report a daemon serves names its carbon model on the Total CO2
   cards. No detector, normalizer or finding signature changes, so every stored finding keeps
   its signature.
+
+### Fixed
+
+- An empty Disclosures screen says a scheduled job builds a disclosure from the daemons'
+  archives and publishes it with the import key, where it named a CI job.
 
 ## [0.7.0] - 2026-10-16
 
