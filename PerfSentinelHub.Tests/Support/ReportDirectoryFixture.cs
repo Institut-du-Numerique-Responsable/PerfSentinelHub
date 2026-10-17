@@ -1,5 +1,3 @@
-using PerfSentinelHub.Tests;
-
 [assembly: AssemblyFixture(typeof(ReportDirectoryFixture))]
 
 namespace PerfSentinelHub.Tests.Support;
