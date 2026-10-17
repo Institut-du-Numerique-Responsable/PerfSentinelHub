@@ -594,6 +594,7 @@ public sealed class IncidentPollingTests : IDisposable
             database,
             new IncidentReader(client, database, logger ?? NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new RingWatch(),
             timeProvider,
             NullLogger<SourcePoller>.Instance);
         return (poller, database);

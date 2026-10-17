@@ -69,6 +69,7 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
         var source = new SourceOptions
@@ -151,6 +152,7 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
         var source = new SourceOptions
@@ -212,6 +214,7 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new RingWatch(),
             TimeProvider.System,
             logger);
 
@@ -225,6 +228,73 @@ public sealed class PollingTests : IDisposable
 
         Assert.True(result.IsPossiblyTruncated);
         Assert.Contains(logger.Messages, message => message.Contains("possibly truncated", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    // 300 findings went in between the polls and the ring holds 100.
+    [InlineData(false, 200L)]
+    // The daemon pushes to the Hub, which received what the poll missed.
+    [InlineData(true, 0L)]
+    public async Task Poll_counts_the_findings_that_left_the_ring_between_two_polls(
+        bool exportsToTheHub,
+        long expectedMissed)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var totals = new Queue<(long Uptime, long Total)>([(60, 100), (120, 400)]);
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            if (context.Request.Path == "/api/status")
+            {
+                var (uptime, total) = totals.Dequeue();
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    version = "0.31.2",
+                    uptime_seconds = uptime,
+                    stored_findings = 100,
+                    max_retained_findings = 100,
+                    findings_stored_total = total
+                }, cancellationToken);
+            }
+            else if (context.Request.Path == "/api/config")
+                await context.Response.WriteAsJsonAsync(
+                    new { hub_export_enabled = exportsToTheHub },
+                    cancellationToken);
+            else if (context.Request.Path == "/api/findings")
+                await context.Response.WriteAsync("[]", cancellationToken);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+        }, cancellationToken);
+        var options = new HubOptions { DatabasePath = _databasePath };
+        var database = new HubDatabase(Options.Create(options), TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        var client = new DaemonClient(new HttpClient(), Options.Create(options));
+        var rings = new RingWatch();
+        var logger = new ListLogger<SourcePoller>();
+        var poller = new SourcePoller(
+            client,
+            database,
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new AckReader(client, database, NullLogger<AckReader>.Instance),
+            rings,
+            TimeProvider.System,
+            logger);
+        var source = new SourceOptions
+        {
+            Id = "ring",
+            Name = "Ring",
+            Environment = "test",
+            BaseUrl = daemon.BaseUrl
+        };
+
+        var first = await poller.PollAsync(source, cancellationToken);
+        var second = await poller.PollAsync(source, cancellationToken);
+
+        Assert.Null(first.MissedFindings);
+        Assert.Equal(expectedMissed, second.MissedFindings);
+        Assert.Equal(expectedMissed, rings.Missed("ring"));
+        Assert.Equal(
+            expectedMissed > 0,
+            logger.Messages.Any(message => message.Contains("left the daemon's ring", StringComparison.Ordinal)));
     }
 
     [Theory]
@@ -287,6 +357,7 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new RingWatch(),
             TimeProvider.System,
             logger);
         var source = new SourceOptions
@@ -351,6 +422,7 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
         var source = new SourceOptions
