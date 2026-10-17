@@ -200,7 +200,7 @@ nouveau. Le coût de ce démarrage est mesuré dans
 ## Le contrôle d'accès
 
 `Hub:Access` est compilé une fois, à la première demande, en `AccessPolicy`
-(`Api/AccessPolicy.cs`) : les motifs de chaque projet, les permissions de chaque rôle, les
+(`Access/AccessPolicy.cs`) : les motifs de chaque projet, les permissions de chaque rôle, les
 attributions, les groupes internes par sujet membre, les ensembles d'administrateurs, et
 l'empreinte SHA-256 de chaque jeton machine, jamais le jeton. `Program.cs` l'enregistre quel
 que soit le réglage, parce qu'un handler partagé par les deux modes le prend comme service,
@@ -209,7 +209,7 @@ qu'un `GET` refuse. Contrôle d'accès désactivé, il ne construit rien et chaq
 calcule est illimitée : chaque handler garde le SQL d'aujourd'hui.
 
 Pour un appelant et une permission, `AccessPolicy.Scope` rend un `AccessScope`
-(`Api/AccessScope.cs`) : illimité, rien, ou l'union des motifs des projets attribués. Un
+(`Access/AccessScope.cs`) : illimité, rien, ou l'union des motifs des projets attribués. Un
 `AccessPattern` reconnaît une copie de finding, une signature à une source, sur trois
 choses : la source, le service propre à la copie dans `finding_sources.service`, jamais le
 `findings.service` de la flotte qu'un import réécrit, et les lignes de la copie dans
@@ -234,7 +234,7 @@ voir [BENCHMARKS-FR.md](BENCHMARKS-FR.md#portée-daccès-sur-100-000-copies).
 
 **Qui appelle.** Avec l'accès activé, `HubAuthentication` enregistre un schéma de
 politique, `hub`, qui renvoie une requête portant `Authorization: Bearer` vers
-`HubTokenHandler` (`Api/HubTokenHandler.cs`) et toute autre vers le schéma du cookie, dont
+`HubTokenHandler` (`Access/HubTokenHandler.cs`) et toute autre vers le schéma du cookie, dont
 le challenge va toujours au fournisseur. Le handler de jetons compare l'empreinte du bearer
 à celle de chaque jeton machine par `AccessPolicy.MachineTokenName`, et une correspondance
 devient un principal dont le sujet est `machine:<nom>`. La connexion chez le fournisseur
@@ -248,7 +248,7 @@ chaque réponse.
 ne déclare le flux d'appareil qu'avec `Hub:Auth:TrustedProxyNetworks` renseigné, puisque
 l'adresse cliente qu'il enregistre est celle que `ForwardedHeaders` prend de ces seuls
 réseaux, normalisée par `ClientAddress` (un client IPv6 par son /64).
-`DeviceAuthorizations` (`Api/DeviceAuthorizations.cs`) garde en mémoire les codes en
+`DeviceAuthorizations` (`Access/DeviceAuthorizations.cs`) garde en mémoire les codes en
 attente, avec leurs plafonds, l'intervalle d'interrogation et les codes ratés de chaque
 personne. Les routes d'approbation lisent le ticket du cookie, jamais `HttpContext.User`,
 donc un bearer n'approuve rien. Une approbation récupérée devient une ligne de
@@ -374,4 +374,4 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Hub vers api.github.com                           | `Collection/UpdateChecker.cs`, `ReadAsync`, seul appel sortant qui ne soit pas une source configurée           |
 | CLI vers le Hub, la connexion du terminal         | `Api/ApiEndpoints.Terminal.cs`, `StartDeviceAsync`, `PollDeviceAsync`, `RevokeTokenAsync`                      |
 | Navigateur vers le Hub, l'approbation             | `Api/ApiEndpoints.Terminal.cs`, `DevicePageAsync`, `VerifyDeviceAsync`, `ApproveDeviceAsync`                   |
-| CLI vers le Hub, avec un jeton de terminal        | `Api/HubTokenHandler.cs`, `TerminalAsync`, sur `FindTerminalTokenAsync`                                        |
+| CLI vers le Hub, avec un jeton de terminal        | `Access/HubTokenHandler.cs`, `TerminalAsync`, sur `FindTerminalTokenAsync`                                     |

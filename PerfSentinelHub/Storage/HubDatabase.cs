@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;

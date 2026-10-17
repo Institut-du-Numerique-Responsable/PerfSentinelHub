@@ -1,10 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using PerfSentinelHub.Api;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Tests.Configuration;
 
-namespace PerfSentinelHub.Tests.Api;
+namespace PerfSentinelHub.Tests.Access;
 
 public sealed class AccessMatchingTests
 {

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 

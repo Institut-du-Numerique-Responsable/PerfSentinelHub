@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;

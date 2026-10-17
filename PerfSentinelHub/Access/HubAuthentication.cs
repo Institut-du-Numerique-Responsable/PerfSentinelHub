@@ -9,10 +9,11 @@ using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using IPNetwork = System.Net.IPNetwork;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     Browser sign-in with the framework's own cookie and OAuth2 handlers, when

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 

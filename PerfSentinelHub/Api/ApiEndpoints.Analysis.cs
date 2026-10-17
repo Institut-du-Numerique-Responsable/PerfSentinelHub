@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;

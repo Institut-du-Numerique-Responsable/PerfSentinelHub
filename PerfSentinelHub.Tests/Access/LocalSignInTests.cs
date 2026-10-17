@@ -11,10 +11,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
-using PerfSentinelHub.Api;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 
-namespace PerfSentinelHub.Tests.Api;
+namespace PerfSentinelHub.Tests.Access;
 
 /// <summary>
 ///     Local break-glass accounts and the Hub's own sign-in page. Every request reaches the

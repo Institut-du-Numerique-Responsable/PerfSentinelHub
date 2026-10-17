@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
-using PerfSentinelHub.Api;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Tests.Configuration;

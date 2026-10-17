@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;

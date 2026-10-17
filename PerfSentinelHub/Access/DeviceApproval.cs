@@ -1,4 +1,4 @@
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     What a browser session approved a code with: the owner of the token to come. Groups are

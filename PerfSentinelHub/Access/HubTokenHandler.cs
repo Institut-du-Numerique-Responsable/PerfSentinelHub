@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     <c>Authorization: Bearer</c> with access on: a terminal token (<c>pshub_</c>) a browser

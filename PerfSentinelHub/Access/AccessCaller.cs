@@ -1,6 +1,6 @@
 using System.Security.Claims;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     Who a decision is made for. The subject is the authorization key and nothing

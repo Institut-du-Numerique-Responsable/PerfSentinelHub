@@ -1,7 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     The device codes in flight, in memory: the chart runs one replica, and a restart only

@@ -1,4 +1,4 @@
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     The local sign-in throttle, in memory and cleared by a restart. A backoff per client

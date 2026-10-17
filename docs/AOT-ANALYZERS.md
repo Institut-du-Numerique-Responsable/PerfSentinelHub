@@ -4,7 +4,7 @@ Rider flags a pair of `IL2026` and `IL3050` diagnostics at ERROR severity on
 every call a source generator intercepts: each minimal API mapping (`MapGet` and
 `MapPost` in `Api/ApiEndpoints*.cs` and `Api/MetricsEndpoint.cs`) and the two
 configuration bindings, `AddOptions<HubOptions>().BindConfiguration(...)` in
-`Program.cs` and `GetSection(...).Get<T>()` in `Api/HubAuthentication.cs`. That
+`Program.cs` and `GetSection(...).Get<T>()` in `Access/HubAuthentication.cs`. That
 is two diagnostics per call site, so the count grows with every new route. They
 are false positives. Do not act on them, and do not silence them.
 

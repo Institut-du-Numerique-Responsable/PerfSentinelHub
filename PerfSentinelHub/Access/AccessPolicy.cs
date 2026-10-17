@@ -5,7 +5,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     Hub:Access compiled once from the validated configuration: patterns, role

@@ -1,4 +1,4 @@
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>Terminal sign-in's fixed values: deliberately not settings.</summary>
 public static class TerminalAccess

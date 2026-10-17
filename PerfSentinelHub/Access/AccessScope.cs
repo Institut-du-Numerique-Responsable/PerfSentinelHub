@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Json;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     What one caller may reach with one permission: everything, nothing, or the union of

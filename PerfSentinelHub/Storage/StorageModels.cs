@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 

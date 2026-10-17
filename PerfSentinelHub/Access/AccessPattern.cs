@@ -1,6 +1,6 @@
 using PerfSentinelHub.Configuration;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     One finding_attributes row: a captured pair under the grouping identity of the

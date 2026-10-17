@@ -11,8 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Tests.Api;
 
-namespace PerfSentinelHub.Tests.Api;
+namespace PerfSentinelHub.Tests.Access;
 
 /// <summary>
 ///     The Hub signing browser users in against an OAuth2 provider of its own,

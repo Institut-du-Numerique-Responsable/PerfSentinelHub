@@ -1,9 +1,10 @@
 using System.Buffers.Text;
 using System.Net;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Api;
 
-namespace PerfSentinelHub.Tests.Api;
+namespace PerfSentinelHub.Tests.Access;
 
 /// <summary>
 ///     The pending device codes, held in memory: their shape, the caps, expiry at read,

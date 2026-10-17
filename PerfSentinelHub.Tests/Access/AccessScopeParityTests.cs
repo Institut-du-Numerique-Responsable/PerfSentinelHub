@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
-using PerfSentinelHub.Api;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
-namespace PerfSentinelHub.Tests.Api;
+namespace PerfSentinelHub.Tests.Access;
 
 /// <summary>
 ///     The SQL fragments and the C# matcher must give one answer for one scope, on the

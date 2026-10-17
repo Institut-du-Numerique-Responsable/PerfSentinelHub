@@ -185,7 +185,7 @@ start is measured in [BENCHMARKS.md](BENCHMARKS.md#start-on-a-filled-database).
 ## Access control
 
 `Hub:Access` is compiled once, at the first request for it, into `AccessPolicy`
-(`Api/AccessPolicy.cs`): each project's patterns, each role's permissions, the grants, the
+(`Access/AccessPolicy.cs`): each project's patterns, each role's permissions, the grants, the
 internal groups by member subject, the admin sets, and a SHA-256 fingerprint of each machine
 token, never the token. `Program.cs` registers it whatever the setting, because a handler
 shared by both modes takes it as a service, and the Request Delegate Generator would read a
@@ -193,7 +193,7 @@ type the container lacks as a JSON body, which a `GET` refuses. With access off 
 nothing and every scope it computes is unrestricted, so each handler keeps today's SQL.
 
 For one caller and one permission, `AccessPolicy.Scope` returns an `AccessScope`
-(`Api/AccessScope.cs`): unrestricted, nothing, or the union of the granted projects'
+(`Access/AccessScope.cs`): unrestricted, nothing, or the union of the granted projects'
 patterns. An `AccessPattern` matches a finding copy, one signature at one source, on three
 things: the source, the copy's own service in `finding_sources.service` and never the
 fleet-wide `findings.service` an import rewrites, and the copy's rows in
@@ -215,7 +215,7 @@ times the CTE, see [BENCHMARKS.md](BENCHMARKS.md#access-scope-over-100000-copies
 
 **Who is calling.** With access on, `HubAuthentication` registers a policy scheme, `hub`,
 which forwards a request carrying `Authorization: Bearer` to `HubTokenHandler`
-(`Api/HubTokenHandler.cs`) and every other one to the cookie scheme, whose challenge still
+(`Access/HubTokenHandler.cs`) and every other one to the cookie scheme, whose challenge still
 goes to the provider. The token handler compares the bearer's fingerprint with every
 machine token's through `AccessPolicy.MachineTokenName`, and a match becomes a principal
 whose subject is `machine:<name>`. The provider sign-in adds the subject, the provider
@@ -228,7 +228,7 @@ a browser write without `Sec-Fetch-Site: same-origin`, and a first middleware se
 maps the device flow only with `Hub:Auth:TrustedProxyNetworks` set, since the client
 address it records is the one `ForwardedHeaders` takes from those networks alone,
 normalized by `ClientAddress` (an IPv6 client by its /64). `DeviceAuthorizations`
-(`Api/DeviceAuthorizations.cs`) holds the pending codes in memory, with their caps, the
+(`Access/DeviceAuthorizations.cs`) holds the pending codes in memory, with their caps, the
 polling interval and each person's failed codes. The approval routes read the cookie
 ticket, never `HttpContext.User`, so a bearer approves nothing. A collected approval
 becomes a `terminal_tokens` row through `HubDatabase.Tokens.cs`, holding the SHA-256 of the
@@ -351,4 +351,4 @@ is wrong the first time anyone edits above it.
 | Hub to api.github.com                     | `Collection/UpdateChecker.cs`, `ReadAsync`, the only outbound call that is not a configured source           |
 | CLI to Hub, terminal sign-in              | `Api/ApiEndpoints.Terminal.cs`, `StartDeviceAsync`, `PollDeviceAsync`, `RevokeTokenAsync`                    |
 | Browser to Hub, approving a terminal      | `Api/ApiEndpoints.Terminal.cs`, `DevicePageAsync`, `VerifyDeviceAsync`, `ApproveDeviceAsync`                 |
-| CLI to Hub, with a terminal token         | `Api/HubTokenHandler.cs`, `TerminalAsync`, over `FindTerminalTokenAsync`                                     |
+| CLI to Hub, with a terminal token         | `Access/HubTokenHandler.cs`, `TerminalAsync`, over `FindTerminalTokenAsync`                                  |

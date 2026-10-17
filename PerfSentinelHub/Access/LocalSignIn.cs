@@ -8,9 +8,10 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Primitives;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 
-namespace PerfSentinelHub.Api;
+namespace PerfSentinelHub.Access;
 
 /// <summary>
 ///     The Hub's own sign-in page, mapped only with a local account declared: single sign-on

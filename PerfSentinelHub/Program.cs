@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
