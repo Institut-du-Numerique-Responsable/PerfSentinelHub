@@ -77,12 +77,29 @@ public sealed class DaemonStateTests
     }
 
     [Fact]
-    public void Any_one_gauge_at_its_cap_is_enough()
+    public void A_full_findings_ring_is_the_steady_state_and_reads_ok()
     {
+        // The ring fills on any daemon that runs long enough, its advisor has
+        // no rule on it, and the Hub keeps the history it evicts. The poll
+        // reports what it missed instead.
         var status = Status(1, 1000) with
         {
             StoredFindings = 10_000,
             MaxRetainedFindings = 10_000
+        };
+
+        Assert.Equal(100.0, DaemonView.Read(status).Findings.Pct);
+        Assert.False(DaemonView.Read(status).Findings.AtCapacity);
+        Assert.Equal(DaemonView.Ok, DaemonView.Classify(status, 0, true));
+    }
+
+    [Fact]
+    public void Any_other_gauge_at_its_cap_is_enough()
+    {
+        var status = Status(1, 1000) with
+        {
+            AnalysisQueueDepth = 1000,
+            AnalysisQueueCapacity = 1000
         };
 
         Assert.Equal(DaemonView.NearCapacity, DaemonView.Classify(status, 0, true));

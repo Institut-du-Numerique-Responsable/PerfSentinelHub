@@ -46,7 +46,9 @@ traces.
 Une jauge est teintée dès qu'elle approche d'un plafond qu'elle a publié. Rouge à partir
 de 90 %, la ligne du conseiller du moteur lui-même et celle qui fait passer le verdict
 d'une ligne à "près du plafond". Ambre à partir de 75 %, le palier propre au Hub, un cran
-avant.
+avant. L'anneau de findings n'est jamais teinté et ne change jamais un verdict : il se
+remplit sur tout daemon qui tourne assez longtemps, et le Hub garde ce qu'il évince. Quand
+un poll constate que certains en sont sortis avant qu'il ait pu les lire, les conseils le disent.
 
 Chaque lecture montre ce qui a bougé depuis la précédente, montant depuis le chiffre
 auquel cela se rapporte puis s'effaçant : rouge pour une hausse, vert pour une baisse.

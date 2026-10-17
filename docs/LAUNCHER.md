@@ -39,7 +39,9 @@ daemon the banner says so and asks for a trace backend.
 
 A gauge is toned once it is close to a cap it published. Red from 90 %, the engine's own
 advisor line and the same one that turns a row's verdict to near capacity. Amber from
-75 %, the Hub's own step ahead of it.
+75 %, the Hub's own step ahead of it. The findings ring is never toned and never turns a
+verdict: it fills on any daemon that runs long enough, and the Hub keeps what it evicts.
+When a poll finds that some left the ring before it could read them, the hints say so.
 
 Each read shows what moved since the one before, rising off the figure it belongs to and
 fading out: red for a rise, green for a fall. Every one of these counts toward a cap, so

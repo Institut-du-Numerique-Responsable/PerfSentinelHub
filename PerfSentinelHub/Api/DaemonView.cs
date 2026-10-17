@@ -37,7 +37,10 @@ public static class DaemonView
         return new DaemonGauges(
             Gauge(status.ActiveTraces, status.MaxActiveTraces),
             Gauge(status.AnalysisQueueDepth, status.AnalysisQueueCapacity),
-            Gauge(status.StoredFindings, status.MaxRetainedFindings));
+            // Drawn, never at capacity: the ring fills on any daemon that runs
+            // long enough, its advisor has no rule on it, and the Hub keeps
+            // what it evicts. RingWatch reports what a poll missed instead.
+            Gauge(status.StoredFindings, status.MaxRetainedFindings) with { AtCapacity = false });
     }
 
     public static string Classify(DaemonStatus? status, int warningCount, bool hintsKnown)
@@ -46,7 +49,7 @@ public static class DaemonView
             return Unreachable;
 
         var gauges = Read(status);
-        if (gauges.Traces.AtCapacity || gauges.AnalysisQueue.AtCapacity || gauges.Findings.AtCapacity)
+        if (gauges.Traces.AtCapacity || gauges.AnalysisQueue.AtCapacity)
             return NearCapacity;
         if (warningCount > 0)
             return Advised;

@@ -1772,8 +1772,9 @@
                 [gaugeText(view.traces), 'active traces', PSL.gaugeTone(pct(view.traces)), moves.traces],
                 [gaugeText(view.analysis_queue), 'analysis queue',
                     PSL.gaugeTone(pct(view.analysis_queue)), moves.analysis_queue],
-                [gaugeText(view.findings), 'findings stored',
-                    PSL.gaugeTone(pct(view.findings)), moves.findings],
+                // No tone: the ring fills on any daemon that runs long enough, and
+                // the Hub keeps what it evicts. A poll that missed some says so in the hints.
+                [gaugeText(view.findings), 'findings stored', null, moves.findings],
                 // No cap and only one direction: an uptime that grows every read is
                 // not news, and a tone would say it is running out of something. Down to
                 // the minute, because two units hide a whole day: a daemon up for 10 d
