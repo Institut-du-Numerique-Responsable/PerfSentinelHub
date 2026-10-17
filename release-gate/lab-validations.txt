@@ -182,3 +182,21 @@ v0.6.0	7593c1e	2026-10-16	PASS
 # perf-sentinel 0.31.0. The lab ran with local, uncommitted image pins in its
 # daemon and Hub manifests.
 v0.7.0	bf31096	2026-10-16	PASS
+#
+# v0.7.1, 2026-10-17. The release counts the findings that left a polled
+# daemon's ring before a poll read them, stops reading a full findings ring
+# as a daemon near capacity, and repins the engine to perf-sentinel 0.31.2.
+# Eleven hub-* scenarios ran green on the first run on lab commit 3573531:
+# hub-ingestion, hub-derived-status, hub-source-reachability,
+# hub-plugin-contract, hub-incidents-mirror, hub-incidents-push,
+# hub-correlations-push, hub-disclosures, hub-lineage-mutation,
+# hub-retention-purge and hub-access-control. The image
+# perf-sentinel-hub:0.7.1-84e48d5 was built by seed-hub-local from 84e48d5,
+# the last commit that changes code, and answers 0.7.1 with engine 0.31.2,
+# the published perf-sentinel image pinned by digest. Every daemon, the
+# isolated one in hub-incidents-push included, was the published
+# perf-sentinel 0.31.2 image, pinned by digest sha256:92280db1.
+# hub-disclosures and hub-access-control used a local release binary of
+# perf-sentinel 0.31.2. The lab ran with local, uncommitted image pins in its
+# daemon and Hub manifests.
+v0.7.1	3573531	2026-10-17	PASS
