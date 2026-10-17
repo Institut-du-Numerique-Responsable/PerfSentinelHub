@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
@@ -656,11 +657,4 @@ public static partial class ApiEndpoints
     [LoggerMessage(2014, LogLevel.Warning,
         "Terminal sign-in is off: Hub:Auth:TrustedProxyNetworks is empty, so the Hub cannot tell clients apart behind a proxy.")]
     private static partial void LogTerminalSignInOff(ILogger logger);
-}
-
-// Bounds how many import bodies may be buffered at once (MaxImports * 2 MiB). It is not a write
-// lock -- HubDatabase serializes writes -- so one slow uploader must not stall the whole fleet.
-public sealed class ImportGate() : RequestGate(MaxImports)
-{
-    public const int MaxImports = 4;
 }

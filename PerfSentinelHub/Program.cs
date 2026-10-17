@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
@@ -12,6 +13,8 @@ using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
+// Each subcommand stays a block of its own, handled before the host is built.
+// ReSharper disable once ConvertIfStatementToSwitchStatement
 if (args is ["hash-password", ..])
     // Read from stdin or typed at a prompt, never from argv: an argument stays in the shell
     // history and the process list.

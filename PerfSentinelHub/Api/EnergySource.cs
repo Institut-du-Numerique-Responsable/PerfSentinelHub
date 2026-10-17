@@ -46,7 +46,7 @@ public static class EnergySource
     ///     A tag without its `+cal` suffix, or null when it is not a short
     ///     `[A-Za-z0-9_+-]` token: the daemon is a source the Hub does not control.
     /// </summary>
-    internal static string? DisplayTag(string tag)
+    private static string? DisplayTag(string tag)
     {
         if (tag.EndsWith(CalSuffix, StringComparison.Ordinal))
             tag = tag[..^CalSuffix.Length];
@@ -58,11 +58,14 @@ public static class EnergySource
     private static List<(string Service, double Ratio)> MeasuredRatios(JsonElement green)
     {
         var ratios = new List<(string Service, double Ratio)>();
-        if (green.TryGetProperty("per_service_measured_ratio", out var map) && map.ValueKind == JsonValueKind.Object)
-            foreach (var entry in map.EnumerateObject())
-                // A ratio the engine could not write reads as unmeasured, as NaN does there.
-                ratios.Add((entry.Name,
-                    entry.Value.ValueKind == JsonValueKind.Number ? entry.Value.GetDouble() : double.NaN));
+        if (!green.TryGetProperty("per_service_measured_ratio", out var map) || map.ValueKind != JsonValueKind.Object)
+            return ratios;
+        // Not LINQ: going through IEnumerable would box JsonElement's struct enumerator.
+        // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+        foreach (var entry in map.EnumerateObject())
+            // A ratio the engine could not write reads as unmeasured, as NaN does there.
+            ratios.Add((entry.Name,
+                entry.Value.ValueKind == JsonValueKind.Number ? entry.Value.GetDouble() : double.NaN));
         return ratios;
     }
 
@@ -77,10 +80,13 @@ public static class EnergySource
     private static Dictionary<string, string> StringMap(JsonElement green, string name)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (green.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object)
-            foreach (var entry in value.EnumerateObject())
-                if (entry.Value.ValueKind == JsonValueKind.String)
-                    map[entry.Name] = entry.Value.GetString()!;
+        if (!green.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Object)
+            return map;
+        // Not LINQ: going through IEnumerable would box JsonElement's struct enumerator.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
+        foreach (var entry in value.EnumerateObject())
+            if (entry.Value.ValueKind == JsonValueKind.String)
+                map[entry.Name] = entry.Value.GetString()!;
         return map;
     }
 }

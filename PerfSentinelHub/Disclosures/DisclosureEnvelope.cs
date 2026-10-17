@@ -13,7 +13,6 @@ namespace PerfSentinelHub.Disclosures;
 ///     engine checks the rest.
 /// </summary>
 public sealed record DisclosureEnvelope(
-    string SchemaVersion,
     string ReportUuid,
     string Intent,
     string Confidentiality,
@@ -65,7 +64,7 @@ public sealed record DisclosureEnvelope(
             Text(Child(root, "integrity"), "content_hash") is not { } contentHash)
             return null;
         return new DisclosureEnvelope(
-            schema, uuid, intent, confidentiality, Text(metadata, "integrity_level"), organisation, periodType, from,
+            uuid, intent, confidentiality, Text(metadata, "integrity_level"), organisation, periodType, from,
             to,
             contentHash, Figures(root));
     }

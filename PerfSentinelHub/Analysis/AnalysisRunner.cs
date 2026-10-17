@@ -8,30 +8,6 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Analysis;
 
 /// <summary>
-///     The bounded vocabulary a run may report. Raw stderr never leaves the
-///     process, so this is all the operator gets, and every code needs one
-///     actionable sentence in the interface.
-/// </summary>
-public static class AnalysisErrorCodes
-{
-    public const string SourceUnreachable = "source_unreachable";
-    public const string SourceAuthFailed = "source_auth_failed";
-    public const string SourceRejectedRequest = "source_rejected_request";
-    public const string Timeout = "timeout";
-    public const string OutputTooLarge = "output_too_large";
-    public const string BinaryFailed = "binary_failed";
-    public const string InvalidRequest = "invalid_request";
-    public const string HubMemoryLow = "hub_memory_low";
-    public const string Internal = "internal";
-}
-
-public sealed record RunOutcome(
-    string Status,
-    string? ErrorCode,
-    string? ProducerVersion,
-    ReportSummary? Summary);
-
-/// <summary>
 ///     Executes one run: obtain the engine's report JSON, then render it to a
 ///     self-contained HTML file. Two steps, because the query subcommands emit
 ///     text, JSON or SARIF and only `report` writes HTML.
@@ -198,7 +174,7 @@ public sealed partial class AnalysisRunner(
     /// </summary>
     public static string? LiveDaemonUrl(SourceOptions source, bool engineTakesTheFlag)
     {
-        return engineTakesTheFlag && source.Kind == SourceKinds.Daemon && source.PublishedUrl.AbsolutePath == "/"
+        return engineTakesTheFlag && source is { Kind: SourceKinds.Daemon, PublishedUrl.AbsolutePath: "/" }
             ? source.PublicEndpointArgument
             : null;
     }
@@ -213,8 +189,8 @@ public sealed partial class AnalysisRunner(
     private string[] LiveArguments(SourceOptions source)
     {
         // The engine refuses the two ids a browser would read as path segments.
-        if (engine.SupportsHubRelay && source is { Kind: SourceKinds.Daemon, HasAckCredential: true } &&
-            source.Id is not ("." or ".."))
+        if (engine.SupportsHubRelay &&
+            source is { Kind: SourceKinds.Daemon, HasAckCredential: true, Id: not ("." or "..") })
             return ["--hub-relay", source.Id];
         return LiveDaemonUrl(source, engine.SupportsDaemonUrl && !options.Value.Access.Enabled) is { } url
             ? ["--daemon-url", url]

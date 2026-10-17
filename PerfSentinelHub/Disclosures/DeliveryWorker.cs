@@ -82,13 +82,11 @@ public sealed partial class DeliveryWorker(
         if (attempts >= MaxAttempts)
         {
             // False when an operator's retry reset the row meanwhile: that run of attempts is theirs.
-            if (await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status, DeliveryStates.Failed,
-                    Now(), null, cancellationToken))
-            {
-                metrics.DeliveryFailed();
-                LogGaveUp(logger, delivery.Id, webhook.Name, attempts);
-            }
-
+            if (!await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status,
+                    DeliveryStates.Failed, Now(), null, cancellationToken))
+                return;
+            metrics.DeliveryFailed();
+            LogGaveUp(logger, delivery.Id, webhook.Name, attempts);
             return;
         }
 

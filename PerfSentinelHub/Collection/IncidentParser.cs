@@ -5,35 +5,10 @@ using PerfSentinelHub.Api;
 
 namespace PerfSentinelHub.Collection;
 
-/// <summary>
-///     One incident as the daemon listed it: the columns the Hub indexes beside
-///     the document kept verbatim, the way a finding envelope is. The findings
-///     travel apart from the rest of the document, since they can run to a
-///     thousand and only the single-incident route re-emits them.
-/// </summary>
-public sealed record ParsedIncident(
-    string Id,
-    string Service,
-    string Kind,
-    long AtMs,
-    long? EndedAtMs,
-    long WindowFromMs,
-    long WindowToMs,
-    long? OldestFindingMs,
-    int FindingCount,
-    // The daemon's document without its `findings` property.
-    string IncidentJson,
-    // The `findings` array as the daemon wrote it.
-    string FindingsJson);
-
-public sealed record ParsedIncidentPage(IReadOnlyList<ParsedIncident> Incidents, int RejectedCount);
-
-public sealed record ParsedIncidentImport(string ProducerVersion, ParsedIncidentPage Page);
-
 public static class IncidentParser
 {
     /// <summary>A pushed batch holds at most this many incidents, each up to a thousand findings.</summary>
-    public const int MaxImportIncidents = 10;
+    private const int MaxImportIncidents = 10;
 
     /// <summary>
     ///     The daemon's closed set of kinds. Anything else folds to `other`, as
@@ -44,6 +19,8 @@ public static class IncidentParser
     public static ParsedIncidentPage Parse(ReadOnlyMemory<byte> payload)
     {
         using var document = Open(payload, "The incidents response is not valid JSON.");
+        // An explicit branch per refusal, as in FindingParser.
+        // ReSharper disable once ConvertIfStatementToReturnStatement
         if (document.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("The incidents response must be a JSON array.");
         return ParseArray(document.RootElement);
@@ -64,8 +41,11 @@ public static class IncidentParser
             throw new InvalidDataException("The import body is invalid.");
 
         var count = incidents.GetArrayLength();
+        // An explicit branch per refusal, as in FindingParser.
+        // ReSharper disable once ConvertIfStatementToSwitchExpression
         if (count > MaxImportIncidents)
             throw new ImportBatchTooLargeException();
+        // ReSharper disable once ConvertIfStatementToReturnStatement
         if (count == 0)
             throw new InvalidDataException("The import batch is empty.");
         return new ParsedIncidentImport(producerVersion, ParseArray(incidents));
@@ -130,6 +110,8 @@ public static class IncidentParser
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
+            // Not LINQ: going through IEnumerable would box JsonElement's struct enumerator.
+            // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
             foreach (var property in element.EnumerateObject())
                 if (property.Name != "findings")
                     property.WriteTo(writer);

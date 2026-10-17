@@ -1,29 +1,6 @@
 namespace PerfSentinelHub.Api;
 
 /// <summary>
-///     Why an import was refused. A closed set: these become Prometheus label
-///     values, and a label fed from anything a caller controls is how a /metrics
-///     endpoint dies of cardinality.
-/// </summary>
-public enum ImportRejection
-{
-    /// <summary>Malformed query string, unparseable body, or an empty batch.</summary>
-    BadRequest,
-
-    /// <summary>Unknown source id, or a key that does not match the configured one.</summary>
-    Unauthorized,
-
-    /// <summary>Too many imports already in flight. Raise the uploader's spacing.</summary>
-    GateFull,
-
-    /// <summary>The write lock did not come free in five seconds.</summary>
-    WriteTimeout,
-
-    /// <summary>Body over the size limit, or more findings than one batch accepts.</summary>
-    TooLarge
-}
-
-/// <summary>
 ///     Counts refused imports, in process. Deliberately not in SQLite: a refusal
 ///     happens on the paths that could not take the write lock, so recording it
 ///     would need the very lock that failed. The count resets on restart, which is
@@ -46,8 +23,7 @@ public class ImportMetrics
     /// </summary>
     public IEnumerable<(string Reason, long Count)> Snapshot()
     {
-        foreach (var reason in Reasons)
-            yield return (Label(reason), Interlocked.Read(ref _counts[(int)reason]));
+        return Reasons.Select(reason => (Label(reason), Interlocked.Read(ref _counts[(int)reason])));
     }
 
     private static string Label(ImportRejection reason)
@@ -72,43 +48,8 @@ public class ImportMetrics
 /// </summary>
 public sealed class IncidentImportMetrics : ImportMetrics;
 
-/// <summary>The incident import's admission: the shared gate, its own refusal count.</summary>
-public sealed record IncidentImportAdmission(ImportGate Gate, IncidentImportMetrics Metrics)
-{
-    public T Refuse<T>(ImportRejection reason, T result)
-    {
-        Metrics.Rejected(reason);
-        return result;
-    }
-}
-
 /// <summary>
 ///     The correlation import's refusals, on a series of their own for the reason the
 ///     incident import has one.
 /// </summary>
 public sealed class CorrelationImportMetrics : ImportMetrics;
-
-/// <summary>The correlation import's admission: the shared gate, its own refusal count.</summary>
-public sealed record CorrelationImportAdmission(ImportGate Gate, CorrelationImportMetrics Metrics)
-{
-    public T Refuse<T>(ImportRejection reason, T result)
-    {
-        Metrics.Rejected(reason);
-        return result;
-    }
-}
-
-/// <summary>
-///     The import endpoint's admission control: the concurrency gate that decides
-///     whether a request runs at all, and the counter that records every refusal.
-///     One parameter rather than two because a refusal always touches both.
-/// </summary>
-public sealed record ImportAdmission(ImportGate Gate, ImportMetrics Metrics)
-{
-    /// <summary>Counts a refused import and hands its result straight back.</summary>
-    public T Refuse<T>(ImportRejection reason, T result)
-    {
-        Metrics.Rejected(reason);
-        return result;
-    }
-}

@@ -47,6 +47,6 @@ public static class WebhookDelivery
             writer.WriteEndObject();
         }
 
-        return buffer.WrittenSpan.ToArray();
+        return [.. buffer.WrittenSpan];
     }
 }

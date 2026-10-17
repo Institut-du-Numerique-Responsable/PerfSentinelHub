@@ -64,7 +64,7 @@ public static class IncidentWriter
         return oldestFindingMs switch
         {
             null => "empty",
-            var oldest when oldest <= windowFromMs => "complete",
+            _ when oldestFindingMs <= windowFromMs => "complete",
             _ => "partial"
         };
     }
@@ -79,6 +79,8 @@ public static class IncidentWriter
     {
         using var document = JsonDocument.Parse(row.IncidentJson);
         writer.WriteStartObject();
+        // Not LINQ: going through IEnumerable would box JsonElement's struct enumerator.
+        // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var property in document.RootElement.EnumerateObject())
         {
             if (property.Name == "ended_at_ms")

@@ -1,0 +1,271 @@
+using System.IO.Compression;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Storage;
+
+namespace PerfSentinelHub.Tests.Api;
+
+// Drives a real worker over a stub engine, end to end.
+public sealed class AnalysisApiTests : IDisposable
+{
+    private readonly HttpClient _client;
+
+    private readonly WebApplicationFactory<Program> _factory;
+
+    private readonly string _workspace = Path.Combine(
+        Path.GetTempPath(),
+        $"perf-sentinel-hub-analysis-{Guid.NewGuid():N}");
+
+    public AnalysisApiTests()
+    {
+        Directory.CreateDirectory(_workspace);
+        var enginePath = WriteStubEngine();
+        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                // The real clock: the worker's idle delay runs on the injected
+                // TimeProvider, and a frozen one would park it forever.
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton(TimeProvider.System);
+                services.PostConfigure<HubOptions>(options =>
+                {
+                    options.DatabasePath = Path.Combine(_workspace, "hub.db");
+                    options.Analysis = new AnalysisOptions
+                    {
+                        EngineBinaryPath = enginePath,
+                        ReportDirectory = Path.Combine(_workspace, "reports"),
+                        Timeout = TimeSpan.FromSeconds(20)
+                    };
+                    options.Sources =
+                    [
+                        new SourceOptions
+                        {
+                            Id = "prod-tempo",
+                            Name = "Tempo, production",
+                            Environment = "production",
+                            Kind = SourceKinds.Tempo,
+                            RetentionHours = 168,
+                            BaseUrl = new Uri("http://tempo.example:3200")
+                        }
+                    ];
+                });
+            }));
+        _client = _factory.CreateClient();
+    }
+
+    public void Dispose()
+    {
+        _client.Dispose();
+        _factory.Dispose();
+        TestPool.ClearFor(Path.Combine(_workspace, "hub.db"));
+        if (Directory.Exists(_workspace))
+            Directory.Delete(_workspace, true);
+    }
+
+    [Fact]
+    public async Task A_submitted_run_is_executed_and_its_report_is_served_from_the_same_origin()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var submission = await SubmitAsync("""
+                                                 {"source_id":"prod-tempo","request":{"service":"order-service","lookback":"1h","max_traces":100}}
+                                                 """, cancellationToken);
+        Assert.Equal(HttpStatusCode.Accepted, submission.StatusCode);
+        var id = (await submission.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
+            .GetProperty("id").GetString()!;
+
+        var run = await WaitForTerminalStatusAsync(id, cancellationToken);
+        Assert.Equal(AnalysisStatuses.Succeeded, run.GetProperty("status").GetString());
+        Assert.Equal("0.16.0", run.GetProperty("producer_version").GetString());
+        // Recorded at submission so the card survives the source leaving the
+        // configuration.
+        Assert.Equal("Tempo, production", run.GetProperty("source_name").GetString());
+        Assert.Equal("operator@example.internal", run.GetProperty("requested_by").GetString());
+        Assert.Equal("order-service", run.GetProperty("request").GetProperty("service").GetString());
+        Assert.Equal(3, run.GetProperty("result").GetProperty("findings").GetInt32());
+        Assert.False(run.GetProperty("result").GetProperty("empty").GetBoolean());
+        Assert.True(run.GetProperty("expires_at_ms").GetInt64() > run.GetProperty("finished_at_ms").GetInt64());
+
+        using var report = await _client.GetAsync($"/reports/{id}.html", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, report.StatusCode);
+        Assert.Equal("text/html", report.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("<html>", await report.Content.ReadAsStringAsync(cancellationToken),
+            StringComparison.Ordinal);
+
+        using var list = await _client.GetAsync("/api/analyses", cancellationToken);
+        var runs = await list.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Contains(runs.EnumerateArray(), item => item.GetProperty("id").GetString() == id);
+    }
+
+    [Fact]
+    public async Task A_report_is_compressed_for_a_browser_that_accepts_it_and_the_api_is_not()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var submission = await SubmitAsync("""
+                                                 {"source_id":"prod-tempo","request":{"service":"order-service","lookback":"1h","max_traces":100}}
+                                                 """, cancellationToken);
+        var id = (await submission.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
+            .GetProperty("id").GetString()!;
+        await WaitForTerminalStatusAsync(id, cancellationToken);
+
+        using var reportRequest = new HttpRequestMessage(HttpMethod.Get, $"/reports/{id}.html");
+        reportRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "br, gzip");
+        using var report = await _client.SendAsync(reportRequest, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, report.StatusCode);
+        Assert.Equal("br", Assert.Single(report.Content.Headers.ContentEncoding));
+        await using (var body = new BrotliStream(await report.Content.ReadAsStreamAsync(cancellationToken),
+                         CompressionMode.Decompress))
+        using (var reader = new StreamReader(body))
+        {
+            Assert.Contains("<html>", await reader.ReadToEndAsync(cancellationToken), StringComparison.Ordinal);
+        }
+
+        // JSON stays plain: an answer may carry a token, and compressing a secret
+        // beside reflected input is what BREACH reads.
+        using var apiRequest = new HttpRequestMessage(HttpMethod.Get, "/api/analyses");
+        apiRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "br, gzip");
+        using var api = await _client.SendAsync(apiRequest, cancellationToken);
+        Assert.Empty(api.Content.Headers.ContentEncoding);
+    }
+
+    [Theory]
+    // An unknown source is not a bad request shape, but it is still refusable
+    // before anything is queued.
+    [InlineData("""{"source_id":"absent","request":{}}""")]
+    [InlineData("""{"source_id":"prod-tempo","request":{"service":"orders"}}""")]
+    [InlineData("""{"source_id":"prod-tempo","request":{"trace_id":"abc","lookback":"1h"}}""")]
+    [InlineData("not json")]
+    public async Task An_impossible_submission_is_refused_without_queueing_anything(string body)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var response = await SubmitAsync(body, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var status = await _client.GetAsync("/api/status", cancellationToken);
+        var payload = await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal(0, payload.GetProperty("queue_depth").GetInt32());
+    }
+
+    [Theory]
+    // What this actually pins is the response, not the IsRunId guard: an id the
+    // Hub never minted finds no row and 404s with or without it. The guard is
+    // defence in depth ahead of that lookup, and its removal is deliberately
+    // invisible from out here.
+    [InlineData("ABCDEF0123456789")]
+    [InlineData("ZZZZZZZZZZZZZZZZ")]
+    [InlineData("abc")]
+    [InlineData("../../etc/passwd")]
+    public async Task A_report_id_outside_the_minted_vocabulary_is_not_found(string id)
+    {
+        using var response = await _client.GetAsync($"/reports/{id}.html", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+
+    [Fact]
+    public async Task An_old_engine_is_offered_the_mode_but_not_the_variance_threshold()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var status = await _client.GetAsync("/api/status", cancellationToken);
+        var knobs = (await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
+            .GetProperty("detection_knobs").EnumerateArray().ToList();
+
+        // The stub reports 0.16.0: it has read the mode since 0.5.7 but its
+        // `[detection]` refuses the variance threshold outright.
+        Assert.Equal(9, knobs.Count);
+        Assert.All(
+            knobs.Where(knob => knob.GetProperty("name").GetString() != "sanitizer_aware_classification"),
+            knob => Assert.Equal("integer", knob.GetProperty("kind").GetString()));
+        var mode = Assert.Single(knobs,
+            knob => knob.GetProperty("name").GetString() == "sanitizer_aware_classification");
+        Assert.Equal("choice", mode.GetProperty("kind").GetString());
+        Assert.Equal("auto", mode.GetProperty("default").GetString());
+        Assert.DoesNotContain(knobs, knob => knob.GetProperty("name").GetString() == "sanitizer_aware_min_cv");
+    }
+
+    [Fact]
+    public async Task A_knob_the_engine_cannot_read_is_refused_before_anything_is_queued()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var response = await SubmitAsync("""
+                                               {"source_id":"prod-tempo","request":{"service":"orders","lookback":"1h","detection":{"sanitizer_aware_min_cv":0.75}}}
+                                               """, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadAsStringAsync(cancellationToken);
+        Assert.Contains("sanitizer_aware_min_cv needs engine 0.18.0 or later, this Hub runs 0.16.0.", problem,
+            StringComparison.Ordinal);
+        using var status = await _client.GetAsync("/api/status", cancellationToken);
+        var payload = await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal(0, payload.GetProperty("queue_depth").GetInt32());
+    }
+
+    [Fact]
+    public async Task The_engine_version_and_the_declared_retention_reach_the_launcher()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        using var status = await _client.GetAsync("/api/status", cancellationToken);
+        var payload = await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal("0.16.0", payload.GetProperty("engine_version").GetString());
+        // The browser never sees the header the proxy adds, so the identity has
+        // to come back from the server or the topbar cannot show it.
+        Assert.Equal(JsonValueKind.Null, payload.GetProperty("identity").ValueKind);
+
+        using var identified = new HttpRequestMessage(HttpMethod.Get, "/api/status");
+        identified.Headers.Add("X-Forwarded-User", "operator@example.internal");
+        using var response = await _client.SendAsync(identified, cancellationToken);
+        var claimed = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal("operator@example.internal", claimed.GetProperty("identity").GetString());
+
+        using var sources = await _client.GetAsync("/api/sources", cancellationToken);
+        var listed = await sources.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal(168, listed.EnumerateArray().Single().GetProperty("retention_hours").GetInt32());
+    }
+
+    private async Task<HttpResponseMessage> SubmitAsync(string body, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/analyses");
+        request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+        request.Headers.Add("X-Forwarded-User", "operator@example.internal");
+        return await _client.SendAsync(request, cancellationToken);
+    }
+
+    private async Task<JsonElement> WaitForTerminalStatusAsync(string id, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 300; attempt++)
+        {
+            using var response = await _client.GetAsync($"/api/analyses/{id}", cancellationToken);
+            var run = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            if (run.GetProperty("status").GetString() is not (AnalysisStatuses.Pending or AnalysisStatuses.Running))
+                return run.Clone();
+            await Task.Delay(100, cancellationToken);
+        }
+
+        throw new TimeoutException($"Run {id} never reached a terminal status.");
+    }
+
+    private string WriteStubEngine()
+    {
+        return new FakeEngine
+        {
+            Version = "perf-sentinel 0.16.0",
+            Output = """
+                     {"analysis":{"traces_analyzed":42},
+                      "findings":[{"severity":"critical"},{"severity":"warning"},{"severity":"info"}],
+                      "quality_gate":{"passed":false},
+                      "binary_version":"0.16.0"}
+                     """
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel"));
+    }
+}

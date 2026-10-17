@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -112,6 +113,8 @@ public static partial class ApiEndpoints
         var (_, refusal) = await ReadOAuthRequestAsync(request, true, cancellationToken);
         if (refusal is not null) return refusal;
         var address = ClientAddress.Normalize(request.HttpContext.Connection.RemoteIpAddress);
+        // The refusal stays the guard, and the answer comes last.
+        // ReSharper disable once InvertIf
         if (devices.Start(address) is not { } start)
         {
             LogDeviceCap(loggerFactory.CreateLogger(TerminalLog), address);
@@ -397,6 +400,8 @@ public static partial class ApiEndpoints
             return (null, null, Problem(StatusCodes.Status401Unauthorized, NoBrowserSession));
         if (RefuseForeignRequest(context.Request) is { } refusal)
             return (null, null, refusal);
+        // The refusal stays the guard, and the answer comes last.
+        // ReSharper disable once InvertIf
         if (devices.Throttled(caller.Subject) is { } wait)
         {
             context.Response.Headers.RetryAfter =

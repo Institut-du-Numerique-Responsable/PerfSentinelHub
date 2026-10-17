@@ -21,6 +21,8 @@ public static partial class ApiEndpoints
         app.MapGet("/share/{token}/{name}", ServeSharedFileAsync).AllowAnonymous();
         // The catch-all only matches: nothing under it is read, let alone reflected.
 #pragma warning disable ASP0018
+        // ReSharper disable once RouteTemplates.RouteParameterIsNotPassedToMethod
+        // ReSharper disable once RouteTemplates.UnusedRouteParameter
         app.MapMethods("/share/{**rest}", [HttpMethods.Get, HttpMethods.Head], NotShared).AllowAnonymous();
 #pragma warning restore ASP0018
     }

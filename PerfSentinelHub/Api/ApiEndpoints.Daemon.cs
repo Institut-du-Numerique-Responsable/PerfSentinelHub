@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
@@ -132,7 +133,7 @@ public static partial class ApiEndpoints
         var snapshot = ReadSnapshot(report.Value);
         var relayedConfig = ReadConfigObject(config.Value);
         // The Hub's own finding about this daemon, drawn and counted with its hints.
-        IReadOnlyList<ResultWarning> warnings = missedFindings > 0
+        var warnings = missedFindings > 0
             ? [.. snapshot.Warnings, RingWatch.Hint(missedFindings)]
             : snapshot.Warnings;
 
@@ -351,15 +352,4 @@ public static partial class ApiEndpoints
         string? EnergySource,
         IReadOnlyList<ResultWarning> Warnings,
         int Dropped);
-}
-
-/// <summary>
-///     Each daemon read buffers a report snapshot, so a burst of folds on the
-///     Sources screen is real memory rather than a few cheap requests.
-/// </summary>
-public sealed class DaemonViewGate() : RequestGate(MaxReads)
-{
-    // Public because DaemonViewApiTests pins it, the same reason
-    // ImportGate.MaxImports is: the cap is a contract, not a detail.
-    public const int MaxReads = 2;
 }

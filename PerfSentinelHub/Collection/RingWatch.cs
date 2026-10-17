@@ -45,6 +45,8 @@ public sealed class RingWatch
             return null;
         // A restart resets the counter, and its uptime can climb past the previous
         // reading's before the next poll, so the estimated start is what tells.
+        // A restart is the exception, so it stays the guard.
+        // ReSharper disable once InvertIf
         if (Math.Abs(reading.StartedAtMs - previous.StartedAtMs) > SameProcessToleranceMs ||
             total < previous.Total)
         {

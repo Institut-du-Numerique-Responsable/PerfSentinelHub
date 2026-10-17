@@ -5,12 +5,6 @@ using PerfSentinelHub.Storage;
 namespace PerfSentinelHub.Api;
 
 /// <summary>
-///     One sample of perf_sentinel_hub_findings. The environment is configured,
-///     the type and the severity are already folded into their closed vocabularies.
-/// </summary>
-public sealed record FindingSeries(string Environment, FindingCount Findings);
-
-/// <summary>
 ///     The findings family of /metrics, counted at most once per scrape interval.
 ///     The route is anonymous and ungated and a scoped count reads its whole
 ///     scope, so an uncached one would let any caller make the Hub count at will.

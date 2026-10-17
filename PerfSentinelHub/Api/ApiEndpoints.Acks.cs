@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -146,13 +147,15 @@ public static partial class ApiEndpoints
     private static JsonHttpResult<AnalysisProblem>? Refuse(AckTarget target, bool revoke, string sourceId,
         AccessScope reads, AccessScope acks)
     {
-        const string ReadOnly = "You can read this finding at this source but not acknowledge it there.";
+        const string readOnly = "You can read this finding at this source but not acknowledge it there.";
+        // The cases read top to bottom; a switch on true would only hide them.
+        // ReSharper disable once ConvertIfStatementToSwitchExpression
         if (target.Held && reads.Reads(new AccessCopy(sourceId, target.Service, target.Rows)))
             return acks.Writes(new AccessCopy(sourceId, target.Service, target.Rows))
                 ? null
-                : Problem(StatusCodes.Status403Forbidden, ReadOnly);
+                : Problem(StatusCodes.Status403Forbidden, readOnly);
         if (!target.Held && revoke && target.Mirrored && reads.HoldsAtSource(sourceId))
-            return acks.HoldsAtSource(sourceId) ? null : Problem(StatusCodes.Status403Forbidden, ReadOnly);
+            return acks.HoldsAtSource(sourceId) ? null : Problem(StatusCodes.Status403Forbidden, readOnly);
         return Problem(
             StatusCodes.Status404NotFound,
             revoke
@@ -193,15 +196,4 @@ public static partial class ApiEndpoints
             ? null
             : TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);
     }
-}
-
-/// <summary>
-///     Each relay holds a daemon connection for up to three client timeouts, and
-///     every one of them spends that daemon's write key, so a burst is refused
-///     rather than queued.
-/// </summary>
-public sealed class AckRelayGate() : RequestGate(MaxRelays)
-{
-    // Public because AckRelayApiTests pins it, as IncidentRefreshGate.MaxReads is.
-    public const int MaxRelays = 2;
 }
