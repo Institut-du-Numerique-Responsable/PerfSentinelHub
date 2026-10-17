@@ -13,7 +13,9 @@ All notable changes to PerfSentinelHub are recorded here.
   logs them (event 1104), publishes `perf_sentinel_hub_source_missed_findings_total` per
   source and adds a hint beside the daemon's own in the fleet screen, naming
   `max_retained_findings`, `Hub:PollInterval` and the daemon's Hub export. A restart, a first
-  poll or a daemon that pushes counts nothing.
+  poll or a daemon that pushes counts nothing, and the hint counts since the daemon last
+  started, so a fix and a restart clear it. The daemon's config is read only when a poll
+  finds a candidate, after the findings.
 
 ### Changed
 
