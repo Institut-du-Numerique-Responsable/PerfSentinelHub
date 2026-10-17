@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="PerfSentinelHub.Tests.Support" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PerfSentinelHub\PerfSentinelHub.csproj" />
