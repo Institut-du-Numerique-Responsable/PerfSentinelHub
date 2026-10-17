@@ -71,18 +71,27 @@ public sealed class IncidentImportStorageTests(HubApplicationFactory factory) : 
     public async Task A_push_records_the_import_and_files_no_read()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        // The class shares one database, and a poll in another test files a read for this
+        // source, so the push is judged by what it adds to the ledger rather than by a zero.
+        var readsBefore = await IncidentReadsAsync(cancellationToken);
         await factory.Database.TryUpsertPushedIncidentsAsync(
             Source, [Incident("a1000000000000000000000000000004", null, 1)], 1_800_000_200_000, cancellationToken);
 
         await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT last_import_ms FROM source_imports WHERE source_id = 'test';";
+        Assert.Equal(1_800_000_200_000L, await command.ExecuteScalarAsync(cancellationToken));
+        Assert.Equal(readsBefore, await IncidentReadsAsync(cancellationToken));
+    }
+
+    private async Task<string> IncidentReadsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
         command.CommandText = """
-                              SELECT (SELECT last_import_ms FROM source_imports WHERE source_id = 'test'),
-                                     (SELECT COUNT(*) FROM incident_reads WHERE source_id = 'test');
+                              SELECT COALESCE(group_concat(last_read_ms || ':' || state, ','), '')
+                              FROM incident_reads WHERE source_id = 'test';
                               """;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        Assert.True(await reader.ReadAsync(cancellationToken));
-        Assert.Equal(1_800_000_200_000, reader.GetInt64(0));
-        Assert.Equal(0, reader.GetInt64(1));
+        return (string)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 }
