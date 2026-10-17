@@ -352,14 +352,3 @@ public static partial class ApiEndpoints
         IReadOnlyList<ResultWarning> Warnings,
         int Dropped);
 }
-
-/// <summary>
-///     Each daemon read buffers a report snapshot, so a burst of folds on the
-///     Sources screen is real memory rather than a few cheap requests.
-/// </summary>
-public sealed class DaemonViewGate() : RequestGate(MaxReads)
-{
-    // Public because DaemonViewApiTests pins it, the same reason
-    // ImportGate.MaxImports is: the cap is a contract, not a detail.
-    public const int MaxReads = 2;
-}

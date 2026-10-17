@@ -194,14 +194,3 @@ public static partial class ApiEndpoints
             : TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);
     }
 }
-
-/// <summary>
-///     Each relay holds a daemon connection for up to three client timeouts, and
-///     every one of them spends that daemon's write key, so a burst is refused
-///     rather than queued.
-/// </summary>
-public sealed class AckRelayGate() : RequestGate(MaxRelays)
-{
-    // Public because AckRelayApiTests pins it, as IncidentRefreshGate.MaxReads is.
-    public const int MaxRelays = 2;
-}

@@ -248,15 +248,3 @@ public static partial class ApiEndpoints
                value >= min && value <= max;
     }
 }
-
-/// <summary>
-///     Each refresh reads the whole daemon fleet, and every page it pulls is
-///     buffered under the client's 4 MiB cap, so a burst of screen opens is real
-///     memory and real load on the daemons rather than a few cheap requests.
-/// </summary>
-public sealed class IncidentRefreshGate() : RequestGate(MaxReads)
-{
-    // Public because IncidentRefreshApiTests pins it, the same reason
-    // DaemonViewGate.MaxReads is: the cap is a contract, not a detail.
-    public const int MaxReads = 2;
-}
