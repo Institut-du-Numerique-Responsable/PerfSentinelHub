@@ -1,8 +1,5 @@
 namespace PerfSentinelHub.Api;
 
-/// <summary>A count and the moment it was taken, on the Hub's clock.</summary>
-public sealed record Counted<T>(T Value, DateTimeOffset CountedAt);
-
 /// <summary>
 ///     A count served from memory for <see cref="Lifetime" /> after it lands, or nine
 ///     times as long as it took when that is longer, then taken again, one at a time:

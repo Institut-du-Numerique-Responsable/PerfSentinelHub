@@ -5,16 +5,6 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Collection;
 
-public sealed record PollResult(
-    int ImportedCount,
-    int RejectedCount,
-    string ProducerVersion,
-    bool IsPossiblyTruncated,
-    // Null when the daemon publishes no incidents, or refused or failed the read.
-    int? IncidentCount,
-    // Null when RingWatch cannot judge this poll: see Observe.
-    long? MissedFindings = null);
-
 public sealed class SourcePollException(string errorCode, Exception innerException)
     : Exception($"Source poll failed: {errorCode}", innerException)
 {

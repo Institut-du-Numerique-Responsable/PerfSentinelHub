@@ -202,17 +202,3 @@ public sealed partial class HubDatabase
         return QueryReadsAsync(AckReadSelect, cancellationToken);
     }
 }
-
-/// <summary>An ack's target at one source: the held copy, if any, and whether the mirror lists an ack of it.</summary>
-public sealed record AckTarget(bool Held, string? Service, bool Mirrored, IReadOnlyList<AccessAttribute> Rows);
-
-/// <summary>A mirrored daemon ack as the listing reads it, with its held copy at that source, if any.</summary>
-public sealed record ListedAck(
-    string Signature,
-    string By,
-    string? Reason,
-    string At,
-    string? ExpiresAt,
-    bool Held,
-    string? Service,
-    IReadOnlyList<AccessAttribute> Rows);

@@ -241,3 +241,117 @@ public sealed record TerminalToken(
     long CreatedAtMs,
     long ExpiresAtMs,
     long? LastUsedAtMs);
+
+public enum DisclosureFile
+{
+    Report,
+    Attestation,
+    Bundle,
+    Pdf
+}
+
+/// <summary>The three files a scheduled job publishes, each exactly as received.</summary>
+public sealed record DisclosureFiles(byte[] Report, byte[]? Attestation, byte[]? Bundle);
+
+public sealed record DisclosureRecord(
+    string Id,
+    string ReportUuid,
+    string Organisation,
+    string PeriodType,
+    string PeriodFrom,
+    string PeriodTo,
+    string Intent,
+    string Confidentiality,
+    string ContentHash,
+    string? IntegrityLevel,
+    string? FiguresJson,
+    DisclosureFiles Files,
+    byte[]? Pdf,
+    string? RenderReason,
+    string? EngineVersion,
+    bool? HashChecked,
+    bool? BindingChecked,
+    long PublishedAtMs);
+
+/// <summary>A disclosure without its files: what every listing and every check reads.</summary>
+public sealed record DisclosureSummary(
+    string Id,
+    string ReportUuid,
+    string Organisation,
+    string PeriodType,
+    string PeriodFrom,
+    string PeriodTo,
+    string Intent,
+    string Confidentiality,
+    string ContentHash,
+    string? IntegrityLevel,
+    string? FiguresJson,
+    bool HasAttestation,
+    bool HasBundle,
+    bool HasPdf,
+    string? RenderReason,
+    string? EngineVersion,
+    bool? HashChecked,
+    bool? BindingChecked,
+    long PublishedAtMs,
+    long? SignatureAddedAtMs,
+    long? WithdrawnAtMs,
+    string? WithdrawnReason,
+    string? WithdrawnBy)
+{
+    public bool Withdrawn => WithdrawnAtMs is not null;
+}
+
+public sealed record ShareLinkRecord(
+    string Id,
+    string DisclosureId,
+    byte[] TokenHash,
+    string CreatedBy,
+    long CreatedAtMs,
+    long ExpiresAtMs);
+
+public sealed record ShareLinkSummary(
+    string Id,
+    string CreatedBy,
+    long CreatedAtMs,
+    long ExpiresAtMs,
+    long? RevokedAtMs,
+    string? RevokedBy,
+    long Downloads,
+    long? LastUsedAtMs,
+    string? LastClient);
+
+/// <summary>Downloads counted in memory since the last flush, with the last one's time and client.</summary>
+public sealed record ShareDownloads(long Count, long LastUsedAtMs, string? LastClient);
+
+public sealed record DeliveryRecord(
+    string Id,
+    string DisclosureId,
+    string Webhook,
+    string Event,
+    string State,
+    int Attempts,
+    long? LastAttemptMs,
+    long? NextAttemptMs,
+    int? LastStatus);
+
+public static class DeliveryStates
+{
+    public const string Pending = "pending";
+    public const string Delivered = "delivered";
+    public const string Failed = "failed";
+}
+
+/// <summary>An ack's target at one source: the held copy, if any, and whether the mirror lists an ack of it.</summary>
+public sealed record AckTarget(bool Held, string? Service, bool Mirrored, IReadOnlyList<AccessAttribute> Rows);
+
+/// <summary>A mirrored daemon ack as the listing reads it, with its held copy at that source, if any.</summary>
+public sealed record ListedAck(
+    string Signature,
+    string By,
+    string? Reason,
+    string At,
+    string? ExpiresAt,
+    bool Held,
+    string? Service,
+    IReadOnlyList<AccessAttribute> Rows);
