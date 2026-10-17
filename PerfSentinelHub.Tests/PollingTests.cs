@@ -240,7 +240,8 @@ public sealed class PollingTests : IDisposable
         long expectedMissed)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var totals = new Queue<(long Uptime, long Total)>([(60, 100), (120, 400)]);
+        // The same uptime twice: the polls are milliseconds apart, so one process.
+        var totals = new Queue<(long Uptime, long Total)>([(60, 100), (60, 400)]);
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
             if (context.Request.Path == "/api/status")

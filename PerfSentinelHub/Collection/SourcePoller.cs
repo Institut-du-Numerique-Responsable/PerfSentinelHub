@@ -40,7 +40,10 @@ public sealed partial class SourcePoller(
         try
         {
             var status = await client.FetchStatusAsync(source, cancellationToken);
-            var missed = await WatchRingAsync(source, status, cancellationToken);
+            var missedCandidate = rings.Measure(
+                source.Id,
+                status,
+                timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
             var payload = await client.FetchFindingsAsync(source, cancellationToken);
             var batch = FindingParser.Parse(payload);
             await database.UpsertBatchAsync(
@@ -57,6 +60,9 @@ public sealed partial class SourcePoller(
             var isPossiblyTruncated = batch.Findings.Count + batch.RejectedCount == DaemonClient.FindingsLimit;
             if (isPossiblyTruncated)
                 LogPossiblyTruncated(logger, source.Id);
+            // After the findings: a config read only for a candidate, and never
+            // between the status and the findings it measured.
+            var missed = await RecordMissedAsync(source, missedCandidate, cancellationToken);
             // Its own failures, filed in incident_reads and never in
             // source_state: see IncidentReader.
             var incidentCount = await incidents.ReadAsync(source, observedAtMs, cancellationToken);
@@ -84,22 +90,21 @@ public sealed partial class SourcePoller(
         }
     }
 
-    private async Task<long?> WatchRingAsync(
+    private async Task<long?> RecordMissedAsync(
         SourceOptions source,
-        DaemonStatus status,
+        long? candidate,
         CancellationToken cancellationToken)
     {
-        // Only a daemon that publishes the counter can be judged, so its config
-        // is read only then.
-        if (status.FindingsStoredTotal is null)
-            return rings.Observe(source.Id, status, false);
-        // An unread config counts as delivered: a missed count the Hub cannot
-        // back would send the operator after a setting that may be fine.
-        var delivered = await ExportsToHubAsync(source, cancellationToken) ?? true;
-        var missed = rings.Observe(source.Id, status, delivered);
-        if (missed > 0)
-            LogMissedFindings(logger, source.Id, missed.Value);
-        return missed;
+        if (candidate is not > 0)
+            return candidate;
+        // A daemon that pushes delivered them to the Hub. An unread config counts
+        // as pushing: a missed count the Hub cannot back would send the operator
+        // after a setting that may be fine.
+        if (await ExportsToHubAsync(source, cancellationToken) is not false)
+            return 0;
+        rings.Record(source.Id, candidate.Value);
+        LogMissedFindings(logger, source.Id, candidate.Value);
+        return candidate;
     }
 
     private async Task<bool?> ExportsToHubAsync(SourceOptions source, CancellationToken cancellationToken)

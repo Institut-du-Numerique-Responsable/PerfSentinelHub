@@ -91,7 +91,7 @@ public static partial class ApiEndpoints
                 // still the ones it was built with, so they are still published
                 // and the reader is told they belong to nothing it can name.
                 engine.Version ?? "unknown",
-                rings.Missed(source.Id),
+                rings.MissedSinceStart(source.Id),
                 cancellationToken);
             await DaemonViewWriter.WriteAsync(context.Response, view, cancellationToken);
         }
