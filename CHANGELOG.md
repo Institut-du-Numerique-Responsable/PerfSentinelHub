@@ -24,9 +24,9 @@ All notable changes to PerfSentinelHub are recorded here.
   rule on it, and the Hub keeps what it evicts. The traces and analysis queue gauges keep the
   90 % line.
 
-- The image ships perf-sentinel `0.31.1` as its analysis engine, repinned by digest from
+- The image ships perf-sentinel `0.31.2` as its analysis engine, repinned by digest from
   `0.31.0`. It is also the version the launcher compares a polled daemon's
-  `producer_version` against, so a daemon still on `0.31.0` now reads behind.
+  `producer_version` against, so a daemon still on `0.31.1` or earlier now reads behind.
   `config/supply-chain.json` carries the same digest as the `Dockerfile`.
 
   A disclosure the Hub renders now ends on an annex of every field the schema defines,
@@ -34,8 +34,9 @@ All notable changes to PerfSentinelHub are recorded here.
   attachment, each energy model named beside its tag. A report with a character outside the
   bundled fonts in a field the `0.31.0` pages did not print is now refused at import with
   `unsupported_characters`. A report a daemon serves names its carbon model on the Total CO2
-  cards. No detector, normalizer or finding signature changes, so every stored finding keeps
-  its signature.
+  cards. `0.31.2` adds the `findings_stored_total` the missed findings count above reads, and
+  `hub_export_enabled`. No detector, normalizer or finding signature changes, so every stored
+  finding keeps its signature.
 
 ### Fixed
 
