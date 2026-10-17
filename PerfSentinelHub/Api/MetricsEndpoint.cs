@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Storage;
@@ -86,13 +87,14 @@ public static partial class MetricsEndpoint
                 CorrelationImportMetrics correlationImports,
                 DisclosureMetrics disclosures,
                 FindingMetrics findings,
+                RingWatch rings,
                 TimeProvider timeProvider,
                 CancellationToken cancellationToken) =>
 #pragma warning restore S107
         {
             var body = await RenderAsync(
                 database, options.Value, imports, incidentImports, correlationImports, disclosures, findings,
-                timeProvider,
+                rings, timeProvider,
                 version, cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
@@ -108,6 +110,7 @@ public static partial class MetricsEndpoint
         CorrelationImportMetrics correlationImports,
         DisclosureMetrics disclosures,
         FindingMetrics findings,
+        RingWatch rings,
         TimeProvider timeProvider,
         string version,
         CancellationToken cancellationToken)
@@ -182,6 +185,15 @@ public static partial class MetricsEndpoint
             if (lastImportMs is { } pushedAt)
                 Line(text, "perf_sentinel_hub_source_last_import_seconds", Label(id),
                     Seconds(now - pushedAt));
+
+        // Published for every polled daemon from startup, like the rejection
+        // counters: a series that appears only on the first miss reads as a
+        // scrape gap instead.
+        Counter(text, "perf_sentinel_hub_source_missed_findings_total",
+            "Findings that left this daemon's ring between two polls before the Hub read them, since the "
+            + "Hub started. Counted only for a daemon on perf-sentinel 0.31.2 or later that does not push.");
+        foreach (var (id, _, _) in daemons)
+            Line(text, "perf_sentinel_hub_source_missed_findings_total", Label(id), rings.Missed(id));
 
         Counter(text, "perf_sentinel_hub_import_rejected_total",
             "Imports the Hub refused, by reason. Every reason is published from startup, since a "

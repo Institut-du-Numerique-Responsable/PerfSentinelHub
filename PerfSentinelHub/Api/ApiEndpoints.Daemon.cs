@@ -31,6 +31,7 @@ public static partial class ApiEndpoints
         EngineProbe engine,
         AccessPolicy access,
         IOptions<HubOptions> options,
+        RingWatch rings,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
 #pragma warning restore S107
@@ -90,6 +91,7 @@ public static partial class ApiEndpoints
                 // still the ones it was built with, so they are still published
                 // and the reader is told they belong to nothing it can name.
                 engine.Version ?? "unknown",
+                rings.MissedSinceStart(source.Id),
                 cancellationToken);
             await DaemonViewWriter.WriteAsync(context.Response, view, cancellationToken);
         }
@@ -105,6 +107,7 @@ public static partial class ApiEndpoints
         TimeSpan timeout,
         long observedAtMs,
         string defaultsEngineVersion,
+        long missedFindings,
         CancellationToken cancellationToken)
     {
         // Three independent reads: the latency is the slowest of them rather
@@ -128,13 +131,17 @@ public static partial class ApiEndpoints
         var report = reportTask.Result;
         var snapshot = ReadSnapshot(report.Value);
         var relayedConfig = ReadConfigObject(config.Value);
+        // The Hub's own finding about this daemon, drawn and counted with its hints.
+        IReadOnlyList<ResultWarning> warnings = missedFindings > 0
+            ? [.. snapshot.Warnings, RingWatch.Hint(missedFindings)]
+            : snapshot.Warnings;
 
         return new DaemonViewData(
             source.Id,
             observedAtMs,
             // An unread export means the daemon's own hints are unknown, and
             // "ok" is a claim about those hints as much as about the gauges.
-            DaemonView.Classify(status.Value, DaemonView.AdvisingCount(snapshot.Warnings), report.ErrorCode is null),
+            DaemonView.Classify(status.Value, DaemonView.AdvisingCount(warnings), report.ErrorCode is null),
             status.ErrorCode,
             status.Value,
             relayedConfig,
@@ -145,7 +152,7 @@ public static partial class ApiEndpoints
             snapshot.EnergySource,
             defaultsEngineVersion,
             report.ErrorCode,
-            snapshot.Warnings,
+            warnings,
             snapshot.Dropped);
     }
 

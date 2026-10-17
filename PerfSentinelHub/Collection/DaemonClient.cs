@@ -22,7 +22,14 @@ public sealed record DaemonStatus(
     long? AnalysisQueueDepth,
     long? AnalysisQueueCapacity,
     long? StoredFindings,
-    long? MaxRetainedFindings);
+    long? MaxRetainedFindings)
+{
+    /// <summary>
+    ///     Findings the daemon put in its ring since it started, evicted ones
+    ///     included (perf-sentinel 0.31.2 and later). Read by RingWatch.
+    /// </summary>
+    public long? FindingsStoredTotal { get; init; }
+}
 
 public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> options)
 {
@@ -94,7 +101,10 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
             ReadDepth(root, "analysis_queue_depth"),
             ReadCapacity(root, "analysis_queue_capacity"),
             ReadGauge(root, "stored_findings"),
-            ReadCapacity(root, "max_retained_findings"));
+            ReadCapacity(root, "max_retained_findings"))
+        {
+            FindingsStoredTotal = ReadGauge(root, "findings_stored_total")
+        };
     }
 
     private static long? ReadGauge(JsonElement root, string name)

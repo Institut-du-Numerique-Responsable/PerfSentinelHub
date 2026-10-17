@@ -127,6 +127,7 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Update
 builder.Services.AddTransient<IncidentReader>();
 builder.Services.AddTransient<AckReader>();
 builder.Services.AddTransient<AckRelay>();
+builder.Services.AddSingleton<RingWatch>();
 builder.Services.AddTransient<SourcePoller>();
 builder.Services.AddHostedService<PollWorker>();
 builder.Services.AddSingleton<SignatureRate>();

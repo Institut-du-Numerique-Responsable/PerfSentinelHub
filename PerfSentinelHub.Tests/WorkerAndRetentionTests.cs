@@ -259,6 +259,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new RingWatch(),
             clock,
             NullLogger<SourcePoller>.Instance);
         using var worker = new PollWorker(poller, options, clock, logger);
@@ -298,6 +299,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new RingWatch(),
             clock,
             NullLogger<SourcePoller>.Instance);
         using var worker = new PollWorker(poller, options, clock, NullLogger<PollWorker>.Instance);

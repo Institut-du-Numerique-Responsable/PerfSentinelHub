@@ -2,6 +2,47 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.7.1] - 2026-10-17
+
+### Added
+
+- The Hub counts the findings that left a polled daemon's ring before a poll read them.
+  Against a daemon on perf-sentinel 0.31.2 or later that does not push to the Hub, two polls
+  of one process tell how many findings went into the ring in between, from
+  `findings_stored_total`, and the ones beyond the ring's length were evicted unread. The Hub
+  logs them (event 1104), publishes `perf_sentinel_hub_source_missed_findings_total` per
+  source and adds a hint beside the daemon's own in the fleet screen, naming
+  `max_retained_findings`, `Hub:PollInterval` and the daemon's Hub export. A restart, a first
+  poll or a daemon that pushes counts nothing, and the hint counts since the daemon last
+  started, so a fix and a restart clear it. The daemon's config is read only when a poll
+  finds a candidate, after the findings.
+
+### Changed
+
+- The findings ring no longer turns a daemon's verdict to near capacity, and its gauge is no
+  longer toned. It fills on any daemon that runs long enough, the daemon's own advisor has no
+  rule on it, and the Hub keeps what it evicts. The traces and analysis queue gauges keep the
+  90 % line.
+
+- The image ships perf-sentinel `0.31.2` as its analysis engine, repinned by digest from
+  `0.31.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.31.1` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`.
+
+  A disclosure the Hub renders now ends on an annex of every field the schema defines,
+  `not reported` marking the absent ones, and its pages print the fields `0.31.0` left in the
+  attachment, each energy model named beside its tag. A report with a character outside the
+  bundled fonts in a field the `0.31.0` pages did not print is now refused at import with
+  `unsupported_characters`. A report a daemon serves names its carbon model on the Total CO2
+  cards. `0.31.2` adds the `findings_stored_total` the missed findings count above reads, and
+  `hub_export_enabled`. No detector, normalizer or finding signature changes, so every stored
+  finding keeps its signature.
+
+### Fixed
+
+- An empty Disclosures screen says a scheduled job builds a disclosure from the daemons'
+  archives and publishes it with the import key, where it named a CI job.
+
 ## [0.7.0] - 2026-10-16
 
 ### Added
