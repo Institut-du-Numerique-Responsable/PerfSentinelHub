@@ -121,6 +121,12 @@ orders = base | {"uptime_seconds": 511_500, "active_traces": 344, "max_active_tr
 ci = base | {"uptime_seconds": 97_380, "active_traces": 61, "max_active_traces": 1000,
              "analysis_queue_depth": 0, "analysis_queue_capacity": 1024,
              "stored_findings": 6, "max_retained_findings": 10_000}
+# An idle daemon has pushed nothing: the total counts at least what the ring
+# holds, and the minor behind predates the counter.
+for status in (busy, orders, ci):
+    if "findings_stored_total" in base:
+        status["findings_stored_total"] = status["stored_findings"]
+calm.pop("findings_stored_total", None)
 (out / "daemon-status-busy.json").write_text(json.dumps(busy, indent=2) + "\n")
 (out / "daemon-status-calm.json").write_text(json.dumps(calm, indent=2) + "\n")
 (out / "daemon-status-acked.json").write_text(json.dumps(orders, indent=2) + "\n")

@@ -23,6 +23,7 @@
   "ack_api_key_set": false,
   "read_api_key_set": false,
   "incidents_enabled": false,
+  "hub_export_enabled": false,
   "cors_allowed_origins": [
     "http://127.0.0.1:8080"
   ],
