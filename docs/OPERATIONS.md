@@ -94,6 +94,7 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_source_unreachable_seconds`                         | gauge   | How long it has been unreachable, 0 when it answers   |
 | `perf_sentinel_hub_source_last_success_seconds`                        | gauge   | Age of the last successful poll                       |
 | `perf_sentinel_hub_source_last_import_seconds`                         | gauge   | When a daemon last pushed. Not a heartbeat, see below |
+| `perf_sentinel_hub_source_missed_findings_total{source}`               | counter | Findings that left a polled daemon's ring unread      |
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refused, by reason                            |
 | `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Incident imports refused, by the findings reasons     |
 | `perf_sentinel_hub_correlation_import_rejected_total{reason}`          | counter | Correlation imports refused, by the findings reasons  |

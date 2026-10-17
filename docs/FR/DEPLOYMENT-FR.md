@@ -52,8 +52,13 @@ démarrage puis à chaque `Hub:PollInterval`. Cela resynchronise le contenu
 courant du tampon du daemon. Ce n'est pas un journal. Ce que le tampon a évincé
 pendant l'absence du Hub est perdu, et aucune limite ne le ramène. Un poll qui
 revient pile sur le plafond est journalisé comme possiblement tronqué, parce
-que l'instantané peut être en deçà de ce que le daemon détient. Voir
-[LIMITATIONS-FR.md](LIMITATIONS-FR.md).
+que l'instantané peut être en deçà de ce que le daemon détient. Face à un daemon en
+perf-sentinel 0.31.2 ou plus récent qui ne pousse pas, le Hub compte aussi les findings
+sortis de l'anneau entre deux polls avant qu'il les lise : il les journalise
+(événement 1104), publie `perf_sentinel_hub_source_missed_findings_total` et ajoute un
+conseil à ceux du daemon dans l'écran de la flotte. Relevez `[daemon]
+max_retained_findings`, raccourcissez `Hub:PollInterval` ou activez l'export Hub du
+daemon. Voir [LIMITATIONS-FR.md](LIMITATIONS-FR.md).
 
 ## Ce que le push seul abandonne
 
