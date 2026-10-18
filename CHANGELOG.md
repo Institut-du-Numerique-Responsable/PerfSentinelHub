@@ -2,6 +2,20 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.31.3` as its analysis engine, repinned by digest from
+  `0.31.2`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.31.2` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. `0.31.3` masks a
+  quote escaped with a backslash, a hexadecimal number and a number with an exponent in its SQL
+  templates, where the escaped quote used to leak the rest of its string into the template the
+  Hub stores. A finding on such a query gets a new signature, so an analysis the Hub runs, or a
+  daemon on `0.31.3`, reports it as a new finding: the old one stops receiving occurrences and
+  its acknowledgment does not carry over.
+
 ## [0.7.1] - 2026-10-17
 
 ### Added
