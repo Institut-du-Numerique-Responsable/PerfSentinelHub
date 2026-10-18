@@ -200,3 +200,21 @@ v0.7.0	bf31096	2026-10-16	PASS
 # perf-sentinel 0.31.2. The lab ran with local, uncommitted image pins in its
 # daemon and Hub manifests.
 v0.7.1	3573531	2026-10-17	PASS
+# v0.7.2, 2026-10-18. Repins the engine to perf-sentinel 0.31.3 and ships the
+# source reorganization of #104 (Models subfolders, the Access namespace, the
+# request gates beside RequestGate, the schema migration file, test folders).
+# Eleven hub-* scenarios ran green on lab commit 2dff93a, on a cluster rebuilt
+# from scratch: hub-ingestion, hub-derived-status, hub-source-reachability,
+# hub-plugin-contract, hub-incidents-mirror, hub-incidents-push,
+# hub-correlations-push, hub-disclosures, hub-lineage-mutation,
+# hub-retention-purge and hub-access-control. hub-ingestion,
+# hub-incidents-mirror, hub-disclosures and hub-access-control first failed on
+# a missing lab-tracegen:1 image, which make seed-tracegen builds, and passed
+# once it was seeded. The image perf-sentinel-hub:0.7.2-ea0bcb8 was built by
+# seed-hub-local from ea0bcb8, the release bump, and embeds the published
+# perf-sentinel 0.31.3 image pinned by digest. Every daemon was the published
+# perf-sentinel 0.31.3 image, pinned by digest sha256:74f285c2.
+# hub-disclosures and hub-access-control used a local release binary of
+# perf-sentinel 0.31.3. The lab ran with a local, uncommitted image pin in
+# its Hub manifest.
+v0.7.2	2dff93a	2026-10-18	PASS
