@@ -5154,7 +5154,8 @@
         const id = incidentKey(incident) + ':' + key;
         const button = el('button', {type: 'button', class: 'sort-head', 'data-sort': id}, [
             el('span', {text: name}),
-            active ? svg([['path', {d: sort.dir === 'asc' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}]], 11) : null
+            // Idle heads carry both arrows, or only the sorted column would read as sortable.
+            svg([['path', {d: active ? (sort.dir === 'asc' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6') : 'M8 9l4-4 4 4M8 15l4 4 4-4'}]], 11)
         ]);
         button.addEventListener('click', function () {
             state.findingSort = active

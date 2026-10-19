@@ -825,7 +825,8 @@ a.shell-identity[aria-current="page"] {
     font-family: var(--font-mono);
 }
 
-/* A sortable column head reads as the header it replaces, plus its arrow. */
+/* A sortable column head reads as the header it replaces, plus its arrow: one
+   for the sorted column, both, muted, for the others. */
 .sort-head {
     display: inline-flex;
     align-items: center;
@@ -841,6 +842,14 @@ a.shell-identity[aria-current="page"] {
 
 .sort-head:hover, th[aria-sort] .sort-head {
     color: var(--text);
+}
+
+.sort-head svg {
+    opacity: .5;
+}
+
+.sort-head:hover svg, th[aria-sort] .sort-head svg {
+    opacity: 1;
 }
 
 /* An incident's findings: fewer columns than the fleet table, and the

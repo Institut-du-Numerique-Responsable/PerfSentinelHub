@@ -39,6 +39,9 @@ All notable changes to PerfSentinelHub are recorded here.
   the tables: `[daemon.correlation]` and `[daemon.hub_export]` in the Correlations help and
   empty screen, `[daemon.incidents]` in the empty Incidents screen, and `[daemon]` in a
   daemon's read error. A help tip renders backticks the way the daemon's hints do.
+- Every sortable column head of an incident's findings carries a muted double arrow, so a
+  column reads as sortable before it is the sorted one, where only the sorted column showed
+  an arrow.
 
 ## [0.7.2] - 2026-10-18
 
