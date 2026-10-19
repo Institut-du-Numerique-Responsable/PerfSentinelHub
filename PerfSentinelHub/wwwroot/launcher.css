@@ -855,6 +855,13 @@ a.shell-identity[aria-current="page"] {
     max-width: 300px;
 }
 
+/* Underlined, unlike the rest of the product's links: a lone word in a table
+   cell does not read as a link by its colour alone. */
+.ack-link {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .findings-filter {
     max-width: 320px;
 }

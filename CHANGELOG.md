@@ -26,6 +26,8 @@ All notable changes to PerfSentinelHub are recorded here.
   machine token only exists with access control on. `POST /api/incidents/refresh` still
   needs a session, and with `Hub:Access` on these reads still need a session or a machine
   token.
+- The Ack link of an incident's findings is underlined. A lone word in a table cell, set
+  apart by its colour only, did not read as a link.
 
 ## [0.7.2] - 2026-10-18
 

@@ -5170,6 +5170,7 @@
         const label = PSL.FINDING_TYPE_LABEL[finding.type] || finding.type || 'finding';
         const link = el('a', {
             href: PSL.ackRouteHash(finding.signature, incident.source_id),
+            class: 'ack-link',
             'aria-label': 'Ack ' + label + ' on ' + (finding.source_endpoint || 'an unknown endpoint'),
             text: 'Ack'
         });
