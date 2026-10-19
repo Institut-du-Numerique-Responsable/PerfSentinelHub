@@ -95,10 +95,10 @@
     {
       "name": "dotnet-sonarscanner",
       "kind": "dotnet-tool",
-      "version": "11.3.0",
-      "digest_or_sha": "sha512-base64:abta3b09UTqrrdpITMmk7uyUFDDcvmihpZukz59zyb6zyS3RpRnPDY4T7yIP+DAObhLB0LUF7vG9UTUua3cLlA==",
-      "released_at": "2026-09-02T09:44:15.947Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-sonarscanner/11.3.0.json",
+      "version": "12.0.0",
+      "digest_or_sha": "sha512-base64:3de/QlFpKg+CbPeWQmVOTnMh/7A0KIw44zrwIFVyPBtRevdNAi+CODye25mzdkxK1upJ0Qrzypua855bwPFwgg==",
+      "released_at": "2026-10-15T15:10:08.123Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-sonarscanner/12.0.0.json",
       "reason": "Latest stable Sonar .NET scanner tool."
     },
     {
