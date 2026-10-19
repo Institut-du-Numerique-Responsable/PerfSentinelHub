@@ -293,19 +293,19 @@
     {
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
-      "version": "10.0.401-resolute-aot",
-      "digest_or_sha": "sha256:2fa5621bb22034ea82107f1e9811e86f38c140cceac3cfafcdd59cb4a6db329c",
-      "released_at": "2026-09-08",
-      "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.401-resolute-aot",
+      "version": "10.0.402-resolute-aot",
+      "digest_or_sha": "sha256:cb1c2b2844192553017d1e492705f1c5aa75b056109488b4677705dac3b20f81",
+      "released_at": "2026-10-13",
+      "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.402-resolute-aot",
       "reason": "Official NativeAOT SDK image matching the locked SDK."
     },
     {
       "name": "mcr.microsoft.com/dotnet/runtime-deps",
       "kind": "container",
-      "version": "10.0.12-resolute-chiseled-extra",
-      "digest_or_sha": "sha256:2b0f7a348127985b5accc794e1304b0f3f9ab9c8db652096514db4b831dc3ce4",
-      "released_at": "2026-10-02",
-      "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.12-resolute-chiseled-extra",
+      "version": "10.0.13-resolute-chiseled-extra",
+      "digest_or_sha": "sha256:8d3382bf11c0da9d087b1852dc2859c5ff113348cbab20fa1282babf36b2386a",
+      "released_at": "2026-10-13",
+      "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.13-resolute-chiseled-extra",
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.12."
     },
     {
