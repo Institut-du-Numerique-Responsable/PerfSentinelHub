@@ -13,6 +13,9 @@ All notable changes to PerfSentinelHub are recorded here.
   `Microsoft.DotNet.ILCompiler`, `Microsoft.NET.ILLink.Tasks` and the `Microsoft.Extensions` family
   they pull to `10.0.13`. `config/supply-chain.json` carries the new SDK archive, digests and
   package hashes.
+- An incident finding's template shows whole, wrapped over as many lines as it needs, where
+  it was cut to one line with the rest in its tooltip: two templates sharing a long prefix,
+  two routes of one host for instance, read alike.
 
 ### Fixed
 

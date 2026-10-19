@@ -843,9 +843,9 @@ a.shell-identity[aria-current="page"] {
     color: var(--text);
 }
 
-/* An incident's findings: fewer columns than the fleet table, the endpoint
-   wraps and the template is cut to one line, so it needs less than the
-   fleet table's minimum. */
+/* An incident's findings: fewer columns than the fleet table, and the
+   endpoint and the template wrap, so it needs less than the fleet table's
+   minimum. */
 .table-findings {
     min-width: 820px;
 }
@@ -853,9 +853,6 @@ a.shell-identity[aria-current="page"] {
 .findings-template {
     display: block;
     max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .findings-filter {

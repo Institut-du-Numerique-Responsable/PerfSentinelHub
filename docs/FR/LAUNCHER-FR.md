@@ -209,8 +209,8 @@ avant l'incident ou après le redémarrage d'après son propre horodatage face �
 l'incident. La colonne capture porte la lecture du daemon de jusqu'où son anneau
 remontait encore : complete, partial ou empty. Les durées sont relatives, jamais des
 dates, et l'horodatage exact est dans l'infobulle. Chaque finding montre la requête
-normalisée sur laquelle il a été levé, coupée à une ligne et entière dans l'infobulle,
-puisqu'un même endpoint en porte souvent plusieurs. Les findings s'ouvrent du plus grave au
+normalisée sur laquelle il a été levé, entière et repliée sur plusieurs lignes, puisqu'un
+même endpoint en porte souvent plusieurs. Les findings s'ouvrent du plus grave au
 moins grave, puis du plus vu au moins vu, un clic ou une touche sur l'en-tête d'une colonne
 les trie selon elle, et un champ au-dessus du tableau les restreint par endpoint ou par
 gabarit. Cinq sélecteurs restreignent la liste. Kind et service restent

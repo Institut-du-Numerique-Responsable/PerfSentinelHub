@@ -5108,12 +5108,8 @@
                     text: finding.severity || '?'
                 })]),
                 el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
-                // Truncated to one line, whole in the tooltip: the template is what tells two rows apart.
-                el('td', {class: 'table-mono'}, [el('span', {
-                    class: 'findings-template',
-                    title: template,
-                    text: template || '—'
-                })]),
+                // Whole, wrapped: the template is what tells two rows apart.
+                el('td', {class: 'table-mono'}, [el('span', {class: 'findings-template', text: template || '—'})]),
                 el('td', {'data-align': 'right', text: String(row.seen_count == null ? '?' : row.seen_count)}),
                 el('td', {
                     title: PSL.dtHuman(row.first_seen_ms),
