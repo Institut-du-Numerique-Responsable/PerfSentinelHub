@@ -188,7 +188,9 @@ the incident or after the restart from its own stamp against the incident's. The
 column carries the daemon's reading of how far back its ring still reached: complete,
 partial, or empty. Times are relative, never dates, and the exact stamp sits in the
 tooltip. Each finding shows the normalized query it was raised on, whole and wrapped,
-since one endpoint often carries several. The findings open worst
+since one endpoint often carries several, and its estimated impact, the findings
+dashboard's avoidable I/O operations: traces seen times extra operations per trace, a dash
+when the daemon has green scoring off. The findings open worst
 first, then most seen, a click or a keypress on a column head sorts them by that column,
 and a field above the table narrows them by endpoint or template. Five selects narrow the list. Kind and service stay
 in sight, and namespace, environment and daemon fold behind More filters, which says how

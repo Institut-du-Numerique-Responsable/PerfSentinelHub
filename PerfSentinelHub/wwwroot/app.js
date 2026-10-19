@@ -5090,7 +5090,7 @@
         const canAck = (state.sources || []).some(function (source) {
             return source.ack_relay;
         });
-        const columns = ['Type', 'Severity', 'Endpoint', 'Template', 'Seen', 'First seen'].concat(canAck ? ['Ack'] : []);
+        const columns = ['Type', 'Severity', IMPACT_HEAD, 'Endpoint', 'Template', 'Seen', 'First seen'].concat(canAck ? ['Ack'] : []);
         const head = el('tr', {}, columns.map(function (name) {
             return findingHead(name, incident);
         }));
@@ -5098,6 +5098,7 @@
             const finding = row.finding || {};
             const phase = PSL.findingPhase(row, incident);
             const template = PSL.findingTemplate(row);
+            const impact = PSL.findingImpact(row);
             const tr = el('tr', {}, [
                 // Not table-mono: this reads as a label now, not as the
                 // identifier the API filters on, which is untouched.
@@ -5107,6 +5108,7 @@
                     'data-sev': finding.severity || null,
                     text: finding.severity || '?'
                 })]),
+                el('td', {'data-align': 'right', text: impact == null ? '—' : impact.toLocaleString('en')}),
                 el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
                 // Whole, wrapped: the template is what tells two rows apart.
                 el('td', {class: 'table-mono'}, [el('span', {class: 'findings-template', text: template || '—'})]),
@@ -5130,9 +5132,13 @@
         })]);
     }
 
+    // The findings dashboard's own name for it, so the two read the same number the same way.
+    const IMPACT_HEAD = 'Est. impact (ops)';
+
     const FINDING_SORT_KEY = {
         Type: 'type',
         Severity: 'severity',
+        [IMPACT_HEAD]: 'impact',
         Endpoint: 'endpoint',
         Template: 'template',
         Seen: 'seen',
@@ -5142,7 +5148,7 @@
     /** A column head that sorts on click. Counts and severity read worst first, the rest A to Z. */
     function findingHead(name, incident) {
         const key = FINDING_SORT_KEY[name];
-        const th = el('th', {scope: 'col', 'data-align': name === 'Seen' ? 'right' : null});
+        const th = el('th', {scope: 'col', 'data-align': name === 'Seen' || name === IMPACT_HEAD ? 'right' : null});
         if (!key) {
             th.textContent = name;
             return th;
@@ -5158,7 +5164,7 @@
         button.addEventListener('click', function () {
             state.findingSort = active
                 ? {key: key, dir: sort.dir === 'asc' ? 'desc' : 'asc'}
-                : {key: key, dir: key === 'severity' || key === 'seen' ? 'desc' : 'asc'};
+                : {key: key, dir: key === 'severity' || key === 'impact' || key === 'seen' ? 'desc' : 'asc'};
             // The ids come from the daemon: escaped, so a quote in one cannot break the selector.
             renderFocus('[data-sort="' + CSS.escape(id) + '"]');
         });

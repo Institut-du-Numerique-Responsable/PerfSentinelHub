@@ -960,6 +960,19 @@
     }
 
     /**
+     * The avoidable I/O operations a frozen finding stands for, traces seen times
+     * extra operations per trace: the findings dashboard's "Est. impact (ops)".
+     * Null when the daemon did not score green impact.
+     * @param {{seen_count?: number, finding?: any}} row
+     * @returns {number | null}
+     */
+    function findingImpact(row) {
+        const perTrace = ((row.finding || {}).green_impact || {}).estimated_extra_io_ops;
+        if (perTrace == null || row.seen_count == null) return null;
+        return row.seen_count * perTrace;
+    }
+
+    /**
      * Whether a frozen finding matches what the operator typed above the table,
      * on its endpoint or its template, ignoring case.
      * @param {{finding?: any}} row
@@ -993,7 +1006,7 @@
      * back to the default reading order, worst and most seen first, so equal
      * rows never shuffle between two renders.
      * @param {Array<{seen_count?: number, first_seen_ms: number, finding?: any}>} rows
-     * @param {'type' | 'severity' | 'endpoint' | 'template' | 'seen' | 'first'} key
+     * @param {'type' | 'severity' | 'impact' | 'endpoint' | 'template' | 'seen' | 'first'} key
      * @param {'asc' | 'desc'} dir
      * @returns {Array<any>}
      */
@@ -1005,6 +1018,11 @@
             },
             severity: function (row) {
                 return SEVERITY_RANK[(row.finding || {}).severity] || 0;
+            },
+            // Unscored below a scored zero, so a descending sort leads with what was measured.
+            impact: function (row) {
+                const impact = findingImpact(row);
+                return impact == null ? -1 : impact;
             },
             endpoint: function (row) {
                 return (row.finding || {}).source_endpoint || '';
@@ -2168,6 +2186,7 @@
         sortFindings,
         moreFiltersLabel,
         findingTemplate,
+        findingImpact,
         findingMatches,
         ackCommand,
         phaseLabel,

@@ -4,6 +4,13 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- An incident's findings carry an Est. impact (ops) column beside Severity: the avoidable
+  I/O operations the findings dashboard computes for the same incident, traces seen in its
+  window times the finding's extra operations per trace. It sorts like the other columns,
+  most first, and reads a dash when the daemon has green scoring off.
+
 ### Changed
 
 - The toolchain moves to .NET 10.0.13, released on 2026-10-13: the build image to
