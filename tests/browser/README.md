@@ -135,7 +135,7 @@ detail send too so its actions show.
 for a sibling `perf-sentinel` checkout with a release build, or takes
 `HUB_ENGINE_BINARY`.
 
-**The pinned SDK.** `global.json` pins 10.0.401 with `rollForward: disable`,
+**The pinned SDK.** `global.json` pins 10.0.402 with `rollForward: disable`,
 which is usually not the `dotnet` on `PATH`. The setup runs the pinned
 `dotnet` by name, `$DOTNET_ROOT/dotnet` when that variable is set and
 `/usr/local/share/dotnet/dotnet` otherwise, rather than putting either
