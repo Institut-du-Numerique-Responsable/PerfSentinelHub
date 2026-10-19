@@ -238,3 +238,20 @@ v0.7.2	2dff93a	2026-10-18	PASS
 # release binary of perf-sentinel 0.31.3. The lab ran with a local, uncommitted
 # image pin in its Hub manifest.
 v0.7.3	d9982a4	2026-10-19	PASS
+# v0.7.4, 2026-10-19. Repins the engine to perf-sentinel 0.31.4, whose only
+# change is in the engine's tests. Eleven hub-* scenarios ran green on lab
+# commit bbed72d, on a cluster rebuilt from scratch: hub-ingestion,
+# hub-derived-status, hub-source-reachability, hub-plugin-contract,
+# hub-incidents-mirror, hub-incidents-push, hub-correlations-push,
+# hub-disclosures, hub-lineage-mutation, hub-retention-purge and
+# hub-access-control, 142 checks ok and no skip. hub-incidents-push first
+# failed in its pre-flight, before any check: its isolated daemon, pinned
+# with imagePullPolicy Never, landed on the one node the kubelet had not
+# pulled the daemon image to. It passed once the image was on every node.
+# The image perf-sentinel-hub:0.7.4-22334e7 was built by seed-hub-local from
+# 22334e7, the release bump, and embeds the published perf-sentinel 0.31.4
+# image pinned by digest. Every daemon was the published perf-sentinel 0.31.4
+# image, pinned by digest sha256:2ea11501. hub-disclosures and
+# hub-access-control used a local release binary of perf-sentinel 0.31.4.
+# The lab ran with a local, uncommitted image pin in its Hub manifest.
+v0.7.4	bbed72d	2026-10-19	PASS

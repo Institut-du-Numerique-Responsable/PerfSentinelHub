@@ -2,6 +2,17 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.7.4] - 2026-10-19
+
+### Changed
+
+- The image ships perf-sentinel `0.31.4` as its analysis engine, repinned by digest from
+  `0.31.3`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.31.3` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. `0.31.4` changes
+  no code outside the engine's tests, so an analysis the Hub runs gives the same findings and
+  signatures as on `0.31.3`.
+
 ## [0.7.3] - 2026-10-19
 
 ### Added
