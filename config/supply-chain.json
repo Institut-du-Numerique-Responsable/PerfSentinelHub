@@ -248,10 +248,10 @@
     {
       "name": "actions/create-github-app-token",
       "kind": "github-action",
-      "version": "3.2.0",
-      "digest_or_sha": "bcd2ba49218906704ab6c1aa796996da409d3eb1",
-      "released_at": "2026-05-12T23:31:37Z",
-      "source": "https://github.com/actions/create-github-app-token/releases/tag/v3.2.0",
+      "version": "3.3.0",
+      "digest_or_sha": "64ab729a6294000f5aa4a4bc0b73d1f32bc45510",
+      "released_at": "2026-10-12T23:42:23Z",
+      "source": "https://github.com/actions/create-github-app-token/releases/tag/v3.3.0",
       "reason": "Latest stable official action for a short-lived, checks-only GitHub App installation token."
     },
     {
@@ -275,19 +275,19 @@
     {
       "name": "github/codeql-action",
       "kind": "github-action",
-      "version": "4.38.3",
-      "digest_or_sha": "24c54180a607b1449ed407dd24f251e4e9147c8d",
-      "released_at": "2026-10-08T13:01:01Z",
-      "source": "https://github.com/github/codeql-action/releases/tag/v4.38.3",
+      "version": "4.39.0",
+      "digest_or_sha": "6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee",
+      "released_at": "2026-10-15T10:57:05Z",
+      "source": "https://github.com/github/codeql-action/releases/tag/v4.39.0",
       "reason": "Latest stable CodeQL action release."
     },
     {
       "name": "ossf/scorecard-action",
       "kind": "github-action",
-      "version": "2.4.4",
-      "digest_or_sha": "2d1146689b8cda280b9bc96326124645441f03bc",
-      "released_at": "2026-07-23T21:12:46Z",
-      "source": "https://github.com/ossf/scorecard-action/releases/tag/v2.4.4",
+      "version": "2.5.0",
+      "digest_or_sha": "fa7117db83c52d787ae5a89f350999701505d78e",
+      "released_at": "2026-10-12T02:54:09Z",
+      "source": "https://github.com/ossf/scorecard-action/releases/tag/v2.5.0",
       "reason": "Latest stable OpenSSF Scorecard action, pinned to its release commit."
     },
     {

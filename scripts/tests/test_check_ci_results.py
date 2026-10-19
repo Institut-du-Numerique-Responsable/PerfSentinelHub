@@ -426,7 +426,7 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertEqual(1, text.count("name: 'CI / Gate'"))
 
         publisher = job_body("publish-gate")
-        app_sha = "bcd2ba49218906704ab6c1aa796996da409d3eb1"
+        app_sha = "64ab729a6294000f5aa4a4bc0b73d1f32bc45510"
         self.assertIn(f"actions/create-github-app-token@{app_sha}", publisher)
         self.assertIn("secrets.CI_GATE_APP_ID", publisher)
         self.assertIn("secrets.CI_GATE_APP_PRIVATE_KEY", publisher)
