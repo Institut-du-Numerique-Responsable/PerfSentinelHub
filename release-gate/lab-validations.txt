@@ -218,3 +218,23 @@ v0.7.1	3573531	2026-10-17	PASS
 # perf-sentinel 0.31.3. The lab ran with a local, uncommitted image pin in
 # its Hub manifest.
 v0.7.2	2dff93a	2026-10-18	PASS
+# v0.7.3, 2026-10-19. Moves the toolchain to .NET 10.0.13 (SDK 10.0.402, build
+# image sdk:10.0.402-resolute-aot, runtime image
+# runtime-deps:10.0.13-resolute-chiseled-extra), keeps GET /api/incidents,
+# GET /api/incidents/{id} and GET /api/correlations open with Hub:Auth on and
+# Hub:Access off (#111), and reworks an incident's findings table (#112).
+# Eleven hub-* scenarios ran green on lab commit d9982a4, on the cluster of the
+# v0.7.2 pass restarted with Docker: hub-ingestion, hub-derived-status,
+# hub-source-reachability, hub-plugin-contract, hub-incidents-mirror,
+# hub-incidents-push, hub-correlations-push, hub-disclosures,
+# hub-lineage-mutation, hub-retention-purge and hub-access-control.
+# hub-ingestion, hub-plugin-contract and hub-lineage-mutation first failed on
+# the shared port-forwards, gone with the Docker restart, and the whole set was
+# run again once scripts/port-forward.sh start had brought them back. The image
+# perf-sentinel-hub:0.7.3-c1237d9 was built by seed-hub-local from c1237d9, the
+# release bump, and embeds the published perf-sentinel 0.31.3 image pinned by
+# digest. Every daemon was the published perf-sentinel 0.31.3 image, pinned by
+# digest sha256:74f285c2. hub-disclosures and hub-access-control used a local
+# release binary of perf-sentinel 0.31.3. The lab ran with a local, uncommitted
+# image pin in its Hub manifest.
+v0.7.3	d9982a4	2026-10-19	PASS
