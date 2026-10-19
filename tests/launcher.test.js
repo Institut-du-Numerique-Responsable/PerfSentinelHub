@@ -1202,6 +1202,19 @@ test("a frozen finding is told apart by its template, and found by it", () => {
     assert.deepEqual(sorted.map(PSL.findingTemplate), ["a", "b"]);
 });
 
+test("a frozen finding's impact is the dashboard's traces times extra operations, absent when unscored", () => {
+    const row = (seen, perTrace) => ({
+        seen_count: seen, first_seen_ms: 1,
+        finding: perTrace == null ? {} : {green_impact: {estimated_extra_io_ops: perTrace}}
+    });
+    assert.equal(PSL.findingImpact(row(4, 11)), 44);
+    assert.equal(PSL.findingImpact(row(4, 0)), 0);
+    assert.equal(PSL.findingImpact(row(4, null)), null);
+    assert.equal(PSL.findingImpact({finding: {green_impact: {estimated_extra_io_ops: 3}}}), null);
+    const sorted = PSL.sortFindings([row(1, null), row(1, 0), row(2, 5)], "impact", "desc");
+    assert.deepEqual(sorted.map(PSL.findingImpact), [10, 0, null]);
+});
+
 test("the daemon-side ack names the daemon before the subcommand and quotes what the shell needs", () => {
     const line = PSL.ackCommand({base_url: "http://d:4318"}, "n_plus_one_sql:svc:ep:abc", "posix");
     assert.equal(line, "perf-sentinel ack --daemon http://d:4318 create --signature n_plus_one_sql:svc:ep:abc --reason 'why it can wait'");

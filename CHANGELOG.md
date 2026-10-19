@@ -4,6 +4,13 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- An incident's findings carry an Est. impact (ops) column beside Severity: the avoidable
+  I/O operations the findings dashboard computes for the same incident, traces seen in its
+  window times the finding's extra operations per trace. It sorts like the other columns,
+  most first, and reads a dash when the daemon has green scoring off.
+
 ### Changed
 
 - The toolchain moves to .NET 10.0.13, released on 2026-10-13: the build image to
@@ -13,6 +20,9 @@ All notable changes to PerfSentinelHub are recorded here.
   `Microsoft.DotNet.ILCompiler`, `Microsoft.NET.ILLink.Tasks` and the `Microsoft.Extensions` family
   they pull to `10.0.13`. `config/supply-chain.json` carries the new SDK archive, digests and
   package hashes.
+- An incident finding's template shows whole, wrapped over as many lines as it needs, where
+  it was cut to one line with the rest in its tooltip: two templates sharing a long prefix,
+  two routes of one host for instance, read alike.
 
 ### Fixed
 
@@ -23,6 +33,15 @@ All notable changes to PerfSentinelHub are recorded here.
   machine token only exists with access control on. `POST /api/incidents/refresh` still
   needs a session, and with `Hub:Access` on these reads still need a session or a machine
   token.
+- The Ack link of an incident's findings is underlined. A lone word in a table cell, set
+  apart by its colour only, did not read as a link.
+- The config sections the screens name read as code, as they already did in the notes under
+  the tables: `[daemon.correlation]` and `[daemon.hub_export]` in the Correlations help and
+  empty screen, `[daemon.incidents]` in the empty Incidents screen, and `[daemon]` in a
+  daemon's read error. A help tip renders backticks the way the daemon's hints do.
+- Every sortable column head of an incident's findings carries a muted double arrow, so a
+  column reads as sortable before it is the sorted one, where only the sorted column showed
+  an arrow.
 
 ## [0.7.2] - 2026-10-18
 
