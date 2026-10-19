@@ -14,6 +14,16 @@ All notable changes to PerfSentinelHub are recorded here.
   they pull to `10.0.13`. `config/supply-chain.json` carries the new SDK archive, digests and
   package hashes.
 
+### Fixed
+
+- With `Hub:Auth` on and `Hub:Access` off, `GET /api/incidents`, `GET /api/incidents/{id}` and
+  `GET /api/correlations` stay open, as `/api/findings` already did. A Grafana datasource
+  reads them without a credential, and the findings dashboard's Correlation episodes and
+  Correlated pairs panels and its Hub incidents annotation answered `401` there, since a
+  machine token only exists with access control on. `POST /api/incidents/refresh` still
+  needs a session, and with `Hub:Access` on these reads still need a session or a machine
+  token.
+
 ## [0.7.2] - 2026-10-18
 
 ### Changed

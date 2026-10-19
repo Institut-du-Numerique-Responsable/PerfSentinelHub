@@ -103,11 +103,12 @@ and `ingress.annotations` reach the controller as given.
 
 The Ingress publishes every route. With `Hub:Auth` off, the default, none of
 them asks who calls, the launcher and `POST /api/analyses` included. With it on,
-three stay open: `/api/findings`, which IDE plugins and CI jobs read and which
-returns every finding of every source, `/metrics` and `/health`. Publish the
+the machine routes stay open: `/api/findings`, which IDE plugins and CI jobs read and
+which returns every finding of every source, the incident and correlation reads
+dashboards use, `/metrics` and `/health`. Publish the
 host only on a network allowed to read them, or restrict who reaches it with
 the controller's source allow-list annotations. With `Hub:Access` on as well,
-`/api/findings` needs a session or a machine token and answers each caller with
+those reads need a session or a machine token and answers each caller with
 its own scope, and `/metrics` answers only on `hub.metricsPort`, which the
 Ingress does not route, see [ACCESS-CONTROL.md](ACCESS-CONTROL.md). A proxy or
 controller in front of the Hub must then neither inject nor forward an

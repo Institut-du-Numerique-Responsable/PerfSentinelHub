@@ -120,6 +120,7 @@ public sealed class AuthenticationTests : IAsyncLifetime
     [InlineData("/api/status")]
     [InlineData("/api/sources")]
     [InlineData("/api/analyses")]
+    [InlineData("/api/disclosures")]
     [InlineData("/app.js")]
     public async Task What_the_launcher_reads_answers_401_or_redirects_without_a_session(string path)
     {
@@ -154,6 +155,8 @@ public sealed class AuthenticationTests : IAsyncLifetime
 
     [Theory]
     [InlineData("/api/findings")]
+    [InlineData("/api/incidents")]
+    [InlineData("/api/correlations")]
     [InlineData("/health/live")]
     [InlineData("/health/ready")]
     [InlineData("/metrics")]

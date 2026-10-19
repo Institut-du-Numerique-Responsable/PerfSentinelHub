@@ -13,10 +13,11 @@ une machine :
 | Route                                                            | Accès                                                                      |
 |------------------------------------------------------------------|----------------------------------------------------------------------------|
 | `/` et les fichiers du lanceur                                   | session, sinon redirection vers le fournisseur, ou vers la page de connexion du Hub avec un [compte local](#comptes-locaux) |
-| `/api/status`, `/api/sources`, `/api/incidents`, `/api/correlations`, `/api/analyses` | session, sinon `401`                                                       |
+| `/api/status`, `/api/sources`, `/api/analyses`                   | session, sinon `401`                                                       |
 | `/reports/`                                                      | session, `401` dans le cadre du lanceur, redirection si ouvert directement |
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`            | session, sinon `401`, et l'acquittement est pris au nom de la session      |
 | `/api/findings`                                                  | ouvert, pour les plugins IDE et les jobs CI, sauf contrôle d'accès         |
+| `GET /api/incidents`, `GET /api/incidents/{id}`, `GET /api/correlations` | ouvert, pour les dashboards, sauf contrôle d'accès ; `POST /api/incidents/refresh` exige une session |
 | `POST /api/import/findings`                                      | sa propre `X-API-Key`, comme avant                                         |
 | `POST /api/import/incidents`                                     | la même `X-API-Key` que l'import des findings                              |
 | `POST /api/import/correlations`                                  | la même `X-API-Key` que l'import des findings                              |
@@ -30,9 +31,10 @@ une redirection vers l'origine du fournisseur. Le lanceur se recharge sur un
 `401`, et c'est ce rechargement qui renvoie le navigateur se connecter.
 
 Les routes laissées ouvertes servent toujours qui joint le port :
-`/api/findings` renvoie tous les findings de toutes les sources. Gardez pour
+`/api/findings` renvoie tous les findings de toutes les sources, `/api/incidents` et
+`/api/correlations` tous les incidents et tous les épisodes de corrélation. Gardez pour
 elles la frontière réseau, une NetworkPolicy ou un ingress qui ne publie pas ces
-chemins. Avec `Hub:Access:Enabled`, `/api/findings` exige aussi une session ou un jeton
+chemins. Avec `Hub:Access:Enabled`, ces lectures exigent aussi une session ou un jeton
 machine, et chaque appelant atteint ce que couvrent ses grants, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
 

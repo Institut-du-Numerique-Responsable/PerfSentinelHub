@@ -46,9 +46,9 @@ hub:
     # Browser sign-in against an OAuth2 provider (Keycloak, Entra ID, Google,
     # GitLab, Bitbucket...), so no oauth2-proxy has to front the Hub. Declare
     # https://<hub host>/auth/callback as the client's redirect URI. The
-    # routes machines call stay open: /api/findings (unless hub.access.enabled,
-    # which wants a machine token there), the import (its own key), /health and
-    # /metrics. See docs/AUTHENTICATION.md.
+    # routes machines call stay open: GET /api/findings, /api/incidents and
+    # /api/correlations (unless hub.access.enabled, which wants a machine token
+    # there), the import (its own key), /health and /metrics. See docs/AUTHENTICATION.md.
     enabled: false
     authorizationEndpoint: ""
     tokenEndpoint: ""

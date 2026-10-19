@@ -107,12 +107,13 @@ OAuth, `https://<hôte>/auth/callback`, est en `https`. `ingress.className` et
 
 L'Ingress publie toutes les routes. Avec `Hub:Auth` désactivé, le défaut,
 aucune ne demande qui appelle, le lanceur et `POST /api/analyses` compris. Avec
-`Hub:Auth` activé, trois restent ouvertes : `/api/findings`, que lisent les
-plugins d'IDE et les jobs de CI et qui renvoie toutes les findings de toutes
-les sources, `/metrics` et `/health`. Ne publiez l'hôte que sur un réseau
+`Hub:Auth` activé, les routes machines restent ouvertes : `/api/findings`, que lisent
+les plugins d'IDE et les jobs de CI et qui renvoie toutes les findings de toutes
+les sources, les lectures d'incidents et de corrélations des dashboards, `/metrics`
+et `/health`. Ne publiez l'hôte que sur un réseau
 autorisé à les lire, ou limitez qui le joint avec les annotations de liste
 d'adresses sources du contrôleur. Avec `Hub:Access` activé en plus,
-`/api/findings` exige une session ou un jeton machine et répond à chaque
+ces lectures exigent une session ou un jeton machine et répond à chaque
 appelant avec son propre périmètre, et `/metrics` ne répond que sur
 `hub.metricsPort`, que l'Ingress ne route pas, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Un proxy ou un contrôleur devant
