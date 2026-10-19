@@ -12,10 +12,11 @@ calls:
 | Route                                                            | Access                                                                  |
 |------------------------------------------------------------------|-------------------------------------------------------------------------|
 | `/` and the launcher's files                                     | session, otherwise a redirect to the provider, or to the Hub's sign-in page with a [local account](#local-accounts) |
-| `/api/status`, `/api/sources`, `/api/incidents`, `/api/correlations`, `/api/analyses` | session, otherwise `401`                                                |
+| `/api/status`, `/api/sources`, `/api/analyses`                   | session, otherwise `401`                                                |
 | `/reports/`                                                      | session, `401` in the launcher's frame, a redirect when opened directly |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`           | session, otherwise `401`, and the ack is taken in the session's name    |
 | `/api/findings`                                                  | open, for IDE plugins and CI jobs, unless access control is on          |
+| `GET /api/incidents`, `GET /api/incidents/{id}`, `GET /api/correlations` | open, for dashboards, unless access control is on; `POST /api/incidents/refresh` needs a session |
 | `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
 | `POST /api/import/incidents`                                     | the same `X-API-Key` as the findings import                             |
 | `POST /api/import/correlations`                                  | the same `X-API-Key` as the findings import                             |
@@ -29,9 +30,10 @@ redirect to the provider's origin. The launcher reloads itself on a `401`, and
 the reload is what sends the browser to sign in again.
 
 The routes left open still serve whoever reaches the port: `/api/findings`
-returns every finding of every source. Keep the network boundary for them, a
+returns every finding of every source, `/api/incidents` and `/api/correlations`
+every incident and correlation episode. Keep the network boundary for them, a
 NetworkPolicy or an ingress that does not publish those paths. With
-`Hub:Access:Enabled`, `/api/findings` needs a session or a machine token too, and
+`Hub:Access:Enabled`, these reads need a session or a machine token too, and
 each caller reaches what its grants cover, see [ACCESS-CONTROL.md](ACCESS-CONTROL.md).
 
 Without `Hub:Auth:RequiredGroups`, any user the provider signs in is let in:

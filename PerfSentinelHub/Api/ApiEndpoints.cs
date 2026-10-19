@@ -66,10 +66,14 @@ public static partial class ApiEndpoints
         app.MapPost("/api/sources/{sourceId}/acks", CreateAckAsync);
         app.MapPost("/api/sources/{sourceId}/acks/revoke", RevokeAckAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
-        // machine calls: IDE plugins and CI read findings, a daemon pushes with its key.
-        // With Hub:Access the findings need a caller too, a machine token for a machine.
+        // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
+        // correlations, a daemon pushes with its key. With Hub:Access the reads need a
+        // caller too, a machine token for a machine.
         var findings = app.MapGet("/api/findings", GetFindingsAsync);
         var byTrace = app.MapGet("/api/findings/{traceId}", GetFindingsByTraceAsync);
+        var incidents = app.MapGet("/api/incidents", GetIncidentsAsync);
+        var incident = app.MapGet("/api/incidents/{id}", GetIncidentAsync);
+        var correlations = app.MapGet("/api/correlations", GetCorrelationsAsync);
         if (app.Services.GetRequiredService<AccessPolicy>().Enabled)
         {
             // Any caller, even one no grant reaches. With access off it is not mapped.
@@ -79,12 +83,12 @@ public static partial class ApiEndpoints
         {
             findings.AllowAnonymous();
             byTrace.AllowAnonymous();
+            incidents.AllowAnonymous();
+            incident.AllowAnonymous();
+            correlations.AllowAnonymous();
         }
 
-        app.MapGet("/api/incidents", GetIncidentsAsync);
-        app.MapGet("/api/incidents/{id}", GetIncidentAsync);
         app.MapPost("/api/incidents/refresh", RefreshIncidentsAsync);
-        app.MapGet("/api/correlations", GetCorrelationsAsync);
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
