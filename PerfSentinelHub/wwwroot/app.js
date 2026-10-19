@@ -757,7 +757,7 @@
 
     function showTip(anchor, text) {
         closeTip();
-        const box = el('div', {class: 'tipbox', id: 'tipbox', role: 'tooltip', text: text});
+        const box = proseInto(el('div', {class: 'tipbox', id: 'tipbox', role: 'tooltip'}), text);
         anchor.setAttribute('aria-describedby', 'tipbox');
         document.body.appendChild(box);
         const at = anchor.getBoundingClientRect();
@@ -1719,9 +1719,8 @@
                     el('p', {}, [
                         el('span', {text: 'Reading this daemon\'s settings returned '}),
                         el('span', {class: 'code-inline', text: code}),
-                        el('span', {
-                            text: ': ' + (PSL.READ_ERRORS[code] || PSL.ERRORS[code] || 'the Hub could not reach it.')
-                        })
+                        proseInto(el('span'),
+                            ': ' + (PSL.READ_ERRORS[code] || PSL.ERRORS[code] || 'the Hub could not reach it.'))
                     ]),
                     el('p', {
                         class: 'notice-sub',
@@ -3580,10 +3579,8 @@
             text.appendChild(el('p', {class: 'notice-block-body'}, [
                 el('span', {text: 'The last attempt returned '}),
                 el('span', {class: 'code-inline', text: source.last_error_code}),
-                el('span', {
-                    text: ': ' + (PSL.READ_ERRORS[source.last_error_code] || PSL.ERRORS[source.last_error_code]
-                        || 'the Hub could not reach it.')
-                })
+                proseInto(el('span'), ': ' + (PSL.READ_ERRORS[source.last_error_code]
+                    || PSL.ERRORS[source.last_error_code] || 'the Hub could not reach it.'))
             ]));
         }
         text.appendChild(el('p', {
@@ -4684,12 +4681,10 @@
         if (state.incidents.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
                 el('p', {class: 'empty-title', text: 'No incident recorded.'}),
-                el('p', {
-                    text: 'An incident exists only when a daemon with [daemon.incidents] enabled receives one from '
-                        + 'the operator\'s alerting. Nothing here means none was posted'
-                        + (Object.values(state.incidentFilter).some(Boolean) ? ' for this filter' : '')
-                        + ', or that no daemon read just now publishes them yet.'
-                })
+                proseInto(el('p'), 'An incident exists only when a daemon with `[daemon.incidents]` enabled '
+                    + 'receives one from the operator\'s alerting. Nothing here means none was posted'
+                    + (Object.values(state.incidentFilter).some(Boolean) ? ' for this filter' : '')
+                    + ', or that no daemon read just now publishes them yet.')
             ]));
             appendCopyNote(section);
             return section;
@@ -5249,7 +5244,7 @@
             el('p', {class: 'page-sub'}, [
                 document.createTextNode('Each pair is a finding that, again and again, fires within seconds after '
                     + 'another one. Its periods of activity stay here after the daemon forgets them. '),
-                helpDot('A daemon with [daemon.correlation] on and [daemon.hub_export] set pushes each period a '
+                helpDot('A daemon with `[daemon.correlation]` on and `[daemon.hub_export]` set pushes each period a '
                     + 'pair stays active as an episode, and closes it once the pair has not co-occurred for its '
                     + 'gap, ten minutes by default. The Hub keeps what it is pushed and re-derives nothing. An '
                     + 'episode whose daemon went silent past its gap and a quarter of an hour reads as ended '
@@ -5272,10 +5267,8 @@
         if (pairs.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
                 el('p', {class: 'empty-title', text: 'No correlation in this range.'}),
-                el('p', {
-                    text: 'A pair shows here once a daemon with [daemon.correlation] and [daemon.hub_export] on '
-                        + 'pushes an episode of it.'
-                })
+                proseInto(el('p'), 'A pair shows here once a daemon with `[daemon.correlation]` and '
+                    + '`[daemon.hub_export]` on pushes an episode of it.')
             ]));
             return section;
         }

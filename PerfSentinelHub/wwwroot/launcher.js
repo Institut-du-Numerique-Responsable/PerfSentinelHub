@@ -59,7 +59,7 @@
         http_error: 'it answered with an error status, so it is running and reachable. This is the daemon refusing or failing the request rather than a network problem.',
         timeout: 'it did not answer inside this Hub\'s HTTP timeout. Busy is as likely as down.',
         invalid_status: 'it answered, but not with a status this Hub can read. Its /api/status has to carry a version string.',
-        response_too_large: 'it answered with more than this Hub reads in one go. A [daemon] section past that cap is worth reporting.',
+        response_too_large: 'it answered with more than this Hub reads in one go. A `[daemon]` section past that cap is worth reporting.',
         hub_busy: 'the Hub capped how many daemon reads run at once and this one hit the cap. It clears in about a second.',
         invalid_findings: 'it answered, but not with a findings list this Hub can read. A daemon this Hub does not support yet is the usual cause.',
         database_full: 'the daemon answered, but the Hub\'s own database is full and could not store it. Grow the Hub\'s volume or shorten Hub:Retention, then look for a source creating abnormally many signatures.',

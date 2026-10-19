@@ -35,6 +35,10 @@ All notable changes to PerfSentinelHub are recorded here.
   token.
 - The Ack link of an incident's findings is underlined. A lone word in a table cell, set
   apart by its colour only, did not read as a link.
+- The config sections the screens name read as code, as they already did in the notes under
+  the tables: `[daemon.correlation]` and `[daemon.hub_export]` in the Correlations help and
+  empty screen, `[daemon.incidents]` in the empty Incidents screen, and `[daemon]` in a
+  daemon's read error. A help tip renders backticks the way the daemon's hints do.
 
 ## [0.7.2] - 2026-10-18
 
