@@ -2,6 +2,21 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.32.0` as its analysis engine, repinned by digest from
+  `0.31.4`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.31.4` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The engine now
+  reads and renders disclosures on schema `perf-sentinel-report/v1.8`, which the `0.31.4`
+  engine refused as newer than itself, so the Hub imports and renders them. A backend
+  analysis runs the engine with its `[detection]` section only, so its findings, signatures
+  and energy figures are the same as on `0.31.4`. A daemon-source run renders the daemon's
+  own report, whose totals hold the database and broker host energy when that daemon
+  declares or measures it.
+
 ## [0.7.4] - 2026-10-19
 
 ### Changed
