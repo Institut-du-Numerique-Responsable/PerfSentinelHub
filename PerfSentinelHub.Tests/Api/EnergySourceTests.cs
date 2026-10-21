@@ -69,6 +69,34 @@ public sealed class EnergySourceTests
     }
 
     [Fact]
+    public void Only_host_figures_inside_the_totals_add_their_model()
+    {
+        const string db = ",\"database_waste\":{\"energy_kwh\":2.0,\"model\":\"alumet_rapl\",\"in_totals\":true}";
+        const string legacy = ",\"database_waste\":{\"energy_kwh\":2.0,\"model\":\"alumet_rapl\"}";
+        const string broker =
+            ",\"messaging_waste\":{\"energy_kwh\":0.5,\"model\":\"broker\\u001b[2J\",\"in_totals\":true}";
+        var modeled = Services(("a", "io_proxy_v3", 0.0));
+
+        Assert.Equal("modeled from I/O counts", Label(Summary("io_proxy_v3", modeled, legacy)));
+        Assert.Equal("modeled from I/O counts · plus database hosts, alumet_rapl",
+            Label(Summary("io_proxy_v3", modeled, db)));
+        Assert.Equal(
+            "modeled from I/O counts · plus database hosts, alumet_rapl · plus broker hosts, unknown",
+            Label(Summary("io_proxy_v3", modeled, db + broker)));
+        Assert.Equal("source redfish_bmc · plus broker hosts, unknown",
+            Label(Summary("redfish_bmc", Services(("a", "redfish_bmc", 1.0)), broker)));
+    }
+
+    [Fact]
+    public void A_host_figure_without_a_model_reads_unknown()
+    {
+        Assert.Equal("modeled from I/O counts · plus database hosts, unknown",
+            Label("{\"energy_kwh\":0.1,\"database_waste\":{\"in_totals\":true}}"));
+        Assert.Equal("modeled from I/O counts",
+            Label("{\"energy_kwh\":0.1,\"database_waste\":{\"in_totals\":\"true\",\"model\":\"x\"}}"));
+    }
+
+    [Fact]
     public void A_hostile_tag_is_not_displayed()
     {
         var longTag = new string('a', 65);

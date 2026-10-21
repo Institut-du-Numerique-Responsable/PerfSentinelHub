@@ -17,6 +17,14 @@ All notable changes to PerfSentinelHub are recorded here.
   own report, whose totals hold the database and broker host energy when that daemon
   declares or measures it.
 
+### Fixed
+
+- The daemon view's `energy_source` named only the application part of a snapshot whose
+  energy holds database or broker host energy. It follows the engine's 0.32.0 label again
+  and adds `· plus database hosts, <model>` or `· plus broker hosts, <model>` for each host
+  figure the daemon counts inside its totals. A figure beside the totals adds nothing, and a
+  model that is not a short plain token reads `unknown`.
+
 ## [0.7.4] - 2026-10-19
 
 ### Changed
