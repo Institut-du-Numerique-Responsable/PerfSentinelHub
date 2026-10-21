@@ -314,7 +314,11 @@ Une carte ouvre l'écran propre à la divulgation :
 - **Livraisons**, chaque événement de webhook par le nom du webhook, son état, ses tentatives
   et son dernier statut.
 - **Applications**, et **Méthode et limites** avec les avertissements, lus dans `report.json`
-  tels que le rapport les énonce.
+  tels que le rapport les énonce. Un rapport v1.8 dont le total contient l'énergie d'hôtes de
+  base de données ou de broker ajoute une ligne `Database hosts` ou `Broker hosts`, qu'aucune
+  application ne porte. Chaque part est calculée sur le `total_energy_kwh` du rapport, comme
+  dans le PDF. Une ligne d'hôtes indique `in K of N windows` quand les totaux ne l'ont tenue
+  qu'une partie de la période.
 
 Un détenteur de `disclosures.manage` que le Hub sait nommer, par une session ou par l'en-tête
 d'identité de confiance, dispose aussi de New share link, de Render again sur une divulgation

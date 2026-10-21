@@ -161,7 +161,9 @@ the same line the daemon's own monitor draws. And `energy_source`, where the sna
 energy figure comes from, worded as the engine words it since 0.26.0 (`source scaphandre_rapl
 on 1 of 2 services · rest modeled from I/O counts`, null when no energy was computed). It
 reads per-service coverage, never `energy_model`, which names the carbon intensity source or
-tier rather than an energy backend. It also carries `daemon_defaults`,
+tier rather than an energy backend. Since 0.32.0 a database or broker host figure that the
+daemon counts inside its totals adds its own model (`· plus database hosts,
+database_specpower`), and a figure beside the totals adds nothing. It also carries `daemon_defaults`,
 `detection_defaults` and `defaults_engine_version`, so a reader can mark what a daemon
 actually changed. Those defaults belong to the binary this Hub embeds, so the version is
 named rather than assumed and a daemon on another minor is flagged rather than judged.

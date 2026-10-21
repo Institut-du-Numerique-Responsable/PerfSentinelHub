@@ -1425,6 +1425,31 @@ test("who checked what never says the Hub checked a signature", () => {
     assert.deepEqual(unchecked.map((row) => row.outcome), ["not_checked", "absent", "absent", "declared"]);
 });
 
+test("host rows carry the database and broker energy the total holds and no application does", () => {
+    assert.deepEqual(PSL.hostRows(null), []);
+    assert.deepEqual(PSL.hostRows({aggregate: {database_waste: {windows_with_figure: 4, energy_kwh: 3}}}), [],
+        "a v1.7 block, or one beside the totals, adds no row");
+
+    const rows = PSL.hostRows({
+        aggregate: {
+            database_waste: {windows_with_figure: 4, in_totals_windows: 4, in_totals_energy_kwh: 1.25},
+            messaging_waste: {windows_with_figure: 4, in_totals_windows: 3, in_totals_energy_kwh: 0.5},
+            carbon_breakdown: {database_kgco2eq: 0.4}
+        }
+    });
+    assert.deepEqual(rows, [
+        {label: "Database hosts", energy_kwh: 1.25, carbon_kgco2eq: 0.4, partial: null},
+        {label: "Broker hosts", energy_kwh: 0.5, carbon_kgco2eq: 0, partial: {windows: 3, of: 4}}
+    ]);
+});
+
+test("a small in-total host never reads as zero kWh", () => {
+    assert.equal(PSL.hostKwh(0), "0.00");
+    assert.equal(PSL.hostKwh(0.2), "0.20");
+    assert.equal(PSL.hostKwh(0.005), "0.01");
+    assert.equal(PSL.hostKwh(0.003), "3.0e-3");
+});
+
 test("the verify command names the expected signer only when the Hub knows one", () => {
     assert.equal(PSL.verifyCommand({expected_identity: null, expected_issuer: null}),
         "perf-sentinel verify-hash --report report.pdf");

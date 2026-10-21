@@ -4,10 +4,11 @@ namespace PerfSentinelHub.Api;
 
 /// <summary>
 ///     Where a snapshot's energy figure comes from, worded as the engine words it:
-///     a port of `GreenSummary::energy_source_label` (perf-sentinel 0.26.0), rules
+///     a port of `GreenSummary::energy_source_label` (perf-sentinel 0.32.0), rules
 ///     and strings alike. It reads per-service coverage and never `energy_model`,
 ///     which on an Electricity Maps daemon names the intensity source and on any
-///     other the intensity tier.
+///     other the intensity tier. A database or broker host figure counted inside
+///     `energy_kwh` adds its own model after the application part.
 /// </summary>
 public static class EnergySource
 {
@@ -23,6 +24,12 @@ public static class EnergySource
             kwh.GetDouble() <= 0.0)
             return null;
 
+        return ApplicationLabel(green) + HostSuffix(green, "database_waste", "database hosts") +
+               HostSuffix(green, "messaging_waste", "broker hosts");
+    }
+
+    private static string ApplicationLabel(JsonElement green)
+    {
         var models = StringMap(green, "per_service_energy_model");
         var ratios = MeasuredRatios(green);
         var cal = IsCalibrated(green, models) ? Calibrated : "";
@@ -40,6 +47,19 @@ public static class EnergySource
         return ratios.All(r => r.Ratio >= 1.0)
             ? "source " + named
             : $"source {named} on {covered.Count} of {ratios.Count} services · rest {Modeled}{cal}";
+    }
+
+    /// <summary>
+    ///     <c> · plus &lt;noun&gt;, &lt;model&gt;</c> when the figure carries `in_totals`, its kWh then
+    ///     being inside `energy_kwh`. A figure beside the totals adds nothing.
+    /// </summary>
+    private static string HostSuffix(JsonElement green, string name, string noun)
+    {
+        if (!green.TryGetProperty(name, out var figure) || figure.ValueKind != JsonValueKind.Object ||
+            !figure.TryGetProperty("in_totals", out var inTotals) || inTotals.ValueKind != JsonValueKind.True)
+            return "";
+        var tag = JsonRead.ReadString(figure, "model") is { } model ? DisplayTag(model) : null;
+        return $" · plus {noun}, {tag ?? "unknown"}";
     }
 
     /// <summary>
