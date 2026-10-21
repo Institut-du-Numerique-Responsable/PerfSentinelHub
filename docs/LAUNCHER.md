@@ -286,7 +286,10 @@ A card opens the disclosure's own screen:
 - **Deliveries**, each webhook event by the webhook's name, its state, attempts and last
   status.
 - **Applications**, and **Method and limits** with the disclaimers, read from `report.json` as
-  the report states them.
+  the report states them. A v1.8 report whose total holds database or broker host energy adds
+  a `Database hosts` or `Broker hosts` row, which no application carries. Each share is taken
+  over the report's `total_energy_kwh`, as in the PDF. A host row says `in K of N windows`
+  when the totals held it for part of the period only.
 
 A holder of `disclosures.manage` the Hub can name, through a session or the trusted identity
 header, also gets New share link, Render again on a disclosure not rendered, Retry on a

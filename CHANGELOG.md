@@ -17,6 +17,22 @@ All notable changes to PerfSentinelHub are recorded here.
   own report, whose totals hold the database and broker host energy when that daemon
   declares or measures it.
 
+### Added
+
+- A disclosure's applications table gains `Database hosts` and `Broker hosts` rows when its
+  v1.8 report counts that host energy inside `total_energy_kwh`, read from
+  `aggregate.database_waste.in_totals_energy_kwh`, `aggregate.messaging_waste` and the
+  `carbon_breakdown` host terms. The hosts used to be in the total the screen shows above and
+  in no row. Every share is now taken over the report's `total_energy_kwh`, as the engine's
+  PDF takes it, instead of over the rows, so a period with energy no service was attributed
+  no longer inflates the applications' shares. A host under 0.005 kWh reads in scientific
+  notation rather than `0.00`, and a host the totals held for part of the period says
+  `in K of N windows`. A report older than v1.8 adds no host row.
+- The daemon view's carbon scoring card describes `grid_feeds`, the grid operator feeds a
+  0.32.0 daemon lists, and `fingrid_dataset`. `electricity_maps` says it reports the
+  configuration, and no longer that off means the embedded table, since a region can take its
+  grid operator's live value instead.
+
 ### Fixed
 
 - The daemon view's `energy_source` named only the application part of a snapshot whose
