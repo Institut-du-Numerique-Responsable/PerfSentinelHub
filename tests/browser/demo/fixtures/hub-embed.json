@@ -3,9 +3,9 @@
   "routes": {
     "/api/status": {
       "service": "perf-sentinel-hub",
-      "version": "0.8.1",
+      "version": "0.8.2",
       "identity": null,
-      "engine_version": "0.33.0",
+      "engine_version": "0.34.1",
       "latest_engine_version": null,
       "latest_hub_version": null,
       "queue_depth": 0,
@@ -117,7 +117,7 @@
         "last_attempt_ms": 1756511998000,
         "last_success_ms": 1756511998000,
         "unreachable_since_ms": null,
-        "producer_version": "0.33.0",
+        "producer_version": "0.34.1",
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41400",
         "engine_subcommand": null,
@@ -140,7 +140,7 @@
         "last_attempt_ms": 1756511998000,
         "last_success_ms": 1756511998000,
         "unreachable_since_ms": null,
-        "producer_version": "0.32.0",
+        "producer_version": "0.33.0",
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41401",
         "engine_subcommand": null,
@@ -232,7 +232,7 @@
         "last_attempt_ms": 1756511998000,
         "last_success_ms": 1756511998000,
         "unreachable_since_ms": null,
-        "producer_version": "0.33.0",
+        "producer_version": "0.34.1",
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41405",
         "engine_subcommand": null,
@@ -255,7 +255,7 @@
         "last_attempt_ms": 1756511998000,
         "last_success_ms": 1756511998000,
         "unreachable_since_ms": null,
-        "producer_version": "0.33.0",
+        "producer_version": "0.34.1",
         "last_error_code": null,
         "base_url": "http://127.0.0.1:41406",
         "engine_subcommand": null,
@@ -270,6 +270,23 @@
       }
     ],
     "/api/analyses?limit=500": [
+      {
+        "id": "0000000000000003",
+        "status": "failed",
+        "source_id": "search-prod",
+        "source_name": "Search production",
+        "environment": "production",
+        "kind": "daemon",
+        "request": {},
+        "requested_by": "unknown",
+        "created_at_ms": 1756511999000,
+        "started_at_ms": 1756512000000,
+        "finished_at_ms": 1756512000000,
+        "expires_at_ms": null,
+        "producer_version": null,
+        "error_code": "source_unreachable",
+        "result": null
+      },
       {
         "id": "0000000000000004",
         "status": "failed",
@@ -292,23 +309,6 @@
         "result": null
       },
       {
-        "id": "0000000000000003",
-        "status": "failed",
-        "source_id": "search-prod",
-        "source_name": "Search production",
-        "environment": "production",
-        "kind": "daemon",
-        "request": {},
-        "requested_by": "unknown",
-        "created_at_ms": 1756511999000,
-        "started_at_ms": 1756512000000,
-        "finished_at_ms": 1756512000000,
-        "expires_at_ms": null,
-        "producer_version": null,
-        "error_code": "source_unreachable",
-        "result": null
-      },
-      {
         "id": "0000000000000002",
         "status": "succeeded",
         "source_id": "billing-stg",
@@ -321,7 +321,7 @@
         "started_at_ms": 1756512000000,
         "finished_at_ms": 1756512000000,
         "expires_at_ms": 1756598400000,
-        "producer_version": "0.32.0",
+        "producer_version": "0.33.0",
         "error_code": null,
         "result": {
           "empty": false,
@@ -353,7 +353,7 @@
         "started_at_ms": 1756512000000,
         "finished_at_ms": 1756512000000,
         "expires_at_ms": 1756598400000,
-        "producer_version": "0.33.0",
+        "producer_version": "0.34.1",
         "error_code": null,
         "result": {
           "empty": false,
@@ -386,7 +386,7 @@
       "started_at_ms": 1756512000000,
       "finished_at_ms": 1756512000000,
       "expires_at_ms": 1756598400000,
-      "producer_version": "0.33.0",
+      "producer_version": "0.34.1",
       "error_code": null,
       "result": {
         "empty": false,
@@ -418,7 +418,7 @@
       "started_at_ms": 1756512000000,
       "finished_at_ms": 1756512000000,
       "expires_at_ms": 1756598400000,
-      "producer_version": "0.32.0",
+      "producer_version": "0.33.0",
       "error_code": null,
       "result": {
         "empty": false,
@@ -477,10 +477,10 @@
     },
     "/api/sources/checkout-prod/daemon": {
       "source_id": "checkout-prod",
-      "observed_at_ms": 1756512001000,
+      "observed_at_ms": 1756512000000,
       "state": "near_capacity",
       "error_code": null,
-      "version": "0.33.0",
+      "version": "0.34.1",
       "uptime_seconds": 888120,
       "config": {
         "listen_addr": "127.0.0.1",
@@ -501,6 +501,7 @@
         "memory_high_water_pct": 0,
         "per_service_labels": true,
         "per_grouping_labels": true,
+        "findings_stdout": true,
         "api_enabled": true,
         "tls_configured": false,
         "ack_enabled": true,
@@ -576,7 +577,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.33.0",
+      "defaults_engine_version": "0.34.1",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -621,7 +622,7 @@
       "observed_at_ms": 1756512000000,
       "state": "advised",
       "error_code": null,
-      "version": "0.32.0",
+      "version": "0.33.0",
       "uptime_seconds": 263220,
       "config": {
         "listen_addr": "127.0.0.1",
@@ -642,6 +643,7 @@
         "memory_high_water_pct": 0,
         "per_service_labels": true,
         "per_grouping_labels": true,
+        "findings_stdout": true,
         "api_enabled": true,
         "tls_configured": false,
         "ack_enabled": true,
@@ -717,7 +719,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.33.0",
+      "defaults_engine_version": "0.34.1",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -759,7 +761,7 @@
     },
     "/api/sources/search-prod/daemon": {
       "source_id": "search-prod",
-      "observed_at_ms": 1756512000000,
+      "observed_at_ms": 1756512002000,
       "state": "unreachable",
       "error_code": "network_error",
       "version": null,
@@ -811,7 +813,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.33.0",
+      "defaults_engine_version": "0.34.1",
       "scoring_config": null,
       "energy_model": null,
       "energy_source": null,
@@ -827,7 +829,7 @@
       "observed_at_ms": 1756512001000,
       "state": "advised",
       "error_code": null,
-      "version": "0.33.0",
+      "version": "0.34.1",
       "uptime_seconds": 511500,
       "config": {
         "listen_addr": "127.0.0.1",
@@ -848,6 +850,7 @@
         "memory_high_water_pct": 0,
         "per_service_labels": true,
         "per_grouping_labels": true,
+        "findings_stdout": true,
         "api_enabled": true,
         "tls_configured": false,
         "ack_enabled": true,
@@ -923,7 +926,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.33.0",
+      "defaults_engine_version": "0.34.1",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -965,10 +968,10 @@
     },
     "/api/sources/ci-main/daemon": {
       "source_id": "ci-main",
-      "observed_at_ms": 1756512002000,
+      "observed_at_ms": 1756512001000,
       "state": "advised",
       "error_code": null,
-      "version": "0.33.0",
+      "version": "0.34.1",
       "uptime_seconds": 97380,
       "config": {
         "listen_addr": "127.0.0.1",
@@ -989,6 +992,7 @@
         "memory_high_water_pct": 0,
         "per_service_labels": true,
         "per_grouping_labels": true,
+        "findings_stdout": true,
         "api_enabled": true,
         "tls_configured": false,
         "ack_enabled": true,
@@ -1064,7 +1068,7 @@
         "sanitizer_aware_min_cv": 0.5,
         "sanitizer_aware_classification": "auto"
       },
-      "defaults_engine_version": "0.33.0",
+      "defaults_engine_version": "0.34.1",
       "scoring_config": {
         "api_version": "v4",
         "emission_factor_type": "lifecycle",
@@ -1156,7 +1160,7 @@
             "id": "billing-stg",
             "name": "Billing staging",
             "environment": "staging",
-            "producer_version": "0.32.0",
+            "producer_version": "0.33.0",
             "age_seconds": 2,
             "status": "ok"
           },
@@ -1164,7 +1168,7 @@
             "id": "checkout-prod",
             "name": "Checkout production",
             "environment": "production",
-            "producer_version": "0.33.0",
+            "producer_version": "0.34.1",
             "age_seconds": 2,
             "status": "ok"
           },
@@ -1172,7 +1176,7 @@
             "id": "ci-main",
             "name": "CI baseline",
             "environment": "ci",
-            "producer_version": "0.33.0",
+            "producer_version": "0.34.1",
             "age_seconds": 2,
             "status": "ok"
           },
@@ -1180,7 +1184,7 @@
             "id": "orders-prod",
             "name": "Orders production",
             "environment": "production",
-            "producer_version": "0.33.0",
+            "producer_version": "0.34.1",
             "age_seconds": 2,
             "status": "ok"
           }
@@ -1198,14 +1202,14 @@
             "source": "daemon",
             "by": "order-oncall@example.com",
             "reason": "Known since the incident, the batched query ships with the order service.",
-            "at": "2026-10-23T13:45:06.312231Z"
+            "at": "2026-10-23T22:33:42.091356Z"
           }
         ]
       }
     ],
     "/api/incidents?limit=100&offset=0": [
       {
-        "id": "76872025dd839ed9e4de6f23d7795c4d",
+        "id": "023ece5aeb4e6a6c48194d37a4db4264",
         "service": "order-svc",
         "namespace": "shop",
         "kind": "restart",
@@ -1224,7 +1228,7 @@
         "capture": "partial"
       },
       {
-        "id": "bc569f1de7a0f0d63418087c8a2db923",
+        "id": "f898fa3676b0804b5e65f697b802f0d4",
         "service": "cache-svc",
         "kind": "other",
         "at_ms": 1756511872000,
@@ -1242,26 +1246,7 @@
         "capture": "partial"
       },
       {
-        "id": "ca88a881495c1ff94fc7c9b3b3449714",
-        "service": "checkout-svc",
-        "namespace": "shop",
-        "kind": "oom_kill",
-        "at_ms": 1756511872000,
-        "detail": "container exceeded its memory limit",
-        "window_from_ms": 1756511869000,
-        "window_to_ms": 1756511874000,
-        "oldest_finding_ms": 1756511869000,
-        "ended_at_ms": null,
-        "source_id": "checkout-prod",
-        "source_name": "Checkout production",
-        "environment": "production",
-        "first_seen": 1756511998000,
-        "last_seen": 1756511998000,
-        "finding_count": 1,
-        "capture": "complete"
-      },
-      {
-        "id": "db93570dd892b5df935c7a2ec82b32da",
+        "id": "c1861e4d9558759bcca81601d352496c",
         "service": "reports-svc",
         "namespace": "reporting",
         "kind": "memory_saturation",
@@ -1280,7 +1265,26 @@
         "capture": "complete"
       },
       {
-        "id": "767dcc56736510d5d8481ba30c8d6d24",
+        "id": "c874e7472504114e9514ce1bb3f0e946",
+        "service": "checkout-svc",
+        "namespace": "shop",
+        "kind": "oom_kill",
+        "at_ms": 1756511872000,
+        "detail": "container exceeded its memory limit",
+        "window_from_ms": 1756511869000,
+        "window_to_ms": 1756511874000,
+        "oldest_finding_ms": 1756511869000,
+        "ended_at_ms": null,
+        "source_id": "checkout-prod",
+        "source_name": "Checkout production",
+        "environment": "production",
+        "first_seen": 1756511998000,
+        "last_seen": 1756511998000,
+        "finding_count": 1,
+        "capture": "complete"
+      },
+      {
+        "id": "467d876f8c700dab72d70d81278a121d",
         "service": "gateway-svc",
         "namespace": "edge",
         "kind": "deploy",
@@ -1692,7 +1696,7 @@
         "content_hash": "checked",
         "binding": "checked",
         "signature": "absent",
-        "engine_version": "0.33.0"
+        "engine_version": "0.34.1"
       },
       "share_links": [],
       "deliveries": [],
@@ -1954,7 +1958,7 @@
         "content_hash": "checked",
         "binding": "no_attestation",
         "signature": "absent",
-        "engine_version": "0.33.0"
+        "engine_version": "0.34.1"
       },
       "share_links": [],
       "deliveries": [],
@@ -2216,7 +2220,7 @@
         "content_hash": "checked",
         "binding": "checked",
         "signature": "absent",
-        "engine_version": "0.33.0"
+        "engine_version": "0.34.1"
       },
       "share_links": [
         {
@@ -2438,8 +2442,8 @@
         }
       }
     },
-    "/api/incidents/76872025dd839ed9e4de6f23d7795c4d": {
-      "id": "76872025dd839ed9e4de6f23d7795c4d",
+    "/api/incidents/023ece5aeb4e6a6c48194d37a4db4264": {
+      "id": "023ece5aeb4e6a6c48194d37a4db4264",
       "service": "order-svc",
       "namespace": "shop",
       "kind": "restart",
@@ -2466,8 +2470,8 @@
               "span_duration_cv_x1000": 0
             },
             "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-            "first_timestamp": "2026-10-23T13:45:01.186Z",
-            "last_timestamp": "2026-10-23T13:45:01.186Z",
+            "first_timestamp": "2026-10-23T22:33:36.959Z",
+            "last_timestamp": "2026-10-23T22:33:36.959Z",
             "green_impact": {
               "estimated_extra_io_ops": 7,
               "io_intensity_score": 8,
@@ -2490,8 +2494,8 @@
       "finding_count": 1,
       "capture": "partial"
     },
-    "/api/incidents/bc569f1de7a0f0d63418087c8a2db923": {
-      "id": "bc569f1de7a0f0d63418087c8a2db923",
+    "/api/incidents/f898fa3676b0804b5e65f697b802f0d4": {
+      "id": "f898fa3676b0804b5e65f697b802f0d4",
       "service": "cache-svc",
       "kind": "other",
       "at_ms": 1756511872000,
@@ -2517,8 +2521,8 @@
               "span_duration_cv_x1000": 0
             },
             "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-            "first_timestamp": "2026-10-23T13:45:01.187Z",
-            "last_timestamp": "2026-10-23T13:45:01.187Z",
+            "first_timestamp": "2026-10-23T22:33:36.960Z",
+            "last_timestamp": "2026-10-23T22:33:36.960Z",
             "green_impact": {
               "estimated_extra_io_ops": 7,
               "io_intensity_score": 8,
@@ -2541,60 +2545,8 @@
       "finding_count": 1,
       "capture": "partial"
     },
-    "/api/incidents/ca88a881495c1ff94fc7c9b3b3449714": {
-      "id": "ca88a881495c1ff94fc7c9b3b3449714",
-      "service": "checkout-svc",
-      "namespace": "shop",
-      "kind": "oom_kill",
-      "at_ms": 1756511872000,
-      "detail": "container exceeded its memory limit",
-      "window_from_ms": 1756511869000,
-      "window_to_ms": 1756511874000,
-      "oldest_finding_ms": 1756511869000,
-      "findings": [
-        {
-          "finding": {
-            "type": "n_plus_one_sql",
-            "severity": "warning",
-            "trace_id": "hubc0000000000000000000000000000",
-            "service": "checkout-svc",
-            "source_endpoint": "POST /checkout",
-            "pattern": {
-              "template": "SELECT * FROM invoices WHERE owner_id = ?",
-              "occurrences": 8,
-              "window_ms": 0,
-              "distinct_params": 8,
-              "span_duration_us_p50": 1500,
-              "span_duration_us_p99": 1500,
-              "span_duration_cv_x1000": 0
-            },
-            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-            "first_timestamp": "2026-10-23T13:45:03.690Z",
-            "last_timestamp": "2026-10-23T13:45:03.690Z",
-            "green_impact": {
-              "estimated_extra_io_ops": 7,
-              "io_intensity_score": 8,
-              "io_intensity_band": "high"
-            },
-            "confidence": "daemon_staging",
-            "signature": "n_plus_one_sql:checkout-svc:POST__checkout:e1e0bf0f3636b95b2421e5e4a3c0832c"
-          },
-          "stored_at_ms": 1756511871000,
-          "first_seen_ms": 1756511871000,
-          "seen_count": 1
-        }
-      ],
-      "ended_at_ms": null,
-      "source_id": "checkout-prod",
-      "source_name": "Checkout production",
-      "environment": "production",
-      "first_seen": 1756511998000,
-      "last_seen": 1756511998000,
-      "finding_count": 1,
-      "capture": "complete"
-    },
-    "/api/incidents/db93570dd892b5df935c7a2ec82b32da": {
-      "id": "db93570dd892b5df935c7a2ec82b32da",
+    "/api/incidents/c1861e4d9558759bcca81601d352496c": {
+      "id": "c1861e4d9558759bcca81601d352496c",
       "service": "reports-svc",
       "namespace": "reporting",
       "kind": "memory_saturation",
@@ -2621,8 +2573,8 @@
               "span_duration_cv_x1000": 0
             },
             "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-            "first_timestamp": "2026-10-23T13:45:03.690Z",
-            "last_timestamp": "2026-10-23T13:45:03.690Z",
+            "first_timestamp": "2026-10-23T22:33:39.470Z",
+            "last_timestamp": "2026-10-23T22:33:39.470Z",
             "green_impact": {
               "estimated_extra_io_ops": 7,
               "io_intensity_score": 8,
@@ -2645,8 +2597,60 @@
       "finding_count": 1,
       "capture": "complete"
     },
-    "/api/incidents/767dcc56736510d5d8481ba30c8d6d24": {
-      "id": "767dcc56736510d5d8481ba30c8d6d24",
+    "/api/incidents/c874e7472504114e9514ce1bb3f0e946": {
+      "id": "c874e7472504114e9514ce1bb3f0e946",
+      "service": "checkout-svc",
+      "namespace": "shop",
+      "kind": "oom_kill",
+      "at_ms": 1756511872000,
+      "detail": "container exceeded its memory limit",
+      "window_from_ms": 1756511869000,
+      "window_to_ms": 1756511874000,
+      "oldest_finding_ms": 1756511869000,
+      "findings": [
+        {
+          "finding": {
+            "type": "n_plus_one_sql",
+            "severity": "warning",
+            "trace_id": "hubc0000000000000000000000000000",
+            "service": "checkout-svc",
+            "source_endpoint": "POST /checkout",
+            "pattern": {
+              "template": "SELECT * FROM invoices WHERE owner_id = ?",
+              "occurrences": 8,
+              "window_ms": 0,
+              "distinct_params": 8,
+              "span_duration_us_p50": 1500,
+              "span_duration_us_p99": 1500,
+              "span_duration_cv_x1000": 0
+            },
+            "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
+            "first_timestamp": "2026-10-23T22:33:39.469Z",
+            "last_timestamp": "2026-10-23T22:33:39.469Z",
+            "green_impact": {
+              "estimated_extra_io_ops": 7,
+              "io_intensity_score": 8,
+              "io_intensity_band": "high"
+            },
+            "confidence": "daemon_staging",
+            "signature": "n_plus_one_sql:checkout-svc:POST__checkout:e1e0bf0f3636b95b2421e5e4a3c0832c"
+          },
+          "stored_at_ms": 1756511871000,
+          "first_seen_ms": 1756511871000,
+          "seen_count": 1
+        }
+      ],
+      "ended_at_ms": null,
+      "source_id": "checkout-prod",
+      "source_name": "Checkout production",
+      "environment": "production",
+      "first_seen": 1756511998000,
+      "last_seen": 1756511998000,
+      "finding_count": 1,
+      "capture": "complete"
+    },
+    "/api/incidents/467d876f8c700dab72d70d81278a121d": {
+      "id": "467d876f8c700dab72d70d81278a121d",
       "service": "gateway-svc",
       "namespace": "edge",
       "kind": "deploy",
@@ -2692,8 +2696,8 @@
               "span_duration_cv_x1000": 0
             },
             "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-            "first_timestamp": "2026-10-23T13:45:03.690Z",
-            "last_timestamp": "2026-10-23T13:45:03.690Z",
+            "first_timestamp": "2026-10-23T22:33:39.470Z",
+            "last_timestamp": "2026-10-23T22:33:39.470Z",
             "green_impact": {
               "estimated_extra_io_ops": 7,
               "io_intensity_score": 8,
