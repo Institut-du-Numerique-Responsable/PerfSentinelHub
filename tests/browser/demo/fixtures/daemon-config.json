@@ -17,6 +17,7 @@
   "memory_high_water_pct": 0,
   "per_service_labels": true,
   "per_grouping_labels": true,
+  "findings_stdout": true,
   "api_enabled": true,
   "tls_configured": false,
   "ack_enabled": true,

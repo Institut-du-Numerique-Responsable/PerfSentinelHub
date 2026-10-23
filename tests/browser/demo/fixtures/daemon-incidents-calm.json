@@ -1,13 +1,13 @@
 [
   {
-    "id": "bc569f1de7a0f0d63418087c8a2db923",
+    "id": "f898fa3676b0804b5e65f697b802f0d4",
     "service": "cache-svc",
     "kind": "other",
-    "at_ms": 1792763102194,
+    "at_ms": 1792794817980,
     "detail": "node under memory pressure, pod evicted",
-    "window_from_ms": 1792763099194,
-    "window_to_ms": 1792763104194,
-    "oldest_finding_ms": 1792763102656,
+    "window_from_ms": 1792794814980,
+    "window_to_ms": 1792794819980,
+    "oldest_finding_ms": 1792794818428,
     "findings": [
       {
         "finding": {
@@ -26,8 +26,8 @@
             "span_duration_cv_x1000": 0
           },
           "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-          "first_timestamp": "2026-10-23T13:45:01.187Z",
-          "last_timestamp": "2026-10-23T13:45:01.187Z",
+          "first_timestamp": "2026-10-23T22:33:36.960Z",
+          "last_timestamp": "2026-10-23T22:33:36.960Z",
           "green_impact": {
             "estimated_extra_io_ops": 7,
             "io_intensity_score": 8.0,
@@ -36,23 +36,23 @@
           "confidence": "daemon_staging",
           "signature": "n_plus_one_sql:cache-svc:GET__sessions:99ac55dc43d361d97d7ac908149fe6bd"
         },
-        "stored_at_ms": 1792763102656,
-        "first_seen_ms": 1792763102656,
+        "stored_at_ms": 1792794818428,
+        "first_seen_ms": 1792794818428,
         "seen_count": 1
       }
     ]
   },
   {
-    "id": "76872025dd839ed9e4de6f23d7795c4d",
+    "id": "023ece5aeb4e6a6c48194d37a4db4264",
     "service": "order-svc",
     "namespace": "shop",
     "kind": "restart",
-    "at_ms": 1792763102194,
-    "ended_at_ms": 1792763147194,
+    "at_ms": 1792794817980,
+    "ended_at_ms": 1792794862980,
     "detail": "pod restarted by the kubelet",
-    "window_from_ms": 1792763099194,
-    "window_to_ms": 1792763104194,
-    "oldest_finding_ms": 1792763102656,
+    "window_from_ms": 1792794814980,
+    "window_to_ms": 1792794819980,
+    "oldest_finding_ms": 1792794818428,
     "findings": [
       {
         "finding": {
@@ -71,8 +71,8 @@
             "span_duration_cv_x1000": 0
           },
           "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-          "first_timestamp": "2026-10-23T13:45:01.186Z",
-          "last_timestamp": "2026-10-23T13:45:01.186Z",
+          "first_timestamp": "2026-10-23T22:33:36.959Z",
+          "last_timestamp": "2026-10-23T22:33:36.959Z",
           "green_impact": {
             "estimated_extra_io_ops": 7,
             "io_intensity_score": 8.0,
@@ -81,21 +81,21 @@
           "confidence": "daemon_staging",
           "signature": "n_plus_one_sql:order-svc:GET__orders:1a22332fbc3bbc0b58c01ef7af1f4a31"
         },
-        "stored_at_ms": 1792763102656,
-        "first_seen_ms": 1792763102656,
+        "stored_at_ms": 1792794818428,
+        "first_seen_ms": 1792794818428,
         "seen_count": 1
       }
     ]
   },
   {
-    "id": "767dcc56736510d5d8481ba30c8d6d24",
+    "id": "467d876f8c700dab72d70d81278a121d",
     "service": "gateway-svc",
     "namespace": "edge",
     "kind": "deploy",
-    "at_ms": 1792763096682,
+    "at_ms": 1792794812456,
     "detail": "rollout 4f21c8 reached every replica",
-    "window_from_ms": 1792763093682,
-    "window_to_ms": 1792763098682,
+    "window_from_ms": 1792794809456,
+    "window_to_ms": 1792794814456,
     "findings": []
   }
 ]
