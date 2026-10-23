@@ -2,6 +2,19 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.8.2] - 2026-10-23
+
+### Changed
+
+- The image ships perf-sentinel `0.34.1` as its analysis engine, repinned by digest from
+  `0.33.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.33.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. A backend analysis runs the engine with its
+  `[detection]` section only, so its findings, signatures and energy figures are the same
+  as on `0.33.0`. A daemon can now set `[daemon] findings_stdout = false` to stop writing
+  its findings to stdout once the Hub receives them.
+
 ## [0.8.1] - 2026-10-23
 
 ### Changed
