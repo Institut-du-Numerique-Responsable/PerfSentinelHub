@@ -2,6 +2,20 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- Three launcher functions declared twice in `app.js`, one IIFE, so the later declaration
+  replaced the earlier for every caller since `0.7.0`. A finished run's `Open the dashboard`
+  read `[object Object]`, and a click greyed it out and did nothing: it ran the Disclosures
+  screen's write button. The `Download` button of a generated config file became
+  `Download the PDF` and asked `/api/disclosures/` for a file. The home and launch screens
+  showed the run page's "keeps what it last read" warning instead of their own Hub-down
+  banner. The Disclosures and run page copies are renamed `disclosureActionButton`,
+  `disclosureFileButton` and `runUnreachableBanner`, and `tests/launcher.test.js` fails on
+  any top-level function `app.js` declares twice.
+
 ## [0.8.0] - 2026-10-21
 
 ### Changed

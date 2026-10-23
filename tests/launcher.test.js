@@ -1501,3 +1501,18 @@ test("a download goes through fetch, and a 401 signs back in instead of saving t
     assert.equal(reloaded, true);
     assert.equal(saved.length, 1);
 });
+
+test("app.js declares each of its top-level functions once", () => {
+    // app.js is one IIFE: a second declaration of a name silently replaces the
+    // first for every caller, as the Disclosures screen's actionButton did to
+    // the run page's "Open the dashboard". Top level only, nested scopes may
+    // reuse a name.
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const source = fs.readFileSync(
+        path.join(__dirname, "..", "PerfSentinelHub", "wwwroot", "app.js"), "utf8");
+    const names = [...source.matchAll(/^ {4}function ([A-Za-z0-9_$]+)\(/gm)].map(m => m[1]);
+    assert.ok(names.length > 100, "the top-level pattern no longer matches app.js");
+    const twice = names.filter((name, i) => names.indexOf(name) !== i);
+    assert.deepEqual(twice, []);
+});
