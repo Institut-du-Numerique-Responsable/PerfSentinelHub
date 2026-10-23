@@ -2,6 +2,17 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- `appsettings.json` keeps `Microsoft.AspNetCore` at Warning in every environment, as
+  `appsettings.Development.json` already did. Production logged four Information lines per HTTP
+  request (hosting start and finish, endpoint, result), so probes, the `/metrics` scrape,
+  daemon imports and dashboards wrote tens of thousands of lines an hour. The Hub's own
+  categories stay at Information, and `Logging__LogLevel__Microsoft.AspNetCore` lowers it again
+  for a debugging session.
+
 ## [0.8.2] - 2026-10-23
 
 ### Changed
