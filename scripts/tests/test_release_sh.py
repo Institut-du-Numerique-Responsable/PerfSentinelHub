@@ -218,7 +218,7 @@ class ReleaseScriptTests(unittest.TestCase):
 
     def write_ledger(self, *versions):
         # The gate dates in UTC, so a local date runs a day ahead after midnight east of UTC.
-        today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        today = datetime.datetime.now(datetime.UTC).date().isoformat()
         lines = "".join(f"{version}\tabc1234\t{today}\tPASS\n" for version in versions)
         (self.repository / "release-gate/lab-validations.txt").write_text(
             "# fixture ledger\n" + lines, encoding="utf-8"
