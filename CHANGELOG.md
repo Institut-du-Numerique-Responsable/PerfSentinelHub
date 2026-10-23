@@ -2,20 +2,7 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
-
-### Changed
-
-- `appsettings.json` keeps `Microsoft.AspNetCore` at Warning in every environment, as
-  `appsettings.Development.json` already did. Production logged four Information lines per HTTP
-  request (hosting start and finish, endpoint, result), so probes, the `/metrics` scrape,
-  daemon imports and dashboards wrote tens of thousands of lines an hour. The outgoing calls
-  (daemon polls, pg_stat queries, update check) go to Warning too: `System.Net.Http.HttpClient`
-  logged four lines per call, each with its URL. The Hub's own categories stay at Information,
-  and `Logging__LogLevel__Microsoft.AspNetCore` or `Logging__LogLevel__System.Net.Http.HttpClient`
-  lowers either again for a debugging session.
-
-## [0.8.2] - 2026-10-23
+## [0.8.2] - 2026-10-24
 
 ### Changed
 
@@ -27,6 +14,14 @@ All notable changes to PerfSentinelHub are recorded here.
   `[detection]` section only, so its findings, signatures and energy figures are the same
   as on `0.33.0`. A daemon can now set `[daemon] findings_stdout = false` to stop writing
   its findings to stdout once the Hub receives them.
+- `appsettings.json` keeps `Microsoft.AspNetCore` at Warning in every environment, as
+  `appsettings.Development.json` already did. Production logged four Information lines per HTTP
+  request (hosting start and finish, endpoint, result), so probes, the `/metrics` scrape,
+  daemon imports and dashboards wrote tens of thousands of lines an hour. The outgoing calls
+  (daemon polls, pg_stat queries, update check) go to Warning too: `System.Net.Http.HttpClient`
+  logged four lines per call, each with its URL. The Hub's own categories stay at Information,
+  and `Logging__LogLevel__Microsoft.AspNetCore` or `Logging__LogLevel__System.Net.Http.HttpClient`
+  lowers either again for a debugging session.
 
 ## [0.8.1] - 2026-10-23
 
