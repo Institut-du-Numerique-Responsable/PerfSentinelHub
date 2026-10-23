@@ -286,8 +286,9 @@ With `Hub:Disclosures:ImportKey` set, the Hub takes periodic disclosures from a 
 see [API.md](API.md#disclosures). Three things change in how it runs.
 
 **Request logs.** A share link's token travels in the request path, and ASP.NET Core's hosting
-layer logs every path at Information. While disclosures are on, the Hub raises
-`Microsoft.AspNetCore.Hosting` to Warning, so no token reaches its own logs. The ingress
+layer logs every path at Information. `appsettings.json` keeps `Microsoft.AspNetCore` at Warning
+in every environment, and while disclosures are on the Hub also sets
+`Microsoft.AspNetCore.Hosting` to Warning in code, so no token reaches its own logs. The ingress
 controller's access log still records each path, tokens included: keep it as private as the
 links, or strip `/share/` paths from it. A token is revoked from the launcher or with
 `DELETE /api/disclosures/{id}/share-links/{linkId}`.

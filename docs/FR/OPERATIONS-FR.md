@@ -309,9 +309,10 @@ planifiée, voir [API-FR.md](API-FR.md#divulgations). Trois choses changent dans
 fonctionnement.
 
 **Journaux de requêtes.** Le jeton d'un lien de partage voyage dans le chemin de la requête,
-et la couche d'hébergement d'ASP.NET Core journalise chaque chemin en Information. Tant que
-les divulgations sont actives, le Hub relève `Microsoft.AspNetCore.Hosting` à Warning, si bien
-qu'aucun jeton n'atteint ses propres journaux. Le journal d'accès du contrôleur d'ingress
+et la couche d'hébergement d'ASP.NET Core journalise chaque chemin en Information.
+`appsettings.json` garde `Microsoft.AspNetCore` à Warning dans tous les environnements, et tant
+que les divulgations sont actives le Hub règle aussi `Microsoft.AspNetCore.Hosting` à Warning
+dans le code, si bien qu'aucun jeton n'atteint ses propres journaux. Le journal d'accès du contrôleur d'ingress
 enregistre toujours chaque chemin, jetons compris : gardez-le aussi privé que les liens, ou
 retirez-en les chemins `/share/`. Un jeton se révoque depuis le lanceur ou par
 `DELETE /api/disclosures/{id}/share-links/{linkId}`.
