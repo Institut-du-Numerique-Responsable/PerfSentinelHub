@@ -2,6 +2,32 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.8.1] - 2026-10-23
+
+### Changed
+
+- The image ships perf-sentinel `0.33.0` as its analysis engine, repinned by digest from
+  `0.32.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.32.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. A backend analysis runs the engine with its
+  `[detection]` section only, so its findings, signatures and energy figures are the same
+  as on `0.32.0`. A daemon that declares its database or broker hosts as groups of
+  different sizes now prices each group on its own, and a daemon-source run renders that
+  daemon's own report.
+
+### Fixed
+
+- Three launcher functions declared twice in `app.js`, one IIFE, so the later declaration
+  replaced the earlier for every caller since `0.7.0`. A finished run's `Open the dashboard`
+  read `[object Object]`, and a click greyed it out and did nothing: it ran the Disclosures
+  screen's write button. The `Download` button of a generated config file became
+  `Download the PDF` and asked `/api/disclosures/` for a file. The home and launch screens
+  showed the run page's "keeps what it last read" warning instead of their own Hub-down
+  banner. The Disclosures and run page copies are renamed `disclosureActionButton`,
+  `disclosureFileButton` and `runUnreachableBanner`, and `tests/launcher.test.js` fails on
+  any top-level function `app.js` declares twice.
+
 ## [0.8.0] - 2026-10-21
 
 ### Changed
