@@ -194,19 +194,19 @@
     {
       "name": "docker/login-action",
       "kind": "github-action",
-      "version": "4.6.0",
-      "digest_or_sha": "dbcb813823bdd20940b903addbd779551569679f",
-      "released_at": "2026-07-29T12:12:00Z",
-      "source": "https://github.com/docker/login-action/releases/tag/v4.6.0",
+      "version": "4.7.0",
+      "digest_or_sha": "81c6f93d4bc991e510b342a00b419b3bb4efc5c6",
+      "released_at": "2026-10-23T15:22:45Z",
+      "source": "https://github.com/docker/login-action/releases/tag/v4.7.0",
       "reason": "Latest stable Docker registry login action."
     },
     {
       "name": "step-security/harden-runner",
       "kind": "github-action",
-      "version": "2.22.1",
-      "digest_or_sha": "ccd8616d44fd3846e67624a50d5aad6d37bf2d25",
-      "released_at": "2026-10-08T00:46:25Z",
-      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.22.1",
+      "version": "2.22.2",
+      "digest_or_sha": "dc2769abcc0fcfbadfc1df54081c1608579ef6b2",
+      "released_at": "2026-10-19T16:55:35Z",
+      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.22.2",
       "reason": "Latest stable Harden-Runner release."
     },
     {
@@ -275,10 +275,10 @@
     {
       "name": "github/codeql-action",
       "kind": "github-action",
-      "version": "4.39.0",
-      "digest_or_sha": "6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee",
-      "released_at": "2026-10-15T10:57:05Z",
-      "source": "https://github.com/github/codeql-action/releases/tag/v4.39.0",
+      "version": "4.39.1",
+      "digest_or_sha": "9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+      "released_at": "2026-10-21T15:48:42Z",
+      "source": "https://github.com/github/codeql-action/releases/tag/v4.39.1",
       "reason": "Latest stable CodeQL action release."
     },
     {
