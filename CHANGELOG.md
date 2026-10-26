@@ -2,6 +2,17 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- The image now ships `appsettings.json`. The `Dockerfile` copied the binary, the SQLite
+  library and `wwwroot` but not this file, so in a container the Hub read only its environment
+  and the chart's `appsettings.Production.json`. The 0.8.2 log levels therefore never applied
+  there, and the image still logged every HTTP request and every outgoing call at Information.
+  The `Hub` defaults in the file match those in code, so nothing else changes. The native
+  archives already shipped the file.
+
 ## [0.8.2] - 2026-10-24
 
 ### Changed
