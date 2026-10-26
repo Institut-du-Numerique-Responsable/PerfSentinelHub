@@ -424,6 +424,10 @@ jobs:
       - name: Start the image as its unprivileged user
         run: |
           test "$(docker inspect --format '{{.Config.User}}' perf-sentinel-hub:ci)" = 1654:1654
+          # Without appsettings.json the log levels fall back to Information, and nothing else fails.
+          docker create --name appsettings-check perf-sentinel-hub:ci >/dev/null
+          docker cp appsettings-check:/app/appsettings.json - | tar -xO | grep -q '"Microsoft.AspNetCore": "Warning"'
+          docker rm appsettings-check >/dev/null
           id="$(docker run -d --rm -p 127.0.0.1:5082:8080 -e Hub__DatabasePath=/tmp/hub.db -e Hub__Sources__0__Id=ci -e Hub__Sources__0__Name=CI -e Hub__Sources__0__Environment=ci -e Hub__Sources__0__BaseUrl=http://127.0.0.1:9 perf-sentinel-hub:ci)"
           trap 'docker stop "$id" >/dev/null 2>&1 || true' EXIT
           python3 - <<'PY'

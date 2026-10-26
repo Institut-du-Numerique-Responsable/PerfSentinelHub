@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.402-resolute-aot@sha256:cb1c2b2844192553017d1e492705f1c5aa75b056109488b4677705dac3b20f81 AS build
 ARG TARGETARCH
-ARG VERSION=0.8.2
+ARG VERSION=0.8.3
 ARG SOURCE_DATE_EPOCH
 WORKDIR /src
 COPY . .
@@ -16,13 +16,15 @@ FROM ghcr.io/institut-du-numerique-responsable/perf-sentinel:0.34.1@sha256:81747
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.13-resolute-chiseled-extra@sha256:8d3382bf11c0da9d087b1852dc2859c5ff113348cbab20fa1282babf36b2386a
 ARG SOURCE_COMMIT=unknown
-LABEL org.opencontainers.image.version="0.8.2" \
+LABEL org.opencontainers.image.version="0.8.3" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \
       org.opencontainers.image.source="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub"
 WORKDIR /app
 # Root owns what it runs, so the service account cannot rewrite its own binary.
 COPY --from=build /out/PerfSentinelHub /app/PerfSentinelHub
 COPY --from=build /out/libe_sqlite3.so /app/libe_sqlite3.so
+# Base settings (log levels); the chart's appsettings.Production.json only layers on top.
+COPY --from=build /out/appsettings.json /app/appsettings.json
 # The launcher is static files beside the binary, and without them every page answers 404.
 COPY --from=build /out/wwwroot /app/wwwroot
 COPY --from=engine /perf-sentinel /app/perf-sentinel
