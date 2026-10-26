@@ -36,21 +36,21 @@
     {
       "name": "Microsoft.AspNetCore.Mvc.Testing",
       "kind": "nuget",
-      "version": "10.0.13",
-      "digest_or_sha": "sha512-base64:1hFEN3BHL1dJsBlHMWz9+7gqzlKfwpasG9GrhXyYvs5jRrLVtGS/RLR7rwW97Ge6SrmfRpjVDn+HHUsMModXxQ==",
-      "lock_content_hash": "AiQkwLuYCtZoWD1lm6ll/tqVf+u1GVdVJw+EEBQnCOgdofcwpMCnZ6h8HEwD04rOdmF1v+pVfGzr9HFCmq3zdw==",
-      "released_at": "2026-10-13T17:07:57.77Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.aspnetcore.mvc.testing/10.0.13.json",
+      "version": "10.0.14",
+      "digest_or_sha": "sha512-base64:4v0FDslYCyGoGI+95O9NFkNPpBtOOd3FGRYSREraPzDo7ZCEv/TJYCGVpUUcN68pzcscMqps42LUX+dQJucrbg==",
+      "lock_content_hash": "l3eFye4Bv4oGT1Ag8pFtZ6WM0LhR9PkNiDH1AYitZW2LAaFWl1FgF4Dj7wY4Fp/BqCZ4LLkBGLw+NE/CA5k6mQ==",
+      "released_at": "2026-10-25T17:07:21.037Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.aspnetcore.mvc.testing/10.0.14.json",
       "reason": "Latest stable supported ASP.NET Core testing package."
     },
     {
       "name": "Microsoft.Data.Sqlite",
       "kind": "nuget",
-      "version": "10.0.13",
-      "digest_or_sha": "sha512-base64:1iIzR5eIrw3yCPJftPgG4A5DEojq2xILFr1P+oPN1eNGZ6Hj3hWjBKrDyBhyVfleqM7+D7LyG7mAwKF4WBmEZA==",
-      "lock_content_hash": "w37nz3WFmDtRfXxWEwIXX2OgqDRiwhD1JGbFwfpFCF8GkCrV/yO6Y2JF5058J2RGoI2sCcdn02wrk0yEcekWcw==",
-      "released_at": "2026-10-13T17:07:14.547Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/10.0.13.json",
+      "version": "10.0.14",
+      "digest_or_sha": "sha512-base64:K37udQU2dojYZuCUT9F8TlZTAxzE0XOkqUfgIM2+2Lj7yJnfoNhpLmxAp6eSL281R6ncc4uhIAvTxSpv1qjgVA==",
+      "lock_content_hash": "muyroan6rKrf0omZL8UF7Kw5uOGp/yBg1L/XWvkFN3WhKaNtK2IWqRZw93nIwVqjhTVDO0l4CEGhHIh+mb+sKg==",
+      "released_at": "2026-10-25T17:07:18.587Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/10.0.14.json",
       "reason": "Latest stable supported SQLite provider."
     },
     {
