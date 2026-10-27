@@ -25,8 +25,10 @@ All notable changes to PerfSentinelHub are recorded here.
   longer trusts the export flag alone: a daemon whose config says it pushes but from which no push
   landed in the last two hours is counted, since nothing it pushed reached the Hub. An unreadable
   config still counts as pushing.
-- Reading a daemon's `api/config` no longer fails the whole poll when the connection drops
-  mid-body. The config is then treated as unread, as for any other read error.
+- A daemon connection that drops mid-body now fails every daemon read as an
+  `HttpRequestException`, like any other network error, instead of a bare `IOException`. Reading
+  `api/config` therefore no longer fails the whole poll on such a cut: the config is treated as
+  unread, as for any other read error.
 
 ## [0.8.3] - 2026-10-26
 

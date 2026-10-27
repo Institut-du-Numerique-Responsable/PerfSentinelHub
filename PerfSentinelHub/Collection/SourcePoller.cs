@@ -130,8 +130,7 @@ public sealed partial class SourcePoller(
                 ? enabled.GetBoolean()
                 : null;
         }
-        // IOException: a body cut mid-read, which HttpRequestException does not cover.
-        catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException
+        catch (Exception exception) when (exception is HttpRequestException or JsonException
                                               or DaemonTimeoutException or ResponseTooLargeException)
         {
             return null;
