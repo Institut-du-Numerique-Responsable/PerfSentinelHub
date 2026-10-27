@@ -148,7 +148,7 @@ aussi pour que ses actions s'affichent.
 cherche un dépôt `perf-sentinel` voisin avec une compilation release, ou prend
 `HUB_ENGINE_BINARY`.
 
-**Le SDK épinglé.** `global.json` épingle 10.0.402 en `rollForward: disable`,
+**Le SDK épinglé.** `global.json` épingle 10.0.403 en `rollForward: disable`,
 qui n'est en général pas le `dotnet` du `PATH`. La mise en place appelle le
 `dotnet` épinglé par son nom, `$DOTNET_ROOT/dotnet` quand la variable est
 posée et `/usr/local/share/dotnet/dotnet` sinon, plutôt que de placer l'un de
