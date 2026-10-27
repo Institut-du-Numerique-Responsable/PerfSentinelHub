@@ -274,3 +274,19 @@ v0.7.4	bbed72d	2026-10-19	PASS
 # built from its v0.32.0 tree. The lab ran with a local, uncommitted image
 # pin in its Hub manifest.
 v0.8.0	b05a023	2026-10-21	PASS
+# v0.8.4, 2026-10-27. Skips the truncation warning (1102) and the missed
+# findings count (1104) for a daemon that pushes its findings to this Hub,
+# records findings pushes in their own table (schema version 14), and moves
+# the toolchain to .NET 10.0.14. Eleven hub-* scenarios ran green on lab
+# commit 9e37063, on a cluster rebuilt from scratch: hub-ingestion,
+# hub-derived-status, hub-source-reachability, hub-plugin-contract,
+# hub-incidents-mirror, hub-incidents-push, hub-correlations-push,
+# hub-disclosures, hub-lineage-mutation, hub-retention-purge and
+# hub-access-control, 142 checks ok and no skip. The image
+# perf-sentinel-hub:0.8.4-6af5c96 was built by seed-hub-local from 6af5c96,
+# the release bump, and embeds the published perf-sentinel 0.34.1 image
+# pinned by digest. Every daemon was the published perf-sentinel 0.34.1
+# image, pinned by digest sha256:81747e45. hub-disclosures and
+# hub-access-control used a local release binary reporting perf-sentinel
+# 0.34.1. The lab ran with a local, uncommitted image pin in its Hub manifest.
+v0.8.4	9e37063	2026-10-27	PASS

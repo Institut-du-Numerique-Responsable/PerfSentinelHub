@@ -191,7 +191,7 @@ public static partial class MetricsEndpoint
         // scrape gap instead.
         Counter(text, "perf_sentinel_hub_source_missed_findings_total",
             "Findings that left this daemon's ring between two polls before the Hub read them, since the "
-            + "Hub started. Counted only for a daemon on perf-sentinel 0.31.2 or later that does not push.");
+            + "Hub started. Counted only for a daemon on perf-sentinel 0.31.2 or later whose pushes do not reach the Hub.");
         foreach (var (id, _, _) in daemons)
             Line(text, "perf_sentinel_hub_source_missed_findings_total", Label(id), rings.Missed(id));
 

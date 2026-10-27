@@ -265,6 +265,13 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         {
             throw new DaemonTimeoutException(exception);
         }
+        // A body cut mid-read surfaces as an IOException, not the HttpRequestException
+        // every caller files as a network error: one daemon failure, one type. The
+        // size cap is an IOException of the Hub's own and keeps its meaning.
+        catch (IOException exception) when (exception is not ResponseTooLargeException)
+        {
+            throw new HttpRequestException(exception.Message, exception);
+        }
     }
 
     // The path stays relative and the base keeps its trailing slash: a rooted path would discard

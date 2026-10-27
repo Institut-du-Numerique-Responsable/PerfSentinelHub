@@ -264,26 +264,37 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
 
         if (!fromPoll)
+        {
             await RecordImportAsync(connection, transaction, source.SourceId, observedAtMs, cancellationToken);
+            // A batch with no accepted finding delivered none of what a poll may miss.
+            if (batch.Findings.Count > 0)
+                await RecordImportAsync(
+                    connection, transaction, source.SourceId, observedAtMs, cancellationToken,
+                    "source_finding_imports");
+        }
 
         await transaction.CommitAsync(cancellationToken);
     }
 
-    /// <summary>When this source last pushed, findings or incidents alike.</summary>
+    /// <summary>
+    ///     When this source last pushed: findings or incidents alike in source_imports,
+    ///     findings alone in source_finding_imports. The table is always a constant.
+    /// </summary>
     private static async Task RecordImportAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         string sourceId,
         long observedAtMs,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string table = "source_imports")
     {
         await using var imported = connection.CreateCommand();
         imported.Transaction = transaction;
-        imported.CommandText = """
-                               INSERT INTO source_imports(source_id, last_import_ms)
-                               VALUES ($source_id, $observed_at)
-                               ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
-                               """;
+        imported.CommandText = $"""
+                                INSERT INTO {table}(source_id, last_import_ms)
+                                VALUES ($source_id, $observed_at)
+                                ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
+                                """;
         imported.Parameters.AddWithValue(SourceIdParameter, sourceId);
         imported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await imported.ExecuteNonQueryAsync(cancellationToken);
@@ -515,6 +526,16 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         while (await reader.ReadAsync(cancellationToken))
             imports[reader.GetString(0)] = reader.GetInt64(1);
         return (states, imports);
+    }
+
+    /// <summary>When this source last pushed findings, or null if it never did.</summary>
+    public async Task<long?> QueryLastFindingsImportAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT last_import_ms FROM source_finding_imports WHERE source_id = $source_id;";
+        command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        return await command.ExecuteScalarAsync(cancellationToken) is long at ? at : null;
     }
 
     private static async Task<Dictionary<string, SourceState>> ReadSourceStatesAsync(

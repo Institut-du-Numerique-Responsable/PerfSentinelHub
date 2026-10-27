@@ -163,6 +163,7 @@ soit la source, et rien d'autre.
 | `endpoint_heartbeats`          | source, service et endpoint                                          | rétention, sur `last_seen_any_ms`          |
 | `source_state`                 | source, la joignabilité vue par le poll                              | rétention, sur `last_attempt_ms`           |
 | `source_imports`               | source, son dernier push                                             | jamais                                     |
+| `source_finding_imports`       | source, son dernier push de findings                                 | jamais                                     |
 | `incidents`                    | incident et source                                                   | rétention, sur `last_seen_ms`              |
 | `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
 | `correlation_episodes`         | épisode et source                                                    | rétention, sur `last_seen_ms`              |

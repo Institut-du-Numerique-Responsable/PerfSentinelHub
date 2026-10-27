@@ -20,6 +20,8 @@ public sealed partial class SourcePoller(
     TimeProvider timeProvider,
     ILogger<SourcePoller> logger)
 {
+    private const long PushFreshnessMs = 2 * 3_600_000;
+
     public async Task<PollResult> PollAsync(
         SourceOptions source,
         CancellationToken cancellationToken)
@@ -48,11 +50,19 @@ public sealed partial class SourcePoller(
                     batch.RejectedCount,
                     batch.RejectedCount + batch.Findings.Count);
             var isPossiblyTruncated = batch.Findings.Count + batch.RejectedCount == DaemonClient.FindingsLimit;
-            if (isPossiblyTruncated)
+            // After the findings: a config read only when a warning hangs on it, and
+            // never between the status and the findings it measured. A daemon that
+            // pushes delivered to the Hub what a capped or outrun poll missed. The
+            // config reports the push since perf-sentinel 0.31.2, the release that
+            // added findings_stored_total: an older daemon is not asked.
+            var exportsToHub = status.FindingsStoredTotal is not null && (isPossiblyTruncated || missedCandidate > 0)
+                ? await ExportsToHubAsync(source, cancellationToken)
+                : null;
+            var pushReachesHub = exportsToHub is true &&
+                                 await PushLandedLatelyAsync(source, observedAtMs, cancellationToken);
+            if (isPossiblyTruncated && !pushReachesHub)
                 LogPossiblyTruncated(logger, source.Id);
-            // After the findings: a config read only for a candidate, and never
-            // between the status and the findings it measured.
-            var missed = await RecordMissedAsync(source, missedCandidate, cancellationToken);
+            var missed = RecordMissed(source, missedCandidate, exportsToHub, pushReachesHub);
             // Its own failures, filed in incident_reads and never in
             // source_state: see IncidentReader.
             var incidentCount = await incidents.ReadAsync(source, observedAtMs, cancellationToken);
@@ -80,17 +90,36 @@ public sealed partial class SourcePoller(
         }
     }
 
-    private async Task<long?> RecordMissedAsync(
+    // The config says the export is on, not that its pushes land here. A finding
+    // that keeps recurring comes back by push within the hour, and a ring that
+    // fills or overflows is fed by recurring ones, so a working push landed within
+    // two. A ring of findings that all went quiet pushes nothing and errs toward
+    // the warning. Only a findings push counts: an incident push delivers none.
+    // A failed read errs the same way: it only decides a warning, never the poll.
+    private async Task<bool> PushLandedLatelyAsync(
         SourceOptions source,
-        long? candidate,
+        long observedAtMs,
         CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await database.QueryLastFindingsImportAsync(source.Id, cancellationToken) is { } lastImportMs &&
+                   observedAtMs - lastImportMs <= PushFreshnessMs;
+        }
+        catch (SqliteException)
+        {
+            return false;
+        }
+    }
+
+    private long? RecordMissed(SourceOptions source, long? candidate, bool? exportsToHub, bool pushReachesHub)
     {
         if (candidate is not > 0)
             return candidate;
-        // A daemon that pushes delivered them to the Hub. An unread config counts
-        // as pushing: a missed count the Hub cannot back would send the operator
-        // after a setting that may be fine.
-        if (await ExportsToHubAsync(source, cancellationToken) is not false)
+        // An unread config counts as pushing: a missed count the Hub cannot back
+        // would send the operator after a setting that may be fine. A confirmed
+        // export whose pushes do not land here delivered nothing, so it counts.
+        if (exportsToHub is null || pushReachesHub)
             return 0;
         rings.Record(source.Id, candidate.Value);
         LogMissedFindings(logger, source.Id, candidate.Value);
@@ -154,7 +183,8 @@ public sealed partial class SourcePoller(
         1104,
         LogLevel.Warning,
         "Source {SourceId}: {Missed} findings left the daemon's ring between two polls before the Hub read them; "
-        + "raise [daemon] max_retained_findings, shorten Hub:PollInterval, or turn on [daemon.hub_export].")]
+        + "raise [daemon] max_retained_findings, shorten Hub:PollInterval, or turn on [daemon.hub_export] "
+        + "and check that its pushes reach this Hub.")]
     private static partial void LogMissedFindings(ILogger logger, string sourceId, long missed);
 
     [LoggerMessage(1103, LogLevel.Warning, "Source {SourceId} poll failed: {ErrorCode}")]
