@@ -11,7 +11,7 @@ quand leur dernière observation est plus ancienne que la période configurée.
 
 Le daemon perf-sentinel 0.11.x plafonne `/api/findings` à 1 000 lignes. Le Hub utilise ce
 plafond exact et avertit quand il est atteint, l'instantané du filet pouvant être
-incomplet, sauf si le daemon pousse vers le Hub et qu'une poussée est arrivée dans les deux
+incomplet, sauf si le daemon pousse vers le Hub et qu'une poussée de findings est arrivée dans les deux
 dernières heures (voir DEPLOYMENT-FR.md). Une couverture à fort volume exige donc l'exportateur de push borné.
 
 Les échecs laissent lisibles les findings déjà stockés. La source concernée est marquée

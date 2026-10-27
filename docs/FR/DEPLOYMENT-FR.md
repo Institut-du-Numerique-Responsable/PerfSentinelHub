@@ -53,12 +53,12 @@ courant du tampon du daemon. Ce n'est pas un journal. Ce que le tampon a évinc�
 pendant l'absence du Hub est perdu, et aucune limite ne le ramène. Un poll qui
 revient pile sur le plafond est journalisé comme possiblement tronqué (événement 1102), parce
 que l'instantané peut être en deçà de ce que le daemon détient, sauf si l'`api/config`
-du daemon confirme qu'il pousse vers le Hub et que le Hub a reçu de lui une poussée dans
+du daemon confirme qu'il pousse vers le Hub et que le Hub a reçu de lui une poussée de findings dans
 les deux dernières heures : la poussée a alors livré ce que le plafond a coupé. Un daemon
 antérieur à perf-sentinel 0.31.2 n'est pas interrogé sur sa config et garde toujours
 l'avertissement. Face à un daemon en
 perf-sentinel 0.31.2 ou plus récent dont les poussées n'arrivent pas au Hub (export coupé,
-ou actif sans poussée reçue dans les deux dernières heures), le Hub compte aussi les findings
+ou actif sans poussée de findings reçue dans les deux dernières heures), le Hub compte aussi les findings
 sortis de l'anneau entre deux polls avant qu'il les lise : il les journalise
 (événement 1104), publie `perf_sentinel_hub_source_missed_findings_total` et ajoute un
 conseil à ceux du daemon dans l'écran de la flotte. Relevez `[daemon]

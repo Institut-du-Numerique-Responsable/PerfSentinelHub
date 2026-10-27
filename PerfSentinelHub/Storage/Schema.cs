@@ -399,4 +399,15 @@ internal static class Schema
                                 CREATE INDEX IF NOT EXISTS ix_deliveries_disclosure
                                   ON disclosure_deliveries(disclosure_id);
                                 """;
+
+    // When each source last pushed findings, apart from source_imports, which
+    // incident and correlation pushes refresh too: only a findings push delivers
+    // what a capped or outrun poll missed. A table of its own rather than a
+    // column, so an existing database needs no ALTER.
+    internal const string V14 = """
+                                CREATE TABLE IF NOT EXISTS source_finding_imports (
+                                  source_id TEXT PRIMARY KEY,
+                                  last_import_ms INTEGER NOT NULL
+                                );
+                                """;
 }

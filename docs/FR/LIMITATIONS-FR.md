@@ -22,7 +22,7 @@ dernier succès. C'est la conception, pas un défaut.
 Le daemon perf-sentinel 0.11.x plafonne `/api/findings` à 1 000 lignes. Le Hub
 utilise exactement ce plafond et avertit quand il est atteint, parce que
 l'instantané peut être incomplet, sauf si le daemon pousse vers le Hub et
-qu'une poussée est arrivée dans les deux dernières heures (voir DEPLOYMENT-FR.md). Une couverture à fort volume passe par
+qu'une poussée de findings est arrivée dans les deux dernières heures (voir DEPLOYMENT-FR.md). Une couverture à fort volume passe par
 l'exportateur push borné, pas par le poll.
 
 Un poll qui omet un finding ne le résout pas. Le tampon circulaire du daemon

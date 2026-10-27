@@ -15,16 +15,20 @@ All notable changes to PerfSentinelHub are recorded here.
 ### Fixed
 
 - A poll that returns the daemon's cap no longer logs the "possibly truncated" warning (event 1102)
-  when the daemon confirms in `api/config` that it pushes to the Hub and the Hub received a push
-  from it within the last two hours: the push already delivered what the cap cut, so the warning
+  when the daemon confirms in `api/config` that it pushes to the Hub and the Hub received a findings
+  push from it within the last two hours: the push already delivered what the cap cut, so the warning
   came back on every poll for nothing. A daemon whose config cannot be read, or whose pushes do
   not reach this Hub, still gets the warning. The config is read at most once per poll, shared
   with the missed findings count, and never from a daemon before perf-sentinel 0.31.2, which has
   no such field.
 - The missed findings count (event 1104, `perf_sentinel_hub_source_missed_findings_total`) no
-  longer trusts the export flag alone: a daemon whose config says it pushes but from which no push
-  landed in the last two hours is counted, since nothing it pushed reached the Hub. An unreadable
-  config still counts as pushing.
+  longer trusts the export flag alone: a daemon whose config says it pushes but from which no
+  findings push landed in the last two hours is counted, since nothing it pushed reached the Hub.
+  An unreadable config still counts as pushing.
+- Only a findings push counts as landed for both: the new `source_finding_imports` table (schema
+  version 14) records it apart from `source_imports`, which incident and correlation pushes
+  refresh too. After the upgrade the table starts empty, so a daemon at the cap may log 1102 until
+  its next findings push, within the hour.
 - A daemon connection that drops mid-body now fails every daemon read as an
   `HttpRequestException`, like any other network error, instead of a bare `IOException`. Reading
   `api/config` therefore no longer fails the whole poll on such a cut: the config is treated as

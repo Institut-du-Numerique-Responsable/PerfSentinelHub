@@ -264,7 +264,19 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
 
         if (!fromPoll)
+        {
             await RecordImportAsync(connection, transaction, source.SourceId, observedAtMs, cancellationToken);
+            await using var findingsImported = connection.CreateCommand();
+            findingsImported.Transaction = transaction;
+            findingsImported.CommandText = """
+                                           INSERT INTO source_finding_imports(source_id, last_import_ms)
+                                           VALUES ($source_id, $observed_at)
+                                           ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
+                                           """;
+            findingsImported.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
+            findingsImported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+            await findingsImported.ExecuteNonQueryAsync(cancellationToken);
+        }
 
         await transaction.CommitAsync(cancellationToken);
     }
@@ -517,12 +529,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         return (states, imports);
     }
 
-    /// <summary>When this source last pushed, findings or incidents alike, or null if it never did.</summary>
-    public async Task<long?> QueryLastImportAsync(string sourceId, CancellationToken cancellationToken)
+    /// <summary>When this source last pushed findings, or null if it never did.</summary>
+    public async Task<long?> QueryLastFindingsImportAsync(string sourceId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT last_import_ms FROM source_imports WHERE source_id = $source_id;";
+        command.CommandText = "SELECT last_import_ms FROM source_finding_imports WHERE source_id = $source_id;";
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
         return await command.ExecuteScalarAsync(cancellationToken) is long at ? at : null;
     }

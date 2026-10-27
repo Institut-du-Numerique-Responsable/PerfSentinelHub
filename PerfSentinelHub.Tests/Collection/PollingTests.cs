@@ -194,12 +194,15 @@ public sealed class PollingTests : IDisposable
     // A failed or cut config is unread, not a failed poll.
     [InlineData(true, "error", null, true, 1)]
     [InlineData(true, "cut", null, true, 1)]
+    // Only incidents landed lately: none of the findings the cap cut did.
+    [InlineData(true, "true", 0L, true, 1, true)]
     public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated(
         bool reportsTheCounter,
         string config,
         long? importAgeMs,
         bool expectedWarning,
-        int expectedConfigReads)
+        int expectedConfigReads,
+        bool incidentsPush = false)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
@@ -257,11 +260,16 @@ public sealed class PollingTests : IDisposable
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);
         await database.InitializeAsync(cancellationToken);
         if (importAgeMs is { } age)
-            Assert.True(await database.TryUpsertBatchAsync(
-                new SourceSnapshot("capped", "Capped", "test", "0.34.1"),
-                FindingParser.Parse("[]"u8.ToArray()),
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - age,
-                cancellationToken));
+        {
+            var importedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - age;
+            Assert.True(incidentsPush
+                ? await database.TryUpsertPushedIncidentsAsync("capped", [], importedAtMs, cancellationToken)
+                : await database.TryUpsertBatchAsync(
+                    new SourceSnapshot("capped", "Capped", "test", "0.34.1"),
+                    FindingParser.Parse("[]"u8.ToArray()),
+                    importedAtMs,
+                    cancellationToken));
+        }
         var logger = new ListLogger<SourcePoller>();
         var poller = new SourcePoller(
             new DaemonClient(new HttpClient(), Options.Create(options)),

@@ -151,6 +151,7 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `endpoint_heartbeats`          | source, service and endpoint                                   | retention, on `last_seen_any_ms`           |
 | `source_state`                 | source, the poll's reachability                                | retention, on `last_attempt_ms`            |
 | `source_imports`               | source, its last push                                          | never                                      |
+| `source_finding_imports`       | source, its last findings push                                 | never                                      |
 | `incidents`                    | incident and source                                            | retention, on `last_seen_ms`               |
 | `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
 | `correlation_episodes`         | episode and source                                             | retention, on `last_seen_ms`               |

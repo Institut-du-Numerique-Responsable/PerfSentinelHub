@@ -92,13 +92,12 @@ public sealed partial class SourcePoller(
     // that keeps recurring comes back by push within the hour, and a ring that
     // fills or overflows is fed by recurring ones, so a working push landed within
     // two. A ring of findings that all went quiet pushes nothing and errs toward
-    // the warning. Any push counts, incidents included: source_imports does not
-    // tell them apart.
+    // the warning. Only a findings push counts: an incident push delivers none.
     private async Task<bool> PushLandedLatelyAsync(
         SourceOptions source,
         long observedAtMs,
         CancellationToken cancellationToken) =>
-        await database.QueryLastImportAsync(source.Id, cancellationToken) is { } lastImportMs &&
+        await database.QueryLastFindingsImportAsync(source.Id, cancellationToken) is { } lastImportMs &&
         observedAtMs - lastImportMs <= PushFreshnessMs;
 
     private const long PushFreshnessMs = 2 * 3_600_000;
