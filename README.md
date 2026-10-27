@@ -26,7 +26,7 @@ SQLite. Daemons push their findings, and the Hub polls them as a fallback. Histo
 
 ## Run locally in five minutes
 
-Requirements: .NET SDK 10.0.402 and a reachable Perf Sentinel daemon.
+Requirements: .NET SDK 10.0.403 and a reachable Perf Sentinel daemon.
 
 ```bash
 Hub__DatabasePath=/tmp/perf-sentinel-hub.db \
