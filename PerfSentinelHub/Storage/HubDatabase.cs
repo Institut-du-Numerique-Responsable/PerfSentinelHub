@@ -517,6 +517,16 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         return (states, imports);
     }
 
+    /// <summary>When this source last pushed, findings or incidents alike, or null if it never did.</summary>
+    public async Task<long?> QueryLastImportAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT last_import_ms FROM source_imports WHERE source_id = $source_id;";
+        command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        return await command.ExecuteScalarAsync(cancellationToken) is long at ? at : null;
+    }
+
     private static async Task<Dictionary<string, SourceState>> ReadSourceStatesAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)

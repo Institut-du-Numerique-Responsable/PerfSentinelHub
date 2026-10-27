@@ -50,12 +50,13 @@ public sealed partial class SourcePoller(
             var isPossiblyTruncated = batch.Findings.Count + batch.RejectedCount == DaemonClient.FindingsLimit;
             // After the findings: a config read only when a warning hangs on it, and
             // never between the status and the findings it measured. A daemon that
-            // pushes delivered to the Hub what a capped or outrun poll missed.
-            var exportsToHub = isPossiblyTruncated || missedCandidate > 0
+            // pushes delivered to the Hub what a capped or outrun poll missed. The
+            // config reports the push since perf-sentinel 0.31.2, the release that
+            // added findings_stored_total: an older daemon is not asked.
+            var exportsToHub = status.FindingsStoredTotal is not null && (isPossiblyTruncated || missedCandidate > 0)
                 ? await ExportsToHubAsync(source, cancellationToken)
                 : null;
-            // Only a confirmed push silences it: daemons before 0.31.2 have no config to read.
-            if (isPossiblyTruncated && exportsToHub is not true)
+            if (isPossiblyTruncated && !await PushReachesHubAsync(source, exportsToHub, observedAtMs, cancellationToken))
                 LogPossiblyTruncated(logger, source.Id);
             var missed = RecordMissed(source, missedCandidate, exportsToHub);
             // Its own failures, filed in incident_reads and never in
@@ -85,6 +86,21 @@ public sealed partial class SourcePoller(
         }
     }
 
+    // Only a confirmed push that this Hub received lately silences the truncation
+    // warning: the config says the export is on, not that its pushes land here.
+    // The daemon refreshes a still-active finding at most once an hour, and a ring
+    // at the cap holds active ones, so a working push lands within two.
+    private async Task<bool> PushReachesHubAsync(
+        SourceOptions source,
+        bool? exportsToHub,
+        long observedAtMs,
+        CancellationToken cancellationToken) =>
+        exportsToHub is true &&
+        await database.QueryLastImportAsync(source.Id, cancellationToken) is { } lastImportMs &&
+        observedAtMs - lastImportMs <= PushFreshnessMs;
+
+    private const long PushFreshnessMs = 2 * 3_600_000;
+
     private long? RecordMissed(SourceOptions source, long? candidate, bool? exportsToHub)
     {
         if (candidate is not > 0)
@@ -111,7 +127,8 @@ public sealed partial class SourcePoller(
                 ? enabled.GetBoolean()
                 : null;
         }
-        catch (Exception exception) when (exception is HttpRequestException or JsonException
+        // IOException: a body cut mid-read, which HttpRequestException does not cover.
+        catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException
                                               or DaemonTimeoutException or ResponseTooLargeException)
         {
             return null;

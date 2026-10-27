@@ -15,10 +15,14 @@ All notable changes to PerfSentinelHub are recorded here.
 ### Fixed
 
 - A poll that returns the daemon's cap no longer logs the "possibly truncated" warning (event 1102)
-  when the daemon confirms in `api/config` that it pushes to the Hub: the push already delivered
-  what the cap cut, so the warning came back on every poll for nothing. A daemon whose config
-  cannot be read still gets the warning. The config is read at most once per poll, shared with
-  the missed findings count.
+  when the daemon confirms in `api/config` that it pushes to the Hub and the Hub received a push
+  from it within the last two hours: the push already delivered what the cap cut, so the warning
+  came back on every poll for nothing. A daemon whose config cannot be read, or whose pushes do
+  not reach this Hub, still gets the warning. The config is read at most once per poll, shared
+  with the missed findings count, and never from a daemon before perf-sentinel 0.31.2, which has
+  no such field.
+- Reading a daemon's `api/config` no longer fails the whole poll when the connection drops
+  mid-body. The config is then treated as unread, as for any other read error.
 
 ## [0.8.3] - 2026-10-26
 

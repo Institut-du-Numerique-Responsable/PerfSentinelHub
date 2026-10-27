@@ -51,7 +51,9 @@ contents of the daemon's buffer. It is not a journal. Whatever the buffer
 evicted while the Hub was away is gone, and no limit brings it back. A poll
 that returns exactly the cap is logged as possibly truncated (event 1102), because the
 snapshot may be short of what the daemon holds, unless the daemon's `api/config`
-confirms that it pushes to the Hub, which then received what the cap cut. Against a daemon on perf-sentinel
+confirms that it pushes to the Hub and the Hub received a push from it within the
+last two hours: the push then delivered what the cap cut. A daemon before
+perf-sentinel 0.31.2 is not asked for its config and always gets the warning. Against a daemon on perf-sentinel
 0.31.2 or later that does not push, the Hub also counts the findings that left the
 ring between two polls before it read them: it logs them (event 1104), publishes
 `perf_sentinel_hub_source_missed_findings_total` and adds a hint to the daemon's own

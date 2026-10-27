@@ -181,14 +181,25 @@ public sealed class PollingTests : IDisposable
     }
 
     [Theory]
-    // A daemon without /api/config, before 0.31.2: nothing confirms a push.
-    [InlineData(null, true)]
-    [InlineData(false, true)]
+    // A daemon before 0.31.2 reports no counter and is not asked for a config.
+    [InlineData(false, "true", 0L, true, 0)]
+    // The counter but no config: nothing confirms a push.
+    [InlineData(true, "missing", null, true, 1)]
+    [InlineData(true, "false", null, true, 1)]
     // The daemon pushes to the Hub, which received what the cap cut.
-    [InlineData(true, false)]
+    [InlineData(true, "true", 0L, false, 1)]
+    // The export is on but its pushes do not land here: never, or not lately.
+    [InlineData(true, "true", null, true, 1)]
+    [InlineData(true, "true", 3 * 3_600_000L, true, 1)]
+    // A failed or cut config is unread, not a failed poll.
+    [InlineData(true, "error", null, true, 1)]
+    [InlineData(true, "cut", null, true, 1)]
     public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated(
-        bool? exportsToTheHub,
-        bool expectedWarning)
+        bool reportsTheCounter,
+        string config,
+        long? importAgeMs,
+        bool expectedWarning,
+        int expectedConfigReads)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
@@ -197,20 +208,60 @@ public sealed class PollingTests : IDisposable
         var finding = fixture.RootElement[0].GetRawText();
         var payload = Encoding.UTF8.GetBytes(
             $"[{string.Join(',', Enumerable.Repeat(finding, 1000))}]");
+        var configReads = 0;
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
             if (context.Request.Path == "/api/status")
-                await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
+            {
+                await context.Response.WriteAsync(
+                    reportsTheCounter
+                        ? "{\"version\":\"0.34.1\",\"uptime_seconds\":60,\"stored_findings\":1000,"
+                          + "\"max_retained_findings\":1000,\"findings_stored_total\":1000}"
+                        : "{\"version\":\"0.11.2\"}",
+                    cancellationToken);
+            }
             else if (context.Request.Path == "/api/findings")
+            {
                 await context.Response.Body.WriteAsync(payload, cancellationToken);
-            else if (context.Request.Path == "/api/config" && exportsToTheHub is { } exports)
-                await context.Response.WriteAsJsonAsync(new { hub_export_enabled = exports }, cancellationToken);
+            }
+            else if (context.Request.Path == "/api/config")
+            {
+                Interlocked.Increment(ref configReads);
+                switch (config)
+                {
+                    case "true" or "false":
+                        await context.Response.WriteAsync(
+                            $"{{\"hub_export_enabled\":{config}}}",
+                            cancellationToken);
+                        break;
+                    case "error":
+                        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                        break;
+                    case "cut":
+                        context.Response.ContentLength = 64;
+                        await context.Response.WriteAsync("{\"hub", cancellationToken);
+                        await context.Response.Body.FlushAsync(cancellationToken);
+                        context.Abort();
+                        break;
+                    default:
+                        context.Response.StatusCode = StatusCodes.Status404NotFound;
+                        break;
+                }
+            }
             else
+            {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
+            }
         }, cancellationToken);
         var options = new HubOptions { DatabasePath = _databasePath };
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);
         await database.InitializeAsync(cancellationToken);
+        if (importAgeMs is { } age)
+            Assert.True(await database.TryUpsertBatchAsync(
+                new SourceSnapshot("capped", "Capped", "test", "0.34.1"),
+                FindingParser.Parse("[]"u8.ToArray()),
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - age,
+                cancellationToken));
         var logger = new ListLogger<SourcePoller>();
         var poller = new SourcePoller(
             new DaemonClient(new HttpClient(), Options.Create(options)),
@@ -239,6 +290,82 @@ public sealed class PollingTests : IDisposable
         Assert.Equal(
             expectedWarning,
             logger.Messages.Any(message => message.Contains("possibly truncated", StringComparison.Ordinal)));
+        Assert.Equal(expectedConfigReads, configReads);
+    }
+
+    [Fact]
+    public async Task Poll_reads_the_config_once_for_both_warnings()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
+            FixturePath,
+            cancellationToken));
+        var finding = fixture.RootElement[0].GetRawText();
+        var capped = Encoding.UTF8.GetBytes(
+            $"[{string.Join(',', Enumerable.Repeat(finding, 1000))}]");
+        // 400 findings went in between the polls and the ring holds 100: the second
+        // poll finds 300 gone and, the fake answering the cap, hits it as well.
+        var totals = new Queue<long>([1000, 1400]);
+        var configReads = 0;
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            if (context.Request.Path == "/api/status")
+            {
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    version = "0.34.1",
+                    uptime_seconds = 60,
+                    stored_findings = 100,
+                    max_retained_findings = 100,
+                    findings_stored_total = totals.Dequeue()
+                }, cancellationToken);
+            }
+            else if (context.Request.Path == "/api/config")
+            {
+                Interlocked.Increment(ref configReads);
+                await context.Response.WriteAsJsonAsync(new { hub_export_enabled = false }, cancellationToken);
+            }
+            else if (context.Request.Path == "/api/findings")
+            {
+                await context.Response.Body.WriteAsync(capped, cancellationToken);
+            }
+            else
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+            }
+        }, cancellationToken);
+        var options = new HubOptions { DatabasePath = _databasePath };
+        var database = new HubDatabase(Options.Create(options), TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        var client = new DaemonClient(new HttpClient(), Options.Create(options));
+        var logger = new ListLogger<SourcePoller>();
+        var poller = new SourcePoller(
+            client,
+            database,
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new RingWatch(),
+            TimeProvider.System,
+            logger);
+        var source = new SourceOptions
+        {
+            Id = "both",
+            Name = "Both",
+            Environment = "test",
+            BaseUrl = daemon.BaseUrl
+        };
+        await poller.PollAsync(source, cancellationToken);
+        var readsBefore = configReads;
+        var logged = logger.Messages.Count;
+
+        var second = await poller.PollAsync(source, cancellationToken);
+
+        var messages = logger.Messages.Skip(logged).ToList();
+        Assert.True(second.IsPossiblyTruncated);
+        Assert.Equal(300L, second.MissedFindings);
+        Assert.Contains(messages, message => message.Contains("possibly truncated", StringComparison.Ordinal));
+        Assert.Contains(messages, message => message.Contains("left the daemon's ring", StringComparison.Ordinal));
+        Assert.Equal(1, configReads - readsBefore);
     }
 
     [Theory]
