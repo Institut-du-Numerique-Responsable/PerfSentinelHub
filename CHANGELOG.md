@@ -2,6 +2,22 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.35.0` as its analysis engine, repinned by digest from
+  `0.34.1`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.34.1` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. The engine's one output change is its SARIF,
+  valid against the SARIF 2.1.0 schema again: the service and endpoint move under
+  `result.locations[0].logicalLocations` and the suggested fix to
+  `result.properties.suggestedFix`. The Hub asks the engine for JSON and reads no SARIF, so a
+  backend analysis gives the same findings, signatures and energy figures as on `0.34.1`, and
+  neither the daemon wire format nor the findings JSON changes. The rest of the engine release
+  is documentation and its GitLab and Jenkins CI templates, which the Hub does not use.
+
 ## [0.8.4] - 2026-10-27
 
 ### Changed
