@@ -269,7 +269,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             // A batch with no accepted finding delivered none of what a poll may miss.
             if (batch.Findings.Count > 0)
                 await RecordImportAsync(
-                    connection, transaction, source.SourceId, observedAtMs, cancellationToken, "source_finding_imports");
+                    connection, transaction, source.SourceId, observedAtMs, cancellationToken,
+                    "source_finding_imports");
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -290,10 +291,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         await using var imported = connection.CreateCommand();
         imported.Transaction = transaction;
         imported.CommandText = $"""
-                               INSERT INTO {table}(source_id, last_import_ms)
-                               VALUES ($source_id, $observed_at)
-                               ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
-                               """;
+                                INSERT INTO {table}(source_id, last_import_ms)
+                                VALUES ($source_id, $observed_at)
+                                ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
+                                """;
         imported.Parameters.AddWithValue(SourceIdParameter, sourceId);
         imported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
         await imported.ExecuteNonQueryAsync(cancellationToken);

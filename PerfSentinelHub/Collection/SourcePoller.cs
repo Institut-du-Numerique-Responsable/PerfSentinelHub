@@ -20,6 +20,8 @@ public sealed partial class SourcePoller(
     TimeProvider timeProvider,
     ILogger<SourcePoller> logger)
 {
+    private const long PushFreshnessMs = 2 * 3_600_000;
+
     public async Task<PollResult> PollAsync(
         SourceOptions source,
         CancellationToken cancellationToken)
@@ -109,8 +111,6 @@ public sealed partial class SourcePoller(
             return false;
         }
     }
-
-    private const long PushFreshnessMs = 2 * 3_600_000;
 
     private long? RecordMissed(SourceOptions source, long? candidate, bool? exportsToHub, bool pushReachesHub)
     {

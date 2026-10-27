@@ -274,6 +274,7 @@ public sealed class PollingTests : IDisposable
                     importedAtMs,
                     cancellationToken));
         }
+
         if (push == "unreadable")
         {
             await using var connection = await database.OpenConnectionAsync(cancellationToken);
@@ -281,6 +282,7 @@ public sealed class PollingTests : IDisposable
             drop.CommandText = "DROP TABLE source_finding_imports;";
             await drop.ExecuteNonQueryAsync(cancellationToken);
         }
+
         var logger = new ListLogger<SourcePoller>();
         var poller = new SourcePoller(
             new DaemonClient(new HttpClient(), Options.Create(options)),
