@@ -56,9 +56,11 @@ public sealed partial class SourcePoller(
             var exportsToHub = status.FindingsStoredTotal is not null && (isPossiblyTruncated || missedCandidate > 0)
                 ? await ExportsToHubAsync(source, cancellationToken)
                 : null;
-            if (isPossiblyTruncated && !await PushReachesHubAsync(source, exportsToHub, observedAtMs, cancellationToken))
+            var pushReachesHub = exportsToHub is true &&
+                                 await PushLandedLatelyAsync(source, observedAtMs, cancellationToken);
+            if (isPossiblyTruncated && !pushReachesHub)
                 LogPossiblyTruncated(logger, source.Id);
-            var missed = RecordMissed(source, missedCandidate, exportsToHub);
+            var missed = RecordMissed(source, missedCandidate, exportsToHub, pushReachesHub);
             // Its own failures, filed in incident_reads and never in
             // source_state: see IncidentReader.
             var incidentCount = await incidents.ReadAsync(source, observedAtMs, cancellationToken);
@@ -86,28 +88,29 @@ public sealed partial class SourcePoller(
         }
     }
 
-    // Only a confirmed push that this Hub received lately silences the truncation
-    // warning: the config says the export is on, not that its pushes land here.
-    // The daemon refreshes a still-active finding at most once an hour, and a ring
-    // at the cap holds active ones, so a working push lands within two.
-    private async Task<bool> PushReachesHubAsync(
+    // The config says the export is on, not that its pushes land here. A finding
+    // that keeps recurring comes back by push within the hour, and a ring that
+    // fills or overflows is fed by recurring ones, so a working push landed within
+    // two. A ring of findings that all went quiet pushes nothing and errs toward
+    // the warning. Any push counts, incidents included: source_imports does not
+    // tell them apart.
+    private async Task<bool> PushLandedLatelyAsync(
         SourceOptions source,
-        bool? exportsToHub,
         long observedAtMs,
         CancellationToken cancellationToken) =>
-        exportsToHub is true &&
         await database.QueryLastImportAsync(source.Id, cancellationToken) is { } lastImportMs &&
         observedAtMs - lastImportMs <= PushFreshnessMs;
 
     private const long PushFreshnessMs = 2 * 3_600_000;
 
-    private long? RecordMissed(SourceOptions source, long? candidate, bool? exportsToHub)
+    private long? RecordMissed(SourceOptions source, long? candidate, bool? exportsToHub, bool pushReachesHub)
     {
         if (candidate is not > 0)
             return candidate;
         // An unread config counts as pushing: a missed count the Hub cannot back
-        // would send the operator after a setting that may be fine.
-        if (exportsToHub is not false)
+        // would send the operator after a setting that may be fine. A confirmed
+        // export whose pushes do not land here delivered nothing, so it counts.
+        if (exportsToHub is null || pushReachesHub)
             return 0;
         rings.Record(source.Id, candidate.Value);
         LogMissedFindings(logger, source.Id, candidate.Value);

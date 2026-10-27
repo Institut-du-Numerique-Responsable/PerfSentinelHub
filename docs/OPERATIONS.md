@@ -10,8 +10,9 @@ does **not** mean resolved. Only retention removes findings, when their last obs
 is older than the configured period.
 
 The perf-sentinel 0.11.x daemon caps `/api/findings` at 1,000 rows. The Hub uses that
-exact cap and warns whenever it is reached, because the safety-net snapshot may be
-incomplete. High-volume coverage therefore requires the bounded push exporter.
+exact cap and warns when it is reached, because the safety-net snapshot may be
+incomplete, unless the daemon pushes to the Hub and a push landed in the last two hours
+(see DEPLOYMENT.md). High-volume coverage therefore requires the bounded push exporter.
 
 Failures keep previously stored findings readable. The affected source is marked
 unreachable and retried with bounded exponential backoff, and a later success clears that

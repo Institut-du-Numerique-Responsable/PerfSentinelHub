@@ -18,8 +18,9 @@ fault.
 ## What a poll can and cannot tell you
 
 The perf-sentinel 0.11.x daemon caps `/api/findings` at 1,000 rows. The Hub uses
-that exact cap and warns whenever it is reached, because the snapshot may be
-incomplete. High-volume coverage needs the bounded push exporter, not the poll.
+that exact cap and warns when it is reached, because the snapshot may be
+incomplete, unless the daemon pushes to the Hub and a push landed in the last
+two hours (see DEPLOYMENT.md). High-volume coverage needs the bounded push exporter, not the poll.
 
 A poll that omits a finding does not resolve it. The daemon's ring buffer may
 have evicted it, so missing is not the same as gone. Only retention removes a

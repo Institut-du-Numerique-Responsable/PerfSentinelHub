@@ -370,11 +370,14 @@ public sealed class PollingTests : IDisposable
 
     [Theory]
     // 300 findings went in between the polls and the ring holds 100.
-    [InlineData(false, 200L)]
+    [InlineData(false, false, 200L)]
     // The daemon pushes to the Hub, which received what the poll missed.
-    [InlineData(true, 0L)]
+    [InlineData(true, true, 0L)]
+    // The export is on but no push landed here: nothing was delivered.
+    [InlineData(true, false, 200L)]
     public async Task Poll_counts_the_findings_that_left_the_ring_between_two_polls(
         bool exportsToTheHub,
+        bool pushLanded,
         long expectedMissed)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -412,6 +415,12 @@ public sealed class PollingTests : IDisposable
         var options = new HubOptions { DatabasePath = _databasePath };
         var database = new HubDatabase(Options.Create(options), TimeProvider.System);
         await database.InitializeAsync(cancellationToken);
+        if (pushLanded)
+            Assert.True(await database.TryUpsertBatchAsync(
+                new SourceSnapshot("ring", "Ring", "test", "0.31.2"),
+                FindingParser.Parse("[]"u8.ToArray()),
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                cancellationToken));
         var client = new DaemonClient(new HttpClient(), Options.Create(options));
         var rings = new RingWatch();
         var logger = new ListLogger<SourcePoller>();

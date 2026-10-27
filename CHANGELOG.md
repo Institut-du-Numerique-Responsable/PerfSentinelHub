@@ -21,6 +21,10 @@ All notable changes to PerfSentinelHub are recorded here.
   not reach this Hub, still gets the warning. The config is read at most once per poll, shared
   with the missed findings count, and never from a daemon before perf-sentinel 0.31.2, which has
   no such field.
+- The missed findings count (event 1104, `perf_sentinel_hub_source_missed_findings_total`) no
+  longer trusts the export flag alone: a daemon whose config says it pushes but from which no push
+  landed in the last two hours is counted, since nothing it pushed reached the Hub. An unreadable
+  config still counts as pushing.
 - Reading a daemon's `api/config` no longer fails the whole poll when the connection drops
   mid-body. The config is then treated as unread, as for any other read error.
 

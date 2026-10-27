@@ -54,7 +54,8 @@ snapshot may be short of what the daemon holds, unless the daemon's `api/config`
 confirms that it pushes to the Hub and the Hub received a push from it within the
 last two hours: the push then delivered what the cap cut. A daemon before
 perf-sentinel 0.31.2 is not asked for its config and always gets the warning. Against a daemon on perf-sentinel
-0.31.2 or later that does not push, the Hub also counts the findings that left the
+0.31.2 or later whose pushes do not reach the Hub (export off, or on with no push
+landed in the last two hours), the Hub also counts the findings that left the
 ring between two polls before it read them: it logs them (event 1104), publishes
 `perf_sentinel_hub_source_missed_findings_total` and adds a hint to the daemon's own
 in the fleet screen. Raise `[daemon] max_retained_findings`, shorten
