@@ -2,7 +2,7 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.8.4] - 2026-10-27
 
 ### Changed
 
