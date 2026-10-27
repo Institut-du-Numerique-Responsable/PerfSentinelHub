@@ -84,7 +84,8 @@ public sealed class RingWatch
             "tuning",
             $"The Hub missed {missed} findings from this daemon since the daemon last started: they "
             + "left its ring between two polls before the Hub read them. Raise [daemon] "
-            + "max_retained_findings, shorten Hub:PollInterval, or turn on [daemon.hub_export].");
+            + "max_retained_findings, shorten Hub:PollInterval, or turn on [daemon.hub_export] and check "
+            + "that its pushes reach this Hub.");
     }
 
     private sealed record Reading(long StartedAtMs, long Total);

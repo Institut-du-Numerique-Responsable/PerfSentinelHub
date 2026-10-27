@@ -266,33 +266,31 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         if (!fromPoll)
         {
             await RecordImportAsync(connection, transaction, source.SourceId, observedAtMs, cancellationToken);
-            await using var findingsImported = connection.CreateCommand();
-            findingsImported.Transaction = transaction;
-            findingsImported.CommandText = """
-                                           INSERT INTO source_finding_imports(source_id, last_import_ms)
-                                           VALUES ($source_id, $observed_at)
-                                           ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
-                                           """;
-            findingsImported.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
-            findingsImported.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
-            await findingsImported.ExecuteNonQueryAsync(cancellationToken);
+            // A batch with no accepted finding delivered none of what a poll may miss.
+            if (batch.Findings.Count > 0)
+                await RecordImportAsync(
+                    connection, transaction, source.SourceId, observedAtMs, cancellationToken, "source_finding_imports");
         }
 
         await transaction.CommitAsync(cancellationToken);
     }
 
-    /// <summary>When this source last pushed, findings or incidents alike.</summary>
+    /// <summary>
+    ///     When this source last pushed: findings or incidents alike in source_imports,
+    ///     findings alone in source_finding_imports. The table is always a constant.
+    /// </summary>
     private static async Task RecordImportAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         string sourceId,
         long observedAtMs,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string table = "source_imports")
     {
         await using var imported = connection.CreateCommand();
         imported.Transaction = transaction;
-        imported.CommandText = """
-                               INSERT INTO source_imports(source_id, last_import_ms)
+        imported.CommandText = $"""
+                               INSERT INTO {table}(source_id, last_import_ms)
                                VALUES ($source_id, $observed_at)
                                ON CONFLICT(source_id) DO UPDATE SET last_import_ms = excluded.last_import_ms;
                                """;

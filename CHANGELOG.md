@@ -27,8 +27,10 @@ All notable changes to PerfSentinelHub are recorded here.
   An unreadable config still counts as pushing.
 - Only a findings push counts as landed for both: the new `source_finding_imports` table (schema
   version 14) records it apart from `source_imports`, which incident and correlation pushes
-  refresh too. After the upgrade the table starts empty, so a daemon at the cap may log 1102 until
-  its next findings push, within the hour.
+  refresh too. A pushed batch with no accepted finding does not count either. A failed read of
+  that table counts as no push rather than failing the poll. After the upgrade the table starts empty, so until a pushing daemon's next findings
+  push, within the hour, a capped poll may log 1102 and an overflowing ring may be counted as
+  missed (1104).
 - A daemon connection that drops mid-body now fails every daemon read as an
   `HttpRequestException`, like any other network error, instead of a bare `IOException`. Reading
   `api/config` therefore no longer fails the whole poll on such a cut: the config is treated as

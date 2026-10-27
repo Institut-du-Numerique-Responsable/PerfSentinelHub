@@ -93,12 +93,22 @@ public sealed partial class SourcePoller(
     // fills or overflows is fed by recurring ones, so a working push landed within
     // two. A ring of findings that all went quiet pushes nothing and errs toward
     // the warning. Only a findings push counts: an incident push delivers none.
+    // A failed read errs the same way: it only decides a warning, never the poll.
     private async Task<bool> PushLandedLatelyAsync(
         SourceOptions source,
         long observedAtMs,
-        CancellationToken cancellationToken) =>
-        await database.QueryLastFindingsImportAsync(source.Id, cancellationToken) is { } lastImportMs &&
-        observedAtMs - lastImportMs <= PushFreshnessMs;
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await database.QueryLastFindingsImportAsync(source.Id, cancellationToken) is { } lastImportMs &&
+                   observedAtMs - lastImportMs <= PushFreshnessMs;
+        }
+        catch (SqliteException)
+        {
+            return false;
+        }
+    }
 
     private const long PushFreshnessMs = 2 * 3_600_000;
 
@@ -173,7 +183,8 @@ public sealed partial class SourcePoller(
         1104,
         LogLevel.Warning,
         "Source {SourceId}: {Missed} findings left the daemon's ring between two polls before the Hub read them; "
-        + "raise [daemon] max_retained_findings, shorten Hub:PollInterval, or turn on [daemon.hub_export].")]
+        + "raise [daemon] max_retained_findings, shorten Hub:PollInterval, or turn on [daemon.hub_export] "
+        + "and check that its pushes reach this Hub.")]
     private static partial void LogMissedFindings(ILogger logger, string sourceId, long missed);
 
     [LoggerMessage(1103, LogLevel.Warning, "Source {SourceId} poll failed: {ErrorCode}")]

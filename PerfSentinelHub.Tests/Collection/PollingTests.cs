@@ -194,15 +194,19 @@ public sealed class PollingTests : IDisposable
     // A failed or cut config is unread, not a failed poll.
     [InlineData(true, "error", null, true, 1)]
     [InlineData(true, "cut", null, true, 1)]
-    // Only incidents landed lately: none of the findings the cap cut did.
-    [InlineData(true, "true", 0L, true, 1, true)]
+    // Only incidents, or a batch with no finding, landed lately: none of the
+    // findings the cap cut did.
+    [InlineData(true, "true", 0L, true, 1, "incidents")]
+    [InlineData(true, "true", 0L, true, 1, "empty")]
+    // A failed freshness read decides only the warning, never the poll.
+    [InlineData(true, "true", null, true, 1, "unreadable")]
     public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated(
         bool reportsTheCounter,
         string config,
         long? importAgeMs,
         bool expectedWarning,
         int expectedConfigReads,
-        bool incidentsPush = false)
+        string push = "findings")
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
@@ -262,13 +266,20 @@ public sealed class PollingTests : IDisposable
         if (importAgeMs is { } age)
         {
             var importedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - age;
-            Assert.True(incidentsPush
+            Assert.True(push == "incidents"
                 ? await database.TryUpsertPushedIncidentsAsync("capped", [], importedAtMs, cancellationToken)
                 : await database.TryUpsertBatchAsync(
                     new SourceSnapshot("capped", "Capped", "test", "0.34.1"),
-                    FindingParser.Parse("[]"u8.ToArray()),
+                    FindingParser.Parse(Encoding.UTF8.GetBytes(push == "empty" ? "[]" : $"[{finding}]")),
                     importedAtMs,
                     cancellationToken));
+        }
+        if (push == "unreadable")
+        {
+            await using var connection = await database.OpenConnectionAsync(cancellationToken);
+            await using var drop = connection.CreateCommand();
+            drop.CommandText = "DROP TABLE source_finding_imports;";
+            await drop.ExecuteNonQueryAsync(cancellationToken);
         }
         var logger = new ListLogger<SourcePoller>();
         var poller = new SourcePoller(
@@ -426,7 +437,7 @@ public sealed class PollingTests : IDisposable
         if (pushLanded)
             Assert.True(await database.TryUpsertBatchAsync(
                 new SourceSnapshot("ring", "Ring", "test", "0.31.2"),
-                FindingParser.Parse("[]"u8.ToArray()),
+                FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken)),
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 cancellationToken));
         var client = new DaemonClient(new HttpClient(), Options.Create(options));
