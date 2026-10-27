@@ -12,6 +12,14 @@ All notable changes to PerfSentinelHub are recorded here.
   moves `Microsoft.DotNet.ILCompiler` and `Microsoft.NET.ILLink.Tasks` to `10.0.14`.
   `config/supply-chain.json` carries the new SDK archive, digests and package hashes.
 
+### Fixed
+
+- A poll that returns the daemon's cap no longer logs the "possibly truncated" warning (event 1102)
+  when the daemon confirms in `api/config` that it pushes to the Hub: the push already delivered
+  what the cap cut, so the warning came back on every poll for nothing. A daemon whose config
+  cannot be read still gets the warning. The config is read at most once per poll, shared with
+  the missed findings count.
+
 ## [0.8.3] - 2026-10-26
 
 ### Fixed

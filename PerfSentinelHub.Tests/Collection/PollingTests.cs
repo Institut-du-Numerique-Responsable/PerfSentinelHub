@@ -180,8 +180,15 @@ public sealed class PollingTests : IDisposable
         Assert.Equal(AckReadStates.Ok, read.State);
     }
 
-    [Fact]
-    public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated()
+    [Theory]
+    // A daemon without /api/config, before 0.31.2: nothing confirms a push.
+    [InlineData(null, true)]
+    [InlineData(false, true)]
+    // The daemon pushes to the Hub, which received what the cap cut.
+    [InlineData(true, false)]
+    public async Task Poll_reports_a_cap_sized_snapshot_as_possibly_truncated(
+        bool? exportsToTheHub,
+        bool expectedWarning)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         using var fixture = JsonDocument.Parse(await File.ReadAllBytesAsync(
@@ -196,6 +203,8 @@ public sealed class PollingTests : IDisposable
                 await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
             else if (context.Request.Path == "/api/findings")
                 await context.Response.Body.WriteAsync(payload, cancellationToken);
+            else if (context.Request.Path == "/api/config" && exportsToTheHub is { } exports)
+                await context.Response.WriteAsJsonAsync(new { hub_export_enabled = exports }, cancellationToken);
             else
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
         }, cancellationToken);
@@ -227,7 +236,9 @@ public sealed class PollingTests : IDisposable
         }, cancellationToken);
 
         Assert.True(result.IsPossiblyTruncated);
-        Assert.Contains(logger.Messages, message => message.Contains("possibly truncated", StringComparison.Ordinal));
+        Assert.Equal(
+            expectedWarning,
+            logger.Messages.Any(message => message.Contains("possibly truncated", StringComparison.Ordinal)));
     }
 
     [Theory]

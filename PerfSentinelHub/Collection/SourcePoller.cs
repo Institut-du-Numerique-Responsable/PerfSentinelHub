@@ -48,11 +48,16 @@ public sealed partial class SourcePoller(
                     batch.RejectedCount,
                     batch.RejectedCount + batch.Findings.Count);
             var isPossiblyTruncated = batch.Findings.Count + batch.RejectedCount == DaemonClient.FindingsLimit;
-            if (isPossiblyTruncated)
+            // After the findings: a config read only when a warning hangs on it, and
+            // never between the status and the findings it measured. A daemon that
+            // pushes delivered to the Hub what a capped or outrun poll missed.
+            var exportsToHub = isPossiblyTruncated || missedCandidate > 0
+                ? await ExportsToHubAsync(source, cancellationToken)
+                : null;
+            // Only a confirmed push silences it: daemons before 0.31.2 have no config to read.
+            if (isPossiblyTruncated && exportsToHub is not true)
                 LogPossiblyTruncated(logger, source.Id);
-            // After the findings: a config read only for a candidate, and never
-            // between the status and the findings it measured.
-            var missed = await RecordMissedAsync(source, missedCandidate, cancellationToken);
+            var missed = RecordMissed(source, missedCandidate, exportsToHub);
             // Its own failures, filed in incident_reads and never in
             // source_state: see IncidentReader.
             var incidentCount = await incidents.ReadAsync(source, observedAtMs, cancellationToken);
@@ -80,17 +85,13 @@ public sealed partial class SourcePoller(
         }
     }
 
-    private async Task<long?> RecordMissedAsync(
-        SourceOptions source,
-        long? candidate,
-        CancellationToken cancellationToken)
+    private long? RecordMissed(SourceOptions source, long? candidate, bool? exportsToHub)
     {
         if (candidate is not > 0)
             return candidate;
-        // A daemon that pushes delivered them to the Hub. An unread config counts
-        // as pushing: a missed count the Hub cannot back would send the operator
-        // after a setting that may be fine.
-        if (await ExportsToHubAsync(source, cancellationToken) is not false)
+        // An unread config counts as pushing: a missed count the Hub cannot back
+        // would send the operator after a setting that may be fine.
+        if (exportsToHub is not false)
             return 0;
         rings.Record(source.Id, candidate.Value);
         LogMissedFindings(logger, source.Id, candidate.Value);
