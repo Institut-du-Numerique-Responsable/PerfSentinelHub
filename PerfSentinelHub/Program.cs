@@ -84,13 +84,13 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Engine
 builder.Services.AddSingleton<ImportGate>();
 builder.Services.AddSingleton<ImportMetrics>();
 builder.Services.AddSingleton<FindingMetrics>();
-builder.Services.AddSingleton<ImportAdmission>();
+builder.Services.AddSingleton<ImportAdmission<ImportMetrics>>();
 builder.Services.AddSingleton<IncidentImportMetrics>();
-builder.Services.AddSingleton<IncidentImportAdmission>();
+builder.Services.AddSingleton<ImportAdmission<IncidentImportMetrics>>();
 builder.Services.AddSingleton<CorrelationImportMetrics>();
-builder.Services.AddSingleton<CorrelationImportAdmission>();
+builder.Services.AddSingleton<ImportAdmission<CorrelationImportMetrics>>();
 builder.Services.AddSingleton<DetectionImportMetrics>();
-builder.Services.AddSingleton<DetectionImportAdmission>();
+builder.Services.AddSingleton<ImportAdmission<DetectionImportMetrics>>();
 builder.Services.AddSingleton<DisclosureImportGate>();
 builder.Services.AddSingleton<ShareGate>();
 builder.Services.AddSingleton<DisclosureMetrics>();
