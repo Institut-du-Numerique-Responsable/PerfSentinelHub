@@ -271,15 +271,19 @@ public sealed partial class HubDatabase
     ///     Folds the detection volume into a windowed page, per source and per finding. A
     ///     source that counted a finding without holding a copy joins its sources, named by the
     ///     configuration, and with access patterns only where the caller holds the whole source.
+    ///     An unwindowed read or an empty page has nothing to fold.
     /// </summary>
     private async Task AttachVolumesAsync(
         SqliteConnection connection,
         List<StoredFinding> rows,
         FindingQuery query,
-        VolumeWindow window,
+        VolumeWindow? window,
         int today,
         CancellationToken cancellationToken)
     {
+        if (window is null || rows.Count == 0)
+            return;
+
         await using var command = connection.CreateCommand();
         command.CommandText = DetectionVolumeRead;
         command.Parameters.AddWithValue("$signatures", JsonArray([.. rows.Select(row => row.Signature)]));

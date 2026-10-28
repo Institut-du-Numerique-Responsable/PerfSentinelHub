@@ -587,15 +587,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
         AddFilter(where, parameters, "signature", SignatureParameter, query.Signature);
         var windowed = AddWindow(parameters, query);
-        // Only a windowed read has volumes to count, and the window reaches back by the retention.
-        VolumeWindow? volumeWindow = null;
-        var today = 0;
-        if (windowed)
-        {
-            (volumeWindow, today) = VolumeWindowOf(query);
-            parameters.Add(("$vol_from_day", volumeWindow.FromDay));
-            parameters.Add(("$vol_to_day", volumeWindow.ToDay));
-        }
+        var (volumeWindow, today) = AddVolumeWindow(parameters, query, windowed);
 
         if (query.Grouping is not null)
             parameters.Add(("$grouping", query.Grouping));
@@ -651,9 +643,23 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
 
         // The page's reader is drained, and SQLite runs the next statement on the same connection.
-        if (volumeWindow is not null && rows.Count > 0)
-            await AttachVolumesAsync(connection, rows, query, volumeWindow, today, cancellationToken);
+        await AttachVolumesAsync(connection, rows, query, volumeWindow, today, cancellationToken);
         return rows;
+    }
+
+    // Only a windowed read has volumes to count, and the window reaches back by the retention.
+    private (VolumeWindow? Window, int Today) AddVolumeWindow(
+        List<(string Name, object Value)> parameters,
+        FindingQuery query,
+        bool windowed)
+    {
+        if (!windowed)
+            return (null, 0);
+
+        var (window, today) = VolumeWindowOf(query);
+        parameters.Add(("$vol_from_day", window.FromDay));
+        parameters.Add(("$vol_to_day", window.ToDay));
+        return (window, today);
     }
 
     // The last five columns of the findings read, null on a source holding no active ack.
