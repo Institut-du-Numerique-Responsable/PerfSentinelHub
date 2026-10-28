@@ -131,14 +131,14 @@ public sealed class FindingIngestionTests : IDisposable
     }
 
     [Fact]
-    public async Task Upsert_honors_the_daemon_reported_first_seen_and_keeps_the_hub_clock_for_last_seen()
+    public async Task Upsert_honors_the_daemon_reported_first_seen_and_last_detection()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var database = CreateDatabase();
         await database.InitializeAsync(cancellationToken);
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
-        // A realistic poll clock: after the fixture's first_seen_ms, so the
-        // daemon-reported birth survives the clamp instead of being cut to it.
+        // A realistic poll clock: after the fixture's first_seen_ms and stored_at_ms,
+        // so the daemon-reported dates survive the clamp instead of being cut to it.
         const long firstObservedAt = 1786190000000;
         const long secondObservedAt = firstObservedAt + 3_600_000;
         var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
@@ -151,13 +151,13 @@ public sealed class FindingIngestionTests : IDisposable
             1786183200000L,
             await ScalarAsync(connection, "SELECT first_seen_ms FROM findings;", cancellationToken));
         Assert.Equal(
-            secondObservedAt,
+            1786183205000L,
             await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
         Assert.Equal(
             1786183200000L,
             await ScalarAsync(connection, "SELECT first_seen_ms FROM finding_sources;", cancellationToken));
         Assert.Equal(
-            secondObservedAt,
+            1786183205000L,
             await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;", cancellationToken));
     }
 
@@ -469,7 +469,7 @@ public sealed class FindingIngestionTests : IDisposable
             Options.Create(new HubOptions { DatabasePath = _databasePath }),
             clock);
         await database.InitializeAsync(cancellationToken);
-        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var batch = await UndatedBatchAsync(cancellationToken);
         var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
         var query = new FindingQuery(null, null, null, 100);
 
@@ -521,7 +521,7 @@ public sealed class FindingIngestionTests : IDisposable
             Options.Create(new HubOptions { DatabasePath = _databasePath }),
             clock);
         await database.InitializeAsync(cancellationToken);
-        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var batch = await UndatedBatchAsync(cancellationToken);
         var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
         await database.UpsertBatchAsync(
             source, batch, clock.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
@@ -560,7 +560,7 @@ public sealed class FindingIngestionTests : IDisposable
             Options.Create(new HubOptions { DatabasePath = _databasePath }),
             clock);
         await database.InitializeAsync(cancellationToken);
-        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var batch = await UndatedBatchAsync(cancellationToken);
         var staging = new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2");
         var fleet = new FindingQuery(null, null, null, 100);
         var scope = fleet with { SourceIds = ["staging-a"] };
@@ -677,6 +677,25 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal(
             $"critical {batch.Findings[0].EnvelopeJson}",
             await SourceCopyAsync(connection, "production-a", cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_pushed_finding_uses_its_stored_at()
+    {
+        const long detectedAtMs = 1786183205000;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+
+        Assert.True(await database.TryUpsertBatchAsync(
+            ProductionA, batch, detectedAtMs + 3_600_000, cancellationToken));
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(detectedAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
+        Assert.Equal(
+            detectedAtMs,
+            await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;", cancellationToken));
     }
 
     [Fact]
@@ -1254,6 +1273,13 @@ public sealed class FindingIngestionTests : IDisposable
             FROM (SELECT * FROM finding_observations ORDER BY day);
             """,
             cancellationToken);
+    }
+
+    // Without its stored_at_ms, each upsert of the fixture finding is a detection at that upsert.
+    private static async Task<ParsedBatch> UndatedBatchAsync(CancellationToken cancellationToken)
+    {
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        return batch with { Findings = [.. batch.Findings.Select(finding => finding with { StoredAtMs = null })] };
     }
 
     private HubDatabase CreateDatabase()

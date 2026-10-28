@@ -540,7 +540,8 @@ public sealed class MetricsEndpointTests : IDisposable
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(
             Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
             TestContext.Current.CancellationToken));
-        return batch.Findings[0];
+        // Undated, so each push's own time stands for the detection.
+        return batch.Findings[0] with { StoredAtMs = null };
     }
 
     // The push path: only TryUpsertBatchAsync records an import.

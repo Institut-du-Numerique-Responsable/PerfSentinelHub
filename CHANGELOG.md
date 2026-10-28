@@ -18,6 +18,16 @@ All notable changes to PerfSentinelHub are recorded here.
   The other engine fix, the expiry hint of `perf-sentinel ack create`, is a CLI message the
   Hub does not use.
 
+### Fixed
+
+- A finding's `last_seen` is now the source daemon's last detection, the envelope's
+  `stored_at_ms` clamped to the Hub's clock, instead of the time of the poll that read it.
+  A daemon keeps a finding in its ring long after it stops detecting it, so every poll moved
+  `last_seen` to the present and a fixed finding stayed `active` for as long as the ring held
+  it. The observation day, the endpoint heartbeat, the grouping and attribute stamps and the
+  push path follow the same time. A producer without `stored_at_ms` keeps the poll time, and
+  a daemon clock running ahead is cut to the Hub's.
+
 ## [0.8.5] - 2026-10-27
 
 ### Changed

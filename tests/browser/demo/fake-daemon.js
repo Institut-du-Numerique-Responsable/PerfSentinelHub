@@ -15,9 +15,9 @@
 // keep the distances the daemon measured.
 //
 // The findings body is slid the same way, and for the same reason. The Hub
-// takes `first_seen_ms` from the envelope and dates `last_seen` by its own
-// clock, so a fixed stamp would print a finding first seen a year before it was
-// last seen, and the ack page prints that pair side by side.
+// takes `first_seen` and `last_seen` from the envelope's `first_seen_ms` and
+// `stored_at_ms`, so a fixed stamp would print every finding as months old and
+// no longer active.
 //
 // The ack listings are captures too, one from a daemon that took an ack at
 // runtime and one from a daemon that loaded a CI baseline holding the same

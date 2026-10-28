@@ -16,4 +16,5 @@ public sealed record ParsedFinding(
     string Confidence,
     int ConfidenceRank,
     long? FirstSeenMs,
-    string? Grouping = null);
+    string? Grouping = null,
+    long? StoredAtMs = null);

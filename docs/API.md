@@ -317,8 +317,13 @@ observation time and to a Unix-ms sanity floor. Neither a daemon clock running a
 seconds-unit bug can distort it, and it falls back to the observation time when a producer
 omits the field.
 
-`last_seen` is deliberately the Hub's own observation clock. Retention, ordering and
-freshness comparisons rely on it, so it never comes from a remote clock.
+`last_seen` is the source daemon's last detection (`stored_at_ms`), clamped to the Hub's
+observation time, and the observation time when a producer omits the field. A finding the
+daemon still holds but no longer detects keeps its `last_seen` across polls and ages into
+`not_observed` or `likely_resolved`. The clamp keeps a daemon clock running ahead from
+holding a finding fresh, so retention, ordering and freshness comparisons never see a
+time past the Hub's own. The observation day and the endpoint heartbeat follow the same
+time.
 
 Read with `environment` or `source_id`, an envelope describes that scope and not the fleet.
 The daemon's document is the copy of the source in scope that saw the finding last, so

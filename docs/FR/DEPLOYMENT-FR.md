@@ -143,7 +143,7 @@ jusqu'à 8 Mio, donc la tâche qui publie les divulgations par cet hôte demande
 ## La CI lit, elle n'alimente pas
 
 Un build produit du SARIF et du JSON, et ni l'un ni l'autre n'a sa place dans
-le Hub. `last_seen` est l'horloge d'observation du Hub, `status` est déduit
+le Hub. `last_seen` est la dernière détection d'un daemon, `status` est déduit
 d'un endpoint qui bat encore, et un build est un tir synthétique sur une
 branche. En importer un rendrait `status` faux et ferait passer les findings
 d'une branche pour ceux de la production. Un job de CI qui veut l'état de la

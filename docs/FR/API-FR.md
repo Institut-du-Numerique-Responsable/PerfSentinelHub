@@ -346,9 +346,13 @@ d'observation du Hub et à un plancher de bon sens en millisecondes Unix. Ni une
 daemon en avance ni un bug d'unité en secondes ne peuvent le fausser, et il retombe sur
 l'heure d'observation quand un producteur omet le champ.
 
-`last_seen` est délibérément l'horloge d'observation du Hub. La rétention, l'ordonnancement
-et les comparaisons de fraîcheur s'appuient dessus, donc il ne vient jamais d'une horloge
-distante.
+`last_seen` est la dernière détection du daemon source (`stored_at_ms`), bornée par l'heure
+d'observation du Hub, et l'heure d'observation quand un producteur omet le champ. Un finding
+que le daemon garde mais ne détecte plus conserve son `last_seen` d'un poll à l'autre et
+vieillit jusqu'à `not_observed` ou `likely_resolved`. La borne empêche une horloge de daemon
+en avance de garder un finding frais, donc la rétention, l'ordonnancement et les
+comparaisons de fraîcheur ne voient jamais une heure postérieure à celle du Hub. Le jour
+d'observation et le battement de l'endpoint suivent la même heure.
 
 Lue avec `environment` ou `source_id`, une enveloppe décrit ce périmètre et non la flotte.
 Le document du daemon est la copie de la source du périmètre qui a vu le finding en dernier,
