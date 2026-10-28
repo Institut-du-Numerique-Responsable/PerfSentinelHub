@@ -42,6 +42,8 @@ public class ImportMetrics
     }
 }
 
+// Empty on purpose: each subclass is its own DI type and its own metric series.
+#pragma warning disable S2094
 /// <summary>
 ///     The incident import's refusals, on a series of their own: a label added to
 ///     the findings counter would change what an unaggregated alert on it matches.
@@ -59,3 +61,4 @@ public sealed class CorrelationImportMetrics : ImportMetrics;
 ///     incident import has one.
 /// </summary>
 public sealed class DetectionImportMetrics : ImportMetrics;
+#pragma warning restore S2094

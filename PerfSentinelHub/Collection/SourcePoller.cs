@@ -11,6 +11,8 @@ public sealed class SourcePollException(string errorCode, Exception innerExcepti
     public string ErrorCode { get; } = errorCode;
 }
 
+// Every parameter is a collaborator the DI container injects, one per poll stage.
+#pragma warning disable S107
 public sealed partial class SourcePoller(
     DaemonClient client,
     HubDatabase database,
@@ -20,6 +22,7 @@ public sealed partial class SourcePoller(
     RingWatch rings,
     TimeProvider timeProvider,
     ILogger<SourcePoller> logger)
+#pragma warning restore S107
 {
     private const long PushFreshnessMs = 2 * 3_600_000;
 
