@@ -397,8 +397,9 @@ et chaque entrée de `sources` reçoivent cinq champs :
 Le finding reçoit aussi `detections_from` et `detections_to`, les jours UTC comptés, au
 format `YYYY-MM-DD`. Ils vont du jour de `from`, jamais avant le jour que la purge de
 rétention garde, au jour de `to`, jamais après le jour courant du Hub. Une fenêtre tout
-entière après le jour du Hub ne compte rien, et son `detections_from` est alors le
-lendemain de `detections_to`.
+entière après le jour du Hub ne compte rien, et son `detections_from` est alors le lendemain
+de `detections_to`. Une fenêtre tout entière avant la limite de rétention sert des comptes
+null, et son `detections_from` est de même après son `detections_to`.
 
 Un compte se lit dans l'un de trois états :
 
@@ -429,15 +430,17 @@ non nulles, et null seulement quand toutes le sont. `detections_complete` vaut t
 seulement quand chaque source est connue et complète, `detections_gaps` est l'union des
 raisons, et `detections_sampling_rate` le plus petit taux des sources connues.
 
-Une source qui a compté le finding dans la fenêtre sans en tenir de copie rejoint
-`sources`, nommée comme la configuration la nomme. Sa `producer_version` et son
-`age_seconds` valent null, puisque les deux décrivent une copie. Avec des motifs d'accès,
-une telle source n'est listée qu'à un appelant qui lit la source entière. Un finding que
-les daemons ont compté dans la fenêtre est listé même quand aucun poll ne l'y a observé,
-l'anneau ayant tourné entre deux polls, pourvu que le Hub en tienne déjà le corps. Une
-lecture restreinte, par `environment`, `source_id` ou motifs d'accès, n'atteint que les
-findings qui ont au moins une copie dans son périmètre. Les sept noms sont réservés comme
-les autres champs du Hub : une propriété du daemon du même nom est abandonnée.
+Une source qui a compté le finding dans la fenêtre sans en tenir de copie rejoint `sources`,
+nommée comme la configuration la nomme. Sa `producer_version` et son `age_seconds` valent
+null, puisque les deux décrivent une copie. Avec des motifs d'accès, une telle source n'est
+listée qu'à un appelant qui lit la source entière. Un finding que les daemons ont compté
+dans la fenêtre est listé même quand aucun poll ne l'y a observé, l'anneau ayant tourné
+entre deux polls, pourvu que le Hub en tienne déjà le corps. Une source qui n'est plus dans
+`Hub:Sources`, un daemon retiré, n'a pas de nom à servir : elle est écartée de `sources` et
+des totaux. Une lecture restreinte, par `environment`, `source_id` ou motifs d'accès,
+n'atteint que les findings qui ont au moins une copie dans son périmètre. Les sept noms sont
+réservés comme les autres champs du Hub : une propriété du daemon du même nom est
+abandonnée.
 
 ### Comment `include_acked` juge un finding
 
@@ -480,6 +483,7 @@ telle mutation à son prédécesseur à l'import, quand exactement un finding st
 - partage le service, le détecteur et l'endpoint,
 - porte un hash de template différent,
 - a été vu dans les 30 derniers jours et strictement avant le lot entrant,
+- n'est pas un finding du lot entrant, dont tous les findings sont des problèmes courants,
 - et n'est pas lui-même déjà supplanté.
 
 Une signature change aussi quand l'**endpoint** change, et ce chemin-là n'est pas relié.

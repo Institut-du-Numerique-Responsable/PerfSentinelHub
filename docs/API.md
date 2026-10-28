@@ -366,6 +366,8 @@ The finding also gets `detections_from` and `detections_to`, the UTC days counte
 `YYYY-MM-DD`. They run from the day of `from`, never before the day the retention purge
 keeps, to the day of `to`, never after the Hub's current day. A window wholly ahead of the
 Hub's day counts nothing, and its `detections_from` is then the day after `detections_to`.
+A window wholly before the retention cutoff serves null counts, and its `detections_from`
+is likewise after its `detections_to`.
 
 A count reads in one of three states:
 
@@ -401,9 +403,11 @@ A source that counted the finding in the window without holding a copy of it joi
 are null, since both describe a copy. With access patterns, such a source is listed only
 to a caller who reads the whole source. A finding the daemons counted in the window is
 listed even when no poll observed it there, the ring having turned between two polls, as
-long as the Hub already holds its body. A scoped read, by `environment`, `source_id` or
-access patterns, only reaches findings with at least one copy in scope. The seven names
-are reserved like the Hub's other fields: a daemon property of the same name is dropped.
+long as the Hub already holds its body. A source that is no longer in `Hub:Sources`, a
+retired daemon, has no name to serve: it is left out of `sources` and of the totals. A
+scoped read, by `environment`, `source_id` or access patterns, only reaches findings with
+at least one copy in scope. The seven names are reserved like the Hub's other fields: a
+daemon property of the same name is dropped.
 
 ### How `include_acked` judges a finding
 
@@ -445,6 +449,7 @@ predecessor at import time, when exactly one stored finding:
 - shares the service, detector and endpoint,
 - has a different template hash,
 - was seen within the last 30 days and strictly before the incoming batch,
+- is not a finding of the incoming batch, whose findings are all current problems,
 - and is not itself already superseded.
 
 A signature also changes when the **endpoint** changes, and that path is not linked. The
