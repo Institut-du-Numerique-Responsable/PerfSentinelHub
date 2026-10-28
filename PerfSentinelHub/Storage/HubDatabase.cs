@@ -587,9 +587,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
         AddFilter(where, parameters, "signature", SignatureParameter, query.Signature);
         var windowed = AddWindow(parameters, query);
-        var (volumeWindow, today) = VolumeWindowOf(query);
+        // Only a windowed read has volumes to count, and the window reaches back by the retention.
+        VolumeWindow? volumeWindow = null;
+        var today = 0;
         if (windowed)
         {
+            (volumeWindow, today) = VolumeWindowOf(query);
             parameters.Add(("$vol_from_day", volumeWindow.FromDay));
             parameters.Add(("$vol_to_day", volumeWindow.ToDay));
         }
@@ -648,7 +651,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
 
         // The page's reader is drained, and SQLite runs the next statement on the same connection.
-        if (windowed && rows.Count > 0)
+        if (volumeWindow is not null && rows.Count > 0)
             await AttachVolumesAsync(connection, rows, query, volumeWindow, today, cancellationToken);
         return rows;
     }

@@ -221,4 +221,15 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         Assert.Equal(5, row.Volume!.Detections);
         Assert.Equal(["open_day", "uncovered_days"], row.Volume.Gaps);
     }
+
+    [Fact]
+    public async Task An_unwindowed_read_answers_whatever_the_retention()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _path, Retention = TimeSpan.MaxValue }),
+            TimeProvider.System);
+
+        Assert.Empty(await database.QueryFindingsAsync(new FindingQuery(null, null, null, 10), cancellationToken));
+    }
 }
