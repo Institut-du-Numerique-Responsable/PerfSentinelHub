@@ -129,10 +129,13 @@ compteurs repartent de zéro à chaque démarrage, comme celui de l'import des f
 `outcome`, sur les lectures de détections, prend cinq constantes, publiées dès le démarrage
 pour chaque daemon interrogé : `ok`, `aborted`, `unauthorized`, `failed` et `capped`.
 `aborted` est un daemon qui a ouvert un nouveau registre ou l'a coupé pendant le passage, et
-`capped` un registre de plus de 64 pages. Un daemon antérieur à perf-sentinel 0.37.0, ou dont
-le registre est coupé, n'est jamais lu et reste à zéro. Un registre poussé ne compte que ses
-refus, dans `detection_import_rejected_total`, dont les motifs sont ceux de l'import des
-findings. Les trois compteurs de détections repartent de zéro à chaque démarrage.
+`capped` un registre de plus de 64 pages. Un daemon antérieur à perf-sentinel 0.37.0, ou
+dont le registre est coupé, n'est jamais lu et reste à zéro. `detection_rows_total` compte
+les lignes fusionnées par chaque passage, et le jour ouvert est fusionné de nouveau à chaque
+poll, donc il ne compte pas des lignes distinctes et son débit n'est pas un volume d'entrée.
+Un registre poussé ne compte que ses refus, dans `detection_import_rejected_total`, dont les
+motifs sont ceux de l'import des findings. Les trois compteurs de détections repartent de
+zéro à chaque démarrage.
 
 Quatre partis pris dans cette forme.
 
