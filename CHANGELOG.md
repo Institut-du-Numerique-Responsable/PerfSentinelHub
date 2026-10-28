@@ -18,6 +18,29 @@ All notable changes to PerfSentinelHub are recorded here.
   The other engine fix, the expiry hint of `perf-sentinel ack create`, is a CLI message the
   Hub does not use.
 
+### Added
+
+- The Hub stores the detection ledgers of daemons on perf-sentinel 0.37.0 and later, in three
+  tables of schema V15. It polls each ledger after the findings, page by page from its cursor,
+  and accepts the daemon's push on `POST /api/import/detections?source_id=<id>`, under the
+  findings import's key, gate and write wait. Both paths merge absolute values per UTC day by
+  their maximum, so a poll, a push and a replay land on the same rows, and a source's ledgers
+  add up across daemon restarts. A daemon older than 0.37.0 is never asked. The poll passes
+  count on `perf_sentinel_hub_detection_reads_total{source,outcome}` and
+  `perf_sentinel_hub_detection_rows_total{source}`, the refused pushes on
+  `perf_sentinel_hub_detection_import_rejected_total{reason}`, and the example dashboards
+  gain a "Detection ledger reads by outcome" panel.
+- A read of `GET /api/findings` with `from` or `to` serves the detection volume of each
+  finding and each of its sources over the window's UTC days: `detections`,
+  `detections_complete`, `avoidable_io_ops`, `detections_gaps` and
+  `detections_sampling_rate`, plus `detections_from` and `detections_to` on the finding. A
+  count is null when nothing is known, exact when complete, and otherwise a lower bound with
+  its reasons from a closed set. A finding the daemons counted in the window is listed even
+  when no poll observed it there, and a source that only counted it joins `sources`. A read
+  without `from` or `to` is unchanged, byte for byte.
+- The ack page shows the detections of the last 7 days and their avoidable I/O, per source
+  with the reasons a count falls short, beside the unwindowed finding.
+
 ### Fixed
 
 - A finding's `last_seen` is now the source daemon's last detection, the envelope's

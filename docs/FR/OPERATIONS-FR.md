@@ -93,7 +93,7 @@ correspond à aucune portée par attribut.
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt
-qu'au travers d'une bibliothèque : quinze familles de métriques sur des données que
+qu'au travers d'une bibliothèque : dix-neuf familles de métriques sur des données que
 le Hub détient déjà ne justifient pas une dépendance dans un service dont les
 deux seuls paquets sont SQLite.
 
@@ -109,6 +109,9 @@ deux seuls paquets sont SQLite.
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refusés, par motif                                        |
 | `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Imports d'incidents refusés, par les motifs des findings          |
 | `perf_sentinel_hub_correlation_import_rejected_total{reason}`          | counter | Imports de corrélations refusés, par les motifs des findings      |
+| `perf_sentinel_hub_detection_import_rejected_total{reason}`            | counter | Pushs de détections refusés, par les motifs des findings          |
+| `perf_sentinel_hub_detection_reads_total{source,outcome}`              | counter | Passages du poll sur un registre de détections, par issue         |
+| `perf_sentinel_hub_detection_rows_total{source}`                       | counter | Lignes de comptes fusionnées depuis un registre interrogé         |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Les runs actuellement stockés, par statut                         |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Les signatures de findings distinctes stockées, par environnement |
 | `perf_sentinel_hub_findings_age_seconds`                               | gauge   | L'âge des comptes derrière `findings`                             |
@@ -122,6 +125,14 @@ si bien qu'un Hub qui n'en a pas est collecté comme avant. `reason` prend huit 
 `render_refused`, `internal_refused` et `conflict`. `render_refused` est le refus du moteur,
 une empreinte qui ne se recalcule pas ou une attestation qui nomme un autre rapport. Les deux
 compteurs repartent de zéro à chaque démarrage, comme celui de l'import des findings.
+
+`outcome`, sur les lectures de détections, prend cinq constantes, publiées dès le démarrage
+pour chaque daemon interrogé : `ok`, `aborted`, `unauthorized`, `failed` et `capped`.
+`aborted` est un daemon qui a ouvert un nouveau registre ou l'a coupé pendant le passage, et
+`capped` un registre de plus de 64 pages. Un daemon antérieur à perf-sentinel 0.37.0, ou dont
+le registre est coupé, n'est jamais lu et reste à zéro. Un registre poussé ne compte que ses
+refus, dans `detection_import_rejected_total`, dont les motifs sont ceux de l'import des
+findings. Les trois compteurs de détections repartent de zéro à chaque démarrage.
 
 Quatre partis pris dans cette forme.
 
@@ -237,7 +248,7 @@ Quatre fichiers sous [`examples/`](../../examples), validés plutôt qu'esquiss�
 
 | Fichier                                                                       | Est                                                           |
 |-------------------------------------------------------------------------------|---------------------------------------------------------------|
-| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Onze panneaux sur huit des quinze familles, importable tel quel |
+| [`grafana-dashboard.json`](../../examples/grafana-dashboard.json)             | Douze panneaux sur neuf des dix-neuf familles, importable tel quel |
 | [`FR/grafana-dashboard-FR.json`](../../examples/FR/grafana-dashboard-FR.json) | Le même tableau de bord, titres et descriptions en français   |
 | [`prometheus-alerts.yml`](../../examples/prometheus-alerts.yml)               | Une règle, contrôlée par `promtool check rules`               |
 | [`prometheus-scrape.yml`](../../examples/prometheus-scrape.yml)               | Un job de collecte pour un déploiement qui nomme ses cibles   |

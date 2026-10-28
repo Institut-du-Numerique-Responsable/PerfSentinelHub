@@ -83,6 +83,59 @@ Lineage links a mutated signature to its predecessor only when exactly one
 stored finding matches. Ambiguity records nothing, because naming one of several
 candidates would be a guess. See [API.md](API.md).
 
+`last_seen` is the source daemon's last detection, cut to the Hub's clock when the
+daemon's runs ahead. A daemon clock running behind is not corrected, so its findings
+age early by the same amount. A producer that omits `stored_at_ms` is dated by the
+poll that read it, which keeps such a finding `active` for as long as its ring holds
+it.
+
+## What a detection count claims
+
+A read of `/api/findings` with `from` or `to` serves how many times the daemons
+detected each finding, from the detection ledgers of perf-sentinel 0.37.0 and later.
+The count is exact only when `detections_complete` is true. Otherwise it is a lower
+bound, the sum of what is known, with its reasons in `detections_gaps`. Null means
+nothing is known, never zero. See
+[API.md](API.md#what-the-hub-adds-to-a-finding).
+
+A detection is a finding the daemon emits, counted before its ring, its acks or its
+push see it. An acknowledged finding still counts, as its waste still counts in
+`io_waste_ratio`. One trace can yield several findings of one signature, a redundant
+call with different parameters, a fan-out or serialized group per parent, several
+grouping values, and each counts. Slow findings across traces count with 0 avoidable
+I/O. A trace fragment analyzed again after its window evicted it counts as the
+detector emitted it. `seen_count` keeps its meaning, the detections the daemon's ring
+still retains, and is not a volume.
+
+A daemon keeps its ledger in memory only, so every stop, clean or not, is a gap: the
+day a ledger starts and the last day of a stopped one read `restart`. The Hub adds a
+source's successive ledgers up. A daemon read by poll alone loses what it counted
+between the Hub's last read and its stop. A daemon that pushes sends a last round as
+it drains.
+
+Nothing is extrapolated. Under sampling or shedding the count is what the daemon
+analyzed, and the Hub serves the lowest sampling rate of the counted days as
+`detections_sampling_rate`. A consumer that extrapolates from it should say so. Some
+losses have no signal at the daemon: an ingest refused with a `413`, an oversized
+gRPC message, the JSON socket and the per-trace truncation. A day can therefore read
+complete while traces never reached the detector.
+
+A poll reaches one pod per request, so several pods behind one Service cannot all be
+read. Two polled ledgers of one source alive at once read `multi_instance`, and that
+source is never complete. Give each pod its own source, or let each pod push: pushed
+ledgers add up without the reason. The overlap compares the daemon's `started_ms`
+with the Hub's read time, so a daemon clock running behind the Hub's can make a
+restart read as `multi_instance`.
+
+The window counts whole UTC days on the Hub's clock, from the day of `from`, never
+before the day retention keeps, to the day of `to`, never after the Hub's day. Days
+before the upgrade have no row and read as unknown. With access patterns, a source
+that counted a finding without holding a copy of it is listed only to a caller who
+reads that whole source,
+and a scoped read reaches only findings with at least one copy in scope. A source
+removed from `Hub:Sources` drops out of the count, since the Hub has no name to serve
+for it.
+
 ## What a finding is attributed to
 
 The engine files an N+1 or redundant-call group that spans several services

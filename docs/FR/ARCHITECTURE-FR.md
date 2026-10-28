@@ -45,6 +45,13 @@ découpe chaque épisode et le pousse quand il s'ouvre, quand un pic monte, quan
 co-occurrence avance d'une minute et quand il se ferme. Rien ne les lit par poll, donc un daemon
 qui ne pousse pas laisse le Hub sans eux.
 
+Les registres de détections passent par les deux chemins depuis perf-sentinel 0.37.0 : le daemon
+pousse les lignes qui ont changé depuis son dernier push accepté, et le poll lit le registre que
+nomme le statut du daemon. Les deux écrivent des valeurs absolues par jour UTC, fusionnées par leur
+maximum, donc les deux chemins, un renvoi et un chevauchement aboutissent aux mêmes lignes. Chaque
+démarrage du daemon ouvre un nouveau registre, et le Hub additionne les registres d'une source au
+lieu de laisser le suivant remplacer le précédent.
+
 Un daemon qui pousse avec succès prouve qu'il peut joindre le Hub. Il ne prouve rien
 sur la capacité du Hub à le joindre, qui est une autre route à travers un autre jeu de
 pare-feux, et c'est cette direction dont un opérateur a besoin quand une source se tait.
@@ -58,11 +65,12 @@ verrou d'écriture parce qu'il est le travail programmé du Hub lui-même et qu'
 attendre. Un import abandonne au bout de cinq secondes avec `503 Retry-After: 1`, parce
 qu'un téléverseur lent ne doit pas pouvoir bloquer la collecte de toute la flotte.
 
-Un poll lit jusqu'à quatre choses d'un daemon, dans l'ordre : son statut, ses findings,
-ses incidents et ses acquittements actifs. Seuls les deux premiers décident de la
-joignabilité. Les deux autres sont consignés à part, dans `incident_reads` et
-`ack_reads`, parce qu'une clé refusée ou une route absente sur l'un ou l'autre ne dit
-rien de la capacité du daemon à répondre.
+Un poll lit jusqu'à cinq choses d'un daemon, dans l'ordre : son statut, ses findings,
+ses incidents, ses acquittements actifs et son registre de détections. Seuls les deux
+premiers décident de la joignabilité. Les trois autres sont consignés à part, dans
+`incident_reads`, dans `ack_reads` et sur `perf_sentinel_hub_detection_reads_total`, parce
+qu'une clé refusée ou une route absente sur l'un d'eux ne dit rien de la capacité du
+daemon à répondre.
 
 La lecture des acquittements reflète et n'écrit jamais sur le daemon. Elle demande
 `GET /api/acks?include_toml=true` avec l'identifiant de lecture de la source et remplace
@@ -76,6 +84,14 @@ ses acquittements d'exécution, une réponse qu'on ne peut pas distinguer de cel
 daemon sans baseline, donc sa lecture est consignée `absent`. Une liste qui atteint le
 plafond du daemon, mille lignes, est reflétée et consignée `truncated`, puisque sa fin,
 là où se trouve la baseline, peut manquer.
+
+La lecture du registre part de son curseur, ou de son jour le plus ancien la première fois,
+et pagine jusqu'au bout, 64 pages au plus. Un passage qui lit toutes les pages scelle les
+jours jusqu'au `sealed_through` de sa première page et avance le curseur au-delà, donc un
+jour que le daemon a scellé pendant le passage est relu en entier par le suivant. Un passage
+qui s'arrête avant, au plafond de pages ou parce que le daemon a ouvert un nouveau registre
+entre-temps, garde ce qu'il a fusionné et ne scelle rien. Un daemon dont le statut ne nomme
+aucun registre, antérieur à 0.37.0 ou dont le registre est coupé, n'est jamais interrogé.
 
 ## Ce que fait réellement une analyse lancée
 
@@ -126,7 +142,10 @@ leur propre `last_seen_ms`, sans clé étrangère pour la même raison, et une o
 tout aussi invisible : une lecture n'en atteint une qu'à travers un finding. Les attributs
 de regroupement que chaque source a captés sur un finding la suivent de la même façon, sur
 leur propre `last_seen_ms`. Les paires que partagent les findings gelés d'un incident partent
-avec leur incident.
+avec leur incident. Les comptes et les jours de détections la suivent par jour UTC entier,
+comme les jours d'observation, et la ligne d'un registre sur la dernière fois que le Hub l'a
+lu. Le renvoi d'un jour purgé est sans effet néfaste, puisque chaque valeur est absolue, et un
+daemon ne garde de toute façon que 31 jours au plus.
 
 Le miroir des acquittements suit aussi cette horloge, sur `read_at_ms`, l'heure de la
 lecture qui a écrit la ligne. Elle ne fait pas vieillir un acquittement : chaque lecture
@@ -160,6 +179,9 @@ soit la source, et rien d'autre.
 | `finding_groupings`            | signature, source et valeur de regroupement effective                | rétention, sur `last_seen_ms`              |
 | `finding_attributes`           | signature, source, identité de regroupement et paire captée          | rétention, sur `last_seen_ms`              |
 | `finding_lineage`              | signature successeur et prédécesseur                                 | avec son successeur                        |
+| `detection_ledgers`            | source et registre du daemon, avec son départ et le curseur du poll  | rétention, sur `last_read_ms`              |
+| `detection_days`               | source, registre et jour UTC, avec ce que le jour dit de lui-même    | rétention, par jour entier                 |
+| `detection_counts`             | signature, source, registre et jour UTC, avec ses détections         | rétention, par jour entier                 |
 | `endpoint_heartbeats`          | source, service et endpoint                                          | rétention, sur `last_seen_any_ms`          |
 | `source_state`                 | source, la joignabilité vue par le poll                              | rétention, sur `last_attempt_ms`           |
 | `source_imports`               | source, son dernier push                                             | jamais                                     |
@@ -187,6 +209,14 @@ qu'une lecture la change. Une lecture qui laisse la copie telle quelle, mêmes f
 recapture plus pauvre, ne fait que dater ses lignes du nouveau `last_seen_ms` de la copie.
 Rien ne lit encore ces trois-là. Elles sont enregistrées avant le contrôle d'accès, qui y
 fera correspondre les projets, pour que l'activer ne parte pas d'un historique vide.
+
+Les trois tables de détections, ajoutées par le schéma V15, tiennent les registres des daemons
+tels que lus. Une ligne de `detection_days` porte ce que ce jour dit de sa propre complétude :
+scellé ou encore ouvert, un redémarrage, son taux d'échantillonnage, des traces délestées, des
+ingestions rejetées et les détections au-delà du plafond de signatures du registre. Une lecture
+fenêtrée de `/api/findings` les replie, par source, en un compte servi et les raisons qui le
+rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Rien n'est
+rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.
 
 Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : les lignes
 d'attributs d'une copie dont l'observation la plus récente n'en a aucune, le service d'une
@@ -366,6 +396,8 @@ correspond à un appel réel. Désigné par symbole plutôt que par ligne, un nu
 | Hub vers le daemon, la config d'une ligne dépliée | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                               |
 | Hub vers le daemon, les incidents                 | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paginé par `SourcePoller` vers `UpsertIncidentsAsync` |
 | Hub vers le daemon, les acquittements             | `Collection/DaemonClient.cs`, `FetchAcksAsync`, reflété par `AckReader` vers `ReplaceSourceAcksAsync`          |
+| Hub vers le daemon, le registre de détections     | `Collection/DaemonClient.cs`, `FetchDetectionsPageAsync`, paginé par `DetectionReader`                         |
+| Daemon vers le Hub, le push de détections         | `Api/ApiEndpoints.cs`, `ImportDetectionsAsync`, qui range par `TryMergeDetectionPageAsync`                     |
 | Hub vers le daemon, le relais d'acquittement      | `Api/ApiEndpoints.Acks.cs`, `RelayAckAsync`, écrit par `AckRelay` via `SendAckAsync`                           |
 | La joignabilité, posée et effacée                 | `Collection/SourcePoller.cs`, les deux appels `MarkSource` et `UpsertBatchAsync`                               |
 | Hub vers SQLite                                   | `Storage/Schema.cs`                                                                                            |

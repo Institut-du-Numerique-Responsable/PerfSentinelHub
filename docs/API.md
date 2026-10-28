@@ -37,13 +37,27 @@ batch with none valid is a `400`. Copies of one episode merge in any order: the 
 latest `last_seen_ms` and the highest peaks win, the rolling values come from the newer copy, and
 an end is kept once seen. Refusals count on `perf_sentinel_hub_correlation_import_rejected_total`.
 
+`POST /api/import/detections?source_id=<id>` accepts the detection ledger a daemon on
+perf-sentinel 0.37.0 or later pushes beside its findings, one page in the shape
+`GET /api/detections` serves on the daemon: `ledger_id`, `counts` and `days`. It takes the same
+key, the same four-slot gate and the same five-second write wait, and at most 8 MiB per request.
+The page is checked whole, with the bounds the poll applies: a GUID `ledger_id`, days from 400
+before the Hub's day to 2 after it, signatures of at most 1,024 characters with no control
+character, integers from 0 to 2^53, a sampling rate from 0 to 1. One value out of bounds is a
+`400`, and more than 5,000 count rows or 31 days a `413`. A page with no count row is accepted,
+since the daemon seals a day by pushing its day object alone. A day pushed `sealed` stays
+sealed, and every value merges by its maximum, a sampling rate by its minimum, so a push, a poll
+and a replay land on the same rows in any order. The push writes neither reachability nor the
+time of the source's last findings push. Refusals count on
+`perf_sentinel_hub_detection_import_rejected_total`.
+
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that
 cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon
 exporters retain and retry their coalesced batches. Retention purges in bounded chunks, so
 a long purge does not reject imports for its whole duration.
 
-A push updates findings, incidents and per-source observations only. It never clears the poll path's
+A push updates findings, incidents, detection ledgers and per-source observations only. It never clears the poll path's
 `unreachable_since_ms`. A source the Hub cannot reach still reports `unreachable_since`
 while its daemon pushes successfully, and that is correct: reachability is a fact about
 the Hub's route to the daemon, which a push does not exercise.

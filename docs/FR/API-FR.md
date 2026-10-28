@@ -41,6 +41,20 @@ ordre : le début le plus ancien, le `last_seen_ms` le plus récent et les pics 
 l'emportent, les valeurs glissantes viennent de la copie la plus récente, et une fin est gardée une
 fois vue. Les refus se comptent sur `perf_sentinel_hub_correlation_import_rejected_total`.
 
+`POST /api/import/detections?source_id=<id>` accepte le registre de détections qu'un daemon en
+perf-sentinel 0.37.0 ou suivant pousse à côté de ses findings, une page sous la forme que sert
+`GET /api/detections` sur le daemon : `ledger_id`, `counts` et `days`. Il prend la même clé, la
+même porte à quatre places et la même attente d'écriture de cinq secondes, et 8 Mio au plus par
+requête. La page est vérifiée en entier, avec les bornes qu'applique le poll : un `ledger_id` GUID,
+des jours de 400 avant le jour du Hub à 2 après, des signatures de 1 024 caractères au plus sans
+caractère de contrôle, des entiers de 0 à 2^53, un taux d'échantillonnage de 0 à 1. Une valeur
+hors bornes est un `400`, et plus de 5 000 lignes de comptes ou de 31 jours un `413`. Une page sans
+ligne de compte est acceptée, puisque le daemon scelle un jour en poussant son objet jour seul. Un
+jour poussé `sealed` reste scellé, et chaque valeur fusionne par son maximum, un taux
+d'échantillonnage par son minimum, donc un push, un poll et un renvoi aboutissent aux mêmes lignes
+dans n'importe quel ordre. Le push n'écrit ni l'accessibilité ni l'heure du dernier push de
+findings de la source. Les refus se comptent sur `perf_sentinel_hub_detection_import_rejected_total`.
+
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit
@@ -48,7 +62,7 @@ rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq seco
 fusionnés. La rétention purge par tranches bornées, pour qu'une purge longue ne rejette
 pas les imports pendant toute sa durée.
 
-Un push met à jour les findings, les incidents et les observations par source, rien d'autre. Il n'efface
+Un push met à jour les findings, les incidents, les registres de détections et les observations par source, rien d'autre. Il n'efface
 jamais le `unreachable_since_ms` du chemin de poll. Une source que le Hub ne peut pas
 joindre continue de rapporter `unreachable_since` alors que son daemon pousse avec succès,
 et c'est juste : la joignabilité est un fait sur la route du Hub vers le daemon, qu'un
