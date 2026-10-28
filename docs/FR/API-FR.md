@@ -414,13 +414,16 @@ Un compte se lit dans l'un de trois états :
 Les raisons forment un ensemble fermé :
 
 - `uncovered_days` : un jour de la fenêtre sans ligne pour la source.
-- `open_day` : un jour pas encore scellé, y compris le jour courant du Hub.
+- `open_day` : un jour pas encore scellé, y compris le jour courant du Hub, ou un jour dont
+  les comptes d'un registre ont atteint le Hub avant la ligne de ce registre pour ce jour.
+  Ces comptes l'attendent.
 - `restart` : un jour où le daemon a redémarré.
 - `sampling` : un jour lu avec un taux d'échantillonnage inférieur à 1.
 - `shed` : un jour où le daemon a délesté des traces sous pression mémoire.
 - `ingest_rejected` : un jour où le daemon a refusé de l'ingestion.
-- `overflow` : un jour où le registre a dépassé son plafond de signatures alors que cette
-  signature n'a pas de ligne ce jour-là.
+- `overflow` : un jour où un registre a dépassé son plafond de signatures alors que cette
+  signature n'a pas de ligne dans ce même registre ce jour-là. La ligne d'un autre pod ne
+  compte pas.
 - `multi_instance` : deux registres de la source lus par poll et vivants le même jour de
   la fenêtre, plusieurs pods derrière un Service que le poll ne peut pas tous lire. Les
   registres que le Hub reçoit seulement par push s'additionnent sans cette raison.

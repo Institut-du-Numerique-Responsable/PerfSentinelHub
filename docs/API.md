@@ -382,13 +382,14 @@ A count reads in one of three states:
 The reasons form a closed set:
 
 - `uncovered_days`: a day of the window the source has no row for.
-- `open_day`: a day not yet sealed, the Hub's current day included.
+- `open_day`: a day not yet sealed, the Hub's current day included, or a day a ledger's
+  counts reached the Hub before that ledger's own row for the day. Those counts wait for it.
 - `restart`: a day the daemon restarted on.
 - `sampling`: a day read at a sampling rate below 1.
 - `shed`: a day the daemon shed traces under memory pressure.
 - `ingest_rejected`: a day the daemon rejected ingest.
-- `overflow`: a day the ledger overflowed its signature cap while this signature has no row
-  that day.
+- `overflow`: a day a ledger overflowed its signature cap while this signature has no row
+  in that same ledger that day. Another pod's row for it does not count.
 - `multi_instance`: two polled ledgers of the source alive on the same window day, several
   pods behind one Service that a poll cannot all read. Ledgers the Hub only received by push
   add up without it.

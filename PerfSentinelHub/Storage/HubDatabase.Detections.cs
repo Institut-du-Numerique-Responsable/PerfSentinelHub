@@ -64,7 +64,7 @@ public sealed partial class HubDatabase
     // key them by the page's sources if a fleet grows to hundreds of daemons.
     private static readonly string DetectionVolumeRead = $"""
                                                           SELECT dc.signature, dc.source_id, dc.day, dc.detections,
-                                                                 dc.extra_io_ops, ss.unreachable_since_ms
+                                                                 dc.extra_io_ops, ss.unreachable_since_ms, dc.ledger_id
                                                           FROM detection_counts AS dc
                                                           LEFT JOIN source_state AS ss ON ss.source_id = dc.source_id
                                                           WHERE dc.signature IN (SELECT value FROM json_each($signatures))
@@ -72,7 +72,7 @@ public sealed partial class HubDatabase
                                                             AND {Copies(false, "dc")};
                                                           SELECT dd.source_id, dd.day, dd.sealed, dd.gap,
                                                                  dd.overflow_detections, dd.shed_traces,
-                                                                 dd.ingest_rejected, dd.sampling_rate
+                                                                 dd.ingest_rejected, dd.sampling_rate, dd.ledger_id
                                                           FROM detection_days AS dd
                                                           WHERE dd.day BETWEEN $vol_from_day AND $vol_to_day
                                                             AND {Copies(false, "dd")};
@@ -288,18 +288,18 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue(
             "$source_ids", query.SourceIds is null ? DBNull.Value : JsonArray(query.SourceIds));
 
-        var counts = new List<(string SourceId, long? UnreachableSinceMs, DetectionCountRow Row)>();
+        var counts = new List<(string SourceId, long? UnreachableSinceMs, string LedgerId, DetectionCountRow Row)>();
         var days = new List<(string SourceId, DayCoverage Day)>();
         var ledgers = new List<(string SourceId, LedgerLife Ledger)>();
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
-                counts.Add((reader.GetString(1), reader.IsDBNull(5) ? null : reader.GetInt64(5),
+                counts.Add((reader.GetString(1), reader.IsDBNull(5) ? null : reader.GetInt64(5), reader.GetString(6),
                     new DetectionCountRow(reader.GetInt32(2), reader.GetString(0), reader.GetInt64(3),
                         reader.IsDBNull(4) ? null : reader.GetInt64(4))));
             await reader.NextResultAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
-                days.Add((reader.GetString(0), new DayCoverage(reader.GetInt32(1), reader.GetBoolean(2),
+                days.Add((reader.GetString(0), new DayCoverage(reader.GetString(8), reader.GetInt32(1), reader.GetBoolean(2),
                     reader.GetBoolean(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6),
                     reader.GetDouble(7))));
             await reader.NextResultAsync(cancellationToken);
@@ -322,7 +322,8 @@ public sealed partial class HubDatabase
             foreach (var source in finding.Sources)
                 source.Volume = DetectionVolumeFold.ForSource(
                     [.. daysBySource[source.SourceId]],
-                    [.. findingCounts.Where(item => item.SourceId == source.SourceId).Select(item => item.Row)],
+                    [.. findingCounts.Where(item => item.SourceId == source.SourceId)
+                        .Select(item => (item.LedgerId, item.Row))],
                     window, today, multiInstance.Contains(source.SourceId));
             finding.Window = window;
             finding.Volume = DetectionVolumeFold.ForFinding([.. finding.Sources.Select(source => source.Volume!)]);
@@ -332,10 +333,10 @@ public sealed partial class HubDatabase
     // A source no longer configured has no name to serve, and is left out.
     private void AddCountOnlySources(
         StoredFinding finding,
-        List<(string SourceId, long? UnreachableSinceMs, DetectionCountRow Row)> counts,
+        List<(string SourceId, long? UnreachableSinceMs, string LedgerId, DetectionCountRow Row)> counts,
         AccessScope? access)
     {
-        foreach (var (sourceId, unreachableSinceMs, _) in counts.DistinctBy(item => item.SourceId))
+        foreach (var (sourceId, unreachableSinceMs, _, _) in counts.DistinctBy(item => item.SourceId))
         {
             if (finding.Sources.Exists(source => source.SourceId == sourceId) ||
                 (access is not null && !access.HoldsAtSource(sourceId)) ||

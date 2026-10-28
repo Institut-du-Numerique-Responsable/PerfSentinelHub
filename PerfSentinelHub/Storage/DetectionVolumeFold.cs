@@ -2,6 +2,7 @@ namespace PerfSentinelHub.Storage;
 
 /// <summary>What one ledger's row of detection_days says about its day, as the fold reads it.</summary>
 public sealed record DayCoverage(
+    string LedgerId,
     int Day,
     bool Sealed,
     bool Gap,
@@ -23,11 +24,12 @@ public static class DetectionVolumeFold
 
     /// <summary>
     ///     One source's volume for one signature. days are its detection_days rows over every
-    ///     ledger, counts that signature's rows. Null when no window day is covered.
+    ///     ledger, counts that signature's rows with their ledger. Null when no window day is
+    ///     covered.
     /// </summary>
     public static DetectionVolume ForSource(
         IReadOnlyList<DayCoverage> days,
-        IReadOnlyList<DetectionCountRow> counts,
+        IReadOnlyList<(string LedgerId, DetectionCountRow Row)> counts,
         VolumeWindow window,
         int today,
         bool multiInstance)
@@ -40,10 +42,14 @@ public static class DetectionVolumeFold
         if (covered.Count == 0)
             return new DetectionVolume(null, null, null, [.. gaps], null);
 
-        // A count on a day nothing covers is not trusted: its day says nothing of what it missed.
-        var counted = counts.Where(count => covered.Contains(count.Day)).ToList();
-        var countedDays = counted.Select(count => count.Day).ToHashSet();
-        if (window.ToDay >= today || inWindow.Exists(day => !day.Sealed))
+        // A count is trusted only on a day its own ledger covers: another ledger's day says
+        // nothing of what this one missed. Covered by another, its own day is still to come.
+        var ledgerDays = inWindow.Select(day => (day.LedgerId, day.Day)).ToHashSet();
+        var counted = counts.Where(count => ledgerDays.Contains((count.LedgerId, count.Row.Day))).ToList();
+        var countedDays = counted.Select(count => (count.LedgerId, count.Row.Day)).ToHashSet();
+        var awaited = counts.Any(count =>
+            covered.Contains(count.Row.Day) && !ledgerDays.Contains((count.LedgerId, count.Row.Day)));
+        if (window.ToDay >= today || inWindow.Exists(day => !day.Sealed) || awaited)
             gaps.Add("open_day");
         if (inWindow.Exists(day => day.Gap))
             gaps.Add("restart");
@@ -53,16 +59,18 @@ public static class DetectionVolumeFold
             gaps.Add("shed");
         if (inWindow.Exists(day => day.IngestRejected > 0))
             gaps.Add("ingest_rejected");
-        // A signature with a row that day was counted, the overflow only hid the others.
-        if (inWindow.Exists(day => day.OverflowDetections > 0 && !countedDays.Contains(day.Day)))
+        // A signature with a row in that ledger that day was counted, its overflow only hid the others.
+        if (inWindow.Exists(day => day.OverflowDetections > 0 && !countedDays.Contains((day.LedgerId, day.Day))))
             gaps.Add("overflow");
         if (multiInstance)
             gaps.Add("multi_instance");
 
         return new DetectionVolume(
-            counted.Sum(count => count.Detections),
+            counted.Sum(count => count.Row.Detections),
             gaps.Count == 0,
-            counted.Exists(count => count.ExtraIoOps is null) ? null : counted.Sum(count => count.ExtraIoOps!.Value),
+            counted.Exists(count => count.Row.ExtraIoOps is null)
+                ? null
+                : counted.Sum(count => count.Row.ExtraIoOps!.Value),
             [.. gaps],
             inWindow.Min(day => day.SamplingRate));
     }

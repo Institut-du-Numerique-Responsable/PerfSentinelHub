@@ -18,17 +18,19 @@ public sealed class DetectionVolumeFoldTests
         long overflow = 0,
         long shed = 0,
         long rejected = 0,
-        double samplingRate = 1.0)
+        double samplingRate = 1.0,
+        string ledger = "L")
     {
-        return new DayCoverage(day, sealedDay, gap, overflow, shed, rejected, samplingRate);
+        return new DayCoverage(ledger, day, sealedDay, gap, overflow, shed, rejected, samplingRate);
     }
 
-    private static DetectionCountRow Count(int day, long detections, long? extraIoOps = 10)
+    private static (string, DetectionCountRow) Count(int day, long detections, long? extraIoOps = 10,
+        string ledger = "L")
     {
-        return new DetectionCountRow(day, Signature, detections, extraIoOps);
+        return (ledger, new DetectionCountRow(day, Signature, detections, extraIoOps));
     }
 
-    private static DetectionVolume Whole(params DetectionCountRow[] counts)
+    private static DetectionVolume Whole(params (string, DetectionCountRow)[] counts)
     {
         return DetectionVolumeFold.ForSource([Day(10), Day(11), Day(12)], counts, Window, Today, false);
     }
@@ -187,12 +189,41 @@ public sealed class DetectionVolumeFoldTests
     {
         // A restart on day 11: the first ledger covers its morning, the second the rest.
         var volume = DetectionVolumeFold.ForSource(
-            [Day(10), Day(11, gap: true), Day(11), Day(12)],
-            [Count(10, 2), Count(11, 3), Count(11, 4), Count(12, 1)],
+            [Day(10), Day(11), Day(11, gap: true, ledger: "M"), Day(12, ledger: "M")],
+            [Count(10, 2), Count(11, 3), Count(11, 4, ledger: "M"), Count(12, 1, ledger: "M")],
             Window, Today, false);
 
         Assert.Equal(10, volume.Detections);
         Assert.Equal(["restart"], volume.Gaps);
+    }
+
+    [Fact]
+    public void An_overflow_is_not_hidden_by_another_ledger_s_row()
+    {
+        // Two pods on day 11: L overflowed before the signature had a slot, M counted it.
+        var volume = DetectionVolumeFold.ForSource(
+            [Day(10), Day(11, overflow: 9), Day(11, ledger: "M"), Day(12)],
+            [Count(11, 5, ledger: "M")],
+            Window, Today, false);
+
+        Assert.Equal(5, volume.Detections);
+        Assert.False(volume.Complete);
+        Assert.Equal(["overflow"], volume.Gaps);
+    }
+
+    [Fact]
+    public void A_count_whose_own_ledger_has_no_row_that_day_is_not_counted()
+    {
+        // M covers day 11, but L's day 11 never arrived: a pass merged L's counts page and
+        // died before the page carrying that day.
+        var volume = DetectionVolumeFold.ForSource(
+            [Day(10), Day(11, ledger: "M"), Day(12)],
+            [Count(11, 5), Count(11, 2, ledger: "M")],
+            Window, Today, false);
+
+        Assert.Equal(2, volume.Detections);
+        Assert.False(volume.Complete);
+        Assert.Equal(["open_day"], volume.Gaps);
     }
 
     [Fact]
