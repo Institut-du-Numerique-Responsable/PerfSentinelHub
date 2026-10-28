@@ -132,8 +132,8 @@ périmètre et non la flotte, voir
 
 `from` et `to` bornent la lecture à une fenêtre d'observation, en millisecondes depuis
 l'epoch, chacun facultatif et tous deux inclus. Un finding est listé quand une source du
-périmètre l'a observé dans la fenêtre, donc la fenêtre respecte `environment` et
-`source_id`. Elle choisit des lignes et ne les réécrit pas : `first_seen`, `last_seen` et
+périmètre l'a observé dans la fenêtre, ou l'y a compté (voir le volume de détections plus
+bas), donc la fenêtre respecte `environment` et `source_id`. Elle choisit des lignes et ne les réécrit pas : `first_seen`, `last_seen` et
 `status` décrivent toujours le finding tel qu'il est maintenant. Une valeur qui n'est pas
 un entier positif ou nul sans fioriture, signe compris, répond `400`, et un `from` supérieur
 à `to` aussi. Donné vide ou composé seulement de blancs, chacun se lit comme absent et
@@ -363,6 +363,66 @@ l'échelle de la flotte, délibérément, la plus haute confiance qu'une source 
 rapportée. La copie propre à une source commence à sa première observation après la mise à
 niveau qui l'enregistre. Jusque-là, sa ligne sert la copie que la flotte partage, la plus
 fraîche toutes sources confondues.
+
+Une lecture avec `from` ou `to` sert aussi combien de fois les daemons ont détecté le
+finding dans la fenêtre, d'après les registres de détections que le Hub lit par poll ou
+reçoit par push. Une lecture sans l'un ni l'autre ne porte aucun de ces champs. Le finding
+et chaque entrée de `sources` reçoivent cinq champs :
+
+- `detections` : le compte, un entier ou null.
+- `detections_complete` : true quand aucune des raisons ci-dessous ne s'applique, null avec
+  `detections`.
+- `avoidable_io_ops` : les opérations d'I/O en trop de ces détections, null quand un jour
+  compté a été lu avec le scoring green coupé.
+- `detections_gaps` : la liste triée des raisons pour lesquelles le compte est incomplet,
+  vide quand il est complet.
+- `detections_sampling_rate` : le plus petit taux d'échantillonnage des jours comptés. Le
+  Hub n'extrapole jamais, un consommateur qui le fait doit le dire.
+
+Le finding reçoit aussi `detections_from` et `detections_to`, les jours UTC comptés, au
+format `YYYY-MM-DD`. Ils vont du jour de `from`, jamais avant le jour que la purge de
+rétention garde, au jour de `to`, jamais après le jour courant du Hub. Une fenêtre tout
+entière après le jour du Hub ne compte rien, et son `detections_from` est alors le
+lendemain de `detections_to`.
+
+Un compte se lit dans l'un de trois états :
+
+- null quand aucun jour de la fenêtre n'est connu pour la source, tous registres
+  confondus. C'est le cas d'un daemon antérieur à 0.37.0, d'un registre coupé et de
+  l'historique d'avant la mise à jour.
+- complet, `detections_complete: true`, quand chaque jour de la fenêtre est connu et
+  qu'aucune raison ne s'applique.
+- incomplet, `detections_complete: false`, la somme des jours connus avec ses raisons dans
+  `detections_gaps`. Un jour connu sans ligne pour la signature compte 0.
+
+Les raisons forment un ensemble fermé :
+
+- `uncovered_days` : un jour de la fenêtre sans ligne pour la source.
+- `open_day` : un jour pas encore scellé, y compris le jour courant du Hub.
+- `restart` : un jour où le daemon a redémarré.
+- `sampling` : un jour lu avec un taux d'échantillonnage inférieur à 1.
+- `shed` : un jour où le daemon a délesté des traces sous pression mémoire.
+- `ingest_rejected` : un jour où le daemon a refusé de l'ingestion.
+- `overflow` : un jour où le registre a dépassé son plafond de signatures alors que cette
+  signature n'a pas de ligne ce jour-là.
+- `multi_instance` : deux registres de la source lus par poll et vivants le même jour de
+  la fenêtre, plusieurs pods derrière un Service que le poll ne peut pas tous lire. Les
+  registres que le Hub reçoit seulement par push s'additionnent sans cette raison.
+
+Au niveau du finding, `detections` et `avoidable_io_ops` sont les sommes sur les sources
+non nulles, et null seulement quand toutes le sont. `detections_complete` vaut true
+seulement quand chaque source est connue et complète, `detections_gaps` est l'union des
+raisons, et `detections_sampling_rate` le plus petit taux des sources connues.
+
+Une source qui a compté le finding dans la fenêtre sans en tenir de copie rejoint
+`sources`, nommée comme la configuration la nomme. Sa `producer_version` et son
+`age_seconds` valent null, puisque les deux décrivent une copie. Avec des motifs d'accès,
+une telle source n'est listée qu'à un appelant qui lit la source entière. Un finding que
+les daemons ont compté dans la fenêtre est listé même quand aucun poll ne l'y a observé,
+l'anneau ayant tourné entre deux polls, pourvu que le Hub en tienne déjà le corps. Une
+lecture restreinte, par `environment`, `source_id` ou motifs d'accès, n'atteint que les
+findings qui ont au moins une copie dans son périmètre. Les sept noms sont réservés comme
+les autres champs du Hub : une propriété du daemon du même nom est abandonnée.
 
 ### Comment `include_acked` juge un finding
 

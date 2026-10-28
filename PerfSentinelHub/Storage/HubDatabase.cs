@@ -59,6 +59,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
 
     private readonly long _resolutionGraceMs = (long)options.Value.ResolutionGrace.TotalMilliseconds;
+    private readonly TimeSpan _retention = options.Value.Retention;
+
+    // Names a source that only counted a finding, since it holds no copy that would.
+    private readonly IReadOnlyList<SourceOptions> _sources = options.Value.Sources;
 
     // Never disposed, and the class is deliberately not IDisposable. A
     // SemaphoreSlim only holds a wait handle once AvailableWaitHandle is read,
@@ -583,6 +587,13 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
         AddFilter(where, parameters, "signature", SignatureParameter, query.Signature);
         var windowed = AddWindow(parameters, query);
+        var (volumeWindow, today) = VolumeWindowOf(query);
+        if (windowed)
+        {
+            parameters.Add(("$vol_from_day", volumeWindow.FromDay));
+            parameters.Add(("$vol_to_day", volumeWindow.ToDay));
+        }
+
         if (query.Grouping is not null)
             parameters.Add(("$grouping", query.Grouping));
 
@@ -636,6 +647,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                     ReadAck(reader)));
         }
 
+        // The page's reader is drained, and SQLite runs the next statement on the same connection.
+        if (windowed && rows.Count > 0)
+            await AttachVolumesAsync(connection, rows, query, volumeWindow, today, cancellationToken);
         return rows;
     }
 
@@ -674,7 +688,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 $" AND fs.source_id {InScope}"),
             _ => ("WITH", "findings", "", "")
         };
-        var window = windowed ? InWindow(row, Copies(access, "p")) : "";
+        var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
         var grouped = query.Grouping is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));
 #pragma warning disable S2077
@@ -774,10 +788,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             : $"($source_ids IS NULL OR {alias}.source_id {InScope})";
     }
 
-    private static string InWindow(string row, string copies)
+    // A finding counted in the volume window is present too, observed or not: the ring may
+    // have turned between two polls, or the listing hit its cap.
+    private static string InWindow(string row, string copies, string countCopies)
     {
         return $"""
-                 AND EXISTS (
+                 AND (EXISTS (
                     SELECT 1 FROM finding_sources AS p
                     WHERE p.signature = {row}.signature
                       AND {copies}
@@ -787,6 +803,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                AND o.day BETWEEN $from_day AND $to_day)
                            OR (p.first_seen_ms <= $to_ms
                                AND COALESCE(p.first_observed_day * 86400000, p.last_seen_ms) >= $from_ms)))
+                  OR EXISTS (
+                    SELECT 1 FROM detection_counts AS dc
+                    WHERE dc.signature = {row}.signature
+                      AND dc.day BETWEEN $vol_from_day AND $vol_to_day
+                      AND {countCopies}))
                 """;
     }
 

@@ -1,4 +1,6 @@
 using Microsoft.Data.Sqlite;
+using PerfSentinelHub.Access;
+using PerfSentinelHub.Api;
 
 namespace PerfSentinelHub.Storage;
 
@@ -55,6 +57,29 @@ public sealed partial class HubDatabase
                                                   detections = MAX(detection_counts.detections, excluded.detections),
                                                   extra_io_ops = MAX(detection_counts.extra_io_ops, excluded.extra_io_ops);
                                                 """;
+
+    // A windowed page's volume inputs in one round trip: the page's counts in the window,
+    // then the days and the ledgers of every source in scope.
+    // shortcut: days and ledgers are read for every source in scope, not only the page's,
+    // key them by the page's sources if a fleet grows to hundreds of daemons.
+    private static readonly string DetectionVolumeRead = $"""
+                                                          SELECT dc.signature, dc.source_id, dc.day, dc.detections,
+                                                                 dc.extra_io_ops, ss.unreachable_since_ms
+                                                          FROM detection_counts AS dc
+                                                          LEFT JOIN source_state AS ss ON ss.source_id = dc.source_id
+                                                          WHERE dc.signature IN (SELECT value FROM json_each($signatures))
+                                                            AND dc.day BETWEEN $vol_from_day AND $vol_to_day
+                                                            AND {Copies(false, "dc")};
+                                                          SELECT dd.source_id, dd.day, dd.sealed, dd.gap,
+                                                                 dd.overflow_detections, dd.shed_traces,
+                                                                 dd.ingest_rejected, dd.sampling_rate
+                                                          FROM detection_days AS dd
+                                                          WHERE dd.day BETWEEN $vol_from_day AND $vol_to_day
+                                                            AND {Copies(false, "dd")};
+                                                          SELECT dl.source_id, dl.started_ms, dl.last_read_ms, dl.polled
+                                                          FROM detection_ledgers AS dl
+                                                          WHERE {Copies(false, "dl")};
+                                                          """;
 
     /// <summary>
     ///     Merges one ledger page in its own transaction, waiting for the write lock as long
@@ -221,5 +246,96 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
         command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
         return await command.ExecuteScalarAsync(cancellationToken) is long day ? (int)day : null;
+    }
+
+    // The days a windowed read counts: from its from day, never before the purge's cutoff
+    // day, to its to day, never after the Hub's own. A window wholly ahead starts the day after.
+    private (VolumeWindow Window, int Today) VolumeWindowOf(FindingQuery query)
+    {
+        var now = timeProvider.GetUtcNow();
+        var today = now.ToUnixTimeMilliseconds() / DayMs;
+        var cutoffDay = (now - _retention).ToUnixTimeMilliseconds() / DayMs;
+        var from = Math.Min(Math.Max((query.FromMs ?? 0) / DayMs, cutoffDay), today + 1);
+        var to = Math.Min((query.ToMs ?? long.MaxValue) / DayMs, today);
+        return (new VolumeWindow((int)from, (int)to), (int)today);
+    }
+
+    /// <summary>
+    ///     Folds the detection volume into a windowed page, per source and per finding. A
+    ///     source that counted a finding without holding a copy joins its sources, named by the
+    ///     configuration, and with access patterns only where the caller holds the whole source.
+    /// </summary>
+    private async Task AttachVolumesAsync(
+        SqliteConnection connection,
+        List<StoredFinding> rows,
+        FindingQuery query,
+        VolumeWindow window,
+        int today,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = DetectionVolumeRead;
+        command.Parameters.AddWithValue("$signatures", JsonArray([.. rows.Select(row => row.Signature)]));
+        command.Parameters.AddWithValue("$vol_from_day", window.FromDay);
+        command.Parameters.AddWithValue("$vol_to_day", window.ToDay);
+        command.Parameters.AddWithValue(
+            "$source_ids", query.SourceIds is null ? DBNull.Value : JsonArray(query.SourceIds));
+
+        var counts = new List<(string SourceId, long? UnreachableSinceMs, DetectionCountRow Row)>();
+        var days = new List<(string SourceId, DayCoverage Day)>();
+        var ledgers = new List<(string SourceId, LedgerLife Ledger)>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                counts.Add((reader.GetString(1), reader.IsDBNull(5) ? null : reader.GetInt64(5),
+                    new DetectionCountRow(reader.GetInt32(2), reader.GetString(0), reader.GetInt64(3),
+                        reader.IsDBNull(4) ? null : reader.GetInt64(4))));
+            await reader.NextResultAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                days.Add((reader.GetString(0), new DayCoverage(reader.GetInt32(1), reader.GetBoolean(2),
+                    reader.GetBoolean(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6),
+                    reader.GetDouble(7))));
+            await reader.NextResultAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                ledgers.Add((reader.GetString(0),
+                    new LedgerLife(reader.GetInt64(1), reader.GetInt64(2), reader.GetBoolean(3))));
+        }
+
+        var daysBySource = days.ToLookup(item => item.SourceId, item => item.Day, StringComparer.Ordinal);
+        var multiInstance = ledgers
+            .GroupBy(item => item.SourceId, item => item.Ledger, StringComparer.Ordinal)
+            .Where(group => DetectionVolumeFold.MultiInstance([.. group], window))
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        var countsBySignature = counts.ToLookup(item => item.Row.Signature, StringComparer.Ordinal);
+        foreach (var finding in rows)
+        {
+            var findingCounts = countsBySignature[finding.Signature].ToList();
+            AddCountOnlySources(finding, findingCounts, query.Access);
+            foreach (var source in finding.Sources)
+                source.Volume = DetectionVolumeFold.ForSource(
+                    [.. daysBySource[source.SourceId]],
+                    [.. findingCounts.Where(item => item.SourceId == source.SourceId).Select(item => item.Row)],
+                    window, today, multiInstance.Contains(source.SourceId));
+            finding.Window = window;
+            finding.Volume = DetectionVolumeFold.ForFinding([.. finding.Sources.Select(source => source.Volume!)]);
+        }
+    }
+
+    // A source no longer configured has no name to serve, and is left out.
+    private void AddCountOnlySources(
+        StoredFinding finding,
+        List<(string SourceId, long? UnreachableSinceMs, DetectionCountRow Row)> counts,
+        AccessScope? access)
+    {
+        foreach (var (sourceId, unreachableSinceMs, _) in counts.DistinctBy(item => item.SourceId))
+        {
+            if (finding.Sources.Exists(source => source.SourceId == sourceId) ||
+                (access is not null && !access.HoldsAtSource(sourceId)) ||
+                _sources.FirstOrDefault(source => source.Id == sourceId) is not { } configured)
+                continue;
+            finding.Sources.Add(new FindingSourceObservation(
+                sourceId, configured.Name, configured.Environment, null, null, unreachableSinceMs));
+        }
     }
 }

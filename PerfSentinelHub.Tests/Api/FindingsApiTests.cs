@@ -28,6 +28,22 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     private static readonly SourceSnapshot OpenStaging =
         new("open-staging-a", "Open Staging A", "open-staging", "0.24.0");
 
+    // Detection days are per source, so each volume test counts on a daemon of its own.
+    private static readonly SourceSnapshot Volume = new("volume-a", "Volume A", "volume", "0.37.0");
+    private static readonly SourceSnapshot Unwindowed = new("volume-none", "Volume None", "volume", "0.37.0");
+    private static readonly SourceSnapshot VolumeCopy = new("volume-copy", "Volume Copy", "volume-copy", "0.37.0");
+    private static readonly SourceSnapshot VolumeCount = new("volume-count", "Volume Count", "volume-count", "0.37.0");
+    private static readonly SourceSnapshot VolumeAdmitted = new("volume-admitted", "Volume Admitted", "volume", "0.37.0");
+    private static readonly SourceSnapshot VolumeClamp = new("volume-clamp", "Volume Clamp", "volume", "0.37.0");
+
+    private const string VolumeLedger = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+
+    private static readonly string[] VolumeFields =
+    [
+        "detections", "detections_complete", "avoidable_io_ops", "detections_gaps", "detections_sampling_rate",
+        "detections_from", "detections_to"
+    ];
+
     private readonly HttpClient _client = factory.CreateClient();
 
     private static string FixturePath => Path.Combine(
@@ -648,6 +664,138 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             envelope.GetProperty("finding").GetProperty("trace_id").GetString());
     }
 
+    [Fact]
+    public async Task A_windowed_read_carries_the_volume_fields()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await factory.Database.UpsertBatchAsync(
+            Volume, new ParsedBatch([await VariantAsync("volume:x", "volume")], 0), 1000, cancellationToken);
+        await RecordDetectionsAsync(Volume, "volume:x", 5, 50);
+
+        var finding = Assert.Single((await ListAsync("/api/findings?service=volume&from=0")).EnumerateArray());
+
+        // The factory clock sits on day 0, which is still open.
+        Assert.Equal("""5 false 50 ["open_day"] 1""", DescribeVolume(finding));
+        Assert.Equal("1970-01-01", finding.GetProperty("detections_from").GetString());
+        Assert.Equal("1970-01-01", finding.GetProperty("detections_to").GetString());
+        var source = Assert.Single(finding.GetProperty("sources").EnumerateArray());
+        Assert.Equal("""5 false 50 ["open_day"] 1""", DescribeVolume(source));
+        Assert.False(source.TryGetProperty("detections_from", out _));
+    }
+
+    [Fact]
+    public async Task An_unwindowed_read_carries_none()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await factory.Database.UpsertBatchAsync(
+            Unwindowed, new ParsedBatch([await VariantAsync("volume-none:x", "volume-none")], 0), 1000,
+            cancellationToken);
+        await RecordDetectionsAsync(Unwindowed, "volume-none:x", 5, 50);
+
+        var finding = Assert.Single((await ListAsync("/api/findings?service=volume-none")).EnumerateArray());
+        var source = Assert.Single(finding.GetProperty("sources").EnumerateArray());
+
+        Assert.DoesNotContain(finding.EnumerateObject(), property => VolumeFields.Contains(property.Name));
+        Assert.DoesNotContain(source.EnumerateObject(), property => VolumeFields.Contains(property.Name));
+        Assert.Equal("0.37.0", source.GetProperty("producer_version").GetString());
+        Assert.Equal(JsonValueKind.Number, source.GetProperty("age_seconds").ValueKind);
+    }
+
+    [Fact]
+    public async Task A_count_only_source_appears_with_null_version_and_age()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await factory.Database.UpsertBatchAsync(
+            VolumeCopy, new ParsedBatch([await VariantAsync("volume-count:x", "volume-count")], 0), 1000,
+            cancellationToken);
+        await RecordDetectionsAsync(VolumeCopy, "volume-count:x", 2, 20);
+        await RecordDetectionsAsync(VolumeCount, "volume-count:x", 3, 30);
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+
+        var finding = Assert.Single(
+            (await ListAsync("/api/findings?service=volume-count&from=0", client)).EnumerateArray());
+
+        Assert.Equal("""5 false 50 ["open_day"] 1""", DescribeVolume(finding));
+        var sources = finding.GetProperty("sources").EnumerateArray().ToArray();
+        Assert.Equal(2, sources.Length);
+        Assert.Equal("0.37.0", sources[0].GetProperty("producer_version").GetString());
+        Assert.Equal("""2 false 20 ["open_day"] 1""", DescribeVolume(sources[0]));
+        var countOnly = sources[1];
+        Assert.Equal("volume-count", countOnly.GetProperty("id").GetString());
+        Assert.Equal("Volume Count", countOnly.GetProperty("name").GetString());
+        Assert.Equal("volume-count", countOnly.GetProperty("environment").GetString());
+        Assert.Equal(JsonValueKind.Null, countOnly.GetProperty("producer_version").ValueKind);
+        Assert.Equal(JsonValueKind.Null, countOnly.GetProperty("age_seconds").ValueKind);
+        Assert.Equal("ok", countOnly.GetProperty("status").GetString());
+        Assert.Equal("""3 false 30 ["open_day"] 1""", DescribeVolume(countOnly));
+
+        // A scope keeps the counts of its own sources only.
+        var copyOnly = Assert.Single(
+            (await ListAsync("/api/findings?service=volume-count&from=0&source_id=volume-copy", client))
+            .EnumerateArray());
+        Assert.Equal("""2 false 20 ["open_day"] 1""", DescribeVolume(copyOnly));
+        Assert.Single(copyOnly.GetProperty("sources").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task A_finding_counted_but_not_observed_in_the_window_is_admitted()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        // Both observed on day 2 only: the window of day 0 sees neither, but one was counted then.
+        var batch = new ParsedBatch(
+            [await VariantAsync("volume-admitted:counted", "volume-admitted"),
+                await VariantAsync("volume-admitted:quiet", "volume-admitted")], 0);
+        await factory.Database.UpsertBatchAsync(VolumeAdmitted, batch, 2 * DayMs + 1000, cancellationToken);
+        await RecordDetectionsAsync(VolumeAdmitted, "volume-admitted:counted", 4);
+
+        var listed = Assert.Single(
+            (await ListAsync($"/api/findings?service=volume-admitted&from=0&to={DayMs - 1}")).EnumerateArray());
+
+        Assert.Equal("volume-admitted:counted", listed.GetProperty("finding").GetProperty("signature").GetString());
+        Assert.Equal(4, listed.GetProperty("detections").GetInt64());
+    }
+
+    [Fact]
+    public async Task detections_from_and_to_are_the_clamped_days()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await factory.Database.UpsertBatchAsync(
+            VolumeClamp, new ParsedBatch([await VariantAsync("volume-clamp:x", "volume-clamp")], 0),
+            3 * DayMs + 1000, cancellationToken);
+
+        // The window stops at the Hub's day, 0 on the factory clock.
+        var past = Assert.Single(
+            (await ListAsync($"/api/findings?service=volume-clamp&to={5 * DayMs}")).EnumerateArray());
+        Assert.Equal("1970-01-01", past.GetProperty("detections_from").GetString());
+        Assert.Equal("1970-01-01", past.GetProperty("detections_to").GetString());
+
+        // A window wholly ahead of the Hub's day counts nothing.
+        var ahead = Assert.Single(
+            (await ListAsync($"/api/findings?service=volume-clamp&from={3 * DayMs}")).EnumerateArray());
+        Assert.Equal("1970-01-02", ahead.GetProperty("detections_from").GetString());
+        Assert.Equal("1970-01-01", ahead.GetProperty("detections_to").GetString());
+        Assert.Equal("null null null [] null", DescribeVolume(ahead));
+    }
+
+    // The five volume fields a finding and each of its sources carry, as served.
+    private static string DescribeVolume(JsonElement element)
+    {
+        return string.Join(' ', VolumeFields.Take(5).Select(name => element.GetProperty(name).GetRawText()));
+    }
+
+    // One pushed page of a ledger: day 0, open, unsampled, one signature's count.
+    private Task RecordDetectionsAsync(SourceSnapshot source, string signature, long detections, long? extraIoOps = 10)
+    {
+        var page = new DetectionLedgerPage(
+            VolumeLedger, 0, 0, 0, null,
+            [new DetectionCountRow(0, signature, detections, extraIoOps)],
+            [new DetectionDayRow(0, false, false, 0, null, 0, 0, 1.0)],
+            null);
+        return factory.Database.MergeDetectionPageAsync(
+            source.SourceId, page, true, 10_000, TestContext.Current.CancellationToken);
+    }
+
     // The severity the envelope states, the Hub's two clocks, and who reported it.
     private static string Describe(JsonElement envelope)
     {
@@ -673,7 +821,9 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
                     Configured(Staging),
                     Configured(StagingB),
                     Configured(AckedProduction),
-                    Configured(OpenStaging)
+                    Configured(OpenStaging),
+                    Configured(VolumeCopy),
+                    Configured(VolumeCount)
                 ];
             })));
     }

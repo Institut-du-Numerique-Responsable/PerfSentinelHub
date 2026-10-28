@@ -30,7 +30,29 @@ public sealed record StoredFinding(
     ///     recorded predecessor.
     /// </summary>
     public LineageInfo? Lineage { get; set; }
+
+    /// <summary>
+    ///     The UTC days a windowed read counted detections over, and the finding's total
+    ///     across its sources. Both null on a read without from or to.
+    /// </summary>
+    public VolumeWindow? Window { get; set; }
+
+    public DetectionVolume? Volume { get; set; }
 }
+
+/// <summary>
+///     A windowed read's detection volume, for a finding or one of its sources. Detections
+///     is null when no day of the window is known, Complete null with it.
+/// </summary>
+public sealed record DetectionVolume(
+    long? Detections,
+    bool? Complete,
+    long? AvoidableIoOps,
+    IReadOnlyList<string> Gaps,
+    double? SamplingRate);
+
+/// <summary>Whole UTC epoch days, both ends included; empty when FromDay is after ToDay.</summary>
+public sealed record VolumeWindow(int FromDay, int ToDay);
 
 /// <summary>
 ///     Flattened view of a finding's mutation chain: the earliest predecessor
@@ -43,11 +65,15 @@ public sealed record FindingSourceObservation(
     string SourceId,
     string SourceName,
     string Environment,
-    string ProducerVersion,
-    long LastSeenMs,
+    // Both null for a source that only counted the finding and holds no copy of it.
+    string? ProducerVersion,
+    long? LastSeenMs,
     long? UnreachableSinceMs,
     // The active ack this source's daemon holds on the finding, as last mirrored.
-    MirroredAck? Ack = null);
+    MirroredAck? Ack = null)
+{
+    public DetectionVolume? Volume { get; set; }
+}
 
 /// <summary>
 ///     One row of source_acks as a read serves it. `Origin` is `daemon` or

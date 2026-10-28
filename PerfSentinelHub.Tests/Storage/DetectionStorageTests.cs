@@ -1,5 +1,8 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Api;
+using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -191,5 +194,31 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         await PollAsync(Page(), ObservedAt + 1000);
         Assert.Equal("1800000500000",
             await ScalarAsync("SELECT last_import_ms FROM source_imports WHERE source_id = 'daemon-a';"));
+    }
+
+    [Fact]
+    public async Task A_windowed_read_counts_from_the_retention_cutoff_to_the_hub_day()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const long dayMs = 86_400_000;
+        // An hour into the day after Day, keeping thirty days.
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds((Day + 1) * dayMs + 3_600_000));
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _path, Retention = TimeSpan.FromDays(30) }), clock);
+        var parsed = FindingParser.Parse(await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
+            cancellationToken));
+        var finding = parsed.Findings[0] with { Signature = Signature };
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("daemon-a", "Daemon A", "lab", "0.37.0"), new ParsedBatch([finding], 0),
+            Day * dayMs, cancellationToken);
+        await database.MergeDetectionPageAsync("daemon-a", Page(), true, Day * dayMs, cancellationToken);
+
+        var row = Assert.Single(await database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 10, FromMs: 0), cancellationToken));
+
+        Assert.Equal(new VolumeWindow(Day - 29, Day + 1), row.Window);
+        Assert.Equal(5, row.Volume!.Detections);
+        Assert.Equal(["open_day", "uncovered_days"], row.Volume.Gaps);
     }
 }
