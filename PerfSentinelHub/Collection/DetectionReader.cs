@@ -7,8 +7,8 @@ namespace PerfSentinelHub.Collection;
 /// <summary>
 ///     One daemon's detection ledger, read page by page and merged. A pass starts from the
 ///     ledger's cursor, or its oldest day the first time, and seals only once it read every
-///     page: then the days up to the sealed_through its first page carried, so a day the
-///     daemon sealed while the pass ran is read whole again by the next one.
+///     page: then the days it read up to the sealed_through its first page carried, so a
+///     day the daemon sealed while the pass ran is read whole again by the next one.
 /// </summary>
 /// <remarks>
 ///     Its failures are its own, as for IncidentReader, and a storage failure too, unlike
@@ -76,6 +76,7 @@ public sealed partial class DetectionReader(
         var sinceDay = await database.ReadDetectionCursorAsync(source.Id, ledger.LedgerId, cancellationToken) ??
                        ledger.OldestDay;
         int? sealedThrough = null;
+        var oldestDay = sinceDay;
         string? after = null;
         for (var pages = 0; pages < PagesCap; pages++)
         {
@@ -93,12 +94,13 @@ public sealed partial class DetectionReader(
             }
 
             if (pages == 0)
-                sealedThrough = page.SealedThrough;
+                (sealedThrough, oldestDay) = (page.SealedThrough, page.OldestDay);
             await database.MergeDetectionPageAsync(source.Id, page, false, observedAtMs, cancellationToken);
             rows.Value += page.Counts.Count;
             if (page.NextAfter is null)
             {
-                await database.SealDetectionPassAsync(source.Id, ledger.LedgerId, sealedThrough, cancellationToken);
+                await database.SealDetectionPassAsync(
+                    source.Id, ledger.LedgerId, sinceDay, oldestDay, sealedThrough, cancellationToken);
                 return DetectionReadOutcome.Ok;
             }
 

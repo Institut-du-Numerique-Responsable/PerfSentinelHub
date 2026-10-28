@@ -148,10 +148,10 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         Assert.Null(await _database.ReadDetectionCursorAsync("daemon-a", Ledger, cancellationToken));
 
         // A pass whose first page had no sealed day leaves everything as it was.
-        await _database.SealDetectionPassAsync("daemon-a", Ledger, null, cancellationToken);
+        await _database.SealDetectionPassAsync("daemon-a", Ledger, 20_398, 20_398, null, cancellationToken);
         Assert.Equal("0,0,0", await ScalarAsync("SELECT group_concat(sealed, ',') FROM detection_days;"));
 
-        await _database.SealDetectionPassAsync("daemon-a", Ledger, 20_399, cancellationToken);
+        await _database.SealDetectionPassAsync("daemon-a", Ledger, 20_398, 20_398, 20_399, cancellationToken);
 
         Assert.Equal("20398 1,20399 1,20400 0",
             await ScalarAsync("SELECT group_concat(day || ' ' || sealed, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));

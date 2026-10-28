@@ -192,14 +192,18 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
-    ///     Closes a whole poll pass in one transaction: seals the ledger's days up to the
-    ///     sealed_through its first page carried and moves the cursor to the day after, so
-    ///     the next pass rereads whole any day sealed while this one ran. A first page with
-    ///     no sealed day leaves both as they are.
+    ///     Closes a whole poll pass in one transaction: seals the ledger's days the pass read,
+    ///     from the later of its since_day and its first page's oldest_day up to the
+    ///     sealed_through that page carried, and moves the cursor to the day after, so the
+    ///     next pass rereads whole any day sealed while this one ran. A day below the read
+    ///     was pruned by the daemon, perhaps read partially, and stays open. A first page
+    ///     with no sealed day leaves both as they are.
     /// </summary>
     public async Task SealDetectionPassAsync(
         string sourceId,
         string ledgerId,
+        int sinceDay,
+        int oldestDay,
         int? sealedThrough,
         CancellationToken cancellationToken)
     {
@@ -215,12 +219,15 @@ public sealed partial class HubDatabase
             command.Transaction = transaction;
             command.CommandText = """
                                   UPDATE detection_days SET sealed = 1
-                                  WHERE source_id = $source_id AND ledger_id = $ledger_id AND day <= $sealed_through;
+                                  WHERE source_id = $source_id AND ledger_id = $ledger_id
+                                    AND day BETWEEN MAX($since_day, $oldest_day) AND $sealed_through;
                                   UPDATE detection_ledgers SET read_from_day = $sealed_through + 1
                                   WHERE source_id = $source_id AND ledger_id = $ledger_id;
                                   """;
             command.Parameters.AddWithValue(SourceIdParameter, sourceId);
             command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
+            command.Parameters.AddWithValue("$since_day", sinceDay);
+            command.Parameters.AddWithValue("$oldest_day", oldestDay);
             command.Parameters.AddWithValue("$sealed_through", sealedThrough.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

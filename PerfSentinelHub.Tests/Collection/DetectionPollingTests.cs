@@ -207,6 +207,38 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_complete_pass_never_seals_a_day_below_what_it_read()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (poller, database, _) = await BuildAsync(cancellationToken);
+        // A day read partially, its cursor still on it, then pruned by the daemon: its
+        // ledger now starts two days later.
+        var partial = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(Today - 4)], [DetectionLedgerJson.Day(Today - 4)], Today);
+        var nowMs = DetectionLedgerJson.Midnight(Today);
+        await database.MergeDetectionPageAsync(
+            "prod", DetectionLedgerJson.Parse(partial, nowMs), false, nowMs, cancellationToken);
+        await using (var connection = await database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"UPDATE detection_ledgers SET read_from_day = {Today - 4};";
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()), context => Serve(context, Page([Today - 2, Today - 1], null)), cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        Assert.Equal([$"?since_day={Today - 4}&limit=5000"], _requests);
+        Assert.Equal(
+            [(Today - 4, false), (Today - 2, true), (Today - 1, true)],
+            await DaysAsync(database, cancellationToken));
+        Assert.Equal(Today, await database.ReadDetectionCursorAsync("prod", DetectionLedgerJson.LedgerId,
+            cancellationToken));
+    }
+
+    [Fact]
     public async Task The_cursor_is_escaped()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
