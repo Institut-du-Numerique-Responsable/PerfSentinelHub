@@ -186,9 +186,9 @@ machine token too and every read is trimmed to the caller's grants, see
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md) and
 [What access control does not cover](#what-access-control-does-not-cover).
 
-Four endpoints ask for a credential, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations` and
-`POST /api/import/disclosures`, whose `X-API-Key` is compared by fingerprint, and `/share/`
+Five endpoints ask for a credential, `POST /api/import/findings`,
+`POST /api/import/incidents`, `POST /api/import/correlations`,
+`POST /api/import/detections` and `POST /api/import/disclosures`, whose `X-API-Key` is compared by fingerprint, and `/share/`
 serves a disclosure's files to whoever holds a live token. Every other one asks for nothing:
 `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses` for both the
 listing and the request that starts a run, `/reports/`, `/metrics`, and the
