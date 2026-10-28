@@ -297,7 +297,8 @@ public static partial class ApiEndpoints
             return (null!, refuse(ImportRejection.TooLarge,
                 TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge)));
         }
-        catch (InvalidDataException)
+        // The second is an unpaired surrogate or invalid UTF-8 in a string, which the reader cannot hand over.
+        catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
         {
             return (null!, refuse(ImportRejection.BadRequest, TypedResults.BadRequest()));
         }

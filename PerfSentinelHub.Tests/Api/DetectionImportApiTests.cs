@@ -174,4 +174,23 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         Assert.Equal(before + 1, Refusals("bad_request"));
         Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM detection_counts WHERE signature = 'invalid';"));
     }
+
+    // A lone surrogate is valid JSON text, but no .NET string holds it: reading it throws.
+    [Theory]
+    [InlineData("signature")]
+    [InlineData("ledger_id")]
+    public async Task A_lone_surrogate_is_a_400_and_counted(string field)
+    {
+        var page = Page(field == "signature" ? "surrogate" : DetectionLedgerJson.Signature);
+        if (field == "ledger_id")
+            page["ledger_id"] = "surrogate";
+        var body = page.ToJsonString().Replace("\"surrogate\"", "\"\\ud800\"", StringComparison.Ordinal);
+        var before = Refusals("bad_request");
+
+        using var request = Request(ApiKey, body);
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(before + 1, Refusals("bad_request"));
+    }
 }
