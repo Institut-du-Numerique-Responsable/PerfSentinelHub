@@ -334,6 +334,9 @@ public sealed class PollingTests : IDisposable
         // 400 findings went in between the polls and the ring holds 100: the second
         // poll finds 300 gone and, the fake answering the cap, hits it as well.
         var totals = new Queue<long>([1000, 1400]);
+        // An uptime that runs with the clock the poller reads, so a loaded run with polls
+        // seconds apart still reads one process and not a restart.
+        var startedAt = DateTimeOffset.UtcNow.AddSeconds(-60);
         var configReads = 0;
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
@@ -342,7 +345,7 @@ public sealed class PollingTests : IDisposable
                 await context.Response.WriteAsJsonAsync(new
                 {
                     version = "0.34.1",
-                    uptime_seconds = 60,
+                    uptime_seconds = (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds,
                     stored_findings = 100,
                     max_retained_findings = 100,
                     findings_stored_total = totals.Dequeue()
