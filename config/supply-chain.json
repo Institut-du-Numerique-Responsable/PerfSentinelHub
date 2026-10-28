@@ -311,10 +311,10 @@
     {
       "name": "ghcr.io/institut-du-numerique-responsable/perf-sentinel",
       "kind": "container",
-      "version": "0.36.0",
-      "digest_or_sha": "sha256:01b24b5fa9db0b96989129a196af18de4d5b1a9a41361f298873e7c3a18d57ce",
+      "version": "0.37.0",
+      "digest_or_sha": "sha256:290fce8940fff7548b7f700964e0655fe19d84d9227d8d728b713df493ab1286",
       "released_at": "2026-10-28",
-      "source": "https://ghcr.io/v2/institut-du-numerique-responsable/perf-sentinel/manifests/0.36.0",
+      "source": "https://ghcr.io/v2/institut-du-numerique-responsable/perf-sentinel/manifests/0.37.0",
       "reason": "The analysis engine the Hub runs. Copied from the published image so the build reaches no host outside the registry."
     },
     {

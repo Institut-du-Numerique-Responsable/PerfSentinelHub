@@ -6,17 +6,18 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
-- The image ships perf-sentinel `0.36.0` as its analysis engine, repinned by digest from
+- The image ships perf-sentinel `0.37.0` as its analysis engine, repinned by digest from
   `0.35.0`. It is also the version the launcher compares a polled daemon's
-  `producer_version` against, so a daemon still on `0.35.0` or earlier now reads behind.
+  `producer_version` against, so a daemon still on `0.36.0` or earlier now reads behind.
   `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
-  schema stays `perf-sentinel-report/v1.8`. The engine's one output change is its SARIF,
-  which the Jenkins Warnings NG parser reads again: a result carries a `location` only when
-  it has a source file, and the service and endpoint move to `result.properties`. The Hub
-  reads no SARIF, so a backend analysis gives the same findings, signatures and energy
-  figures as on `0.35.0`, and neither the daemon wire format nor the findings JSON changes.
-  The other engine fix, the expiry hint of `perf-sentinel ack create`, is a CLI message the
-  Hub does not use.
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.37.0` adds the detection ledger this
+  release reads: a per-day count of every finding a daemon detects, served on
+  `GET /api/detections` and pushed to `POST /api/import/detections`, and
+  `perf-sentinel hub findings` relays `--from`, `--to`, `--offset`, `--include-acked` and
+  `--signature` to the Hub. Engine `0.36.0` changed only its SARIF, which the Jenkins
+  Warnings NG parser reads again, and the expiry hint of `perf-sentinel ack create`. The Hub
+  reads neither. A backend analysis gives the same findings, signatures and energy figures
+  as on `0.35.0`, and the findings wire format is unchanged.
 
 ### Added
 
