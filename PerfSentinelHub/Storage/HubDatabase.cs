@@ -938,6 +938,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                 AND candidate.endpoint = $endpoint
                                 AND candidate.template_hash <> $template_hash
                                 AND candidate.last_seen_ms >= $window_start
+                                -- Strictly before this poll: a finding seen at or after it is still current.
                                 AND candidate.last_seen_ms < $observed_at
                                 -- Two findings of the same batch are two current problems, not a
                                 -- mutation. last_seen alone cannot tell: it is the daemon's
