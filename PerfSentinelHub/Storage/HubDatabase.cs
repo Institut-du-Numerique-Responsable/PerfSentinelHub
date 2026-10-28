@@ -219,6 +219,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(false);
+        var batchSignatures = JsonArray([.. batch.Findings.Select(finding => finding.Signature)]);
 
         foreach (var finding in batch.Findings)
         {
@@ -228,7 +229,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             // signature the Hub has never stored, and the upsert would hide
             // that distinction.
             var predecessor = await FindLineagePredecessorAsync(
-                connection, transaction, finding, observedAtMs, cancellationToken);
+                connection, transaction, finding, batchSignatures, observedAtMs, cancellationToken);
             await UpsertFindingAsync(connection, transaction, finding, firstSeenMs, seenAtMs, cancellationToken);
             if (predecessor is not null)
                 await InsertLineageAsync(
@@ -881,6 +882,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         SqliteConnection connection,
         SqliteTransaction transaction,
         ParsedFinding finding,
+        string batchSignatures,
         long observedAtMs,
         CancellationToken cancellationToken)
     {
@@ -906,9 +908,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                 AND candidate.endpoint = $endpoint
                                 AND candidate.template_hash <> $template_hash
                                 AND candidate.last_seen_ms >= $window_start
-                                -- Strictly earlier: two findings of the same batch are two
-                                -- current problems, not a mutation.
                                 AND candidate.last_seen_ms < $observed_at
+                                -- Two findings of the same batch are two current problems, not a
+                                -- mutation. last_seen alone cannot tell: it is the daemon's
+                                -- detection, older than this poll.
+                                AND candidate.signature NOT IN (SELECT value FROM json_each($batch_signatures))
                                 -- Already superseded: without this, the second mutation in a
                                 -- chain always sees two candidates and never links.
                                 AND candidate.signature NOT IN (SELECT predecessor_signature FROM finding_lineage)
@@ -918,6 +922,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$finding_type", finding.FindingType);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
+        command.Parameters.AddWithValue("$batch_signatures", batchSignatures);
         command.Parameters.AddWithValue("$window_start", observedAtMs - LineageWindowMs);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
 

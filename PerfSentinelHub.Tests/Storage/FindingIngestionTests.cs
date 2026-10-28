@@ -296,6 +296,32 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Equal(0L, await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_lineage;", cancellationToken));
     }
 
+    /// <summary>
+    ///     A poll after the daemon's detection dates each finding before the poll, so
+    ///     the first finding of the batch already looks older than the second one.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_polled_after_its_detections_never_links_its_own_findings()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var batch = FindingParser.Parse(await File.ReadAllBytesAsync(FixturePath, cancellationToken));
+        var source = new SourceSnapshot("production-a", "Production A", "production", "0.11.2");
+        var second = batch.Findings[0] with
+        {
+            Signature = "blocking_wait:rider-smoke:checkout:other-path",
+            TemplateHash = "other-template-hash"
+        };
+        var pollMs = batch.Findings[0].StoredAtMs!.Value + (long)TimeSpan.FromHours(2).TotalMilliseconds;
+
+        await database.UpsertBatchAsync(
+            source, new ParsedBatch([batch.Findings[0], second], 0), pollMs, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(0L, await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_lineage;", cancellationToken));
+    }
+
     [Fact]
     public async Task Query_walks_the_lineage_chain_to_the_original_first_seen()
     {
