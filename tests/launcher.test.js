@@ -776,6 +776,7 @@ test("every reason a count falls short has its own phrase", () => {
     assert.equal(new Set(phrases).size, reasons.length, "no two reasons share a phrase");
     // A reason a newer engine adds reads as it is sent rather than as nothing.
     assert.equal(PSL.gapLabel("new_reason"), "new_reason");
+    assert.equal(PSL.gapLabel("constructor"), "constructor");
 });
 
 const ACK_NOW = Date.parse("2026-09-20T15:00:00Z");

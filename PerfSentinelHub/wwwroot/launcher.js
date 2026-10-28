@@ -1519,7 +1519,7 @@
      * @returns {string}
      */
     function gapLabel(reason) {
-        return GAP_LABEL[reason] || reason;
+        return Object.prototype.hasOwnProperty.call(GAP_LABEL, reason) ? GAP_LABEL[reason] : reason;
     }
 
     /**
