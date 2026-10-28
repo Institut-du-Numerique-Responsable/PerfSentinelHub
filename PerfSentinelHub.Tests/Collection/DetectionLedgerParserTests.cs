@@ -64,6 +64,15 @@ public sealed class DetectionLedgerParserTests
         Assert.Throws<InvalidDataException>(() => Parse(json));
     }
 
+    [Fact]
+    public void An_upper_case_ledger_id_reads_as_the_lower_case_one()
+    {
+        var json = Valid();
+        json["ledger_id"] = "0000000A-0000-4000-8000-00000000000B";
+
+        Assert.Equal("0000000a-0000-4000-8000-00000000000b", Parse(json).LedgerId);
+    }
+
     [Theory]
     [InlineData(Today - 401)]
     [InlineData(Today + 3)]

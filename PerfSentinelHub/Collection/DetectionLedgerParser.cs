@@ -90,11 +90,12 @@ public static class DetectionLedgerParser
             samplingRate);
     }
 
-    // The daemon writes a hyphenated UUID; the ledger is keyed on it as written.
+    // The daemon writes a lower-case hyphenated UUID, and the ledger is keyed on it: an
+    // upper-case spelling of the same GUID must not open a second ledger.
     private static string ReadLedgerId(JsonElement root)
     {
         return JsonRead.ReadString(root, "ledger_id") is { } ledgerId && Guid.TryParseExact(ledgerId, "D", out _)
-            ? ledgerId
+            ? ledgerId.ToLowerInvariant()
             : throw Invalid("The detection page's ledger_id is not a GUID.");
     }
 
