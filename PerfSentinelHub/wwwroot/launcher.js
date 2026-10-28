@@ -1441,7 +1441,11 @@
     function ackRows(finding, sources, scope) {
         const sourceId = (scope && scope.sourceId) || null;
         const environment = (scope && scope.environment) || null;
-        const rows = (finding.sources || []).map(function (carrier) {
+        // A source that only counted the finding holds no copy to ack or revoke.
+        const copies = (finding.sources || []).filter(function (carrier) {
+            return carrier.producer_version !== null;
+        });
+        const rows = copies.map(function (carrier) {
             const source = (sources || []).find(function (candidate) {
                 return candidate.id === carrier.id;
             });
@@ -1481,6 +1485,40 @@
             else row.checked = actionable.length === 1;
         });
         return rows;
+    }
+
+    /**
+     * A detection count as the page shows it: `?` when no day of the window is
+     * known, `at least N` when a reason keeps it short, `N` when it is whole.
+     * @param {number | null | undefined} detections
+     * @param {boolean | null | undefined} complete
+     * @returns {string}
+     */
+    function formatDetections(detections, complete) {
+        if (detections === null || detections === undefined) return '?';
+        const count = detections.toLocaleString('en');
+        return complete === false ? '\u2265 ' + count : count;
+    }
+
+    const GAP_LABEL = {
+        uncovered_days: 'days the ledger does not cover',
+        open_day: 'a day still open',
+        restart: 'a daemon restart',
+        sampling: 'sampled traces',
+        shed: 'traces shed under memory pressure',
+        ingest_rejected: 'rejected ingest',
+        overflow: 'a full ledger',
+        multi_instance: 'several instances behind one source'
+    };
+
+    /**
+     * Why a detection count falls short, in a few words. A reason a newer
+     * engine adds is returned as it was sent.
+     * @param {string} reason
+     * @returns {string}
+     */
+    function gapLabel(reason) {
+        return GAP_LABEL[reason] || reason;
     }
 
     /**
@@ -2243,6 +2281,8 @@
         ackEntryHash,
         readAckRoute,
         ackRows,
+        formatDetections,
+        gapLabel,
         ackExpiry,
         ackExpiryLine,
         ackChecked,

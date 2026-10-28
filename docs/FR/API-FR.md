@@ -3,9 +3,10 @@
 Quatre surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'import. Un
 greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse et
 le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et ne lit
-`/api/findings` que sur la page d'acquittement, par signature. Les divulgations périodiques
-se tiennent à part des quatre : une tâche planifiée les publie sur une route qui leur est
-propre, et le lanceur, un lien de partage ou un webhook les transmet, voir
+`/api/findings` que sur la page d'acquittement, par signature, une fois sans fenêtre et une
+fois sur les 7 derniers jours pour le volume de détections. Les divulgations périodiques se
+tiennent à part des quatre : une tâche planifiée les publie sur une route qui leur est propre,
+et le lanceur, un lien de partage ou un webhook les transmet, voir
 [Divulgations](#divulgations).
 
 ## API d'import

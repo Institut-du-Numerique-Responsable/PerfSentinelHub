@@ -3,8 +3,9 @@
 Four surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
 plugin or a CI job reads the read API. The browser uses the analysis API and the ack relay,
 reads `/api/incidents` for its incidents screen, and reads `/api/findings` only on the ack
-page, by signature. Periodic disclosures sit apart from all four: a scheduled job publishes
-them to a route of their own, and the launcher, a share link or a webhook carries them on, see
+page, by signature, once without a window and once over the last 7 days for the detection
+volume. Periodic disclosures sit apart from all four: a scheduled job publishes them to a
+route of their own, and the launcher, a share link or a webhook carries them on, see
 [Disclosures](#disclosures).
 
 ## Import API
