@@ -326,8 +326,9 @@ severity, service, endpoint, operation template, first and last seen, and status
 with no signature, or with one past the Hub's bounds, says that it is incomplete, and a
 signature the Hub holds no finding for says so. Neither falls back to another screen.
 
-A second read of the same route, windowed over the last 7 days with `from` and `to` taken
-from the browser's clock, adds the detections to the card. The facts gain
+A second read of the same route, windowed over the last 7 UTC days, today included, from
+the start of the UTC day six days back to now on the browser's clock, adds the detections
+to the card. The facts gain
 `Detections (7 days)`, the count over every source, and `Avoidable I/O (7 days)` when the
 daemons counted the extra I/O. A count that falls short, a day still open for one, reads
 as a lower bound with a ≥ sign, and as `?` when no day of the window is known. Under the

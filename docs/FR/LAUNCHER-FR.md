@@ -356,8 +356,9 @@ observation, et le statut. Un lien sans signature, ou dont la signature dépasse
 du Hub, dit qu'il est incomplet, et une signature pour laquelle le Hub ne détient aucun
 finding le dit aussi. Aucun des deux ne retombe sur un autre écran.
 
-Une seconde lecture de la même route, fenêtrée sur les 7 derniers jours avec `from` et `to`
-pris sur l'horloge du navigateur, ajoute les détections à la carte. Les faits gagnent
+Une seconde lecture de la même route, fenêtrée sur les 7 derniers jours UTC, aujourd'hui
+compris, du début du jour UTC d'il y a six jours jusqu'à maintenant sur l'horloge du
+navigateur, ajoute les détections à la carte. Les faits gagnent
 `Detections (7 days)`, le compte sur toutes les sources, et `Avoidable I/O (7 days)` quand les
 daemons ont compté l'I/O supplémentaire. Un compte qui reste en deçà, un jour encore ouvert
 par exemple, se lit comme une borne basse avec un signe ≥, et comme `?` quand aucun jour de la

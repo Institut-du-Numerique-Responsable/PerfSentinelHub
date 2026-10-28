@@ -765,6 +765,14 @@ test("a detection count reads as ?, N or at least N, grouped by thousands", () =
     assert.equal(PSL.formatDetections(0, false), "\u2265 0");
 });
 
+test("the detection window spans seven UTC days ending today", () => {
+    const day = 86400000;
+    const now = 20400 * day + 15 * 3600000;
+    // The Hub counts whole days from the from day to the to day, both included.
+    assert.deepEqual(PSL.detectionWindow(now, 7), {from: 20394 * day, to: now});
+    assert.deepEqual(PSL.detectionWindow(20400 * day, 1), {from: 20400 * day, to: 20400 * day});
+});
+
 test("every reason a count falls short has its own phrase", () => {
     const reasons = ["uncovered_days", "open_day", "restart", "sampling", "shed", "ingest_rejected",
         "overflow", "multi_instance"];

@@ -5652,9 +5652,9 @@
         };
         // A second, windowed read adds the detections. Any failure of it, a refused read or
         // a body that is not a list, must not hide the card.
-        const now = Date.now();
+        const span = PSL.detectionWindow(Date.now(), ACK_WINDOW_DAYS);
         const windowed = getJson('/api/findings?signature=' + encodeURIComponent(route.signature)
-            + '&from=' + (now - ACK_WINDOW_DAYS * 86400000) + '&to=' + now + '&limit=1').then(named).catch(function () {
+            + '&from=' + span.from + '&to=' + span.to + '&limit=1').then(named).catch(function () {
             return undefined;
         });
         Promise.all([getJson(path), reloadSources(), windowed]).then(function (answers) {

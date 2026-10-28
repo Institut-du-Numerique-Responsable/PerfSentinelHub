@@ -1501,6 +1501,19 @@
         return complete === false ? '\u2265 ' + count : count;
     }
 
+    /**
+     * The from and to of a windowed read counting `days` whole UTC days, today the last.
+     * The Hub counts every day from the from day to the to day, so `now - days` would
+     * count one day more.
+     * @param {number} nowMs
+     * @param {number} days
+     * @returns {{from: number, to: number}}
+     */
+    function detectionWindow(nowMs, days) {
+        const dayMs = 86400000;
+        return {from: (Math.floor(nowMs / dayMs) - days + 1) * dayMs, to: nowMs};
+    }
+
     const GAP_LABEL = {
         uncovered_days: 'days the ledger does not cover',
         open_day: 'a day still open',
@@ -2283,6 +2296,7 @@
         readAckRoute,
         ackRows,
         formatDetections,
+        detectionWindow,
         gapLabel,
         ackExpiry,
         ackExpiryLine,
