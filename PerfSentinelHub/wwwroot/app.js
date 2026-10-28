@@ -5650,10 +5650,11 @@
                 return row.finding && row.finding.signature === route.signature;
             }) || null;
         };
-        // A second, windowed read adds the detections. Its failure must not hide the card.
+        // A second, windowed read adds the detections. Any failure of it, a refused read or
+        // a body that is not a list, must not hide the card.
         const now = Date.now();
         const windowed = getJson('/api/findings?signature=' + encodeURIComponent(route.signature)
-            + '&from=' + (now - ACK_WINDOW_DAYS * 86400000) + '&to=' + now + '&limit=1').then(named, function () {
+            + '&from=' + (now - ACK_WINDOW_DAYS * 86400000) + '&to=' + now + '&limit=1').then(named).catch(function () {
             return undefined;
         });
         Promise.all([getJson(path), reloadSources(), windowed]).then(function (answers) {
