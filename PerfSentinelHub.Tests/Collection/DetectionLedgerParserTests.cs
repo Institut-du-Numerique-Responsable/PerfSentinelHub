@@ -103,6 +103,12 @@ public sealed class DetectionLedgerParserTests
             Parse(Valid(DetectionLedgerJson.Count(Today, new string('s', 1025)))));
     }
 
+    [Fact]
+    public void An_empty_signature_is_refused()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Valid(DetectionLedgerJson.Count(Today, ""))));
+    }
+
     [Theory]
     [InlineData("n_plus_one_sql:order-svc:SELECT 1\n")]
     [InlineData("n_plus_one_sql:\u001b[31morder-svc")]

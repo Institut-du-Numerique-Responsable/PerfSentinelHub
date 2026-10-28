@@ -65,7 +65,7 @@ public static class DetectionLedgerParser
 
     private static DetectionCountRow ReadCount(JsonElement row, DayWindow window)
     {
-        if (JsonRead.ReadString(row, "signature") is not { Length: <= MaxSignatureLength } signature ||
+        if (JsonRead.ReadString(row, "signature") is not { Length: > 0 and <= MaxSignatureLength } signature ||
             signature.Any(char.IsControl))
             throw Invalid("A detection count has no readable signature.");
         return new DetectionCountRow(
