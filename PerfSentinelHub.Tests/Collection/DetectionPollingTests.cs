@@ -239,6 +239,25 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
+    public async Task An_upper_case_ledger_id_is_the_same_ledger_on_the_status_and_the_pages()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string upper = "AAAAAAAA-0000-4000-8000-00000000000A";
+        var ledger = Ledger();
+        ledger["ledger_id"] = upper;
+        var page = Page([Today - 1], null);
+        page["ledger_id"] = upper;
+        await using var daemon = await DaemonAsync(Status(ledger), context => Serve(context, page), cancellationToken);
+        var (poller, database, watch) = await BuildAsync(cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        Assert.Equal(1, watch.Reads("prod", DetectionReadOutcome.Ok));
+        Assert.Equal(Today, await database.ReadDetectionCursorAsync("prod", upper.ToLowerInvariant(),
+            cancellationToken));
+    }
+
+    [Fact]
     public async Task The_cursor_is_escaped()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

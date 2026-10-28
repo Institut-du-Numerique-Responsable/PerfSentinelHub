@@ -92,17 +92,19 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
 
     // Any field that does not read voids the whole object rather than the status: the
     // ledger is an extra, and a daemon whose ledger the Hub cannot name is never asked
-    // for it. The id is the one every page must carry, so it is held to the same GUID.
+    // for it. The id is the one every page must carry, so it is held to the same GUID
+    // and lower-cased as DetectionLedgerParser does.
     private static DetectionLedgerStatus? ReadDetectionLedger(JsonElement root)
     {
         if (!root.TryGetProperty("detection_ledger", out var ledger) ||
             ledger.ValueKind != JsonValueKind.Object ||
-            JsonRead.ReadString(ledger, "ledger_id") is not { } ledgerId ||
-            !Guid.TryParseExact(ledgerId, "D", out _) ||
+            JsonRead.ReadString(ledger, "ledger_id") is not { } spelledId ||
+            !Guid.TryParseExact(spelledId, "D", out _) ||
             JsonRead.ReadLong(ledger, "started_ms") is not { } startedMs ||
             ReadDay(ledger, "oldest_day") is not { } oldestDay ||
             ReadDay(ledger, "current_day") is not { } currentDay)
             return null;
+        var ledgerId = spelledId.ToLowerInvariant();
         if (!ledger.TryGetProperty("sealed_through", out var sealedThrough) ||
             sealedThrough.ValueKind == JsonValueKind.Null)
             return new DetectionLedgerStatus(ledgerId, startedMs, oldestDay, currentDay, null);
