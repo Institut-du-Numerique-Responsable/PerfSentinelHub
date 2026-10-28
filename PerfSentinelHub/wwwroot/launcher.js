@@ -1430,7 +1430,8 @@
      * daemon below 0.24.0 never has a listing and one failed read proves
      * nothing, while the relay would still answer, so the daemon is left to
      * refuse the button that does not apply.
-     * @param {{sources?: Array<{id: string, name: string, environment: string}>,
+     * @param {{sources?: Array<{id: string, name: string, environment: string,
+     *   producer_version?: string | null}>,
      *   acks?: Array<{source_id: string, source: string}>}} finding
      * @param {Array<import('../types').Source> | null | undefined} sources
      * @param {{sourceId?: string | null, environment?: string | null} | null | undefined} scope
