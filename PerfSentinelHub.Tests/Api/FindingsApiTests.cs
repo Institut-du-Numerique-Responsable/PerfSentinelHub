@@ -757,6 +757,24 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     }
 
     [Fact]
+    public async Task A_scoped_window_admits_no_finding_counted_only_outside_its_scope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        // Observed at volume-copy on day 2 only, counted on day 0 at volume-count alone.
+        await factory.Database.UpsertBatchAsync(
+            VolumeCopy, new ParsedBatch([await VariantAsync("volume-scope:x", "volume-scope")], 0),
+            2 * DayMs + 1000, cancellationToken);
+        await RecordDetectionsAsync(VolumeCount, "volume-scope:x", 4);
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+        var window = $"/api/findings?service=volume-scope&from=0&to={DayMs - 1}";
+
+        Assert.Equal(4, Assert.Single((await ListAsync(window, client)).EnumerateArray())
+            .GetProperty("detections").GetInt64());
+        Assert.Empty((await ListAsync($"{window}&source_id=volume-copy", client)).EnumerateArray());
+    }
+
+    [Fact]
     public async Task detections_from_and_to_are_the_clamped_days()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
