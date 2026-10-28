@@ -62,11 +62,11 @@ rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq seco
 fusionnés. La rétention purge par tranches bornées, pour qu'une purge longue ne rejette
 pas les imports pendant toute sa durée.
 
-Un push met à jour les findings, les incidents, les registres de détections et les observations par source, rien d'autre. Il n'efface
-jamais le `unreachable_since_ms` du chemin de poll. Une source que le Hub ne peut pas
-joindre continue de rapporter `unreachable_since` alors que son daemon pousse avec succès,
-et c'est juste : la joignabilité est un fait sur la route du Hub vers le daemon, qu'un
-push n'exerce pas.
+Un push met à jour les findings, les incidents, les registres de détections et les
+observations par source, rien d'autre. Il n'efface jamais le `unreachable_since_ms` du
+chemin de poll. Une source que le Hub ne peut pas joindre continue de rapporter
+`unreachable_since` alors que son daemon pousse avec succès, et c'est juste : la
+joignabilité est un fait sur la route du Hub vers le daemon, qu'un push n'exerce pas.
 
 ## API de lecture
 

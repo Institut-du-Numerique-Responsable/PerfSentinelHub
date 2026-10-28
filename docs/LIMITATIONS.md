@@ -131,10 +131,9 @@ The window counts whole UTC days on the Hub's clock, from the day of `from`, nev
 before the day retention keeps, to the day of `to`, never after the Hub's day. Days
 before the upgrade have no row and read as unknown. With access patterns, a source
 that counted a finding without holding a copy of it is listed only to a caller who
-reads that whole source,
-and a scoped read reaches only findings with at least one copy in scope. A source
-removed from `Hub:Sources` drops out of the count, since the Hub has no name to serve
-for it.
+reads that whole source, and a scoped read reaches only findings with at least one
+copy in scope. A source removed from `Hub:Sources` drops out of the count, since the
+Hub has no name to serve for it.
 
 ## What a finding is attributed to
 
@@ -187,13 +186,13 @@ machine token too and every read is trimmed to the caller's grants, see
 [What access control does not cover](#what-access-control-does-not-cover).
 
 Five endpoints ask for a credential, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations`,
-`POST /api/import/detections` and `POST /api/import/disclosures`, whose `X-API-Key` is compared by fingerprint, and `/share/`
-serves a disclosure's files to whoever holds a live token. Every other one asks for nothing:
-`/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses` for both the
-listing and the request that starts a run, `/reports/`, `/metrics`, and the
-launcher itself. Whoever reaches the port reads every finding of every tenant,
-SQL query shapes and endpoint names included.
+`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`
+and `POST /api/import/disclosures`, whose `X-API-Key` is compared by fingerprint, and
+`/share/` serves a disclosure's files to whoever holds a live token. Every other one asks for
+nothing: `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses`
+for both the listing and the request that starts a run, `/reports/`, `/metrics`, and the
+launcher itself. Whoever reaches the port reads every finding of every tenant, SQL query
+shapes and endpoint names included.
 
 The `by` and `reason` of a mirrored ack are readable on the open read route,
 `/api/findings`, which stays open to machines with `Hub:Auth` on unless `Hub:Access` is

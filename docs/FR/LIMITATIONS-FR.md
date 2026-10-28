@@ -139,12 +139,12 @@ s'additionnent sans cette raison. Le chevauchement compare le `started_ms` du da
 l'heure de lecture du Hub, donc une horloge de daemon en retard sur celle du Hub peut
 faire lire un redémarrage comme `multi_instance`.
 
-La fenêtre compte des jours UTC entiers sur l'horloge du Hub, du jour de `from`,
-jamais avant le jour que garde la rétention, au jour de `to`, jamais après le jour du
-Hub. Les jours antérieurs à la mise à jour n'ont pas de ligne et se lisent inconnus.
-Avec des motifs d'accès, une source qui a compté un finding sans en tenir de copie
-n'est listée qu'à un appelant qui lit cette source entière, et une lecture restreinte n'atteint que les
-findings qui ont au moins une copie dans sa portée. Une source retirée de
+La fenêtre compte des jours UTC entiers sur l'horloge du Hub, du jour de `from`, jamais
+avant le jour que garde la rétention, au jour de `to`, jamais après le jour du Hub. Les
+jours antérieurs à la mise à jour n'ont pas de ligne et se lisent inconnus. Avec des
+motifs d'accès, une source qui a compté un finding sans en tenir de copie n'est listée
+qu'à un appelant qui lit cette source entière, et une lecture restreinte n'atteint que
+les findings qui ont au moins une copie dans sa portée. Une source retirée de
 `Hub:Sources` sort du compte, puisque le Hub n'a aucun nom à servir pour elle.
 
 ## À quoi un finding est attribué
@@ -202,14 +202,13 @@ lecture est réduite aux grants de l'appelant, voir
 [Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
 Cinq endpoints réclament une preuve, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations`,
-`POST /api/import/detections` et `POST /api/import/disclosures`, dont la `X-API-Key` est comparée par empreinte, et `/share/`
-sert les fichiers d'une divulgation à quiconque détient un jeton valide. Tous les autres ne
-réclament rien :
-`/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses` aussi bien pour
-la liste que pour la requête qui lance un run, `/reports/`, `/metrics`, et le
-lanceur lui-même. Qui joint le port lit tous les findings de tous les tenants,
-modèles de requêtes SQL et noms d'endpoints compris.
+`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`
+et `POST /api/import/disclosures`, dont la `X-API-Key` est comparée par empreinte, et
+`/share/` sert les fichiers d'une divulgation à quiconque détient un jeton valide. Tous les
+autres ne réclament rien : `/api/status`, `/api/sources`, `/api/findings`,
+`/api/correlations`, `/api/analyses` aussi bien pour la liste que pour la requête qui lance
+un run, `/reports/`, `/metrics`, et le lanceur lui-même. Qui joint le port lit tous les
+findings de tous les tenants, modèles de requêtes SQL et noms d'endpoints compris.
 
 Le `by` et le `reason` d'un acquittement reflété sont lisibles sur la route de
 lecture ouverte, `/api/findings`, qui reste ouverte aux machines quand
