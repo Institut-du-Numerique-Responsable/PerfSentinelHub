@@ -20,6 +20,16 @@ public sealed record CorrelationImportAdmission(ImportGate Gate, CorrelationImpo
     }
 }
 
+/// <summary>The detection import's admission: the shared gate, its own refusal count.</summary>
+public sealed record DetectionImportAdmission(ImportGate Gate, DetectionImportMetrics Metrics)
+{
+    public T Refuse<T>(ImportRejection reason, T result)
+    {
+        Metrics.Rejected(reason);
+        return result;
+    }
+}
+
 /// <summary>
 ///     The import endpoint's admission control: the concurrency gate that decides
 ///     whether a request runs at all, and the counter that records every refusal.

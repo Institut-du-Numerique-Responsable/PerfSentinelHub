@@ -22,6 +22,9 @@ public static partial class ApiEndpoints
     // A hundred episodes of two templates each: the daemon's own cap per batch.
     private const int CorrelationImportMaxBytes = 1024 * 1024;
 
+    // Twice the daemon's own 4 MiB bound on a ledger page.
+    private const int DetectionImportMaxBytes = 8 * 1024 * 1024;
+
     public static void MapHubApi(this WebApplication app)
     {
         var version = HubVersion.Current;
@@ -92,6 +95,7 @@ public static partial class ApiEndpoints
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
+        app.MapPost("/api/import/detections", ImportDetectionsAsync).AllowAnonymous();
         app.MapPost("/api/import/disclosures", ImportDisclosuresAsync).AllowAnonymous();
         app.MapGet("/api/disclosures", GetDisclosuresAsync);
         app.MapGet("/api/disclosures/{id}", GetDisclosureAsync);
@@ -368,6 +372,40 @@ public static partial class ApiEndpoints
             if (import.RejectedCount > 0)
                 LogRejectedImportedEpisodes(loggerFactory.CreateLogger("ImportApi"), source.Id, import.RejectedCount);
             return TypedResults.Ok(new ImportResponse(import.Episodes.Count, import.RejectedCount));
+        }
+        finally
+        {
+            admission.Gate.Exit();
+        }
+    }
+
+    private static async Task<IResult> ImportDetectionsAsync(
+        HttpRequest request,
+        HubDatabase database,
+        DetectionImportAdmission admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        if (AdmitImport(request, options, admission.Gate, admission.Refuse, out var source) is { } refused)
+            return refused;
+        try
+        {
+            var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+            var (page, rejected) = await ReadImportAsync(
+                request, DetectionImportMaxBytes, payload => DetectionLedgerParser.ParsePage(payload, nowMs),
+                admission.Refuse, cancellationToken);
+            if (rejected is not null)
+                return rejected;
+            // No refusal for an empty page: the midnight seal often arrives as a day with no rows.
+            if (!await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken))
+            {
+                request.HttpContext.Response.Headers.RetryAfter = "1";
+                return admission.Refuse(ImportRejection.WriteTimeout,
+                    TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
+            }
+
+            return TypedResults.Ok(new ImportResponse(page.Counts.Count, 0));
         }
         finally
         {

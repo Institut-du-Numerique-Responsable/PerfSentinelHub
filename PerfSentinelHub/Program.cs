@@ -89,6 +89,8 @@ builder.Services.AddSingleton<IncidentImportMetrics>();
 builder.Services.AddSingleton<IncidentImportAdmission>();
 builder.Services.AddSingleton<CorrelationImportMetrics>();
 builder.Services.AddSingleton<CorrelationImportAdmission>();
+builder.Services.AddSingleton<DetectionImportMetrics>();
+builder.Services.AddSingleton<DetectionImportAdmission>();
 builder.Services.AddSingleton<DisclosureImportGate>();
 builder.Services.AddSingleton<ShareGate>();
 builder.Services.AddSingleton<DisclosureMetrics>();

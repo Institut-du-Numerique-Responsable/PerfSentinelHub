@@ -53,3 +53,9 @@ public sealed class IncidentImportMetrics : ImportMetrics;
 ///     incident import has one.
 /// </summary>
 public sealed class CorrelationImportMetrics : ImportMetrics;
+
+/// <summary>
+///     The detection import's refusals, on a series of their own for the reason the
+///     incident import has one.
+/// </summary>
+public sealed class DetectionImportMetrics : ImportMetrics;
