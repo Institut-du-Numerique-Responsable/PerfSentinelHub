@@ -131,6 +131,8 @@ builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<UpdateChecker>());
 builder.Services.AddTransient<IncidentReader>();
 builder.Services.AddTransient<AckReader>();
+builder.Services.AddTransient<DetectionReader>();
+builder.Services.AddSingleton<DetectionWatch>();
 builder.Services.AddTransient<AckRelay>();
 builder.Services.AddSingleton<RingWatch>();
 builder.Services.AddTransient<SourcePoller>();

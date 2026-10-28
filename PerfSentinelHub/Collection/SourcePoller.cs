@@ -16,6 +16,7 @@ public sealed partial class SourcePoller(
     HubDatabase database,
     IncidentReader incidents,
     AckReader acks,
+    DetectionReader detections,
     RingWatch rings,
     TimeProvider timeProvider,
     ILogger<SourcePoller> logger)
@@ -69,6 +70,8 @@ public sealed partial class SourcePoller(
             // The same, in ack_reads. The version decides whether the daemon
             // is asked at all: see AckReader.
             await acks.ReadAsync(source, status.Version, observedAtMs, cancellationToken);
+            // Last, and never failing the poll: see DetectionReader.
+            await detections.ReadAsync(source, status.DetectionLedger, observedAtMs, cancellationToken);
             return new PollResult(
                 batch.Findings.Count,
                 batch.RejectedCount,

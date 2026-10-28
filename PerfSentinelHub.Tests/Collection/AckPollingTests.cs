@@ -298,6 +298,7 @@ public sealed class AckPollingTests : IDisposable
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, logger ?? NullLogger<AckReader>.Instance),
+            new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             timeProvider,
             NullLogger<SourcePoller>.Instance);

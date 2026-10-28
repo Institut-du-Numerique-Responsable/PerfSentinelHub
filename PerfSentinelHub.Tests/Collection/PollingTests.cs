@@ -76,6 +76,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
@@ -159,6 +164,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
@@ -302,6 +312,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             logger);
@@ -375,6 +390,7 @@ public sealed class PollingTests : IDisposable
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             logger);
@@ -460,6 +476,7 @@ public sealed class PollingTests : IDisposable
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             rings,
             TimeProvider.System,
             logger);
@@ -542,6 +559,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             logger);
@@ -607,6 +629,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
@@ -734,6 +761,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             clock,
             NullLogger<SourcePoller>.Instance);
