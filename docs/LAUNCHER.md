@@ -326,6 +326,18 @@ severity, service, endpoint, operation template, first and last seen, and status
 with no signature, or with one past the Hub's bounds, says that it is incomplete, and a
 signature the Hub holds no finding for says so. Neither falls back to another screen.
 
+A second read of the same route, windowed over the last 7 days with `from` and `to` taken
+from the browser's clock, adds the detections to the card. The facts gain
+`Detections (7 days)`, the count over every source, and `Avoidable I/O (7 days)` when the
+daemons counted the extra I/O. A count that falls short, a day still open for one, reads
+as a lower bound with a ≥ sign, and as `?` when no day of the window is known. Under the
+facts, one line per source gives its count, its avoidable I/O and, in parentheses, why it
+falls short, in words. The reasons are listed under [What the Hub adds to a
+finding](API.md#what-the-hub-adds-to-a-finding). A window with no detection the Hub knows
+reads "No detection known in the last 7 days". Any failure of this second read, a refused
+request or an answer that is not a list, leaves the card and the form as they are and adds
+the one line "The Hub could not read the detections of the last 7 days."
+
 Below it sits one form: a required reason, an optional expiry, and one row per source that
 carries the finding. The expiry is a day, sent as the last second of that day in UTC, and
 an empty one is a permanent ack. When no source carrying the finding can take an ack from

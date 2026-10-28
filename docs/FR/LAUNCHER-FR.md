@@ -356,6 +356,19 @@ observation, et le statut. Un lien sans signature, ou dont la signature dépasse
 du Hub, dit qu'il est incomplet, et une signature pour laquelle le Hub ne détient aucun
 finding le dit aussi. Aucun des deux ne retombe sur un autre écran.
 
+Une seconde lecture de la même route, fenêtrée sur les 7 derniers jours avec `from` et `to`
+pris sur l'horloge du navigateur, ajoute les détections à la carte. Les faits gagnent
+`Detections (7 days)`, le compte sur toutes les sources, et `Avoidable I/O (7 days)` quand les
+daemons ont compté l'I/O supplémentaire. Un compte qui reste en deçà, un jour encore ouvert
+par exemple, se lit comme une borne basse avec un signe ≥, et comme `?` quand aucun jour de la
+fenêtre n'est connu. Sous les faits, une ligne par source donne son compte, son I/O évitable
+et, entre parenthèses, pourquoi il reste en deçà, en toutes lettres. Les raisons sont listées
+dans [Ce que le Hub ajoute à un finding](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Une
+fenêtre sans détection connue du Hub se lit "No detection known in the last 7 days". Tout
+échec de cette seconde lecture, une requête refusée ou une réponse qui n'est pas une liste,
+laisse la carte et le formulaire tels quels et ajoute la seule ligne "The Hub could not read
+the detections of the last 7 days."
+
 Dessous, un seul formulaire : une raison obligatoire, une expiration facultative, et une
 ligne par source qui porte le finding. L'expiration est un jour, envoyé comme la dernière
 seconde de ce jour en UTC, et une expiration vide est un acquittement permanent. Quand
