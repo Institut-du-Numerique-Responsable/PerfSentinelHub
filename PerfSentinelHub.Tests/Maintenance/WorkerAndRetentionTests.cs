@@ -118,6 +118,42 @@ public sealed class WorkerAndRetentionTests : IDisposable
         Assert.Equal("3,4", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    // Counts and days leave by their day, the cutoff's own day kept whole; a ledger by its last read.
+    [Fact]
+    public async Task Detection_rows_leave_with_their_day()
+    {
+        const long dayMs = 86_400_000;
+        const string ledger = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        await database.MergeDetectionPageAsync("a", new DetectionLedgerPage(
+                ledger, 0, 4, 2, null,
+                [new DetectionCountRow(2, "sig", 1, null), new DetectionCountRow(3, "sig", 1, null)],
+                [
+                    new DetectionDayRow(2, false, false, 0, null, 0, 0, 1.0),
+                    new DetectionDayRow(3, false, false, 0, null, 0, 0, 1.0)
+                ],
+                null),
+            false, 3 * dayMs, cancellationToken);
+        await database.MergeDetectionPageAsync("b", new DetectionLedgerPage(
+                ledger, 0, 4, 4, null, [], [new DetectionDayRow(4, false, false, 0, null, 0, 0, 1.0)], null),
+            false, 4 * dayMs, cancellationToken);
+
+        await database.PurgeAsync(3 * dayMs + dayMs / 2, 0, 0, cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = connection.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(day, ',') FROM detection_counts) || ' | ' ||
+                                  (SELECT group_concat(day, ',') FROM (SELECT day FROM detection_days ORDER BY day)) || ' | ' ||
+                                  (SELECT group_concat(source_id, ',') FROM detection_ledgers);
+                           """;
+        Assert.Equal("3 | 3,4 | b", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
     [Fact]
     public async Task Purge_removes_a_grouping_no_source_saw_since_the_cutoff()
     {

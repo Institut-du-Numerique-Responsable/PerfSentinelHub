@@ -356,3 +356,28 @@ public sealed record ListedAck(
     bool Held,
     string? Service,
     IReadOnlyList<AccessAttribute> Rows);
+
+/// <summary>One page of a daemon's detection ledger, as the poll reads it and the push sends it.</summary>
+public sealed record DetectionLedgerPage(
+    string LedgerId,
+    long StartedMs,
+    int CurrentDay,
+    int OldestDay,
+    int? SealedThrough,
+    IReadOnlyList<DetectionCountRow> Counts,
+    IReadOnlyList<DetectionDayRow> Days,
+    string? NextAfter);
+
+/// <summary>How many times one signature was detected on one UTC epoch day, null I/O when green was off.</summary>
+public sealed record DetectionCountRow(int Day, string Signature, long Detections, long? ExtraIoOps);
+
+/// <summary>What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.</summary>
+public sealed record DetectionDayRow(
+    int Day,
+    bool Sealed,
+    bool Gap,
+    long OverflowDetections,
+    long? OverflowExtraIoOps,
+    long ShedTraces,
+    long IngestRejected,
+    double SamplingRate);
