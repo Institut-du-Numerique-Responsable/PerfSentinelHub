@@ -85,7 +85,7 @@ one does. Until it lands, such a copy matches no attribute scope.
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather
-than through a library: fifteen metric families over data the Hub already holds do
+than through a library: nineteen metric families over data the Hub already holds do
 not justify a dependency in a service whose only two packages are SQLite.
 
 | Metric                                                                 | Type    | What it answers                                       |
@@ -99,6 +99,9 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_import_rejected_total{reason}`                      | counter | Imports refused, by reason                            |
 | `perf_sentinel_hub_incident_import_rejected_total{reason}`             | counter | Incident imports refused, by the findings reasons     |
 | `perf_sentinel_hub_correlation_import_rejected_total{reason}`          | counter | Correlation imports refused, by the findings reasons  |
+| `perf_sentinel_hub_detection_import_rejected_total{reason}`            | counter | Detection pushes refused, by the findings reasons     |
+| `perf_sentinel_hub_detection_reads_total{source,outcome}`              | counter | Poll passes over a detection ledger, by outcome       |
+| `perf_sentinel_hub_detection_rows_total{source}`                       | counter | Detection count rows merged from a polled ledger      |
 | `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Runs accepted and not yet claimed by a worker         |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Runs currently stored, per status                     |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Distinct finding signatures stored, per environment   |
@@ -113,6 +116,16 @@ scrapes as it did before. `reason` takes eight constants: `unauthorized`, `gate_
 `internal_refused` and `conflict`. `render_refused` is the engine's refusal, a hash that does
 not recompute or an attestation that names another report. Both counters start from zero at
 each start, as the findings import counter does.
+
+`outcome` on the detection reads takes five constants, published from startup for every
+polled daemon: `ok`, `aborted`, `unauthorized`, `failed` and `capped`. `aborted` is a
+daemon that started a new ledger or turned it off during the pass, and `capped` a ledger
+past 64 pages. A daemon older than perf-sentinel 0.37.0, or with its ledger off, is never
+read and stays at zero. `detection_rows_total` counts the rows merged by each pass, and
+the open day is merged again on every poll, so it does not count distinct rows and its
+rate is not an intake volume. A pushed ledger counts only its refusals, on
+`detection_import_rejected_total`, whose reasons are the findings import's. The three
+detection counters start from zero at each start.
 
 Four things the shape is deliberate about.
 
@@ -220,7 +233,7 @@ Four files under [`examples/`](../examples), each validated rather than sketched
 
 | File                                                                       | Is                                                                     |
 |----------------------------------------------------------------------------|------------------------------------------------------------------------|
-| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Eleven panels over eight of the fifteen families, importable as it stands |
+| [`grafana-dashboard.json`](../examples/grafana-dashboard.json)             | Twelve panels over nine of the nineteen families, importable as it stands |
 | [`FR/grafana-dashboard-FR.json`](../examples/FR/grafana-dashboard-FR.json) | The same dashboard with French titles and descriptions                 |
 | [`prometheus-alerts.yml`](../examples/prometheus-alerts.yml)               | One rule, checked with `promtool check rules`                          |
 | [`prometheus-scrape.yml`](../examples/prometheus-scrape.yml)               | A scrape job for a deployment that names its targets                   |

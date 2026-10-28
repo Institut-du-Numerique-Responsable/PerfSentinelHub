@@ -59,6 +59,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     private readonly int _maxReadLimit = options.Value.MaxReadLimit;
 
     private readonly long _resolutionGraceMs = (long)options.Value.ResolutionGrace.TotalMilliseconds;
+    private readonly TimeSpan _retention = options.Value.Retention;
+
+    // Names a source that only counted a finding, since it holds no copy that would.
+    private readonly IReadOnlyList<SourceOptions> _sources = options.Value.Sources;
 
     // Never disposed, and the class is deliberately not IDisposable. A
     // SemaphoreSlim only holds a wait handle once AvailableWaitHandle is read,
@@ -219,23 +223,25 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(false);
+        var batchSignatures = JsonArray([.. batch.Findings.Select(finding => finding.Signature)]);
 
         foreach (var finding in batch.Findings)
         {
-            var firstSeenMs = ClampedFirstSeen(finding, observedAtMs);
+            var seenAtMs = ClampedSeen(finding, observedAtMs);
+            var firstSeenMs = ClampedFirstSeen(finding, seenAtMs);
             // Resolved before the upsert: a predecessor only exists for a
             // signature the Hub has never stored, and the upsert would hide
             // that distinction.
             var predecessor = await FindLineagePredecessorAsync(
-                connection, transaction, finding, observedAtMs, cancellationToken);
-            await UpsertFindingAsync(connection, transaction, finding, firstSeenMs, observedAtMs, cancellationToken);
+                connection, transaction, finding, batchSignatures, observedAtMs, cancellationToken);
+            await UpsertFindingAsync(connection, transaction, finding, firstSeenMs, seenAtMs, cancellationToken);
             if (predecessor is not null)
                 await InsertLineageAsync(
                     connection, transaction, finding.Signature, predecessor, observedAtMs, cancellationToken);
 
             await UpsertFindingSourceAsync(
-                connection, transaction, source, finding, firstSeenMs, observedAtMs, cancellationToken);
-            await UpsertHeartbeatAsync(connection, transaction, source, finding, observedAtMs, cancellationToken);
+                connection, transaction, source, finding, firstSeenMs, seenAtMs, cancellationToken);
+            await UpsertHeartbeatAsync(connection, transaction, source, finding, seenAtMs, cancellationToken);
         }
 
         await using (var state = connection.CreateCommand())
@@ -400,6 +406,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM correlation_episodes WHERE last_seen_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM finding_observations WHERE rowid IN (
                                      SELECT rowid FROM finding_observations WHERE day < $cutoff_day LIMIT $chunk);
+                                   DELETE FROM detection_counts WHERE rowid IN (
+                                     SELECT rowid FROM detection_counts WHERE day < $cutoff_day LIMIT $chunk);
+                                   DELETE FROM detection_days WHERE rowid IN (
+                                     SELECT rowid FROM detection_days WHERE day < $cutoff_day LIMIT $chunk);
+                                   DELETE FROM detection_ledgers WHERE rowid IN (
+                                     SELECT rowid FROM detection_ledgers WHERE last_read_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM finding_groupings WHERE rowid IN (
                                      SELECT rowid FROM finding_groupings WHERE last_seen_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM finding_attributes WHERE rowid IN (
@@ -575,6 +587,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
         AddFilter(where, parameters, "signature", SignatureParameter, query.Signature);
         var windowed = AddWindow(parameters, query);
+        var (volumeWindow, today) = AddVolumeWindow(parameters, query, windowed);
+
         if (query.Grouping is not null)
             parameters.Add(("$grouping", query.Grouping));
 
@@ -628,7 +642,24 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                     ReadAck(reader)));
         }
 
+        // The page's reader is drained, and SQLite runs the next statement on the same connection.
+        await AttachVolumesAsync(connection, rows, query, volumeWindow, today, cancellationToken);
         return rows;
+    }
+
+    // Only a windowed read has volumes to count, and the window reaches back by the retention.
+    private (VolumeWindow? Window, int Today) AddVolumeWindow(
+        List<(string Name, object Value)> parameters,
+        FindingQuery query,
+        bool windowed)
+    {
+        if (!windowed)
+            return (null, 0);
+
+        var (window, today) = VolumeWindowOf(query);
+        parameters.Add(("$vol_from_day", window.FromDay));
+        parameters.Add(("$vol_to_day", window.ToDay));
+        return (window, today);
     }
 
     // The last five columns of the findings read, null on a source holding no active ack.
@@ -666,7 +697,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 $" AND fs.source_id {InScope}"),
             _ => ("WITH", "findings", "", "")
         };
-        var window = windowed ? InWindow(row, Copies(access, "p")) : "";
+        var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
         var grouped = query.Grouping is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));
 #pragma warning disable S2077
@@ -766,10 +797,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             : $"($source_ids IS NULL OR {alias}.source_id {InScope})";
     }
 
-    private static string InWindow(string row, string copies)
+    // A finding counted in the volume window is present too, observed or not: the ring may
+    // have turned between two polls, or the listing hit its cap.
+    private static string InWindow(string row, string copies, string countCopies)
     {
         return $"""
-                 AND EXISTS (
+                 AND (EXISTS (
                     SELECT 1 FROM finding_sources AS p
                     WHERE p.signature = {row}.signature
                       AND {copies}
@@ -779,6 +812,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                AND o.day BETWEEN $from_day AND $to_day)
                            OR (p.first_seen_ms <= $to_ms
                                AND COALESCE(p.first_observed_day * 86400000, p.last_seen_ms) >= $from_ms)))
+                  OR EXISTS (
+                    SELECT 1 FROM detection_counts AS dc
+                    WHERE dc.signature = {row}.signature
+                      AND dc.day BETWEEN $vol_from_day AND $vol_to_day
+                      AND {countCopies}))
                 """;
     }
 
@@ -854,12 +892,18 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     }
 
     // The daemon-reported birth wins over the Hub clock, clamped so a clock
-    // running ahead cannot mint future observations. last_seen stays the Hub
-    // clock on purpose: retention, ORDER BY and the freshness guard compare
-    // it, so it must come from one monotonic clock, never a remote one.
-    private static long ClampedFirstSeen(ParsedFinding finding, long observedAtMs)
+    // running ahead cannot mint future observations.
+    private static long ClampedFirstSeen(ParsedFinding finding, long seenAtMs)
     {
-        return Math.Min(finding.FirstSeenMs ?? observedAtMs, observedAtMs);
+        return Math.Min(finding.FirstSeenMs ?? seenAtMs, seenAtMs);
+    }
+
+    // The daemon's last detection, not the poll that read it: a finding the daemon
+    // still holds but no longer detects must age. Clamped to the Hub clock so a
+    // daemon clock running ahead cannot keep it fresh; the poll time without one.
+    private static long ClampedSeen(ParsedFinding finding, long observedAtMs)
+    {
+        return Math.Min(finding.StoredAtMs ?? observedAtMs, observedAtMs);
     }
 
     /// <summary>
@@ -874,6 +918,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         SqliteConnection connection,
         SqliteTransaction transaction,
         ParsedFinding finding,
+        string batchSignatures,
         long observedAtMs,
         CancellationToken cancellationToken)
     {
@@ -899,9 +944,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                 AND candidate.endpoint = $endpoint
                                 AND candidate.template_hash <> $template_hash
                                 AND candidate.last_seen_ms >= $window_start
-                                -- Strictly earlier: two findings of the same batch are two
-                                -- current problems, not a mutation.
+                                -- Strictly before this poll: a finding seen at or after it is still current.
                                 AND candidate.last_seen_ms < $observed_at
+                                -- Two findings of the same batch are two current problems, not a
+                                -- mutation. last_seen alone cannot tell: it is the daemon's
+                                -- detection, older than this poll.
+                                AND candidate.signature NOT IN (SELECT value FROM json_each($batch_signatures))
                                 -- Already superseded: without this, the second mutation in a
                                 -- chain always sees two candidates and never links.
                                 AND candidate.signature NOT IN (SELECT predecessor_signature FROM finding_lineage)
@@ -911,6 +959,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$finding_type", finding.FindingType);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
+        command.Parameters.AddWithValue("$batch_signatures", batchSignatures);
         command.Parameters.AddWithValue("$window_start", observedAtMs - LineageWindowMs);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
 
@@ -963,7 +1012,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         SqliteTransaction transaction,
         ParsedFinding finding,
         long firstSeenMs,
-        long observedAtMs,
+        long seenAtMs,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -1010,7 +1059,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$template_hash", finding.TemplateHash);
         command.Parameters.AddWithValue("$sample_trace_id", (object?)finding.TraceId ?? DBNull.Value);
         command.Parameters.AddWithValue(FirstSeenParameter, firstSeenMs);
-        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, seenAtMs);
         command.Parameters.AddWithValue("$confidence", finding.Confidence);
         command.Parameters.AddWithValue("$confidence_rank", finding.ConfidenceRank);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1022,7 +1071,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         SourceSnapshot source,
         ParsedFinding finding,
         long firstSeenMs,
-        long observedAtMs,
+        long seenAtMs,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -1070,12 +1119,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$environment", source.Environment);
         command.Parameters.AddWithValue("$producer_version", source.ProducerVersion);
         command.Parameters.AddWithValue(FirstSeenParameter, firstSeenMs);
-        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, seenAtMs);
         command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
         command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$severity", finding.Severity);
         command.Parameters.AddWithValue("$severity_rank", FindingParser.SeverityRank(finding.Severity));
-        command.Parameters.AddWithValue("$day", observedAtMs / DayMs);
+        command.Parameters.AddWithValue("$day", seenAtMs / DayMs);
         command.Parameters.AddWithValue("$grouping", (object?)finding.Grouping ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1085,7 +1134,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         SqliteTransaction transaction,
         SourceSnapshot source,
         ParsedFinding finding,
-        long observedAtMs,
+        long seenAtMs,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -1099,7 +1148,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue(SourceIdParameter, source.SourceId);
         command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
-        command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        command.Parameters.AddWithValue(ObservedAtParameter, seenAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

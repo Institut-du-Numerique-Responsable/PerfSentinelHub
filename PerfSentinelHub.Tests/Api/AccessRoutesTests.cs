@@ -46,6 +46,9 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     private const string F3 = "slow_sql:cart:0000000000000000000000000000000000000003";
     private const string F4 = "slow_sql:cart:0000000000000000000000000000000000000004";
     private const string F5 = "slow_sql:checkout:0000000000000000000000000000000000000005";
+
+    // Seeded by the detection volume tests alone: cart at lab-d, counted elsewhere too.
+    private const string F6 = "slow_sql:cart:0000000000000000000000000000000000000006";
     private const string Orphan = "slow_sql:gone:0000000000000000000000000000000000000009";
     private const string Incident = "0000000000000000000000000000000a";
     private const string MixedIncident = "0000000000000000000000000000000b";
@@ -323,6 +326,46 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         Assert.Contains(F1, (await FindingsAsync(svc, window)).Select(Signature));
         Assert.DoesNotContain(F1, (await FindingsAsync(attr, "/api/findings?status=active")).Select(Signature));
         Assert.Contains(F1, (await FindingsAsync(svc, "/api/findings?status=active")).Select(Signature));
+    }
+
+    [Fact]
+    public async Task A_count_only_source_joins_only_for_a_caller_holding_the_whole_source()
+    {
+        // F6 has its one copy at lab-d and is counted at lab-d and at shop-d.
+        await SeedFindingAsync("lab-d", "lab", F6, "cart", "[]");
+        await RecordDetectionsAsync("lab-d", F6, 2);
+        await RecordDetectionsAsync("shop-d", F6, 3);
+        var window = $"/api/findings?from={NowMs - 60_000}&to={NowMs}";
+
+        // lab holds lab-d whole, svc reads cart at every source: neither holds shop-d whole.
+        foreach (var user in new[] { "lab", "svc" })
+        {
+            using var client = await SignedInAsync(user);
+            var finding = Assert.Single(await FindingsAsync(client, window), item => Signature(item) == F6);
+            Assert.Equal("lab-d",
+                Assert.Single(finding.GetProperty("sources").EnumerateArray()).GetProperty("id").GetString());
+            Assert.Equal(2, finding.GetProperty("detections").GetInt64());
+        }
+
+        using var admin = await SignedInAsync("admin");
+        var whole = Assert.Single(await FindingsAsync(admin, window), item => Signature(item) == F6);
+        Assert.Equal(2, whole.GetProperty("sources").GetArrayLength());
+        Assert.Equal(5, whole.GetProperty("detections").GetInt64());
+    }
+
+    [Fact]
+    public async Task A_count_admits_a_finding_to_a_window_only_where_the_caller_reads_a_copy()
+    {
+        // F6 seen at lab-d, then counted eight days later at shop-d alone, where it has no copy.
+        await SeedFindingAsync("lab-d", "lab", F6, "cart", "[]");
+        _clock.Advance(TimeSpan.FromDays(8));
+        await RecordDetectionsAsync("shop-d", F6, 3);
+        using var lab = await SignedInAsync("lab");
+        using var admin = await SignedInAsync("admin");
+        var window = $"/api/findings?from={NowMs - 60_000}&to={NowMs}";
+
+        Assert.DoesNotContain(F6, (await FindingsAsync(lab, window)).Select(Signature));
+        Assert.Contains(F6, (await FindingsAsync(admin, window)).Select(Signature));
     }
 
     [Fact]
@@ -1104,6 +1147,18 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                   "grouping":{{grouping}},"source_endpoint":"GET /orders","pattern":{"template":"SELECT 1"},
                   "confidence":"daemon_production","signature":"{{signature}}"},"first_seen_ms":1}
                  """;
+    }
+
+    // One pushed page of a ledger: today, open, one signature's count.
+    private Task RecordDetectionsAsync(string source, string signature, long detections)
+    {
+        var day = (int)(NowMs / 86_400_000);
+        var page = new DetectionLedgerPage(
+            "00000000-0000-4000-8000-000000000001", 0, day, day, null,
+            [new DetectionCountRow(day, signature, detections, 10)],
+            [new DetectionDayRow(day, false, false, 0, null, 0, 0, 1.0)],
+            null);
+        return Database.MergeDetectionPageAsync(source, page, true, NowMs, TestContext.Current.CancellationToken);
     }
 
     private static string ImportBody(string signature, string service, string grouping)

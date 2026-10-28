@@ -135,7 +135,7 @@ to 8 MiB, so the job that publishes disclosures through this host needs `8m`.
 ## The CI reads, it does not feed
 
 A build produces SARIF and JSON, and neither belongs in the Hub. `last_seen` is
-the Hub's own observation clock, `status` is derived from an endpoint that
+a daemon's last detection, `status` is derived from an endpoint that
 still heartbeats, and a build is a synthetic shot against a branch. Importing
 one would make `status` false and would let a branch's findings read as
 production's. A CI job that wants the fleet's state calls `GET /api/findings`

@@ -23,6 +23,12 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
     private const int AcksMaxBytes = 8 * 1024 * 1024;
     internal const int FindingsLimit = 1000;
     public const int IncidentsPageSize = 100;
+
+    // A full page of 5000 count rows holds ASCII signatures at the parser's 1 KiB bound.
+    public const int DetectionsMaxBytes = 8 * 1024 * 1024;
+
+    // The daemon's own ceiling on a page.
+    public const int DetectionsPageSize = 5000;
     private readonly TimeSpan _timeout = options.Value.HttpTimeout;
 
     public async Task<DaemonStatus> FetchStatusAsync(
@@ -79,8 +85,37 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
             ReadGauge(root, "stored_findings"),
             ReadCapacity(root, "max_retained_findings"))
         {
-            FindingsStoredTotal = ReadGauge(root, "findings_stored_total")
+            FindingsStoredTotal = ReadGauge(root, "findings_stored_total"),
+            DetectionLedger = ReadDetectionLedger(root)
         };
+    }
+
+    // Any field that does not read voids the whole object rather than the status: the
+    // ledger is an extra, and a daemon whose ledger the Hub cannot name is never asked
+    // for it. The id is the one every page must carry, so it is held to the same GUID
+    // and lower-cased as DetectionLedgerParser does.
+    private static DetectionLedgerStatus? ReadDetectionLedger(JsonElement root)
+    {
+        if (!root.TryGetProperty("detection_ledger", out var ledger) ||
+            ledger.ValueKind != JsonValueKind.Object ||
+            JsonRead.ReadString(ledger, "ledger_id") is not { } spelledId ||
+            !Guid.TryParseExact(spelledId, "D", out _) ||
+            JsonRead.ReadLong(ledger, "started_ms") is not { } startedMs ||
+            ReadDay(ledger, "oldest_day") is not { } oldestDay ||
+            ReadDay(ledger, "current_day") is not { } currentDay)
+            return null;
+        var ledgerId = spelledId.ToLowerInvariant();
+        if (!ledger.TryGetProperty("sealed_through", out var sealedThrough) ||
+            sealedThrough.ValueKind == JsonValueKind.Null)
+            return new DetectionLedgerStatus(ledgerId, startedMs, oldestDay, currentDay, null);
+        return ReadDay(ledger, "sealed_through") is { } sealedDay
+            ? new DetectionLedgerStatus(ledgerId, startedMs, oldestDay, currentDay, sealedDay)
+            : null;
+    }
+
+    private static int? ReadDay(JsonElement element, string name)
+    {
+        return JsonRead.ReadLong(element, name) is { } day and >= 0 and <= int.MaxValue ? (int)day : null;
     }
 
     private static long? ReadGauge(JsonElement root, string name)
@@ -151,6 +186,37 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
         {
             throw new IncidentsUnauthorizedException(exception);
+        }
+    }
+
+    /// <summary>
+    ///     One page of the daemon's detection ledger, from <paramref name="sinceDay" /> on and
+    ///     past the cursor <paramref name="after" /> the previous page ended on. Null when the
+    ///     route is absent (404) or the ledger is off (503), and a 401 is its own exception,
+    ///     as for the incidents.
+    /// </summary>
+    public async Task<byte[]?> FetchDetectionsPageAsync(
+        SourceOptions source,
+        int sinceDay,
+        string? after,
+        CancellationToken cancellationToken)
+    {
+        // The cursor is "<day>:<signature>", and a signature may hold spaces, '&' or '+'.
+        var path = $"api/detections?since_day={sinceDay}&limit={DetectionsPageSize}";
+        if (after is not null)
+            path += $"&after={Uri.EscapeDataString(after)}";
+        try
+        {
+            return await SendAsync(source, path, cancellationToken, maxBytes: DetectionsMaxBytes);
+        }
+        catch (HttpRequestException exception)
+            when (exception.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.ServiceUnavailable)
+        {
+            return null;
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            throw new DetectionsUnauthorizedException(exception);
         }
     }
 
@@ -293,6 +359,9 @@ public sealed class ResponseTooLargeException(int maxBytes)
 
 public sealed class IncidentsUnauthorizedException(Exception innerException)
     : IOException("The daemon refused the key on its incidents route.", innerException);
+
+public sealed class DetectionsUnauthorizedException(Exception innerException)
+    : IOException("The daemon refused the key on its detections route.", innerException);
 
 public sealed class AcksUnauthorizedException(Exception innerException)
     : IOException("The daemon refused the key on its ack listing.", innerException);

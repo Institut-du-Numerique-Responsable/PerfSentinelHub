@@ -3,8 +3,9 @@
 Four surfaces, and they do not overlap. A daemon pushes into the import API. An IDE
 plugin or a CI job reads the read API. The browser uses the analysis API and the ack relay,
 reads `/api/incidents` for its incidents screen, and reads `/api/findings` only on the ack
-page, by signature. Periodic disclosures sit apart from all four: a scheduled job publishes
-them to a route of their own, and the launcher, a share link or a webhook carries them on, see
+page, by signature, once without a window and once over the last 7 days for the detection
+volume. Periodic disclosures sit apart from all four: a scheduled job publishes them to a
+route of their own, and the launcher, a share link or a webhook carries them on, see
 [Disclosures](#disclosures).
 
 ## Import API
@@ -36,16 +37,30 @@ batch with none valid is a `400`. Copies of one episode merge in any order: the 
 latest `last_seen_ms` and the highest peaks win, the rolling values come from the newer copy, and
 an end is kept once seen. Refusals count on `perf_sentinel_hub_correlation_import_rejected_total`.
 
+`POST /api/import/detections?source_id=<id>` accepts the detection ledger a daemon on
+perf-sentinel 0.37.0 or later pushes beside its findings, one page in the shape
+`GET /api/detections` serves on the daemon: `ledger_id`, `counts` and `days`. It takes the same
+key, the same four-slot gate and the same five-second write wait, and at most 8 MiB per request.
+The page is checked whole, with the bounds the poll applies: a GUID `ledger_id`, days from 400
+before the Hub's day to 2 after it, signatures of at most 1,024 characters with no control
+character, integers from 0 to 2^53, a sampling rate from 0 to 1. One value out of bounds is a
+`400`, and more than 5,000 count rows or 31 days a `413`. A page with no count row is accepted,
+since the daemon seals a day by pushing its day object alone. A day pushed `sealed` stays
+sealed, and every value merges by its maximum, a sampling rate by its minimum, so a push, a poll
+and a replay land on the same rows in any order. The push writes neither reachability nor the
+time of the source's last findings push. Refusals count on
+`perf_sentinel_hub_detection_import_rejected_total`.
+
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that
 cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon
 exporters retain and retry their coalesced batches. Retention purges in bounded chunks, so
 a long purge does not reject imports for its whole duration.
 
-A push updates findings, incidents and per-source observations only. It never clears the poll path's
-`unreachable_since_ms`. A source the Hub cannot reach still reports `unreachable_since`
-while its daemon pushes successfully, and that is correct: reachability is a fact about
-the Hub's route to the daemon, which a push does not exercise.
+A push updates findings, incidents, detection ledgers and per-source observations only. It
+never clears the poll path's `unreachable_since_ms`. A source the Hub cannot reach still
+reports `unreachable_since` while its daemon pushes successfully, and that is correct:
+reachability is a fact about the Hub's route to the daemon, which a push does not exercise.
 
 ## Read API
 
@@ -120,7 +135,8 @@ than the fleet, see [What the Hub adds to a finding](#what-the-hub-adds-to-a-fin
 
 `from` and `to` bound the read to an observation window, in epoch milliseconds, each
 optional and both inclusive. A finding is listed when a source in scope observed it inside
-the window, so the window honours `environment` and `source_id`. It selects rows and does
+the window, or counted it there (see the detection volume below), so the window honours
+`environment` and `source_id`. It selects rows and does
 not rewrite them: `first_seen`, `last_seen` and `status` still describe the finding as it
 stands now. A value that is not a plain non-negative integer, a sign included, is a `400`,
 and so is a `from` greater than `to`. Given empty or as whitespace only, either reads as
@@ -317,8 +333,13 @@ observation time and to a Unix-ms sanity floor. Neither a daemon clock running a
 seconds-unit bug can distort it, and it falls back to the observation time when a producer
 omits the field.
 
-`last_seen` is deliberately the Hub's own observation clock. Retention, ordering and
-freshness comparisons rely on it, so it never comes from a remote clock.
+`last_seen` is the source daemon's last detection (`stored_at_ms`), clamped to the Hub's
+observation time, and the observation time when a producer omits the field. A finding the
+daemon still holds but no longer detects keeps its `last_seen` across polls and ages into
+`not_observed` or `likely_resolved`. The clamp keeps a daemon clock running ahead from
+holding a finding fresh, so retention, ordering and freshness comparisons never see a
+time past the Hub's own. The observation day and the endpoint heartbeat follow the same
+time.
 
 Read with `environment` or `source_id`, an envelope describes that scope and not the fleet.
 The daemon's document is the copy of the source in scope that saw the finding last, so
@@ -328,6 +349,66 @@ those sources alone, and `sources` and `acks` list only them. `max_confidence` s
 fleet-wide on purpose, the highest confidence any source ever reported. A source's own copy
 starts at its first observation after the upgrade that records it. Until then its row
 serves the copy the fleet shares, the freshest one from any source.
+
+A read with `from` or `to` also serves how many times the daemons detected the finding in
+the window, from the detection ledgers the Hub polls or receives. A read with neither carries
+none of these fields. The finding and each entry of `sources` get five fields:
+
+- `detections`: the count, an integer or null.
+- `detections_complete`: true when no reason below applies, null with `detections`.
+- `avoidable_io_ops`: the extra I/O operations of those detections, null when a counted day
+  was read with green scoring off.
+- `detections_gaps`: the sorted reasons the count falls short, empty when it is complete.
+- `detections_sampling_rate`: the lowest sampling rate of the counted days. The Hub never
+  extrapolates, a consumer that does should say so.
+
+The finding also gets `detections_from` and `detections_to`, the UTC days counted, as
+`YYYY-MM-DD`. They run from the day of `from`, never before the day the retention purge
+keeps, to the day of `to`, never after the Hub's current day. A window wholly ahead of the
+Hub's day counts nothing, and its `detections_from` is then the day after `detections_to`.
+A window wholly before the retention cutoff serves null counts, and its `detections_from`
+is likewise after its `detections_to`.
+
+A count reads in one of three states:
+
+- null when no day of the window is known for the source, whatever the ledger. This is the
+  case of a daemon older than 0.37.0, of a disabled ledger and of history before the
+  upgrade.
+- complete, `detections_complete: true`, when every day of the window is known and no
+  reason applies.
+- incomplete, `detections_complete: false`, the sum of the known days with its reasons in
+  `detections_gaps`. A known day with no row for the signature counts 0.
+
+The reasons form a closed set:
+
+- `uncovered_days`: a day of the window the source has no row for.
+- `open_day`: a day not yet sealed, the Hub's current day included, or a day a ledger's
+  counts reached the Hub before that ledger's own row for the day. Those counts wait for it.
+- `restart`: a day the daemon restarted on.
+- `sampling`: a day read at a sampling rate below 1.
+- `shed`: a day the daemon shed traces under memory pressure.
+- `ingest_rejected`: a day the daemon rejected ingest.
+- `overflow`: a day a ledger overflowed its signature cap while this signature has no row
+  in that same ledger that day. Another pod's row for it does not count.
+- `multi_instance`: two polled ledgers of the source alive on the same window day, several
+  pods behind one Service that a poll cannot all read. Ledgers the Hub only received by push
+  add up without it.
+
+At the finding level, `detections` and `avoidable_io_ops` are the sums over the sources
+that are not null, and null only when every source is. `detections_complete` is true only
+when every source is known and complete, `detections_gaps` is the union of the reasons, and
+`detections_sampling_rate` the lowest rate of the known sources.
+
+A source that counted the finding in the window without holding a copy of it joins
+`sources`, named as the configuration names it. Its `producer_version` and `age_seconds`
+are null, since both describe a copy. With access patterns, such a source is listed only
+to a caller who reads the whole source. A finding the daemons counted in the window is
+listed even when no poll observed it there, the ring having turned between two polls, as
+long as the Hub already holds its body. A source that is no longer in `Hub:Sources`, a
+retired daemon, has no name to serve: it is left out of `sources` and of the totals. A
+scoped read, by `environment`, `source_id` or access patterns, only reaches findings with
+at least one copy in scope. The seven names are reserved like the Hub's other fields: a
+daemon property of the same name is dropped.
 
 ### How `include_acked` judges a finding
 
@@ -369,6 +450,7 @@ predecessor at import time, when exactly one stored finding:
 - shares the service, detector and endpoint,
 - has a different template hash,
 - was seen within the last 30 days and strictly before the incoming batch,
+- is not a finding of the incoming batch, whose findings are all current problems,
 - and is not itself already superseded.
 
 A signature also changes when the **endpoint** changes, and that path is not linked. The

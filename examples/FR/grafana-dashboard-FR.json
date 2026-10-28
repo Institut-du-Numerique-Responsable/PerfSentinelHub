@@ -617,6 +617,44 @@
           }
         ]
       }
+    },
+    {
+      "title": "Lectures du registre de détections par issue",
+      "description": "Les passages du poll sur le registre de détections de chaque daemon, selon leur issue. ok est un passage qui a lu toutes les pages et scellé les jours que le daemon avait clos. aborted signifie que le daemon a ouvert un nouveau registre ou l'a coupé pendant le passage : ce qui a été lu reste, et le passage suivant lit le nouveau registre. capped est un registre de plus de 64 pages de 5 000 lignes, qui ne scelle rien et repart au poll suivant. unauthorized est une clé de lecture que le daemon refuse sur /api/detections, et failed une page qui n'est pas arrivée, n'a pas pu être lue ou stockée. Aucune ne fait échouer le poll des findings. Un daemon antérieur à perf-sentinel 0.37.0, ou dont le registre est coupé, n'est jamais lu et reste à zéro, donc un tableau plat n'est pas une panne. Un registre que le daemon pousse n'apparaît pas ici : les pushs refusés comptent dans perf_sentinel_hub_detection_import_rejected_total.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (source, outcome) (rate(perf_sentinel_hub_detection_reads_total{job=~\"$job\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{source}} {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      }
     }
   ],
   "schemaVersion": 39,
@@ -685,5 +723,5 @@
   "timezone": "browser",
   "title": "PerfSentinelHub, vue d'ensemble",
   "uid": "perf-sentinel-hub-overview",
-  "version": 4
+  "version": 5
 }

@@ -20,6 +20,7 @@ calls:
 | `POST /api/import/findings`                                      | its own `X-API-Key`, as before                                          |
 | `POST /api/import/incidents`                                     | the same `X-API-Key` as the findings import                             |
 | `POST /api/import/correlations`                                  | the same `X-API-Key` as the findings import                             |
+| `POST /api/import/detections`                                    | the same `X-API-Key` as the findings import                             |
 | `POST /api/import/disclosures`                                   | its own `X-API-Key`, `Hub:Disclosures:ImportKey`                        |
 | `/api/disclosures`                                               | session, otherwise `401`                                                |
 | `GET /share/{token}/{name}`                                      | open, the share link's token is the credential                          |

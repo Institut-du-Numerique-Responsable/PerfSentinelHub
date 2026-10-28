@@ -267,6 +267,47 @@ public sealed class MetricsEndpointTests : IDisposable
     }
 
     [Fact]
+    public async Task Refused_detection_imports_are_published_by_reason_from_startup()
+    {
+        var body = await ScrapeAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("# TYPE perf_sentinel_hub_detection_import_rejected_total counter", body,
+            StringComparison.Ordinal);
+        foreach (var reason in new[] { "bad_request", "unauthorized", "gate_full", "write_timeout", "too_large" })
+            Assert.Contains(
+                $"perf_sentinel_hub_detection_import_rejected_total{{reason=\"{reason}\"}} 0",
+                body,
+                StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Detection_reads_are_published_per_daemon_from_startup()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var body = await ScrapeAsync(cancellationToken);
+        Assert.Contains("# TYPE perf_sentinel_hub_detection_reads_total counter", body, StringComparison.Ordinal);
+        Assert.Contains("# TYPE perf_sentinel_hub_detection_rows_total counter", body, StringComparison.Ordinal);
+        foreach (var source in new[] { "checkout", "payments", "staging-a" })
+        {
+            foreach (var outcome in new[] { "ok", "aborted", "unauthorized", "failed", "capped" })
+                Assert.Contains(
+                    $"perf_sentinel_hub_detection_reads_total{{source=\"{source}\",outcome=\"{outcome}\"}} 0",
+                    body,
+                    StringComparison.Ordinal);
+            Assert.Contains($"perf_sentinel_hub_detection_rows_total{{source=\"{source}\"}} 0", body,
+                StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("source=\"tempo-eu\"", body, StringComparison.Ordinal);
+
+        _factory.Services.GetRequiredService<DetectionWatch>().Record("payments", DetectionReadOutcome.Capped, 12);
+        body = await ScrapeAsync(cancellationToken);
+        Assert.Contains("perf_sentinel_hub_detection_reads_total{source=\"payments\",outcome=\"capped\"} 1", body,
+            StringComparison.Ordinal);
+        Assert.Contains("perf_sentinel_hub_detection_rows_total{source=\"payments\"} 12", body,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_refused_import_advances_its_own_reason_and_no_other()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -540,7 +581,8 @@ public sealed class MetricsEndpointTests : IDisposable
         var batch = FindingParser.Parse(await File.ReadAllBytesAsync(
             Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
             TestContext.Current.CancellationToken));
-        return batch.Findings[0];
+        // Undated, so each push's own time stands for the detection.
+        return batch.Findings[0] with { StoredAtMs = null };
     }
 
     // The push path: only TryUpsertBatchAsync records an import.

@@ -12,7 +12,7 @@ namespace PerfSentinelHub.Api;
 
 /// <summary>
 ///     The Prometheus exposition format, written by hand. The whole surface is
-///     thirteen metric families over data the Hub already holds, which is not worth a
+///     nineteen metric families over data the Hub already holds, which is not worth a
 ///     dependency in a NativeAOT service whose only two packages are SQLite.
 ///     Cardinality is bounded by configuration, not by requests: `source` takes the
 ///     ids and `environment` the environments in `Hub:Sources`, fixed at startup
@@ -85,17 +85,18 @@ public static partial class MetricsEndpoint
                 ImportMetrics imports,
                 IncidentImportMetrics incidentImports,
                 CorrelationImportMetrics correlationImports,
+                DetectionImportMetrics detectionImports,
                 DisclosureMetrics disclosures,
                 FindingMetrics findings,
                 RingWatch rings,
+                DetectionWatch detections,
                 TimeProvider timeProvider,
                 CancellationToken cancellationToken) =>
 #pragma warning restore S107
         {
             var body = await RenderAsync(
-                database, options.Value, imports, incidentImports, correlationImports, disclosures, findings,
-                rings, timeProvider,
-                version, cancellationToken);
+                database, options.Value, imports, incidentImports, correlationImports, detectionImports, disclosures,
+                findings, rings, detections, timeProvider, version, cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
     }
@@ -108,9 +109,11 @@ public static partial class MetricsEndpoint
         ImportMetrics imports,
         IncidentImportMetrics incidentImports,
         CorrelationImportMetrics correlationImports,
+        DetectionImportMetrics detectionImports,
         DisclosureMetrics disclosures,
         FindingMetrics findings,
         RingWatch rings,
+        DetectionWatch detections,
         TimeProvider timeProvider,
         string version,
         CancellationToken cancellationToken)
@@ -195,6 +198,19 @@ public static partial class MetricsEndpoint
         foreach (var (id, _, _) in daemons)
             Line(text, "perf_sentinel_hub_source_missed_findings_total", Label(id), rings.Missed(id));
 
+        Counter(text, "perf_sentinel_hub_detection_reads_total",
+            "Poll passes over this daemon's detection ledger since the Hub started, by outcome. Every outcome "
+            + "is published from startup, and a daemon without a ledger stays at zero.");
+        foreach (var (id, _, _) in daemons)
+            foreach (var outcome in DetectionWatch.Outcomes)
+                Line(text, "perf_sentinel_hub_detection_reads_total",
+                    $"{Label(id)},outcome=\"{DetectionWatch.Label(outcome)}\"", detections.Reads(id, outcome));
+
+        Counter(text, "perf_sentinel_hub_detection_rows_total",
+            "Detection count rows the Hub merged from this daemon's ledger by poll since it started.");
+        foreach (var (id, _, _) in daemons)
+            Line(text, "perf_sentinel_hub_detection_rows_total", Label(id), detections.Rows(id));
+
         Counter(text, "perf_sentinel_hub_import_rejected_total",
             "Imports the Hub refused, by reason. Every reason is published from startup, since a "
             + "series that appears only on the first failure reads as a scrape gap instead.");
@@ -210,6 +226,11 @@ public static partial class MetricsEndpoint
             "Correlation imports the Hub refused, by reason, published from startup like the findings ones.");
         foreach (var (reason, count) in correlationImports.Snapshot())
             Line(text, "perf_sentinel_hub_correlation_import_rejected_total", $"reason=\"{reason}\"", count);
+
+        Counter(text, "perf_sentinel_hub_detection_import_rejected_total",
+            "Detection ledger pages the Hub refused, by reason, published from startup like the findings ones.");
+        foreach (var (reason, count) in detectionImports.Snapshot())
+            Line(text, "perf_sentinel_hub_detection_import_rejected_total", $"reason=\"{reason}\"", count);
 
         // Only while disclosures are on: a Hub without them scrapes as it did before.
         if (options.Disclosures.Enabled)

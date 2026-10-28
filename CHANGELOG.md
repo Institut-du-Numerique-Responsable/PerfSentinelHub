@@ -2,6 +2,58 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.8.6] - 2026-10-28
+
+### Changed
+
+- The image ships perf-sentinel `0.37.1` as its analysis engine, repinned by digest from
+  `0.35.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.37.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.37.0` adds the detection ledger this
+  release reads: a per-day count of every finding a daemon detects, served on
+  `GET /api/detections` and pushed to `POST /api/import/detections`, and
+  `perf-sentinel hub findings` relays `--from`, `--to`, `--offset`, `--include-acked` and
+  `--signature` to the Hub. Engine `0.37.1` pushes the ledger after the findings when a
+  daemon shuts down, so a long ledger no longer spends the findings' drain budget. Engine
+  `0.36.0` changed only its SARIF, which the Jenkins Warnings NG parser reads again, and the
+  expiry hint of `perf-sentinel ack create`. The Hub reads neither. A backend analysis gives
+  the same findings, signatures and energy figures as on `0.35.0`, and the findings wire
+  format is unchanged.
+
+### Added
+
+- The Hub stores the detection ledgers of daemons on perf-sentinel 0.37.0 and later, in three
+  tables of schema V15. It polls each ledger after the findings, page by page from its cursor,
+  and accepts the daemon's push on `POST /api/import/detections?source_id=<id>`, under the
+  findings import's key, gate and write wait. Both paths merge absolute values per UTC day by
+  their maximum, so a poll, a push and a replay land on the same rows, and a source's ledgers
+  add up across daemon restarts. A daemon older than 0.37.0 is never asked. The poll passes
+  count on `perf_sentinel_hub_detection_reads_total{source,outcome}` and
+  `perf_sentinel_hub_detection_rows_total{source}`, the refused pushes on
+  `perf_sentinel_hub_detection_import_rejected_total{reason}`, and the example dashboards
+  gain a "Detection ledger reads by outcome" panel.
+- A read of `GET /api/findings` with `from` or `to` serves the detection volume of each
+  finding and each of its sources over the window's UTC days: `detections`,
+  `detections_complete`, `avoidable_io_ops`, `detections_gaps` and
+  `detections_sampling_rate`, plus `detections_from` and `detections_to` on the finding. A
+  count is null when nothing is known, exact when complete, and otherwise a lower bound with
+  its reasons from a closed set. A finding the daemons counted in the window is listed even
+  when no poll observed it there, and a source that only counted it joins `sources`. A read
+  without `from` or `to` is unchanged, byte for byte.
+- The ack page shows the detections of the last 7 days and their avoidable I/O, per source
+  with the reasons a count falls short, beside the unwindowed finding.
+
+### Fixed
+
+- A finding's `last_seen` is now the source daemon's last detection, the envelope's
+  `stored_at_ms` clamped to the Hub's clock, instead of the time of the poll that read it.
+  A daemon keeps a finding in its ring long after it stops detecting it, so every poll moved
+  `last_seen` to the present and a fixed finding stayed `active` for as long as the ring held
+  it. The observation day, the endpoint heartbeat, the grouping and attribute stamps and the
+  push path follow the same time. A producer without `stored_at_ms` keeps the poll time, and
+  a daemon clock running ahead is cut to the Hub's.
+
 ## [0.8.5] - 2026-10-27
 
 ### Changed

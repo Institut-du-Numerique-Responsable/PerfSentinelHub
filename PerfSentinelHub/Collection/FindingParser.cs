@@ -113,7 +113,8 @@ public static class FindingParser
             confidence,
             ConfidenceRank(confidence),
             JsonRead.ReadEpochMs(envelope, "first_seen_ms"),
-            EffectiveGrouping(body));
+            EffectiveGrouping(body),
+            JsonRead.ReadEpochMs(envelope, "stored_at_ms"));
         return true;
     }
 

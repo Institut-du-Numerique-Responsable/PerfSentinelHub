@@ -11,14 +11,18 @@ public sealed class SourcePollException(string errorCode, Exception innerExcepti
     public string ErrorCode { get; } = errorCode;
 }
 
+// Every parameter is a collaborator the DI container injects, one per poll stage.
+#pragma warning disable S107
 public sealed partial class SourcePoller(
     DaemonClient client,
     HubDatabase database,
     IncidentReader incidents,
     AckReader acks,
+    DetectionReader detections,
     RingWatch rings,
     TimeProvider timeProvider,
     ILogger<SourcePoller> logger)
+#pragma warning restore S107
 {
     private const long PushFreshnessMs = 2 * 3_600_000;
 
@@ -69,6 +73,8 @@ public sealed partial class SourcePoller(
             // The same, in ack_reads. The version decides whether the daemon
             // is asked at all: see AckReader.
             await acks.ReadAsync(source, status.Version, observedAtMs, cancellationToken);
+            // Last, and never failing the poll: see DetectionReader.
+            await detections.ReadAsync(source, status.DetectionLedger, observedAtMs, cancellationToken);
             return new PollResult(
                 batch.Findings.Count,
                 batch.RejectedCount,

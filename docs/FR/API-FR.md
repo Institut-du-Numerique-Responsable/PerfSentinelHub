@@ -3,9 +3,10 @@
 Quatre surfaces, et elles ne se recouvrent pas. Un daemon pousse vers l'API d'import. Un
 greffon d'IDE ou un job de CI lit l'API de lecture. Le navigateur utilise l'API d'analyse et
 le relais d'acquittement, lit `/api/incidents` pour son écran d'incidents, et ne lit
-`/api/findings` que sur la page d'acquittement, par signature. Les divulgations périodiques
-se tiennent à part des quatre : une tâche planifiée les publie sur une route qui leur est
-propre, et le lanceur, un lien de partage ou un webhook les transmet, voir
+`/api/findings` que sur la page d'acquittement, par signature, une fois sans fenêtre et une
+fois sur les 7 derniers jours pour le volume de détections. Les divulgations périodiques se
+tiennent à part des quatre : une tâche planifiée les publie sur une route qui leur est propre,
+et le lanceur, un lien de partage ou un webhook les transmet, voir
 [Divulgations](#divulgations).
 
 ## API d'import
@@ -40,6 +41,20 @@ ordre : le début le plus ancien, le `last_seen_ms` le plus récent et les pics 
 l'emportent, les valeurs glissantes viennent de la copie la plus récente, et une fin est gardée une
 fois vue. Les refus se comptent sur `perf_sentinel_hub_correlation_import_rejected_total`.
 
+`POST /api/import/detections?source_id=<id>` accepte le registre de détections qu'un daemon en
+perf-sentinel 0.37.0 ou suivant pousse à côté de ses findings, une page sous la forme que sert
+`GET /api/detections` sur le daemon : `ledger_id`, `counts` et `days`. Il prend la même clé, la
+même porte à quatre places et la même attente d'écriture de cinq secondes, et 8 Mio au plus par
+requête. La page est vérifiée en entier, avec les bornes qu'applique le poll : un `ledger_id` GUID,
+des jours de 400 avant le jour du Hub à 2 après, des signatures de 1 024 caractères au plus sans
+caractère de contrôle, des entiers de 0 à 2^53, un taux d'échantillonnage de 0 à 1. Une valeur
+hors bornes est un `400`, et plus de 5 000 lignes de comptes ou de 31 jours un `413`. Une page sans
+ligne de compte est acceptée, puisque le daemon scelle un jour en poussant son objet jour seul. Un
+jour poussé `sealed` reste scellé, et chaque valeur fusionne par son maximum, un taux
+d'échantillonnage par son minimum, donc un push, un poll et un renvoi aboutissent aux mêmes lignes
+dans n'importe quel ordre. Le push n'écrit ni l'accessibilité ni l'heure du dernier push de
+findings de la source. Les refus se comptent sur `perf_sentinel_hub_detection_import_rejected_total`.
+
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit
@@ -47,11 +62,11 @@ rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq seco
 fusionnés. La rétention purge par tranches bornées, pour qu'une purge longue ne rejette
 pas les imports pendant toute sa durée.
 
-Un push met à jour les findings, les incidents et les observations par source, rien d'autre. Il n'efface
-jamais le `unreachable_since_ms` du chemin de poll. Une source que le Hub ne peut pas
-joindre continue de rapporter `unreachable_since` alors que son daemon pousse avec succès,
-et c'est juste : la joignabilité est un fait sur la route du Hub vers le daemon, qu'un
-push n'exerce pas.
+Un push met à jour les findings, les incidents, les registres de détections et les
+observations par source, rien d'autre. Il n'efface jamais le `unreachable_since_ms` du
+chemin de poll. Une source que le Hub ne peut pas joindre continue de rapporter
+`unreachable_since` alors que son daemon pousse avec succès, et c'est juste : la
+joignabilité est un fait sur la route du Hub vers le daemon, qu'un push n'exerce pas.
 
 ## API de lecture
 
@@ -132,8 +147,8 @@ périmètre et non la flotte, voir
 
 `from` et `to` bornent la lecture à une fenêtre d'observation, en millisecondes depuis
 l'epoch, chacun facultatif et tous deux inclus. Un finding est listé quand une source du
-périmètre l'a observé dans la fenêtre, donc la fenêtre respecte `environment` et
-`source_id`. Elle choisit des lignes et ne les réécrit pas : `first_seen`, `last_seen` et
+périmètre l'a observé dans la fenêtre, ou l'y a compté (voir le volume de détections plus
+bas), donc la fenêtre respecte `environment` et `source_id`. Elle choisit des lignes et ne les réécrit pas : `first_seen`, `last_seen` et
 `status` décrivent toujours le finding tel qu'il est maintenant. Une valeur qui n'est pas
 un entier positif ou nul sans fioriture, signe compris, répond `400`, et un `from` supérieur
 à `to` aussi. Donné vide ou composé seulement de blancs, chacun se lit comme absent et
@@ -346,9 +361,13 @@ d'observation du Hub et à un plancher de bon sens en millisecondes Unix. Ni une
 daemon en avance ni un bug d'unité en secondes ne peuvent le fausser, et il retombe sur
 l'heure d'observation quand un producteur omet le champ.
 
-`last_seen` est délibérément l'horloge d'observation du Hub. La rétention, l'ordonnancement
-et les comparaisons de fraîcheur s'appuient dessus, donc il ne vient jamais d'une horloge
-distante.
+`last_seen` est la dernière détection du daemon source (`stored_at_ms`), bornée par l'heure
+d'observation du Hub, et l'heure d'observation quand un producteur omet le champ. Un finding
+que le daemon garde mais ne détecte plus conserve son `last_seen` d'un poll à l'autre et
+vieillit jusqu'à `not_observed` ou `likely_resolved`. La borne empêche une horloge de daemon
+en avance de garder un finding frais, donc la rétention, l'ordonnancement et les
+comparaisons de fraîcheur ne voient jamais une heure postérieure à celle du Hub. Le jour
+d'observation et le battement de l'endpoint suivent la même heure.
 
 Lue avec `environment` ou `source_id`, une enveloppe décrit ce périmètre et non la flotte.
 Le document du daemon est la copie de la source du périmètre qui a vu le finding en dernier,
@@ -359,6 +378,72 @@ l'échelle de la flotte, délibérément, la plus haute confiance qu'une source 
 rapportée. La copie propre à une source commence à sa première observation après la mise à
 niveau qui l'enregistre. Jusque-là, sa ligne sert la copie que la flotte partage, la plus
 fraîche toutes sources confondues.
+
+Une lecture avec `from` ou `to` sert aussi combien de fois les daemons ont détecté le
+finding dans la fenêtre, d'après les registres de détections que le Hub lit par poll ou
+reçoit par push. Une lecture sans l'un ni l'autre ne porte aucun de ces champs. Le finding
+et chaque entrée de `sources` reçoivent cinq champs :
+
+- `detections` : le compte, un entier ou null.
+- `detections_complete` : true quand aucune des raisons ci-dessous ne s'applique, null avec
+  `detections`.
+- `avoidable_io_ops` : les opérations d'I/O en trop de ces détections, null quand un jour
+  compté a été lu avec le scoring green coupé.
+- `detections_gaps` : la liste triée des raisons pour lesquelles le compte est incomplet,
+  vide quand il est complet.
+- `detections_sampling_rate` : le plus petit taux d'échantillonnage des jours comptés. Le
+  Hub n'extrapole jamais, un consommateur qui le fait doit le dire.
+
+Le finding reçoit aussi `detections_from` et `detections_to`, les jours UTC comptés, au
+format `YYYY-MM-DD`. Ils vont du jour de `from`, jamais avant le jour que la purge de
+rétention garde, au jour de `to`, jamais après le jour courant du Hub. Une fenêtre tout
+entière après le jour du Hub ne compte rien, et son `detections_from` est alors le lendemain
+de `detections_to`. Une fenêtre tout entière avant la limite de rétention sert des comptes
+null, et son `detections_from` est de même après son `detections_to`.
+
+Un compte se lit dans l'un de trois états :
+
+- null quand aucun jour de la fenêtre n'est connu pour la source, tous registres
+  confondus. C'est le cas d'un daemon antérieur à 0.37.0, d'un registre coupé et de
+  l'historique d'avant la mise à jour.
+- complet, `detections_complete: true`, quand chaque jour de la fenêtre est connu et
+  qu'aucune raison ne s'applique.
+- incomplet, `detections_complete: false`, la somme des jours connus avec ses raisons dans
+  `detections_gaps`. Un jour connu sans ligne pour la signature compte 0.
+
+Les raisons forment un ensemble fermé :
+
+- `uncovered_days` : un jour de la fenêtre sans ligne pour la source.
+- `open_day` : un jour pas encore scellé, y compris le jour courant du Hub, ou un jour dont
+  les comptes d'un registre ont atteint le Hub avant la ligne de ce registre pour ce jour.
+  Ces comptes l'attendent.
+- `restart` : un jour où le daemon a redémarré.
+- `sampling` : un jour lu avec un taux d'échantillonnage inférieur à 1.
+- `shed` : un jour où le daemon a délesté des traces sous pression mémoire.
+- `ingest_rejected` : un jour où le daemon a refusé de l'ingestion.
+- `overflow` : un jour où un registre a dépassé son plafond de signatures alors que cette
+  signature n'a pas de ligne dans ce même registre ce jour-là. La ligne d'un autre pod ne
+  compte pas.
+- `multi_instance` : deux registres de la source lus par poll et vivants le même jour de
+  la fenêtre, plusieurs pods derrière un Service que le poll ne peut pas tous lire. Les
+  registres que le Hub reçoit seulement par push s'additionnent sans cette raison.
+
+Au niveau du finding, `detections` et `avoidable_io_ops` sont les sommes sur les sources
+non nulles, et null seulement quand toutes le sont. `detections_complete` vaut true
+seulement quand chaque source est connue et complète, `detections_gaps` est l'union des
+raisons, et `detections_sampling_rate` le plus petit taux des sources connues.
+
+Une source qui a compté le finding dans la fenêtre sans en tenir de copie rejoint `sources`,
+nommée comme la configuration la nomme. Sa `producer_version` et son `age_seconds` valent
+null, puisque les deux décrivent une copie. Avec des motifs d'accès, une telle source n'est
+listée qu'à un appelant qui lit la source entière. Un finding que les daemons ont compté
+dans la fenêtre est listé même quand aucun poll ne l'y a observé, l'anneau ayant tourné
+entre deux polls, pourvu que le Hub en tienne déjà le corps. Une source qui n'est plus dans
+`Hub:Sources`, un daemon retiré, n'a pas de nom à servir : elle est écartée de `sources` et
+des totaux. Une lecture restreinte, par `environment`, `source_id` ou motifs d'accès,
+n'atteint que les findings qui ont au moins une copie dans son périmètre. Les sept noms sont
+réservés comme les autres champs du Hub : une propriété du daemon du même nom est
+abandonnée.
 
 ### Comment `include_acked` juge un finding
 
@@ -401,6 +486,7 @@ telle mutation à son prédécesseur à l'import, quand exactement un finding st
 - partage le service, le détecteur et l'endpoint,
 - porte un hash de template différent,
 - a été vu dans les 30 derniers jours et strictement avant le lot entrant,
+- n'est pas un finding du lot entrant, dont tous les findings sont des problèmes courants,
 - et n'est pas lui-même déjà supplanté.
 
 Une signature change aussi quand l'**endpoint** change, et ce chemin-là n'est pas relié.

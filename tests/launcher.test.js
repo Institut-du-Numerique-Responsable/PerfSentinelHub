@@ -743,6 +743,50 @@ test("a source the finding lists and the Hub no longer configures keeps its name
     assert.equal(PSL.ackRows(carriedBy(["gone"]), null, null)[0].action, "none");
 });
 
+test("a source that only counted the finding is no row of the ack form", () => {
+    const finding = {
+        sources: [
+            {id: "production-a", name: "Production A", environment: "production", producer_version: "0.37.0"},
+            {id: "staging-a", name: "Staging A", environment: "staging", producer_version: null}
+        ]
+    };
+    const rows = PSL.ackRows(finding, ackSources, null);
+    assert.deepEqual(rows.map((row) => row.id), ["production-a"]);
+    // The count-only source is no candidate either, so the one copy is ticked.
+    assert.equal(rows[0].checked, true);
+});
+
+test("a detection count reads as ?, N or at least N, grouped by thousands", () => {
+    assert.equal(PSL.formatDetections(null, null), "?");
+    assert.equal(PSL.formatDetections(undefined, undefined), "?");
+    assert.equal(PSL.formatDetections(0, true), "0");
+    assert.equal(PSL.formatDetections(1234567, true), "1,234,567");
+    assert.equal(PSL.formatDetections(12345, false), "\u2265 12,345");
+    assert.equal(PSL.formatDetections(0, false), "\u2265 0");
+});
+
+test("the detection window spans seven UTC days ending today", () => {
+    const day = 86400000;
+    const now = 20400 * day + 15 * 3600000;
+    // The Hub counts whole days from the from day to the to day, both included.
+    assert.deepEqual(PSL.detectionWindow(now, 7), {from: 20394 * day, to: now});
+    assert.deepEqual(PSL.detectionWindow(20400 * day, 1), {from: 20400 * day, to: 20400 * day});
+});
+
+test("every reason a count falls short has its own phrase", () => {
+    const reasons = ["uncovered_days", "open_day", "restart", "sampling", "shed", "ingest_rejected",
+        "overflow", "multi_instance"];
+    const phrases = reasons.map(PSL.gapLabel);
+    phrases.forEach((phrase, index) => {
+        assert.notEqual(phrase, reasons[index], reasons[index] + " is worded");
+        assert.match(phrase, /^[a-z][a-z ]+$/);
+    });
+    assert.equal(new Set(phrases).size, reasons.length, "no two reasons share a phrase");
+    // A reason a newer engine adds reads as it is sent rather than as nothing.
+    assert.equal(PSL.gapLabel("new_reason"), "new_reason");
+    assert.equal(PSL.gapLabel("constructor"), "constructor");
+});
+
 const ACK_NOW = Date.parse("2026-09-20T15:00:00Z");
 const IN_PRODUCTION = {sourceId: null, environment: "production"};
 const IN_STAGING = {sourceId: null, environment: "staging"};

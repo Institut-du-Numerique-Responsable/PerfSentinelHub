@@ -43,6 +43,12 @@ Correlation episodes take the push alone from perf-sentinel 0.30.0: the daemon c
 pushes it when it opens, when a peak rises, when its last co-occurrence moves on by a minute and
 when it closes. Nothing polls them, so a daemon that does not push leaves the Hub without them.
 
+Detection ledgers take both paths from perf-sentinel 0.37.0: the daemon pushes the rows that
+changed since its last accepted push, and the poll reads the ledger the daemon's status
+names. Both write absolute values per UTC day, merged by their maximum, so the two paths, a replay
+and an overlap all land on the same rows. Each daemon start opens a new ledger, and the Hub adds a
+source's ledgers up rather than letting the next one replace the last.
+
 A daemon pushing successfully proves that the daemon can reach the Hub. It proves
 nothing about whether the Hub can reach the daemon, which is a different route through
 a different set of firewalls, and that is the direction an operator needs when a source
@@ -56,10 +62,11 @@ lock because it is the Hub's own scheduled work and can wait. An import gives up
 five seconds with `503 Retry-After: 1`, because a slow uploader must not be able to
 stall the whole fleet's collection.
 
-A poll reads up to four things from one daemon, in order: its status, its findings, its
-incidents and its active acknowledgments. Only the first two decide reachability. The
-other two are filed apart, in `incident_reads` and `ack_reads`, because a refused key or
-a missing route on either says nothing about whether the daemon answers.
+A poll reads up to five things from one daemon, in order: its status, its findings, its
+incidents, its active acknowledgments and its detection ledger. Only the first two decide
+reachability. The other three are filed apart, in `incident_reads`, in `ack_reads` and on
+`perf_sentinel_hub_detection_reads_total`, because a refused key or a missing route on any
+of them says nothing about whether the daemon answers.
 
 The ack read mirrors and never writes to the daemon. It asks
 `GET /api/acks?include_toml=true` with the source's read credential and replaces that
@@ -71,6 +78,15 @@ is never asked: it ignores the parameter and lists its runtime acks alone, an an
 cannot be told from a daemon with no baseline, so its read is filed `absent`. A listing
 at the daemon's cap of a thousand rows is mirrored and filed `truncated`, since its tail,
 which is where the baseline sits, may be missing.
+
+The ledger read starts from the ledger's cursor, or from its oldest day the first time, and
+pages to the end, 64 pages at most. A pass that reads every page seals the days it read, from
+the later of the cursor and the daemon's oldest day up to the `sealed_through` of its first
+page, and moves the cursor past them, so a day the daemon sealed while the pass ran is read
+whole again by the next one. A day below that, pruned by the daemon after a partial read, stays
+open. A pass that stops early, at the page cap or because the daemon opened a new ledger
+meanwhile, keeps what it merged and seals nothing. A daemon whose status names no ledger, older
+than 0.37.0 or with the ledger off, is never asked.
 
 ## What a launched analysis actually does
 
@@ -117,7 +133,9 @@ source saw a finding in ride the same clock on their own `last_seen_ms`, without
 key for the same reason, and an orphan is as invisible: a read reaches one only through a
 finding. The grouping attributes each source captured on a finding ride it the same way, on
 their own `last_seen_ms`. The pairs an incident's frozen findings share leave with their
-incident.
+incident. Detection counts and days ride it by whole UTC day, like observation days, and a
+ledger's own row on the last time the Hub read it. A replay of a purged day is harmless,
+since every value is absolute, and a daemon keeps 31 days at most anyway.
 
 The ack mirror rides that clock as well, on `read_at_ms`, the time of the read that wrote
 the row. It does not age an ack: every read that succeeds rewrites its source's rows, so
@@ -148,6 +166,9 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `finding_groupings`            | signature, source and effective grouping value                 | retention, on `last_seen_ms`               |
 | `finding_attributes`           | signature, source, grouping identity and captured pair         | retention, on `last_seen_ms`               |
 | `finding_lineage`              | successor and predecessor signature                            | with its successor                         |
+| `detection_ledgers`            | source and daemon ledger, with its start and the poll's cursor | retention, on `last_read_ms`               |
+| `detection_days`               | source, ledger and UTC day, with what the day says of itself   | retention, by whole day                    |
+| `detection_counts`             | signature, source, ledger and UTC day, with its detections     | retention, by whole day                    |
 | `endpoint_heartbeats`          | source, service and endpoint                                   | retention, on `last_seen_any_ms`           |
 | `source_state`                 | source, the poll's reachability                                | retention, on `last_attempt_ms`            |
 | `source_imports`               | source, its last push                                          | never                                      |
@@ -174,6 +195,14 @@ read that leaves the copy as it was, the same findings or a poorer recapture, on
 its rows with the copy's new `last_seen_ms`. Nothing reads these three yet. They are
 recorded ahead of access control, which will match projects on them, so that turning it on
 does not start from an empty history.
+
+The three detection tables, added by schema V15, hold the daemons' ledgers as read. A row of
+`detection_days` carries what that day says of its own completeness: sealed or still open, a
+restart, its sampling rate, shed traces, rejected ingest and the detections past the ledger's
+signature cap. A windowed read of `/api/findings` folds them, per source, into the count it
+serves and the reasons it falls short, see
+[API.md](API.md#what-the-hub-adds-to-a-finding). Nothing is backfilled: a day before the
+upgrade has no row and reads as unknown.
 
 Each start fills in what an older build left out: the attribute rows of a copy whose newest
 observation has none, the service of a copy that has none, both from that copy's own
@@ -343,6 +372,8 @@ is wrong the first time anyone edits above it.
 | Hub to daemon, config for an unfolded row | `Collection/DaemonClient.cs`, `FetchConfigAsync`                                                             |
 | Hub to daemon, incidents                  | `Collection/DaemonClient.cs`, `FetchIncidentsPageAsync`, paged by `SourcePoller` into `UpsertIncidentsAsync` |
 | Hub to daemon, acks                       | `Collection/DaemonClient.cs`, `FetchAcksAsync`, mirrored by `AckReader` into `ReplaceSourceAcksAsync`        |
+| Hub to daemon, detection ledger           | `Collection/DaemonClient.cs`, `FetchDetectionsPageAsync`, paged by `DetectionReader`                         |
+| Daemon to Hub, detection push             | `Api/ApiEndpoints.cs`, `ImportDetectionsAsync`, storing via `TryMergeDetectionPageAsync`                     |
 | Hub to daemon, ack relay                  | `Api/ApiEndpoints.Acks.cs`, `RelayAckAsync`, written by `AckRelay` through `SendAckAsync`                    |
 | Reachability set, and cleared             | `Collection/SourcePoller.cs`, the two `MarkSource` calls and `UpsertBatchAsync`                              |
 | Hub to SQLite                             | `Storage/Schema.cs`                                                                                          |

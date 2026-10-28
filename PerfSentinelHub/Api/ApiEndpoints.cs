@@ -22,6 +22,9 @@ public static partial class ApiEndpoints
     // A hundred episodes of two templates each: the daemon's own cap per batch.
     private const int CorrelationImportMaxBytes = 1024 * 1024;
 
+    // Twice the daemon's own 4 MiB bound on a ledger page.
+    private const int DetectionImportMaxBytes = 8 * 1024 * 1024;
+
     public static void MapHubApi(this WebApplication app)
     {
         var version = HubVersion.Current;
@@ -92,6 +95,7 @@ public static partial class ApiEndpoints
         app.MapPost("/api/import/findings", ImportFindingsAsync).AllowAnonymous();
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
+        app.MapPost("/api/import/detections", ImportDetectionsAsync).AllowAnonymous();
         app.MapPost("/api/import/disclosures", ImportDisclosuresAsync).AllowAnonymous();
         app.MapGet("/api/disclosures", GetDisclosuresAsync);
         app.MapGet("/api/disclosures/{id}", GetDisclosureAsync);
@@ -174,7 +178,7 @@ public static partial class ApiEndpoints
     private static async Task<IResult> ImportFindingsAsync(
         HttpRequest request,
         HubDatabase database,
-        ImportAdmission admission,
+        ImportAdmission<ImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
@@ -270,7 +274,7 @@ public static partial class ApiEndpoints
     /// <summary>
     ///     An admitted import's body, read under its cap and parsed, or the refusal it earned,
     ///     already counted: 413 past the cap or the batch limit, 400 for what the parser
-    ///     refuses. The incident and correlation imports share it, their parsers differ.
+    ///     refuses. The incident, correlation and detection imports share it, their parsers differ.
     /// </summary>
     private static async Task<(T Import, IResult? Rejected)> ReadImportAsync<T>(
         HttpRequest request,
@@ -293,44 +297,41 @@ public static partial class ApiEndpoints
             return (null!, refuse(ImportRejection.TooLarge,
                 TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge)));
         }
-        catch (InvalidDataException)
+        // The second is an unpaired surrogate or invalid UTF-8 in a string, which the reader cannot hand over.
+        catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
         {
             return (null!, refuse(ImportRejection.BadRequest, TypedResults.BadRequest()));
         }
     }
 
-    private static async Task<IResult> ImportIncidentsAsync(
+    /// <summary>
+    ///     What the incident, correlation and detection pushes share: admission, the body read
+    ///     and parsed under its cap, then <paramref name="store" />, which answers null when the
+    ///     write lock was not taken (503 with Retry-After). The gate slot is always freed.
+    /// </summary>
+    private static async Task<IResult> PushImportAsync<TMetrics, T>(
         HttpRequest request,
-        HubDatabase database,
-        IncidentImportAdmission admission,
         IOptions<HubOptions> options,
-        TimeProvider timeProvider,
-        ILoggerFactory loggerFactory,
+        ImportAdmission<TMetrics> admission,
+        int maxBytes,
+        Func<ReadOnlyMemory<byte>, T> parse,
+        Func<SourceOptions, T, Task<IResult?>> store,
         CancellationToken cancellationToken)
+        where TMetrics : ImportMetrics
+        where T : class
     {
         if (AdmitImport(request, options, admission.Gate, admission.Refuse, out var source) is { } refused)
             return refused;
         try
         {
-            var (import, rejected) = await ReadImportAsync(
-                request, IncidentImportMaxBytes, IncidentParser.ParseImport, admission.Refuse, cancellationToken);
+            var (import, rejected) = await ReadImportAsync(request, maxBytes, parse, admission.Refuse, cancellationToken);
             if (rejected is not null)
                 return rejected;
-
-            if (import.Page.Incidents.Count == 0)
-                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-            if (!await database.TryUpsertPushedIncidentsAsync(source.Id, import.Page.Incidents,
-                    timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
-            {
-                request.HttpContext.Response.Headers.RetryAfter = "1";
-                return admission.Refuse(ImportRejection.WriteTimeout,
-                    TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
-            }
-
-            if (import.Page.RejectedCount > 0)
-                LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
-                    import.Page.RejectedCount);
-            return TypedResults.Ok(new ImportResponse(import.Page.Incidents.Count, import.Page.RejectedCount));
+            if (await store(source, import) is { } stored)
+                return stored;
+            request.HttpContext.Response.Headers.RetryAfter = "1";
+            return admission.Refuse(ImportRejection.WriteTimeout,
+                TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
         }
         finally
         {
@@ -338,41 +339,70 @@ public static partial class ApiEndpoints
         }
     }
 
-    private static async Task<IResult> ImportCorrelationsAsync(
+    private static Task<IResult> ImportIncidentsAsync(
         HttpRequest request,
         HubDatabase database,
-        CorrelationImportAdmission admission,
+        ImportAdmission<IncidentImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        if (AdmitImport(request, options, admission.Gate, admission.Refuse, out var source) is { } refused)
-            return refused;
-        try
-        {
-            var (import, rejected) = await ReadImportAsync(
-                request, CorrelationImportMaxBytes, CorrelationParser.ParseImport, admission.Refuse, cancellationToken);
-            if (rejected is not null)
-                return rejected;
-            if (import.Episodes.Count == 0)
-                return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-            if (!await database.TryUpsertEpisodesAsync(source.Id, import.Episodes,
-                    timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
+        return PushImportAsync(request, options, admission, IncidentImportMaxBytes, IncidentParser.ParseImport,
+            async (source, import) =>
             {
-                request.HttpContext.Response.Headers.RetryAfter = "1";
-                return admission.Refuse(ImportRejection.WriteTimeout,
-                    TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
-            }
+                if (import.Page.Incidents.Count == 0)
+                    return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
+                if (!await database.TryUpsertPushedIncidentsAsync(source.Id, import.Page.Incidents,
+                        timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
+                    return null;
+                if (import.Page.RejectedCount > 0)
+                    LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                        import.Page.RejectedCount);
+                return TypedResults.Ok(new ImportResponse(import.Page.Incidents.Count, import.Page.RejectedCount));
+            }, cancellationToken);
+    }
 
-            if (import.RejectedCount > 0)
-                LogRejectedImportedEpisodes(loggerFactory.CreateLogger("ImportApi"), source.Id, import.RejectedCount);
-            return TypedResults.Ok(new ImportResponse(import.Episodes.Count, import.RejectedCount));
-        }
-        finally
-        {
-            admission.Gate.Exit();
-        }
+    private static Task<IResult> ImportCorrelationsAsync(
+        HttpRequest request,
+        HubDatabase database,
+        ImportAdmission<CorrelationImportMetrics> admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        return PushImportAsync(request, options, admission, CorrelationImportMaxBytes, CorrelationParser.ParseImport,
+            async (source, import) =>
+            {
+                if (import.Episodes.Count == 0)
+                    return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
+                if (!await database.TryUpsertEpisodesAsync(source.Id, import.Episodes,
+                        timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
+                    return null;
+                if (import.RejectedCount > 0)
+                    LogRejectedImportedEpisodes(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                        import.RejectedCount);
+                return TypedResults.Ok(new ImportResponse(import.Episodes.Count, import.RejectedCount));
+            }, cancellationToken);
+    }
+
+    private static Task<IResult> ImportDetectionsAsync(
+        HttpRequest request,
+        HubDatabase database,
+        ImportAdmission<DetectionImportMetrics> admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+        // No refusal for an empty page: the midnight seal often arrives as a day with no rows.
+        return PushImportAsync(request, options, admission, DetectionImportMaxBytes,
+            payload => DetectionLedgerParser.ParsePage(payload, nowMs),
+            async (source, page) => await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken)
+                ? TypedResults.Ok(new ImportResponse(page.Counts.Count, 0))
+                : null,
+            cancellationToken);
     }
 
     private static async Task GetFindingsAsync(

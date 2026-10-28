@@ -410,4 +410,47 @@ internal static class Schema
                                   last_import_ms INTEGER NOT NULL
                                 );
                                 """;
+
+    // The daemons' detection ledgers: absolute values per UTC epoch day, merged by MAX
+    // (MIN for a sampling rate), so a poll, a push, a replay or an overlap all land on
+    // the same row. read_from_day is the poll's cursor. Kept rowid tables with no foreign
+    // key, like V6, because the purge deletes them in chunks by rowid.
+    internal const string V15 = """
+                                CREATE TABLE IF NOT EXISTS detection_ledgers (
+                                  source_id TEXT NOT NULL,
+                                  ledger_id TEXT NOT NULL,
+                                  started_ms INTEGER NOT NULL,
+                                  first_read_ms INTEGER NOT NULL,
+                                  last_read_ms INTEGER NOT NULL,
+                                  polled INTEGER NOT NULL,
+                                  pushed INTEGER NOT NULL,
+                                  read_from_day INTEGER,
+                                  PRIMARY KEY(source_id, ledger_id)
+                                );
+                                CREATE TABLE IF NOT EXISTS detection_days (
+                                  source_id TEXT NOT NULL,
+                                  ledger_id TEXT NOT NULL,
+                                  day INTEGER NOT NULL,
+                                  sealed INTEGER NOT NULL,
+                                  gap INTEGER NOT NULL,
+                                  overflow_detections INTEGER NOT NULL,
+                                  overflow_extra_io_ops INTEGER,
+                                  shed_traces INTEGER NOT NULL,
+                                  ingest_rejected INTEGER NOT NULL,
+                                  sampling_rate REAL NOT NULL,
+                                  last_read_ms INTEGER NOT NULL,
+                                  PRIMARY KEY(source_id, ledger_id, day)
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_detection_days_day ON detection_days(day);
+                                CREATE TABLE IF NOT EXISTS detection_counts (
+                                  signature TEXT NOT NULL,
+                                  source_id TEXT NOT NULL,
+                                  ledger_id TEXT NOT NULL,
+                                  day INTEGER NOT NULL,
+                                  detections INTEGER NOT NULL,
+                                  extra_io_ops INTEGER,
+                                  PRIMARY KEY(signature, source_id, ledger_id, day)
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_detection_counts_day ON detection_counts(day);
+                                """;
 }

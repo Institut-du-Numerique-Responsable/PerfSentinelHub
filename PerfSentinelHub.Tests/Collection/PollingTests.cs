@@ -1,9 +1,11 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
@@ -13,6 +15,11 @@ namespace PerfSentinelHub.Tests.Collection;
 
 public sealed class PollingTests : IDisposable
 {
+    private const long DayMs = 86_400_000;
+
+    // The fixture finding's stored_at_ms: when the daemon last detected it.
+    private const long DetectedAtMs = 1786183205000;
+
     private readonly string _databasePath = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-poll-{Guid.NewGuid():N}.db");
@@ -69,6 +76,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
@@ -152,6 +164,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
@@ -295,6 +312,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             logger);
@@ -327,6 +349,9 @@ public sealed class PollingTests : IDisposable
         // 400 findings went in between the polls and the ring holds 100: the second
         // poll finds 300 gone and, the fake answering the cap, hits it as well.
         var totals = new Queue<long>([1000, 1400]);
+        // An uptime that runs with the clock the poller reads, so a loaded run with polls
+        // seconds apart still reads one process and not a restart.
+        var startedAt = DateTimeOffset.UtcNow.AddSeconds(-60);
         var configReads = 0;
         await using var daemon = await FakeDaemon.StartAsync(async context =>
         {
@@ -335,7 +360,7 @@ public sealed class PollingTests : IDisposable
                 await context.Response.WriteAsJsonAsync(new
                 {
                     version = "0.34.1",
-                    uptime_seconds = 60,
+                    uptime_seconds = (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds,
                     stored_findings = 100,
                     max_retained_findings = 100,
                     findings_stored_total = totals.Dequeue()
@@ -365,6 +390,7 @@ public sealed class PollingTests : IDisposable
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             logger);
@@ -450,6 +476,7 @@ public sealed class PollingTests : IDisposable
             database,
             new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
+            new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             rings,
             TimeProvider.System,
             logger);
@@ -532,6 +559,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             logger);
@@ -597,6 +629,11 @@ public sealed class PollingTests : IDisposable
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
                 NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
             new RingWatch(),
             TimeProvider.System,
             NullLogger<SourcePoller>.Instance);
@@ -621,6 +658,143 @@ public sealed class PollingTests : IDisposable
         Assert.True(await reader.ReadAsync(cancellationToken));
         Assert.True(reader.IsDBNull(0));
         Assert.True(reader.IsDBNull(1));
+    }
+
+    [Fact]
+    public async Task A_poll_of_an_unchanged_finding_does_not_move_last_seen()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = await PollDetectionsAsync(
+            (DetectedAtMs + 3_600_000, DetectedAtMs),
+            (DetectedAtMs + 9 * DayMs, DetectedAtMs));
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(DetectedAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;"));
+        Assert.Equal(DetectedAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;"));
+        Assert.Equal(1L, await ScalarAsync(connection, "SELECT COUNT(*) FROM finding_observations;"));
+        Assert.Equal(DetectedAtMs / DayMs, await ScalarAsync(connection, "SELECT day FROM finding_observations;"));
+        var finding = Assert.Single(await database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 10), cancellationToken));
+        Assert.NotEqual("active", finding.Status);
+    }
+
+    [Fact]
+    public async Task A_new_detection_moves_last_seen()
+    {
+        const long redetectedAtMs = DetectedAtMs + 5_400_000;
+        var database = await PollDetectionsAsync(
+            (DetectedAtMs + 3_600_000, DetectedAtMs),
+            (DetectedAtMs + 7_200_000, redetectedAtMs));
+
+        await using var connection = await database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(redetectedAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;"));
+        Assert.Equal(redetectedAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;"));
+    }
+
+    [Fact]
+    public async Task A_daemon_clock_ahead_is_clamped_to_the_poll()
+    {
+        const long polledAtMs = DetectedAtMs + 3_600_000;
+        var database = await PollDetectionsAsync((polledAtMs, polledAtMs + 3_600_000));
+
+        await using var connection = await database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(polledAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;"));
+        Assert.Equal(polledAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;"));
+    }
+
+    [Fact]
+    public async Task A_finding_without_stored_at_keeps_the_poll_time()
+    {
+        const long polledAtMs = DetectedAtMs + 3_600_000;
+        var database = await PollDetectionsAsync((polledAtMs, null));
+
+        await using var connection = await database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(polledAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;"));
+        Assert.Equal(polledAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;"));
+    }
+
+    [Fact]
+    public async Task The_endpoint_heartbeat_follows_the_detection_not_the_poll()
+    {
+        var database = await PollDetectionsAsync(
+            (DetectedAtMs + 3_600_000, DetectedAtMs),
+            (DetectedAtMs + 9 * DayMs, DetectedAtMs));
+
+        await using var connection = await database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(
+            DetectedAtMs,
+            await ScalarAsync(connection, "SELECT last_seen_any_ms FROM endpoint_heartbeats;"));
+    }
+
+    /// <summary>
+    ///     Polls the fixture finding once per entry, the Hub clock set to PolledAtMs and the
+    ///     daemon reporting StoredAtMs as its last detection (no stored_at_ms when null).
+    /// </summary>
+    private async Task<HubDatabase> PollDetectionsAsync(params (long PolledAtMs, long? StoredAtMs)[] polls)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fixture = await File.ReadAllTextAsync(FixturePath, cancellationToken);
+        var findings = fixture;
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            if (context.Request.Path == "/api/status")
+                await context.Response.WriteAsync("{\"version\":\"0.11.2\"}", cancellationToken);
+            else if (context.Request.Path == "/api/findings")
+                await context.Response.WriteAsync(findings, cancellationToken);
+            else if (context.Request.Path == "/api/incidents")
+                await context.Response.WriteAsync("[]", cancellationToken);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+        }, cancellationToken);
+        var clock = new FakeTimeProvider();
+        var options = new HubOptions { DatabasePath = _databasePath, HttpTimeout = TimeSpan.FromSeconds(2) };
+        var database = new HubDatabase(Options.Create(options), clock);
+        await database.InitializeAsync(cancellationToken);
+        var poller = new SourcePoller(
+            new DaemonClient(new HttpClient(), Options.Create(options)),
+            database,
+            new IncidentReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<IncidentReader>.Instance),
+            new AckReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                NullLogger<AckReader>.Instance),
+            new DetectionReader(
+                new DaemonClient(new HttpClient(), Options.Create(options)),
+                database,
+                new DetectionWatch(),
+                NullLogger<DetectionReader>.Instance),
+            new RingWatch(),
+            clock,
+            NullLogger<SourcePoller>.Instance);
+        var source = new SourceOptions
+        {
+            Id = "prod",
+            Name = "Production",
+            Environment = "production",
+            BaseUrl = daemon.BaseUrl
+        };
+
+        foreach (var (polledAtMs, storedAtMs) in polls)
+        {
+            clock.SetUtcNow(DateTimeOffset.FromUnixTimeMilliseconds(polledAtMs));
+            findings = fixture.Replace(
+                $"\"stored_at_ms\": {DetectedAtMs},",
+                storedAtMs is { } ms ? $"\"stored_at_ms\": {ms.ToString(CultureInfo.InvariantCulture)}," : "",
+                StringComparison.Ordinal);
+            await poller.PollAsync(source, cancellationToken);
+        }
+
+        return database;
+    }
+
+    private static async Task<long> ScalarAsync(SqliteConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return (long)(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
     }
 
     [Theory]

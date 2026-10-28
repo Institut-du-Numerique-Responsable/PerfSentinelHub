@@ -617,6 +617,44 @@
           }
         ]
       }
+    },
+    {
+      "title": "Detection ledger reads by outcome",
+      "description": "Poll passes over each daemon's detection ledger, by how they ended. ok is a pass that read every page and sealed the days the daemon had closed. aborted means the daemon started a new ledger or turned it off during the pass: what was read stays, and the next pass reads the new ledger. capped is a ledger past 64 pages of 5,000 rows, which seals nothing and starts over at the next poll. unauthorized is a read key the daemon refuses on /api/detections, and failed a page that did not arrive, parse or store. None of them fails the findings poll. A daemon older than perf-sentinel 0.37.0, or with its ledger off, is never read and stays at zero, so a flat dashboard is not a fault. A ledger the daemon pushes does not show here: refused pushes count on perf_sentinel_hub_detection_import_rejected_total.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (source, outcome) (rate(perf_sentinel_hub_detection_reads_total{job=~\"$job\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{source}} {{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      }
     }
   ],
   "schemaVersion": 39,
@@ -685,5 +723,5 @@
   "timezone": "browser",
   "title": "PerfSentinelHub overview",
   "uid": "perf-sentinel-hub-overview",
-  "version": 4
+  "version": 5
 }

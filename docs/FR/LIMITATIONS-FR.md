@@ -93,6 +93,60 @@ Le lignage relie une signature mutée à sa devancière seulement quand exacteme
 un finding stocké correspond. L'ambiguïté n'enregistre rien, parce que nommer
 l'un de plusieurs candidats serait une supposition. Voir [API-FR.md](API-FR.md).
 
+`last_seen` est la dernière détection du daemon source, ramenée à l'horloge du Hub
+quand celle du daemon avance. Une horloge de daemon en retard n'est pas corrigée,
+donc ses findings vieillissent d'autant plus tôt. Un producteur qui omet
+`stored_at_ms` est daté par le poll qui l'a lu, ce qui garde un tel finding `active`
+tant que son anneau le retient.
+
+## Ce qu'affirme un compte de détections
+
+Une lecture de `/api/findings` avec `from` ou `to` sert combien de fois les daemons
+ont détecté chaque finding, d'après les registres de détections de perf-sentinel
+0.37.0 et suivants. Le compte n'est exact que quand `detections_complete` vaut true.
+Sinon c'est une borne basse, la somme de ce qui est connu, avec ses raisons dans
+`detections_gaps`. Null signifie que rien n'est connu, jamais zéro. Voir
+[API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding).
+
+Une détection est un finding que le daemon émet, compté avant que son anneau, ses
+acquittements ou son push ne le voient. Un finding acquitté compte toujours, comme
+son gaspillage compte toujours dans `io_waste_ratio`. Une trace peut produire
+plusieurs findings d'une même signature, un appel redondant aux paramètres
+différents, un groupe fanout ou serialized par parent, plusieurs valeurs de
+regroupement, et chacun compte. Les findings slow entre traces comptent avec 0 I/O
+évitable. Un fragment de trace réanalysé après que sa fenêtre l'a évincé compte tel
+que le détecteur l'a émis. `seen_count` garde son sens, les détections que l'anneau
+du daemon retient encore, et n'est pas un volume.
+
+Un daemon ne garde son registre qu'en mémoire, donc tout arrêt, propre ou non, est un
+trou : le jour où un registre démarre et le dernier jour d'un registre arrêté se
+lisent `restart`. Le Hub additionne les registres successifs d'une source. Un daemon
+lu par poll seul perd ce qu'il a compté entre la dernière lecture du Hub et son
+arrêt. Un daemon qui pousse envoie un dernier tour pendant son drain.
+
+Rien n'est extrapolé. Sous échantillonnage ou délestage, le compte est ce que le
+daemon a analysé, et le Hub sert le plus petit taux d'échantillonnage des jours
+comptés dans `detections_sampling_rate`. Un consommateur qui extrapole à partir de lui
+doit le dire. Certaines pertes n'ont aucun signal au daemon : une ingestion refusée en
+`413`, un message gRPC trop gros, le socket JSON et la troncature par trace. Un jour
+peut donc se lire complet alors que des traces n'ont jamais atteint le détecteur.
+
+Un poll atteint un pod par requête, donc plusieurs pods derrière un Service ne peuvent
+pas tous être lus. Deux registres d'une source lus par poll et vivants en même temps
+se lisent `multi_instance`, et cette source n'est jamais complète. Donnez à chaque pod
+sa propre source, ou laissez chaque pod pousser : les registres poussés
+s'additionnent sans cette raison. Le chevauchement compare le `started_ms` du daemon à
+l'heure de lecture du Hub, donc une horloge de daemon en retard sur celle du Hub peut
+faire lire un redémarrage comme `multi_instance`.
+
+La fenêtre compte des jours UTC entiers sur l'horloge du Hub, du jour de `from`, jamais
+avant le jour que garde la rétention, au jour de `to`, jamais après le jour du Hub. Les
+jours antérieurs à la mise à jour n'ont pas de ligne et se lisent inconnus. Avec des
+motifs d'accès, une source qui a compté un finding sans en tenir de copie n'est listée
+qu'à un appelant qui lit cette source entière, et une lecture restreinte n'atteint que
+les findings qui ont au moins une copie dans sa portée. Une source retirée de
+`Hub:Sources` sort du compte, puisque le Hub n'a aucun nom à servir pour elle.
+
 ## À quoi un finding est attribué
 
 Le moteur range un groupe N+1 ou d'appels redondants qui traverse plusieurs
@@ -147,15 +201,14 @@ lecture est réduite aux grants de l'appelant, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) et
 [Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
-Quatre endpoints réclament une preuve, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations` et
-`POST /api/import/disclosures`, dont la `X-API-Key` est comparée par empreinte, et `/share/`
-sert les fichiers d'une divulgation à quiconque détient un jeton valide. Tous les autres ne
-réclament rien :
-`/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses` aussi bien pour
-la liste que pour la requête qui lance un run, `/reports/`, `/metrics`, et le
-lanceur lui-même. Qui joint le port lit tous les findings de tous les tenants,
-modèles de requêtes SQL et noms d'endpoints compris.
+Cinq endpoints réclament une preuve, `POST /api/import/findings`,
+`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`
+et `POST /api/import/disclosures`, dont la `X-API-Key` est comparée par empreinte, et
+`/share/` sert les fichiers d'une divulgation à quiconque détient un jeton valide. Tous les
+autres ne réclament rien : `/api/status`, `/api/sources`, `/api/findings`,
+`/api/correlations`, `/api/analyses` aussi bien pour la liste que pour la requête qui lance
+un run, `/reports/`, `/metrics`, et le lanceur lui-même. Qui joint le port lit tous les
+findings de tous les tenants, modèles de requêtes SQL et noms d'endpoints compris.
 
 Le `by` et le `reason` d'un acquittement reflété sont lisibles sur la route de
 lecture ouverte, `/api/findings`, qui reste ouverte aux machines quand

@@ -22,4 +22,11 @@ public sealed record DaemonStatus(
     ///     included (perf-sentinel 0.31.2 and later). Read by RingWatch.
     /// </summary>
     public long? FindingsStoredTotal { get; init; }
+
+    /// <summary>
+    ///     The daemon's detection ledger (perf-sentinel 0.37.0 and later). Null when the
+    ///     daemon is older, its ledger is off, or the object does not read: the Hub then
+    ///     never asks for the ledger. Read by DetectionReader.
+    /// </summary>
+    public DetectionLedgerStatus? DetectionLedger { get; init; }
 }

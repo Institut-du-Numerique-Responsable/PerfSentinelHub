@@ -194,9 +194,11 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
         // is not something the embed needs to replay.
         ...["checkout-prod", "billing-stg", "search-prod", "orders-prod", "ci-main"]
             .map((id) => `/api/sources/${id}/daemon`),
-        // What the ack page reads, spelled the way the launcher spells it, so the Ack
+        // What the ack page reads first, spelled the way the launcher spells it, so the Ack
         // link of an unfolded incident lands on a page with something on it rather
-        // than on an embed that has no answer for the route.
+        // than on an embed that has no answer for the route. Its second, windowed read has
+        // from and to taken from the clock, a URL no exact-key capture can record: the embed
+        // answers it 404, and the card shows the line for a failed windowed read.
         `/api/findings?signature=${encodeURIComponent(ackSignature())}&include_acked=true&limit=1`,
         incidents,
         "/api/correlations",
