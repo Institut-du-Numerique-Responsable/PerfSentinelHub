@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -21,6 +22,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(IReadOnlyList<SourceAckResponse>))]
 [JsonSerializable(typeof(ActionResponse))]
 [JsonSerializable(typeof(AccessResponse))]
+[JsonSerializable(typeof(RecapSnapshot))]
 [JsonSerializable(typeof(OAuthError))]
 [JsonSerializable(typeof(DeviceAuthorizationResponse))]
 [JsonSerializable(typeof(DeviceTokenResponse))]
