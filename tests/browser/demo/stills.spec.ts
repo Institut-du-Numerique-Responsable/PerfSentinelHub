@@ -238,11 +238,22 @@ test("correlations open every episode of an incident's pair", async ({page}) => 
 });
 
 test("recap", async ({page}, info) => {
+    // One report on demand, written once for both colour schemes: the Hub trusts the identity
+    // header in this setup, and the screen's own button cannot send one.
+    const known = await page.request.get("/api/recap/reports");
+    if ((await known.json()).length === 0) {
+        const made = await page.request.post("/api/recap/reports", {
+            headers: {"x-forwarded-user": "alice.martin@acme.example"},
+            data: {period: "week"}
+        });
+        expect(made.status()).toBe(201);
+    }
     await page.goto("/#/recap");
     await settled(page, "What wastes the most");
     // The heading is drawn before the read answers, and the tiles and the priorities come from
-    // that one read, so the first card is the whole screen.
+    // that one read, so the first card is the whole screen. The reports are read beside it.
     await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 15_000});
+    await expect(page.locator(".recap-report").first()).toBeVisible({timeout: 15_000});
     await page.screenshot({
         path: nameFor("launcher-recap", info.project.name),
         fullPage: true,

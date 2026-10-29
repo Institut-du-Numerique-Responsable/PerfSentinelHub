@@ -5176,6 +5176,61 @@ a.chip {
     line-height: 1.45;
 }
 
+/* A report: its name and its two downloads on one line, then when it was written and where it went. */
+.recap-report {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 6px 16px;
+    padding: 12px 16px;
+}
+
+.recap-report .recap-label {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.recap-report-links {
+    display: flex;
+    gap: 14px;
+}
+
+.recap-report-foot {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    font-size: 12px;
+    color: var(--text-3);
+}
+
+/* A delivery is a sentence with an address in it: sentence case, not the run pill's capitals. */
+.recap-report .status-pill {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-transform: none;
+    overflow-wrap: anywhere;
+}
+
+.recap-generate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin-bottom: 12px;
+}
+
+.recap-generate .recap-more {
+    margin: 0;
+}
+
+.recap-alert-wide {
+    margin: 0 0 12px;
+}
+
 .recap-state {
     display: inline-flex;
     align-items: center;
@@ -5478,6 +5533,15 @@ a.chip {
 
     .recap-moves {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* The two downloads drop under the name, which gets the whole line. */
+    .recap-report {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .recap-report-links {
+        order: 1;
     }
 
     .recap-input {

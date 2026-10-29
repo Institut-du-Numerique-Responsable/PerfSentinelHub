@@ -126,6 +126,12 @@
         // What was typed in the name field when the Hub refused it, so a refusal does not eat it.
         recapNameDraft: null,
         recapSeq: 0,
+        // The frozen reports under the recap: the list GET /api/recap/reports answered, null when the
+        // Hub refused it (403, the section stays hidden) or while it loads, 'error' when it failed
+        // otherwise; whether a generate is in flight and the sentence a refused one left.
+        recapReports: null,
+        recapGenerating: false,
+        recapGenerateError: null,
         // GET /api/disclosures, null while it loads.
         disclosures: null,
         disclosuresError: false,
@@ -6047,11 +6053,14 @@
             state.recapNaming = null;
             state.recapNameDraft = null;
             state.recapShowAll = false;
+            state.recapReports = null;
+            state.recapGenerateError = null;
             render();
         }
-        getJson(PSL.recapPath(recapRoute())).then(function (snapshot) {
+        Promise.all([getJson(PSL.recapPath(recapRoute())), readRecapReports()]).then(function (results) {
             if (sequence !== state.recapSeq) return;
-            state.recap = snapshot;
+            state.recap = results[0];
+            state.recapReports = results[1];
             state.recapError = null;
         }).catch(function (error) {
             if (sequence !== state.recapSeq) return;
@@ -6059,6 +6068,13 @@
             state.recapError = error.status || 0;
         }).finally(function () {
             if (sequence === state.recapSeq && currentScreen() === 'recap') render();
+        });
+    }
+
+    /** A 403 is a caller with no right to the reports: null hides the section. */
+    function readRecapReports() {
+        return getJson('/api/recap/reports').catch(function (error) {
+            return error.status === 403 ? null : 'error';
         });
     }
 
@@ -6085,8 +6101,8 @@
         const snapshot = state.recap;
         const labels = PSL.RECAP_LABELS[snapshot.view === 'pilotage' ? 'pilotage' : 'tech'];
         [recapPeriodBlock(snapshot), recapTiles(snapshot, labels), recapPriorities(snapshot, labels, route),
-            recapMoved(snapshot, labels)].forEach(function (part) {
-            section.appendChild(part);
+            recapMoved(snapshot, labels), recapReportsPanel(route)].forEach(function (part) {
+            if (part) section.appendChild(part);
         });
         return section;
     }
@@ -6753,6 +6769,100 @@
             return 'No day of this period has closed yet, so nothing is compared with the previous one.';
         }
         return snapshot.nothing_moved ? 'Nothing moved since the previous period.' : '';
+    }
+
+    // ---- the frozen reports
+
+    const RECAP_REPORT_VIEWS = [['pilotage', 'Management'], ['tech', 'Engineering']];
+    const RECAP_DELIVERY_STATUS = {delivered: 'succeeded', failed: 'failed'};
+
+    /** The list under What moved; null (no right to read it) leaves the section out. */
+    function recapReportsPanel(route) {
+        const reports = state.recapReports;
+        if (reports === null) return null;
+        const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-reports'}, [
+            ruledOverline('// reports'),
+            recapHeading('recap-h-reports', 'Reports', 'frozen when written',
+                'A report is a copy of a closed period that no later read changes. A subscription writes one when '
+                + 'its period ends; Generate a report freezes the period and filters above, in your name, '
+                + 'and sends it nowhere.', 'reports'),
+            recapGenerateBar(route)
+        ]);
+        if (state.recapGenerateError) {
+            section.appendChild(el('p', {class: 'recap-alert recap-alert-wide', role: 'alert', text: state.recapGenerateError}));
+        }
+        if (reports === 'error') {
+            section.appendChild(el('p', {class: 'sources-note', text: 'The Hub did not return the reports.'}));
+        } else if (reports.length === 0) {
+            section.appendChild(el('p', {class: 'recap-more', text: 'No report yet.'}));
+        } else {
+            section.appendChild(el('ul', {class: 'recap-list'}, reports.map(recapReportRow)));
+        }
+        return section;
+    }
+
+    function recapGenerateBar(route) {
+        const button = el('button', {
+            class: 'pill-button pill-sm recap-generate-button', type: 'button', disabled: state.recapGenerating ? 'disabled' : null,
+            text: state.recapGenerating ? 'Generating…' : 'Generate a report'
+        });
+        button.addEventListener('click', function () {
+            recapGenerate(route);
+        });
+        return el('div', {class: 'recap-generate'}, [
+            el('span', {
+                class: 'recap-more',
+                text: 'Freezes ' + (route.at ? 'the ' + route.period + ' that holds ' + route.at : 'the last closed ' + route.period)
+                    + (route.environment || route.service || route.grouping ? ', with the filters above' : '') + '.'
+            }),
+            button
+        ]);
+    }
+
+    function recapGenerate(route) {
+        if (state.recapGenerating) return;
+        const sequence = state.recapSeq;
+        state.recapGenerating = true;
+        state.recapGenerateError = null;
+        render();
+        recapSend('POST', '/api/recap/reports', PSL.recapOnDemandBody(route)).then(function (failure) {
+            state.recapGenerating = false;
+            state.recapGenerateError = failure;
+            // The button was replaced while it was busy: put the focus back on it.
+            if (failure) return renderFocus('.recap-generate-button');
+            return readRecapReports().then(function (reports) {
+                if (sequence === state.recapSeq) state.recapReports = reports;
+                if (currentScreen() === 'recap') renderFocus('.recap-generate-button');
+            });
+        });
+    }
+
+    function recapReportRow(report) {
+        const status = PSL.recapReportStatus(report);
+        const links = RECAP_REPORT_VIEWS.filter(function (view) {
+            return report.views.indexOf(view[0]) >= 0;
+        }).map(function (view) {
+            return el('a', {
+                class: 'recap-link', href: '/recaps/' + report.id + '/' + view[0] + '.html', download: '',
+                text: view[1], 'aria-label': view[1] + ' view of the ' + PSL.recapReportLabel(report)
+            });
+        });
+        return el('li', {class: 'run-card recap-report'}, [
+            el('p', {class: 'recap-label', text: PSL.recapReportLabel(report)}),
+            el('div', {class: 'recap-report-links'}, links),
+            el('div', {class: 'recap-report-foot'}, [
+                el('time', {
+                    class: 'recap-when', datetime: PSL.isoUtc(report.generated_at_ms),
+                    title: PSL.isoUtc(report.generated_at_ms), text: 'generated ' + PSL.localTime(report.generated_at_ms)
+                }),
+                status ? el('span', {class: 'recap-report-status', text: status}) : null
+            ].concat(report.deliveries.map(function (delivery) {
+                return el('span', {
+                    class: 'status-pill', 'data-status': RECAP_DELIVERY_STATUS[delivery.state] || 'queued',
+                    text: PSL.recapDeliveryText(delivery)
+                });
+            })))
+        ]);
     }
 
     // ---------------------------------------------------- screen: disclosures

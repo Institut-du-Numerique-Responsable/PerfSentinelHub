@@ -2334,6 +2334,61 @@
     }
 
     /**
+     * The line that names a frozen report: its period as the recap prints it, then the
+     * subscription that made it or the person who asked, and a mark when it is not whole.
+     * @param {{subscription: string | null, created_by?: string | null, complete: boolean,
+     *   period: {kind: string, from: string, to: string}}} report
+     * @returns {string}
+     */
+    function recapReportLabel(report) {
+        const kind = report.period.kind.charAt(0).toUpperCase() + report.period.kind.slice(1);
+        const origin = report.subscription || 'on demand by ' + (report.created_by || 'someone');
+        return kind + ' ' + periodText(report.period) + ' · ' + origin + (report.complete ? '' : ' · incomplete');
+    }
+
+    /**
+     * Why a report went nowhere, or an empty string when it went somewhere.
+     * @param {{subscription: string | null, nothing_moved: boolean, deliveries: unknown[]}} report
+     * @returns {string}
+     */
+    function recapReportStatus(report) {
+        if (!report.subscription) return 'On demand, not sent';
+        if (report.nothing_moved) return 'Archived, not sent: nothing moved';
+        return report.deliveries.length === 0 ? 'Archived, no destination' : '';
+    }
+
+    /**
+     * One delivery of a report: the channel and where it went, the state, the last answer the
+     * destination gave and how many tries it took.
+     * @param {{channel: string, target: string, state: string, attempts?: number,
+     *   last_status?: number | null}} delivery
+     * @returns {string}
+     */
+    function recapDeliveryText(delivery) {
+        const attempts = delivery.attempts || 0;
+        return delivery.channel + ' ' + delivery.target + ': ' + delivery.state
+            + (delivery.last_status === null || delivery.last_status === undefined ? '' : ' (' + delivery.last_status + ')')
+            + (attempts > 0 ? ', ' + attempts + (attempts === 1 ? ' try' : ' tries') : '');
+    }
+
+    /**
+     * The body of a generate request: the screen's period and filters, and the date only when
+     * the route names one (the Hub then takes the last closed period).
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @returns {{period: string, at?: string, environment: string | null, service: string | null,
+     *   grouping: string | null}}
+     */
+    function recapOnDemandBody(route) {
+        return {
+            period: route.period,
+            ...(route.at ? {at: route.at} : {}),
+            environment: route.environment,
+            service: route.service,
+            grouping: route.grouping
+        };
+    }
+
+    /**
      * The carbon tile in three pieces, so a phone-wide tile can set the figure large and the
      * rest small. The grams arrive rounded to one significant figure, the server's rule.
      * @param {number | null} grams
@@ -2621,6 +2676,10 @@
         readRecapRoute,
         recapHash,
         recapPath,
+        recapReportLabel,
+        recapReportStatus,
+        recapDeliveryText,
+        recapOnDemandBody,
         co2Parts,
         co2Text,
         trendText,

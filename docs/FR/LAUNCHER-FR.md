@@ -325,6 +325,32 @@ phrase fixe par type, le nom de l'endpoint quand quelqu'un l'a donné (sinon l'e
 chiffre en opérations inutiles, la tendance et l'action, en lecture seule. Elle ne porte aucun mot
 technique, ses sept textes d'aide non plus.
 
+### Reports
+
+Sous What moved, Reports liste les copies figées des périodes closes, la plus récente d'abord, depuis
+`GET /api/recap/reports` ([l'API](../API.md#recap-reports)). La section est absente pour un appelant que le
+Hub ne laisse pas les lire : il faut `recaps.read`, ou `findings.read` pour les rapports qu'on a générés
+soi-même. Une ligne nomme la période et l'origine du rapport, `Week 2026-10-19 to 2026-10-25 · weekly-shop`
+pour un abonnement, `Day 2026-10-28 · on demand by alice` pour un rapport demandé par quelqu'un, avec
+`· incomplete` quand un jour n'était pas scellé ou qu'un daemon avait redémarré. Dessous viennent le moment
+de l'écriture, à votre heure, et le sort du rapport : une pastille par livraison
+(`webhook ops-chat: delivered`, `email pm@example.test: failed (550), 1 try`,
+`webhook ops: pending (500), 3 tries`), verte une fois livrée, rouge une fois en échec, grise tant que le
+Hub réessaie. Un rapport qui n'est parti nulle part dit pourquoi : `Archived, not sent: nothing moved` (une
+période où rien n'a bougé est archivée et jamais livrée), `Archived, no destination` pour un abonnement
+sans webhook ni adresse, et `On demand, not sent` pour un rapport généré à la demande, qui n'est jamais
+livré.
+
+Management et Engineering téléchargent la page figée de chaque vue, un fichier autonome qui s'ouvre hors
+ligne, en clair comme en sombre, sans autre script que les deux qui règlent le thème et les heures. Un
+rapport ne porte que les vues avec lesquelles il a été figé.
+
+Generate a report fige la période et les filtres que l'écran montre, à votre nom, à partir des copies que
+vous pouvez lire : sans date choisie, c'est la dernière période close, et un jour d'une période qui n'est
+pas finie est refusé avec la phrase du Hub dans la section. Il refuse aussi quand le Hub ne sait pas qui
+demande, ce qui est le cas d'un navigateur derrière aucune connexion ni proxy d'identité, et quand votre
+accès ne porte aucun `findings.read`. Un succès ajoute la ligne aussitôt.
+
 ## L'écran des divulgations
 
 Les divulgations périodiques qu'une tâche planifiée a publiées, voir

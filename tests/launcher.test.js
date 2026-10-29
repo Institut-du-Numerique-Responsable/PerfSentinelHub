@@ -1687,6 +1687,48 @@ test("Management_help_carries_no_technical_word", () => {
     for (const text of Object.values(PSL.RECAP_HELP.pilotage)) assert.doesNotMatch(text, technical);
 });
 
+test("a recap report is named by its period and who it came from", () => {
+    const week = {subscription: "weekly-shop", period: {kind: "week", from: "2026-10-19", to: "2026-10-25"}, complete: true};
+    assert.equal(PSL.recapReportLabel(week), "Week 2026-10-19 to 2026-10-25 · weekly-shop");
+    assert.equal(PSL.recapReportLabel({...week, complete: false}),
+        "Week 2026-10-19 to 2026-10-25 · weekly-shop · incomplete");
+    assert.equal(PSL.recapReportLabel({
+        subscription: null, created_by: "alice", period: {kind: "day", from: "2026-10-28", to: "2026-10-28"}, complete: true
+    }), "Day 2026-10-28 · on demand by alice");
+    assert.equal(PSL.recapReportLabel({
+        subscription: null, created_by: "bob", period: {kind: "month", from: "2026-09-01", to: "2026-09-30"}, complete: false
+    }), "Month 2026-09-01 to 2026-09-30 · on demand by bob · incomplete");
+});
+
+test("a recap report says why nothing was sent", () => {
+    const sent = {subscription: "weekly-shop", nothing_moved: false, deliveries: [{channel: "webhook"}]};
+    assert.equal(PSL.recapReportStatus({...sent, nothing_moved: true, deliveries: []}),
+        "Archived, not sent: nothing moved");
+    assert.equal(PSL.recapReportStatus({subscription: null, nothing_moved: false, deliveries: []}), "On demand, not sent");
+    assert.equal(PSL.recapReportStatus({subscription: null, nothing_moved: true, deliveries: []}), "On demand, not sent");
+    assert.equal(PSL.recapReportStatus({...sent, deliveries: []}), "Archived, no destination");
+    assert.equal(PSL.recapReportStatus(sent), "");
+});
+
+test("a recap delivery reads as where it went and how it fared", () => {
+    assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops-chat", state: "delivered", attempts: 0, last_status: null}),
+        "webhook ops-chat: delivered");
+    assert.equal(PSL.recapDeliveryText({channel: "email", target: "pm@example.test", state: "failed", attempts: 1, last_status: 550}),
+        "email pm@example.test: failed (550), 1 try");
+    assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops", state: "pending", attempts: 3, last_status: 500}),
+        "webhook ops: pending (500), 3 tries");
+    assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops", state: "pending", attempts: 2}),
+        "webhook ops: pending, 2 tries");
+});
+
+test("a generate request carries the screen's period and filters, and a date only when one is set", () => {
+    const route = PSL.readRecapRoute("#/recap?period=month&service=shop&view=pilotage");
+    assert.deepEqual(PSL.recapOnDemandBody(route), {period: "month", environment: null, service: "shop", grouping: null});
+    assert.deepEqual(
+        PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?at=2026-10-14&environment=prod&namespace=x&grouping=checkout")),
+        {period: "week", at: "2026-10-14", environment: "prod", service: null, grouping: "checkout"});
+});
+
 test("a timestamp reads in the browser's zone, in a fixed order", () => {
     const kept = process.env.TZ;
     try {
