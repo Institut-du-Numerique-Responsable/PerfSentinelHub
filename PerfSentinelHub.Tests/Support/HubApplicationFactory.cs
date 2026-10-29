@@ -8,6 +8,7 @@ using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Maintenance;
+using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Support;
@@ -74,7 +75,8 @@ public sealed class HubApplicationFactory : WebApplicationFactory<Program>
             descriptor.ServiceType == typeof(IHostedService) &&
             descriptor.ImplementationType is { } type &&
             (type == typeof(PollWorker) || type == typeof(RetentionWorker) ||
-             type == typeof(SignatureRateWorker) || type == typeof(DeliveryLoop))).ToArray();
+             type == typeof(SignatureRateWorker) || type == typeof(DeliveryLoop) ||
+             type == typeof(RecapLoop))).ToArray();
         foreach (var worker in workers)
             services.Remove(worker);
     }
