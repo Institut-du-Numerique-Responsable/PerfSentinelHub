@@ -13,8 +13,10 @@ public static class RecapSentences
                 "For each item on a page, the application fetches the same kind of information again, instead of fetching it all at once.",
             "n_plus_one_http" =>
                 "For each item, the application asks another part of the system again, instead of asking once for the whole list.",
-            "n_plus_one_messaging" => "The application sends one small message per item instead of grouping them into one.",
-            "redundant_sql" => "The application fetches the same information several times for one action, when once would do.",
+            "n_plus_one_messaging" =>
+                "The application sends one small message per item instead of grouping them into one.",
+            "redundant_sql" =>
+                "The application fetches the same information several times for one action, when once would do.",
             "redundant_http" =>
                 "The application asks another part of the system the same question several times for one action, when once would do.",
             "slow_sql" => "Fetching some information takes long enough to make people wait.",

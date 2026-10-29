@@ -5,7 +5,6 @@ using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Recaps;
 
@@ -38,9 +37,9 @@ public sealed class RecapServiceTests : IAsyncLifetime
         }
     ];
 
-    private FakeTimeProvider _clock = Clock("2026-10-29T10:00:00Z");
-
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-recap-{Guid.NewGuid():N}.db");
+
+    private FakeTimeProvider _clock = Clock("2026-10-29T10:00:00Z");
 
     private HubDatabase _database = null!;
     private RecapService _service = null!;
@@ -52,6 +51,15 @@ public sealed class RecapServiceTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await StartAtAsync(_clock);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        TestPool.ClearFor(_path);
+        File.Delete(_path);
+        File.Delete($"{_path}-shm");
+        File.Delete($"{_path}-wal");
+        return ValueTask.CompletedTask;
     }
 
     private static FakeTimeProvider Clock(string utc)
@@ -66,15 +74,6 @@ public sealed class RecapServiceTests : IAsyncLifetime
         _database = new HubDatabase(Configured(0.2), _clock);
         await _database.InitializeAsync(Token);
         _service = new RecapService(_database, Configured(0.2), _clock);
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        TestPool.ClearFor(_path);
-        File.Delete(_path);
-        File.Delete($"{_path}-shm");
-        File.Delete($"{_path}-wal");
-        return ValueTask.CompletedTask;
     }
 
     private IOptions<HubOptions> Configured(double threshold)
@@ -92,7 +91,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
     [Fact]
     public async Task Findings_with_io_rank_first_then_by_severity()
     {
-        await SeedAsync("a", "w", Thu, "warning");
+        await SeedAsync("a", "w", Thu);
         await SeedAsync("a", "i", Thu, "info");
         await SeedAsync("a", "c", Thu, "critical");
         await SeedAsync("a", "n", Thu, "info");
@@ -115,14 +114,14 @@ public sealed class RecapServiceTests : IAsyncLifetime
             "a", [new ParsedAck("big", "daemon", "robin", "known", "2026-09-20T10:00:00Z", null, null)],
             AckReadStates.Ok, NowMs, Token);
 
-        var snapshot = await RecapAsync(environment: "prod");
+        var snapshot = await RecapAsync("prod");
 
         Assert.Equal(1, snapshot.Tiles.AckedFindings);
         Assert.Equal(1, snapshot.Tiles.ActiveFindings);
         Assert.Equal(100, snapshot.Tiles.AvoidableIoOps);
         Assert.Equal(0, snapshot.MorePriorities);
         // The Lab source has no ledger: its finding has no known I/O, which is not zero.
-        var lab = await RecapAsync(environment: "lab");
+        var lab = await RecapAsync("lab");
         Assert.Null(lab.Tiles.AvoidableIoOps);
         Assert.Equal(0, lab.MorePriorities);
     }
@@ -388,8 +387,8 @@ public sealed class RecapServiceTests : IAsyncLifetime
         await LedgerAsync("b", [Sealed(Mon + 1), Sealed(Mon + 2), Open(Thu)], [Count(Mon + 1, S, 5)]);
         await ActionAsync(S, ActionStatuses.Done);
 
-        var shop = await RecapAsync(environment: "prod");
-        var lab = await RecapAsync(environment: "lab");
+        var shop = await RecapAsync("prod");
+        var lab = await RecapAsync("lab");
 
         Assert.Equal("confirmed", Assert.Single(shop.Priorities).Action!.Confirmation);
         Assert.Equal("contradicted", Assert.Single(lab.Priorities).Action!.Confirmation);

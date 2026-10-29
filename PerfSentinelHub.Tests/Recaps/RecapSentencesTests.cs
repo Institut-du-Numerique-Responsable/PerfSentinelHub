@@ -35,7 +35,7 @@ public sealed class RecapSentencesTests
         var sentence = RecapSentences.For(type).ToLowerInvariant();
 
         foreach (var word in new[]
-                 { "query", "database", "service", "endpoint", "broker", "pool", "connection", "sql", "http" })
+                     { "query", "database", "service", "endpoint", "broker", "pool", "connection", "sql", "http" })
             Assert.DoesNotContain(word, sentence);
     }
 }

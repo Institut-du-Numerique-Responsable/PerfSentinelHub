@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text.Json;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Api;
 

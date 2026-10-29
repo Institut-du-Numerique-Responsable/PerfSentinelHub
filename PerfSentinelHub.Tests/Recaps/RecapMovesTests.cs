@@ -98,7 +98,7 @@ public sealed class RecapMovesTests
         var ranked = Enumerable.Range(1, 10).Select(rank => Priority(rank, "flat"))
             .Append(Priority(11, "up")).ToList();
 
-        Assert.True(RecapMoves.NothingMoved(Moves(up: [MoveRow()]), ranked));
+        Assert.True(RecapMoves.NothingMoved(Moves([MoveRow()]), ranked));
         Assert.False(RecapMoves.NothingMoved(Moves(), [Priority(1, "down")]));
     }
 

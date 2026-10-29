@@ -55,7 +55,7 @@ public sealed class RecapCo2Tests
     [Fact]
     public void Each_day_is_priced_at_its_own_coefficient()
     {
-        var estimate = RecapCo2.Estimate([Row("a", 100, 1.0, 100, 20750), Row("a", 100, 3.0, 100, 20751)]);
+        var estimate = RecapCo2.Estimate([Row("a", 100, 1.0, 100), Row("a", 100, 3.0, 100, 20751)]);
 
         Assert.Equal(new Co2Estimate(4, 0, null), estimate);
     }

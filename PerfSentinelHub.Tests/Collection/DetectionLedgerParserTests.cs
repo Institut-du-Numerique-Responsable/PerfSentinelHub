@@ -171,7 +171,8 @@ public sealed class DetectionLedgerParserTests
     [Fact]
     public void Over_5000_rows_is_too_large()
     {
-        var rows = Enumerable.Range(0, 5000).Select(index => DetectionLedgerJson.Count(Today, $"sig-{index}")).ToArray();
+        var rows = Enumerable.Range(0, 5000).Select(index => DetectionLedgerJson.Count(Today, $"sig-{index}"))
+            .ToArray();
         Assert.Equal(5000, Parse(Valid(rows)).Counts.Count);
 
         Assert.Throws<ImportBatchTooLargeException>(() =>
@@ -182,7 +183,9 @@ public sealed class DetectionLedgerParserTests
     public void Over_31_days_is_too_large()
     {
         var json = Valid();
-        json["days"] = new JsonArray([.. Enumerable.Range(0, 31).Select(JsonNode? (offset) => DetectionLedgerJson.Day(Today - offset))]);
+        json["days"] = new JsonArray([
+            .. Enumerable.Range(0, 31).Select(JsonNode? (offset) => DetectionLedgerJson.Day(Today - offset))
+        ]);
         Assert.Equal(31, Parse(json).Days.Count);
 
         json["days"]!.AsArray().Add(DetectionLedgerJson.Day(Today - 31));
@@ -237,7 +240,8 @@ public sealed class DetectionLedgerParserTests
     [Theory]
     [InlineData("not json")]
     [InlineData("[]")]
-    [InlineData("{\"ledger_id\":\"00000000-0000-4000-8000-000000000001\",\"ledger_id\":\"00000000-0000-4000-8000-000000000002\"}")]
+    [InlineData(
+        "{\"ledger_id\":\"00000000-0000-4000-8000-000000000001\",\"ledger_id\":\"00000000-0000-4000-8000-000000000002\"}")]
     public void A_body_that_is_not_one_page_object_is_refused(string body)
     {
         Assert.Throws<InvalidDataException>(() =>
@@ -305,5 +309,4 @@ public sealed class DetectionLedgerParserTests
         Assert.Null(read.AvoidableGco2);
         Assert.Null(read.AvoidableGco2Low);
     }
-
 }

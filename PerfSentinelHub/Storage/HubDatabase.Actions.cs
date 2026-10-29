@@ -87,7 +87,8 @@ public sealed partial class HubDatabase
             await using (var read = connection.CreateCommand())
             {
                 read.Transaction = transaction;
-                read.CommandText = "SELECT status, owner, done_at_ms FROM finding_actions WHERE signature = $signature;";
+                read.CommandText =
+                    "SELECT status, owner, done_at_ms FROM finding_actions WHERE signature = $signature;";
                 read.Parameters.AddWithValue(SignatureParameter, signature);
                 await using var reader = await read.ExecuteReaderAsync(cancellationToken);
                 if (!await reader.ReadAsync(cancellationToken))

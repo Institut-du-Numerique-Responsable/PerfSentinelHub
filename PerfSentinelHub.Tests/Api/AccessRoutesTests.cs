@@ -1121,7 +1121,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                 services.PostConfigure<HubOptions>(options =>
                 {
                     options.Analysis = new AnalysisOptions
-                    { EngineBinaryPath = "/usr/bin/false", ReportDirectory = _reports };
+                        { EngineBinaryPath = "/usr/bin/false", ReportDirectory = _reports };
                     options.Sources =
                     [
                         .. options.Sources,

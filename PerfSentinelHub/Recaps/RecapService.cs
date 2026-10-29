@@ -380,7 +380,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         public RecapPeriod PreviousFull => Period.Previous();
 
         // The closed days of the period (the whole of it once over), none on its first day.
-        public RecapPeriod? ClosedWindow => !InProgress ? Period : ClosedDays >= 1 ? Period.Truncated(ClosedDays) : null;
+        public RecapPeriod? ClosedWindow =>
+            !InProgress ? Period : ClosedDays >= 1 ? Period.Truncated(ClosedDays) : null;
 
         // The previous period cut to the same number of days, not read at all on the first day.
         public RecapPeriod? PreviousWindow =>

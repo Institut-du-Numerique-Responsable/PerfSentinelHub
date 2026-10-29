@@ -1,6 +1,5 @@
 using System.Reflection;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Storage;
 
@@ -128,7 +127,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "copies:cart:1";
         await Database.UpsertBatchAsync(new SourceSnapshot("copy-a", "copy-a", "prod", "0.26.2"), FindingJson.Batch(
-            FindingJson.Envelope(signature, service: "cart", grouping: """[{"key":"team","value":"shop"}]""")),
+                FindingJson.Envelope(signature, service: "cart", grouping: """[{"key":"team","value":"shop"}]""")),
             1, cancellationToken);
         await Database.UpsertBatchAsync(new SourceSnapshot("copy-b", "copy-b", "lab", "0.26.2"), FindingJson.Batch(
             FindingJson.Envelope(signature, service: "basket")), 1, cancellationToken);

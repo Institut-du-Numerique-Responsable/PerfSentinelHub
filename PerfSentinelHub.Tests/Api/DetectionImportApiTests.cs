@@ -67,11 +67,11 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         Assert.Equal(2, body.RootElement.GetProperty("accepted").GetInt32());
         Assert.Equal(0, body.RootElement.GetProperty("rejected").GetInt32());
         Assert.Equal("stored-a 5 40,stored-b 7 -", await ScalarAsync("""
-                                                                    SELECT group_concat(signature || ' ' || detections || ' ' || IFNULL(extra_io_ops, '-'), ',')
-                                                                    FROM (SELECT * FROM detection_counts
-                                                                          WHERE source_id = 'test' AND signature LIKE 'stored-%'
-                                                                          ORDER BY signature);
-                                                                    """));
+                                                                     SELECT group_concat(signature || ' ' || detections || ' ' || IFNULL(extra_io_ops, '-'), ',')
+                                                                     FROM (SELECT * FROM detection_counts
+                                                                           WHERE source_id = 'test' AND signature LIKE 'stored-%'
+                                                                           ORDER BY signature);
+                                                                     """));
         Assert.Equal("1 0", await ScalarAsync(
             $"SELECT pushed || ' ' || polled FROM detection_ledgers WHERE ledger_id = '{DetectionLedgerJson.LedgerId}';"));
     }
@@ -81,17 +81,19 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
     {
         var page = DetectionLedgerJson.Page(
             [],
-            [DetectionLedgerJson.Day(
-                2, avoidableGco2: 12.5, avoidableIoOps: 400, avoidableGco2Low: 6.25, totalIoOps: 5200)]);
+            [
+                DetectionLedgerJson.Day(
+                    2, avoidableGco2: 12.5, avoidableIoOps: 400, avoidableGco2Low: 6.25, totalIoOps: 5200)
+            ]);
         using var request = Request(ApiKey, page);
         using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("12.5 6.25 400 5200", await ScalarAsync("""
-                                                            SELECT avoidable_gco2 || ' ' || avoidable_gco2_low || ' ' || avoidable_io_ops
-                                                              || ' ' || total_io_ops
-                                                            FROM detection_days WHERE source_id = 'test' AND day = 2;
-                                                            """));
+                                                             SELECT avoidable_gco2 || ' ' || avoidable_gco2_low || ' ' || avoidable_io_ops
+                                                               || ' ' || total_io_ops
+                                                             FROM detection_days WHERE source_id = 'test' AND day = 2;
+                                                             """));
     }
 
     [Fact]

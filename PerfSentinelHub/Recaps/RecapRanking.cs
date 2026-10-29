@@ -15,7 +15,8 @@ public static class RecapRanking
             .. findings
                 .OrderBy(finding => finding.AvoidableIoOps > 0 ? 0 : 1)
                 .ThenByDescending(finding => finding.AvoidableIoOps > 0 ? finding.AvoidableIoOps : 0)
-                .ThenByDescending(finding => finding.AvoidableIoOps > 0 ? 0 : FindingParser.SeverityRank(finding.Severity))
+                .ThenByDescending(finding =>
+                    finding.AvoidableIoOps > 0 ? 0 : FindingParser.SeverityRank(finding.Severity))
                 .ThenByDescending(finding => finding.Detections ?? -1)
                 .ThenBy(finding => finding.Signature, StringComparer.Ordinal)
         ];

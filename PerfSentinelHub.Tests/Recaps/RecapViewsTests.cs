@@ -6,7 +6,8 @@ namespace PerfSentinelHub.Tests.Recaps;
 public sealed class RecapViewsTests
 {
     // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
-    private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    private static readonly JsonSerializerOptions Wire = new()
+        { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private static RecapPriority Priority(int rank)
     {

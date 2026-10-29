@@ -45,7 +45,13 @@ public sealed record RecapTiles(
     int AckedFindings,
     RecapActionCounts Actions);
 
-public sealed record RecapActionCounts(int Todo, int InProgress, int Done, int Confirmed, int Contradicted, int CameBack);
+public sealed record RecapActionCounts(
+    int Todo,
+    int InProgress,
+    int Done,
+    int Confirmed,
+    int Contradicted,
+    int CameBack);
 
 public sealed record RecapPriority(
     int Rank,

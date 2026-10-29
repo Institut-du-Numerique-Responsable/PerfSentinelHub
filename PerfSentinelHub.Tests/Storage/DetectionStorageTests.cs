@@ -15,6 +15,26 @@ public sealed class DetectionStorageTests : IAsyncLifetime
     private const string Ledger = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
     private const string Signature = "n_plus_one_sql:order-svc:SELECT * FROM orders WHERE id = ?";
 
+    private const string CarbonRow = """
+                                     SELECT IFNULL(avoidable_gco2, '-') || ' ' || IFNULL(avoidable_gco2_low, '-') || ' '
+                                       || IFNULL(avoidable_io_ops, '-') || ' ' || IFNULL(total_io_ops, '-')
+                                     FROM detection_days;
+                                     """;
+
+    // Every stored column of the three tables on one line, so a failure prints them all.
+    private const string Rows = """
+                                SELECT
+                                  (SELECT group_concat(day || ' ' || detections || ' ' || IFNULL(extra_io_ops, '-'), ',')
+                                   FROM detection_counts) || ' | ' ||
+                                  (SELECT group_concat(day || ' ' || sealed || ' ' || gap || ' ' || overflow_detections
+                                     || ' ' || IFNULL(overflow_extra_io_ops, '-') || ' ' || shed_traces || ' '
+                                     || ingest_rejected || ' ' || sampling_rate || ' ' || last_read_ms, ',')
+                                   FROM detection_days) || ' | ' ||
+                                  (SELECT group_concat(started_ms || ' ' || first_read_ms || ' ' || last_read_ms || ' '
+                                     || polled || ' ' || pushed || ' ' || IFNULL(read_from_day, '-'), ',')
+                                   FROM detection_ledgers);
+                                """;
+
     private readonly string _path = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-detections-{Guid.NewGuid():N}.db");
@@ -59,16 +79,12 @@ public sealed class DetectionStorageTests : IAsyncLifetime
     {
         return new DetectionLedgerPage(
             Ledger, 1_799_000_000_000, Day, Day, null, [],
-            [new DetectionDayRow(Day, false, false, 0, 0, 0, 0, 1.0, avoidableGco2, avoidableIoOps, avoidableGco2Low,
-                totalIoOps)],
+            [
+                new DetectionDayRow(Day, false, false, 0, 0, 0, 0, 1.0, avoidableGco2, avoidableIoOps, avoidableGco2Low,
+                    totalIoOps)
+            ],
             null);
     }
-
-    private const string CarbonRow = """
-                                     SELECT IFNULL(avoidable_gco2, '-') || ' ' || IFNULL(avoidable_gco2_low, '-') || ' '
-                                       || IFNULL(avoidable_io_ops, '-') || ' ' || IFNULL(total_io_ops, '-')
-                                     FROM detection_days;
-                                     """;
 
     [Fact]
     public async Task Carbon_fields_absent_then_present_keep_the_present_values()
@@ -111,20 +127,6 @@ public sealed class DetectionStorageTests : IAsyncLifetime
             "daemon-a", page, observedAt, TestContext.Current.CancellationToken));
     }
 
-    // Every stored column of the three tables on one line, so a failure prints them all.
-    private const string Rows = """
-                                SELECT
-                                  (SELECT group_concat(day || ' ' || detections || ' ' || IFNULL(extra_io_ops, '-'), ',')
-                                   FROM detection_counts) || ' | ' ||
-                                  (SELECT group_concat(day || ' ' || sealed || ' ' || gap || ' ' || overflow_detections
-                                     || ' ' || IFNULL(overflow_extra_io_ops, '-') || ' ' || shed_traces || ' '
-                                     || ingest_rejected || ' ' || sampling_rate || ' ' || last_read_ms, ',')
-                                   FROM detection_days) || ' | ' ||
-                                  (SELECT group_concat(started_ms || ' ' || first_read_ms || ' ' || last_read_ms || ' '
-                                     || polled || ' ' || pushed || ' ' || IFNULL(read_from_day, '-'), ',')
-                                   FROM detection_ledgers);
-                                """;
-
     private async Task<string> ScalarAsync(string sql)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -142,7 +144,8 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         var once = await ScalarAsync(Rows);
         await PollAsync(Page());
 
-        Assert.Equal("20400 5 40 | 20400 0 0 0 0 0 0 1.0 1800000500000 | 1799000000000 1800000500000 1800000500000 1 0 -",
+        Assert.Equal(
+            "20400 5 40 | 20400 0 0 0 0 0 0 1.0 1800000500000 | 1799000000000 1800000500000 1800000500000 1 0 -",
             once);
         Assert.Equal(once, await ScalarAsync(Rows));
     }
@@ -154,9 +157,11 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         await PollAsync(Page(4, 30), ObservedAt - 1000);
         await PollAsync(Page(6, 90, shedTraces: 1, samplingRate: 0.8), ObservedAt + 1000);
 
-        Assert.Equal("20400 9 90", await ScalarAsync("SELECT day || ' ' || detections || ' ' || extra_io_ops FROM detection_counts;"));
+        Assert.Equal("20400 9 90",
+            await ScalarAsync("SELECT day || ' ' || detections || ' ' || extra_io_ops FROM detection_counts;"));
         Assert.Equal("3 0.5 1800000501000",
-            await ScalarAsync("SELECT shed_traces || ' ' || sampling_rate || ' ' || last_read_ms FROM detection_days;"));
+            await ScalarAsync(
+                "SELECT shed_traces || ' ' || sampling_rate || ' ' || last_read_ms FROM detection_days;"));
         Assert.Equal("1800000499000 1800000501000",
             await ScalarAsync("SELECT first_read_ms || ' ' || last_read_ms FROM detection_ledgers;"));
     }
@@ -194,7 +199,8 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         await _database.SealDetectionPassAsync("daemon-a", Ledger, 20_398, 20_398, 20_399, cancellationToken);
 
         Assert.Equal("20398 1,20399 1,20400 0",
-            await ScalarAsync("SELECT group_concat(day || ' ' || sealed, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));
+            await ScalarAsync(
+                "SELECT group_concat(day || ' ' || sealed, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));
         Assert.Equal(20_400, await _database.ReadDetectionCursorAsync("daemon-a", Ledger, cancellationToken));
         Assert.Null(await _database.ReadDetectionCursorAsync(
             "daemon-a", "00000000-0000-4000-8000-000000000000", cancellationToken));

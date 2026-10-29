@@ -6,12 +6,12 @@ namespace PerfSentinelHub.Tests.Recaps;
 public sealed class RecapCoverageTests
 {
     private const long DayMs = 86_400_000;
-
-    // Week of Monday 2026-10-26 (day 20752) to Sunday 2026-11-01 (20758).
-    private static readonly RecapPeriod Week = RecapPeriod.Of(RecapPeriodKind.Week, new DateOnly(2026, 10, 29));
     private const int Monday = 20752;
     private const int Thursday = 20755;
     private const int NextWeek = 20760;
+
+    // Week of Monday 2026-10-26 (day 20752) to Sunday 2026-11-01 (20758).
+    private static readonly RecapPeriod Week = RecapPeriod.Of(RecapPeriodKind.Week, new DateOnly(2026, 10, 29));
 
     private static DayCoverage Day(
         int day,
@@ -70,7 +70,8 @@ public sealed class RecapCoverageTests
     [Fact]
     public void A_sampled_day_is_a_note_with_its_rate()
     {
-        var days = Days(Monday, Monday + 6).Select(day => day.Day == Monday + 1 ? day with { SamplingRate = 0.5 } : day);
+        var days = Days(Monday, Monday + 6)
+            .Select(day => day.Day == Monday + 1 ? day with { SamplingRate = 0.5 } : day);
 
         var info = RecapCoverage.Judge(Week, NextWeek, [Source(days)], null);
 
@@ -114,7 +115,8 @@ public sealed class RecapCoverageTests
     [Fact]
     public void Overflow_is_incomplete_and_multi_instance_a_note()
     {
-        var days = Days(Monday, Monday + 6).Select(day => day.Day == Monday ? day with { OverflowDetections = 3 } : day);
+        var days = Days(Monday, Monday + 6)
+            .Select(day => day.Day == Monday ? day with { OverflowDetections = 3 } : day);
         var start = Monday * DayMs;
         var ledgers = new[]
         {

@@ -1,10 +1,8 @@
 using System.Net;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Api;
 
@@ -12,13 +10,14 @@ namespace PerfSentinelHub.Tests.Api;
 ///     Declaring who works on a finding. Access is off here, so every caller is an admin and the
 ///     identity is the proxy header; AccessRoutesTests owns what each role may do.
 /// </summary>
-public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>, IAsyncLifetime
+public sealed class ActionsApiTests(HubApplicationFactory factory)
+    : IClassFixture<HubApplicationFactory>, IAsyncLifetime
 {
     // The factory's clock, fixed.
     private const long NowMs = 10_000;
+    private HttpClient _client = null!;
 
     private WebApplicationFactory<Program> _scoped = null!;
-    private HttpClient _client = null!;
 
     public ValueTask InitializeAsync()
     {
@@ -67,7 +66,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
     {
         var signature = await SeedAsync("status-owner");
 
-        using var response = await SendAsync("POST", Body(signature, status: "todo", owner: "bob"));
+        using var response = await SendAsync("POST", Body(signature, "todo", "bob"));
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var body = await JsonOf(response);
@@ -82,7 +81,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
         var signature = await SeedAsync("twice");
         using var first = await SendAsync("POST", Body(signature, take: true));
 
-        using var second = await SendAsync("POST", Body(signature, status: "done"));
+        using var second = await SendAsync("POST", Body(signature, "done"));
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
         Assert.Equal("This finding already has an action; change it with PATCH.", await DetailAsync(second));
@@ -103,7 +102,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
         var signature = await SeedAsync("done");
         using var created = await SendAsync("POST", Body(signature, take: true));
 
-        using var response = await SendAsync("PATCH", Body(signature, status: "done"));
+        using var response = await SendAsync("PATCH", Body(signature, "done"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await JsonOf(response);
@@ -118,9 +117,9 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
     public async Task Leaving_done_clears_done_at()
     {
         var signature = await SeedAsync("reopen");
-        using var created = await SendAsync("POST", Body(signature, status: "done"));
+        using var created = await SendAsync("POST", Body(signature, "done"));
 
-        using var response = await SendAsync("PATCH", Body(signature, status: "in_progress"));
+        using var response = await SendAsync("PATCH", Body(signature, "in_progress"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Null((await JsonOf(response))["done_at_ms"]);
@@ -143,7 +142,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
     {
         var signature = await SeedAsync("no-action");
 
-        using var response = await SendAsync("PATCH", Body(signature, status: "done"));
+        using var response = await SendAsync("PATCH", Body(signature, "done"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("This finding has no action yet.", await DetailAsync(response));
@@ -163,7 +162,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
     public async Task A_patch_cannot_take()
     {
         var signature = await SeedAsync("patch-take");
-        using var created = await SendAsync("POST", Body(signature, status: "todo"));
+        using var created = await SendAsync("POST", Body(signature, "todo"));
 
         using var response = await SendAsync("PATCH", Body(signature, take: true));
 
@@ -201,7 +200,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
     {
         var signature = await SeedAsync("long-owner");
 
-        using var response = await SendAsync("POST", Body(signature, status: "todo", owner: new string('o', 257)));
+        using var response = await SendAsync("POST", Body(signature, "todo", new string('o', 257)));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -231,7 +230,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
     [Fact]
     public async Task A_body_over_the_cap_is_a_413()
     {
-        using var response = await SendAsync("POST", Body(new string('s', 9 * 1024), status: "todo"));
+        using var response = await SendAsync("POST", Body(new string('s', 9 * 1024), "todo"));
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
     }
@@ -253,7 +252,8 @@ public sealed class ActionsApiTests(HubApplicationFactory factory) : IClassFixtu
         // The identity comes first in the route order, so this caller carries one.
         var signature = await SeedAsync("form");
         using var request = Request("POST", "alice", null);
-        request.Content = new StringContent(Body(signature, take: true), Encoding.UTF8, "application/x-www-form-urlencoded");
+        request.Content =
+            new StringContent(Body(signature, take: true), Encoding.UTF8, "application/x-www-form-urlencoded");
 
         using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 

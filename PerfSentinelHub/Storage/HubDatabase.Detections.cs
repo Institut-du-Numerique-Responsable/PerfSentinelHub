@@ -197,7 +197,7 @@ public sealed partial class HubDatabase
 
         if (fromPush)
             await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken,
-                table: "source_imports");
+                "source_imports");
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -323,7 +323,8 @@ public sealed partial class HubDatabase
                         reader.IsDBNull(4) ? null : reader.GetInt64(4))));
             await reader.NextResultAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
-                days.Add((reader.GetString(0), new DayCoverage(reader.GetString(8), reader.GetInt32(1), reader.GetBoolean(2),
+                days.Add((reader.GetString(0), new DayCoverage(reader.GetString(8), reader.GetInt32(1),
+                    reader.GetBoolean(2),
                     reader.GetBoolean(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6),
                     reader.GetDouble(7))));
             await reader.NextResultAsync(cancellationToken);
@@ -346,8 +347,10 @@ public sealed partial class HubDatabase
             foreach (var source in finding.Sources)
                 source.Volume = DetectionVolumeFold.ForSource(
                     [.. daysBySource[source.SourceId]],
-                    [.. findingCounts.Where(item => item.SourceId == source.SourceId)
-                        .Select(item => (item.LedgerId, item.Row))],
+                    [
+                        .. findingCounts.Where(item => item.SourceId == source.SourceId)
+                            .Select(item => (item.LedgerId, item.Row))
+                    ],
                     window, today, multiInstance.Contains(source.SourceId));
             finding.Window = window;
             finding.Volume = DetectionVolumeFold.ForFinding([.. finding.Sources.Select(source => source.Volume!)]);
