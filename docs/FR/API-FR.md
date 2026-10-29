@@ -598,6 +598,95 @@ l'écriture. Chaque relais journalise une ligne, l'événement `1310` quand le d
 répondu et `1311` sinon, avec la source, l'action, l'appelant et le statut. La raison et
 l'identifiant ne sont jamais journalisés.
 
+## Recap
+
+`GET /api/recap` répond par un recap de revue d'une période : les findings à regarder en
+premier, ce qui a bougé depuis la période précédente, ce que les équipes en ont fait, et ce
+que les I/O évitables peuvent coûter en carbone. Il est calculé avec les mêmes lectures que
+`/api/findings`, donc le périmètre, les filtres, le contrôle d'accès et le volume de
+détection sont ceux de cette liste. Il n'est jamais ouvert : sous `Hub:Auth` il demande une
+session ou un jeton, et un appelant sans `findings.read` nulle part reçoit le `403` de la
+liste des findings.
+
+| Paramètre                   | Défaut            | Effet                                                             |
+|-----------------------------|-------------------|-------------------------------------------------------------------|
+| `period`                    | `week`            | `day`, `week` (ISO, du lundi au dimanche, UTC) ou `month` (civil) |
+| `at`                        | aujourd'hui, UTC  | N'importe quel jour de la période, `yyyy-MM-dd` ; un jour après aujourd'hui est un `400` |
+| `view`                      | `tech`            | `tech` (Engineering) ou `pilotage` (Management)                   |
+| `environment`, `source_id`  | toute la flotte   | Comme sur `/api/findings`                                         |
+| `service`, `grouping`       | aucun             | Comme sur `/api/findings`                                         |
+
+Un paramètre répété, une valeur que la liste ne connaît pas ou de l'UTF-8 invalide est un
+`400`.
+
+La réponse est un instantané, `schema_version` `1`, avec `view`, `generated_at_ms`, `period`
+et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
+`sampling_rate`, `truncated_to_days`), `filters` (tels que demandés), `comparison_exact`,
+`tiles`, `priorities[]`, `more_priorities`, `movements`, `nothing_moved`,
+`sources_without_volume[]` et `truncated`.
+
+- **Comparer.** Une période en cours se compare sur ses jours clos : du premier jour à hier
+  contre le même nombre de premiers jours de la période précédente, indiqué dans
+  `previous.truncated_to_days`. Aujourd'hui est partiel et se lirait comme une baisse face à
+  un jour entier. Le premier jour d'une période, il n'y a aucun jour clos : toutes les
+  tendances valent `unknown`, les listes `new`, `gone`, `up` et `down` sont vides, la période
+  précédente n'est pas lue et `truncated_to_days` vaut `0`. Les tuiles et le classement
+  gardent le volume partiel d'aujourd'hui et sont signalés en cours par `period.in_progress`.
+- **Classement.** Les findings non acquittés seulement. D'abord ceux qui ont des I/O
+  évitables sur la période, par ce volume, puis les autres par sévérité (critical, warning,
+  info) ; à égalité, le finding le plus souvent détecté, puis la signature. `rank` commence à
+  `1`. La vue `tech` liste tous les findings classés, `pilotage` les cinq premiers et
+  `more_priorities` compte le reste.
+- **Tendances.** Chaque finding classé est `new` (absent de la période précédente), `up`,
+  `down` ou `flat` face à son propre volume de la période précédente, `change` étant l'écart
+  relatif. La mesure est l'I/O évitable quand l'un des deux côtés en a, les détections sinon.
+  `Hub:Recaps:MovementThreshold` (`0.2` par défaut, au-dessus de `0` et au plus `10`) est
+  l'écart à partir duquel un finding vaut `up` ou `down`. Un finding que les données ne
+  permettent pas de comparer, ou vu aujourd'hui seulement, vaut `unknown`, jamais `down`.
+- **Mouvements.** `new`, `up` et `down` suivent les tendances, dans l'ordre du classement.
+  `gone` liste les findings non acquittés de la période précédente que la courante ne
+  contient plus du tout, un finding acquitté n'étant pas parti, dans leur classement précédent,
+  avec la tendance `gone` et sans écart ;
+  `gone_with_confirmed_action` compte ceux dont le correctif a été confirmé. `came_back` et
+  `done_still_detected` listent les findings de la période dont l'action `done` est revenue
+  ou a été contredite. `nothing_moved` est vrai quand aucune de ces listes ne contient rien et
+  qu'aucun finding des rangs 1 à 10 n'est passé `up` ou `down`.
+- **Incomplet et notes.** `incomplete` nomme ce qui interdit une comparaison exacte :
+  `uncovered_days`, `open_day` (un jour passé non scellé), `restart` (un redémarrage du
+  daemon a interrompu ses comptes) et `overflow`. `notes` nomme ce qui mérite une ligne et
+  laisse la comparaison debout : `sampling` (avec `sampling_rate`, le plus bas de la période),
+  `shed`, `ingest_rejected` et `multi_instance`. `comparison_exact` est vrai quand aucune des
+  deux périodes n'est incomplète. Aujourd'hui seul ne rend jamais une période incomplète.
+- **Sources sans volume.** `sources_without_volume` nomme les sources qui portent un finding de
+  l'une des périodes et n'ont aucun registre de détections (un daemon d'avant le registre,
+  ou un daemon qui n'envoie aucun jour). Leurs findings sont classés par sévérité et portent
+  `volume_known: false`.
+- **Tuiles.** `avoidable_io_ops` est la somme des findings classés, `null` quand aucun n'a de
+  volume connu, à côté de `previous_avoidable_io_ops`, `null` quand la période précédente n'a
+  pas été lue. `active_findings` compte les findings classés, `acked_findings` les acquittés de
+  la période, et `actions` compte les actions des findings de la période par statut (`todo`,
+  `in_progress`, `done`) et, parmi les `done`, les confirmations `confirmed`, `contradicted`
+  et `came_back`.
+- **Carbone.** `co2_grams` est un contexte, jamais une clé de tri : une estimation, arrondie à
+  un chiffre significatif, des I/O en trop valorisées au coefficient du jour (grammes par I/O
+  évitable) tel que le moteur l'a envoyé avec ses jours de registre. C'est un minimum partiel
+  quand certaines sources n'envoient aucun coefficient : `co2_sources_without_coefficient` les
+  compte et le chiffre n'est jamais extrapolé. Sans aucun coefficient, `co2_grams` vaut `null`
+  et `co2_missing_reason` vaut `no_coefficient`, ou `no_avoidable_io` quand il n'y a rien à
+  valoriser. Une priorité porte son propre `co2_grams` et `co2_partial`.
+- **Actions et confirmation.** Une priorité porte son `action` (statut, responsable, dates et,
+  en `tech`, les `events`). Une action `done` est jugée sur les jours après celui où elle a
+  été marquée faite : `confirmed` dès qu'un jour scellé dans une source joignable du finding
+  ne contient aucune détection, `contradicted` quand il est détecté avant tout jour propre,
+  `came_back` quand il l'est après un, `awaiting` tant qu'aucun jour n'est scellé. Une source
+  injoignable ne confirme jamais. Le jugement reste dans les filtres de la requête.
+- **Deux vues.** `pilotage` est l'instantané `tech` avec `view: "pilotage"`, les cinq premières
+  priorités, une phrase en langage courant fixe par type de finding dans `plain`, et aucune
+  clé technique : `signature`, `endpoint`, `template`, `suggestion`, `suggested_fix`,
+  `code_location`, `confidence` et les `events` de l'action sont absentes, pas `null`.
+- **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
+  `truncated: true` ; resserrez la requête avec un filtre.
+
 ## Actions
 
 Une action dit qui travaille sur un finding et où il en est. Le Hub la tient lui-même :
@@ -987,6 +1076,10 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   exactement le `404` d'un inconnu, et une copie qu'il lit sans pouvoir l'écrire `403`. La
   révocation d'un ack reflété dont le Hub ne détient plus le finding exige la source
   entière. `expires_at` reste au choix de l'appelant : aucune expiration n'est imposée.
+- **Le recap** suit `findings.read` de la même façon : il est construit avec les copies que
+  l'appelant lit, comme `/api/findings`, et un appelant sans `findings.read` nulle part reçoit
+  le même `403`. Un `source_id` ou un `environment` hors de `/api/sources` de l'appelant est
+  le `400` d'un inconnu.
 - **Les actions** exigent un appelant que le Hub sait nommer, puis `actions.write` quelque
   part, sinon `403 {"detail":"You may not act on findings."}`, avant que le corps soit lu.
   Une action est globale à la signature, elle est donc jugée sur les copies du finding que

@@ -554,6 +554,91 @@ one line, event `1310` when the daemon answered and `1311` when it did not, with
 source, the action, the caller and the status. The reason and the credential are never
 logged.
 
+## Recap
+
+`GET /api/recap` answers a review recap of one period: the findings worth a look first, what
+moved since the period before, what the teams did about them, and what the avoidable I/O
+may cost in carbon. It is computed from the same reads as `/api/findings`, so the scope,
+the filters, access control and the detection volume are the ones of that list. It is never
+open: under `Hub:Auth` it needs a session or a token, and a caller with `findings.read`
+nowhere gets the `403` the findings list gives.
+
+| Parameter                   | Default           | Does                                                             |
+|-----------------------------|-------------------|------------------------------------------------------------------|
+| `period`                    | `week`            | `day`, `week` (ISO, Monday to Sunday, UTC) or `month` (calendar) |
+| `at`                        | today, UTC        | Any day of the period, `yyyy-MM-dd`; a day after today is a `400` |
+| `view`                      | `tech`            | `tech` (Engineering) or `pilotage` (Management)                  |
+| `environment`, `source_id`  | the whole fleet   | As on `/api/findings`                                            |
+| `service`, `grouping`       | none              | As on `/api/findings`                                            |
+
+A repeated parameter, a value the list does not know or invalid UTF-8 is a `400`.
+
+The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, `period` and
+`previous` (each `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
+`sampling_rate`, `truncated_to_days`), `filters` (as asked), `comparison_exact`, `tiles`,
+`priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`
+and `truncated`.
+
+- **Comparing.** A period in progress is compared on its closed days: `FromDay` to
+  yesterday against the same number of first days of the previous period, reported in
+  `previous.truncated_to_days`. Today is partial and would read as a drop against a full
+  day. On the first day of a period there is no closed day: every trend is `unknown`, the
+  `new`, `gone`, `up` and `down` lists are empty, the previous period is not read and
+  `truncated_to_days` is `0`. The tiles and the ranking keep today's partial volume and
+  are labelled in progress by `period.in_progress`.
+- **Ranking.** Unacknowledged findings only. First those with avoidable I/O on the period,
+  by that volume, then the others by severity (critical, warning, info); ties go to the
+  finding detected more often, then to the signature. `rank` starts at `1`. The `tech` view
+  lists every ranked finding, `pilotage` the first five and `more_priorities` counts the rest.
+- **Trends.** Each ranked finding is `new` (absent from the previous period), `up`, `down`
+  or `flat` against its own volume in the previous period, `change` being the relative
+  difference. The metric is the avoidable I/O when either side has it, the detections
+  otherwise. `Hub:Recaps:MovementThreshold` (default `0.2`, above `0` and at most `10`)
+  is the change past which a finding reads `up` or `down`. A finding the data cannot
+  compare, or seen today only, reads `unknown`, never `down`.
+- **Movements.** `new`, `up` and `down` follow the trends, in ranking order. `gone` lists the
+  unacknowledged findings of the previous period that the current period does not hold at
+  all, an acknowledged finding not being gone, in their previous ranking, with the trend
+  `gone` and no change; `gone_with_confirmed_action`
+  counts those whose fix was confirmed. `came_back` and `done_still_detected` list the
+  findings of the period whose `done` action came back or was contradicted.
+  `nothing_moved` is true when none of those lists holds anything and no finding of ranks 1
+  to 10 went `up` or `down`.
+- **Incomplete and notes.** `incomplete` names what forbids an exact comparison:
+  `uncovered_days`, `open_day` (a past day not sealed), `restart` (a daemon restart
+  interrupted its counts) and `overflow`. `notes` names what is worth a line and leaves the
+  comparison standing: `sampling` (with `sampling_rate`, the lowest over the period), `shed`,
+  `ingest_rejected` and `multi_instance`. `comparison_exact` is true when neither period is
+  incomplete. Today alone never makes a period incomplete.
+- **Sources without volume.** `sources_without_volume` names the sources holding a finding of
+  either period and no detection ledger (a daemon that predates the ledger, or one that
+  sends no day). Their findings are ranked by severity and carry `volume_known: false`.
+- **Tiles.** `avoidable_io_ops` is the sum over the ranked findings, `null` when none has a
+  known volume, next to `previous_avoidable_io_ops`, `null` when the previous period was
+  not read. `active_findings` counts the ranked findings, `acked_findings` the
+  acknowledged ones of the period, and `actions` counts the actions of the period's
+  findings by status (`todo`, `in_progress`, `done`) and, among the `done` ones, the
+  confirmations `confirmed`, `contradicted` and `came_back`.
+- **Carbon.** `co2_grams` is context, never a sort key: an estimate, rounded to one
+  significant figure, of the extra I/O priced at each day's own grams per avoidable I/O, as the
+  engine sent them with its ledger days. It is a partial minimum when some sources send
+  no coefficient: `co2_sources_without_coefficient` counts them and the figure is never
+  extrapolated. With none, `co2_grams` is `null` and `co2_missing_reason` is
+  `no_coefficient`, or `no_avoidable_io` when there is nothing to price. A priority carries
+  its own `co2_grams` and `co2_partial`.
+- **Actions and confirmation.** A priority carries its `action` (status, owner, times and,
+  in `tech`, the `events`). A `done` action is judged on the days after the one it was
+  marked done: `confirmed` once a day sealed at a reachable source of the finding holds no
+  detection, `contradicted` when it is detected before any clean day, `came_back` when it
+  is detected after one, `awaiting` while no day is sealed yet. A source that is
+  unreachable never confirms. The judgment stays within the filters of the request.
+- **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
+  priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
+  technical keys: `signature`, `endpoint`, `template`, `suggestion`, `suggested_fix`,
+  `code_location`, `confidence` and the action `events` are absent, not `null`.
+- **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
+  `truncated: true`; narrow the request with a filter.
+
 ## Actions
 
 An action says who works on a finding and where it stands. The Hub keeps it itself: nothing
@@ -921,6 +1006,10 @@ token or a machine token, and each answer covers what the caller's grants cover.
   cannot read answers the very `404` an unknown one does, and one it reads but may not
   write `403`. A revoke of a mirrored ack whose finding the Hub no longer holds needs the
   source as a whole. `expires_at` stays the caller's choice: no expiry is forced.
+- **The recap** follows `findings.read` the same way: it is built from the copies the
+  caller reads, as `/api/findings` is, and a caller holding `findings.read` nowhere gets the
+  same `403`. A `source_id` or an `environment` outside the caller's `/api/sources` is the
+  `400` of an unknown one.
 - **Actions** need a caller the Hub can name, then `actions.write` somewhere, or
   `403 {"detail":"You may not act on findings."}`, before the body is read. An action is
   global to the signature, so it is judged on the copies of the finding the caller reads, at

@@ -133,6 +133,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("GET", "/api/sources/shop-d/acks")]
     [InlineData("POST", "/api/actions")]
     [InlineData("PATCH", "/api/actions")]
+    [InlineData("GET", "/api/recap")]
     [InlineData("GET", "/api/disclosures")]
     [InlineData("GET", "/api/analyses")]
     [InlineData("POST", "/api/analyses")]
@@ -402,6 +403,38 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         var finding = Assert.Single(await FindingsAsync(client, "/api/findings"), item => Signature(item) == F2);
         Assert.Equal("lab-d",
             Assert.Single(finding.GetProperty("sources").EnumerateArray()).GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task The_recap_reads_only_the_copies_in_scope()
+    {
+        // F1 is acked at shop-d, the only copy attr reads: counted, not ranked. F2 is outside its scope.
+        using var attr = await SignedInAsync("attr");
+
+        using var response = await attr.GetAsync("/api/recap", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = document.RootElement;
+        var ranked = root.GetProperty("priorities").EnumerateArray()
+            .Select(priority => priority.GetProperty("signature").GetString()).ToList();
+        // Both warnings with no volume, so the signature breaks the tie.
+        Assert.Equal([F4, F5], ranked);
+        Assert.DoesNotContain(F2, ranked);
+        Assert.DoesNotContain(F1, ranked);
+        Assert.Equal(1, root.GetProperty("tiles").GetProperty("acked_findings").GetInt32());
+    }
+
+    [Fact]
+    public async Task A_caller_without_findings_read_gets_403_on_the_recap()
+    {
+        using var client = await SignedInAsync("tracer");
+
+        using var response = await client.GetAsync("/api/recap", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("No grant gives you findings.read on this Hub.", await DetailAsync(response));
     }
 
     [Fact]

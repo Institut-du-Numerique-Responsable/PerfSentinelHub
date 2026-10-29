@@ -159,6 +159,7 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `/` et les fichiers du launcher                                        | n'importe quel appelant                                            | redirection ou `401`        |
 | `GET /api/status`, `GET /api/sources`                                  | une permission quelque part                                        | `403`                       |
 | `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtré                                            | `403` si détenue nulle part |
+| `GET /api/recap`                                                       | `findings.read`, filtré                                            | `403` si détenue nulle part |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtré ; la copie la plus riche dans le périmètre | `403` ; `404`               |
 | `POST /api/incidents/refresh`                                          | `findings.read` ; ne lit que les démons dans le périmètre          | `403`                       |
 | `GET /api/correlations`                                                | `findings.read`, filtré sur les épisodes dont l'appelant lit les deux services à cette source | `403` s'il n'est détenu nulle part |

@@ -71,6 +71,8 @@ public static partial class ApiEndpoints
         // Never anonymous: an action is taken in somebody's name.
         app.MapPost("/api/actions", CreateActionAsync);
         app.MapPatch("/api/actions", UpdateActionAsync);
+        // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
+        app.MapGet("/api/recap", GetRecapAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
         // correlations, a daemon pushes with its key. With Hub:Access the reads need a

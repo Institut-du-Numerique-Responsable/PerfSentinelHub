@@ -148,6 +148,7 @@ does not depend on the provider at all.
 | `/` and the launcher's files                                           | any caller                                                      | redirect or `401`       |
 | `GET /api/status`, `GET /api/sources`                                  | any permission anywhere                                         | `403`                   |
 | `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtered                                       | `403` when held nowhere |
+| `GET /api/recap`                                                       | `findings.read`, filtered                                       | `403` when held nowhere |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtered; the richest copy in scope            | `403`; `404`            |
 | `POST /api/incidents/refresh`                                          | `findings.read`; reads only the daemons in scope                | `403`                   |
 | `GET /api/correlations`                                                | `findings.read`, filtered to the episodes whose two services the caller reads at that source | `403` when held nowhere |

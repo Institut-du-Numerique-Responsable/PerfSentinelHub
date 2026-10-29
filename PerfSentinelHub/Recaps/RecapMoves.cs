@@ -28,13 +28,12 @@ public static class RecapMoves
 
     /// <summary>
     ///     True when no finding appeared, left, came back or was done-but-detected, and none of
-    ///     the top ten went up or down. A fix that was confirmed counts as movement too.
+    ///     the top ten went up or down. A gone finding whose fix was confirmed is in Gone already.
     /// </summary>
     public static bool NothingMoved(RecapMovements moves, IReadOnlyList<RecapPriority> ranked)
     {
         return moves.New.Count == 0 &&
                moves.Gone.Count == 0 &&
-               moves.GoneWithConfirmedAction == 0 &&
                moves.CameBack.Count == 0 &&
                moves.DoneStillDetected.Count == 0 &&
                !ranked.Take(NothingMovedRanks).Any(priority => priority.Trend is "up" or "down");
