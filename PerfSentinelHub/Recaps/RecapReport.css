@@ -405,6 +405,7 @@ h3 {
     margin-top: 8px;
 }
 
+/* The disclosure triangle is drawn, not the browser's, so both reports fold the same way. */
 .fix summary, .more summary {
     display: inline-flex;
     align-items: center;
@@ -414,10 +415,6 @@ h3 {
     font-weight: 600;
     color: var(--btn-fg);
     cursor: pointer;
-}
-
-/* The disclosure triangle is drawn, not the browser's, so both reports fold the same way. */
-.fix summary, .more summary {
     list-style: none;
 }
 
