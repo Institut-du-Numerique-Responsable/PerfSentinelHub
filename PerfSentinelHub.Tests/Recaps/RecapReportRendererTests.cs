@@ -47,8 +47,7 @@ public sealed partial class RecapReportRendererTests
 
     private static string Island(string html)
     {
-        return Regex.Match(html, "<script type=\"application/json\" id=\"recap-data\">(.*?)</script>",
-            RegexOptions.Singleline).Groups[1].Value;
+        return DataIsland().Match(html).Groups[1].Value;
     }
 
     private static string Hash(string script)
@@ -142,7 +141,7 @@ public sealed partial class RecapReportRendererTests
 
         foreach (var script in ExecutableScripts(Html(RecapSnapshots.Distinctive())))
             Assert.Contains(Hash(script), policy, StringComparison.Ordinal);
-        Assert.Equal(2, Regex.Matches(policy, "'sha256-").Count);
+        Assert.Equal(2, ScriptHash().Count(policy));
     }
 
     [Fact]
@@ -153,7 +152,7 @@ public sealed partial class RecapReportRendererTests
         Assert.Contains("<time datetime=\"2026-10-29T14:32:05Z\">2026-10-29 14:32 UTC</time>", html,
             StringComparison.Ordinal);
         Assert.Contains("Frozen on 2026-10-29 14:32 UTC.", Visible(html), StringComparison.Ordinal);
-        var times = Regex.Matches(html, "<time[^>]*>[^<]*</time>");
+        var times = TimeElement().Matches(html);
         Assert.NotEmpty(times);
         foreach (Match time in times)
             Assert.Matches(@"^<time datetime=""\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"">\d{4}-\d\d-\d\d \d\d:\d\d UTC</time>$",
@@ -249,7 +248,7 @@ public sealed partial class RecapReportRendererTests
         var html = Html(RecapViews.Frozen(Everything()));
 
         RecapSentencesTests.AssertPlain(Visible(html));
-        foreach (Match title in Regex.Matches(html, "title=\"([^\"]*)\""))
+        foreach (Match title in TitleAttribute().Matches(html))
             RecapSentencesTests.AssertPlain(WebUtility.HtmlDecode(title.Groups[1].Value));
         var visible = Visible(html);
         Assert.Contains("Done, confirmed by the measurements", visible, StringComparison.Ordinal);
@@ -376,8 +375,8 @@ public sealed partial class RecapReportRendererTests
 
         var folded = html.IndexOf("<details class=\"more\">", StringComparison.Ordinal);
         Assert.True(folded > 0);
-        Assert.Equal(10, Rows().Matches(html[..folded]).Count);
-        Assert.Equal(2, Rows().Matches(html[folded..html.LastIndexOf("</details>", StringComparison.Ordinal)]).Count);
+        Assert.Equal(10, Rows().Count(html[..folded]));
+        Assert.Equal(2, Rows().Count(html[folded..html.LastIndexOf("</details>", StringComparison.Ordinal)]));
         Assert.Contains("<summary>Show all 12</summary>", html, StringComparison.Ordinal);
     }
 
@@ -395,7 +394,7 @@ public sealed partial class RecapReportRendererTests
             [.. snapshot.Priorities.Select((priority, index) => priority with { AvoidableIoOps = volumes[index] })]
         };
 
-        Assert.Equal(dividers, Regex.Count(Html(snapshot), "<li class=\"divider\">Below, "));
+        Assert.Equal(dividers, Divider().Count(Html(snapshot)));
     }
 
     [Fact]
@@ -403,7 +402,7 @@ public sealed partial class RecapReportRendererTests
     {
         var html = Html(RecapViews.Frozen(RecapSnapshots.Distinctive(12)));
 
-        Assert.Equal(5, Rows().Matches(html).Count);
+        Assert.Equal(5, Rows().Count(html));
         Assert.DoesNotContain("<details class=\"more\">", html, StringComparison.Ordinal);
         Assert.Contains("7 more in the engineering view.", Visible(html), StringComparison.Ordinal);
     }
@@ -448,4 +447,19 @@ public sealed partial class RecapReportRendererTests
 
     [GeneratedRegex(@"url\(")]
     private static partial Regex UrlCall();
+
+    [GeneratedRegex("<script type=\"application/json\" id=\"recap-data\">(.*?)</script>", RegexOptions.Singleline)]
+    private static partial Regex DataIsland();
+
+    [GeneratedRegex("'sha256-")]
+    private static partial Regex ScriptHash();
+
+    [GeneratedRegex("<time[^>]*>[^<]*</time>")]
+    private static partial Regex TimeElement();
+
+    [GeneratedRegex("title=\"([^\"]*)\"")]
+    private static partial Regex TitleAttribute();
+
+    [GeneratedRegex("<li class=\"divider\">Below, ")]
+    private static partial Regex Divider();
 }

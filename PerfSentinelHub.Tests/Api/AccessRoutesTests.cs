@@ -59,6 +59,9 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     private const string
         DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
+    private static readonly JsonSerializerOptions Wire = new()
+    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+
     private static readonly Dictionary<string, string> Users = new(StringComparer.Ordinal)
     {
         ["admin"] = """{"sub":"u-admin","email":"admin@example.internal","groups":[]}""",
@@ -1509,8 +1512,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     private async Task<string> StoreSubscriptionReportAsync()
     {
         var id = Guid.NewGuid().ToString("N");
-        var snapshot = JsonSerializer.Serialize(RecapSnapshots.Distinctive(),
-            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+        var snapshot = JsonSerializer.Serialize(RecapSnapshots.Distinctive(), Wire);
         Assert.True(await Database.InsertRecapReportAsync(
             new RecapReportRecord(
                 new RecapReportSummary(
