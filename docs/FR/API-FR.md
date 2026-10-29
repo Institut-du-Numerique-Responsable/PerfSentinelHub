@@ -699,8 +699,10 @@ Chaque webhook nommé par un abonnement, déclaré dans `Hub:Recaps:Webhooks`, r
 JSON quand le rapport de l'abonnement pour une période close est figé. Une période où rien n'a
 bougé est archivée et envoyée nulle part. Le corps ne porte que la vue de pilotage : l'objet `recap`
 est le snapshot `pilotage` décrit plus haut, il ne contient donc aucune clé d'ingénierie, et aucun
-`endpoint` : une ligne sans libellé garde son `label` à `null` et son `service`, rien de plus. La vue
-d'ingénierie arrive chez le destinataire sous forme de lien, jamais de contenu.
+`endpoint` : une ligne sans libellé garde son `label` à `null` et son `service`, rien de plus. Une
+action garde son `owner` et son `owner_display` tels que le Hub les stocke : seule la page jointe
+change le responsable en nom. La vue d'ingénierie arrive chez le destinataire sous forme de lien,
+jamais de contenu.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
@@ -778,9 +780,10 @@ scripts en ligne de la page, par empreinte. `pilotage` est la projection de pilo
 stocké, faite au moment de servir la page, avec deux coupes que l'écran en direct ne fait pas. Une
 ligne sans libellé ne montre aucun endpoint : son titre se lit « An unnamed step in » suivi du
 service, avec « Name it in the Hub to see it here. » dessous. Le responsable d'une action est le nom
-qu'une personne lit (`Alice Martin` pour `alice.martin@acme.com`), et l'identité derrière (un e-mail,
-un nom `local:`, un sujet) n'est ni dans le texte, ni dans un `title`, ni dans l'îlot de données. La
-page `tech` garde cette identité au survol. Un id qui n'est pas 32 caractères hexadécimaux minuscules,
+qu'une personne lit (`Alice Martin` pour `alice.martin@acme.com` ou `Alice.Martin@Acme.com`, `Alice`
+pour `Alice <alice@acme.com>`), et l'identité derrière (un e-mail, un nom `local:`, un sujet) n'est ni
+dans le texte, ni dans un `title`, ni dans l'îlot de données. Un responsable dont il ne reste aucun nom
+une fois l'e-mail retiré n'apparaît pas. La page `tech` garde cette identité au survol. Un id qui n'est pas 32 caractères hexadécimaux minuscules,
 un id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rapports sont purgés
 après `Hub:Recaps:Retention`.
 

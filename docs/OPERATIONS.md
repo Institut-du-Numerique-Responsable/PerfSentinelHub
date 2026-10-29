@@ -345,7 +345,7 @@ that moved is delivered to each webhook and each e-mail address of its subscript
 webhook and the mail carry the management view only, and the engineering view is a link to the Hub,
 which stays behind its sign-in. Neither names the endpoint of a row nobody labelled, and the attached
 page shows each action owner by name, without the e-mail or account behind it (see
-[API.md](API.md#recap-reports), The page).
+[API.md](API.md#recap-reports), The page). The webhook body keeps the owner as the Hub stores it.
 
 **Deliveries.** They run in the same 15 second pass and resume after a restart. A 2xx settles a
 webhook; any other answer, a redirect included, and silence are retried with a backoff that starts

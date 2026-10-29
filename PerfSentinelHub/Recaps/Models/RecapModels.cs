@@ -5,7 +5,8 @@ namespace PerfSentinelHub.Recaps;
 // The recap snapshot GET /api/recap serves, snake_case through HubJsonContext. In the pilotage
 // view the technical keys (signature, template, suggestion, suggested_fix, code_location,
 // confidence, events) are absent, not null, and so is endpoint, kept only on a priority or a move
-// with no label. label is always there, null while nobody has named the endpoint.
+// with no label. RecapViews.Frozen, the view a frozen report and its webhook carry, drops it there
+// too. label is always there, null while nobody has named the endpoint.
 
 public sealed record RecapSnapshot(
     int SchemaVersion,

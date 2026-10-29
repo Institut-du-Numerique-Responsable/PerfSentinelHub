@@ -1691,8 +1691,9 @@ test("Management_labels_carry_no_technical_word", () => {
         {io: "Unnecessary operations", findings: "Open problems", moved: "What changed"});
 });
 
-// The engine's words a Management reader must not meet, as RecapSentencesTests.TechnicalWords.
-const TECHNICAL = /quer(y|ies)|database|endpoint|broker|pool|connection|sql|http|I\/O|finding|signature|engine|daemon|ledger|coefficient|trace|ingest|sampl|source/i;
+// The engine's words a Management reader must not meet, as RecapSentencesTests.TechnicalWords. "engine" is a
+// whole word: "Engineering" names the other view.
+const TECHNICAL = /quer(y|ies)|database|endpoint|broker|pool|connection|sql|http|I\/O|finding|signature|\bengine\b|daemon|ledger|coefficient|trace|ingest|sampl|source/i;
 const GAP_REASONS = ["uncovered_days", "open_day", "restart", "sampling", "shed", "ingest_rejected", "overflow",
     "multi_instance"];
 
@@ -1759,7 +1760,9 @@ test("Management_copy_carries_no_technical_word", () => {
         PSL.recapReportStatus({...report, subscription: "weekly-shop", nothing_moved: true}),
         PSL.recapReportStatus({...report, subscription: "weekly-shop"}),
         PSL.recapDeliveryText({channel: "webhook", target: "ops-chat", state: "delivered", attempts: 1, last_status: 204}),
-        PSL.recapDeliveryText({channel: "email", target: "pm@acme.test", state: "failed", attempts: 8, last_status: null})
+        PSL.recapDeliveryText({channel: "email", target: "pm@acme.test", state: "failed", attempts: 8, last_status: null}),
+        // app.js: the more-priorities note and the Reports row's download links.
+        "2 more priorities, lower down, in the Engineering view.", "Management", "Engineering"
     ];
     for (const text of texts) {
         assert.ok(text, "every text is set");

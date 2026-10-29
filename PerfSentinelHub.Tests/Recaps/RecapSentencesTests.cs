@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -22,8 +23,9 @@ public sealed class RecapSentencesTests
 
     internal static void AssertPlain(string text)
     {
+        // "engine" as a whole word: "engineering" names the other view, which a Management reader may meet.
         foreach (var word in TechnicalWords)
-            Assert.DoesNotContain(word, text.ToLowerInvariant());
+            Assert.DoesNotMatch(@"(?i)" + (word == "engine" ? @"\bengine\b" : Regex.Escape(word)), text);
     }
 
     public static TheoryData<string> AllTypes()

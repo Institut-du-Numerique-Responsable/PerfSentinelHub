@@ -6803,7 +6803,8 @@
         render();
         recapSend('POST', '/api/recap/reports', PSL.recapOnDemandBody(route)).then(function (failure) {
             state.recapGenerating = false;
-            state.recapGenerateError = failure;
+            // Management reads no permission name nor filter key: the Hub's own detail is for engineers.
+            state.recapGenerateError = failure && route.view === 'pilotage' ? PSL.RECAP_REPORTS_COPY.refused : failure;
             // The button was replaced while it was busy: put the focus back on it.
             if (failure) return renderFocus('.recap-generate-button');
             return readRecapReports().then(function (reports) {

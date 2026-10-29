@@ -66,11 +66,28 @@ public static class RecapReportRenderer
     {
         if (priority.Action is not { } action)
             return priority;
-        var name = RecapText.Owner(action.Owner, action.OwnerDisplay).Text;
+        var name = NameOnly(RecapText.Owner(action.Owner, action.OwnerDisplay).Text);
         return priority with
         {
             Action = action with { Owner = null, OwnerDisplay = name.Length > 0 ? name : null, Events = null }
         };
+    }
+
+    // Owner keeps a mixed-case or hand-typed identity as it is. Here a name beside an e-mail stays, and
+    // a bare e-mail or local: identity becomes the name built from it, else no owner shows.
+    private static string NameOnly(string text)
+    {
+        var local = text.StartsWith("local:", StringComparison.OrdinalIgnoreCase);
+        if (!local && !text.Contains('@'))
+            return text;
+        var words = (local ? text["local:".Length..] : text).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var kept = words.Where(word => !word.Contains('@')).ToList();
+        if (words.Length > 1 && kept.Count > 0)
+            return string.Join(' ', kept);
+        var identity = words.FirstOrDefault(word => word.Contains('@'), words.FirstOrDefault(""))
+            .Trim('<', '>', '(', ')', '"').ToLowerInvariant();
+        var name = RecapText.Owner(identity, null).Text;
+        return name.Contains('@') ? "" : name;
     }
 
     // ---- the head of the page
@@ -314,8 +331,8 @@ public static class RecapReportRenderer
         if (priority.Label is not null)
             html.Append("<p class=\"label\">").Append(E(priority.Label)).Append("</p>");
         else
-            html.Append("<p class=\"label\">").Append(E(Unnamed(priority.Service))).Append("</p><p class=\"where\">")
-                .Append(NameIt).Append("</p>");
+            html.Append("<p class=\"label\">").Append(E(Unnamed(priority.Service))).Append("</p><div class=\"where\">")
+                .Append(NameIt).Append("</div>");
         html.Append("<p class=\"plain\">").Append(E(priority.Plain)).Append("</p>");
         if (priority.Label is not null)
             html.Append("<div class=\"where\">in ").Append(E(priority.Service)).Append("</div>");

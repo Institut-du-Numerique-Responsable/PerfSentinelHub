@@ -650,8 +650,9 @@ Each webhook named by a subscription, declared in `Hub:Recaps:Webhooks`, receive
 body when the subscription's report of a closed period is frozen. A period in which nothing moved is
 archived and sent nowhere. The body carries the management view only: the `recap` object is the
 `pilotage` snapshot described above, so it holds none of the engineering keys, and no `endpoint` at
-all: a row that has no label keeps its `null` `label` and its `service`, nothing more. The engineering
-view reaches a receiver as a link, never as content.
+all: a row that has no label keeps its `null` `label` and its `service`, nothing more. An action keeps
+its `owner` and `owner_display` as the Hub stores them: only the attached page turns the owner into a
+name. The engineering view reaches a receiver as a link, never as content.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
@@ -725,9 +726,11 @@ inline scripts of the page, by hash. `pilotage` is the management projection of 
 snapshot, made when the page is served, with two cuts the live screen does not make. A row with no
 label shows no endpoint: its title reads "An unnamed step in" and the service, with "Name it in the
 Hub to see it here." under it. An action owner is the name a person reads (`Alice Martin` for
-`alice.martin@acme.com`), and the identity behind it (an e-mail, a `local:` name, a subject) is in
-neither the text, a `title` nor the data island. The `tech` page keeps that identity on hover. An id that is not 32 lowercase hex, an unknown id and a
-view the report does not hold are all `404`. Reports are purged after `Hub:Recaps:Retention`.
+`alice.martin@acme.com` or `Alice.Martin@Acme.com`, `Alice` for `Alice <alice@acme.com>`), and the
+identity behind it (an e-mail, a `local:` name, a subject) is in neither the text, a `title` nor the
+data island. An owner that leaves no name once the e-mail is gone shows no owner. The `tech` page
+keeps that identity on hover. An id that is not 32 lowercase hex, an unknown id and a view the report
+does not hold are all `404`. Reports are purged after `Hub:Recaps:Retention`.
 
 ## Actions
 

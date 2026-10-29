@@ -64,9 +64,10 @@ public static class RecapText
     public static (string Lead, string Figure, string Unit) Co2Parts(
         double? grams, int sourcesWithoutCoefficient, string? missingReason, string view = "tech")
     {
+        if (grams is null && view == "pilotage")
+            return ("", "—", "not available");
         if (grams is not { } value)
-            return ("", "—", view == "pilotage" ? "not available"
-                : missingReason == "no_avoidable_io" ? "no avoidable I/O" : "no coefficient from the engine");
+            return ("", "—", missingReason == "no_avoidable_io" ? "no avoidable I/O" : "no coefficient from the engine");
         // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".
         if (value is > 0 and < 1)
             return ("", "< 1 g", "CO2e");

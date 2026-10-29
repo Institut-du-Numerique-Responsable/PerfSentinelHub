@@ -2373,7 +2373,8 @@
         generate: 'Generate a report',
         generating: 'Generating\u2026',
         none: 'No report yet.',
-        failed: 'The Hub did not return the reports.'
+        failed: 'The Hub did not return the reports.',
+        refused: 'The Hub did not make the report. Check the period and filters, or ask whoever runs the Hub for access.'
     };
 
     /**
@@ -2479,10 +2480,10 @@
      */
     function co2Parts(grams, sourcesWithoutCoefficient, missingReason, view) {
         if (grams === null || grams === undefined) {
+            if (view === 'pilotage') return {lead: '', figure: '—', unit: 'not available'};
             return {
                 lead: '', figure: '—',
-                unit: view === 'pilotage' ? 'not available'
-                    : missingReason === 'no_avoidable_io' ? 'no avoidable I/O' : 'no coefficient from the engine'
+                unit: missingReason === 'no_avoidable_io' ? 'no avoidable I/O' : 'no coefficient from the engine'
             };
         }
         // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".

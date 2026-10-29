@@ -373,7 +373,7 @@ abonnement, une fois. Le webhook et le courrier portent la vue de pilotage seule
 technique est un lien vers le Hub, qui reste derrière sa connexion. Aucun des deux ne nomme
 l'endpoint d'une ligne que personne n'a libellée, et la page jointe montre chaque responsable
 d'action par son nom, sans l'e-mail ni le compte derrière (voir [API-FR.md](API-FR.md#rapports-de-récap),
-La page).
+La page). Le corps du webhook garde le responsable tel que le Hub le stocke.
 
 **Livraisons.** Elles tournent dans le même passage de 15 secondes et reprennent après un
 redémarrage. Un 2xx règle un webhook ; toute autre réponse, une redirection comprise, et le silence

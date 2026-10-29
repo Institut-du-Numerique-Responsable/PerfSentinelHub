@@ -185,8 +185,8 @@ public sealed partial class RecapReportRendererTests
         var html = Html(RecapViews.Frozen(snapshot));
         var visible = Visible(html);
 
-        Assert.Contains("<p class=\"label\">An unnamed step in checkout-api</p><p class=\"where\">" +
-                        "Name it in the Hub to see it here.</p>", html, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"label\">An unnamed step in checkout-api</p><div class=\"where\">" +
+                        "Name it in the Hub to see it here.</div>", html, StringComparison.Ordinal);
         Assert.Contains("An unnamed step in checkout-api. ", visible, StringComparison.Ordinal);
         Assert.DoesNotContain(RecapSnapshots.Endpoint, html, StringComparison.Ordinal);
         Assert.DoesNotContain("\"endpoint\"", Island(html), StringComparison.Ordinal);
@@ -203,6 +203,32 @@ public sealed partial class RecapReportRendererTests
         Assert.Contains("Alice Martin", Visible(html), StringComparison.Ordinal);
         Assert.DoesNotContain("alice.martin@acme.com", html, StringComparison.Ordinal);
         Assert.DoesNotContain("acme.com", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Alice.Martin@Acme.com", null, "Alice Martin")]
+    [InlineData("Alice <alice.martin@acme.com>", null, "Alice")]
+    [InlineData("alice.martin@acme.com", "alice.martin@acme.com", "Alice Martin")]
+    [InlineData("local:Alice", null, "Alice")]
+    public void The_management_report_never_shows_an_identity_however_the_owner_is_spelled(
+        string owner, string? display, string name)
+    {
+        var snapshot = RecapSnapshots.Distinctive();
+        var priority = snapshot.Priorities[0];
+        snapshot = snapshot with
+        {
+            Priorities = [priority with { Action = priority.Action! with { Owner = owner, OwnerDisplay = display } }]
+        };
+
+        var html = Html(RecapViews.Frozen(snapshot));
+        var withoutStyle = html[..html.IndexOf("<style>", StringComparison.Ordinal)] +
+                           html[html.IndexOf("</style>", StringComparison.Ordinal)..];
+
+        Assert.Contains("<span class=\"owner\">" + name + "</span>", html, StringComparison.Ordinal);
+        // The stylesheet's @media rules aside, no character of an e-mail is left.
+        Assert.DoesNotContain("@", withoutStyle, StringComparison.Ordinal);
+        Assert.DoesNotContain("acme", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("local:", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -228,6 +254,7 @@ public sealed partial class RecapReportRendererTests
                         "too many problems to count them all, another measurement gap", visible, StringComparison.Ordinal);
         Assert.Contains("No figures came from: svc-quiet.", visible, StringComparison.Ordinal);
         Assert.Contains("The Hub read the first 5,000 problems", visible, StringComparison.Ordinal);
+        Assert.Contains("2 more in the engineering view.", visible, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -244,8 +271,9 @@ public sealed partial class RecapReportRendererTests
     // Every gap, every action state, a partial carbon figure, a cut read and an unnamed row.
     private static RecapSnapshot Everything()
     {
-        var snapshot = RecapSnapshots.Distinctive(5);
-        string?[] states = ["confirmed", "contradicted", "came_back", "awaiting", null];
+        // Seven rows: the management view keeps five and says two more are in the engineering view.
+        var snapshot = RecapSnapshots.Distinctive(7);
+        string?[] states = ["confirmed", "contradicted", "came_back", "awaiting", null, null, null];
         return snapshot with
         {
             Period = snapshot.Period with
