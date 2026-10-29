@@ -64,6 +64,8 @@ public sealed class RecapMailDeliveryTests : IAsyncLifetime
 
         Assert.Equal("hub", Assert.Single(_relay.Received).AuthUser);
         Assert.Equal(DeliveryStates.Delivered, Assert.Single(await DeliveriesAsync(hub)).State);
+        // The image has no libgssapi: a client that so much as tries GSSAPI or NTLM breaks there.
+        Assert.Equal(["login"], _relay.AuthAttempts);
     }
 
     [Fact]

@@ -28,6 +28,9 @@ public sealed class FakeSmtp : IAsyncDisposable
 
     public string? RcptReply { get; set; }
 
+    /// <summary>The mechanism of each AUTH command the client sent, lowercased, in order.</summary>
+    public ConcurrentQueue<string> AuthAttempts { get; } = new();
+
     public ConcurrentQueue<Message> Received { get; } = new();
 
     public async ValueTask DisposeAsync()
@@ -99,6 +102,8 @@ public sealed class FakeSmtp : IAsyncDisposable
                     await writer.WriteLineAsync($"250 AUTH {AuthMechanisms}");
                     break;
                 case "AUTH":
+                    if (words.Length > 1)
+                        AuthAttempts.Enqueue(words[1].ToLowerInvariant());
                     user = await AuthenticateAsync(words, reader, writer, cancellationToken) ?? user;
                     break;
                 case "RCPT":

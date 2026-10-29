@@ -19,7 +19,14 @@ public sealed class RecapMailer(IOptions<HubOptions> options)
         {
             EnableSsl = smtp.StartTls,
             DeliveryMethod = SmtpDeliveryMethod.Network,
-            Credentials = smtp.UserName is null ? null : new NetworkCredential(smtp.UserName, smtp.Password)
+            // Held for "login" alone: a plain credential is offered to GSSAPI and NTLM first, and the image,
+            // which has no libgssapi, fails on a relay that advertises them instead of falling back to LOGIN.
+            Credentials = smtp.UserName is null
+                ? null
+                : new CredentialCache
+                {
+                    { smtp.Host!, smtp.Port, "login", new NetworkCredential(smtp.UserName, smtp.Password) }
+                }
         };
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Timeout);
