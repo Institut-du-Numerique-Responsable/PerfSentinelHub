@@ -636,7 +636,9 @@ and `truncated`.
   to the endpoint they come from (see [Endpoint labels](#endpoint-labels)), or `null`, and
   `service_label`, the business name of their service, or `null`. Both keys are always there,
   in every view, and `service` stays beside `service_label`, so a receiver can still group by
-  the technical service. `filters.service_label` is the name of the service filter, or `null`.
+  the technical service. `filters.service_label` is the name of the service filter, or `null`,
+  and `null` too when the caller reads no finding of that service in either period: a typed
+  filter never reveals the name of a service outside the caller's scope.
 - **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
   priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
   technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,

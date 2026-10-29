@@ -339,13 +339,14 @@ public sealed class RecapServiceTests : IAsyncLifetime
         await _database.SetServiceLabelAsync("quiet-svc", "Quiet", "alice", Token);
 
         var named = await _service.ComputeAsync(Request(service: "order-svc"), Token);
-        // A filter on a service with no finding this period still reads by its name.
+        // A typed filter names no service the caller reads no finding of: names are Hub-wide, so
+        // resolving one here would tell a caller the business name of a service outside its scope.
         var quiet = await _service.ComputeAsync(Request(service: "quiet-svc"), Token);
         var bare = await _service.ComputeAsync(Request(service: "bare-svc"), Token);
 
         Assert.Equal("Ordering", named.Filters.ServiceLabel);
         Assert.Equal("order-svc", named.Filters.Service);
-        Assert.Equal("Quiet", quiet.Filters.ServiceLabel);
+        Assert.Null(quiet.Filters.ServiceLabel);
         Assert.Null(bare.Filters.ServiceLabel);
         Assert.Null((await RecapAsync()).Filters.ServiceLabel);
     }

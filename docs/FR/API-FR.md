@@ -685,7 +685,9 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   ou `null`, et `service_label`, le nom métier de leur service, ou `null`. Les deux clés sont
   toujours là, dans chaque vue, et `service` reste à côté de `service_label` : un destinataire
   peut toujours regrouper par service technique. `filters.service_label` est le nom du filtre de
-  service, ou `null`.
+  service, ou `null`, et `null` aussi quand l'appelant ne lit aucun finding de ce service sur
+  l'une ou l'autre période : un filtre saisi ne révèle jamais le nom d'un service hors de son
+  périmètre.
 - **Deux vues.** `pilotage` est l'instantané `tech` avec `view: "pilotage"`, les cinq premières
   priorités, une phrase en langage courant fixe par type de finding dans `plain`, et aucune
   clé technique : `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
