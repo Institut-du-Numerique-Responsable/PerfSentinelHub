@@ -663,8 +663,9 @@ on a row that has no label. The engineering view reaches a receiver as a link, n
 otherwise. `recap` is shortened above. The signature headers, the retries and the 8 attempts are those of
 [disclosure webhooks](#webhooks): `X-PerfSentinel-Timestamp`, `X-PerfSentinel-Signature` under the
 webhook's `Secret`, no redirect followed, a `2xx` settles a delivery, anything else is tried again
-after 30 seconds then a doubling wait capped at one hour. `Confidentiality`, `IncludeShareLink` and
-`ShareLinkDays` apply to disclosures only and are ignored here.
+after 30 seconds then a doubling wait capped at one hour. A recap webhook with `IncludeShareLink`
+set is rejected at startup. `Confidentiality` (which must stay `public`) and `ShareLinkDays` (1 to 30)
+are validated but unused here.
 
 Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart resumes them. A
 delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a

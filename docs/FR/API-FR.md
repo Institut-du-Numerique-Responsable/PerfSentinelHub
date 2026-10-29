@@ -714,8 +714,8 @@ sinon. `recap` est abrégé ci-dessus. Les en-têtes de signature, les relances 
 [webhooks de divulgation](#webhooks) : `X-PerfSentinel-Timestamp`, `X-PerfSentinel-Signature` sous
 le `Secret` du webhook, aucune redirection suivie, un `2xx` règle une livraison, tout autre statut
 est retenté après 30 secondes, puis après une attente qui double, plafonnée à une heure.
-`Confidentiality`, `IncludeShareLink` et `ShareLinkDays` ne valent que pour les divulgations et
-sont ignorés ici.
+Un webhook de récap dont `IncludeShareLink` est activé est refusé au démarrage. `Confidentiality`
+(qui doit rester `public`) et `ShareLinkDays` (de 1 à 30) sont validés mais sans effet ici.
 
 Les livraisons tournent toutes les 15 secondes depuis la table `recap_deliveries`, si bien qu'un
 redémarrage les reprend. Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
