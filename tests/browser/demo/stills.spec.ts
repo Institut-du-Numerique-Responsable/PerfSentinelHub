@@ -238,6 +238,12 @@ test("correlations open every episode of an incident's pair", async ({page}) => 
 });
 
 test("recap", async ({page}, info) => {
+    // A team named one service, so the cards show the pair and Management reads the name.
+    const named = await page.request.put("/api/labels/services", {
+        headers: {"x-forwarded-user": "alice.martin@acme.example"},
+        data: {service: "order-svc", label: "Ordering"}
+    });
+    expect(named.status()).toBe(204);
     // One report on demand, written once for both colour schemes: the Hub trusts the identity
     // header in this setup, and the screen's own button cannot send one.
     const known = await page.request.get("/api/recap/reports");
@@ -254,11 +260,17 @@ test("recap", async ({page}, info) => {
     // that one read, so the first card is the whole screen. The reports are read beside it.
     await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 15_000});
     await expect(page.locator(".recap-report").first()).toBeVisible({timeout: 15_000});
+    await expect(page.locator(".recap-service", {hasText: "Ordering"}).first().locator("code.code-inline"))
+        .toHaveText("order-svc");
     await page.screenshot({
         path: nameFor("launcher-recap", info.project.name),
         fullPage: true,
         animations: "disabled"
     });
+    // Management reads the service by its name.
+    await page.goto("/#/recap?view=pilotage");
+    await expect(page.locator(".recap-where", {hasText: "in Ordering"}).first()).toBeVisible({timeout: 15_000});
+    await expect(page.locator(".recap-where", {hasText: "in order-svc"})).toHaveCount(0);
 });
 
 test("disclosures", async ({page}, info) => {

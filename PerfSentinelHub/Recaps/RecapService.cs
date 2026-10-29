@@ -38,7 +38,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         var current = await CarbonAsync(reads.Ranked, span.Period, scope, cancellationToken);
         var previous = await CarbonAsync(reads.Previous, span.PreviousWindow, scope, cancellationToken);
         var actions = await ReadActionsAsync(reads, scope, cancellationToken);
-        var labels = await ReadLabelsAsync(reads, cancellationToken);
+        var labels = await ReadLabelsAsync(reads, request.Filters.Service, cancellationToken);
 
         var priorities = PrioritiesOf(reads, current, actions, labels);
         var movements = MovementsOf(reads, priorities, actions, labels);
@@ -48,7 +48,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             nowMs,
             coverage.Current,
             coverage.Previous,
-            request.Filters,
+            request.Filters with { ServiceLabel = labels.OfService(request.Filters.Service) },
             coverage.Current.Incomplete.Count == 0 && coverage.Previous.Incomplete.Count == 0,
             TilesOf(reads, current, previous, actions),
             priorities,
@@ -237,12 +237,13 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     // ------------------------------------------------------------ labels
 
     // One read per table over everything the snapshot names, gone included: the (service, endpoint)
-    // pairs, then the services.
-    private async Task<Labels> ReadLabelsAsync(Reads reads, CancellationToken cancellationToken)
+    // pairs, then the services and the service filter, which may hold no finding this period.
+    private async Task<Labels> ReadLabelsAsync(Reads reads, string? filter, CancellationToken cancellationToken)
     {
         var named = reads.All.Concat(reads.Previous ?? []).ToList();
         var pairs = named.Select(finding => (finding.Service, finding.Endpoint)).Distinct().ToList();
-        var services = named.Select(finding => finding.Service).Distinct(StringComparer.Ordinal).ToList();
+        var services = named.Select(finding => finding.Service).Append(filter).OfType<string>()
+            .Distinct(StringComparer.Ordinal).ToList();
         return new Labels(
             await database.ReadEndpointLabelsAsync(pairs, cancellationToken),
             await database.ReadServiceLabelsAsync(services, cancellationToken));
@@ -457,7 +458,12 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
 
         public string? OfService(RecapFinding finding)
         {
-            return Services.GetValueOrDefault(finding.Service);
+            return OfService(finding.Service);
+        }
+
+        public string? OfService(string? service)
+        {
+            return service is null ? null : Services.GetValueOrDefault(service);
         }
     }
 

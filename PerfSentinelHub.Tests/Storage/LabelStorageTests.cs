@@ -70,6 +70,17 @@ public sealed class LabelStorageTests(HubApplicationFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Reading_the_copies_of_a_label_stops_once_one_decides()
+    {
+        await Api.LabelsAccessTests.SeedAsync(Database, "copies-1", "copies-svc", "GET /a");
+        await Api.LabelsAccessTests.SeedAsync(Database, "copies-2", "copies-svc", "GET /b");
+
+        Assert.Equal(2, (await Database.ReadLabelCopiesAsync("copies-svc", null, _ => false, Token)).Count);
+        Assert.Single(await Database.ReadLabelCopiesAsync("copies-svc", null, _ => true, Token));
+        Assert.Single(await Database.ReadLabelCopiesAsync("copies-svc", "GET /a", _ => false, Token));
+    }
+
+    [Fact]
     public async Task No_key_reads_no_label()
     {
         Assert.Empty(await Database.ReadEndpointLabelsAsync([], Token));

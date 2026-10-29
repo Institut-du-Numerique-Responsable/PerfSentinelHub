@@ -684,7 +684,8 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   quelqu'un a donné à l'endpoint dont ils viennent (voir [Libellés d'endpoint](#libellés-dendpoint)),
   ou `null`, et `service_label`, le nom métier de leur service, ou `null`. Les deux clés sont
   toujours là, dans chaque vue, et `service` reste à côté de `service_label` : un destinataire
-  peut toujours regrouper par service technique.
+  peut toujours regrouper par service technique. `filters.service_label` est le nom du filtre de
+  service, ou `null`.
 - **Deux vues.** `pilotage` est l'instantané `tech` avec `view: "pilotage"`, les cinq premières
   priorités, une phrase en langage courant fixe par type de finding dans `plain`, et aucune
   clé technique : `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
@@ -775,21 +776,22 @@ ne peut pas lire reçoit le `404` d'un id inconnu, avec le même corps, sur les 
 nomment un ; la liste répond `403 {"detail":"You may not read recap reports."}` à un appelant qui ne
 détient aucune des deux permissions, et seulement ses propres rapports sinon.
 
-**La page.** `Content-Type: text/html; charset=utf-8`, `Content-Disposition: inline;
-filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
-`X-Content-Type-Options: nosniff` et une `Content-Security-Policy` qui n'autorise que les deux
-scripts en ligne de la page, par empreinte. `pilotage` est la projection de pilotage du snapshot
-stocké, faite au moment de servir la page, avec deux coupes que l'écran en direct ne fait pas. Une
-ligne sans libellé ne montre aucun endpoint : son titre se lit « An unnamed step in » suivi du
-service, avec « Name it in the Hub to see it here. » dessous. Partout où une ligne de pilotage
-nomme son service, elle prend le nom métier du service quand quelqu'un en a donné un
-(`An unnamed step in Payment`, `in Payment`). Le responsable d'une action est le nom
-qu'une personne lit (`Alice Martin` pour `alice.martin@acme.com` ou `Alice.Martin@Acme.com`, `Alice`
-pour `Alice <alice@acme.com>`), et l'identité derrière (un e-mail, un nom `local:`, un sujet) n'est ni
-dans le texte, ni dans un `title`, ni dans l'îlot de données. Un responsable dont il ne reste aucun nom
-une fois l'e-mail retiré n'apparaît pas. La page `tech` garde cette identité au survol. Un id qui n'est pas 32 caractères hexadécimaux minuscules,
-un id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rapports sont purgés
-après `Hub:Recaps:Retention`.
+**La page.** `Content-Type: text/html; charset=utf-8`,
+`Content-Disposition: inline; filename="perf-sentinel-recap-<from>-<view>.html"`,
+`Cache-Control: no-store`, `X-Content-Type-Options: nosniff` et une `Content-Security-Policy` qui
+n'autorise que les deux scripts en ligne de la page, par empreinte. `pilotage` est la projection de
+pilotage du snapshot stocké, faite au moment de servir la page, avec deux coupes que l'écran en
+direct ne fait pas. Une ligne sans libellé ne montre aucun endpoint : son titre se lit « An unnamed
+step in » suivi du service, avec « Name it in the Hub to see it here. » dessous. Partout où une
+ligne de pilotage nomme son service, elle prend le nom métier du service quand quelqu'un en a donné
+un (`An unnamed step in Payment`, `in Payment`, et `Scope: Payment` pour un filtre de service). Le
+responsable d'une action est le nom qu'une personne lit (`Alice Martin` pour `alice.martin@acme.com`
+ou `Alice.Martin@Acme.com`, `Alice` pour `Alice <alice@acme.com>`), et l'identité derrière (un
+e-mail, un nom `local:`, un sujet) n'est ni dans le texte, ni dans un `title`, ni dans l'îlot de
+données. Un responsable dont il ne reste aucun nom une fois l'e-mail retiré n'apparaît pas. La page
+`tech` garde cette identité au survol. Un id qui n'est pas 32 caractères hexadécimaux minuscules, un
+id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rapports sont purgés après
+`Hub:Recaps:Retention`.
 
 ## Actions
 
@@ -855,8 +857,10 @@ formule lui-même porte `{"detail":"…"}`.
 Un libellé est ce qu'une personne appelle un endpoint, en mots du métier (`Showing a cart` pour
 `checkout-api` `GET /api/cart/{id}`). Il appartient à un couple `(service, endpoint)` pour tout
 le Hub, quelle que soit la source qui détient les findings, et le recap l'affiche comme titre
-d'une ligne. Une route l'écrit, avec un corps JSON, et elle n'est jamais ouverte : sous
-`Hub:Auth` elle demande une session.
+d'une ligne. Le nom d'un service fait de même pour un service entier (`Payment` pour
+`checkout-api`), une fois pour toutes ses étapes, et le recap l'affiche partout où une ligne
+nomme son service. Deux routes les écrivent, chacune avec un corps JSON, et aucune n'est
+ouverte : sous `Hub:Auth` les deux demandent une session.
 
 | Endpoint                   | Corps                                                     | Effet                            |
 |----------------------------|-----------------------------------------------------------|----------------------------------|

@@ -1865,6 +1865,11 @@ test("a named service reads by its name, the technical one beside it", () => {
     assert.equal("in " + PSL.serviceParts("checkout-api", "Payment").name, "in Payment");
 });
 
+test("only the first card of a service offers to name it", () => {
+    const rows = [{service: "a"}, {service: "b"}, {service: "a"}, {service: "c"}, {service: "b"}];
+    assert.deepEqual(rows.map((row, index) => PSL.namesService(rows, index)), [true, true, false, true, false]);
+});
+
 test("the Management help says a team can name its services and steps", () => {
     assert.ok(PSL.RECAP_HELP.pilotage.prio.endsWith(
         " A team can name its services and steps in the Hub, so this report speaks its language."));

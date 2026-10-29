@@ -248,23 +248,35 @@ public sealed partial class HubDatabase
         return await ReadCopiesAsync(command, cancellationToken);
     }
 
-    // One copy per (signature, source), in the order the select gives.
+    // One copy per (signature, source), in the order the select gives, which keeps the rows of a
+    // copy together: once the key changes the copy before is whole, and the read stops as soon as
+    // enough accepts one.
     internal static async Task<IReadOnlyList<AccessCopy>> ReadCopiesAsync(
         SqliteCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<AccessCopy, bool>? enough = null)
     {
-        var copies = new Dictionary<(string, string), (string? Service, List<AccessAttribute> Rows)>();
+        var copies = new List<AccessCopy>();
+        (string Signature, string Source)? key = null;
+        List<AccessAttribute> rows = [];
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var key = (reader.GetString(0), reader.GetString(1));
-            if (!copies.TryGetValue(key, out var copy))
-                copies[key] = copy = (reader.IsDBNull(2) ? null : reader.GetString(2), []);
+            var row = (reader.GetString(0), reader.GetString(1));
+            if (row != key)
+            {
+                if (key is not null && enough?.Invoke(copies[^1]) == true)
+                    return copies;
+                key = row;
+                rows = [];
+                copies.Add(new AccessCopy(row.Item2, reader.IsDBNull(2) ? null : reader.GetString(2), rows));
+            }
+
             if (!reader.IsDBNull(3))
-                copy.Rows.Add(new AccessAttribute(reader.GetString(3), reader.GetString(4), reader.GetString(5),
+                rows.Add(new AccessAttribute(reader.GetString(3), reader.GetString(4), reader.GetString(5),
                     reader.GetString(6)));
         }
 
-        return [.. copies.Select(copy => new AccessCopy(copy.Key.Item2, copy.Value.Service, copy.Value.Rows))];
+        return copies;
     }
 }

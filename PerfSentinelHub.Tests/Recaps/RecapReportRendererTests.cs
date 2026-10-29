@@ -233,6 +233,27 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
+    public void The_management_scope_reads_a_named_service_by_its_name()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Filters = new RecapFilters("prod", null, "checkout-api", null, "Payment"),
+            Priorities = [RecapSnapshots.Priority(1) with { ServiceLabel = "Payment" }],
+            Movements = new RecapMovements([], [], 0, [], [], [], [])
+        };
+
+        var management = Visible(Html(RecapViews.Frozen(snapshot)));
+
+        Assert.Contains("Scope: prod, Payment", management, StringComparison.Ordinal);
+        Assert.DoesNotContain("checkout-api", management, StringComparison.Ordinal);
+        Assert.Contains("Scope: environment prod, service checkout-api", Visible(Html(snapshot)),
+            StringComparison.Ordinal);
+        Assert.Contains("Scope: prod, checkout-api",
+            Visible(Html(RecapViews.Frozen(snapshot with { Filters = snapshot.Filters with { ServiceLabel = null } }))),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_engineering_report_shows_a_named_service_beside_its_technical_name()
     {
         var snapshot = RecapSnapshots.Distinctive() with

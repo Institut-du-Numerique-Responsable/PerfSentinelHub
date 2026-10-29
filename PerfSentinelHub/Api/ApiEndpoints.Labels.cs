@@ -74,7 +74,8 @@ public static partial class ApiEndpoints
             return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
 
         var reads = access.Scope(request.HttpContext, AccessPermissions.FindingsRead);
-        var copies = await CopiesAsync(database, write, cancellationToken);
+        var copies = await database.ReadLabelCopiesAsync(write.Service, write.Endpoint,
+            copy => reads.Reads(copy) && writes.Writes(copy), cancellationToken);
         if (RefuseLabel(copies, reads, writes, target) is { } refused)
             return refused;
 
@@ -82,16 +83,6 @@ public static partial class ApiEndpoints
             return TypedResults.NoContent();
         request.HttpContext.Response.Headers.RetryAfter = "1";
         return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
-    }
-
-    private static Task<IReadOnlyList<AccessCopy>> CopiesAsync(
-        HubDatabase database,
-        LabelWrite write,
-        CancellationToken cancellationToken)
-    {
-        return write.Endpoint is { } endpoint
-            ? database.ReadEndpointCopiesAsync(write.Service, endpoint, cancellationToken)
-            : database.ReadServiceCopiesAsync(write.Service, cancellationToken);
     }
 
     private static Task<bool> SaveLabelAsync(
@@ -105,8 +96,9 @@ public static partial class ApiEndpoints
             : database.SetServiceLabelAsync(write.Service, write.Label, identity, cancellationToken);
     }
 
-    // A label is global to its endpoint or service, so it is judged on every copy of every finding
-    // there the caller reads and allowed when one of them is writable.
+    // A label is global to its endpoint or service, so it is judged on the copies of the findings
+    // there the caller reads and allowed when one of them is writable. The copies stop at the first
+    // that is both, which is all this needs.
     private static JsonHttpResult<AnalysisProblem>? RefuseLabel(
         IReadOnlyList<AccessCopy> copies,
         AccessScope reads,

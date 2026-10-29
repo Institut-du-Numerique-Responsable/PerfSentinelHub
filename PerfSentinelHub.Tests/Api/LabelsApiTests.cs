@@ -246,7 +246,9 @@ public sealed class LabelsAccessTests(HubApplicationFactory factory) : IClassFix
     {
         ["reader"] = """{"sub":"u-reader","email":"reader@example.internal","groups":["/readers"]}""",
         ["member"] = """{"sub":"u-member","email":"member@example.internal","groups":["/members"]}""",
-        ["scoped"] = """{"sub":"u-scoped","email":"scoped@example.internal","groups":["/scoped"]}"""
+        ["scoped"] = """{"sub":"u-scoped","email":"scoped@example.internal","groups":["/scoped"]}""",
+        // Reads everything, writes only billing-svc.
+        ["mixed"] = """{"sub":"u-mixed","email":"mixed@example.internal","groups":["/readers","/scoped"]}"""
     };
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -319,6 +321,46 @@ public sealed class LabelsAccessTests(HubApplicationFactory factory) : IClassFix
                 JsonNode.Parse(await response.Content.ReadAsStringAsync(Token))!["detail"]!.GetValue<string>());
     }
 
+    [Theory]
+    [InlineData(false, "You can read this endpoint but not name it.")]
+    [InlineData(true, "You can read this service but not name it.")]
+    public async Task A_label_the_caller_reads_but_may_not_write_is_a_403(bool service, string detail)
+    {
+        var named = $"{Service}-mixed-{service}";
+        await SeedAsync(factory.Database, $"mixed-{service}", named, Endpoint);
+        await using var provider = await FakeProvider.StartAsync(Users);
+        await using var hub = Hub(provider);
+        using var client = FakeProvider.Client(hub);
+        using var callback = await FakeProvider.SignInAsync(client, "mixed");
+
+        using var response = service
+            ? await SendService(client, callback, named)
+            : await Send(client, callback, named, Endpoint);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(detail,
+            JsonNode.Parse(await response.Content.ReadAsStringAsync(Token))!["detail"]!.GetValue<string>());
+        Assert.Empty(await factory.Database.ReadServiceLabelsAsync([named], Token));
+        Assert.Empty(await factory.Database.ReadEndpointLabelsAsync([(named, Endpoint)], Token));
+    }
+
+    [Fact]
+    public async Task A_service_the_caller_cannot_read_answers_as_an_unknown_one()
+    {
+        await SeedAsync(factory.Database, "service-scoped", Service, Endpoint);
+        await using var provider = await FakeProvider.StartAsync(Users);
+        await using var hub = Hub(provider);
+        using var client = FakeProvider.Client(hub);
+        using var callback = await FakeProvider.SignInAsync(client, "scoped");
+
+        using var hidden = await SendService(client, callback, Service);
+        using var unknown = await SendService(client, callback, "unknown-svc");
+
+        Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        Assert.Equal(await unknown.Content.ReadAsByteArrayAsync(Token),
+            await hidden.Content.ReadAsByteArrayAsync(Token));
+    }
+
     [Fact]
     public async Task An_endpoint_the_caller_cannot_read_answers_as_an_unknown_one()
     {
@@ -346,6 +388,19 @@ public sealed class LabelsAccessTests(HubApplicationFactory factory) : IClassFix
         request.Headers.Add("Cookie", FakeProvider.SessionCookie(callback));
         request.Headers.Add("Sec-Fetch-Site", "same-origin");
         request.Content = new StringContent(LabelsApiTests.Body(service, endpoint, "Showing a cart"), Encoding.UTF8,
+            "application/json");
+        return client.SendAsync(request, Token);
+    }
+
+    private static Task<HttpResponseMessage> SendService(
+        HttpClient client,
+        HttpResponseMessage callback,
+        string service)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, LabelsApiTests.ServicesPath);
+        request.Headers.Add("Cookie", FakeProvider.SessionCookie(callback));
+        request.Headers.Add("Sec-Fetch-Site", "same-origin");
+        request.Content = new StringContent(LabelsApiTests.ServiceBody(service, "Basket"), Encoding.UTF8,
             "application/json");
         return client.SendAsync(request, Token);
     }

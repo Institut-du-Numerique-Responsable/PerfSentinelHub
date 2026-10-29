@@ -4983,6 +4983,11 @@ a.chip {
     gap: 4px 8px;
 }
 
+/* The technical name beside a named service, at the size of the endpoint after it. */
+.recap-service .code-inline {
+    font-size: 12px;
+}
+
 .recap-endpoint {
     font-family: var(--font-mono);
     font-size: 12px;

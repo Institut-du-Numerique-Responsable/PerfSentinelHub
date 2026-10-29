@@ -2307,6 +2307,19 @@
     }
 
     /**
+     * Whether the card at `index` is the first of its service in `rows`: only that one offers to
+     * name the service, so a list of one service's steps does not repeat the button.
+     * @param {Array<{service: string}>} rows
+     * @param {number} index
+     * @returns {boolean}
+     */
+    function namesService(rows, index) {
+        return rows.findIndex(function (row) {
+            return row.service === rows[index].service;
+        }) === index;
+    }
+
+    /**
      * What a `#/recap?…` hash names. Anything it does not know reads as the default, and a filter
      * that is blank, past 256 characters or carries a control character as none.
      * @param {string | null | undefined} hash
@@ -2800,6 +2813,7 @@
         RECAP_LABELS,
         RECAP_HELP,
         serviceParts,
+        namesService,
         readRecapRoute,
         recapHash,
         recapPath,

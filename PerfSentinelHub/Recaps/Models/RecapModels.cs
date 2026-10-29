@@ -35,7 +35,13 @@ public sealed record RecapPeriodInfo(
     double? SamplingRate,
     int? TruncatedToDays);
 
-public sealed record RecapFilters(string? Environment, string? SourceId, string? Service, string? Grouping);
+// service_label is the business name of the service filter, so a Management scope line reads by it.
+public sealed record RecapFilters(
+    string? Environment,
+    string? SourceId,
+    string? Service,
+    string? Grouping,
+    string? ServiceLabel = null);
 
 public sealed record RecapTiles(
     long? AvoidableIoOps,

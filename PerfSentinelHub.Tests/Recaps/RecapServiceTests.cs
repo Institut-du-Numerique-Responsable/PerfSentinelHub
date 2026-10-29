@@ -296,7 +296,9 @@ public sealed class RecapServiceTests : IAsyncLifetime
     public async Task The_snapshot_carries_the_service_labels()
     {
         await SeedAsync("a", S, LastMon, service: "billing-svc");
-        await SeedAsync("a", T, Thu);
+        // On a closed day with nothing the week before, so it is new.
+        await SeedAsync("a", T, Mon);
+        await LedgerAsync("a", [.. Days(Mon, 3), Open(Thu)], [Count(Mon, T, 5)]);
         await SeedAsync("a", U, Thu, service: "bare-svc");
         await _database.SetServiceLabelAsync("order-svc", "Ordering", "alice", Token);
         await _database.SetServiceLabelAsync("billing-svc", "Paying", "alice", Token);
@@ -305,6 +307,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
 
         Assert.Equal("Ordering", snapshot.Priorities.Single(priority => priority.Signature == T).ServiceLabel);
         Assert.Null(snapshot.Priorities.Single(priority => priority.Signature == U).ServiceLabel);
+        Assert.Equal("Ordering", Assert.Single(snapshot.Movements.New, move => move.Signature == T).ServiceLabel);
         var gone = Assert.Single(snapshot.Movements.Gone);
         Assert.Equal("billing-svc", gone.Service);
         Assert.Equal("Paying", gone.ServiceLabel);
@@ -319,11 +322,32 @@ public sealed class RecapServiceTests : IAsyncLifetime
             [.. Days(Mon, 3), Open(Thu), .. Days(LastMon, 7)],
             [Count(Mon, S, 60), Count(Mon + 1, S, 40), Count(Mon + 2, S, 40), Count(LastMon, S, 100)]);
         await _database.SetEndpointLabelAsync("order-svc", "GET /named", "Showing a cart", "alice", Token);
+        await _database.SetServiceLabelAsync("order-svc", "Ordering", "alice", Token);
 
         var snapshot = await RecapAsync();
 
         Assert.Equal("Showing a cart", Assert.Single(snapshot.Priorities).Label);
         Assert.Equal("Showing a cart", Assert.Single(snapshot.Movements.Up).Label);
+        Assert.Equal("Ordering", Assert.Single(snapshot.Movements.Up).ServiceLabel);
+    }
+
+    [Fact]
+    public async Task The_service_filter_carries_its_name()
+    {
+        await SeedAsync("a", T, Thu);
+        await _database.SetServiceLabelAsync("order-svc", "Ordering", "alice", Token);
+        await _database.SetServiceLabelAsync("quiet-svc", "Quiet", "alice", Token);
+
+        var named = await _service.ComputeAsync(Request(service: "order-svc"), Token);
+        // A filter on a service with no finding this period still reads by its name.
+        var quiet = await _service.ComputeAsync(Request(service: "quiet-svc"), Token);
+        var bare = await _service.ComputeAsync(Request(service: "bare-svc"), Token);
+
+        Assert.Equal("Ordering", named.Filters.ServiceLabel);
+        Assert.Equal("order-svc", named.Filters.Service);
+        Assert.Equal("Quiet", quiet.Filters.ServiceLabel);
+        Assert.Null(bare.Filters.ServiceLabel);
+        Assert.Null((await RecapAsync()).Filters.ServiceLabel);
     }
 
     [Fact]
@@ -473,14 +497,14 @@ public sealed class RecapServiceTests : IAsyncLifetime
         return _service.ComputeAsync(Request(environment), Token);
     }
 
-    private static RecapRequest Request(string? environment = null)
+    private static RecapRequest Request(string? environment = null, string? service = null)
     {
         var ids = environment is null
             ? null
             : (IReadOnlyList<string>)[.. Sources.Where(source => source.Environment == environment).Select(s => s.Id)];
         return new RecapRequest(
-            RecapPeriodKind.Week, new DateOnly(2026, 10, 29), ids, null, null, null, Sources,
-            new RecapFilters(environment, null, null, null));
+            RecapPeriodKind.Week, new DateOnly(2026, 10, 29), ids, service, null, null, Sources,
+            new RecapFilters(environment, null, service, null));
     }
 
     private Task SeedAsync(

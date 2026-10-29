@@ -108,20 +108,25 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
-    ///     Every Hub copy of every finding at one service and endpoint, one per signature and source,
-    ///     with its own service and attribute rows: what naming the endpoint is judged on.
+    ///     The Hub copies of the findings at one service and endpoint, or of the whole service for a
+    ///     null endpoint, one per signature and source, with their own service and attribute rows:
+    ///     what naming them is judged on. The read stops after the first copy <paramref name="enough" />
+    ///     accepts, since one readable and writable copy decides the request.
     /// </summary>
-    public async Task<IReadOnlyList<AccessCopy>> ReadEndpointCopiesAsync(
+    public async Task<IReadOnlyList<AccessCopy>> ReadLabelCopiesAsync(
         string service,
-        string endpoint,
+        string? endpoint,
+        Func<AccessCopy, bool> enough,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = CopiesSelect + "WHERE f.service = $service AND f.endpoint = $endpoint" + CopiesOrder;
+        command.CommandText = CopiesSelect + "WHERE f.service = $service" +
+                              (endpoint is null ? "" : " AND f.endpoint = $endpoint") + CopiesOrder;
         command.Parameters.AddWithValue("$service", service);
-        command.Parameters.AddWithValue("$endpoint", endpoint);
-        return await ReadCopiesAsync(command, cancellationToken);
+        if (endpoint is not null)
+            command.Parameters.AddWithValue("$endpoint", endpoint);
+        return await ReadCopiesAsync(command, cancellationToken, enough);
     }
 
     /// <summary>The business names of the given services; a service without one is absent.</summary>
@@ -144,21 +149,6 @@ public sealed partial class HubDatabase
         while (await reader.ReadAsync(cancellationToken))
             labels[reader.GetString(0)] = reader.GetString(1);
         return labels;
-    }
-
-    /// <summary>
-    ///     Every Hub copy of every finding of one service, one per signature and source: what naming
-    ///     the service is judged on.
-    /// </summary>
-    public async Task<IReadOnlyList<AccessCopy>> ReadServiceCopiesAsync(
-        string service,
-        CancellationToken cancellationToken)
-    {
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = CopiesSelect + "WHERE f.service = $service" + CopiesOrder;
-        command.Parameters.AddWithValue("$service", service);
-        return await ReadCopiesAsync(command, cancellationToken);
     }
 
     private static string PairArray(IEnumerable<(string Service, string Endpoint)> keys)

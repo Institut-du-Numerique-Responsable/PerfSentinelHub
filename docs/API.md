@@ -636,7 +636,7 @@ and `truncated`.
   to the endpoint they come from (see [Endpoint labels](#endpoint-labels)), or `null`, and
   `service_label`, the business name of their service, or `null`. Both keys are always there,
   in every view, and `service` stays beside `service_label`, so a receiver can still group by
-  the technical service.
+  the technical service. `filters.service_label` is the name of the service filter, or `null`.
 - **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
   priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
   technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
@@ -723,19 +723,21 @@ answers the `404` an unknown id gets, with the same body, on the three routes th
 list answers `403 {"detail":"You may not read recap reports."}` to a caller holding neither
 permission, and only the caller's own reports otherwise.
 
-**The page.** `Content-Type: text/html; charset=utf-8`, `Content-Disposition: inline;
-filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
-`X-Content-Type-Options: nosniff` and a `Content-Security-Policy` that allows nothing but the two
-inline scripts of the page, by hash. `pilotage` is the management projection of the stored
-snapshot, made when the page is served, with two cuts the live screen does not make. A row with no
-label shows no endpoint: its title reads "An unnamed step in" and the service, with "Name it in the
-Hub to see it here." under it. Wherever a management row names its service, it uses the service's
-business name when someone gave one (`An unnamed step in Payment`, `in Payment`). An action owner is the name a person reads (`Alice Martin` for
-`alice.martin@acme.com` or `Alice.Martin@Acme.com`, `Alice` for `Alice <alice@acme.com>`), and the
-identity behind it (an e-mail, a `local:` name, a subject) is in neither the text, a `title` nor the
-data island. An owner that leaves no name once the e-mail is gone shows no owner. The `tech` page
-keeps that identity on hover. An id that is not 32 lowercase hex, an unknown id and a view the report
-does not hold are all `404`. Reports are purged after `Hub:Recaps:Retention`.
+**The page.** `Content-Type: text/html; charset=utf-8`,
+`Content-Disposition: inline; filename="perf-sentinel-recap-<from>-<view>.html"`,
+`Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and a `Content-Security-Policy` that
+allows nothing but the two inline scripts of the page, by hash. `pilotage` is the management
+projection of the stored snapshot, made when the page is served, with two cuts the live screen does
+not make. A row with no label shows no endpoint: its title reads "An unnamed step in" and the
+service, with "Name it in the Hub to see it here." under it. Wherever a management row names its
+service, it uses the service's business name when someone gave one (`An unnamed step in Payment`,
+`in Payment`, and `Scope: Payment` for a service filter). An action owner is the name a person reads
+(`Alice Martin` for `alice.martin@acme.com` or `Alice.Martin@Acme.com`, `Alice` for
+`Alice <alice@acme.com>`), and the identity behind it (an e-mail, a `local:` name, a subject) is in
+neither the text, a `title` nor the data island. An owner that leaves no name once the e-mail is
+gone shows no owner. The `tech` page keeps that identity on hover. An id that is not 32 lowercase
+hex, an unknown id and a view the report does not hold are all `404`. Reports are purged after
+`Hub:Recaps:Retention`.
 
 ## Actions
 
@@ -800,8 +802,9 @@ changes nothing appends nothing. Every refusal the Hub words itself carries
 A label is what a person calls an endpoint in business words (`Showing a cart` for
 `checkout-api` `GET /api/cart/{id}`). It belongs to one `(service, endpoint)` pair for the
 whole Hub, whichever source holds the findings, and the recap shows it as the title of a row.
-One route writes it, with a JSON body, and it is never open: under `Hub:Auth` it needs a
-session.
+A service name does the same for a whole service (`Payment` for `checkout-api`), once for every
+step of it, and the recap shows it wherever a row names its service. Two routes write them,
+each with a JSON body, and neither is open: under `Hub:Auth` both need a session.
 
 | Endpoint                   | Body                                                      | Does                         |
 |----------------------------|-----------------------------------------------------------|------------------------------|

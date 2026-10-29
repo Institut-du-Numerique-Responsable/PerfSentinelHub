@@ -89,12 +89,14 @@ public static class RecapReportRenderer
             html.Append("<p class=\"").Append(css).Append("\">").Append(E(text)).Append("</p>\n");
     }
 
-    // The filters the report was cut with. Management reads values only: its words stay plain.
+    // The filters the report was cut with. Management reads values only, a named service by its name:
+    // its words stay plain.
     private static string Scope(RecapSnapshot snapshot)
     {
         var filters = snapshot.Filters;
         var parts = snapshot.View == RecapViewNames.Pilotage
-            ? new[] { filters.Environment, filters.Service }.Where(value => value is not null).Select(value => value!)
+            ? new[] { filters.Environment, filters.ServiceLabel ?? filters.Service }.Where(value => value is not null)
+                .Select(value => value!)
             : new[]
             {
                 Named("environment", filters.Environment), Named("source", filters.SourceId),

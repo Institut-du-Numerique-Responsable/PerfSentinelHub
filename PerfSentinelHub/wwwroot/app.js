@@ -6321,7 +6321,7 @@
                         : 'Below, no avoidable I/O to count: ranked by severity'
                 }));
             }
-            list.appendChild(recapRow(priority, max, snapshot, labels, route));
+            list.appendChild(recapRow(priority, max, snapshot, labels, route, PSL.namesService(shown, index)));
         });
         const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-prio'}, [
             ruledOverline('// priorities'),
@@ -6362,7 +6362,7 @@
         }
     }
 
-    function recapRow(priority, max, snapshot, labels, route) {
+    function recapRow(priority, max, snapshot, labels, route, namesService) {
         const management = snapshot.view === 'pilotage';
         const kids = [
             el('span', {class: 'recap-rank', text: String(priority.rank)}),
@@ -6370,7 +6370,7 @@
             recapFigure(priority, max, labels, management)
         ];
         if (!management) kids.push(recapDetail(priority));
-        kids.push(recapFoot(priority, management, route));
+        kids.push(recapFoot(priority, management, route, namesService));
         const naming = management ? null : recapNamingTarget(priority);
         if (naming) kids.push(recapNameEditor(naming));
         const failure = management ? null : state.recapRowError[priority.signature];
@@ -6406,13 +6406,12 @@
         ]);
     }
 
-    /** The service by the name a team gave it, the technical one beside it, and the button that names it. */
+    /** The service by the name a team gave it, the technical one beside it once named. */
     function recapServiceHead(priority) {
         const parts = PSL.serviceParts(priority.service, priority.service_label);
         return el('span', {class: 'recap-service'}, [
             el('span', {class: 'table-strong', text: parts.name}),
-            parts.code ? el('code', {class: 'code-inline', text: parts.code}) : null,
-            recapNameButton(recapNameTarget(priority, 'service'))
+            parts.code ? el('code', {class: 'code-inline', text: parts.code}) : null
         ]);
     }
 
@@ -6615,7 +6614,8 @@
             confirmation ? recapStateChip(action.confirmation, confirmation) : null, recapWhen(action), ack];
     }
 
-    function recapFoot(priority, management, route) {
+    /** `namesService` puts the service button on the first card of a service only, beside "Name this". */
+    function recapFoot(priority, management, route, namesService) {
         const kids = [];
         if (!management) {
             kids.push(el('span', {class: 'facts'}, [
@@ -6626,7 +6626,8 @@
                     }),
                     document.createTextNode(' detections')
                 ]),
-                recapNameButton(recapNameTarget(priority, 'endpoint'))
+                recapNameButton(recapNameTarget(priority, 'endpoint')),
+                namesService ? recapNameButton(recapNameTarget(priority, 'service')) : null
             ]));
         }
         kids.push(el('div', {class: 'recap-action'}, management
