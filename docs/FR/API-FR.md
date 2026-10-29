@@ -688,7 +688,8 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   clé technique : `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
   `confidence` et les `events` de l'action sont absentes, pas `null`. `endpoint` l'est aussi,
   sauf sur une priorité ou un élément de mouvement dont le `label` est `null` : deux lignes du
-  même type restent distinguées par la seule valeur technique qui reste.
+  même type restent distinguées par la seule valeur technique qui reste. Un rapport figé et un
+  webhook du récap retirent aussi `endpoint` de ces lignes (voir [Rapports de récap](#rapports-de-récap)).
 - **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
   `truncated: true` ; resserrez la requête avec un filtre.
 
@@ -697,9 +698,9 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
 Chaque webhook nommé par un abonnement, déclaré dans `Hub:Recaps:Webhooks`, reçoit un `POST` à corps
 JSON quand le rapport de l'abonnement pour une période close est figé. Une période où rien n'a
 bougé est archivée et envoyée nulle part. Le corps ne porte que la vue de pilotage : l'objet `recap`
-est le snapshot `pilotage` décrit plus haut, il ne contient donc aucune clé d'ingénierie, et un
-endpoint seulement sur une ligne sans libellé. La vue d'ingénierie arrive chez le destinataire sous
-forme de lien, jamais de contenu.
+est le snapshot `pilotage` décrit plus haut, il ne contient donc aucune clé d'ingénierie, et aucun
+`endpoint` : une ligne sans libellé garde son `label` à `null` et son `service`, rien de plus. La vue
+d'ingénierie arrive chez le destinataire sous forme de lien, jamais de contenu.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
@@ -774,7 +775,12 @@ détient aucune des deux permissions, et seulement ses propres rapports sinon.
 filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
 `X-Content-Type-Options: nosniff` et une `Content-Security-Policy` qui n'autorise que les deux
 scripts en ligne de la page, par empreinte. `pilotage` est la projection de pilotage du snapshot
-stocké, faite au moment de servir la page. Un id qui n'est pas 32 caractères hexadécimaux minuscules,
+stocké, faite au moment de servir la page, avec deux coupes que l'écran en direct ne fait pas. Une
+ligne sans libellé ne montre aucun endpoint : son titre se lit « An unnamed step in » suivi du
+service, avec « Name it in the Hub to see it here. » dessous. Le responsable d'une action est le nom
+qu'une personne lit (`Alice Martin` pour `alice.martin@acme.com`), et l'identité derrière (un e-mail,
+un nom `local:`, un sujet) n'est ni dans le texte, ni dans un `title`, ni dans l'îlot de données. La
+page `tech` garde cette identité au survol. Un id qui n'est pas 32 caractères hexadécimaux minuscules,
 un id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rapports sont purgés
 après `Hub:Recaps:Retention`.
 

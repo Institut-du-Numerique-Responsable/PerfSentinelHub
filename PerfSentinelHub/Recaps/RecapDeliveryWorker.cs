@@ -51,7 +51,7 @@ public sealed partial class RecapDeliveryWorker(
             return;
         }
 
-        var pilotage = RecapViews.Pilotage(Snapshot(report));
+        var pilotage = RecapViews.Frozen(Snapshot(report));
         var status = await WebhookDelivery.PostAsync(
             clients.CreateClient(DeliveryWorker.ClientName), webhook.Url!, webhook.Secret!,
             RecapWebhook.Body(report.Summary, pilotage, settings.RecapPublicUrl), timeProvider,

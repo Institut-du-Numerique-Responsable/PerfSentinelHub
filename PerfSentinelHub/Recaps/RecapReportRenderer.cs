@@ -39,6 +39,8 @@ public static class RecapReportRenderer
 
     public static byte[] Render(RecapSnapshot snapshot)
     {
+        if (snapshot.View == "pilotage")
+            snapshot = snapshot with { Priorities = [.. snapshot.Priorities.Select(ByName)] };
         var labels = RecapText.Labels(snapshot.View);
         var html = new StringBuilder(32 * 1024);
         html.Append("<!doctype html>\n<html lang=\"en\" data-theme=\"light\">\n<head>\n<meta charset=\"utf-8\">\n")
@@ -56,6 +58,19 @@ public static class RecapReportRenderer
             .Append(JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot))
             .Append("</script>\n<script>").Append(TimeScript).Append("</script>\n</body>\n</html>\n");
         return Encoding.UTF8.GetBytes(html.ToString());
+    }
+
+    // A mailed report leaves the Hub: its owner is the name a person reads, never the identity behind it,
+    // not even in a title or the data island.
+    private static RecapPriority ByName(RecapPriority priority)
+    {
+        if (priority.Action is not { } action)
+            return priority;
+        var name = RecapText.Owner(action.Owner, action.OwnerDisplay).Text;
+        return priority with
+        {
+            Action = action with { Owner = null, OwnerDisplay = name.Length > 0 ? name : null, Events = null }
+        };
     }
 
     // ---- the head of the page
@@ -297,17 +312,26 @@ public static class RecapReportRenderer
         html.Append("</div>\n");
     }
 
-    // The label when someone named the endpoint, else the sentence and the one technical value left.
+    // The label when someone named the endpoint, else a neutral title: a report never shows the endpoint.
     private static void PriorityPilotage(StringBuilder html, RecapPriority priority)
     {
         html.Append("<div class=\"what\">");
         if (priority.Label is not null)
             html.Append("<p class=\"label\">").Append(E(priority.Label)).Append("</p>");
-        html.Append("<p class=\"plain\">").Append(E(priority.Plain)).Append("</p><div class=\"where\">in ")
-            .Append(E(priority.Service));
-        if (priority.Label is null && priority.Endpoint is not null)
-            html.Append(" · <code class=\"code-inline\">").Append(E(priority.Endpoint)).Append("</code>");
-        html.Append("</div></div>\n");
+        else
+            html.Append("<p class=\"label\">").Append(E(Unnamed(priority.Service))).Append("</p><p class=\"where\">")
+                .Append(NameIt).Append("</p>");
+        html.Append("<p class=\"plain\">").Append(E(priority.Plain)).Append("</p>");
+        if (priority.Label is not null)
+            html.Append("<div class=\"where\">in ").Append(E(priority.Service)).Append("</div>");
+        html.Append("</div>\n");
+    }
+
+    private const string NameIt = "Name it in the Hub to see it here.";
+
+    private static string Unnamed(string service)
+    {
+        return "An unnamed step in " + service;
     }
 
     private static void Figure(
@@ -514,13 +538,9 @@ public static class RecapReportRenderer
 
     private static void MoveWho(StringBuilder html, RecapMove item)
     {
-        html.Append("<span class=\"plain\">");
-        if (item.Label is not null)
-            html.Append("<b>").Append(E(item.Label + ". ")).Append("</b>");
-        html.Append(E(item.Plain)).Append("</span><span class=\"where\">In ").Append(E(item.Service));
-        if (item.Label is null && item.Endpoint is not null)
-            html.Append(", <code class=\"code-inline\">").Append(E(item.Endpoint)).Append("</code>");
-        html.Append(".</span>");
+        html.Append("<span class=\"plain\"><b>").Append(E((item.Label ?? Unnamed(item.Service)) + ". ")).Append("</b>")
+            .Append(E(item.Plain)).Append("</span><span class=\"where\">")
+            .Append(item.Label is null ? NameIt : "In " + E(item.Service) + ".").Append("</span>");
     }
 
     // ---- the closing sections

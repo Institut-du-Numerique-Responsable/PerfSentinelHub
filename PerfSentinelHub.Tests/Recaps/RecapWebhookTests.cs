@@ -90,6 +90,27 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_unlabelled_row_reaches_the_webhook_without_its_endpoint()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Priorities = [RecapSnapshots.Priority(1, label: null)],
+            Movements = new RecapMovements([RecapSnapshots.Move(label: null)], [], 0, [], [], [], [])
+        };
+        var hub = await ReportedAsync(snapshot: snapshot);
+
+        await RunAsync(hub);
+
+        var received = Assert.Single(_received);
+        Assert.DoesNotContain(RecapSnapshots.Endpoint, received.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"endpoint\"", received.Body, StringComparison.Ordinal);
+        using var body = JsonDocument.Parse(received.Body);
+        var priority = body.RootElement.GetProperty("recap").GetProperty("priorities")[0];
+        Assert.Equal(JsonValueKind.Null, priority.GetProperty("label").ValueKind);
+        Assert.Equal("checkout-api", priority.GetProperty("service").GetString());
+    }
+
+    [Fact]
     public async Task With_a_public_url_the_links_name_the_hub()
     {
         var hub = await ReportedAsync(publicUrl: "https://hub.example/");
@@ -270,7 +291,8 @@ public sealed class RecapWebhookTests : IAsyncLifetime
         string[]? views = null,
         string channel = RecapChannels.Webhook,
         string target = "ops-chat",
-        string? databasePath = null)
+        string? databasePath = null,
+        RecapSnapshot? snapshot = null)
     {
         var hub = Hub(publicUrl, disclosureUrl, databasePath);
         _reportId = Guid.NewGuid().ToString("N");
@@ -278,7 +300,7 @@ public sealed class RecapWebhookTests : IAsyncLifetime
             new RecapReportSummary(
                 _reportId, "weekly-shop", "week", "2026-10-19", "2026-10-25",
                 views ?? [RecapViewNames.Pilotage, RecapViewNames.Tech], true, false, null, 10_000),
-            JsonSerializer.Serialize(RecapSnapshots.Distinctive(), Wire));
+            JsonSerializer.Serialize(snapshot ?? RecapSnapshots.Distinctive(), Wire));
         Assert.True(await Database(hub).InsertRecapReportAsync(report, [(channel, target)], CancellationToken.None));
         return hub;
     }

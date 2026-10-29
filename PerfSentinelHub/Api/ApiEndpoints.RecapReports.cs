@@ -128,7 +128,7 @@ public static partial class ApiEndpoints
         headers.CacheControl = "no-store";
         headers.ContentDisposition = $"inline; filename=\"perf-sentinel-recap-{report.Summary.PeriodFrom}-{view}.html\"";
         return TypedResults.Bytes(
-            RecapReportRenderer.Render(view == RecapViewNames.Pilotage ? RecapViews.Pilotage(snapshot) : snapshot),
+            RecapReportRenderer.Render(view == RecapViewNames.Pilotage ? RecapViews.Frozen(snapshot) : snapshot),
             "text/html; charset=utf-8");
     }
 

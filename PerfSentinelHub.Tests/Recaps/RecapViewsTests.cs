@@ -70,6 +70,28 @@ public sealed class RecapViewsTests
     }
 
     [Fact]
+    public void Frozen_drops_the_endpoint_of_an_unlabelled_row_too()
+    {
+        var tech = Tech(2) with
+        {
+            Priorities = [Priority(1), Priority(2, null)],
+            Movements = Tech(2).Movements with { New = [Move(), Move(null)] }
+        };
+
+        var view = RecapViews.Frozen(tech);
+
+        Assert.Equal("pilotage", view.View);
+        Assert.All(view.Priorities, priority => Assert.Null(priority.Endpoint));
+        Assert.All(view.Movements.New, move => Assert.Null(move.Endpoint));
+        Assert.Null(view.Priorities[1].Label);
+        Assert.Equal("svc", view.Priorities[1].Service);
+        var json = JsonSerializer.Serialize(view, Wire);
+        Assert.DoesNotContain("\"endpoint\"", json);
+        Assert.DoesNotContain("GET /", json);
+        Assert.Contains("\"label\":null", json);
+    }
+
+    [Fact]
     public void Pilotage_keeps_five_and_counts_the_rest()
     {
         var view = RecapViews.Pilotage(Tech(12));

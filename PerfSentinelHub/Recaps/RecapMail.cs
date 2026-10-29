@@ -25,7 +25,7 @@ public static class RecapMail
         };
         if (report.Views.Contains(RecapViewNames.Pilotage))
             message.Attachments.Add(new Attachment(
-                new MemoryStream(RecapReportRenderer.Render(RecapViews.Pilotage(tech))),
+                new MemoryStream(RecapReportRenderer.Render(RecapViews.Frozen(tech))),
                 $"perf-sentinel-recap-{report.PeriodFrom}-pilotage.html", "text/html; charset=utf-8"));
         return message;
     }

@@ -42,6 +42,22 @@ public sealed class RecapMailTests
     }
 
     [Fact]
+    public void The_attachment_names_no_endpoint_of_an_unlabelled_row()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Priorities = [RecapSnapshots.Priority(1, label: null)],
+            Movements = new RecapMovements([RecapSnapshots.Move(label: null)], [], 0, [], [], [], [])
+        };
+        using var mail = Build(null, snapshot: snapshot);
+
+        var html = new StreamReader(Assert.Single(mail.Attachments).ContentStream, Encoding.UTF8).ReadToEnd();
+
+        Assert.Contains("An unnamed step in checkout-api", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(RecapSnapshots.Endpoint, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_engineering_view_is_a_link_when_the_hub_has_a_public_url()
     {
         using var mail = Build(new Uri("https://hub.example/"));
@@ -103,11 +119,12 @@ public sealed class RecapMailTests
         return mail.Body.Split('\n', StringSplitOptions.RemoveEmptyEntries);
     }
 
-    private static MailMessage Build(Uri? publicUrl, string[]? views = null, bool complete = true)
+    private static MailMessage Build(
+        Uri? publicUrl, string[]? views = null, bool complete = true, RecapSnapshot? snapshot = null)
     {
         var summary = new RecapReportSummary(
             Id, "weekly-shop", "week", "2026-10-19", "2026-10-25",
             views ?? [RecapViewNames.Pilotage, RecapViewNames.Tech], complete, false, null, 10_000);
-        return RecapMail.Build(summary, RecapSnapshots.Distinctive(), "pm@example.test", Relay, publicUrl);
+        return RecapMail.Build(summary, snapshot ?? RecapSnapshots.Distinctive(), "pm@example.test", Relay, publicUrl);
     }
 }

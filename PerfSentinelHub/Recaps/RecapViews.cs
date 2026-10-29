@@ -26,6 +26,34 @@ public static class RecapViews
         };
     }
 
+    /// <summary>
+    ///     The management view a frozen report and its webhook carry: as <see cref="Pilotage" />, but a
+    ///     row no label names loses its endpoint too, so the report reads "an unnamed step" there.
+    /// </summary>
+    public static RecapSnapshot Frozen(RecapSnapshot tech)
+    {
+        var view = Pilotage(tech);
+        var moves = view.Movements;
+        return view with
+        {
+            Priorities = [.. view.Priorities.Select(priority => priority with { Endpoint = null })],
+            Movements = moves with
+            {
+                New = Unnamed(moves.New),
+                Gone = Unnamed(moves.Gone),
+                Up = Unnamed(moves.Up),
+                Down = Unnamed(moves.Down),
+                CameBack = Unnamed(moves.CameBack),
+                DoneStillDetected = Unnamed(moves.DoneStillDetected)
+            }
+        };
+    }
+
+    private static List<RecapMove> Unnamed(IReadOnlyList<RecapMove> moves)
+    {
+        return [.. moves.Select(move => move with { Endpoint = null })];
+    }
+
     private static RecapPriority Plain(RecapPriority priority)
     {
         return priority with

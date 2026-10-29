@@ -639,7 +639,8 @@ and `truncated`.
   technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
   `confidence` and the action `events` are absent, not `null`. So is `endpoint`, except on a
   priority or a movement item whose `label` is `null`: two rows of the same type stay apart
-  by the one technical value left.
+  by the one technical value left. A frozen report and a recap webhook drop `endpoint` on those
+  rows too (see [Recap reports](#recap-reports)).
 - **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
   `truncated: true`; narrow the request with a filter.
 
@@ -648,8 +649,9 @@ and `truncated`.
 Each webhook named by a subscription, declared in `Hub:Recaps:Webhooks`, receives a `POST` with a JSON
 body when the subscription's report of a closed period is frozen. A period in which nothing moved is
 archived and sent nowhere. The body carries the management view only: the `recap` object is the
-`pilotage` snapshot described above, so it holds none of the engineering keys, and an endpoint only
-on a row that has no label. The engineering view reaches a receiver as a link, never as content.
+`pilotage` snapshot described above, so it holds none of the engineering keys, and no `endpoint` at
+all: a row that has no label keeps its `null` `label` and its `service`, nothing more. The engineering
+view reaches a receiver as a link, never as content.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
@@ -720,7 +722,11 @@ permission, and only the caller's own reports otherwise.
 filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
 `X-Content-Type-Options: nosniff` and a `Content-Security-Policy` that allows nothing but the two
 inline scripts of the page, by hash. `pilotage` is the management projection of the stored
-snapshot, made when the page is served. An id that is not 32 lowercase hex, an unknown id and a
+snapshot, made when the page is served, with two cuts the live screen does not make. A row with no
+label shows no endpoint: its title reads "An unnamed step in" and the service, with "Name it in the
+Hub to see it here." under it. An action owner is the name a person reads (`Alice Martin` for
+`alice.martin@acme.com`), and the identity behind it (an e-mail, a `local:` name, a subject) is in
+neither the text, a `title` nor the data island. The `tech` page keeps that identity on hover. An id that is not 32 lowercase hex, an unknown id and a
 view the report does not hold are all `404`. Reports are purged after `Hub:Recaps:Retention`.
 
 ## Actions

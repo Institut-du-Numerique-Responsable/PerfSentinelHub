@@ -24,7 +24,7 @@ public sealed partial class RecapReportRendererTests
 
     private static string Management()
     {
-        return Html(RecapViews.Pilotage(RecapSnapshots.Distinctive()));
+        return Html(RecapViews.Frozen(RecapSnapshots.Distinctive()));
     }
 
     /// <summary>What a reader sees: no script, no style, no tag, entities decoded.</summary>
@@ -174,15 +174,42 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
-    public void An_unlabelled_priority_shows_its_endpoint_in_the_management_report()
+    public void An_unlabelled_row_reads_as_an_unnamed_step_in_the_management_report()
     {
-        var snapshot = RecapSnapshots.Distinctive() with { Priorities = [RecapSnapshots.Priority(1, label: null)] };
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Priorities = [RecapSnapshots.Priority(1, label: null)],
+            Movements = new RecapMovements([RecapSnapshots.Move(label: null)], [], 0, [], [], [], [])
+        };
 
-        var visible = Visible(Html(RecapViews.Pilotage(snapshot)));
+        var html = Html(RecapViews.Frozen(snapshot));
+        var visible = Visible(html);
 
-        Assert.Contains(RecapSnapshots.Endpoint, visible, StringComparison.Ordinal);
-        Assert.DoesNotContain(RecapSnapshots.Signature, visible, StringComparison.Ordinal);
-        Assert.DoesNotContain(RecapSnapshots.Template, visible, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"label\">An unnamed step in checkout-api</p><p class=\"where\">" +
+                        "Name it in the Hub to see it here.</p>", html, StringComparison.Ordinal);
+        Assert.Contains("An unnamed step in checkout-api. ", visible, StringComparison.Ordinal);
+        Assert.DoesNotContain(RecapSnapshots.Endpoint, html, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"endpoint\"", Island(html), StringComparison.Ordinal);
+        Assert.DoesNotContain("<code", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(RecapSnapshots.Signature, html, StringComparison.Ordinal);
+        Assert.DoesNotContain(RecapSnapshots.Template, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_management_report_shows_the_owner_by_name_only()
+    {
+        var html = Html(RecapViews.Frozen(RecapSnapshots.Distinctive()));
+
+        Assert.Contains("Alice Martin", Visible(html), StringComparison.Ordinal);
+        Assert.DoesNotContain("alice.martin@acme.com", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("acme.com", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_engineering_report_keeps_the_owner_identity_on_hover()
+    {
+        Assert.Contains("<span class=\"owner\" title=\"alice.martin@acme.com\">Alice Martin</span>",
+            Html(RecapSnapshots.Distinctive()), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -291,7 +318,7 @@ public sealed partial class RecapReportRendererTests
     [Fact]
     public void The_management_report_lists_five_and_counts_the_rest()
     {
-        var html = Html(RecapViews.Pilotage(RecapSnapshots.Distinctive(12)));
+        var html = Html(RecapViews.Frozen(RecapSnapshots.Distinctive(12)));
 
         Assert.Equal(5, Rows().Matches(html).Count);
         Assert.DoesNotContain("<details class=\"more\">", html, StringComparison.Ordinal);

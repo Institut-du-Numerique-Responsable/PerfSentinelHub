@@ -131,7 +131,7 @@ h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .rank { padding-top: 1px; font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text-3); }
 .what { min-width: 0; }
 .label { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
-.label + .plain { font-size: 13px; font-weight: 400; color: var(--text-2); }
+.label ~ .plain { font-size: 13px; font-weight: 400; color: var(--text-2); }
 .plain { max-width: 68ch; margin: 0; font-size: 14px; font-weight: 500; }
 .where { margin-top: 3px; font-size: 12px; color: var(--text-3); }
 .head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
