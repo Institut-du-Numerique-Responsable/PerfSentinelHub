@@ -321,8 +321,16 @@ Webhooks, Emails }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, a
 `Hub:Recaps:Smtp:Host`. A subscription with no destination is valid: it archives its reports and
 delivers none.
 
-Under Helm, the chart does not carry the `Hub:Recaps` block yet. Pass it as `Hub__Recaps__*`
-environment variables until it does.
+Under Helm the block is `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` and
+`publicUrl` follow the settings above. `subscriptions` passes its items as they are, keys in
+camel case: `{ name, cadences, views, environment, sourceId, service, grouping, webhooks,
+emails }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
+come from that Secret. `smtp` takes `host`, `port`, `startTls`, `userName` and `from`, and the
+chart writes it only once `host` is set. `passwordSecretName` and `passwordSecretKey` name the
+Secret holding the password, which reaches the pod as `Hub__Recaps__Smtp__Password`. The chart
+refuses a duplicate subscription or webhook name and a subscription naming an undeclared webhook.
+The schema refuses `emails` without `smtp.host`, port 465, and a `userName` without `startTls` on
+a relay off loopback. A wrong `environment` or `sourceId` is left to the Hub's startup check.
 
 ## What a source is, and what is measured
 

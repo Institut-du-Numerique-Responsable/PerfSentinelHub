@@ -21,6 +21,22 @@
 {{- $_ := set $accountNames .name true }}
 {{- if not (and .secretName .secretKey) }}{{ fail (printf "local account %s needs secretName and secretKey" .name) }}{{ end }}
 {{- end }}
+{{- /* The Hub refuses these at startup, after Recreate has stopped the running pod. */}}
+{{- $recaps := .Values.hub.recaps | default dict }}
+{{- $recapWebhookNames := dict }}
+{{- range ($recaps.webhooks | default list) }}
+{{- if hasKey $recapWebhookNames .name }}{{ fail (printf "duplicate recap webhook name: %s" .name) }}{{ end }}
+{{- $_ := set $recapWebhookNames .name true }}
+{{- end }}
+{{- $subscriptionNames := dict }}
+{{- range ($recaps.subscriptions | default list) }}
+{{- if hasKey $subscriptionNames .name }}{{ fail (printf "duplicate recap subscription name: %s" .name) }}{{ end }}
+{{- $_ := set $subscriptionNames .name true }}
+{{- $subscription := .name }}
+{{- range (.webhooks | default list) }}
+{{- if not (hasKey $recapWebhookNames .) }}{{ fail (printf "recap subscription %s names an undeclared webhook: %s" $subscription .) }}{{ end }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -112,6 +128,29 @@ spec:
                 secretKeyRef:
                   name: {{ $webhook.secretName }}
                   key: {{ $webhook.secretKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.hub.recaps }}
+            {{- range $index, $webhook := .webhooks | default list }}
+            - name: Hub__Recaps__Webhooks__{{ $index }}__Url
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $webhook.secretName }}
+                  key: {{ $webhook.urlKey }}
+            - name: Hub__Recaps__Webhooks__{{ $index }}__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $webhook.secretName }}
+                  key: {{ $webhook.secretKey }}
+            {{- end }}
+            {{- with .smtp }}
+            {{- if and .host .passwordSecretName }}
+            - name: Hub__Recaps__Smtp__Password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .passwordSecretName }}
+                  key: {{ .passwordSecretKey }}
             {{- end }}
             {{- end }}
             {{- end }}

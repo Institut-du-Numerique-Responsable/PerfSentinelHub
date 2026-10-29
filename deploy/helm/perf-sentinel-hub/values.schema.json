@@ -64,6 +64,78 @@
             }
           }
         },
+        "recaps": {
+          "type": "object",
+          "additionalProperties": false,
+          "$comment": "Name uniqueness and webhook references are checked in configmap.yaml, environment and sourceId by the Hub.",
+          "if": { "properties": { "subscriptions": { "contains": { "properties": { "emails": { "minItems": 1 } }, "required": ["emails"] } } }, "required": ["subscriptions"] },
+          "then": { "properties": { "smtp": { "properties": { "host": { "minLength": 1 } }, "required": ["host"] } }, "required": ["smtp"] },
+          "properties": {
+            "movementThreshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+            "retention": { "type": "string", "minLength": 1 },
+            "maxDelay": { "type": "string", "minLength": 1 },
+            "publicUrl": { "type": "string", "pattern": "^$|^https?://" },
+            "webhooks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "secretName", "urlKey", "secretKey"],
+                "properties": {
+                  "name": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+                  "secretName": { "type": "string", "minLength": 1 },
+                  "urlKey": { "type": "string", "minLength": 1 },
+                  "secretKey": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "smtp": {
+              "type": "object",
+              "additionalProperties": false,
+              "$comment": "values.yaml sets every string to empty, so the pairs are checked on non-empty values.",
+              "allOf": [
+                { "if": { "properties": { "host": { "minLength": 1 } }, "required": ["host"] }, "then": { "properties": { "from": { "minLength": 1 } }, "required": ["from"] } },
+                { "if": { "properties": { "userName": { "minLength": 1 } }, "required": ["userName"] }, "then": { "properties": { "passwordSecretName": { "minLength": 1 }, "passwordSecretKey": { "minLength": 1 } }, "required": ["passwordSecretName", "passwordSecretKey"] } },
+                { "if": { "properties": { "passwordSecretName": { "minLength": 1 } }, "required": ["passwordSecretName"] }, "then": { "properties": { "userName": { "minLength": 1 }, "passwordSecretKey": { "minLength": 1 } }, "required": ["userName", "passwordSecretKey"] } },
+                { "if": { "properties": { "passwordSecretKey": { "minLength": 1 } }, "required": ["passwordSecretKey"] }, "then": { "properties": { "passwordSecretName": { "minLength": 1 } }, "required": ["passwordSecretName"] } },
+                {
+                  "$comment": "A password never travels in clear: without STARTTLS only a loopback relay.",
+                  "if": { "properties": { "userName": { "minLength": 1 }, "startTls": { "const": false } }, "required": ["userName", "startTls"] },
+                  "then": { "properties": { "host": { "pattern": "^(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]{1,3}){3}|::1)$" } } }
+                }
+              ],
+              "properties": {
+                "host": { "type": "string", "pattern": "^[^\\s/@]*$" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "not": { "const": 465 } },
+                "startTls": { "type": "boolean" },
+                "userName": { "type": "string" },
+                "passwordSecretName": { "type": "string" },
+                "passwordSecretKey": { "type": "string" },
+                "from": { "type": "string", "pattern": "^$|^[^\\s<>@\"]+@[^\\s<>@\"]+$" }
+              }
+            },
+            "subscriptions": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "cadences", "views"],
+                "properties": {
+                  "name": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+                  "cadences": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["day", "week", "month"] } },
+                  "views": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["pilotage", "tech"] } },
+                  "environment": { "type": "string", "minLength": 1 },
+                  "sourceId": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+                  "service": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" },
+                  "grouping": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" },
+                  "webhooks": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" } },
+                  "emails": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[^\\s<>@\"]+@[^\\s<>@\"]+$" } }
+                }
+              }
+            }
+          }
+        },
         "ackRelay": {
           "type": "object",
           "properties": {

@@ -344,8 +344,17 @@ contrôle. `Webhooks` nomme des entrées de `Hub:Recaps:Webhooks`, et `Emails` c
 adresses distinctes sans nom d'affichage, ce qui exige `Hub:Recaps:Smtp:Host`. Un abonnement sans
 destination est valide : il archive ses rapports et n'en livre aucun.
 
-Sous Helm, le chart ne porte pas encore le bloc `Hub:Recaps`. Passez-le en variables
-d'environnement `Hub__Recaps__*` d'ici là.
+Sous Helm le bloc est `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` et
+`publicUrl` suivent les réglages ci-dessus. `subscriptions` transmet ses éléments tels quels,
+clés en camel case : `{ name, cadences, views, environment, sourceId, service, grouping,
+webhooks, emails }`. Un webhook vaut `{ name, secretName, urlKey, secretKey }` : son URL et son
+secret viennent tous deux de ce Secret. `smtp` prend `host`, `port`, `startTls`, `userName` et
+`from`, et le chart ne l'écrit qu'une fois `host` posé. `passwordSecretName` et
+`passwordSecretKey` nomment le Secret qui tient le mot de passe, qui arrive dans le pod en
+`Hub__Recaps__Smtp__Password`. Le chart refuse un nom d'abonnement ou de webhook en double et un
+abonnement qui nomme un webhook non déclaré. Le schéma refuse `emails` sans `smtp.host`, le port
+465, et un `userName` sans `startTls` vers un relais hors boucle locale. Un `environment` ou un
+`sourceId` faux reste au contrôle de démarrage du Hub.
 
 ## Ce qu'est une source, et ce qui est mesuré
 

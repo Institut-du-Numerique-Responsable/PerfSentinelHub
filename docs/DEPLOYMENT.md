@@ -18,6 +18,8 @@ before any of it is deployed.
 | IDE plugin or CI job to Hub   | inbound   | `GET /api/findings`, nothing else                                                                              |
 | CI job to Hub, disclosures    | inbound   | `POST /api/import/disclosures` with its own `X-API-Key`, once a period, when disclosures are on               |
 | Hub to webhook receivers      | outbound  | a signed `POST` per disclosure published or withdrawn, to each `Hub:Disclosures:Webhooks` entry                |
+| Hub to recap receivers        | outbound  | a signed `POST` per recap report, to each `Hub:Recaps:Webhooks` entry a subscription names                     |
+| Hub to SMTP relay             | outbound  | the recap e-mails, to `Hub:Recaps:Smtp:Host` only, with STARTTLS on port 587 by default                        |
 | anyone to Hub, share links    | inbound   | `GET /share/{token}/{name}`, a disclosure's files under an expiring token                                      |
 | Hub to api.github.com         | outbound  | the version check, which `Hub:UpdateCheck:Enabled` turns off                                                   |
 

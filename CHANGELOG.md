@@ -32,6 +32,9 @@ All notable changes to PerfSentinelHub are recorded here.
 - The Hub reads the carbon day fields that perf-sentinel engines send with their ledger days
   (avoidable grams, avoidable I/O and total I/O) and keeps them per day. Engines that send
   none leave the recap's carbon figure empty.
+- The chart takes `hub.recaps`: the movement threshold, retention, delay and public URL, the
+  subscriptions, the webhooks and the SMTP relay. Webhook URLs and secrets and the SMTP password
+  come from Secrets as `Hub__Recaps__*` environment variables, never from the ConfigMap.
 
 ## [0.8.6] - 2026-10-28
 
