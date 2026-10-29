@@ -199,6 +199,61 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
+    public void A_named_service_reads_by_its_name_in_the_management_report()
+    {
+        var named = RecapSnapshots.Priority(2) with { ServiceLabel = "Payment" };
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Priorities = [RecapSnapshots.Priority(1, null) with { ServiceLabel = "Payment" }, named],
+            Movements = new RecapMovements(
+                [RecapSnapshots.Move(null) with { ServiceLabel = "Payment" }],
+                [RecapSnapshots.Move() with { ServiceLabel = "Payment" }], 0, [], [], [], [])
+        };
+
+        var html = Html(RecapViews.Frozen(snapshot));
+        var visible = Visible(html);
+
+        Assert.Contains("<p class=\"label\">An unnamed step in Payment</p><div class=\"where\">" +
+                        "Name it in the Hub to see it here.</div>", html, StringComparison.Ordinal);
+        Assert.Contains("<div class=\"where\">in Payment</div>", html, StringComparison.Ordinal);
+        Assert.Contains("An unnamed step in Payment. ", visible, StringComparison.Ordinal);
+        Assert.Contains("In Payment.", visible, StringComparison.Ordinal);
+        // The technical service stays in the data, as service, and nowhere a reader sees it.
+        Assert.DoesNotContain("checkout-api", visible, StringComparison.Ordinal);
+        Assert.Equal(Occurrences(html, "\"service\":\"checkout-api\""), Occurrences(html, "checkout-api"));
+    }
+
+    [Fact]
+    public void An_unnamed_service_keeps_its_technical_name_in_the_management_report()
+    {
+        var html = Management();
+
+        Assert.Contains("<div class=\"where\">in checkout-api</div>", html, StringComparison.Ordinal);
+        Assert.Contains("In checkout-api.", Visible(html), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_engineering_report_shows_a_named_service_beside_its_technical_name()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Priorities = [RecapSnapshots.Priority(1) with { ServiceLabel = "Payment" }]
+        };
+
+        var html = Html(snapshot);
+
+        Assert.Contains("<span class=\"strong\">Payment</span><code class=\"code-inline\">checkout-api</code>", html,
+            StringComparison.Ordinal);
+        Assert.Contains("<span class=\"strong\">checkout-api</span>", Html(RecapSnapshots.Distinctive()),
+            StringComparison.Ordinal);
+    }
+
+    private static int Occurrences(string text, string value)
+    {
+        return (text.Length - text.Replace(value, "", StringComparison.Ordinal).Length) / value.Length;
+    }
+
+    [Fact]
     public void The_management_report_shows_the_owner_by_name_only()
     {
         var html = Html(RecapViews.Frozen(RecapSnapshots.Distinctive()));

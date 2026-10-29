@@ -12,9 +12,48 @@ public sealed partial class HubDatabase
     ///     Sets, replaces or, for a null label, removes the label of one endpoint. False when the
     ///     write lock stays held past the wait.
     /// </summary>
-    public async Task<bool> SetEndpointLabelAsync(
+    public Task<bool> SetEndpointLabelAsync(
         string service,
         string endpoint,
+        string? label,
+        string by,
+        CancellationToken cancellationToken)
+    {
+        return WriteLabelAsync(
+            label is null
+                ? "DELETE FROM endpoint_labels WHERE service = $service AND endpoint = $endpoint;"
+                : """
+                  INSERT INTO endpoint_labels(service, endpoint, label, set_by, set_at_ms)
+                  VALUES ($service, $endpoint, $label, $by, $at_ms)
+                  ON CONFLICT(service, endpoint) DO UPDATE SET
+                    label = excluded.label, set_by = excluded.set_by, set_at_ms = excluded.set_at_ms;
+                  """,
+            service, endpoint, label, by, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Sets, replaces or, for a null label, removes the business name of one service. False when
+    ///     the write lock stays held past the wait.
+    /// </summary>
+    public Task<bool> SetServiceLabelAsync(string service, string? label, string by, CancellationToken cancellationToken)
+    {
+        return WriteLabelAsync(
+            label is null
+                ? "DELETE FROM service_labels WHERE service = $service;"
+                : """
+                  INSERT INTO service_labels(service, label, set_by, set_at_ms)
+                  VALUES ($service, $label, $by, $at_ms)
+                  ON CONFLICT(service) DO UPDATE SET
+                    label = excluded.label, set_by = excluded.set_by, set_at_ms = excluded.set_at_ms;
+                  """,
+            service, null, label, by, cancellationToken);
+    }
+
+    // One write for both tables: $endpoint is bound only for an endpoint label.
+    private async Task<bool> WriteLabelAsync(
+        string sql,
+        string service,
+        string? endpoint,
         string? label,
         string by,
         CancellationToken cancellationToken)
@@ -25,16 +64,10 @@ public sealed partial class HubDatabase
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
-            command.CommandText = label is null
-                ? "DELETE FROM endpoint_labels WHERE service = $service AND endpoint = $endpoint;"
-                : """
-                  INSERT INTO endpoint_labels(service, endpoint, label, set_by, set_at_ms)
-                  VALUES ($service, $endpoint, $label, $by, $at_ms)
-                  ON CONFLICT(service, endpoint) DO UPDATE SET
-                    label = excluded.label, set_by = excluded.set_by, set_at_ms = excluded.set_at_ms;
-                  """;
+            command.CommandText = sql;
             command.Parameters.AddWithValue("$service", service);
-            command.Parameters.AddWithValue("$endpoint", endpoint);
+            if (endpoint is not null)
+                command.Parameters.AddWithValue("$endpoint", endpoint);
             if (label is not null)
             {
                 command.Parameters.AddWithValue("$label", label);
@@ -88,6 +121,43 @@ public sealed partial class HubDatabase
         command.CommandText = CopiesSelect + "WHERE f.service = $service AND f.endpoint = $endpoint" + CopiesOrder;
         command.Parameters.AddWithValue("$service", service);
         command.Parameters.AddWithValue("$endpoint", endpoint);
+        return await ReadCopiesAsync(command, cancellationToken);
+    }
+
+    /// <summary>The business names of the given services; a service without one is absent.</summary>
+    public async Task<IReadOnlyDictionary<string, string>> ReadServiceLabelsAsync(
+        IReadOnlyCollection<string> services,
+        CancellationToken cancellationToken)
+    {
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (services.Count == 0)
+            return labels;
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT service, label FROM service_labels
+                              WHERE service IN (SELECT value FROM json_each($services));
+                              """;
+        command.Parameters.AddWithValue("$services", JsonArray([.. services]));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            labels[reader.GetString(0)] = reader.GetString(1);
+        return labels;
+    }
+
+    /// <summary>
+    ///     Every Hub copy of every finding of one service, one per signature and source: what naming
+    ///     the service is judged on.
+    /// </summary>
+    public async Task<IReadOnlyList<AccessCopy>> ReadServiceCopiesAsync(
+        string service,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = CopiesSelect + "WHERE f.service = $service" + CopiesOrder;
+        command.Parameters.AddWithValue("$service", service);
         return await ReadCopiesAsync(command, cancellationToken);
     }
 

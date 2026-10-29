@@ -46,6 +46,30 @@ public sealed class LabelStorageTests(HubApplicationFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task A_service_label_is_set_read_and_replaced()
+    {
+        Assert.True(await Database.SetServiceLabelAsync("named-svc", "Payment", "alice", Token));
+        Assert.Equal("Payment", (await Database.ReadServiceLabelsAsync(["named-svc", "other-svc"], Token))["named-svc"]);
+        Assert.True(await Database.SetServiceLabelAsync("named-svc", "Checkout", "bob", Token));
+
+        var labels = await Database.ReadServiceLabelsAsync(["named-svc", "other-svc"], Token);
+
+        Assert.Equal("Checkout", Assert.Single(labels).Value);
+        Assert.False(labels.ContainsKey("other-svc"));
+    }
+
+    [Fact]
+    public async Task An_empty_service_label_deletes_it()
+    {
+        await Database.SetServiceLabelAsync("unnamed-svc", "Shipping", "alice", Token);
+
+        Assert.True(await Database.SetServiceLabelAsync("unnamed-svc", null, "alice", Token));
+
+        Assert.Empty(await Database.ReadServiceLabelsAsync(["unnamed-svc"], Token));
+        Assert.Empty(await Database.ReadServiceLabelsAsync([], Token));
+    }
+
+    [Fact]
     public async Task No_key_reads_no_label()
     {
         Assert.Empty(await Database.ReadEndpointLabelsAsync([], Token));

@@ -110,6 +110,34 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_named_service_reaches_the_webhook_by_name_and_keeps_its_service()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Priorities = [RecapSnapshots.Priority(1, null) with { ServiceLabel = "Payment" }],
+            Movements = new RecapMovements([RecapSnapshots.Move(null) with { ServiceLabel = "Payment" }], [], 0, [],
+                [], [], [])
+        };
+        var hub = await ReportedAsync(snapshot: snapshot);
+
+        await RunAsync(hub);
+
+        var received = Assert.Single(_received);
+        using var body = JsonDocument.Parse(received.Body);
+        var recap = body.RootElement.GetProperty("recap");
+        foreach (var row in new[] { recap.GetProperty("priorities")[0], recap.GetProperty("movements").GetProperty("new")[0] })
+        {
+            Assert.Equal("Payment", row.GetProperty("service_label").GetString());
+            Assert.Equal("checkout-api", row.GetProperty("service").GetString());
+            Assert.False(row.TryGetProperty("endpoint", out _));
+        }
+
+        // checkout-api only as a service value: never in a title, a sentence or a link.
+        Assert.Equal(received.Body.Split("\"service\":\"checkout-api\"").Length,
+            received.Body.Split("checkout-api").Length);
+    }
+
+    [Fact]
     public async Task With_a_public_url_the_links_name_the_hub()
     {
         var hub = await ReportedAsync("https://hub.example/");

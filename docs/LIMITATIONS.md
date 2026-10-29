@@ -170,7 +170,8 @@ differently in a filtered and in an unfiltered recap. Any detection after the da
 action was marked done contradicts it, a straggling trace or a slow deployment included,
 so mark it done again once the fix has actually shipped. Actions and their events are
 never purged, not with their finding and not by retention, so the tables only grow. Labels
-are Hub-wide as well, and are not purged either.
+are Hub-wide as well, and are not purged either: an endpoint's name and a service's name both
+outlive the findings they named.
 
 A recap reads the findings in up to four reads: the period with its acknowledged findings,
 the period without them, the closed days of a period in progress, and the previous window.

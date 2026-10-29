@@ -1856,6 +1856,21 @@ test("Management_copy_carries_no_technical_word", () => {
     assert.match(PSL.recapErrorText(500, "tech"), /not any daemon/);
 });
 
+test("a named service reads by its name, the technical one beside it", () => {
+    assert.deepEqual(PSL.serviceParts("checkout-api", "Payment"), {name: "Payment", code: "checkout-api"});
+    assert.deepEqual(PSL.serviceParts("checkout-api", null), {name: "checkout-api", code: null});
+    assert.deepEqual(PSL.serviceParts("checkout-api", undefined), {name: "checkout-api", code: null});
+    assert.deepEqual(PSL.serviceParts("checkout-api", ""), {name: "checkout-api", code: null});
+    // The Management "in ..." line reads the name alone.
+    assert.equal("in " + PSL.serviceParts("checkout-api", "Payment").name, "in Payment");
+});
+
+test("the Management help says a team can name its services and steps", () => {
+    assert.ok(PSL.RECAP_HELP.pilotage.prio.endsWith(
+        " A team can name its services and steps in the Hub, so this report speaks its language."));
+    assert.doesNotMatch(PSL.RECAP_HELP.tech.prio, /name its services/);
+});
+
 test("Management_help_carries_no_technical_word", () => {
     const technical = TECHNICAL;
     const keys = ["period", "io", "co2", "findings", "actions", "prio", "moved"];

@@ -26,7 +26,7 @@ public static class RecapSnapshots
     {
         return new RecapPriority(
             rank, "n_plus_one_sql", "warning", "checkout-api", RecapSentences.For("n_plus_one_sql"), 12, 4000 - rank,
-            300, false, true, "up", 0.35, label,
+            300, false, true, "up", 0.35, label, null,
             new RecapAction("done", "alice.martin@acme.com", null, GeneratedAtMs - 86400000, GeneratedAtMs - 3600000,
                 "confirmed",
                 [
@@ -41,7 +41,7 @@ public static class RecapSnapshots
     public static RecapMove Move(string? label = "Label OK")
     {
         return new RecapMove("n_plus_one_sql", "checkout-api", RecapSentences.For("n_plus_one_sql"), "up", 0.2, label,
-            "sig-TECH-move", Endpoint);
+            null, "sig-TECH-move", Endpoint);
     }
 
     public static RecapSnapshot Distinctive(int priorities = 1)

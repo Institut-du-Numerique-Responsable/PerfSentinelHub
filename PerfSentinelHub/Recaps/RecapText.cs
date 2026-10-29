@@ -247,6 +247,10 @@ public static class RecapText
     ///     RECAP_HELP of launcher.js: the seven sentences the page shows behind its "?", which a report
     ///     with no script prints in a closing section. The term of an entry is the heading it explains.
     /// </summary>
+    /// <summary>The closing sentence of the Management "What to fix first" help, as in RECAP_HELP.</summary>
+    public const string NamingHelp =
+        "A team can name its services and steps in the Hub, so this report speaks its language.";
+
     public static IReadOnlyList<(string Term, string Text)> Help(string view)
     {
         var (io, findings, moved) = Labels(view);
@@ -269,7 +273,7 @@ public static class RecapText
                 ? "What the team said it would fix, and whether the measurements confirm it."
                 : "Declared by the team, checked by the engine: confirmed after a sealed day with no detection, still detected when it shows up after the done day."),
             ("What to fix first", pilotage
-                ? "The problems that cost the most come first."
+                ? "The problems that cost the most come first. " + NamingHelp
                 : "Findings with avoidable calls first, by volume; then the others by severity. Trends compare closed days only."),
             (moved, pilotage
                 ? "\"Gone\" means it was not seen this period: probably fixed, but not proven."

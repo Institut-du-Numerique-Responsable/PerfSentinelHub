@@ -682,7 +682,9 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   injoignable ne confirme jamais. Le jugement reste dans les filtres de la requête.
 - **Libellés.** Une priorité et chaque élément de mouvement portent `label`, le nom métier que
   quelqu'un a donné à l'endpoint dont ils viennent (voir [Libellés d'endpoint](#libellés-dendpoint)),
-  ou `null`.
+  ou `null`, et `service_label`, le nom métier de leur service, ou `null`. Les deux clés sont
+  toujours là, dans chaque vue, et `service` reste à côté de `service_label` : un destinataire
+  peut toujours regrouper par service technique.
 - **Deux vues.** `pilotage` est l'instantané `tech` avec `view: "pilotage"`, les cinq premières
   priorités, une phrase en langage courant fixe par type de finding dans `plain`, et aucune
   clé technique : `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
@@ -779,7 +781,9 @@ filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
 scripts en ligne de la page, par empreinte. `pilotage` est la projection de pilotage du snapshot
 stocké, faite au moment de servir la page, avec deux coupes que l'écran en direct ne fait pas. Une
 ligne sans libellé ne montre aucun endpoint : son titre se lit « An unnamed step in » suivi du
-service, avec « Name it in the Hub to see it here. » dessous. Le responsable d'une action est le nom
+service, avec « Name it in the Hub to see it here. » dessous. Partout où une ligne de pilotage
+nomme son service, elle prend le nom métier du service quand quelqu'un en a donné un
+(`An unnamed step in Payment`, `in Payment`). Le responsable d'une action est le nom
 qu'une personne lit (`Alice Martin` pour `alice.martin@acme.com` ou `Alice.Martin@Acme.com`, `Alice`
 pour `Alice <alice@acme.com>`), et l'identité derrière (un e-mail, un nom `local:`, un sujet) n'est ni
 dans le texte, ni dans un `title`, ni dans l'îlot de données. Un responsable dont il ne reste aucun nom
@@ -854,15 +858,22 @@ le Hub, quelle que soit la source qui détient les findings, et le recap l'affic
 d'une ligne. Une route l'écrit, avec un corps JSON, et elle n'est jamais ouverte : sous
 `Hub:Auth` elle demande une session.
 
-| Endpoint          | Corps                                                     | Effet                           |
-|-------------------|-----------------------------------------------------------|---------------------------------|
-| `PUT /api/labels` | `{"service":"…","endpoint":"…","label":"Showing a cart"}` | Le pose, le remplace ou l'efface |
+| Endpoint                   | Corps                                                     | Effet                            |
+|----------------------------|-----------------------------------------------------------|----------------------------------|
+| `PUT /api/labels`          | `{"service":"…","endpoint":"…","label":"Showing a cart"}` | Le pose, le remplace ou l'efface |
+| `PUT /api/labels/services` | `{"service":"…","label":"Payment"}`                       | Le pose, le remplace ou l'efface |
 
 - `service` et `endpoint` sont ceux du finding, de 1 à 1024 caractères sans caractère de
   contrôle, tels qu'ils se lisent dans `/api/findings` (`endpoint` est son `source_endpoint`).
-- `label` est rogné, puis de 1 à 80 caractères sans caractère de contrôle. `null`, ou un
-  libellé qui ne contient plus rien une fois rogné, l'efface. Un corps sans `label` est un
+- `label` est rogné, puis de 1 à 80 caractères sans caractère de contrôle ni caractère de
+  format (un forçage de sens comme U+202E, un caractère sans chasse). `null`, ou un libellé qui
+  ne contient plus rien une fois rogné, l'efface. Un corps sans `label` est un
   `400 {"detail":"A label needs a label value; send null to remove it."}`.
+- `PUT /api/labels/services` nomme un service entier, une fois pour toutes ses étapes : les
+  lignes de pilotage du récap disent `in Payment` plutôt que `in checkout-api`, et une étape sans
+  nom se lit `An unnamed step in Payment`. Elle prend `service` et `label` sous les mêmes règles,
+  et se juge sur chaque copie de chaque finding de ce service : `404 {"detail":"The Hub holds no
+  finding of this service."}` quand l'appelant n'en lit aucune.
 - Le Hub juge la requête comme une action : l'appelant d'abord (personne à nommer, un `403`),
   puis l'origine (`403`, `415`), la permission, le corps (`400`, ou `413` au-delà de 8 Kio),
   l'endpoint (`404` quand le Hub ne détient aucun finding là que l'appelant lit, `403` quand il
@@ -1227,8 +1238,11 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   chaque copie de chaque finding de cet endpoint que l'appelant lit : aucune reçoit
   `404 {"detail":"The Hub holds no finding at this endpoint."}`, la réponse d'un endpoint
   inconnu, et quand aucune n'est inscriptible sous `labels.write` la réponse est
-  `403 {"detail":"You can read this endpoint but not name it."}`. Un jeton machine ne détient
-  ni l'une ni l'autre des permissions.
+  `403 {"detail":"You can read this endpoint but not name it."}`. Le nom d'un service suit le
+  même ordre sur les copies de chaque finding du service :
+  `403 {"detail":"You may not name services."}`, puis `404 {"detail":"The Hub holds no finding
+  of this service."}` ou `403 {"detail":"You can read this service but not name it."}`. Un jeton
+  machine ne détient ni l'une ni l'autre des permissions.
 - **Les analyses.** Une seule règle décide qui voit la ligne d'un run et ouvre son
   rapport : un run de démon exige `findings.read` et `sources.read` sur le démon entier ;
   un run sur un backend de traces exige `traces.read` sur le service demandé, ou sur le

@@ -4976,6 +4976,13 @@ a.chip {
     gap: 6px 10px;
 }
 
+.recap-service {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+}
+
 .recap-endpoint {
     font-family: var(--font-mono);
     font-size: 12px;

@@ -6371,7 +6371,8 @@
         ];
         if (!management) kids.push(recapDetail(priority));
         kids.push(recapFoot(priority, management, route));
-        if (!management && state.recapNaming === priority.signature) kids.push(recapNameEditor(priority));
+        const naming = management ? null : recapNamingTarget(priority);
+        if (naming) kids.push(recapNameEditor(naming));
         const failure = management ? null : state.recapRowError[priority.signature];
         if (failure) kids.push(el('p', {class: 'recap-alert', role: 'alert', text: failure}));
         return el('li', {class: 'run-card recap-row'}, kids);
@@ -6385,7 +6386,7 @@
                     class: 'chip', 'data-type': priority.finding_type,
                     text: PSL.FINDING_TYPE_LABEL[priority.finding_type] || priority.finding_type
                 }),
-                el('span', {class: 'table-strong', text: priority.service}),
+                recapServiceHead(priority),
                 el('span', {class: 'recap-endpoint', text: priority.endpoint})
             ]),
             priority.suggestion ? proseInto(el('p', {class: 'recap-suggest'}), priority.suggestion) : null
@@ -6394,13 +6395,24 @@
 
     /** The label when someone named the endpoint, else the sentence and the one technical value left. */
     function recapPlainWhat(item) {
+        const service = PSL.serviceParts(item.service, item.service_label).name;
         return el('div', {class: 'recap-what'}, [
             item.label ? el('p', {class: 'recap-label', text: item.label}) : null,
             el('p', {class: 'recap-plain', text: item.plain}),
             el('div', {class: 'recap-where'}, item.label || !item.endpoint
-                ? [document.createTextNode('in ' + item.service)]
-                : [document.createTextNode('in ' + item.service + ' · '),
+                ? [document.createTextNode('in ' + service)]
+                : [document.createTextNode('in ' + service + ' · '),
                     el('code', {class: 'code-inline', text: item.endpoint})])
+        ]);
+    }
+
+    /** The service by the name a team gave it, the technical one beside it, and the button that names it. */
+    function recapServiceHead(priority) {
+        const parts = PSL.serviceParts(priority.service, priority.service_label);
+        return el('span', {class: 'recap-service'}, [
+            el('span', {class: 'table-strong', text: parts.name}),
+            parts.code ? el('code', {class: 'code-inline', text: parts.code}) : null,
+            recapNameButton(recapNameTarget(priority, 'service'))
         ]);
     }
 
@@ -6614,7 +6626,7 @@
                     }),
                     document.createTextNode(' detections')
                 ]),
-                recapNameButton(priority)
+                recapNameButton(recapNameTarget(priority, 'endpoint'))
             ]));
         }
         kids.push(el('div', {class: 'recap-action'}, management
@@ -6655,28 +6667,68 @@
         });
     }
 
-    function recapNameButton(priority) {
+    /**
+     * What the inline editor names on a row: its endpoint, or its whole service. One key per target, so
+     * the two editors of a row never open together; a refusal lands on the row either way.
+     */
+    function recapNameTarget(priority, kind) {
+        if (kind === 'service') {
+            return {
+                key: 'service ' + priority.signature,
+                row: priority.signature,
+                label: priority.service_label,
+                subject: 'service ' + priority.service,
+                name: 'Name service',
+                rename: 'Rename service',
+                placeholder: 'Payment',
+                path: '/api/labels/services',
+                body: {service: priority.service}
+            };
+        }
+        return {
+            key: priority.signature,
+            row: priority.signature,
+            label: priority.label,
+            subject: priority.service + ' ' + priority.endpoint,
+            name: 'Name this',
+            rename: 'Rename',
+            placeholder: 'Showing a cart',
+            path: '/api/labels',
+            body: {service: priority.service, endpoint: priority.endpoint}
+        };
+    }
+
+    /** The target whose editor is open on this row, if any. */
+    function recapNamingTarget(priority) {
+        return ['endpoint', 'service'].map(function (kind) {
+            return recapNameTarget(priority, kind);
+        }).find(function (target) {
+            return target.key === state.recapNaming;
+        }) || null;
+    }
+
+    function recapNameButton(target) {
         const button = el('button', {
-            class: 'recap-link', type: 'button', text: priority.label ? 'Rename' : 'Name this',
-            'aria-label': (priority.label ? 'Rename ' : 'Name ') + priority.service + ' ' + priority.endpoint
+            class: 'recap-link', type: 'button', text: target.label ? target.rename : target.name,
+            'aria-label': (target.label ? 'Rename ' : 'Name ') + target.subject
         });
         button.addEventListener('click', function () {
-            state.recapNaming = state.recapNaming === priority.signature ? null : priority.signature;
+            state.recapNaming = state.recapNaming === target.key ? null : target.key;
             state.recapNameDraft = null;
             renderFocus('.recap-name-input');
         });
         return button;
     }
 
-    /** The business name of an endpoint, in a line of its own under the row. Enter saves, an empty name removes it. */
-    function recapNameEditor(priority) {
+    /** A business name, in a line of its own under the row. Enter saves, an empty name removes it. */
+    function recapNameEditor(target) {
         const input = el('input', {
             class: 'recap-input recap-name-input',
             type: 'text',
             maxlength: '80',
-            value: state.recapNameDraft !== null ? state.recapNameDraft : priority.label || '',
-            placeholder: 'Showing a cart',
-            'aria-label': 'Business name for ' + priority.service + ' ' + priority.endpoint,
+            value: state.recapNameDraft !== null ? state.recapNameDraft : target.label || '',
+            placeholder: target.placeholder,
+            'aria-label': 'Business name for ' + target.subject,
             spellcheck: 'false'
         });
         const save = el('button', {class: 'pill-button pill-sm', type: 'submit', text: 'Save'});
@@ -6689,21 +6741,21 @@
         const form = el('form', {class: 'recap-name'}, [input, save, cancel]);
         form.addEventListener('submit', function (event) {
             event.preventDefault();
-            recapNameSave(priority, input.value.trim() || null);
+            recapNameSave(target, input.value.trim() || null);
         });
         return form;
     }
 
-    function recapNameSave(priority, label) {
-        recapSend('PUT', '/api/labels', {service: priority.service, endpoint: priority.endpoint, label: label})
+    function recapNameSave(target, label) {
+        recapSend('PUT', target.path, Object.assign({}, target.body, {label: label}))
             .then(function (failure) {
                 if (failure) {
-                    state.recapRowError[priority.signature] = failure;
+                    state.recapRowError[target.row] = failure;
                     state.recapNameDraft = label === null ? '' : label;
                     render();
                     return;
                 }
-                delete state.recapRowError[priority.signature];
+                delete state.recapRowError[target.row];
                 state.recapNaming = null;
                 state.recapNameDraft = null;
                 loadRecap(true);
@@ -6714,9 +6766,10 @@
 
     /** The sentence in a line, led by the label when the endpoint has one. */
     function recapMoveWho(item) {
+        const service = PSL.serviceParts(item.service, item.service_label).name;
         const where = item.label || !item.endpoint
-            ? [document.createTextNode('In ' + item.service + '.')]
-            : [document.createTextNode('In ' + item.service + ', '), el('code', {
+            ? [document.createTextNode('In ' + service + '.')]
+            : [document.createTextNode('In ' + service + ', '), el('code', {
                 class: 'code-inline',
                 text: item.endpoint
             }),

@@ -17,12 +17,12 @@ public sealed class RecapMovesTests
     {
         return new RecapPriority(
             rank, "n_plus_one_sql", "warning", "svc", "plain", null, null, null, false, true, trend, null, null,
-            null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null);
     }
 
     private static RecapMove MoveRow()
     {
-        return new RecapMove("n_plus_one_sql", "svc", "plain", "up", null, null, null, null);
+        return new RecapMove("n_plus_one_sql", "svc", "plain", "up", null, null, null, null, null);
     }
 
     private static RecapMovements Moves(

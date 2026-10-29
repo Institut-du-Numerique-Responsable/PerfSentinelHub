@@ -528,4 +528,15 @@ internal static class Schema
                                 CREATE INDEX IF NOT EXISTS ix_recap_deliveries_due ON recap_deliveries(state, next_attempt_ms);
                                 CREATE INDEX IF NOT EXISTS ix_recap_deliveries_report ON recap_deliveries(report_id);
                                 """;
+
+    // What a person calls a service in business words, one name per service for the whole Hub. Like
+    // endpoint_labels, no foreign key ties it to a finding and retention never purges it.
+    internal const string V19 = """
+                                CREATE TABLE IF NOT EXISTS service_labels (
+                                  service TEXT NOT NULL PRIMARY KEY,
+                                  label TEXT NOT NULL,
+                                  set_by TEXT NOT NULL,
+                                  set_at_ms INTEGER NOT NULL
+                                );
+                                """;
 }

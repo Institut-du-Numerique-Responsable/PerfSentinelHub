@@ -116,7 +116,7 @@ scope, and the answer is built from in-scope copies only.
 | `analyses.run`  | Starting a run                                                                  |
 | `acks.write`    | Acknowledging a finding, or revoking an ack                                     |
 | `actions.write` | Declaring and changing an action on a finding                                   |
-| `labels.write`  | Naming an endpoint in business words                                            |
+| `labels.write`  | Naming an endpoint or a service in business words                               |
 | `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
 | `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
 | `recaps.read`   | Reading every recap report: the list, a report and its page (Hub level)         |
@@ -163,6 +163,7 @@ does not depend on the provider at all.
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`                 | `findings.read` and `acks.write` on the finding at that source  | `404`, `403`            |
 | `POST` and `PATCH /api/actions`                                        | `findings.read` and `actions.write` on one copy of the finding, and somebody to name | `404`, `403` |
 | `PUT /api/labels`                                                      | `findings.read` and `labels.write` on one copy of a finding at the endpoint, and somebody to name | `404`, `403` |
+| `PUT /api/labels/services`                                             | `findings.read` and `labels.write` on one copy of a finding of the service, and somebody to name | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` and the run's read rule, below                   | `403`                   |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | the run's read rule                                             | filtered; `404`         |
 | `GET /reports/{id}.html`                                               | the run's read rule                                             | `404`                   |
@@ -255,7 +256,8 @@ writable under `labels.write`. A caller who reads none gets the `404` an unknown
 one who reads some but may write none gets `403`. A caller holding `labels.write` nowhere is
 refused before the request body is read, and a caller the Hub cannot name is refused first of
 all. A label reaches no daemon: it is a name the whole Hub shares for the recap and the cards
-that quote it.
+that quote it. A service name, `PUT /api/labels/services`, is judged the same way on every copy
+of every finding of that service.
 
 ### Your access and Coverage
 

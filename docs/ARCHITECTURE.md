@@ -184,6 +184,7 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `finding_actions`              | signature, with its status and owner                           | never                                      |
 | `finding_action_events`        | status or owner change of an action                            | never                                      |
 | `endpoint_labels`              | service and endpoint, with its business name                   | never                                      |
+| `service_labels`               | service, with its business name                                | never                                      |
 | `incident_reads`, `ack_reads`  | source                                                         | never                                      |
 | `analysis_runs`                | run                                                            | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | terminal token, by the SHA-256 of its value                    | revocation, or retention past `expires_at_ms` |

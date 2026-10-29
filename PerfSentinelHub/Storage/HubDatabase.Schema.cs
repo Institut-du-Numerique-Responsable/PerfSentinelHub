@@ -78,7 +78,7 @@ public sealed partial class HubDatabase
                 migration.CommandText =
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
                     Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12 + Schema.V13 + Schema.V14 +
-                    Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18;
+                    Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18 + Schema.V19;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -100,7 +100,8 @@ public sealed partial class HubDatabase
                                              (7, $applied_at_ms), (8, $applied_at_ms), (9, $applied_at_ms),
                                              (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms),
                                              (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
-                                             (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms);
+                                             (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
+                                             (19, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",

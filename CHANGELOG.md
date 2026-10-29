@@ -16,7 +16,11 @@ All notable changes to PerfSentinelHub are recorded here.
   go with them: `actions.write` for the routes, carried by the built-in `member` role, and
   `recaps.read` for the recap reports, Hub level, carried by `admin`.
 - Endpoint labels: `PUT /api/labels` names an endpoint in business words, which titles its row
-  in the recap, with the `labels.write` permission.
+  in the recap, with the `labels.write` permission. `PUT /api/labels/services` names a whole
+  service once, so every unnamed step of it reads in business words (`in Payment`,
+  `An unnamed step in Payment`); the recap carries it as `service_label` beside `service`, and
+  the Engineering view names a service from its card. A label with a format character (U+202E
+  and the like) is refused.
 - `Hub:Recaps:MovementThreshold` (default `0.2`), the relative change past which a finding
   reads `up` or `down`.
 - Frozen recap reports. `Hub:Recaps:Subscriptions` freezes the last closed day, week or month

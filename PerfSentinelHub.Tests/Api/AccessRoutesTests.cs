@@ -139,6 +139,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("POST", "/api/actions")]
     [InlineData("PATCH", "/api/actions")]
     [InlineData("PUT", "/api/labels")]
+    [InlineData("PUT", "/api/labels/services")]
     [InlineData("GET", "/api/recap")]
     [InlineData("GET", "/api/recap/reports")]
     [InlineData("POST", "/api/recap/reports")]

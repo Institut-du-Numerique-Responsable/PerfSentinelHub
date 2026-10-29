@@ -293,6 +293,24 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_snapshot_carries_the_service_labels()
+    {
+        await SeedAsync("a", S, LastMon, service: "billing-svc");
+        await SeedAsync("a", T, Thu);
+        await SeedAsync("a", U, Thu, service: "bare-svc");
+        await _database.SetServiceLabelAsync("order-svc", "Ordering", "alice", Token);
+        await _database.SetServiceLabelAsync("billing-svc", "Paying", "alice", Token);
+
+        var snapshot = await RecapAsync();
+
+        Assert.Equal("Ordering", snapshot.Priorities.Single(priority => priority.Signature == T).ServiceLabel);
+        Assert.Null(snapshot.Priorities.Single(priority => priority.Signature == U).ServiceLabel);
+        var gone = Assert.Single(snapshot.Movements.Gone);
+        Assert.Equal("billing-svc", gone.Service);
+        Assert.Equal("Paying", gone.ServiceLabel);
+    }
+
+    [Fact]
     public async Task A_moving_priority_carries_its_label_into_the_movement()
     {
         await SeedAsync("a", S, Thu, endpoint: "GET /named");
@@ -470,12 +488,13 @@ public sealed class RecapServiceTests : IAsyncLifetime
         string signature,
         int day,
         string severity = "warning",
-        string endpoint = "GET /orders")
+        string endpoint = "GET /orders",
+        string service = "order-svc")
     {
         var configured = Sources.Single(item => item.Id == source);
         return _database.UpsertBatchAsync(
             new SourceSnapshot(source, configured.Name, configured.Environment, "0.37.1"),
-            FindingJson.Batch(FindingJson.Envelope(signature, severity: severity, endpoint: endpoint)),
+            FindingJson.Batch(FindingJson.Envelope(signature, service: service, severity: severity, endpoint: endpoint)),
             day * DayMs + 3_600_000, Token);
     }
 

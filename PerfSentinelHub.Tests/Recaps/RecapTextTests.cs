@@ -196,6 +196,10 @@ public sealed class RecapTextTests
             tech.Select(entry => entry.Text));
         Assert.Contains("\"Gone\" means it was not seen this period: probably fixed, but not proven.",
             pilotage.Select(entry => entry.Text));
+        Assert.EndsWith(" " + RecapText.NamingHelp, pilotage[5].Text, StringComparison.Ordinal);
+        Assert.Equal("A team can name its services and steps in the Hub, so this report speaks its language.",
+            RecapText.NamingHelp);
+        Assert.DoesNotContain(RecapText.NamingHelp, tech[5].Text, StringComparison.Ordinal);
         Assert.Equal("Avoidable I/O", tech[1].Term);
         Assert.Equal("Unnecessary operations", pilotage[1].Term);
     }

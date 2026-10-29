@@ -184,7 +184,8 @@ détection après le jour où une action a été marquée terminée la contredit
 retardataire ou un déploiement lent compris : marquez-la de nouveau terminée une fois le
 correctif réellement livré. Les actions et leurs événements ne sont jamais purgés, ni avec
 leur finding ni par la rétention, donc les tables ne font que grossir. Les libellés sont
-aussi communs à tout le Hub et jamais purgés.
+aussi communs à tout le Hub et jamais purgés : le nom d'un endpoint comme celui d'un service
+survit aux findings qu'il nommait.
 
 Un récap lit les findings en quatre lectures au plus : la période avec ses findings acquittés,
 la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente. Chaque

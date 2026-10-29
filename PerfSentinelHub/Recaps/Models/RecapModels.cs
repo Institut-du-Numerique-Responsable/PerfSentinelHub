@@ -6,7 +6,8 @@ namespace PerfSentinelHub.Recaps;
 // view the technical keys (signature, template, suggestion, suggested_fix, code_location,
 // confidence, events) are absent, not null, and so is endpoint, kept only on a priority or a move
 // with no label. RecapViews.Frozen, the view a frozen report and its webhook carry, drops it there
-// too. label is always there, null while nobody has named the endpoint.
+// too. label is always there, null while nobody has named the endpoint, and so is service_label for
+// the service, which no view drops: a receiver can still group by the technical service.
 
 public sealed record RecapSnapshot(
     int SchemaVersion,
@@ -70,6 +71,7 @@ public sealed record RecapPriority(
     string Trend,
     double? Change,
     string? Label,
+    string? ServiceLabel,
     RecapAction? Action,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Signature,
@@ -124,6 +126,7 @@ public sealed record RecapMove(
     string Trend,
     double? Change,
     string? Label,
+    string? ServiceLabel,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Signature,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

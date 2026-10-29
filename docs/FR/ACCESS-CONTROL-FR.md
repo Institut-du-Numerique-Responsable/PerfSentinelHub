@@ -126,7 +126,7 @@ seules copies dans le périmètre.
 | `analyses.run`  | Lancer un run                                                                          |
 | `acks.write`    | Acquitter un finding, ou révoquer un ack                                               |
 | `actions.write` | Déclarer et modifier une action sur un finding                                         |
-| `labels.write`  | Nommer un endpoint en mots du métier                                                   |
+| `labels.write`  | Nommer un endpoint ou un service en mots du métier                                     |
 | `disclosures.read` | L'onglet Disclosures, le détail de chaque divulgation et ses fichiers               |
 | `disclosures.manage` | Les liens de partage, les retraits, les relances de livraison et les rendus d'une divulgation |
 | `recaps.read`   | Lire tous les rapports de récap : la liste, un rapport et sa page (niveau Hub)         |
@@ -174,6 +174,7 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`                  | `findings.read` et `acks.write` sur le finding dans cette source   | `404`, `403`                |
 | `POST` et `PATCH /api/actions`                                         | `findings.read` et `actions.write` sur une copie du finding, et quelqu'un à nommer | `404`, `403` |
 | `PUT /api/labels`                                                      | `findings.read` et `labels.write` sur une copie d'un finding de l'endpoint, et quelqu'un à nommer | `404`, `403` |
+| `PUT /api/labels/services`                                             | `findings.read` et `labels.write` sur une copie d'un finding du service, et quelqu'un à nommer | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` et la règle de lecture du run, ci-dessous           | `403`                       |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | la règle de lecture du run                                         | filtré ; `404`              |
 | `GET /reports/{id}.html`                                               | la règle de lecture du run                                         | `404`                       |
@@ -274,7 +275,8 @@ reçoit le `404` d'un endpoint inconnu ; celui qui en lit mais n'en peut écrire
 `403`. Un appelant qui ne détient `labels.write` nulle part est refusé avant la lecture du
 corps de la requête, et un appelant que le Hub ne sait pas nommer l'est avant tout. Un
 libellé ne touche aucun démon : c'est un nom que tout le Hub partage, pour le recap et les
-cartes qui le citent.
+cartes qui le citent. Le nom d'un service, `PUT /api/labels/services`, se juge de la même façon
+sur chaque copie de chaque finding de ce service.
 
 ### Votre accès et Couverture
 

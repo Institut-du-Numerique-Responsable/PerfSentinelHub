@@ -74,6 +74,7 @@ public static partial class ApiEndpoints
         app.MapPatch("/api/actions", UpdateActionAsync);
         // Never anonymous: a label is set in somebody's name.
         app.MapPut("/api/labels", SetLabelAsync);
+        app.MapPut("/api/labels/services", SetServiceLabelAsync);
         // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
         app.MapGet("/api/recap", GetRecapAsync);
         // Never anonymous: a frozen report is read by who made it or by a recaps.read holder, and made in a name.

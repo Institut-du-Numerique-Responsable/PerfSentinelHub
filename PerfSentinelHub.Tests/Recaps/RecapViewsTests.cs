@@ -12,7 +12,7 @@ public sealed class RecapViewsTests
     private static RecapPriority Priority(int rank, string? label = "Showing a cart")
     {
         return new RecapPriority(
-            rank, "n_plus_one_sql", "warning", "svc", "plain", 3, 40, null, false, true, "flat", 0.0, label,
+            rank, "n_plus_one_sql", "warning", "svc", "plain", 3, 40, null, false, true, "flat", 0.0, label, null,
             new RecapAction("done", "ana", "Ana", 1, 2, "confirmed",
                 [new RecapActionEvent(null, "done", "ana", "Ana", "me", 2)]),
             $"sig-{rank}", "GET /x", "SELECT ?", "batch it", new RecapFix("do it", "ef", "https://e.x"),
@@ -21,7 +21,7 @@ public sealed class RecapViewsTests
 
     private static RecapMove Move(string? label = "Placing an order")
     {
-        return new RecapMove("n_plus_one_sql", "svc", "plain", "up", null, label, "sig-m", "GET /m");
+        return new RecapMove("n_plus_one_sql", "svc", "plain", "up", null, label, null, "sig-m", "GET /m");
     }
 
     private static RecapSnapshot Tech(int priorities)
@@ -89,6 +89,28 @@ public sealed class RecapViewsTests
         Assert.DoesNotContain("\"endpoint\"", json);
         Assert.DoesNotContain("GET /", json);
         Assert.Contains("\"label\":null", json);
+    }
+
+    [Fact]
+    public void Both_management_views_keep_the_service_beside_its_name()
+    {
+        var tech = Tech(1) with { Priorities = [Priority(1) with { ServiceLabel = "Payment" }] };
+        tech = tech with
+        {
+            Movements = tech.Movements with { Gone = [Move(null) with { ServiceLabel = "Payment" }] }
+        };
+
+        foreach (var view in new[] { RecapViews.Pilotage(tech), RecapViews.Frozen(tech) })
+        {
+            var json = JsonSerializer.Serialize(view, Wire);
+            Assert.Contains("\"service\":\"svc\",", json, StringComparison.Ordinal);
+            Assert.Contains("\"service_label\":\"Payment\"", json, StringComparison.Ordinal);
+            Assert.Equal("Payment", Assert.Single(view.Movements.Gone).ServiceLabel);
+        }
+
+        // Always there, null while nobody has named the service.
+        Assert.Contains("\"service_label\":null", JsonSerializer.Serialize(RecapViews.Frozen(Tech(1)), Wire),
+            StringComparison.Ordinal);
     }
 
     [Fact]

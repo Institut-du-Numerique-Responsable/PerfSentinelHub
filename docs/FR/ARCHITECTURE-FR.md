@@ -199,6 +199,7 @@ soit la source, et rien d'autre.
 | `finding_actions`              | signature, avec son statut et son responsable                        | jamais                                     |
 | `finding_action_events`        | changement de statut ou de responsable d'une action                  | jamais                                     |
 | `endpoint_labels`              | service et endpoint, avec son nom métier                             | jamais                                     |
+| `service_labels`               | service, avec son nom métier                                         | jamais                                     |
 | `incident_reads`, `ack_reads`  | source                                                               | jamais                                     |
 | `analysis_runs`                | run                                                                  | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | jeton de terminal, par le SHA-256 de sa valeur                       | révocation, ou rétention passé `expires_at_ms` |

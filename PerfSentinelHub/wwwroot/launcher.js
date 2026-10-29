@@ -2287,12 +2287,24 @@
                 + 'figure.',
             findings: 'Problems seen on this period that the team has not set aside.',
             actions: 'What the team said it would fix, and whether the measurements confirm it.',
-            prio: 'The problems that cost the most come first.',
+            prio: 'The problems that cost the most come first. A team can name its services and steps in the '
+                + 'Hub, so this report speaks its language.',
             moved: '"Gone" means it was not seen this period: probably fixed, but not proven.'
         }
     };
 
     const RECAP_PERIODS = ['day', 'week', 'month'];
+
+    /**
+     * A service as a row shows it: by the business name a team gave it, with the technical name
+     * beside it once named (Engineering), the name alone where a Management reader sees it.
+     * @param {string} service
+     * @param {string | null | undefined} serviceLabel
+     * @returns {{name: string, code: string | null}}
+     */
+    function serviceParts(service, serviceLabel) {
+        return serviceLabel ? {name: serviceLabel, code: service} : {name: service, code: null};
+    }
 
     /**
      * What a `#/recap?…` hash names. Anything it does not know reads as the default, and a filter
@@ -2787,6 +2799,7 @@
         ownerLabel,
         RECAP_LABELS,
         RECAP_HELP,
+        serviceParts,
         readRecapRoute,
         recapHash,
         recapPath,

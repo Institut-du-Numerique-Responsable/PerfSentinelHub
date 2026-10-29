@@ -633,7 +633,10 @@ and `truncated`.
   is detected after one, `awaiting` while no day is sealed yet. A source that is
   unreachable never confirms. The judgment stays within the filters of the request.
 - **Labels.** A priority and every movement item carry `label`, the business name someone gave
-  to the endpoint they come from (see [Endpoint labels](#endpoint-labels)), or `null`.
+  to the endpoint they come from (see [Endpoint labels](#endpoint-labels)), or `null`, and
+  `service_label`, the business name of their service, or `null`. Both keys are always there,
+  in every view, and `service` stays beside `service_label`, so a receiver can still group by
+  the technical service.
 - **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
   priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
   technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
@@ -726,7 +729,8 @@ filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
 inline scripts of the page, by hash. `pilotage` is the management projection of the stored
 snapshot, made when the page is served, with two cuts the live screen does not make. A row with no
 label shows no endpoint: its title reads "An unnamed step in" and the service, with "Name it in the
-Hub to see it here." under it. An action owner is the name a person reads (`Alice Martin` for
+Hub to see it here." under it. Wherever a management row names its service, it uses the service's
+business name when someone gave one (`An unnamed step in Payment`, `in Payment`). An action owner is the name a person reads (`Alice Martin` for
 `alice.martin@acme.com` or `Alice.Martin@Acme.com`, `Alice` for `Alice <alice@acme.com>`), and the
 identity behind it (an e-mail, a `local:` name, a subject) is in neither the text, a `title` nor the
 data island. An owner that leaves no name once the e-mail is gone shows no owner. The `tech` page
@@ -799,15 +803,22 @@ whole Hub, whichever source holds the findings, and the recap shows it as the ti
 One route writes it, with a JSON body, and it is never open: under `Hub:Auth` it needs a
 session.
 
-| Endpoint          | Body                                                      | Does                         |
-|-------------------|-----------------------------------------------------------|------------------------------|
-| `PUT /api/labels` | `{"service":"…","endpoint":"…","label":"Showing a cart"}` | Sets, replaces or removes it |
+| Endpoint                   | Body                                                      | Does                         |
+|----------------------------|-----------------------------------------------------------|------------------------------|
+| `PUT /api/labels`          | `{"service":"…","endpoint":"…","label":"Showing a cart"}` | Sets, replaces or removes it |
+| `PUT /api/labels/services` | `{"service":"…","label":"Payment"}`                       | Sets, replaces or removes it |
 
 - `service` and `endpoint` are the finding's own, 1 to 1024 characters with no control
   character, as they read in `/api/findings` (`endpoint` is its `source_endpoint`).
-- `label` is trimmed, then 1 to 80 characters with no control character. `null`, or a label
-  with nothing left once trimmed, removes it. A body without a `label` is a
+- `label` is trimmed, then 1 to 80 characters with no control character and no format
+  character (a direction override such as U+202E, a zero-width one). `null`, or a label with
+  nothing left once trimmed, removes it. A body without a `label` is a
   `400 {"detail":"A label needs a label value; send null to remove it."}`.
+- `PUT /api/labels/services` names a whole service, once for every step of it: the recap's
+  Management rows say `in Payment` rather than `in checkout-api`, and an unnamed step reads
+  `An unnamed step in Payment`. It takes `service` and `label` under the same rules, and is
+  judged on every copy of every finding of that service: `404 {"detail":"The Hub holds no
+  finding of this service."}` when the caller reads none.
 - The Hub judges the request like an action: the caller first (nobody to name is a `403`),
   then where it comes from (`403`, `415`), the permission, the body (`400`, or `413` over 8 KiB),
   the endpoint (`404` when the Hub holds no finding there that the caller reads, `403` when it
@@ -1150,6 +1161,9 @@ token or a machine token, and each answer covers what the caller's grants cover.
   there that the caller reads: none answers `404 {"detail":"The Hub holds no finding at this
   endpoint."}`, the answer an unknown endpoint gets, and when none of them is writable under
   `labels.write` the answer is `403 {"detail":"You can read this endpoint but not name it."}`. A
+  service name follows the same order on the copies of every finding of the service:
+  `403 {"detail":"You may not name services."}`, then `404 {"detail":"The Hub holds no finding
+  of this service."}` or `403 {"detail":"You can read this service but not name it."}`. A
   machine token holds neither permission.
 - **Analyses.** One rule decides who sees a run's row and opens its report: a daemon run
   needs `findings.read` and `sources.read` at the daemon as a whole; a trace-backend run

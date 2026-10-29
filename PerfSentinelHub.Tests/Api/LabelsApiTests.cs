@@ -17,6 +17,7 @@ public sealed class LabelsApiTests(HubApplicationFactory factory) : IClassFixtur
 {
     private const string Service = "order-svc";
     private const string Endpoint = "GET /orders";
+    internal const string ServicesPath = "/api/labels/services";
     private HttpClient _client = null!;
 
     private WebApplicationFactory<Program> _scoped = null!;
@@ -30,6 +31,7 @@ public sealed class LabelsApiTests(HubApplicationFactory factory) : IClassFixtur
         await LabelsAccessTests.SeedAsync(factory.Database, "access-off", Service, Endpoint);
         // The Hub is shared by the class, so each test starts with the endpoint unnamed.
         await factory.Database.SetEndpointLabelAsync(Service, Endpoint, null, "alice", Token);
+        await factory.Database.SetServiceLabelAsync(Service, null, "alice", Token);
     }
 
     public async ValueTask DisposeAsync()
@@ -90,6 +92,8 @@ public sealed class LabelsApiTests(HubApplicationFactory factory) : IClassFixtur
     [InlineData("""{"service":"order-svc","endpoint":"GET /orders","label":"EIGHTY"}""", 204)]
     [InlineData("""{"service":"order-svc","endpoint":"GET /orders","label":"EIGHTYONE"}""", 400)]
     [InlineData("""{"service":"order-svc","endpoint":"GET /orders","label":"Listing\u0007orders"}""", 400)]
+    // A right-to-left override, which would turn the name around where it is shown.
+    [InlineData("""{"service":"order-svc","endpoint":"GET /orders","label":"Listing\u202Eorders"}""", 400)]
     [InlineData("""{"service":"order-svc","endpoint":"GET /orders","label":7}""", 400)]
     [InlineData("""{"service":"order-svc","endpoint":"GET /orders"}""", 400)]
     [InlineData("""{"endpoint":"GET /orders","label":"Listing orders"}""", 400)]
@@ -128,9 +132,70 @@ public sealed class LabelsApiTests(HubApplicationFactory factory) : IClassFixtur
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
     }
 
-    private Task<HttpResponseMessage> SendAsync(string body, string? identity = "alice", string? site = null)
+    [Fact]
+    public async Task A_service_label_needs_an_identity()
     {
-        var request = new HttpRequestMessage(HttpMethod.Put, "/api/labels")
+        using var response = await SendAsync(ServiceBody(Service, "Ordering"), null, path: ServicesPath);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("The Hub does not know who is asking, and a label is set in somebody's name.",
+            await DetailAsync(response));
+    }
+
+    [Fact]
+    public async Task A_service_label_is_set_and_removed()
+    {
+        using var set = await SendAsync(ServiceBody(Service, "  Ordering  "), path: ServicesPath);
+        Assert.Equal(HttpStatusCode.NoContent, set.StatusCode);
+        Assert.Equal("Ordering", await ServiceLabelAsync(Service));
+
+        using var removed = await SendAsync(ServiceBody(Service, null), path: ServicesPath);
+        Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+        Assert.Null(await ServiceLabelAsync(Service));
+    }
+
+    [Fact]
+    public async Task A_service_the_hub_holds_no_finding_of_is_a_404()
+    {
+        using var response = await SendAsync(ServiceBody("nowhere-svc", "Nowhere"), path: ServicesPath);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("The Hub holds no finding of this service.", await DetailAsync(response));
+        Assert.Null(await ServiceLabelAsync("nowhere-svc"));
+    }
+
+    [Theory]
+    [InlineData("""{"service":"order-svc","label":"EIGHTYONE"}""")]
+    [InlineData("""{"service":"order-svc","label":"Order\u0007ing"}""")]
+    [InlineData("""{"service":"order-svc","label":"Order\u202Eing"}""")]
+    [InlineData("""{"label":"Ordering"}""")]
+    [InlineData("""{"service":"order-svc"}""")]
+    public async Task A_bad_service_label_is_a_400(string body)
+    {
+        body = body.Replace("EIGHTYONE", new string('x', 81), StringComparison.Ordinal);
+
+        using var response = await SendAsync(body, path: ServicesPath);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(await ServiceLabelAsync(Service));
+    }
+
+    [Fact]
+    public async Task A_cross_site_service_label_write_is_refused()
+    {
+        using var response = await SendAsync(ServiceBody(Service, "Ordering"), "alice", "cross-site", ServicesPath);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(await ServiceLabelAsync(Service));
+    }
+
+    private Task<HttpResponseMessage> SendAsync(
+        string body,
+        string? identity = "alice",
+        string? site = null,
+        string path = "/api/labels")
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, path)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
@@ -144,6 +209,16 @@ public sealed class LabelsApiTests(HubApplicationFactory factory) : IClassFixtur
     internal static string Body(string service, string endpoint, string? label)
     {
         return new JsonObject { ["service"] = service, ["endpoint"] = endpoint, ["label"] = label }.ToJsonString();
+    }
+
+    internal static string ServiceBody(string service, string? label)
+    {
+        return new JsonObject { ["service"] = service, ["label"] = label }.ToJsonString();
+    }
+
+    private async Task<string?> ServiceLabelAsync(string service)
+    {
+        return (await factory.Database.ReadServiceLabelsAsync([service], Token)).GetValueOrDefault(service);
     }
 
     private async Task<string?> LabelAsync(string service, string endpoint)
@@ -211,6 +286,36 @@ public sealed class LabelsAccessTests(HubApplicationFactory factory) : IClassFix
         Assert.Equal(expected == HttpStatusCode.NoContent ? 1 : 0, labels.Count);
         if (expected == HttpStatusCode.Forbidden)
             Assert.Equal("You may not name endpoints.",
+                JsonNode.Parse(await response.Content.ReadAsStringAsync(Token))!["detail"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("reader", HttpStatusCode.Forbidden)]
+    [InlineData("member", HttpStatusCode.NoContent)]
+    public async Task A_service_label_needs_labels_write_on_a_source_holding_the_service(
+        string user,
+        HttpStatusCode expected)
+    {
+        // One service per case: the Hub is shared by the class and a name outlives its test.
+        var service = $"{Service}-{user}";
+        await SeedAsync(factory.Database, $"service-{user}", service, Endpoint);
+        await using var provider = await FakeProvider.StartAsync(Users);
+        await using var hub = Hub(provider);
+        using var client = FakeProvider.Client(hub);
+        using var callback = await FakeProvider.SignInAsync(client, user);
+        using var request = new HttpRequestMessage(HttpMethod.Put, LabelsApiTests.ServicesPath);
+        request.Headers.Add("Cookie", FakeProvider.SessionCookie(callback));
+        request.Headers.Add("Sec-Fetch-Site", "same-origin");
+        request.Content = new StringContent(LabelsApiTests.ServiceBody(service, "Basket"), Encoding.UTF8,
+            "application/json");
+
+        using var response = await client.SendAsync(request, Token);
+
+        Assert.Equal(expected, response.StatusCode);
+        var labels = await factory.Database.ReadServiceLabelsAsync([service], Token);
+        Assert.Equal(expected == HttpStatusCode.NoContent ? 1 : 0, labels.Count);
+        if (expected == HttpStatusCode.Forbidden)
+            Assert.Equal("You may not name services.",
                 JsonNode.Parse(await response.Content.ReadAsStringAsync(Token))!["detail"]!.GetValue<string>());
     }
 

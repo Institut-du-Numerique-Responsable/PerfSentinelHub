@@ -298,25 +298,33 @@ public static class RecapReportRenderer
         if (priority.Label is not null)
             html.Append("<p class=\"label\">").Append(E(priority.Label)).Append("</p>");
         html.Append("<div class=\"head\"><span class=\"chip\">").Append(E(RecapText.Type(priority.FindingType)))
-            .Append("</span><span class=\"strong\">").Append(E(priority.Service))
-            .Append("</span><span class=\"endpoint\">").Append(E(priority.Endpoint ?? "")).Append("</span></div>");
+            .Append(SpanEnd).Append(ServiceHead(priority.Service, priority.ServiceLabel))
+            .Append("<span class=\"endpoint\">").Append(E(priority.Endpoint ?? "")).Append("</span></div>");
         if (priority.Suggestion is not null)
             html.Append("<p class=\"suggest\">").Append(RecapText.Prose(priority.Suggestion)).Append("</p>");
         html.Append(DivEndLine);
     }
 
+    // The service by its business name, the technical one beside it once someone named it.
+    private static string ServiceHead(string service, string? label)
+    {
+        var head = "<span class=\"strong\">" + E(label ?? service) + SpanEnd;
+        return label is null ? head : head + "<code class=\"code-inline\">" + E(service) + "</code>";
+    }
+
     // The label when someone named the endpoint, else a neutral title: a report never shows the endpoint.
     private static void PriorityPilotage(StringBuilder html, RecapPriority priority)
     {
+        var service = priority.ServiceLabel ?? priority.Service;
         html.Append("<div class=\"what\">");
         if (priority.Label is not null)
             html.Append("<p class=\"label\">").Append(E(priority.Label)).Append("</p>");
         else
-            html.Append("<p class=\"label\">").Append(E(Unnamed(priority.Service))).Append("</p><div class=\"where\">")
+            html.Append("<p class=\"label\">").Append(E(Unnamed(service))).Append("</p><div class=\"where\">")
                 .Append(NameIt).Append(DivEnd);
         html.Append("<p class=\"plain\">").Append(E(priority.Plain)).Append("</p>");
         if (priority.Label is not null)
-            html.Append("<div class=\"where\">in ").Append(E(priority.Service)).Append(DivEnd);
+            html.Append("<div class=\"where\">in ").Append(E(service)).Append(DivEnd);
         html.Append(DivEndLine);
     }
 
@@ -539,9 +547,10 @@ public static class RecapReportRenderer
 
     private static void MoveWho(StringBuilder html, RecapMove item)
     {
-        html.Append("<span class=\"plain\"><b>").Append(E((item.Label ?? Unnamed(item.Service)) + ". ")).Append("</b>")
+        var service = item.ServiceLabel ?? item.Service;
+        html.Append("<span class=\"plain\"><b>").Append(E((item.Label ?? Unnamed(service)) + ". ")).Append("</b>")
             .Append(E(item.Plain)).Append("</span><span class=\"where\">")
-            .Append(item.Label is null ? NameIt : "In " + E(item.Service) + ".").Append(SpanEnd);
+            .Append(item.Label is null ? NameIt : "In " + E(service) + ".").Append(SpanEnd);
     }
 
     // ---- the closing sections
