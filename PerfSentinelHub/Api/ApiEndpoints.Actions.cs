@@ -71,17 +71,32 @@ public static partial class ApiEndpoints
 
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var outcome = create
-            ? await database.CreateActionAsync(
-                write.Signature,
-                write.Take ? ActionStatuses.InProgress : write.Status!,
-                write.Take ? identity : write.Owner,
-                write.Take ? request.HttpContext.User.FindFirstValue(AccessCaller.DisplayNameClaim) : null,
-                identity,
-                nowMs,
-                cancellationToken)
+            ? await FileActionAsync(database, write, identity, request, nowMs, cancellationToken)
             : await database.UpdateActionAsync(
                 write.Signature, write.Status, write.Owner, write.OwnerSet, identity, nowMs, cancellationToken);
         return await ActionAnswerAsync(outcome, create, write.Signature, database, request, cancellationToken);
+    }
+
+    // A take files the action in progress, in the caller's name and with the name the SSO gave them.
+    private static Task<ActionWriteOutcome> FileActionAsync(
+        HubDatabase database,
+        ActionWrite write,
+        string identity,
+        HttpRequest request,
+        long nowMs,
+        CancellationToken cancellationToken)
+    {
+        if (!write.Take)
+            return database.CreateActionAsync(
+                write.Signature, write.Status!, write.Owner, null, identity, nowMs, cancellationToken);
+        return database.CreateActionAsync(
+            write.Signature,
+            ActionStatuses.InProgress,
+            identity,
+            request.HttpContext.User.FindFirstValue(AccessCaller.DisplayNameClaim),
+            identity,
+            nowMs,
+            cancellationToken);
     }
 
     // The action is global to the signature, so it is judged on every copy the caller reads and

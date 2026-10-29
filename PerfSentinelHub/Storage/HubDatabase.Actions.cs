@@ -65,9 +65,8 @@ public sealed partial class HubDatabase
             if (await insert.ExecuteNonQueryAsync(cancellationToken) == 0)
                 return ActionWriteOutcome.Exists;
 
-            await InsertActionEventAsync(connection, transaction, signature, null, status, owner, ownerDisplay, by,
-                nowMs,
-                cancellationToken);
+            await InsertActionEventAsync(connection, transaction, signature,
+                new StoredActionEvent(null, status, owner, ownerDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return ActionWriteOutcome.Written;
         }
@@ -143,8 +142,8 @@ public sealed partial class HubDatabase
                 await update.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await InsertActionEventAsync(connection, transaction, signature, currentStatus, newStatus, newOwner,
-                newDisplay, by, nowMs, cancellationToken);
+            await InsertActionEventAsync(connection, transaction, signature,
+                new StoredActionEvent(currentStatus, newStatus, newOwner, newDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return ActionWriteOutcome.Written;
         }
@@ -180,8 +179,22 @@ public sealed partial class HubDatabase
             rows.Add((reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3), reader.GetString(4), reader.GetInt64(5),
                 reader.GetInt64(6), reader.IsDBNull(7) ? null : reader.GetInt64(7)));
-        var events = new Dictionary<string, List<StoredActionEvent>>(StringComparer.Ordinal);
         await reader.NextResultAsync(cancellationToken);
+        var events = await ReadActionEventsAsync(reader, cancellationToken);
+
+        return
+        [
+            .. rows.Select(row => new StoredAction(row.Signature, row.Status, row.Owner, row.Display, row.By,
+                row.Created, row.Updated, row.Done, events.GetValueOrDefault(row.Signature) ?? []))
+        ];
+    }
+
+    // The events result set, grouped by signature in the order the select gives.
+    private static async Task<Dictionary<string, List<StoredActionEvent>>> ReadActionEventsAsync(
+        SqliteDataReader reader,
+        CancellationToken cancellationToken)
+    {
+        var events = new Dictionary<string, List<StoredActionEvent>>(StringComparer.Ordinal);
         while (await reader.ReadAsync(cancellationToken))
         {
             var signature = reader.GetString(0);
@@ -196,35 +209,26 @@ public sealed partial class HubDatabase
                 reader.GetInt64(6)));
         }
 
-        return
-        [
-            .. rows.Select(row => new StoredAction(row.Signature, row.Status, row.Owner, row.Display, row.By,
-                row.Created, row.Updated, row.Done, events.GetValueOrDefault(row.Signature) ?? []))
-        ];
+        return events;
     }
 
     private static async Task InsertActionEventAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         string signature,
-        string? fromStatus,
-        string toStatus,
-        string? owner,
-        string? ownerDisplay,
-        string by,
-        long nowMs,
+        StoredActionEvent change,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = ActionEventInsert;
         command.Parameters.AddWithValue(SignatureParameter, signature);
-        command.Parameters.AddWithValue("$from_status", (object?)fromStatus ?? DBNull.Value);
-        command.Parameters.AddWithValue("$to_status", toStatus);
-        command.Parameters.AddWithValue("$owner", (object?)owner ?? DBNull.Value);
-        command.Parameters.AddWithValue("$owner_display", (object?)ownerDisplay ?? DBNull.Value);
-        command.Parameters.AddWithValue("$by", by);
-        command.Parameters.AddWithValue("$at_ms", nowMs);
+        command.Parameters.AddWithValue("$from_status", (object?)change.FromStatus ?? DBNull.Value);
+        command.Parameters.AddWithValue("$to_status", change.ToStatus);
+        command.Parameters.AddWithValue("$owner", (object?)change.Owner ?? DBNull.Value);
+        command.Parameters.AddWithValue("$owner_display", (object?)change.OwnerDisplay ?? DBNull.Value);
+        command.Parameters.AddWithValue("$by", change.By);
+        command.Parameters.AddWithValue("$at_ms", change.AtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
