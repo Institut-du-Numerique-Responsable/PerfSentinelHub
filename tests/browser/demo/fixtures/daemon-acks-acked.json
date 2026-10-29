@@ -4,8 +4,8 @@
     "signature": "n_plus_one_http:order-svc:POST__api_orders_42_submit:cd80e7e97cf84255958943efe281962e",
     "by": "cache-guild@example.com",
     "reason": "Known, the read-through cache lands in front of it.",
-    "at": "2026-10-23T22:33:42.084135Z",
-    "expires_at": "2027-10-23T22:33:42Z",
+    "at": "2026-10-29T08:12:26.594268Z",
+    "expires_at": "2027-10-29T08:12:26Z",
     "source": "daemon"
   },
   {
@@ -13,7 +13,7 @@
     "signature": "n_plus_one_sql:order-svc:POST__api_orders_42_submit:c69d2f3ae7f5c6cdb2c6762367852ec7",
     "by": "order-oncall@example.com",
     "reason": "Known since the incident, the batched query ships with the order service.",
-    "at": "2026-10-23T22:33:42.091356Z",
+    "at": "2026-10-29T08:12:26.600085Z",
     "source": "daemon"
   }
 ]

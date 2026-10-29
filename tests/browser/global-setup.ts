@@ -196,9 +196,8 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
             .map((id) => `/api/sources/${id}/daemon`),
         // What the ack page reads first, spelled the way the launcher spells it, so the Ack
         // link of an unfolded incident lands on a page with something on it rather
-        // than on an embed that has no answer for the route. Its second, windowed read has
-        // from and to taken from the clock, a URL no exact-key capture can record: the embed
-        // answers it 404, and the card shows the line for a failed windowed read.
+        // than on an embed that has no answer for the route. Its second, windowed read is
+        // recorded below.
         `/api/findings?signature=${encodeURIComponent(ackSignature())}&include_acked=true&limit=1`,
         incidents,
         "/api/correlations",
@@ -208,6 +207,14 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
         ...disclosures.flatMap((id) => [`/api/disclosures/${id}`, `/api/disclosures/${id}/files/report.json`]),
     ]);
     await readAll((routes[incidents] as { id: string }[]).map((incident) => `/api/incidents/${incident.id}`));
+    // The ack card's windowed read takes from and to off the clock, so no exact URL can
+    // key it. It is read over the launcher's own seven UTC days and recorded under
+    // window=7d, which the embed answers for any from and to of that read.
+    const day = 86_400_000;
+    const signature = encodeURIComponent(ackSignature());
+    const [, windowed] = await read(`/api/findings?signature=${signature}`
+        + `&from=${(Math.floor(capturedAt / day) - 6) * day}&to=${capturedAt}&limit=1`);
+    routes[`/api/findings?signature=${signature}&window=7d&limit=1`] = windowed;
 
     writeFileSync(join(__dirname, "demo", "fixtures", "hub-embed.json"),
         JSON.stringify({epoch_ms: EPOCH_MS, routes}, null, 2) + "\n");
@@ -236,8 +243,13 @@ function localPasswordHash(): string {
 // seen under two groupings is what a conflict is: a signature first seen under team=shop
 // then under team=payments, another seen under team=shop then under no grouping at all.
 async function pushGroupedFindings(importKey: string): Promise<void> {
-    const findings = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-findings.json"), "utf8")) as
-        { finding: Record<string, unknown> }[];
+    const captured = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-findings.json"), "utf8")) as
+        { finding: Record<string, unknown>, stored_at_ms: number, first_seen_ms: number }[];
+    // The Hub dates last_seen by stored_at_ms, so the captured stamps slide to now as
+    // fake-daemon.js slides them, or the findings would sit past the retention.
+    const delta = Date.now() - 120_000 - Math.max(...captured.map((f) => f.stored_at_ms));
+    const findings = captured.map((f) =>
+        ({...f, stored_at_ms: f.stored_at_ms + delta, first_seen_ms: f.first_seen_ms + delta}));
     const {version} = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-status-busy.json"), "utf8")) as
         { version: string };
     const grouped = (envelope: { finding: Record<string, unknown> }, team?: string) =>
