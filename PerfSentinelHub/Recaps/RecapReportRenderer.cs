@@ -80,7 +80,7 @@ public static class RecapReportRenderer
         var local = text.StartsWith("local:", StringComparison.OrdinalIgnoreCase);
         if (!local && !text.Contains('@'))
             return text;
-        var words = (local ? text["local:".Length..] : text).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var words = (local ? text["local:".Length..] : text).Split([' ', '<'], StringSplitOptions.RemoveEmptyEntries);
         var kept = words.Where(word => !word.Contains('@')).ToList();
         if (words.Length > 1 && kept.Count > 0)
             return string.Join(' ', kept);

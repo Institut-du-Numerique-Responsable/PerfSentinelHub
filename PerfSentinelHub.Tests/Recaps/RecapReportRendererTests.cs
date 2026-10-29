@@ -208,6 +208,7 @@ public sealed partial class RecapReportRendererTests
     [Theory]
     [InlineData("Alice.Martin@Acme.com", null, "Alice Martin")]
     [InlineData("Alice <alice.martin@acme.com>", null, "Alice")]
+    [InlineData("Alice<alice.martin@acme.com>", null, "Alice")]
     [InlineData("alice.martin@acme.com", "alice.martin@acme.com", "Alice Martin")]
     [InlineData("local:Alice", null, "Alice")]
     public void The_management_report_never_shows_an_identity_however_the_owner_is_spelled(
