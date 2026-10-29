@@ -30,10 +30,12 @@ TRACES="$(dirname "$ENGINE")/../../tests/fixtures/demo.json"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+# Expanded when the trap fires, so it stops whichever daemon runs at that point.
+stop_daemon='kill $daemon 2>/dev/null || true; rm -rf "$work"'
 
 "$ENGINE" watch --listen-port-http "$PORT" --listen-port-grpc $((PORT + 1)) > "$work/daemon.log" 2>&1 &
 daemon=$!
-trap 'kill $daemon 2>/dev/null || true; rm -rf "$work"' EXIT
+trap "$stop_daemon" EXIT
 
 # Read over the loopback from Python rather than curl. check-supply-chain.py
 # treats any curl or wget in a .sh as a supply-chain download and holds it to the
@@ -166,7 +168,7 @@ n_plus_one_min_occurrences = 5
 EOF
 "$ENGINE" watch --config "$work/incidents.toml" > "$work/incidents-daemon.log" 2>&1 &
 daemon=$!
-trap 'kill $daemon 2>/dev/null || true; rm -rf "$work"' EXIT
+trap "$stop_daemon" EXIT
 
 python3 - "$INC_PORT" "$INC_KEY" "$work" <<'CAPTURE'
 import json, socket, sys, time, urllib.error, urllib.request
@@ -318,7 +320,7 @@ api_enabled = true
 EOF
 "$ENGINE" watch --config "$work/ledger.toml" > "$work/ledger-daemon.log" 2>&1 &
 daemon=$!
-trap 'kill $daemon 2>/dev/null || true; rm -rf "$work"' EXIT
+trap "$stop_daemon" EXIT
 
 python3 - "$LEDGER_PORT" "$work" "$TRACES" "$OUT" <<'LEDGER'
 import json, pathlib, socket, sys, time, urllib.error, urllib.request
@@ -416,7 +418,7 @@ ${ack_toml}
 EOF
   "$ENGINE" watch --config "$work/ack-$round.toml" > "$work/ack-$round.log" 2>&1 &
   daemon=$!
-  trap 'kill $daemon 2>/dev/null || true; rm -rf "$work"' EXIT
+  trap "$stop_daemon" EXIT
 
   python3 - "$ack_port" "$ACK_KEY" "$round" "$work" <<'ACKS'
 import json, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
