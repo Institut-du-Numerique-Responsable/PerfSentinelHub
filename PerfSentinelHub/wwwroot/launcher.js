@@ -1525,14 +1525,31 @@
         multi_instance: 'several instances behind one source'
     };
 
+    /** The same reasons in a Management reader's words, as RecapText's twin. */
+    const GAP_LABEL_PILOTAGE = {
+        uncovered_days: 'days with no data',
+        open_day: 'a day not finished yet',
+        restart: 'a restart of the measuring tool',
+        sampling: 'only part of the traffic was looked at',
+        shed: 'some activity was dropped under load',
+        ingest_rejected: 'some data was refused',
+        overflow: 'too many problems to count them all',
+        multi_instance: 'several copies of one service'
+    };
+
     /**
      * Why a detection count falls short, in a few words. A reason a newer
-     * engine adds is returned as it was sent.
+     * engine adds is returned as it was sent, or as a plain stand-in for Management.
      * @param {string} reason
+     * @param {string} [view] `pilotage` for the Management words
      * @returns {string}
      */
-    function gapLabel(reason) {
-        return Object.prototype.hasOwnProperty.call(GAP_LABEL, reason) ? GAP_LABEL[reason] : reason;
+    function gapLabel(reason, view) {
+        const own = Object.prototype.hasOwnProperty;
+        if (view === 'pilotage') {
+            return own.call(GAP_LABEL_PILOTAGE, reason) ? GAP_LABEL_PILOTAGE[reason] : 'another measurement gap';
+        }
+        return own.call(GAP_LABEL, reason) ? GAP_LABEL[reason] : reason;
     }
 
     /**
@@ -2346,6 +2363,69 @@
         return kind + ' ' + periodText(report.period) + ' · ' + origin + (report.complete ? '' : ' · incomplete');
     }
 
+    /** The fixed copy of the Reports section, pinned with the Management words test. */
+    const RECAP_REPORTS_COPY = {
+        title: 'Reports',
+        hint: 'frozen when written',
+        help: 'A report is a copy of a closed period that no later read changes. A subscription writes one when '
+            + 'its period ends; Generate a report freezes the period and filters above, in your name, '
+            + 'and sends it nowhere.',
+        generate: 'Generate a report',
+        generating: 'Generating\u2026',
+        none: 'No report yet.',
+        failed: 'The Hub did not return the reports.'
+    };
+
+    /**
+     * What Generate a report would freeze for a route.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @returns {string}
+     */
+    function recapFreezeText(route) {
+        return 'Freezes ' + (route.at ? 'the ' + route.period + ' that holds ' + route.at : 'the last closed ' + route.period)
+            + (route.environment || route.service || route.grouping ? ', with the filters above' : '') + '.';
+    }
+
+    /**
+     * Why the recap did not load. Management gets no permission name and no daemon.
+     * @param {number} status
+     * @param {string} view
+     * @returns {string}
+     */
+    function recapErrorText(status, view) {
+        const management = view === 'pilotage';
+        if (status === 403) {
+            return management
+                ? 'The Hub did not let you read the recap: your access does not include it.'
+                : 'The Hub did not let you read the recap: your access holds no findings.read.';
+        }
+        if (status === 400) return 'The Hub could not read a recap for this period or these filters.';
+        return management
+            ? 'The Hub did not return the recap.'
+            : 'The Hub did not return the recap. This is the Hub itself, not any daemon.';
+    }
+
+    /**
+     * The note under a ranking the Hub cut at 5,000, as RecapText.Truncated.
+     * @param {string} view
+     * @returns {string}
+     */
+    function recapTruncatedText(view) {
+        return 'The Hub read the first 5,000 ' + (view === 'pilotage' ? 'problems' : 'findings')
+            + ' and stopped there. Narrow the filters to see the others.';
+    }
+
+    /**
+     * The sources that sent no detection volume, as RecapText.SourcesWithoutVolume.
+     * @param {string[]} sources
+     * @param {string} view
+     * @returns {string}
+     */
+    function recapSourcesNote(sources, view) {
+        return (view === 'pilotage' ? 'No figures came from: ' : 'Sources without a detection volume: ')
+            + sources.join(', ') + '.';
+    }
+
     /**
      * Why a report went nowhere, or an empty string when it went somewhere.
      * @param {{subscription: string | null, nothing_moved: boolean, deliveries: unknown[]}} report
@@ -2394,13 +2474,15 @@
      * @param {number | null} grams
      * @param {number} sourcesWithoutCoefficient
      * @param {string | null | undefined} missingReason `no_coefficient` or `no_avoidable_io`
+     * @param {string} [view] `pilotage` says only that there is no figure
      * @returns {{lead: string, figure: string, unit: string}}
      */
-    function co2Parts(grams, sourcesWithoutCoefficient, missingReason) {
+    function co2Parts(grams, sourcesWithoutCoefficient, missingReason, view) {
         if (grams === null || grams === undefined) {
             return {
                 lead: '', figure: '—',
-                unit: missingReason === 'no_avoidable_io' ? 'no avoidable I/O' : 'no coefficient from the engine'
+                unit: view === 'pilotage' ? 'not available'
+                    : missingReason === 'no_avoidable_io' ? 'no avoidable I/O' : 'no coefficient from the engine'
             };
         }
         // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".
@@ -2420,16 +2502,28 @@
      * @param {number | null} grams
      * @param {number} sourcesWithoutCoefficient
      * @param {string | null | undefined} missingReason
+     * @param {string} [view]
      * @returns {string}
      */
-    function co2Text(grams, sourcesWithoutCoefficient, missingReason) {
-        const parts = co2Parts(grams, sourcesWithoutCoefficient, missingReason);
+    function co2Text(grams, sourcesWithoutCoefficient, missingReason, view) {
+        const parts = co2Parts(grams, sourcesWithoutCoefficient, missingReason, view);
         if (grams === null || grams === undefined) return parts.figure + ' ' + parts.unit;
         return (parts.lead ? parts.lead + ' ' : '') + parts.figure + ' ' + parts.unit + ', estimate'
-            + (sourcesWithoutCoefficient > 0
-                ? ', ' + sourcesWithoutCoefficient + (sourcesWithoutCoefficient === 1 ? ' source' : ' sources')
-                + ' without a coefficient'
-                : '');
+            + co2Tail(sourcesWithoutCoefficient, view);
+    }
+
+    /**
+     * What a partial carbon figure leaves out, after a comma, or nothing when it is whole.
+     * @param {number} sourcesWithoutCoefficient
+     * @param {string} [view]
+     * @returns {string}
+     */
+    function co2Tail(sourcesWithoutCoefficient, view) {
+        if (!(sourcesWithoutCoefficient > 0)) return '';
+        return view === 'pilotage'
+            ? ', part of the activity has no CO2 estimate'
+            : ', ' + sourcesWithoutCoefficient + (sourcesWithoutCoefficient === 1 ? ' source' : ' sources')
+            + ' without a coefficient';
     }
 
     /**
@@ -2472,18 +2566,20 @@
      * What the engine's check of a `done` action says, in words. A state a newer Hub adds is
      * left out rather than guessed at.
      * @param {string | null | undefined} state
+     * @param {string} [view] `pilotage` for the Management words
      * @returns {string}
      */
-    function confirmationLabel(state) {
+    function confirmationLabel(state, view) {
+        const management = view === 'pilotage';
         switch (state) {
             case 'confirmed':
-                return 'Confirmed by the engine';
+                return management ? 'Confirmed by the measurements' : 'Confirmed by the engine';
             case 'contradicted':
                 return 'Still detected';
             case 'came_back':
                 return 'Came back';
             case 'awaiting':
-                return 'Waiting for a sealed day';
+                return management ? 'Waiting for a full day of measurements' : 'Waiting for a sealed day';
             default:
                 return '';
         }
@@ -2501,22 +2597,26 @@
 
     /**
      * @param {string[] | null | undefined} reasons
+     * @param {string} [view]
      * @returns {string}
      */
-    function incompleteText(reasons) {
-        return reasons && reasons.length ? 'Incomplete: ' + reasons.map(gapLabel).join(', ') : '';
+    function incompleteText(reasons, view) {
+        return reasons && reasons.length ? 'Incomplete: ' + reasons.map(function (reason) {
+            return gapLabel(reason, view);
+        }).join(', ') : '';
     }
 
     /**
      * @param {string[] | null | undefined} notes
      * @param {number | null | undefined} samplingRate
+     * @param {string} [view]
      * @returns {string}
      */
-    function notesText(notes, samplingRate) {
+    function notesText(notes, samplingRate, view) {
         if (!notes || !notes.length) return '';
         const hasRate = samplingRate !== null && samplingRate !== undefined;
         return 'Note: ' + notes.map(function (note) {
-            return gapLabel(note) + (note === 'sampling' && hasRate ? ' (rate ' + samplingRate + ')' : '');
+            return gapLabel(note, view) + (note === 'sampling' && hasRate ? ' (rate ' + samplingRate + ')' : '');
         }).join(', ');
     }
 
@@ -2690,11 +2790,17 @@
         recapHash,
         recapPath,
         recapReportLabel,
+        RECAP_REPORTS_COPY,
+        recapFreezeText,
+        recapErrorText,
+        recapTruncatedText,
+        recapSourcesNote,
         recapReportStatus,
         recapDeliveryText,
         recapOnDemandBody,
         co2Parts,
         co2Text,
+        co2Tail,
         trendText,
         hasAvoidableVolume,
         dividesBefore,

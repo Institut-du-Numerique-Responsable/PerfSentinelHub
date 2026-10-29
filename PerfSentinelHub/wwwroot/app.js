@@ -6091,7 +6091,7 @@
             recapFilterLine(route)
         ]);
         if (state.recapError !== null) {
-            section.appendChild(recapErrorBanner(state.recapError));
+            section.appendChild(recapErrorBanner(state.recapError, route.view));
             return section;
         }
         if (state.recap === null) {
@@ -6107,12 +6107,8 @@
         return section;
     }
 
-    function recapErrorBanner(status) {
-        const sentence = status === 403
-            ? 'The Hub did not let you read the recap: your access holds no findings.read.'
-            : status === 400
-                ? 'The Hub could not read a recap for this period or these filters.'
-                : 'The Hub did not return the recap. This is the Hub itself, not any daemon.';
+    function recapErrorBanner(status, view) {
+        const sentence = PSL.recapErrorText(status, view);
         return el('div', {class: 'banner', 'data-tone': 'crit', role: 'alert'}, [critGlyph(16), el('div', {text: sentence})]);
     }
 
@@ -6197,9 +6193,10 @@
     function recapPeriodBlock(snapshot) {
         const period = snapshot.period;
         const previous = snapshot.previous;
-        const previousNotes = PSL.notesText(previous.notes, previous.sampling_rate);
-        const reasons = [PSL.incompleteText(period.incomplete)];
-        const previousReasons = PSL.incompleteText(previous.incomplete);
+        const view = snapshot.view;
+        const previousNotes = PSL.notesText(previous.notes, previous.sampling_rate, view);
+        const reasons = [PSL.incompleteText(period.incomplete, view)];
+        const previousReasons = PSL.incompleteText(previous.incomplete, view);
         if (previousReasons) reasons.push('previous period ' + previousReasons.charAt(0).toLowerCase() + previousReasons.slice(1));
         const block = el('div', {class: 'recap-period-block'}, [
             el('div', {class: 'recap-period'}, [
@@ -6208,7 +6205,7 @@
                 el('span', {class: 'recap-period-prev', text: 'compared with ' + PSL.periodText(previous)}),
                 helpDot(recapHelp(snapshot, 'period'), 'the period')
             ]),
-            recapNotes(PSL.notesText(period.notes, period.sampling_rate)),
+            recapNotes(PSL.notesText(period.notes, period.sampling_rate, view)),
             recapNotes(previousNotes ? 'Previous period. ' + previousNotes : '')
         ]);
         if (reasons.some(Boolean)) {
@@ -6248,30 +6245,23 @@
         return value === null || value === undefined ? null : value.toLocaleString('en-US');
     }
 
-    function recapSourcesText(count) {
-        return count + (count === 1 ? ' source' : ' sources') + ' without a coefficient';
-    }
-
     function recapCo2Tile(snapshot) {
         const tiles = snapshot.tiles;
         const without = tiles.co2_sources_without_coefficient;
-        const co2 = PSL.co2Parts(tiles.co2_grams, without, tiles.co2_missing_reason);
+        const co2 = PSL.co2Parts(tiles.co2_grams, without, tiles.co2_missing_reason, snapshot.view);
         const known = tiles.co2_grams !== null && tiles.co2_grams !== undefined;
         const previous = tiles.previous_co2_grams === null || tiles.previous_co2_grams === undefined
             ? null : PSL.co2Parts(tiles.previous_co2_grams, 0, null).figure;
         // The full sentence stays on the figure for a reader the small print does not reach.
         const value = el('span', {
-            class: 'disc-figure-value', title: PSL.co2Text(tiles.co2_grams, without, tiles.co2_missing_reason)
+            class: 'disc-figure-value', title: PSL.co2Text(tiles.co2_grams, without, tiles.co2_missing_reason, snapshot.view)
         }, [
             co2.lead ? el('small', {text: co2.lead}) : null,
             document.createTextNode(co2.figure),
-            el('span', {
-                class: 'disc-figure-unit',
-                text: !known && snapshot.view === 'pilotage' ? 'not available' : co2.unit
-            })
+            el('span', {class: 'disc-figure-unit', text: co2.unit})
         ]);
         return recapTile('CO2 estimate', recapProgressChip(snapshot), value, [
-            known ? 'order of magnitude' + (without ? ', ' + recapSourcesText(without) : '') : '',
+            known ? 'order of magnitude' + PSL.co2Tail(without, snapshot.view) : '',
             previous ? recapPreviousText(snapshot, previous) : ''
         ], recapHelp(snapshot, 'co2'), 'the CO2 estimate');
     }
@@ -6355,10 +6345,7 @@
             }));
         }
         if (snapshot.truncated) {
-            section.appendChild(el('p', {
-                class: 'sources-note',
-                text: 'The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.'
-            }));
+            section.appendChild(el('p', {class: 'sources-note', text: PSL.recapTruncatedText(snapshot.view)}));
         }
     }
 
@@ -6544,7 +6531,7 @@
             return [recapStateChip(action.status === 'todo' ? 'none' : 'in_progress',
                 action.status === 'todo' ? 'To do' : 'In progress'), recapOwner(action), recapWhen(action)];
         }
-        const confirmation = PSL.confirmationLabel(action.confirmation);
+        const confirmation = PSL.confirmationLabel(action.confirmation, 'pilotage');
         return [recapStateChip(confirmation ? action.confirmation : 'none',
             confirmation ? 'Done, ' + confirmation.toLowerCase() : 'Done'), recapOwner(action), recapWhen(action)];
     }
@@ -6749,8 +6736,7 @@
         }
         if (snapshot.sources_without_volume.length) {
             section.appendChild(el('p', {
-                class: 'sources-note',
-                text: 'Sources without a detection volume: ' + snapshot.sources_without_volume.join(', ') + '.'
+                class: 'sources-note', text: PSL.recapSourcesNote(snapshot.sources_without_volume, snapshot.view)
             }));
         }
         return section;
@@ -6778,19 +6764,17 @@
         if (reports === null) return null;
         const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-reports'}, [
             ruledOverline('// reports'),
-            recapHeading('recap-h-reports', 'Reports', 'frozen when written',
-                'A report is a copy of a closed period that no later read changes. A subscription writes one when '
-                + 'its period ends; Generate a report freezes the period and filters above, in your name, '
-                + 'and sends it nowhere.', 'reports'),
+            recapHeading('recap-h-reports', PSL.RECAP_REPORTS_COPY.title, PSL.RECAP_REPORTS_COPY.hint,
+                PSL.RECAP_REPORTS_COPY.help, 'reports'),
             recapGenerateBar(route)
         ]);
         if (state.recapGenerateError) {
             section.appendChild(el('p', {class: 'recap-alert recap-alert-wide', role: 'alert', text: state.recapGenerateError}));
         }
         if (reports === 'error') {
-            section.appendChild(el('p', {class: 'sources-note', text: 'The Hub did not return the reports.'}));
+            section.appendChild(el('p', {class: 'sources-note', text: PSL.RECAP_REPORTS_COPY.failed}));
         } else if (reports.length === 0) {
-            section.appendChild(el('p', {class: 'recap-more', text: 'No report yet.'}));
+            section.appendChild(el('p', {class: 'recap-more', text: PSL.RECAP_REPORTS_COPY.none}));
         } else {
             section.appendChild(el('ul', {class: 'recap-list'}, reports.map(recapReportRow)));
         }
@@ -6800,17 +6784,13 @@
     function recapGenerateBar(route) {
         const button = el('button', {
             class: 'pill-button pill-sm recap-generate-button', type: 'button', disabled: state.recapGenerating ? 'disabled' : null,
-            text: state.recapGenerating ? 'Generating…' : 'Generate a report'
+            text: state.recapGenerating ? PSL.RECAP_REPORTS_COPY.generating : PSL.RECAP_REPORTS_COPY.generate
         });
         button.addEventListener('click', function () {
             recapGenerate(route);
         });
         return el('div', {class: 'recap-generate'}, [
-            el('span', {
-                class: 'recap-more',
-                text: 'Freezes ' + (route.at ? 'the ' + route.period + ' that holds ' + route.at : 'the last closed ' + route.period)
-                    + (route.environment || route.service || route.grouping ? ', with the filters above' : '') + '.'
-            }),
+            el('span', {class: 'recap-more', text: PSL.recapFreezeText(route)}),
             button
         ]);
     }

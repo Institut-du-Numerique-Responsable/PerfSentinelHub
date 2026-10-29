@@ -1691,8 +1691,88 @@ test("Management_labels_carry_no_technical_word", () => {
         {io: "Unnecessary operations", findings: "Open problems", moved: "What changed"});
 });
 
+// The engine's words a Management reader must not meet, as RecapSentencesTests.TechnicalWords.
+const TECHNICAL = /quer(y|ies)|database|endpoint|broker|pool|connection|sql|http|I\/O|finding|signature|engine|daemon|ledger|coefficient|trace|ingest|sampl|source/i;
+const GAP_REASONS = ["uncovered_days", "open_day", "restart", "sampling", "shed", "ingest_rejected", "overflow",
+    "multi_instance"];
+
+test("Management_text_matches_the_launcher_helpers", () => {
+    assert.deepEqual(GAP_REASONS.concat("brand_new").map((reason) => PSL.gapLabel(reason, "pilotage")), [
+        "days with no data", "a day not finished yet", "a restart of the measuring tool",
+        "only part of the traffic was looked at", "some activity was dropped under load", "some data was refused",
+        "too many problems to count them all", "several copies of one service", "another measurement gap"
+    ]);
+    assert.equal(PSL.gapLabel("brand_new"), "brand_new");
+    assert.equal(PSL.incompleteText(["open_day", "x"], "pilotage"),
+        "Incomplete: a day not finished yet, another measurement gap");
+    assert.equal(PSL.incompleteText(["open_day", "x"], "tech"), "Incomplete: a day still open, x");
+    assert.equal(PSL.notesText(["sampling", "shed"], 0.5, "pilotage"),
+        "Note: only part of the traffic was looked at (rate 0.5), some activity was dropped under load");
+    assert.equal(PSL.co2Text(2000, 1, null, "pilotage"),
+        "at least ~2 kg CO2e, estimate, part of the activity has no CO2 estimate");
+    assert.equal(PSL.co2Text(0.4, 2, null, "pilotage"), "< 1 g CO2e, estimate, part of the activity has no CO2 estimate");
+    assert.equal(PSL.co2Text(300, 0, null, "pilotage"), "~300 g CO2e, estimate");
+    assert.equal(PSL.co2Text(null, 0, "no_coefficient", "pilotage"), "\u2014 not available");
+    assert.equal(PSL.co2Text(null, 0, "no_avoidable_io", "pilotage"), "\u2014 not available");
+    assert.deepEqual(PSL.co2Parts(null, 0, "no_coefficient", "pilotage"), {lead: "", figure: "\u2014", unit: "not available"});
+    assert.equal(PSL.co2Tail(1, "pilotage"), ", part of the activity has no CO2 estimate");
+    assert.equal(PSL.co2Tail(2, "tech"), ", 2 sources without a coefficient");
+    assert.equal(PSL.co2Tail(1, "tech"), ", 1 source without a coefficient");
+    assert.equal(PSL.co2Tail(0, "pilotage"), "");
+    assert.equal(PSL.confirmationLabel("confirmed", "pilotage"), "Confirmed by the measurements");
+    assert.equal(PSL.confirmationLabel("contradicted", "pilotage"), "Still detected");
+    assert.equal(PSL.confirmationLabel("came_back", "pilotage"), "Came back");
+    assert.equal(PSL.confirmationLabel("awaiting", "pilotage"), "Waiting for a full day of measurements");
+    assert.equal(PSL.confirmationLabel("later", "pilotage"), "");
+    assert.equal(PSL.confirmationLabel("confirmed", "tech"), "Confirmed by the engine");
+    assert.equal(PSL.recapTruncatedText("pilotage"),
+        "The Hub read the first 5,000 problems and stopped there. Narrow the filters to see the others.");
+    assert.equal(PSL.recapTruncatedText("tech"),
+        "The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.");
+    assert.equal(PSL.recapSourcesNote(["a", "b"], "pilotage"), "No figures came from: a, b.");
+    assert.equal(PSL.recapSourcesNote(["a", "b"], "tech"), "Sources without a detection volume: a, b.");
+});
+
+test("Management_copy_carries_no_technical_word", () => {
+    const route = PSL.readRecapRoute("#/recap?period=month&at=2026-10-02&service=checkout&view=pilotage");
+    const report = {subscription: null, created_by: "alice", nothing_moved: false, complete: false,
+        period: {kind: "week", from: "2026-10-19", to: "2026-10-25"}, deliveries: []};
+    const texts = [
+        ...GAP_REASONS.concat("brand_new").map((reason) => PSL.gapLabel(reason, "pilotage")),
+        PSL.incompleteText(GAP_REASONS, "pilotage"),
+        PSL.notesText(GAP_REASONS, 0.5, "pilotage"),
+        PSL.co2Text(2000, 3, null, "pilotage"),
+        PSL.co2Text(null, 0, "no_coefficient", "pilotage"),
+        PSL.co2Text(null, 0, "no_avoidable_io", "pilotage"),
+        ...["confirmed", "contradicted", "came_back", "awaiting"].map((state) => PSL.confirmationLabel(state, "pilotage")),
+        PSL.recapTruncatedText("pilotage"),
+        PSL.recapSourcesNote(["svc-quiet"], "pilotage"),
+        ...[403, 400, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
+        ...Object.values(PSL.RECAP_LABELS.pilotage),
+        ...Object.values(PSL.RECAP_HELP.pilotage),
+        ...Object.values(PSL.RECAP_REPORTS_COPY),
+        PSL.recapFreezeText(route),
+        PSL.recapFreezeText(PSL.readRecapRoute("#/recap")),
+        PSL.recapReportLabel(report),
+        PSL.recapReportLabel({...report, subscription: "weekly-shop"}),
+        PSL.recapReportStatus(report),
+        PSL.recapReportStatus({...report, subscription: "weekly-shop", nothing_moved: true}),
+        PSL.recapReportStatus({...report, subscription: "weekly-shop"}),
+        PSL.recapDeliveryText({channel: "webhook", target: "ops-chat", state: "delivered", attempts: 1, last_status: 204}),
+        PSL.recapDeliveryText({channel: "email", target: "pm@acme.test", state: "failed", attempts: 8, last_status: null})
+    ];
+    for (const text of texts) {
+        assert.ok(text, "every text is set");
+        assert.doesNotMatch(text, TECHNICAL);
+    }
+    assert.equal(PSL.recapFreezeText(route), "Freezes the month that holds 2026-10-02, with the filters above.");
+    assert.equal(PSL.recapFreezeText(PSL.readRecapRoute("#/recap")), "Freezes the last closed week.");
+    assert.match(PSL.recapErrorText(403, "tech"), /findings\.read/);
+    assert.match(PSL.recapErrorText(500, "tech"), /not any daemon/);
+});
+
 test("Management_help_carries_no_technical_word", () => {
-    const technical = /I\/O|finding|quer(y|ies)|endpoint|signature|daemon|ledger|coefficient/i;
+    const technical = TECHNICAL;
     const keys = ["period", "io", "co2", "findings", "actions", "prio", "moved"];
     assert.deepEqual(Object.keys(PSL.RECAP_HELP.tech), keys);
     assert.deepEqual(Object.keys(PSL.RECAP_HELP.pilotage), keys);

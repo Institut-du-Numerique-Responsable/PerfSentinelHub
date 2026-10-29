@@ -84,8 +84,8 @@ public static class RecapReportRenderer
             .Append("<p class=\"period\"><span class=\"period-main\">").Append(E(RecapText.Period(period)))
             .Append("</span><span class=\"period-tz\">UTC</span><span class=\"period-prev\">compared with ")
             .Append(E(RecapText.Period(previous))).Append("</span></p>\n");
-        Note(html, RecapText.Notes(period.Notes, period.SamplingRate));
-        var previousNotes = RecapText.Notes(previous.Notes, previous.SamplingRate);
+        Note(html, RecapText.Notes(period.Notes, period.SamplingRate, snapshot.View));
+        var previousNotes = RecapText.Notes(previous.Notes, previous.SamplingRate, snapshot.View);
         Note(html, previousNotes.Length > 0 ? "Previous period. " + previousNotes : "");
         Note(html, Scope(snapshot));
         Incomplete(html, snapshot);
@@ -120,8 +120,8 @@ public static class RecapReportRenderer
 
     private static void Incomplete(StringBuilder html, RecapSnapshot snapshot)
     {
-        var reasons = new List<string> { RecapText.Incomplete(snapshot.Period.Incomplete) };
-        var previous = RecapText.Incomplete(snapshot.Previous.Incomplete);
+        var reasons = new List<string> { RecapText.Incomplete(snapshot.Period.Incomplete, snapshot.View) };
+        var previous = RecapText.Incomplete(snapshot.Previous.Incomplete, snapshot.View);
         if (previous.Length > 0)
             reasons.Add("previous period " + char.ToLowerInvariant(previous[0]) + previous[1..]);
         reasons.RemoveAll(reason => reason.Length == 0);
@@ -162,20 +162,15 @@ public static class RecapReportRenderer
     {
         var tiles = snapshot.Tiles;
         var without = tiles.Co2SourcesWithoutCoefficient;
-        var (lead, figure, unit) = RecapText.Co2Parts(tiles.Co2Grams, without, tiles.Co2MissingReason);
+        var (lead, figure, unit) = RecapText.Co2Parts(tiles.Co2Grams, without, tiles.Co2MissingReason, snapshot.View);
         var known = tiles.Co2Grams is not null;
-        var value = (lead.Length > 0 ? "<small>" + E(lead) + "</small>" : "") + E(figure) +
-                    Unit(!known && snapshot.View == "pilotage" ? "not available" : unit);
+        var value = (lead.Length > 0 ? "<small>" + E(lead) + "</small>" : "") + E(figure) + Unit(unit);
         var previous = tiles.PreviousCo2Grams is { } grams ? RecapText.Co2Parts(grams, 0, null).Figure : null;
         Tile(html, "CO2 estimate", snapshot.Period.InProgress, value,
         [
-            known
-                ? "order of magnitude" + (without > 0
-                    ? ", " + without + (without == 1 ? " source" : " sources") + " without a coefficient"
-                    : "")
-                : "",
+            known ? "order of magnitude" + RecapText.Co2Tail(without, snapshot.View) : "",
             previous is null ? "" : PreviousText(snapshot, previous)
-        ], valueIsHtml: true, title: RecapText.Co2(tiles.Co2Grams, without, tiles.Co2MissingReason));
+        ], valueIsHtml: true, title: RecapText.Co2(tiles.Co2Grams, without, tiles.Co2MissingReason, snapshot.View));
     }
 
     private static void Tile(
@@ -245,8 +240,7 @@ public static class RecapReportRenderer
             html.Append("<p class=\"more-note\">").Append(snapshot.MorePriorities.ToString(CultureInfo.InvariantCulture))
                 .Append(" more in the engineering view.</p>\n");
         if (snapshot.Truncated)
-            html.Append("<p class=\"sources-note\">The Hub read the first 5,000 findings and stopped there. ")
-                .Append("Narrow the filters to see the others.</p>\n");
+            html.Append("<p class=\"sources-note\">").Append(E(RecapText.Truncated(snapshot.View))).Append("</p>\n");
         html.Append("</section>\n");
     }
 
@@ -283,7 +277,8 @@ public static class RecapReportRenderer
             if (!management)
                 html.Append("<span class=\"facts\"><b>").Append(Detections(priority.Detections))
                     .Append("</b> detections</span>");
-            html.Append("<div class=\"action\">").Append(ActionHtml(priority.Action)).Append("</div></div></li>\n");
+            html.Append("<div class=\"action\">").Append(ActionHtml(priority.Action, snapshot.View))
+                .Append("</div></div></li>\n");
         }
 
         html.Append("</ol>\n");
@@ -437,7 +432,7 @@ public static class RecapReportRenderer
     }
 
     // An action, read only: a report cannot change it.
-    private static string ActionHtml(RecapAction? action)
+    private static string ActionHtml(RecapAction? action, string view)
     {
         if (action is null)
             return State("none", "Not taken yet");
@@ -446,7 +441,7 @@ public static class RecapReportRenderer
         {
             "todo" => State("none", "To do"),
             "in_progress" => State("in_progress", "In progress"),
-            _ => DoneState(action.Confirmation)
+            _ => DoneState(action.Confirmation, view)
         };
         var done = action.Status == "done" && action.DoneAtMs is not null;
         return chip +
@@ -458,9 +453,9 @@ public static class RecapReportRenderer
                TimeTag(done ? action.DoneAtMs!.Value : action.UpdatedAtMs) + "</span>";
     }
 
-    private static string DoneState(string? confirmation)
+    private static string DoneState(string? confirmation, string view)
     {
-        var label = RecapText.Confirmation(confirmation);
+        var label = RecapText.Confirmation(confirmation, view);
         return label.Length > 0 ? State(confirmation!, "Done, " + label.ToLowerInvariant()) : State("none", "Done");
     }
 
@@ -499,8 +494,8 @@ public static class RecapReportRenderer
         }
 
         if (snapshot.SourcesWithoutVolume.Count > 0)
-            html.Append("<p class=\"sources-note\">Sources without a detection volume: ")
-                .Append(E(string.Join(", ", snapshot.SourcesWithoutVolume))).Append(".</p>\n");
+            html.Append("<p class=\"sources-note\">")
+                .Append(E(RecapText.SourcesWithoutVolume(snapshot.SourcesWithoutVolume, snapshot.View))).Append("</p>\n");
         html.Append("</section>\n");
     }
 

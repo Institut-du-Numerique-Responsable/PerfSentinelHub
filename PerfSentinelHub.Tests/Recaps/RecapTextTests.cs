@@ -81,6 +81,56 @@ public sealed class RecapTextTests
         Assert.Equal("brand_new", RecapText.Gap("brand_new"));
     }
 
+    [Theory]
+    [InlineData("uncovered_days", "days with no data")]
+    [InlineData("open_day", "a day not finished yet")]
+    [InlineData("restart", "a restart of the measuring tool")]
+    [InlineData("sampling", "only part of the traffic was looked at")]
+    [InlineData("shed", "some activity was dropped under load")]
+    [InlineData("ingest_rejected", "some data was refused")]
+    [InlineData("overflow", "too many problems to count them all")]
+    [InlineData("multi_instance", "several copies of one service")]
+    [InlineData("brand_new", "another measurement gap")]
+    public void Management_gaps_match_the_launcher(string reason, string expected)
+    {
+        Assert.Equal(expected, RecapText.Gap(reason, "pilotage"));
+    }
+
+    [Fact]
+    public void Management_text_matches_the_launcher_helpers()
+    {
+        Assert.Equal("Incomplete: a day not finished yet, another measurement gap",
+            RecapText.Incomplete(["open_day", "x"], "pilotage"));
+        Assert.Equal("Note: only part of the traffic was looked at (rate 0.5), some activity was dropped under load",
+            RecapText.Notes(["sampling", "shed"], 0.5, "pilotage"));
+        Assert.Equal("at least ~2 kg CO2e, estimate, part of the activity has no CO2 estimate",
+            RecapText.Co2(2000, 1, null, "pilotage"));
+        Assert.Equal("< 1 g CO2e, estimate, part of the activity has no CO2 estimate",
+            RecapText.Co2(0.4, 2, null, "pilotage"));
+        Assert.Equal("~300 g CO2e, estimate", RecapText.Co2(300, 0, null, "pilotage"));
+        Assert.Equal("— not available", RecapText.Co2(null, 0, "no_coefficient", "pilotage"));
+        Assert.Equal("— not available", RecapText.Co2(null, 0, "no_avoidable_io", "pilotage"));
+        Assert.Equal(("", "—", "not available"), RecapText.Co2Parts(null, 0, "no_coefficient", "pilotage"));
+        Assert.Equal(", part of the activity has no CO2 estimate", RecapText.Co2Tail(1, "pilotage"));
+        Assert.Equal(", 2 sources without a coefficient", RecapText.Co2Tail(2, "tech"));
+        Assert.Equal(", 1 source without a coefficient", RecapText.Co2Tail(1, "tech"));
+        Assert.Equal("", RecapText.Co2Tail(0, "pilotage"));
+        Assert.Equal("Confirmed by the measurements", RecapText.Confirmation("confirmed", "pilotage"));
+        Assert.Equal("Still detected", RecapText.Confirmation("contradicted", "pilotage"));
+        Assert.Equal("Came back", RecapText.Confirmation("came_back", "pilotage"));
+        Assert.Equal("Waiting for a full day of measurements", RecapText.Confirmation("awaiting", "pilotage"));
+        Assert.Equal("", RecapText.Confirmation("later", "pilotage"));
+        Assert.Equal("The Hub read the first 5,000 problems and stopped there. Narrow the filters to see the others.",
+            RecapText.Truncated("pilotage"));
+        Assert.Equal("The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.",
+            RecapText.Truncated("tech"));
+        Assert.Equal("No figures came from: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "pilotage"));
+        Assert.Equal("Sources without a detection volume: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "tech"));
+        // The Engineering view keeps the engine's words.
+        Assert.Equal("Incomplete: a day still open, x", RecapText.Incomplete(["open_day", "x"], "tech"));
+        Assert.Equal("Confirmed by the engine", RecapText.Confirmation("confirmed", "tech"));
+    }
+
     [Fact]
     public void Finding_types_match_the_launcher()
     {

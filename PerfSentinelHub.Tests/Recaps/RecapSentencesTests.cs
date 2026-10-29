@@ -7,6 +7,25 @@ public sealed class RecapSentencesTests
 {
     private const string Unknown = "blocking_wait";
 
+    /// <summary>
+    ///     The engine's words a Management reader must not meet. "service" is left out: a service's name
+    ///     is a value the Management view shows, and the plain sentences add it below.
+    /// </summary>
+    internal static readonly string[] TechnicalWords =
+    [
+        "query", "database", "endpoint", "broker", "pool", "connection", "sql", "http", "i/o", "finding",
+        "signature", "engine", "daemon", "ledger", "coefficient", "trace", "ingest", "sampl", "source"
+    ];
+
+    internal static readonly string[] Reasons =
+        ["uncovered_days", "open_day", "restart", "sampling", "shed", "ingest_rejected", "overflow", "multi_instance"];
+
+    internal static void AssertPlain(string text)
+    {
+        foreach (var word in TechnicalWords)
+            Assert.DoesNotContain(word, text.ToLowerInvariant());
+    }
+
     public static TheoryData<string> AllTypes()
     {
         return [.. FindingLabels.Types, Unknown];
@@ -34,8 +53,25 @@ public sealed class RecapSentencesTests
     {
         var sentence = RecapSentences.For(type).ToLowerInvariant();
 
-        foreach (var word in new[]
-                     { "query", "database", "service", "endpoint", "broker", "pool", "connection", "sql", "http" })
-            Assert.DoesNotContain(word, sentence);
+        AssertPlain(sentence);
+        Assert.DoesNotContain("service", sentence);
+    }
+
+    [Fact]
+    public void No_management_text_uses_technical_words()
+    {
+        foreach (var reason in Reasons.Append("brand_new"))
+            AssertPlain(RecapText.Gap(reason, "pilotage"));
+        AssertPlain(RecapText.Incomplete([.. Reasons], "pilotage"));
+        AssertPlain(RecapText.Notes([.. Reasons], 0.5, "pilotage"));
+        AssertPlain(RecapText.Co2(2000, 3, null, "pilotage"));
+        AssertPlain(RecapText.Co2(null, 0, "no_coefficient", "pilotage"));
+        AssertPlain(RecapText.Co2(null, 0, "no_avoidable_io", "pilotage"));
+        foreach (var state in new[] { "confirmed", "contradicted", "came_back", "awaiting" })
+            AssertPlain(RecapText.Confirmation(state, "pilotage"));
+        AssertPlain(RecapText.Truncated("pilotage"));
+        AssertPlain(RecapText.SourcesWithoutVolume(["svc-quiet"], "pilotage"));
+        foreach (var (term, text) in RecapText.Help("pilotage"))
+            AssertPlain(term + " " + text);
     }
 }

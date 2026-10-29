@@ -25,6 +25,19 @@ public static class RecapText
         ["multi_instance"] = "several instances behind one source"
     };
 
+    // GAP_LABEL_PILOTAGE: the same reasons in a Management reader's words.
+    private static readonly Dictionary<string, string> PilotageGapLabels = new(StringComparer.Ordinal)
+    {
+        ["uncovered_days"] = "days with no data",
+        ["open_day"] = "a day not finished yet",
+        ["restart"] = "a restart of the measuring tool",
+        ["sampling"] = "only part of the traffic was looked at",
+        ["shed"] = "some activity was dropped under load",
+        ["ingest_rejected"] = "some data was refused",
+        ["overflow"] = "too many problems to count them all",
+        ["multi_instance"] = "several copies of one service"
+    };
+
     private static readonly Dictionary<string, string> TypeLabels = new(StringComparer.Ordinal)
     {
         ["n_plus_one_sql"] = "N+1 SQL",
@@ -49,10 +62,11 @@ public static class RecapText
 
     /// <summary>The carbon estimate in three pieces, as <c>co2Parts</c> returns them.</summary>
     public static (string Lead, string Figure, string Unit) Co2Parts(
-        double? grams, int sourcesWithoutCoefficient, string? missingReason)
+        double? grams, int sourcesWithoutCoefficient, string? missingReason, string view = "tech")
     {
         if (grams is not { } value)
-            return ("", "—", missingReason == "no_avoidable_io" ? "no avoidable I/O" : "no coefficient from the engine");
+            return ("", "—", view == "pilotage" ? "not available"
+                : missingReason == "no_avoidable_io" ? "no avoidable I/O" : "no coefficient from the engine");
         // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".
         if (value is > 0 and < 1)
             return ("", "< 1 g", "CO2e");
@@ -65,16 +79,24 @@ public static class RecapText
         return (sourcesWithoutCoefficient > 0 ? "at least" : "", "~" + number + (kilos ? " kg" : " g"), "CO2e");
     }
 
-    public static string Co2(double? grams, int sourcesWithoutCoefficient, string? missingReason)
+    public static string Co2(double? grams, int sourcesWithoutCoefficient, string? missingReason, string view = "tech")
     {
-        var (lead, figure, unit) = Co2Parts(grams, sourcesWithoutCoefficient, missingReason);
+        var (lead, figure, unit) = Co2Parts(grams, sourcesWithoutCoefficient, missingReason, view);
         if (grams is null)
             return figure + " " + unit;
         return (lead.Length > 0 ? lead + " " : "") + figure + " " + unit + ", estimate" +
-               (sourcesWithoutCoefficient > 0
-                   ? ", " + sourcesWithoutCoefficient + (sourcesWithoutCoefficient == 1 ? " source" : " sources") +
-                     " without a coefficient"
-                   : "");
+               Co2Tail(sourcesWithoutCoefficient, view);
+    }
+
+    /// <summary>What a partial carbon figure leaves out, after a comma, or nothing when it is whole.</summary>
+    public static string Co2Tail(int sourcesWithoutCoefficient, string view)
+    {
+        if (sourcesWithoutCoefficient <= 0)
+            return "";
+        return view == "pilotage"
+            ? ", part of the activity has no CO2 estimate"
+            : ", " + sourcesWithoutCoefficient + (sourcesWithoutCoefficient == 1 ? " source" : " sources") +
+              " without a coefficient";
     }
 
     public static string Trend(string trend, double? change)
@@ -95,16 +117,29 @@ public static class RecapText
         return (value > 0 ? "+" : "") + percent.ToString(CultureInfo.InvariantCulture) + "%";
     }
 
-    public static string Confirmation(string? state)
+    public static string Confirmation(string? state, string view = "tech")
     {
+        var pilotage = view == "pilotage";
         return state switch
         {
-            "confirmed" => "Confirmed by the engine",
+            "confirmed" => pilotage ? "Confirmed by the measurements" : "Confirmed by the engine",
             "contradicted" => "Still detected",
             "came_back" => "Came back",
-            "awaiting" => "Waiting for a sealed day",
+            "awaiting" => pilotage ? "Waiting for a full day of measurements" : "Waiting for a sealed day",
             _ => ""
         };
+    }
+
+    public static string Truncated(string view)
+    {
+        return "The Hub read the first 5,000 " + (view == "pilotage" ? "problems" : "findings") +
+               " and stopped there. Narrow the filters to see the others.";
+    }
+
+    public static string SourcesWithoutVolume(IReadOnlyList<string> sources, string view)
+    {
+        return (view == "pilotage" ? "No figures came from: " : "Sources without a detection volume: ") +
+               string.Join(", ", sources) + ".";
     }
 
     public static string Period(RecapPeriodInfo period)
@@ -113,23 +148,26 @@ public static class RecapText
         return days + (period.InProgress ? ", in progress" : "");
     }
 
-    public static string Incomplete(IReadOnlyList<string> reasons)
+    public static string Incomplete(IReadOnlyList<string> reasons, string view = "tech")
     {
-        return reasons.Count > 0 ? "Incomplete: " + string.Join(", ", reasons.Select(Gap)) : "";
+        return reasons.Count > 0 ? "Incomplete: " + string.Join(", ", reasons.Select(reason => Gap(reason, view))) : "";
     }
 
-    public static string Notes(IReadOnlyList<string> notes, double? samplingRate)
+    public static string Notes(IReadOnlyList<string> notes, double? samplingRate, string view = "tech")
     {
         if (notes.Count == 0)
             return "";
         return "Note: " + string.Join(", ", notes.Select(note =>
-            Gap(note) + (note == "sampling" && samplingRate is { } rate
+            Gap(note, view) + (note == "sampling" && samplingRate is { } rate
                 ? " (rate " + rate.ToString(CultureInfo.InvariantCulture) + ")"
                 : "")));
     }
 
-    public static string Gap(string reason)
+    /// <summary>A gap in words. Engineering gets a reason a newer engine adds as it was sent, Management a plain stand-in.</summary>
+    public static string Gap(string reason, string view = "tech")
     {
+        if (view == "pilotage")
+            return PilotageGapLabels.TryGetValue(reason, out var plain) ? plain : "another measurement gap";
         return GapLabels.TryGetValue(reason, out var label) ? label : reason;
     }
 

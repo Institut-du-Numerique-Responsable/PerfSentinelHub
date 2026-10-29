@@ -215,11 +215,57 @@ public sealed partial class RecapReportRendererTests
     [Fact]
     public void The_management_report_uses_no_technical_word()
     {
-        var visible = Visible(Management()).ToLowerInvariant();
+        var html = Html(RecapViews.Frozen(Everything()));
 
-        foreach (var word in new[]
-                     { "query", "database", "endpoint", "broker", "pool", "connection", "sql", "http", "i/o", "finding" })
-            Assert.DoesNotContain(word, visible);
+        RecapSentencesTests.AssertPlain(Visible(html));
+        foreach (Match title in Regex.Matches(html, "title=\"([^\"]*)\""))
+            RecapSentencesTests.AssertPlain(WebUtility.HtmlDecode(title.Groups[1].Value));
+        var visible = Visible(html);
+        Assert.Contains("Done, confirmed by the measurements", visible, StringComparison.Ordinal);
+        Assert.Contains("Done, waiting for a full day of measurements", visible, StringComparison.Ordinal);
+        Assert.Contains("order of magnitude, part of the activity has no CO2 estimate", visible, StringComparison.Ordinal);
+        Assert.Contains("Incomplete: days with no data, a day not finished yet, a restart of the measuring tool, " +
+                        "too many problems to count them all, another measurement gap", visible, StringComparison.Ordinal);
+        Assert.Contains("No figures came from: svc-quiet.", visible, StringComparison.Ordinal);
+        Assert.Contains("The Hub read the first 5,000 problems", visible, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_engineering_report_keeps_the_engine_words()
+    {
+        var visible = Visible(Html(Everything()));
+
+        Assert.Contains("Done, confirmed by the engine", visible, StringComparison.Ordinal);
+        Assert.Contains("2 sources without a coefficient", visible, StringComparison.Ordinal);
+        Assert.Contains("Incomplete: days the ledger does not cover", visible, StringComparison.Ordinal);
+        Assert.Contains("Sources without a detection volume: svc-quiet.", visible, StringComparison.Ordinal);
+    }
+
+    // Every gap, every action state, a partial carbon figure, a cut read and an unnamed row.
+    private static RecapSnapshot Everything()
+    {
+        var snapshot = RecapSnapshots.Distinctive(5);
+        string?[] states = ["confirmed", "contradicted", "came_back", "awaiting", null];
+        return snapshot with
+        {
+            Period = snapshot.Period with
+            {
+                Incomplete = ["uncovered_days", "open_day", "restart", "overflow", "brand_new"],
+                Notes = ["sampling", "shed", "ingest_rejected", "multi_instance"],
+                SamplingRate = 0.5
+            },
+            Previous = snapshot.Previous with { Incomplete = ["restart"], Notes = ["sampling"] },
+            Tiles = snapshot.Tiles with { Co2SourcesWithoutCoefficient = 2 },
+            Priorities =
+            [
+                .. snapshot.Priorities.Select((priority, index) => priority with
+                {
+                    Label = index == 4 ? null : priority.Label,
+                    Action = priority.Action! with { Confirmation = states[index] }
+                })
+            ],
+            Truncated = true
+        };
     }
 
     [Fact]
