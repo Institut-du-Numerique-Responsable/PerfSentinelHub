@@ -11,11 +11,11 @@ npx playwright install chromium
 npm run demo
 ```
 
-Le résultat arrive dans `docs/img/hub/` : sept écrans en `<nom>.png` (clair) et
+Le résultat arrive dans `docs/img/hub/` : huit écrans en `<nom>.png` (clair) et
 `<nom>-dark.png` (sombre), plus `launcher-handoff.png`, New analysis tel qu'un lien
 d'incident le remplit, et `launcher_light.gif` et `launcher_dark.gif`. Le septième
 est `launcher-ack.png`, la page d'acquittement ouverte comme un lien Grafana
-l'ouvre. Les GIF parcourent les quatre écrans à onglet, plus l'analyse et le
+l'ouvre, et le huitième `launcher-recap.png`, le récapitulatif de la semaine en cours. Les GIF parcourent les quatre écrans à onglet, plus l'analyse et le
 rapport ouverts depuis eux, et se terminent sur le passage à New analysis. La
 page d'acquittement reste hors de la visite : elle s'atteint par un lien depuis
 l'extérieur du lanceur, et le lien Ack du tableau des incidents n'a aucun
@@ -144,7 +144,7 @@ aussi pour que ses actions s'affichent.
 ## Deux choses qu'elle attend de l'extérieur
 
 **Un binaire perf-sentinel.** Sans lui le Hub répond `503` à
-`POST /api/analyses` et trois écrans sur sept sont morts. La mise en place
+`POST /api/analyses` et trois écrans sur huit sont morts. La mise en place
 cherche un dépôt `perf-sentinel` voisin avec une compilation release, ou prend
 `HUB_ENGINE_BINARY`.
 

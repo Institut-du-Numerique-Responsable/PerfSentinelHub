@@ -1970,7 +1970,7 @@
         if (route === '') return 'new';
         if (route.indexOf('disclosures/') === 0) return 'disclosure';
         // `ack` has no tab: it is reached by link only.
-        return ['new', 'recent', 'sources', 'incidents', 'correlations', 'disclosures', 'ack'].indexOf(route) >= 0
+        return ['new', 'recent', 'sources', 'incidents', 'correlations', 'recap', 'disclosures', 'ack'].indexOf(route) >= 0
             ? route
             : 'missing';
     }
@@ -2225,6 +2225,258 @@
         return name ? {text: name, title: owner} : {text: owner, title: null};
     }
 
+    // ----------------------------------------------------------- the recap screen
+
+    /**
+     * Labels that differ by audience. Management reads none of the engine's words: the same
+     * figure is "Unnecessary operations" there and "Avoidable I/O" for the engineers. The
+     * carbon and action tiles keep one label.
+     */
+    const RECAP_LABELS = {
+        tech: {io: 'Avoidable I/O', findings: 'Active findings', moved: 'What moved'},
+        pilotage: {io: 'Unnecessary operations', findings: 'Open problems', moved: 'What changed'}
+    };
+
+    /**
+     * The text behind the seven "?" of the recap, one set per audience. It is copy, pinned by a
+     * test: the Management set may not use the engine's words, and the frozen report (no
+     * script, so no "?") prints the same sentences in its closing section.
+     */
+    const RECAP_HELP = {
+        tech: {
+            period: 'A week runs Monday to Sunday and a month is a calendar month, both counted in UTC '
+                + 'days. While the period is in progress, trends compare its closed days with the same days of '
+                + 'the previous period; today counts in the tiles only. Times elsewhere on the page are in '
+                + 'your local time, with the zone.',
+            io: 'Extra database, HTTP and messaging calls the engine counted as avoidable on this period, '
+                + 'summed over the detections. Measured, not estimated.',
+            co2: 'An order of magnitude, never a ranking key: each finding\'s avoidable calls times the day\'s '
+                + 'grams per avoidable call the daemon reports. "At least" when some sources send no coefficient.',
+            findings: 'Findings seen on this period and not acknowledged. Acknowledged ones are counted apart '
+                + 'and left out of the priorities.',
+            actions: 'Declared by the team, checked by the engine: confirmed after a sealed day with no '
+                + 'detection, still detected when it shows up after the done day.',
+            prio: 'Findings with avoidable calls first, by volume; then the others by severity. Trends compare '
+                + 'closed days only.',
+            moved: 'Gone means not detected this period: a presumption, not proof that the fix shipped.'
+        },
+        pilotage: {
+            period: 'A week runs Monday to Sunday, counted in UTC days. While it is not over, comparisons only '
+                + 'use the days already finished. Times elsewhere on the page are in your local time, with '
+                + 'the zone.',
+            io: 'Work the application did for nothing on this period, counted by Perf Sentinel. Measured, not '
+                + 'estimated.',
+            co2: 'A rough estimate of the carbon this unnecessary work cost. It gives a scale, not an exact '
+                + 'figure.',
+            findings: 'Problems seen on this period that the team has not set aside.',
+            actions: 'What the team said it would fix, and whether the measurements confirm it.',
+            prio: 'The problems that cost the most come first.',
+            moved: '"Gone" means it was not seen this period: probably fixed, but not proven.'
+        }
+    };
+
+    const RECAP_PERIODS = ['day', 'week', 'month'];
+
+    /**
+     * What a `#/recap?…` hash names. Anything it does not know reads as the default, and a filter
+     * that is blank, past 256 characters or carries a control character as none.
+     * @param {string | null | undefined} hash
+     * @returns {{period: 'day' | 'week' | 'month', at: string | null, environment: string | null,
+     *   service: string | null, grouping: string | null, view: 'tech' | 'pilotage'}}
+     */
+    function readRecapRoute(hash) {
+        const text = String(hash || '');
+        const query = text.indexOf('#/recap?') === 0 ? text.slice('#/recap?'.length) : '';
+        const params = new URLSearchParams(query);
+        const filter = function (key) {
+            const value = (params.get(key) || '').trim();
+            return value === '' || value.length > 256 || /\p{Cc}/u.test(value) ? null : value;
+        };
+        const period = params.get('period') || '';
+        const at = params.get('at') || '';
+        return {
+            period: RECAP_PERIODS.indexOf(period) >= 0 ? /** @type {'day' | 'week' | 'month'} */ (period) : 'week',
+            at: /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : null,
+            environment: filter('environment'),
+            service: filter('service'),
+            grouping: filter('grouping'),
+            view: params.get('view') === 'pilotage' ? 'pilotage' : 'tech'
+        };
+    }
+
+    /**
+     * The route of a recap read: `#/recap` and only the values that differ from the defaults.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @returns {string}
+     */
+    function recapHash(route) {
+        const parts = [];
+        if (route.period !== 'week') parts.push('period=' + encodeURIComponent(route.period));
+        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
+            if (route[key]) parts.push(key + '=' + encodeURIComponent(route[key]));
+        });
+        if (route.view !== 'tech') parts.push('view=' + encodeURIComponent(route.view));
+        return parts.length ? '#/recap?' + parts.join('&') : '#/recap';
+    }
+
+    /**
+     * The API read for a route: the period and the view always, the filters when set.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @returns {string}
+     */
+    function recapPath(route) {
+        let path = '/api/recap?period=' + encodeURIComponent(route.period)
+            + '&view=' + encodeURIComponent(route.view);
+        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
+            if (route[key]) path += '&' + key + '=' + encodeURIComponent(route[key]);
+        });
+        return path;
+    }
+
+    /**
+     * The carbon tile in three pieces, so a phone-wide tile can set the figure large and the
+     * rest small. The grams arrive rounded to one significant figure, the server's rule.
+     * @param {number | null} grams
+     * @param {number} sourcesWithoutCoefficient
+     * @param {string | null | undefined} missingReason `no_coefficient` or `no_avoidable_io`
+     * @returns {{lead: string, figure: string, unit: string}}
+     */
+    function co2Parts(grams, sourcesWithoutCoefficient, missingReason) {
+        if (grams === null || grams === undefined) {
+            return {
+                lead: '', figure: '—',
+                unit: missingReason === 'no_avoidable_io' ? 'no avoidable I/O' : 'no coefficient from the engine'
+            };
+        }
+        const kilos = grams >= 1000;
+        const value = kilos ? Number((grams / 1000).toPrecision(3)) : Math.round(grams);
+        return {
+            lead: sourcesWithoutCoefficient > 0 ? 'at least' : '',
+            figure: '~' + value.toLocaleString('en-US') + (kilos ? ' kg' : ' g'),
+            unit: 'CO2e'
+        };
+    }
+
+    /**
+     * The carbon estimate as one sentence: an estimate always, a partial minimum when some
+     * sources send no coefficient, a dash and the reason when there is no figure.
+     * @param {number | null} grams
+     * @param {number} sourcesWithoutCoefficient
+     * @param {string | null | undefined} missingReason
+     * @returns {string}
+     */
+    function co2Text(grams, sourcesWithoutCoefficient, missingReason) {
+        const parts = co2Parts(grams, sourcesWithoutCoefficient, missingReason);
+        if (grams === null || grams === undefined) return parts.figure + ' ' + parts.unit;
+        return (parts.lead ? parts.lead + ' ' : '') + parts.figure + ' ' + parts.unit + ', estimate'
+            + (sourcesWithoutCoefficient > 0
+                ? ', ' + sourcesWithoutCoefficient + (sourcesWithoutCoefficient === 1 ? ' source' : ' sources')
+                + ' without a coefficient'
+                : '');
+    }
+
+    /**
+     * A row's trend as a person reads it: a word, or the relative change as a signed percentage.
+     * @param {string} trend `new`, `up`, `down`, `flat`, `gone` or `unknown`
+     * @param {number | null | undefined} change
+     * @returns {string}
+     */
+    function trendText(trend, change) {
+        if (trend === 'new') return 'new';
+        if (trend === 'gone') return 'gone';
+        if (trend === 'flat') return 'stable';
+        if (trend !== 'up' && trend !== 'down') return '';
+        if (change === null || change === undefined) return trend;
+        return (change > 0 ? '+' : '') + Math.round(change * 100) + '%';
+    }
+
+    /**
+     * What the engine's check of a `done` action says, in words. A state a newer Hub adds is
+     * left out rather than guessed at.
+     * @param {string | null | undefined} state
+     * @returns {string}
+     */
+    function confirmationLabel(state) {
+        switch (state) {
+            case 'confirmed':
+                return 'Confirmed by the engine';
+            case 'contradicted':
+                return 'Still detected';
+            case 'came_back':
+                return 'Came back';
+            case 'awaiting':
+                return 'Waiting for a sealed day';
+            default:
+                return '';
+        }
+    }
+
+    /**
+     * The days of a period, UTC as the server counts them, and whether it is still running.
+     * @param {{kind: string, from: string, to: string, in_progress?: boolean}} period
+     * @returns {string}
+     */
+    function periodText(period) {
+        const days = period.kind === 'day' ? period.from : period.from + ' to ' + period.to;
+        return days + (period.in_progress ? ', in progress' : '');
+    }
+
+    /**
+     * @param {string[] | null | undefined} reasons
+     * @returns {string}
+     */
+    function incompleteText(reasons) {
+        return reasons && reasons.length ? 'Incomplete: ' + reasons.map(gapLabel).join(', ') : '';
+    }
+
+    /**
+     * @param {string[] | null | undefined} notes
+     * @param {number | null | undefined} samplingRate
+     * @returns {string}
+     */
+    function notesText(notes, samplingRate) {
+        if (!notes || !notes.length) return '';
+        const hasRate = samplingRate !== null && samplingRate !== undefined;
+        return 'Note: ' + notes.map(function (note) {
+            return gapLabel(note) + (note === 'sampling' && hasRate ? ' (rate ' + samplingRate + ')' : '');
+        }).join(', ');
+    }
+
+    /**
+     * The address when it is an http or https one, else null. A `reference_url` comes from a daemon,
+     * so a `javascript:` address must never reach an href.
+     * @param {string | null | undefined} value
+     * @returns {string | null}
+     */
+    function httpUrl(value) {
+        try {
+            const url = new URL(String(value));
+            return url.protocol === 'http:' || url.protocol === 'https:' ? String(value) : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * A timestamp in the reader's own time and zone, always `YYYY-MM-DD HH:mm <zone>`: the locale
+     * only supplies the zone name (en-GB writes CET where en-US writes GMT+1), the order is fixed.
+     * @param {number} ms
+     * @returns {string}
+     */
+    function localTime(ms) {
+        const parts = {};
+        new Intl.DateTimeFormat('en-GB', {
+            year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+            hour12: false, timeZoneName: 'short'
+        }).formatToParts(ms).forEach(function (part) {
+            parts[part.type] = part.value;
+        });
+        // Some engines write midnight as 24.
+        const hour = parts.hour === '24' ? '00' : parts.hour;
+        return parts.year + '-' + parts.month + '-' + parts.day + ' ' + hour + ':' + parts.minute + ' '
+            + parts.timeZoneName;
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -2353,6 +2605,21 @@
         deviceRequestLine,
         deviceNetworkAlert,
         deviceApproveStep,
-        ownerLabel
+        ownerLabel,
+        RECAP_LABELS,
+        RECAP_HELP,
+        readRecapRoute,
+        recapHash,
+        recapPath,
+        co2Parts,
+        co2Text,
+        trendText,
+        confirmationLabel,
+        periodText,
+        incompleteText,
+        notesText,
+        httpUrl,
+        localTime,
+        isoUtc
     };
 })(globalThis);

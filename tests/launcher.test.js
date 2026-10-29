@@ -1566,6 +1566,134 @@ test("an action owner reads as a name", () => {
     assert.deepEqual(PSL.ownerLabel("", null), {text: "", title: null});
 });
 
+test("the recap route reads its defaults and drops what it does not know", () => {
+    assert.deepEqual(PSL.readRecapRoute("#/recap"), {
+        period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"
+    });
+    assert.deepEqual(PSL.readRecapRoute("#/recap?period=month&at=2026-10-29&environment=prod&service=a%2Fb&grouping=pay&view=pilotage"), {
+        period: "month", at: "2026-10-29", environment: "prod", service: "a/b", grouping: "pay", view: "pilotage"
+    });
+    // An unknown value reads as its default, a blank filter as none.
+    assert.deepEqual(PSL.readRecapRoute("#/recap?period=year&at=yesterday&view=ceo&service=%20"), {
+        period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"
+    });
+    assert.equal(PSL.readRecapRoute("#/recap?service=a%0Ab").service, null, "control character");
+    assert.equal(PSL.readRecapRoute("#/recap?service=" + "a".repeat(257)).service, null, "too long");
+    assert.equal(PSL.readRecapRoute("#/new").period, "week", "another route reads as the defaults");
+});
+
+test("the recap hash carries only what differs from the defaults", () => {
+    assert.equal(PSL.recapHash(PSL.readRecapRoute("#/recap")), "#/recap");
+    const route = {period: "day", at: "2026-10-29", environment: "pre prod", service: "a/b", grouping: null, view: "pilotage"};
+    assert.equal(PSL.recapHash(route),
+        "#/recap?period=day&at=2026-10-29&environment=pre%20prod&service=a%2Fb&view=pilotage");
+    assert.deepEqual(PSL.readRecapRoute(PSL.recapHash(route)), route);
+    assert.equal(PSL.recapHash({period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"}),
+        "#/recap");
+});
+
+test("the recap path always names its period and view", () => {
+    assert.equal(PSL.recapPath(PSL.readRecapRoute("#/recap")), "/api/recap?period=week&view=tech");
+    assert.equal(PSL.recapPath({period: "day", at: "2026-10-29", environment: "prod", service: "a b", grouping: "g", view: "pilotage"}),
+        "/api/recap?period=day&view=pilotage&at=2026-10-29&environment=prod&service=a%20b&grouping=g");
+});
+
+test("the carbon figure says it is an estimate and what it lacks", () => {
+    assert.equal(PSL.co2Text(null, 0, "no_coefficient"), "— no coefficient from the engine");
+    assert.equal(PSL.co2Text(null, 0, "no_avoidable_io"), "— no avoidable I/O");
+    assert.equal(PSL.co2Text(300, 0, null), "~300 g CO2e, estimate");
+    assert.equal(PSL.co2Text(2000, 1, null), "at least ~2 kg CO2e, estimate, 1 source without a coefficient");
+    assert.equal(PSL.co2Text(2000, 3, null), "at least ~2 kg CO2e, estimate, 3 sources without a coefficient");
+    assert.equal(PSL.co2Text(0, 0, null), "~0 g CO2e, estimate");
+    assert.deepEqual(PSL.co2Parts(2000, 1, null), {lead: "at least", figure: "~2 kg", unit: "CO2e"});
+    assert.deepEqual(PSL.co2Parts(300, 0, null), {lead: "", figure: "~300 g", unit: "CO2e"});
+    assert.deepEqual(PSL.co2Parts(null, 0, "no_avoidable_io"), {lead: "", figure: "—", unit: "no avoidable I/O"});
+});
+
+test("a trend reads in a word or a percentage", () => {
+    assert.equal(PSL.trendText("new", null), "new");
+    assert.equal(PSL.trendText("up", 0.35), "+35%");
+    assert.equal(PSL.trendText("down", -0.2), "-20%");
+    assert.equal(PSL.trendText("up", null), "up");
+    assert.equal(PSL.trendText("flat", 0.01), "stable");
+    assert.equal(PSL.trendText("gone", null), "gone");
+    assert.equal(PSL.trendText("unknown", null), "");
+});
+
+test("an action's confirmation is named, anything else is left out", () => {
+    assert.equal(PSL.confirmationLabel("confirmed"), "Confirmed by the engine");
+    assert.equal(PSL.confirmationLabel("contradicted"), "Still detected");
+    assert.equal(PSL.confirmationLabel("came_back"), "Came back");
+    assert.equal(PSL.confirmationLabel("awaiting"), "Waiting for a sealed day");
+    assert.equal(PSL.confirmationLabel("whatever"), "");
+    assert.equal(PSL.confirmationLabel(null), "");
+});
+
+test("a period reads as its first and last day", () => {
+    assert.equal(PSL.periodText({kind: "week", from: "2026-10-26", to: "2026-11-01", in_progress: false}),
+        "2026-10-26 to 2026-11-01");
+    assert.equal(PSL.periodText({kind: "week", from: "2026-10-26", to: "2026-11-01", in_progress: true}),
+        "2026-10-26 to 2026-11-01, in progress");
+    assert.equal(PSL.periodText({kind: "day", from: "2026-10-29", to: "2026-10-29", in_progress: true}),
+        "2026-10-29, in progress");
+    assert.equal(PSL.periodText({kind: "day", from: "2026-10-28", to: "2026-10-28", in_progress: false}), "2026-10-28");
+    assert.equal(PSL.periodText({kind: "month", from: "2026-10-01", to: "2026-10-31", in_progress: false}),
+        "2026-10-01 to 2026-10-31");
+});
+
+test("what forbids an exact comparison and what is only worth a line", () => {
+    assert.equal(PSL.incompleteText([]), "");
+    assert.equal(PSL.incompleteText(["restart", "open_day"]), "Incomplete: a daemon restart, a day still open");
+    assert.equal(PSL.notesText([], null), "");
+    assert.equal(PSL.notesText(["sampling", "shed"], 0.5),
+        "Note: sampled traces (rate 0.5), traces shed under memory pressure");
+    assert.equal(PSL.notesText(["sampling"], null), "Note: sampled traces");
+});
+
+test("only an http or https address becomes a link", () => {
+    assert.equal(PSL.httpUrl("https://x.test/a"), "https://x.test/a");
+    assert.equal(PSL.httpUrl("http://x.test"), "http://x.test");
+    assert.equal(PSL.httpUrl("javascript:alert(1)"), null);
+    assert.equal(PSL.httpUrl("/a"), null);
+    assert.equal(PSL.httpUrl(null), null);
+    assert.equal(PSL.httpUrl(undefined), null);
+});
+
+test("the recap is a screen of its own", () => {
+    assert.equal(PSL.screenOf("#/recap?period=day", false, false), "recap");
+    assert.equal(PSL.screenOf("#/recap", true, false), "recap");
+});
+
+test("Management_labels_carry_no_technical_word", () => {
+    const technical = /I\/O|finding|quer(y|ies)|endpoint/i;
+    for (const text of Object.values(PSL.RECAP_LABELS.pilotage)) assert.doesNotMatch(text, technical);
+    assert.deepEqual(PSL.RECAP_LABELS.tech, {io: "Avoidable I/O", findings: "Active findings", moved: "What moved"});
+    assert.deepEqual(PSL.RECAP_LABELS.pilotage,
+        {io: "Unnecessary operations", findings: "Open problems", moved: "What changed"});
+});
+
+test("Management_help_carries_no_technical_word", () => {
+    const technical = /I\/O|finding|quer(y|ies)|endpoint|signature|daemon|ledger|coefficient/i;
+    const keys = ["period", "io", "co2", "findings", "actions", "prio", "moved"];
+    assert.deepEqual(Object.keys(PSL.RECAP_HELP.tech), keys);
+    assert.deepEqual(Object.keys(PSL.RECAP_HELP.pilotage), keys);
+    for (const text of Object.values(PSL.RECAP_HELP.pilotage)) assert.doesNotMatch(text, technical);
+});
+
+test("a timestamp reads in the browser's zone, in a fixed order", () => {
+    const kept = process.env.TZ;
+    try {
+        process.env.TZ = "Europe/Paris";
+        // The clocks went back on 2026-10-25, so the 29th is winter time.
+        assert.equal(PSL.localTime(Date.UTC(2026, 9, 29, 13, 32, 59)), "2026-10-29 14:32 CET");
+        assert.equal(PSL.localTime(Date.UTC(2026, 6, 14, 13, 32)), "2026-07-14 15:32 CEST");
+        // Midnight is 00, never 24.
+        assert.equal(PSL.localTime(Date.UTC(2026, 9, 28, 23, 5)), "2026-10-29 00:05 CET");
+    } finally {
+        if (kept === undefined) delete process.env.TZ; else process.env.TZ = kept;
+    }
+});
+
 test("app.js declares each of its top-level functions once", () => {
     // app.js is one IIFE: a second declaration of a name silently replaces the
     // first for every caller, as the Disclosures screen's actionButton did to

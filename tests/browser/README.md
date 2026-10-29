@@ -11,10 +11,11 @@ npx playwright install chromium
 npm run demo
 ```
 
-Output lands in `docs/img/hub/`: seven screens as `<name>.png` (light) and
+Output lands in `docs/img/hub/`: eight screens as `<name>.png` (light) and
 `<name>-dark.png` (dark), plus `launcher-handoff.png`, New analysis as an incident
 link fills it, and `launcher_light.gif` and `launcher_dark.gif`. The seventh is
-`launcher-ack.png`, the ack page opened the way a Grafana link opens it. The GIFs
+`launcher-ack.png`, the ack page opened the way a Grafana link opens it, and the eighth
+`launcher-recap.png`, the recap of the week in progress. The GIFs
 walk the four screens with a tab, plus the run and the report opened from them,
 and end on the handoff. The ack page is left out of the tour: it is reached by a
 link from outside the launcher, and the incidents table's own Ack link has no
@@ -131,7 +132,7 @@ detail send too so its actions show.
 ## Two things it needs from outside
 
 **A perf-sentinel binary.** Without one the Hub answers `503` to
-`POST /api/analyses` and three of the seven screens are dead. The setup looks
+`POST /api/analyses` and three of the eight screens are dead. The setup looks
 for a sibling `perf-sentinel` checkout with a release build, or takes
 `HUB_ENGINE_BINARY`.
 

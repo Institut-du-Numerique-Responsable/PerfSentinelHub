@@ -113,6 +113,19 @@
         correlationServices: [],
         // pair_key mirrors the route, `#/correlations?pair_key=…`, and is never set from a select.
         correlationFilter: {range: '24h', service: '', source_id: '', active: false, pair_key: ''},
+        // The recap screen: the snapshot GET /api/recap answered (null while it loads), the status
+        // of a failed read, whether the priorities are unfolded past ten, the sentence a refused
+        // write left in its row by signature, the rows with a write in flight, the row whose
+        // endpoint is being named, and the number of the latest read so an old one cannot land.
+        recap: null,
+        recapError: null,
+        recapShowAll: false,
+        recapRowError: {},
+        recapBusy: {},
+        recapNaming: null,
+        // What was typed in the name field when the Hub refused it, so a refusal does not eat it.
+        recapNameDraft: null,
+        recapSeq: 0,
         // GET /api/disclosures, null while it loads.
         disclosures: null,
         disclosuresError: false,
@@ -663,6 +676,7 @@
         else if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
         else if (state.screen === 'incidents') main.replaceChildren(renderIncidentsScreen());
         else if (state.screen === 'correlations') main.replaceChildren(renderCorrelationsScreen());
+        else if (state.screen === 'recap') main.replaceChildren(renderRecapScreen());
         else if (state.screen === 'disclosures') main.replaceChildren(renderDisclosuresScreen());
         else if (state.screen === 'disclosure') main.replaceChildren(renderDisclosureScreen());
         else if (state.screen === 'ack') main.replaceChildren(renderAckScreen());
@@ -1183,7 +1197,8 @@
             state.correlationFilter.pair_key = PSL.readCorrelationPair(location.hash);
             if (state.correlationFilter.pair_key) state.correlationFilter.range = PSL.CORRELATION_RANGES[PSL.CORRELATION_RANGES.length - 1];
             loadCorrelations();
-        } else if (screen === 'disclosures') loadDisclosures();
+        } else if (screen === 'recap') loadRecap(false);
+        else if (screen === 'disclosures') loadDisclosures();
         else if (screen === 'disclosure') {
             const id = PSL.readDisclosureId(location.hash);
             // A note and a token belong to the disclosure they were made on.
@@ -5996,6 +6011,748 @@
             ack.lines = PSL.ackSummary(outcomes);
             loadAck(true);
         });
+    }
+
+    // -------------------------------------------------------- screen: recap
+
+    const RECAP_FIRST_PAGE = 10;
+    const RECAP_PERIOD_CHOICES = [['day', 'day'], ['week', 'week'], ['month', 'month']];
+    const RECAP_STATE_GLYPH = {
+        confirmed: [['path', {d: 'M5 12.5l4.5 4.5L19 7.5'}]],
+        contradicted: [['path', {d: 'M12 5v9M12 18.5v.01'}]],
+        came_back: [['path', {d: 'M9 7L4 12l5 5'}], ['path', {d: 'M4 12h11a5 5 0 010 10h-2'}]],
+        awaiting: [['circle', {cx: '12', cy: '12', r: '8.5'}], ['path', {d: 'M12 7.5V12l3 2'}]]
+    };
+    const RECAP_TODO_LABEL = {todo: 'to do', in_progress: 'in progress', done: 'done'};
+
+    function recapRoute() {
+        return PSL.readRecapRoute(location.hash);
+    }
+
+    /** Writes the route the filters name; the hash change reads the recap again. */
+    function goRecap(change) {
+        location.hash = PSL.recapHash(Object.assign({}, recapRoute(), change));
+    }
+
+    /**
+     * Reads the recap the route names. A write on a row reads it again with `keep`, so the page
+     * stays where it was while the new figures arrive. Only the latest read lands.
+     */
+    function loadRecap(keep) {
+        const sequence = ++state.recapSeq;
+        if (!keep) {
+            state.recap = null;
+            state.recapError = null;
+            state.recapRowError = {};
+            state.recapNaming = null;
+            state.recapNameDraft = null;
+            state.recapShowAll = false;
+            render();
+        }
+        getJson(PSL.recapPath(recapRoute())).then(function (snapshot) {
+            if (sequence !== state.recapSeq) return;
+            state.recap = snapshot;
+            state.recapError = null;
+        }).catch(function (error) {
+            if (sequence !== state.recapSeq) return;
+            state.recap = null;
+            state.recapError = error.status || 0;
+        }).finally(function () {
+            if (sequence === state.recapSeq && currentScreen() === 'recap') render();
+        });
+    }
+
+    function renderRecapScreen() {
+        const route = recapRoute();
+        const section = el('section', {}, [
+            ruledOverline('// recap'),
+            el('h1', {class: 'page-title', text: 'What wastes the most, and what moved'}),
+            el('p', {
+                class: 'page-sub',
+                text: 'Support for the team review: what to fix first, and what changed since the previous '
+                    + 'period of the same length.'
+            }),
+            recapFilterLine(route)
+        ]);
+        if (state.recapError !== null) {
+            section.appendChild(recapErrorBanner(state.recapError));
+            return section;
+        }
+        if (state.recap === null) {
+            section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px'}));
+            return section;
+        }
+        const snapshot = state.recap;
+        const labels = PSL.RECAP_LABELS[snapshot.view === 'pilotage' ? 'pilotage' : 'tech'];
+        [recapPeriodBlock(snapshot), recapTiles(snapshot, labels), recapPriorities(snapshot, labels, route),
+            recapMoved(snapshot, labels)].forEach(function (part) {
+            section.appendChild(part);
+        });
+        return section;
+    }
+
+    function recapErrorBanner(status) {
+        const sentence = status === 403
+            ? 'The Hub did not let you read the recap: your access holds no findings.read.'
+            : status === 400
+                ? 'The Hub could not read a recap for this period or these filters.'
+                : 'The Hub did not return the recap. This is the Hub itself, not any daemon.';
+        return el('div', {class: 'banner', 'data-tone': 'crit', role: 'alert'}, [critGlyph(16), el('div', {text: sentence})]);
+    }
+
+    function recapFilterLine(route) {
+        const period = el('select', {class: 'refresh-select', 'aria-label': 'period'},
+            RECAP_PERIOD_CHOICES.map(function (entry) {
+                const option = el('option', {value: entry[0], text: entry[1]});
+                if (entry[0] === route.period) option.selected = true;
+                return option;
+            }));
+        period.addEventListener('change', function () {
+            goRecap({period: period.value});
+        });
+        const day = el('input', {
+            class: 'recap-input', type: 'date', value: route.at || '', 'aria-label': 'a day in the period',
+            max: new Date().toISOString().slice(0, 10)
+        });
+        day.addEventListener('change', function () {
+            goRecap({at: day.value || null});
+        });
+        const environments = Array.from(new Set((state.sources || []).map(function (source) {
+            return source.environment;
+        }).filter(Boolean))).sort();
+        return el('div', {class: 'refresh recap-filter'}, [
+            el('span', {class: 'refresh-label', text: 'period'}),
+            period,
+            day,
+            filterSelect('environment', route.environment || '', environments.map(function (name) {
+                return [name, name];
+            }), function (value) {
+                goRecap({environment: value || null});
+            }),
+            recapTextFilter('service', route.service, 'service'),
+            recapTextFilter('namespace', route.grouping, 'grouping'),
+            recapViewSwitch(route)
+        ]);
+    }
+
+    /** Applied on change, so a name is not searched for a letter at a time. */
+    function recapTextFilter(label, value, key) {
+        const input = el('input', {
+            class: 'recap-input', type: 'text', placeholder: label, value: value || '', 'aria-label': label,
+            spellcheck: 'false'
+        });
+        input.addEventListener('change', function () {
+            goRecap({[key]: input.value.trim() || null});
+        });
+        return input;
+    }
+
+    function recapViewSwitch(route) {
+        const group = el('div', {class: 'segmented', role: 'radiogroup', 'aria-label': 'Audience'});
+        [['tech', 'Engineering'], ['pilotage', 'Management']].forEach(function (entry) {
+            const button = el('button', {
+                type: 'button', role: 'radio', 'aria-checked': route.view === entry[0] ? 'true' : 'false',
+                text: entry[1]
+            });
+            button.addEventListener('click', function () {
+                goRecap({view: entry[0]});
+            });
+            group.appendChild(button);
+        });
+        return radioKeys(group, 'recap-view');
+    }
+
+    /** A heading with its "?" beside it, never inside it, centred on the heading's line. */
+    function recapHeading(id, text, hint, help, topic) {
+        return el('div', {class: 'title-row'}, [
+            el('h2', {class: 'recap-h2', id: id, tabindex: '-1'}, [document.createTextNode(text), hint ? el('span', {text: hint}) : null]),
+            helpDot(help, topic)
+        ]);
+    }
+
+    function recapHelp(snapshot, key) {
+        return PSL.RECAP_HELP[snapshot.view === 'pilotage' ? 'pilotage' : 'tech'][key];
+    }
+
+    function recapNotes(text) {
+        return text ? el('p', {class: 'recap-notes', text: text}) : null;
+    }
+
+    function recapPeriodBlock(snapshot) {
+        const period = snapshot.period;
+        const previous = snapshot.previous;
+        const previousNotes = PSL.notesText(previous.notes, previous.sampling_rate);
+        const reasons = [PSL.incompleteText(period.incomplete)];
+        const previousReasons = PSL.incompleteText(previous.incomplete);
+        if (previousReasons) reasons.push('previous period ' + previousReasons.charAt(0).toLowerCase() + previousReasons.slice(1));
+        const block = el('div', {class: 'recap-period-block'}, [
+            el('div', {class: 'recap-period'}, [
+                el('span', {class: 'recap-period-main', text: PSL.periodText(period)}),
+                el('span', {class: 'recap-period-tz', text: 'UTC'}),
+                el('span', {class: 'recap-period-prev', text: 'compared with ' + PSL.periodText(previous)}),
+                helpDot(recapHelp(snapshot, 'period'), 'the period')
+            ]),
+            recapNotes(PSL.notesText(period.notes, period.sampling_rate)),
+            recapNotes(previousNotes ? 'Previous period. ' + previousNotes : '')
+        ]);
+        if (reasons.some(Boolean)) {
+            block.appendChild(el('div', {class: 'banner', 'data-tone': 'warn', role: 'note'}, [
+                warningGlyph(16),
+                el('div', {text: reasons.filter(Boolean).join('; ') + '. The comparison with the previous period is not exact.'})
+            ]));
+        }
+        return block;
+    }
+
+    function recapTile(label, chip, value, subs, help, topic) {
+        return el('div', {class: 'disc-figure'}, [
+            el('span', {class: 'disc-figure-label'}, [document.createTextNode(label), chip, helpDot(help, topic)]),
+            value
+        ].concat(subs.filter(Boolean).map(function (sub) {
+            return el('span', {class: 'disc-figure-sub', text: sub});
+        })));
+    }
+
+    function recapProgressChip(snapshot) {
+        return snapshot.period.in_progress
+            ? el('span', {class: 'chip', 'data-tone': 'progress', text: 'in progress'})
+            : null;
+    }
+
+    /** "previous week 168,900", with the days it was cut to when this period is not over. */
+    function recapPreviousText(snapshot, value) {
+        if (value === null || value === undefined) return '';
+        const days = snapshot.previous.truncated_to_days;
+        return 'previous ' + snapshot.previous.kind + (days ? ' (first ' + days + ' day' + (days === 1 ? '' : 's') + ')' : '')
+            + ' ' + value;
+    }
+
+    /** A count with thousands separators, or null when the Hub has none. */
+    function recapCount(value) {
+        return value === null || value === undefined ? null : value.toLocaleString('en-US');
+    }
+
+    function recapSourcesText(count) {
+        return count + (count === 1 ? ' source' : ' sources') + ' without a coefficient';
+    }
+
+    function recapCo2Tile(snapshot) {
+        const tiles = snapshot.tiles;
+        const without = tiles.co2_sources_without_coefficient;
+        const co2 = PSL.co2Parts(tiles.co2_grams, without, tiles.co2_missing_reason);
+        const known = tiles.co2_grams !== null && tiles.co2_grams !== undefined;
+        const previous = tiles.previous_co2_grams === null || tiles.previous_co2_grams === undefined
+            ? null : PSL.co2Parts(tiles.previous_co2_grams, 0, null).figure;
+        // The full sentence stays on the figure for a reader the small print does not reach.
+        const value = el('span', {
+            class: 'disc-figure-value', title: PSL.co2Text(tiles.co2_grams, without, tiles.co2_missing_reason)
+        }, [
+            co2.lead ? el('small', {text: co2.lead}) : null,
+            document.createTextNode(co2.figure),
+            el('span', {
+                class: 'disc-figure-unit',
+                text: !known && snapshot.view === 'pilotage' ? 'not available' : co2.unit
+            })
+        ]);
+        return recapTile('CO2 estimate', recapProgressChip(snapshot), value, [
+            known ? 'order of magnitude' + (without ? ', ' + recapSourcesText(without) : '') : '',
+            previous ? recapPreviousText(snapshot, previous) : ''
+        ], recapHelp(snapshot, 'co2'), 'the CO2 estimate');
+    }
+
+    function recapTiles(snapshot, labels) {
+        const tiles = snapshot.tiles;
+        const actions = tiles.actions;
+        const management = snapshot.view === 'pilotage';
+        return el('div', {class: 'disc-figures recap-tiles'}, [
+            recapTile(labels.io, recapProgressChip(snapshot),
+                el('span', {class: 'disc-figure-value', text: recapCount(tiles.avoidable_io_ops) || '\u2014'}),
+                [recapPreviousText(snapshot, recapCount(tiles.previous_avoidable_io_ops))],
+                recapHelp(snapshot, 'io'), labels.io),
+            recapCo2Tile(snapshot),
+            recapTile(labels.findings, null,
+                el('span', {class: 'disc-figure-value', text: String(tiles.active_findings)}), [
+                    recapPreviousText(snapshot, tiles.previous_active_findings),
+                    tiles.acked_findings + (management ? ' set aside' : ' acknowledged') + ', left out'
+                ], recapHelp(snapshot, 'findings'), labels.findings),
+            recapTile('Actions', null, el('span', {class: 'disc-figure-value'}, [
+                document.createTextNode(String(actions.done)), el('span', {class: 'disc-figure-unit', text: 'done'})
+            ]), [
+                actions.confirmed + ' confirmed, ' + actions.contradicted + ' still detected, ' + actions.came_back
+                + ' came back',
+                actions.in_progress + ' in progress, ' + actions.todo + ' to do'
+            ], recapHelp(snapshot, 'actions'), 'the actions')
+        ]);
+    }
+
+    // ---- the priorities
+
+    function recapPriorities(snapshot, labels, route) {
+        const management = snapshot.view === 'pilotage';
+        const all = snapshot.priorities;
+        const shown = management || state.recapShowAll ? all : all.slice(0, RECAP_FIRST_PAGE);
+        const lower = labels.io.charAt(0).toLowerCase() + labels.io.slice(1);
+        const hint = 'ranked by ' + lower + ' over the period'
+            + (management ? '' : ', CO2 never ranks')
+            + (snapshot.period.in_progress ? ', trends on closed days' : '');
+        const max = all.length && all[0].avoidable_io_ops ? all[0].avoidable_io_ops : 0;
+        const list = el('ol', {class: 'recap-list'});
+        let divided = false;
+        shown.forEach(function (priority) {
+            if (priority.avoidable_io_ops === null || priority.avoidable_io_ops === undefined) {
+                if (!divided) {
+                    divided = true;
+                    list.appendChild(el('li', {
+                        class: 'recap-divider',
+                        text: management
+                            ? 'Below, slowness rather than extra work: ranked by severity'
+                            : 'Below, no avoidable I/O to count: ranked by severity'
+                    }));
+                }
+            }
+            list.appendChild(recapRow(priority, max, snapshot, labels, route));
+        });
+        const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-prio'}, [
+            ruledOverline('// priorities'),
+            recapHeading('recap-h-prio', 'What to fix first', hint, recapHelp(snapshot, 'prio'), 'the ranking')
+        ]);
+        if (all.length === 0) {
+            section.appendChild(el('div', {class: 'empty-state'}, [
+                el('p', {class: 'empty-title', text: 'Nothing ranks in this period.'})
+            ]));
+            return section;
+        }
+        section.appendChild(list);
+        recapPriorityNotes(snapshot, all, section);
+        return section;
+    }
+
+    function recapPriorityNotes(snapshot, all, section) {
+        if (snapshot.view !== 'pilotage' && all.length > RECAP_FIRST_PAGE && !state.recapShowAll) {
+            const more = el('button', {class: 'pill-button recap-showall', type: 'button', text: 'Show all ' + all.length});
+            more.addEventListener('click', function () {
+                state.recapShowAll = true;
+                renderFocus('#recap-h-prio');
+            });
+            section.appendChild(more);
+        }
+        if (snapshot.view === 'pilotage' && snapshot.more_priorities > 0) {
+            section.appendChild(el('p', {
+                class: 'recap-more',
+                text: snapshot.more_priorities + ' more priorities, lower down, in the Engineering view.'
+            }));
+        }
+        if (snapshot.truncated) {
+            section.appendChild(el('p', {
+                class: 'sources-note',
+                text: 'The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.'
+            }));
+        }
+    }
+
+    function recapRow(priority, max, snapshot, labels, route) {
+        const management = snapshot.view === 'pilotage';
+        const kids = [
+            el('span', {class: 'recap-rank', text: String(priority.rank)}),
+            management ? recapPlainWhat(priority) : recapTechWhat(priority),
+            recapFigure(priority, max, labels, management)
+        ];
+        if (!management) kids.push(recapDetail(priority));
+        kids.push(recapFoot(priority, management, route));
+        if (!management && state.recapNaming === priority.signature) kids.push(recapNameEditor(priority));
+        const failure = management ? null : state.recapRowError[priority.signature];
+        if (failure) kids.push(el('p', {class: 'recap-alert', role: 'alert', text: failure}));
+        return el('li', {class: 'run-card recap-row'}, kids);
+    }
+
+    function recapTechWhat(priority) {
+        return el('div', {class: 'recap-what'}, [
+            priority.label ? el('p', {class: 'recap-label', text: priority.label}) : null,
+            el('div', {class: 'recap-head'}, [
+                el('span', {
+                    class: 'chip', 'data-type': priority.finding_type,
+                    text: PSL.FINDING_TYPE_LABEL[priority.finding_type] || priority.finding_type
+                }),
+                el('span', {class: 'table-strong', text: priority.service}),
+                el('span', {class: 'recap-endpoint', text: priority.endpoint})
+            ]),
+            priority.suggestion ? proseInto(el('p', {class: 'recap-suggest'}), priority.suggestion) : null
+        ]);
+    }
+
+    /** The label when someone named the endpoint, else the sentence and the one technical value left. */
+    function recapPlainWhat(item) {
+        return el('div', {class: 'recap-what'}, [
+            item.label ? el('p', {class: 'recap-label', text: item.label}) : null,
+            el('p', {class: 'recap-plain', text: item.plain}),
+            el('div', {class: 'recap-where'}, item.label || !item.endpoint
+                ? [document.createTextNode('in ' + item.service)]
+                : [document.createTextNode('in ' + item.service + ' · '),
+                    el('code', {class: 'code-inline', text: item.endpoint})])
+        ]);
+    }
+
+    function recapTrend(item) {
+        const text = PSL.trendText(item.trend, item.change);
+        return text
+            ? el('span', {class: 'recap-trend', 'data-trend': item.trend, title: 'against the previous period, on closed days', text: text})
+            : null;
+    }
+
+    function recapFigure(priority, max, labels, management) {
+        const lower = labels.io.charAt(0).toLowerCase() + labels.io.slice(1);
+        if (priority.avoidable_io_ops === null || priority.avoidable_io_ops === undefined) {
+            return el('div', {class: 'recap-figure'}, [
+                el('span', {class: 'recap-figure-n', text: '—'}),
+                el('span', {class: 'recap-figure-u', text: management ? 'nothing to count' : 'no avoidable I/O'}),
+                recapTrend(priority)
+            ]);
+        }
+        const share = max > 0 ? Math.max(2, Math.round(priority.avoidable_io_ops / max * 100)) : 2;
+        return el('div', {class: 'recap-figure'}, [
+            el('span', {class: 'recap-figure-n', text: recapCount(priority.avoidable_io_ops)}),
+            el('span', {class: 'recap-figure-u', text: lower}),
+            el('span', {class: 'recap-bar', 'aria-hidden': 'true'}, [el('i', {style: 'width:' + share + '%'})]),
+            recapTrend(priority)
+        ]);
+    }
+
+    // ---- the folded technical detail (Engineering)
+
+    function recapDetail(priority) {
+        const key = 'recap:' + priority.signature;
+        const open = state.panelOpen[key] === undefined ? priority.rank === 1 : state.panelOpen[key] === true;
+        const details = el('details', {class: 'recap-detail'}, [
+            el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12), document.createTextNode('Where and how to fix')]),
+            el('div', {class: 'recap-detail-body'}, [
+                priority.template ? el('pre', {class: 'recap-code', text: priority.template}) : null,
+                recapFix(priority.suggested_fix),
+                recapCodeLocation(priority.code_location),
+                recapFacts(priority),
+                recapEvents(priority.action)
+            ])
+        ]);
+        if (open) details.open = true;
+        details.addEventListener('toggle', function () {
+            state.panelOpen[key] = details.open;
+        });
+        return details;
+    }
+
+    function recapFix(fix) {
+        if (!fix) return null;
+        const url = PSL.httpUrl(fix.reference_url);
+        let reference = null;
+        if (fix.reference_url) {
+            reference = el('div', {class: 'recap-fix-ref'}, [url
+                ? el('a', {href: url, rel: 'noopener noreferrer', target: '_blank', text: 'Reference'})
+                : el('span', {text: 'Reference: ' + fix.reference_url})]);
+        }
+        return el('div', {class: 'recap-fix'}, [
+            el('div', {class: 'recap-fix-head'}, [
+                document.createTextNode('Suggested fix'),
+                fix.framework ? el('span', {class: 'chip', text: fix.framework}) : null
+            ]),
+            proseInto(el('div'), fix.recommendation),
+            reference
+        ]);
+    }
+
+    /** The function on one line and `path:line` on the next, as a stack trace reads. */
+    function recapCodeLocation(location) {
+        if (!location) return null;
+        const at = [location.filepath, location.lineno].filter(function (part) {
+            return part !== null && part !== undefined && part !== '';
+        }).join(':');
+        const lines = [location.function, at].filter(Boolean).join('\n');
+        if (!lines) return null;
+        return el('div', {}, [el('div', {class: 'recap-fix-head', text: 'Where in the code'}), el('pre', {class: 'recap-code', text: lines})]);
+    }
+
+    function recapFacts(priority) {
+        const rows = [
+            ['detections', priority.detections === null || priority.detections === undefined
+                ? '—' : priority.detections.toLocaleString('en-US')],
+            ['confidence', priority.confidence || '—']
+        ];
+        const list = el('dl', {class: 'recap-kv'});
+        rows.forEach(function (row) {
+            list.appendChild(el('dt', {text: row[0]}));
+            list.appendChild(el('dd', {text: row[1]}));
+        });
+        list.appendChild(el('dt', {text: 'signature'}));
+        list.appendChild(el('dd', {}, [el('code', {class: 'code-inline', text: priority.signature})]));
+        return list;
+    }
+
+    /** Every change of the action, newest last, in the reader's own time. */
+    function recapEvents(action) {
+        if (!action || !action.events || !action.events.length) return null;
+        return el('div', {}, [
+            el('div', {class: 'recap-fix-head', text: 'Action history'}),
+            el('ul', {class: 'recap-events'}, action.events.map(function (event) {
+                const owner = PSL.ownerLabel(event.owner, event.owner_display);
+                return el('li', {}, [
+                    el('time', {datetime: PSL.isoUtc(event.at_ms), title: PSL.isoUtc(event.at_ms), text: PSL.localTime(event.at_ms)}),
+                    document.createTextNode((event.from ? RECAP_TODO_LABEL[event.from] + ' → ' : '')
+                        + (RECAP_TODO_LABEL[event.to] || event.to) + (owner.text ? ', ' + owner.text : '')
+                        + ', by ' + event.by)
+                ]);
+            }))
+        ]);
+    }
+
+    // ---- actions, names and the foot of a row
+
+    function recapStateChip(kind, text) {
+        return el('span', {class: 'recap-state', 'data-state': kind}, [
+            RECAP_STATE_GLYPH[kind] ? svg(RECAP_STATE_GLYPH[kind], 12) : null,
+            document.createTextNode(text)
+        ]);
+    }
+
+    function recapWhen(action) {
+        const done = action.status === 'done' && action.done_at_ms;
+        const at = done ? action.done_at_ms : action.updated_at_ms;
+        return el('time', {
+            class: 'recap-when', datetime: PSL.isoUtc(at), title: PSL.isoUtc(at),
+            text: (done ? 'done ' : 'updated ') + PSL.localTime(at)
+        });
+    }
+
+    function recapOwner(action) {
+        const owner = PSL.ownerLabel(action.owner, action.owner_display);
+        return owner.text ? el('span', {class: 'recap-owner', title: owner.title, text: owner.text}) : null;
+    }
+
+    /** Management reads an action and cannot change it. */
+    function recapActionReadOnly(action) {
+        if (!action) return [recapStateChip('none', 'Not taken yet')];
+        if (action.status !== 'done') {
+            return [recapStateChip(action.status === 'todo' ? 'none' : 'in_progress',
+                action.status === 'todo' ? 'To do' : 'In progress'), recapOwner(action), recapWhen(action)];
+        }
+        const confirmation = PSL.confirmationLabel(action.confirmation);
+        return [recapStateChip(confirmation ? action.confirmation : 'none',
+            confirmation ? 'Done, ' + confirmation.toLowerCase() : 'Done'), recapOwner(action), recapWhen(action)];
+    }
+
+    function recapActionControls(priority, route) {
+        const action = priority.action;
+        const busy = state.recapBusy[priority.signature] === true;
+        const ack = el('a', {
+            class: 'ack-link', href: PSL.ackRouteHash(priority.signature, null, route.environment), text: 'Acknowledge'
+        });
+        ack.addEventListener('click', function () {
+            state.ackReturn = location.hash;
+        });
+        if (!action) {
+            const take = el('button', {class: 'pill-button pill-sm', type: 'button', text: 'Take', disabled: busy ? 'disabled' : null});
+            take.addEventListener('click', function () {
+                recapWrite(priority.signature, 'POST', '/api/actions', {signature: priority.signature, take: true});
+            });
+            return [take, ack];
+        }
+        const select = el('select', {class: 'refresh-select', 'aria-label': 'action status', disabled: busy ? 'disabled' : null},
+            ['todo', 'in_progress', 'done'].map(function (status) {
+                const option = el('option', {value: status, text: RECAP_TODO_LABEL[status]});
+                if (status === action.status) option.selected = true;
+                return option;
+            }));
+        select.addEventListener('change', function () {
+            recapWrite(priority.signature, 'PATCH', '/api/actions', {signature: priority.signature, status: select.value});
+        });
+        const confirmation = PSL.confirmationLabel(action.confirmation);
+        return [recapOwner(action), select,
+            confirmation ? recapStateChip(action.confirmation, confirmation) : null, recapWhen(action), ack];
+    }
+
+    function recapFoot(priority, management, route) {
+        const kids = [];
+        if (!management) {
+            kids.push(el('span', {class: 'facts'}, [
+                el('span', {}, [
+                    el('b', {text: priority.detections === null || priority.detections === undefined
+                        ? '—' : priority.detections.toLocaleString('en-US')}),
+                    document.createTextNode(' detections')
+                ]),
+                recapNameButton(priority)
+            ]));
+        }
+        kids.push(el('div', {class: 'recap-action'}, management
+            ? recapActionReadOnly(priority.action) : recapActionControls(priority, route)));
+        return el('div', {class: 'recap-foot'}, kids);
+    }
+
+    /**
+     * Sends a write on a row and reads the recap again, whatever it answered. A refusal keeps the
+     * Hub's own sentence in the row: it names why (no identity, no permission).
+     */
+    function recapSend(method, path, body) {
+        return fetch(path, {
+            method: method,
+            headers: {'content-type': 'application/json', accept: 'application/json'},
+            body: JSON.stringify(body)
+        }).then(signInOn401).then(function (response) {
+            if (response.ok) return null;
+            return response.json().catch(function () {
+                return null;
+            }).then(function (payload) {
+                return payload && payload.detail ? String(payload.detail) : 'The Hub refused the request (' + response.status + ').';
+            });
+        }).catch(function () {
+            return 'The Hub did not answer.';
+        });
+    }
+
+    function recapWrite(signature, method, path, body) {
+        if (state.recapBusy[signature]) return;
+        state.recapBusy[signature] = true;
+        render();
+        recapSend(method, path, body).then(function (failure) {
+            delete state.recapBusy[signature];
+            if (failure) state.recapRowError[signature] = failure;
+            else delete state.recapRowError[signature];
+            loadRecap(true);
+        });
+    }
+
+    function recapNameButton(priority) {
+        const button = el('button', {
+            class: 'recap-link', type: 'button', text: priority.label ? 'Rename' : 'Name this',
+            'aria-label': (priority.label ? 'Rename ' : 'Name ') + priority.service + ' ' + priority.endpoint
+        });
+        button.addEventListener('click', function () {
+            state.recapNaming = state.recapNaming === priority.signature ? null : priority.signature;
+            state.recapNameDraft = null;
+            renderFocus('.recap-name-input');
+        });
+        return button;
+    }
+
+    /** The business name of an endpoint, in a line of its own under the row. Enter saves, an empty name removes it. */
+    function recapNameEditor(priority) {
+        const input = el('input', {
+            class: 'recap-input recap-name-input', type: 'text', maxlength: '80',
+            value: state.recapNameDraft !== null ? state.recapNameDraft : priority.label || '',
+            placeholder: 'Showing a cart', 'aria-label': 'Business name for ' + priority.service + ' ' + priority.endpoint,
+            spellcheck: 'false'
+        });
+        const save = el('button', {class: 'pill-button pill-sm', type: 'submit', text: 'Save'});
+        const cancel = el('button', {class: 'recap-link', type: 'button', text: 'Cancel'});
+        cancel.addEventListener('click', function () {
+            state.recapNaming = null;
+            state.recapNameDraft = null;
+            render();
+        });
+        const form = el('form', {class: 'recap-name'}, [input, save, cancel]);
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            recapNameSave(priority, input.value.trim() || null);
+        });
+        return form;
+    }
+
+    function recapNameSave(priority, label) {
+        recapSend('PUT', '/api/labels', {service: priority.service, endpoint: priority.endpoint, label: label})
+            .then(function (failure) {
+                if (failure) {
+                    state.recapRowError[priority.signature] = failure;
+                    state.recapNameDraft = label === null ? '' : label;
+                    render();
+                    return;
+                }
+                delete state.recapRowError[priority.signature];
+                state.recapNaming = null;
+                state.recapNameDraft = null;
+                loadRecap(true);
+            });
+    }
+
+    // ---- what moved
+
+    /** The sentence in a line, led by the label when the endpoint has one. */
+    function recapMoveWho(item) {
+        const where = item.label || !item.endpoint
+            ? [document.createTextNode('In ' + item.service + '.')]
+            : [document.createTextNode('In ' + item.service + ', '), el('code', {class: 'code-inline', text: item.endpoint}),
+                document.createTextNode('.')];
+        return el('span', {class: 'who'}, [
+            el('span', {class: 'plain'}, [
+                item.label ? el('b', {class: 'recap-label', text: item.label + '. '}) : null,
+                document.createTextNode(item.plain)
+            ]),
+            el('span', {class: 'recap-where'}, where)
+        ]);
+    }
+
+    function recapMoveItem(item, management) {
+        const who = management
+            ? recapMoveWho(item)
+            : el('span', {class: 'who'}, [
+                el('span', {
+                    class: 'chip', 'data-type': item.finding_type,
+                    text: PSL.FINDING_TYPE_LABEL[item.finding_type] || item.finding_type
+                }),
+                el('span', {class: 'table-strong', text: item.service}),
+                el('span', {class: 'recap-endpoint', text: item.endpoint})
+            ]);
+        return el('li', {}, [who, recapTrend(item)]);
+    }
+
+    function recapMoved(snapshot, labels) {
+        const management = snapshot.view === 'pilotage';
+        const moves = snapshot.movements;
+        const confirmed = moves.gone_with_confirmed_action;
+        const groups = [
+            ['New', moves.new, '', ''],
+            ['Gone', moves.gone, confirmed > 0 ? confirmed + ' with a confirmed fix' : '', ''],
+            ['Up', moves.up, '', 'crit'],
+            ['Down', moves.down, '', ''],
+            ['Came back', moves.came_back, '', 'warn'],
+            ['Done but still detected', moves.done_still_detected, '', 'crit']
+        ].filter(function (group) {
+            return group[1].length > 0;
+        });
+        const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-moved'}, [
+            ruledOverline('// ' + labels.moved.toLowerCase()),
+            recapHeading('recap-h-moved', labels.moved, 'since ' + PSL.periodText(snapshot.previous),
+                recapHelp(snapshot, 'moved'), labels.moved)
+        ]);
+        const note = recapMovedNote(snapshot);
+        if (note) section.appendChild(el('p', {class: 'recap-more', text: note}));
+        if (groups.length) {
+            section.appendChild(el('div', {class: 'recap-moves'}, groups.map(function (group) {
+                return el('div', {class: 'recap-move', 'data-tone': group[3] || null}, [
+                    el('h3', {}, [
+                        document.createTextNode(group[0]),
+                        el('span', {class: 'n', text: String(group[1].length)}),
+                        group[2] ? el('span', {class: 'sub', text: group[2]}) : null
+                    ]),
+                    el('ul', {}, group[1].map(function (item) {
+                        return recapMoveItem(item, management);
+                    }))
+                ]);
+            })));
+        }
+        if (snapshot.sources_without_volume.length) {
+            section.appendChild(el('p', {
+                class: 'sources-note',
+                text: 'Sources without a detection volume: ' + snapshot.sources_without_volume.join(', ') + '.'
+            }));
+        }
+        return section;
+    }
+
+    /**
+     * The first day of a period has no closed day to compare, which is not the same as nothing
+     * having moved: the server's `nothing_moved` is true there only because every list is empty.
+     */
+    function recapMovedNote(snapshot) {
+        if (snapshot.previous.truncated_to_days === 0) {
+            return 'No day of this period has closed yet, so nothing is compared with the previous one.';
+        }
+        return snapshot.nothing_moved ? 'Nothing moved since the previous period.' : '';
     }
 
     // ---------------------------------------------------- screen: disclosures

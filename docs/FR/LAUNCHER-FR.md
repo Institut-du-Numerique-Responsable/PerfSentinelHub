@@ -277,6 +277,54 @@ dans leur cadre, comme ceux des incidents, et la page ne défile pas.
   <img alt="Un incident déplié qui liste les corrélations actives pendant sa durée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations.png">
 </picture>
 
+## L'écran du récapitulatif
+
+Le récapitulatif sert d'appui à la revue d'équipe : ce qui gaspille le plus, et ce qui a bougé depuis la
+période précédente de même durée. Il lit `GET /api/recap` ([l'API](API-FR.md#recap)), donc son
+périmètre, ses filtres et son volume de détections sont ceux de la liste des findings. Une période
+(jour, semaine ou mois, la semaine par défaut), un jour quelconque de cette période, un environnement, un
+service, un namespace et la bascule Engineering ou Management la resserrent, et chaque choix s'écrit dans
+l'adresse, `#/recap?period=day&view=pilotage`, de sorte qu'une vue s'envoie en lien. La période se compte
+en jours UTC et le dit, alors que chaque horodatage de la page, le moment où une action a été prise ou
+terminée compris, s'affiche à votre heure avec son fuseau (`2026-10-29 14:32 CET`), l'instant UTC au survol.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap-dark.png">
+  <img alt="L'écran du récapitulatif : la période, quatre tuiles, puis les findings à traiter d'abord avec leur tendance et leur action" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap.png">
+</picture>
+
+La page se lit comme un ordre du jour. Sous la ligne de période, les notes (traces échantillonnées,
+traces délestées sous pression mémoire) et, quand un daemon a redémarré ou qu'un jour n'est pas encore
+scellé, un bandeau qui dit que la comparaison n'est pas exacte. Quatre tuiles suivent : les I/O évitables,
+l'estimation carbone (un ordre de grandeur, "at least" quand une source n'envoie pas de coefficient, jamais
+une clé de tri), les findings actifs avec les acquittés comptés à part, et les actions avec ce que le moteur
+a confirmé. Tant que la période est en cours, les deux premières le disent, et les tendances ne comparent
+que ses jours clos aux mêmes jours de la période précédente. Sept "?" expliquent la période, les tuiles, le
+classement et ce qui a bougé.
+
+What to fix first liste les findings non acquittés, ceux qui ont des I/O évitables d'abord par volume, les
+autres par sévérité sous un séparateur, dix au départ et tous derrière Show all. Une carte porte le type, le
+service, l'endpoint, la suggestion, une barre d'ampleur relative à la première ligne et la tendance. Replié
+dessous, ouvert sur la première carte : la requête ou l'appel, le correctif suggéré avec son framework et son
+lien de référence (seule une adresse http ou https devient un lien), l'endroit dans le code, la confiance, la
+signature et l'historique de l'action. Take déclare l'action au nom sous lequel le Hub vous connaît, le
+sélecteur à côté la fait passer entre to do, in progress et done, et le verdict du moteur sur une action
+terminée (confirmed, still detected, came back, waiting for a sealed day) apparaît à côté. Acknowledge ouvre
+la page d'acquittement. Name this, ou Rename, donne à l'endpoint un nom métier qui titre la ligne, en
+Management aussi. Le propriétaire d'une action se lit comme un nom : celui que la connexion a donné, sinon
+un nom tiré de l'identité (`alice.martin@acme.com` se lit Alice Martin), l'identité au survol. Un refus,
+pas d'identité ou pas de permission, montre dans la carte la phrase même du Hub.
+
+What moved liste les findings nouveaux, disparus, en hausse, en baisse, revenus et terminés mais encore
+détectés, les groupes qui contiennent quelque chose seulement. Disparu est une présomption, pas la preuve
+que le correctif est parti. Le premier jour d'une période, rien n'est comparé, et la page le dit au lieu de
+prétendre que rien n'a bougé.
+
+La vue Management lit le même classement en mots simples : les cinq premiers problèmes sous forme d'une
+phrase fixe par type, le nom de l'endpoint quand quelqu'un l'a donné (sinon l'endpoint sous le service), le
+chiffre en opérations inutiles, la tendance et l'action, en lecture seule. Elle ne porte aucun mot
+technique, ses sept textes d'aide non plus.
+
 ## L'écran des divulgations
 
 Les divulgations périodiques qu'une tâche planifiée a publiées, voir

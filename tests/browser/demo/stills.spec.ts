@@ -237,6 +237,19 @@ test("correlations open every episode of an incident's pair", async ({page}) => 
     await expect(page.locator("button.row-toggle", {hasText: "orders-svc"})).toHaveAttribute("aria-expanded", "true");
 });
 
+test("recap", async ({page}, info) => {
+    await page.goto("/#/recap");
+    await settled(page, "What wastes the most");
+    // The heading is drawn before the read answers, and the tiles and the priorities come from
+    // that one read, so the first card is the whole screen.
+    await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 15_000});
+    await page.screenshot({
+        path: nameFor("launcher-recap", info.project.name),
+        fullPage: true,
+        animations: "disabled"
+    });
+});
+
 test("disclosures", async ({page}, info) => {
     await page.goto("/#/disclosures");
     await settled(page, "Energy and carbon, period by period");
