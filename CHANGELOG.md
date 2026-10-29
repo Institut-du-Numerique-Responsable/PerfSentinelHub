@@ -36,6 +36,19 @@ All notable changes to PerfSentinelHub are recorded here.
   subscriptions, the webhooks and the SMTP relay. Webhook URLs and secrets and the SMTP password
   come from Secrets as `Hub__Recaps__*` environment variables, never from the ConfigMap.
 
+### Changed
+
+- The image ships perf-sentinel `0.38.0` as its analysis engine, repinned by digest from
+  `0.37.1`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.37.1` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.38.0` adds the day's avoidable carbon
+  to the detection ledger (`avoidable_gco2`, `avoidable_gco2_low`, `avoidable_io_ops` and
+  `total_io_ops` on each day of `GET /api/detections` and of the push), which the recap reads
+  for its CO2 estimate. Upgrade the Hub before or with the daemons: a Hub older than this one
+  drops the four keys, and a day it already acknowledged is not sent again until it changes.
+  A backend analysis gives the same findings, signatures and energy figures as on `0.37.1`.
+
 ## [0.8.6] - 2026-10-28
 
 ### Changed
