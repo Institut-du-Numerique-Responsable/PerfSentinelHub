@@ -492,4 +492,40 @@ internal static class Schema
                                   PRIMARY KEY (service, endpoint)
                                 );
                                 """;
+
+    // A report is its snapshot as generated, never rewritten; one per subscription, cadence and
+    // period, while on-demand reports carry no subscription and so never conflict. A delivery row
+    // names a webhook or an address, never a URL.
+    internal const string V18 = """
+                                CREATE TABLE IF NOT EXISTS recap_reports (
+                                  id TEXT PRIMARY KEY,
+                                  subscription TEXT,
+                                  period_kind TEXT NOT NULL,
+                                  period_from TEXT NOT NULL,
+                                  period_to TEXT NOT NULL,
+                                  views TEXT NOT NULL,
+                                  complete INTEGER NOT NULL,
+                                  nothing_moved INTEGER NOT NULL,
+                                  created_by TEXT,
+                                  generated_at_ms INTEGER NOT NULL,
+                                  snapshot_json TEXT NOT NULL
+                                );
+                                CREATE UNIQUE INDEX IF NOT EXISTS ux_recap_reports_period
+                                  ON recap_reports(subscription, period_kind, period_from) WHERE subscription IS NOT NULL;
+                                CREATE INDEX IF NOT EXISTS ix_recap_reports_generated ON recap_reports(generated_at_ms DESC, id);
+                                CREATE TABLE IF NOT EXISTS recap_deliveries (
+                                  id TEXT PRIMARY KEY,
+                                  report_id TEXT NOT NULL,
+                                  channel TEXT NOT NULL,
+                                  target TEXT NOT NULL,
+                                  state TEXT NOT NULL,
+                                  attempts INTEGER NOT NULL DEFAULT 0,
+                                  created_at_ms INTEGER NOT NULL,
+                                  last_attempt_ms INTEGER,
+                                  next_attempt_ms INTEGER,
+                                  last_status INTEGER
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_recap_deliveries_due ON recap_deliveries(state, next_attempt_ms);
+                                CREATE INDEX IF NOT EXISTS ix_recap_deliveries_report ON recap_deliveries(report_id);
+                                """;
 }

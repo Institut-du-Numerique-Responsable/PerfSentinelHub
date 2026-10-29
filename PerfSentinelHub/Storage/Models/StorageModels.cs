@@ -369,6 +369,38 @@ public static class DeliveryStates
     public const string Failed = "failed";
 }
 
+public static class RecapChannels
+{
+    public const string Webhook = "webhook";
+    public const string Email = "email";
+}
+
+public sealed record RecapReportSummary(
+    string Id,
+    string? Subscription,
+    string PeriodKind,
+    string PeriodFrom,
+    string PeriodTo,
+    IReadOnlyList<string> Views,
+    bool Complete,
+    bool NothingMoved,
+    string? CreatedBy,
+    long GeneratedAtMs);
+
+/// <summary>A report with the snapshot exactly as it was generated, the one thing a listing never reads.</summary>
+public sealed record RecapReportRecord(RecapReportSummary Summary, string SnapshotJson);
+
+public sealed record RecapDeliveryRecord(
+    string Id,
+    string ReportId,
+    string Channel,
+    string Target,
+    string State,
+    int Attempts,
+    long? LastAttemptMs,
+    long? NextAttemptMs,
+    int? LastStatus);
+
 /// <summary>An ack's target at one source: the held copy, if any, and whether the mirror lists an ack of it.</summary>
 public sealed record AckTarget(bool Held, string? Service, bool Mirrored, IReadOnlyList<AccessAttribute> Rows);
 

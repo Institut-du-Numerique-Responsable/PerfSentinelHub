@@ -369,6 +369,43 @@ public sealed class WorkerAndRetentionTests : IDisposable
         await StopQuietlyAsync(worker, cancellationToken);
     }
 
+    [Fact]
+    public async Task The_daily_pass_purges_reports_past_their_retention()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = Options.Create(new HubOptions
+        {
+            DatabasePath = _databasePath,
+            Recaps = new RecapsOptions { Retention = TimeSpan.FromDays(32) }
+        });
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_800_000_000_000));
+        var database = new HubDatabase(options, clock);
+        await database.InitializeAsync(cancellationToken);
+        var nowMs = clock.GetUtcNow().ToUnixTimeMilliseconds();
+        await database.InsertRecapReportAsync(
+            Report("old", nowMs - (long)TimeSpan.FromDays(33).TotalMilliseconds), [(RecapChannels.Webhook, "ops")],
+            cancellationToken);
+        await database.InsertRecapReportAsync(
+            Report("kept", nowMs - (long)TimeSpan.FromDays(31).TotalMilliseconds), [], cancellationToken);
+        using var worker = new RetentionWorker(database, options, clock, new ListLogger<RetentionWorker>());
+
+        await worker.StartAsync(cancellationToken);
+        for (var attempt = 0; attempt < 500 && (await database.ListRecapReportsAsync(null, 10, cancellationToken)).Count > 1;
+             attempt++)
+            await Task.Delay(10, cancellationToken);
+
+        Assert.Equal(["kept"], (await database.ListRecapReportsAsync(null, 10, cancellationToken)).Select(r => r.Id));
+        Assert.Empty(await database.ListRecapDeliveriesAsync(["old"], cancellationToken));
+        await StopQuietlyAsync(worker, cancellationToken);
+    }
+
+    private static RecapReportRecord Report(string id, long generatedAtMs)
+    {
+        return new RecapReportRecord(
+            new RecapReportSummary(id, id, "week", "2026-10-19", "2026-10-25", RecapViewNames.All, true, false, null,
+                generatedAtMs), "{}");
+    }
+
     private static async Task WaitForAsync(Func<bool> condition)
     {
         for (var attempt = 0; attempt < 500 && !condition(); attempt++)
