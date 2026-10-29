@@ -177,6 +177,9 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
 | `correlation_episodes`         | episode and source                                             | retention, on `last_seen_ms`               |
 | `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
+| `finding_actions`              | signature, with its status and owner                           | never                                      |
+| `finding_action_events`        | status or owner change of an action                            | never                                      |
+| `endpoint_labels`              | service and endpoint, with its business name                   | never                                      |
 | `incident_reads`, `ack_reads`  | source                                                         | never                                      |
 | `analysis_runs`                | run                                                            | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | terminal token, by the SHA-256 of its value                    | revocation, or retention past `expires_at_ms` |
@@ -204,6 +207,14 @@ signature cap. When the daemon scores carbon, the row also carries the day's avo
 serves and the reasons it falls short, see
 [API.md](API.md#what-the-hub-adds-to-a-finding). Nothing is backfilled: a day before the
 upgrade has no row and reads as unknown.
+
+The recap, `GET /api/recap`, writes nothing and keeps nothing of its own. `RecapService` makes
+three windowed reads of the findings, the period with its acknowledged findings, the period
+without them and the previous period, then a coverage read of the sources' days and a carbon
+read of their avoidable grams, and joins the actions and the labels last. The folding is pure
+and lives in `Recaps/`: the period, the ranking, the trends, the moves, the coverage judgment,
+the carbon pricing and the sentence per type. The service is a plain class on purpose: the
+reports a subscription will send reuse it as it is.
 
 Each start fills in what an older build left out: the attribute rows of a copy whose newest
 observation has none, the service of a copy that has none, both from that copy's own

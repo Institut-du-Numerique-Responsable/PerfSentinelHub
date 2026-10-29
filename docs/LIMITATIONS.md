@@ -135,6 +135,40 @@ reads that whole source, and a scoped read reaches only findings with at least o
 copy in scope. A source removed from `Hub:Sources` drops out of the count, since the
 Hub has no name to serve for it.
 
+## What a recap claims
+
+The carbon figure of the recap is an order of magnitude, never a measurement. It prices
+the extra I/O of the ranked findings at each day's own grams per avoidable I/O, and that
+coefficient comes from the operational tier of the daemon's carbon model. The extra I/O
+is the findings' `extra_io_ops`, which is not deduplicated the way a window's
+`avoidable_io_ops` is, so it can exceed what the window counted. The day's coefficient
+also prices the I/O of the batches whose region the daemon could not resolve. The figure
+is rounded to one significant figure for that reason, and a source that sends no
+coefficient leaves it a partial minimum, never extrapolated.
+
+`gone` is a presumption, like `likely_resolved`: a finding the period no longer holds may
+have been fixed, or the traffic that produced it may have stopped. `gone_with_confirmed_action`
+counts the ones backed by a done action the engine confirmed, which is the only evidence
+the recap holds.
+
+The reasons a period reads incomplete, and the notes that leave its comparison standing,
+are the ones of the detection count above. Months of different lengths compare as they
+are, 31 days against 28, so a monthly trend is a ratio of volumes, not of daily rates. A
+period in progress compares its closed days with the same number of first days of the
+previous period. Today counts in the tiles and the ranking only, and on the first day of
+a period nothing is compared, which the recap says instead of reading nothing moved.
+
+An action is global to the signature, as an ack is, whichever source holds the finding.
+Its confirmation is judged within the request's filters, so the same action can read
+differently in a filtered and in an unfiltered recap. Any detection after the day an
+action was marked done contradicts it, a straggling trace or a slow deployment included,
+so mark it done again once the fix has actually shipped. Actions and their events are
+never purged, not with their finding and not by retention, so the tables only grow. Labels
+are Hub-wide as well, and are not purged either.
+
+A recap reads at most 5,000 findings. Past that it keeps the first 5,000, sets
+`truncated`, and every figure covers those alone. Narrow the request with a filter.
+
 ## What a finding is attributed to
 
 The engine files an N+1 or redundant-call group that spans several services

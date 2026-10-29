@@ -2,6 +2,27 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- A recap screen, `#/recap`, and `GET /api/recap`: the findings to fix first, what moved since
+  the previous period of the same length, what the teams did about them and a carbon estimate,
+  by day, week or month, in an Engineering and a Management view. The page and the route follow
+  `findings.read`.
+- Actions on findings: `POST /api/actions` and `PATCH /api/actions` declare who works on a
+  finding and where it stands (`todo`, `in_progress`, `done`). The Hub judges a done action on
+  the days after it and reports it `confirmed`, `contradicted` or `came_back`. Two permissions
+  go with them: `actions.write` for the routes, carried by the built-in `member` role, and
+  `recaps.read` for the recap reports, Hub level, carried by `admin`.
+- Endpoint labels: `PUT /api/labels` names an endpoint in business words, which titles its row
+  in the recap, with the `labels.write` permission.
+- `Hub:Recaps:MovementThreshold` (default `0.2`), the relative change past which a finding
+  reads `up` or `down`.
+- The Hub reads the carbon day fields that perf-sentinel engines send with their ledger days
+  (avoidable grams, avoidable I/O and total I/O) and keeps them per day. Engines that send
+  none leave the recap's carbon figure empty.
+
 ## [0.8.6] - 2026-10-28
 
 ### Changed

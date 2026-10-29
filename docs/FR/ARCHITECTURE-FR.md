@@ -192,6 +192,9 @@ soit la source, et rien d'autre.
 | `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
 | `correlation_episodes`         | épisode et source                                                    | rétention, sur `last_seen_ms`              |
 | `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
+| `finding_actions`              | signature, avec son statut et son responsable                        | jamais                                     |
+| `finding_action_events`        | changement de statut ou de responsable d'une action                  | jamais                                     |
+| `endpoint_labels`              | service et endpoint, avec son nom métier                             | jamais                                     |
 | `incident_reads`, `ack_reads`  | source                                                               | jamais                                     |
 | `analysis_runs`                | run                                                                  | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | jeton de terminal, par le SHA-256 de sa valeur                       | révocation, ou rétention passé `expires_at_ms` |
@@ -220,6 +223,14 @@ grammes évitables du jour (médian et bas), les E/S évitables et les E/S total
 fenêtrée de `/api/findings` les replie, par source, en un compte servi et les raisons qui le
 rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Rien n'est
 rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.
+
+Le récap, `GET /api/recap`, n'écrit rien et ne garde rien en propre. `RecapService` fait trois
+lectures fenêtrées des findings, la période avec ses findings acquittés, la période sans eux et
+la période précédente, puis une lecture de couverture des jours des sources et une lecture
+carbone de leurs grammes évitables, et joint les actions et les libellés en dernier. Le calcul
+est pur et vit dans `Recaps/` : la période, le classement, les tendances, les mouvements, le
+jugement de couverture, la valorisation carbone et la phrase par type. Le service est une
+classe simple à dessein : les rapports qu'enverra un abonnement le réutilisent tel quel.
 
 Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : les lignes
 d'attributs d'une copie dont l'observation la plus récente n'en a aucune, le service d'une

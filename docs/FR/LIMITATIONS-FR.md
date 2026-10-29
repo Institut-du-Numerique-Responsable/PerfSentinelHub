@@ -147,6 +147,42 @@ qu'à un appelant qui lit cette source entière, et une lecture restreinte n'att
 les findings qui ont au moins une copie dans sa portée. Une source retirée de
 `Hub:Sources` sort du compte, puisque le Hub n'a aucun nom à servir pour elle.
 
+## Ce qu'affirme un récap
+
+Le chiffre de carbone du récap est un ordre de grandeur, jamais une mesure. Il valorise les
+E/S en trop des findings classés au nombre de grammes par E/S évitable propre à chaque jour,
+et ce coefficient vient du palier opérationnel du modèle carbone du daemon. Les E/S en trop
+sont les `extra_io_ops` des findings, qui ne sont pas dédupliquées comme le sont les
+`avoidable_io_ops` d'une fenêtre : elles peuvent dépasser ce que la fenêtre a compté. Le
+coefficient du jour valorise aussi les E/S des lots dont le daemon n'a pas pu résoudre la
+région. Le chiffre est arrondi à un chiffre significatif pour cette raison, et une source qui
+n'envoie aucun coefficient le laisse en minimum partiel, jamais extrapolé.
+
+`gone` est une présomption, comme `likely_resolved` : un finding que la période ne porte plus
+peut avoir été corrigé, ou le trafic qui l'a produit peut s'être arrêté.
+`gone_with_confirmed_action` compte ceux qu'appuie une action terminée que le moteur a
+confirmée, seule preuve que le récap détienne.
+
+Les raisons pour lesquelles une période se lit incomplète, et les notes qui laissent sa
+comparaison tenir, sont celles du compte de détections ci-dessus. Des mois de longueurs
+différentes se comparent tels quels, 31 jours contre 28, donc une tendance mensuelle est un
+rapport de volumes, pas de débits quotidiens. Une période en cours compare ses jours clos aux
+mêmes premiers jours de la période précédente. Aujourd'hui ne compte que dans les tuiles et le
+classement, et le premier jour d'une période rien n'est comparé, ce que le récap dit au lieu
+de lire que rien n'a bougé.
+
+Une action est globale à la signature, comme un acquittement, quelle que soit la source qui
+porte le finding. Sa confirmation est jugée dans les filtres de la requête : une même action
+peut donc se lire différemment dans un récap filtré et dans un récap non filtré. Toute
+détection après le jour où une action a été marquée terminée la contredit, une trace
+retardataire ou un déploiement lent compris : marquez-la de nouveau terminée une fois le
+correctif réellement livré. Les actions et leurs événements ne sont jamais purgés, ni avec
+leur finding ni par la rétention, donc les tables ne font que grossir. Les libellés sont
+aussi communs à tout le Hub et jamais purgés.
+
+Un récap lit au plus 5 000 findings. Au-delà il garde les 5 000 premiers, pose `truncated`, et
+tous les chiffres ne couvrent que ceux-là. Restreignez la requête avec un filtre.
+
 ## À quoi un finding est attribué
 
 Le moteur range un groupe N+1 ou d'appels redondants qui traverse plusieurs
