@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
@@ -24,6 +22,12 @@ public sealed partial class DeliveryWorker(
     public const int MaxAttempts = 8;
     private static readonly TimeSpan FirstBackoff = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromHours(1);
+
+    /// <summary>The wait after the given number of failed attempts, 1 or more: 30 s, doubling, capped at one hour.</summary>
+    internal static TimeSpan Backoff(int attempts)
+    {
+        return TimeSpan.FromTicks(Math.Min(MaxBackoff.Ticks, FirstBackoff.Ticks << (attempts - 1)));
+    }
 
     /// <summary>Sends every delivery due now, one after the other.</summary>
     public async Task RunOnceAsync(CancellationToken cancellationToken)
@@ -90,7 +94,7 @@ public sealed partial class DeliveryWorker(
             return;
         }
 
-        var backoff = TimeSpan.FromTicks(Math.Min(MaxBackoff.Ticks, FirstBackoff.Ticks << (attempts - 1)));
+        var backoff = Backoff(attempts);
         await database.RecordDeliveryAttemptAsync(delivery.Id, delivery.Attempts, status, DeliveryStates.Pending, Now(),
             Now() + (long)backoff.TotalMilliseconds, cancellationToken);
     }
@@ -98,26 +102,12 @@ public sealed partial class DeliveryWorker(
     // The status, or null when nothing answered. The URL never reaches a log line.
     private async Task<int?> SendAsync(WebhookOptions webhook, byte[] body, CancellationToken cancellationToken)
     {
-        var timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        using var request = new HttpRequestMessage(HttpMethod.Post, webhook.Url);
-        request.Content = new ByteArrayContent(body);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        request.Headers.Add(WebhookDelivery.TimestampHeader, timestamp.ToString(CultureInfo.InvariantCulture));
-        request.Headers.Add(WebhookDelivery.SignatureHeader, WebhookDelivery.Sign(webhook.Secret!, timestamp, body));
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(options.Value.HttpTimeout);
-        try
-        {
-            using var response = await clients.CreateClient(ClientName).SendAsync(request, timeout.Token);
-            return (int)response.StatusCode;
-        }
-        catch (Exception exception) when (exception is HttpRequestException ||
-                                          (exception is OperationCanceledException &&
-                                           !cancellationToken.IsCancellationRequested))
-        {
+        var status = await WebhookDelivery.PostAsync(
+            clients.CreateClient(ClientName), webhook.Url!, webhook.Secret!, body, timeProvider,
+            options.Value.HttpTimeout, cancellationToken);
+        if (status is null)
             LogUnreachable(logger, webhook.Name);
-            return null;
-        }
+        return status;
     }
 
     private long Now()

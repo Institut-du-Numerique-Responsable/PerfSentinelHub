@@ -692,6 +692,35 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
 - **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
   `truncated: true` ; resserrez la requête avec un filtre.
 
+### Webhooks du récap
+
+Chaque webhook nommé par un abonnement, déclaré dans `Hub:Recaps:Webhooks`, reçoit un `POST` à corps
+JSON quand le rapport de l'abonnement pour une période close est figé. Une période où rien n'a
+bougé est archivée et envoyée nulle part. Le corps ne porte que la vue de pilotage : l'objet `recap`
+est le snapshot `pilotage` décrit plus haut, il ne contient donc aucune clé d'ingénierie, et un
+endpoint seulement sur une ligne sans libellé. La vue d'ingénierie arrive chez le destinataire sous
+forme de lien, jamais de contenu.
+
+```json
+{"event":"recap","report_id":"…","subscription":"weekly-shop",
+ "period":{"kind":"week","from":"2026-10-19","to":"2026-10-25"},"complete":true,
+ "pilotage_url":"https://hub.example/recaps/<id>/pilotage.html","tech_url":null,
+ "recap":{"schema_version":1,"view":"pilotage"}}
+```
+
+`pilotage_url` et `tech_url` nomment la page figée quand le rapport contient cette vue et que
+`Hub:Recaps:PublicUrl` (ou `Hub:Disclosures:PublicUrl` à défaut) est renseigné, et valent `null`
+sinon. `recap` est abrégé ci-dessus. Les en-têtes de signature, les relances et les 8 tentatives sont ceux des
+[webhooks de divulgation](#webhooks) : `X-PerfSentinel-Timestamp`, `X-PerfSentinel-Signature` sous
+le `Secret` du webhook, aucune redirection suivie, un `2xx` règle une livraison, tout autre statut
+est retenté après 30 secondes, puis après une attente qui double, plafonnée à une heure.
+`Confidentiality`, `IncludeShareLink` et `ShareLinkDays` ne valent que pour les divulgations et
+sont ignorés ici.
+
+Les livraisons tournent toutes les 15 secondes depuis la table `recap_deliveries`, si bien qu'un
+redémarrage les reprend. Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
+été purgé entre-temps, échoue sans requête.
+
 ## Actions
 
 Une action dit qui travaille sur un finding et où il en est. Le Hub la tient lui-même :

@@ -3,9 +3,10 @@ using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Recaps;
 
-/// <summary>Runs the scheduled recaps every 15 seconds while a subscription is declared.</summary>
+/// <summary>Generates the scheduled recaps, then sends what is due, every 15 seconds while a subscription is declared.</summary>
 public sealed partial class RecapLoop(
     RecapGenerator generator,
+    RecapDeliveryWorker deliveries,
     IOptions<HubOptions> options,
     TimeProvider timeProvider,
     ILogger<RecapLoop> logger) : BackgroundService
@@ -23,6 +24,7 @@ public sealed partial class RecapLoop(
                 try
                 {
                     await generator.RunOnceAsync(stoppingToken);
+                    await deliveries.RunOnceAsync(stoppingToken);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {

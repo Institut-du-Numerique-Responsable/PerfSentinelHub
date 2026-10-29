@@ -643,6 +643,33 @@ and `truncated`.
 - **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
   `truncated: true`; narrow the request with a filter.
 
+### Recap webhooks
+
+Each webhook named by a subscription, declared in `Hub:Recaps:Webhooks`, receives a `POST` with a JSON
+body when the subscription's report of a closed period is frozen. A period in which nothing moved is
+archived and sent nowhere. The body carries the management view only: the `recap` object is the
+`pilotage` snapshot described above, so it holds none of the engineering keys, and an endpoint only
+on a row that has no label. The engineering view reaches a receiver as a link, never as content.
+
+```json
+{"event":"recap","report_id":"…","subscription":"weekly-shop",
+ "period":{"kind":"week","from":"2026-10-19","to":"2026-10-25"},"complete":true,
+ "pilotage_url":"https://hub.example/recaps/<id>/pilotage.html","tech_url":null,
+ "recap":{"schema_version":1,"view":"pilotage"}}
+```
+
+`pilotage_url` and `tech_url` name the frozen page when the report holds that view and
+`Hub:Recaps:PublicUrl` (or `Hub:Disclosures:PublicUrl` when unset) is set, and are `null`
+otherwise. `recap` is shortened above. The signature headers, the retries and the 8 attempts are those of
+[disclosure webhooks](#webhooks): `X-PerfSentinel-Timestamp`, `X-PerfSentinel-Signature` under the
+webhook's `Secret`, no redirect followed, a `2xx` settles a delivery, anything else is tried again
+after 30 seconds then a doubling wait capped at one hour. `Confidentiality`, `IncludeShareLink` and
+`ShareLinkDays` apply to disclosures only and are ignored here.
+
+Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart resumes them. A
+delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a
+request.
+
 ## Actions
 
 An action says who works on a finding and where it stands. The Hub keeps it itself: nothing

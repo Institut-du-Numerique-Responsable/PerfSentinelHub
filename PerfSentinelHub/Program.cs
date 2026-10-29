@@ -102,6 +102,7 @@ builder.Services.AddHostedService<ShareDownloadFlusher>();
 builder.Services.AddSingleton<DeliveryWorker>();
 builder.Services.AddHostedService<DeliveryLoop>();
 builder.Services.AddSingleton<RecapGenerator>();
+builder.Services.AddSingleton<RecapDeliveryWorker>();
 builder.Services.AddHostedService<RecapLoop>();
 // Its own client: a webhook is a destination of its own, never followed elsewhere. No
 // request logging: the factory would log each URL, and a chat webhook URL is a secret.
