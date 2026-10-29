@@ -560,7 +560,7 @@
       "io_ops": 3
     }
   ],
-  "binary_version": "0.34.1",
+  "binary_version": "0.37.1",
   "detection_config": {
     "n_plus_one_threshold": 5,
     "window_ms": 500,

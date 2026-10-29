@@ -86,6 +86,29 @@ const routes = {
 const acks = optional(`daemon-acks-${variant}`);
 if (acks !== null) routes["/api/acks"] = acks;
 
+// The detection ledger is a capture too, its days slid by whole days so the captured
+// day is today. A status that carries a ledger names this one, because the Hub reads
+// a ledger only under the id the status gives. A status without one, the daemon a
+// minor behind, has no such route, as a daemon below 0.37.0 has none.
+const DAY_MS = 86_400_000;
+const ledger = optional("daemon-detections");
+if (ledger !== null && status.detection_ledger) {
+    const page = JSON.parse(ledger);
+    const shift = Math.floor(Date.now() / DAY_MS) - page.current_day;
+    const day = (value) => (value === null ? null : value + shift);
+    const header = {
+        ledger_id: page.ledger_id, started_ms: page.started_ms + shift * DAY_MS,
+        current_day: day(page.current_day), oldest_day: day(page.oldest_day),
+        sealed_through: day(page.sealed_through),
+    };
+    routes["/api/detections"] = JSON.stringify({
+        ...page, ...header, next_after: null,
+        counts: page.counts.map((row) => ({...row, day: day(row.day)})),
+        days: page.days.map((row) => ({...row, day: day(row.day)})),
+    });
+    routes["/api/status"] = JSON.stringify({...status, detection_ledger: {...status.detection_ledger, ...header}});
+}
+
 /** Where the Hub relays an ack, POST, or a revoke, DELETE. */
 const ACK_WRITE = /^\/api\/findings\/[^/]+\/ack$/;
 const ACK_WRITE_STATUS = {POST: 201, DELETE: 204};

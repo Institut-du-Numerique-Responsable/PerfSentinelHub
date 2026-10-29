@@ -127,6 +127,7 @@ for status in (busy, orders, ci):
     if "findings_stored_total" in base:
         status["findings_stored_total"] = status["stored_findings"]
 calm.pop("findings_stored_total", None)
+calm.pop("detection_ledger", None)
 (out / "daemon-status-busy.json").write_text(json.dumps(busy, indent=2) + "\n")
 (out / "daemon-status-calm.json").write_text(json.dumps(calm, indent=2) + "\n")
 (out / "daemon-status-acked.json").write_text(json.dumps(orders, indent=2) + "\n")
@@ -300,6 +301,63 @@ calm = [i for i in incidents if i["kind"] not in memory]
 print(f"  captured {len(incidents)} incidents: {', '.join(sorted(kinds))}")
 print(f"  capture verdicts: {', '.join(sorted(verdicts))}")
 PY
+
+# The detection ledger comes from one more run that reads the engine's demo trace
+# file three times over its JSON socket, one closed trace each time, so the ack
+# card counts what a daemon really counted. The fake daemon slides its days to
+# today and names this ledger in every status it serves.
+LEDGER_PORT=$((PORT + 16))
+cat > "$work/ledger.toml" <<EOF
+[daemon]
+listen_address = "127.0.0.1"
+listen_port_http = ${LEDGER_PORT}
+listen_port_grpc = $((LEDGER_PORT + 1))
+json_socket = "$work/l"
+trace_ttl_ms = 500
+api_enabled = true
+EOF
+"$ENGINE" watch --config "$work/ledger.toml" > "$work/ledger-daemon.log" 2>&1 &
+daemon=$!
+trap 'kill $daemon 2>/dev/null || true; rm -rf "$work"' EXIT
+
+python3 - "$LEDGER_PORT" "$work" "$TRACES" "$OUT" <<'LEDGER'
+import json, pathlib, socket, sys, time, urllib.error, urllib.request
+
+port, work, traces, out = sys.argv[1], sys.argv[2], sys.argv[3], pathlib.Path(sys.argv[4])
+base = f"http://127.0.0.1:{port}"
+events = json.loads(pathlib.Path(traces).read_text())
+
+deadline = time.monotonic() + 20
+while True:
+    try:
+        urllib.request.urlopen(base + "/api/status", timeout=2).read()
+        break
+    except (urllib.error.URLError, OSError):
+        if time.monotonic() >= deadline:
+            sys.exit("the ledger daemon never answered")
+        time.sleep(0.25)
+
+for _ in range(3):
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    connection.connect(f"{work}/l")
+    connection.sendall((json.dumps(events) + "\n").encode())
+    connection.close()
+    # Past the trace TTL, so the next read opens new traces instead of growing these.
+    time.sleep(2)
+
+deadline = time.monotonic() + 20
+while True:
+    page = json.loads(urllib.request.urlopen(base + "/api/detections?limit=5000", timeout=5).read())
+    if page["counts"] and min(row["detections"] for row in page["counts"]) >= 3:
+        break
+    if time.monotonic() >= deadline:
+        sys.exit(f"the ledger counted {page['counts']}, expected every finding three times")
+    time.sleep(0.5)
+(out / "daemon-detections.json").write_text(json.dumps(page, indent=2) + "\n")
+print(f"  captured a ledger of {len(page['counts'])} signatures, "
+      f"{sum(row['detections'] for row in page['counts'])} detections")
+LEDGER
+kill $daemon 2>/dev/null || true
 
 # The acks come from two more daemon runs, and two is the minimum: one daemon
 # cannot hold both kinds of ack on one signature. It answers 409 to an ack of
