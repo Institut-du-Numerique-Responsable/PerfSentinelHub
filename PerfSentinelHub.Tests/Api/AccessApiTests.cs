@@ -366,7 +366,7 @@ public sealed class AccessApiTests : IAsyncLifetime
     private static SourceOptions Daemon(string id, string environment)
     {
         return new SourceOptions
-            { Id = id, Name = id, Environment = environment, BaseUrl = new Uri("http://127.0.0.1:1") };
+        { Id = id, Name = id, Environment = environment, BaseUrl = new Uri("http://127.0.0.1:1") };
     }
 
     private async Task SeedAsync()
