@@ -245,8 +245,9 @@ public static class RecapReportRenderer
         for (var index = from; index < to; index++)
         {
             var priority = all[index];
-            // The ranking puts the rows with a volume first: the divider goes before the first one without.
-            if (!HasVolume(priority) && (index == 0 || HasVolume(all[index - 1])))
+            // The ranking puts the rows with a volume first: the divider goes before the first one without,
+            // and only after one with, as launcher.js dividesBefore.
+            if (index > 0 && !HasVolume(priority) && HasVolume(all[index - 1]))
             {
                 html.Append("<li class=\"divider\">")
                     .Append(management

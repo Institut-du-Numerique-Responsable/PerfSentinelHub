@@ -272,6 +272,22 @@ public sealed partial class RecapReportRendererTests
         Assert.Contains("<summary>Show all 12</summary>", html, StringComparison.Ordinal);
     }
 
+    // The divider separates the rows with a volume from the ones without, so it needs one of each.
+    [Theory]
+    [InlineData(new long[] { 0, 0 }, 0)]
+    [InlineData(new long[] { 5, 0, 0 }, 1)]
+    [InlineData(new long[] { 5, 3 }, 0)]
+    public void The_divider_follows_a_row_with_a_volume(long[] volumes, int dividers)
+    {
+        var snapshot = RecapSnapshots.Distinctive(volumes.Length);
+        snapshot = snapshot with
+        {
+            Priorities = [.. snapshot.Priorities.Select((priority, index) => priority with { AvoidableIoOps = volumes[index] })]
+        };
+
+        Assert.Equal(dividers, Regex.Count(Html(snapshot), "<li class=\"divider\">Below, "));
+    }
+
     [Fact]
     public void The_management_report_lists_five_and_counts_the_rest()
     {

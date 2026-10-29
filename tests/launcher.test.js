@@ -1605,6 +1605,10 @@ test("the carbon figure says it is an estimate and what it lacks", () => {
     assert.equal(PSL.co2Text(2000, 1, null), "at least ~2 kg CO2e, estimate, 1 source without a coefficient");
     assert.equal(PSL.co2Text(2000, 3, null), "at least ~2 kg CO2e, estimate, 3 sources without a coefficient");
     assert.equal(PSL.co2Text(0, 0, null), "~0 g CO2e, estimate");
+    assert.equal(PSL.co2Text(0.0002, 0, null), "< 1 g CO2e, estimate", "a nonzero estimate never reads zero");
+    assert.equal(PSL.co2Text(0.4, 1, null), "< 1 g CO2e, estimate, 1 source without a coefficient");
+    assert.equal(PSL.co2Text(0.5, 0, null), "< 1 g CO2e, estimate");
+    assert.deepEqual(PSL.co2Parts(0.4, 1, null), {lead: "", figure: "< 1 g", unit: "CO2e"});
     assert.deepEqual(PSL.co2Parts(2000, 1, null), {lead: "at least", figure: "~2 kg", unit: "CO2e"});
     assert.deepEqual(PSL.co2Parts(300, 0, null), {lead: "", figure: "~300 g", unit: "CO2e"});
     assert.deepEqual(PSL.co2Parts(null, 0, "no_avoidable_io"), {lead: "", figure: "—", unit: "no avoidable I/O"});
@@ -1615,6 +1619,14 @@ test("a zero or an unknown avoidable volume is not a figure to rank", () => {
     assert.equal(PSL.hasAvoidableVolume({avoidable_io_ops: 0}), false, "a known ledger with no avoidable call");
     assert.equal(PSL.hasAvoidableVolume({avoidable_io_ops: null}), false);
     assert.equal(PSL.hasAvoidableVolume({}), false);
+});
+
+test("the divider follows a row with a volume, never opens the list", () => {
+    const rows = volumes => volumes.map(volume => ({avoidable_io_ops: volume}));
+    assert.deepEqual([0, 1].map(index => PSL.dividesBefore(rows([0, null]), index)), [false, false],
+        "no row with a volume, nothing to divide");
+    assert.deepEqual([0, 1, 2].map(index => PSL.dividesBefore(rows([5, 0, null]), index)), [false, true, false]);
+    assert.deepEqual([0, 1].map(index => PSL.dividesBefore(rows([5, 3]), index)), [false, false]);
 });
 
 test("a trend reads in a word or a percentage", () => {

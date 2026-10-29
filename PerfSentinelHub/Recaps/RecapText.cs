@@ -53,6 +53,9 @@ public static class RecapText
     {
         if (grams is not { } value)
             return ("", "—", missingReason == "no_avoidable_io" ? "no avoidable I/O" : "no coefficient from the engine");
+        // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".
+        if (value is > 0 and < 1)
+            return ("", "< 1 g", "CO2e");
         var kilos = value >= 1000;
         // toPrecision(3) on the kilos, Math.round on the grams.
         var shown = kilos

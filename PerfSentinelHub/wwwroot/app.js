@@ -6313,18 +6313,14 @@
             + (snapshot.period.in_progress ? ', trends on closed days' : '');
         const max = all.length && all[0].avoidable_io_ops ? all[0].avoidable_io_ops : 0;
         const list = el('ol', {class: 'recap-list'});
-        let divided = false;
-        shown.forEach(function (priority) {
-            if (!PSL.hasAvoidableVolume(priority)) {
-                if (!divided) {
-                    divided = true;
-                    list.appendChild(el('li', {
-                        class: 'recap-divider',
-                        text: management
-                            ? 'Below, slowness rather than extra work: ranked by severity'
-                            : 'Below, no avoidable I/O to count: ranked by severity'
-                    }));
-                }
+        shown.forEach(function (priority, index) {
+            if (PSL.dividesBefore(all, index)) {
+                list.appendChild(el('li', {
+                    class: 'recap-divider',
+                    text: management
+                        ? 'Below, slowness rather than extra work: ranked by severity'
+                        : 'Below, no avoidable I/O to count: ranked by severity'
+                }));
             }
             list.appendChild(recapRow(priority, max, snapshot, labels, route));
         });

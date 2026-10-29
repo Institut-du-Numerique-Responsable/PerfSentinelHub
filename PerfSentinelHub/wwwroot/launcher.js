@@ -2403,6 +2403,8 @@
                 unit: missingReason === 'no_avoidable_io' ? 'no avoidable I/O' : 'no coefficient from the engine'
             };
         }
+        // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".
+        if (grams > 0 && grams < 1) return {lead: '', figure: '< 1 g', unit: 'CO2e'};
         const kilos = grams >= 1000;
         const value = kilos ? Number((grams / 1000).toPrecision(3)) : Math.round(grams);
         return {
@@ -2438,6 +2440,17 @@
      */
     function hasAvoidableVolume(item) {
         return item.avoidable_io_ops != null && item.avoidable_io_ops > 0;
+    }
+
+    /**
+     * Whether the "Below, ..." divider goes before a ranked row: the first row without a volume
+     * after one with, so a list with no volume at all has none.
+     * @param {Array<{avoidable_io_ops?: number | null}>} items the ranking, volumes first
+     * @param {number} index
+     * @returns {boolean}
+     */
+    function dividesBefore(items, index) {
+        return index > 0 && !hasAvoidableVolume(items[index]) && hasAvoidableVolume(items[index - 1]);
     }
 
     /**
@@ -2684,6 +2697,7 @@
         co2Text,
         trendText,
         hasAvoidableVolume,
+        dividesBefore,
         confirmationLabel,
         periodText,
         incompleteText,
