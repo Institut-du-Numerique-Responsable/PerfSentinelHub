@@ -253,6 +253,33 @@ public sealed record ActionResponse(
     long UpdatedAtMs,
     long? DoneAtMs);
 
+/// <summary>One delivery of a frozen recap report: where it goes and how far it has got.</summary>
+public sealed record RecapDeliveryView(
+    string Channel,
+    string Target,
+    string State,
+    int Attempts,
+    long? LastAttemptMs,
+    long? NextAttemptMs,
+    int? LastStatus);
+
+public sealed record RecapPeriodRef(string Kind, string From, string To);
+
+/// <summary>A frozen recap report without its snapshot. Subscription is null for a report somebody asked for.</summary>
+public sealed record RecapReportItem(
+    string Id,
+    string? Subscription,
+    RecapPeriodRef Period,
+    IReadOnlyList<string> Views,
+    bool Complete,
+    bool NothingMoved,
+    string? CreatedBy,
+    long GeneratedAtMs,
+    IReadOnlyList<RecapDeliveryView> Deliveries);
+
+/// <summary>A report and its snapshot, the stored text served as it was frozen.</summary>
+public sealed record RecapReportDetail(RecapReportItem Report, JsonElement Snapshot);
+
 /// <summary>
 ///     GET /api/access, with Hub:Access:Enabled only: who the caller is and what they
 ///     reach. Configuration, Unmatched and Conflicts are null except for an admin. Never

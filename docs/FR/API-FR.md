@@ -721,6 +721,61 @@ Les livraisons tournent toutes les 15 secondes depuis la table `recap_deliveries
 redémarrage les reprend. Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
 été purgé entre-temps, échoue sans requête.
 
+## Rapports de récap
+
+Un rapport de récap est le récap d'une période close, figé : le snapshot tech tel qu'il a été
+calculé, stocké une fois, avec les livraisons qui l'ont porté. Un abonnement de
+`Hub:Recaps:Subscriptions` en produit un par cadence et par période ; un appelant peut aussi en
+demander un. Lire un rapport ne le recalcule jamais : un lien continue de montrer ce que l'équipe a
+reçu le jour même.
+
+| Route                                   | Fait                                                                    |
+|-----------------------------------------|-------------------------------------------------------------------------|
+| `GET /api/recap/reports`                | Les 200 rapports les plus récents, sans snapshot, chacun avec ses livraisons |
+| `POST /api/recap/reports`               | Génère un rapport à la demande, `201` avec le même élément              |
+| `GET /api/recap/reports/{id}`           | `{"report": …, "snapshot": …}`, le snapshot servi tel que stocké        |
+| `GET /recaps/{id}/{view}.html`          | La page figée d'une vue, `pilotage` ou `tech`                           |
+
+Un élément de rapport porte `id` (32 caractères hexadécimaux minuscules), `subscription` (`null` pour
+un rapport à la demande), `period` (`kind`, `from`, `to`), `views[]`, `complete` (aucune raison
+`incomplete` dans le snapshot), `nothing_moved`, `created_by` (`null` pour un rapport d'abonnement),
+`generated_at_ms` et `deliveries[]` : `channel` (`webhook` ou `email`), `target`, `state` (`pending`,
+`delivered` ou `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` et `last_status`. La page
+HTML est hors de `/api` : un navigateur qui suit un lien reçu par e-mail sans session est envoyé se
+connecter.
+
+**À la demande.** Le corps est un objet JSON de 4 Kio au plus, avec la règle de même origine et le
+type de contenu JSON des autres écritures :
+
+| Champ                       | Fait                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| `period`                    | Obligatoire : `day`, `week` ou `month`                                                 |
+| `at`                        | Un jour quelconque de la période, `yyyy-MM-dd`, à partir de 1900 ; par défaut la dernière période close |
+| `environment`, `source_id`  | Comme sur `/api/recap` ; un inconnu est `400 Unknown environment or source_id.`        |
+| `service`, `grouping`       | Comme sur `/api/recap`                                                                 |
+
+Chaque chaîne fait de 1 à 256 caractères sans caractère de contrôle. Une période qui n'est pas
+terminée avant aujourd'hui est `400 A report covers a closed period; pick a date in an earlier one.`
+Le rapport est construit avec les copies que l'appelant lit sous `findings.read`, comme
+`GET /api/recap`, et stocké au nom de l'appelant avec les deux vues et sans livraison. Un appelant que
+le Hub ne sait pas nommer reçoit `403`, une requête d'un autre site `403`, un mauvais type de
+contenu `415`, un corps de plus de 4 Kio `413`.
+
+**Qui lit quoi.** Un détenteur de `recaps.read` lit tous les rapports. Tout autre appelant avec
+`findings.read` lit ceux qu'il a générés, reconnus à l'identité qui les a générés, et rien d'autre ;
+un rapport d'abonnement n'a pas de créateur, donc personne ne le reconnaît. Un rapport que l'appelant
+ne peut pas lire reçoit le `404` d'un id inconnu, avec le même corps, sur les trois routes qui en
+nomment un ; la liste répond `403 {"detail":"You may not read recap reports."}` à un appelant qui ne
+détient aucune des deux permissions, et seulement ses propres rapports sinon.
+
+**La page.** `Content-Type: text/html; charset=utf-8`, `Content-Disposition: inline;
+filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
+`X-Content-Type-Options: nosniff` et une `Content-Security-Policy` qui n'autorise que les deux
+scripts en ligne de la page, par empreinte. `pilotage` est la projection de pilotage du snapshot
+stocké, faite au moment de servir la page. Un id qui n'est pas 32 caractères hexadécimaux minuscules,
+un id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rapports sont purgés
+après `Hub:Recaps:Retention`.
+
 ## Actions
 
 Une action dit qui travaille sur un finding et où il en est. Le Hub la tient lui-même :
@@ -1143,6 +1198,11 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   l'appelant lit, comme `/api/findings`, et un appelant sans `findings.read` nulle part reçoit
   le même `403`. Un `source_id` ou un `environment` hors de `/api/sources` de l'appelant est
   le `400` d'un inconnu.
+- **Les rapports de récap** se lisent par `recaps.read` (niveau Hub, aucun jeton machine ne la
+  détient) ou, pour un rapport qu'un appelant a généré à la demande, par `findings.read` et
+  l'identité qui l'a généré. Un rapport d'abonnement exige `recaps.read`. Un rapport que l'appelant
+  ne peut pas lire reçoit le `404` d'un inconnu. Générer exige un appelant que le Hub sait nommer et
+  `findings.read`, et le rapport est construit avec les copies que cet appelant lit.
 - **Les actions** exigent un appelant que le Hub sait nommer, puis `actions.write` quelque
   part, sinon `403 {"detail":"You may not act on findings."}`, avant que le corps soit lu.
   Une action est globale à la signature, elle est donc jugée sur les copies du finding que

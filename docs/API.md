@@ -671,6 +671,57 @@ Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart 
 delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a
 request.
 
+## Recap reports
+
+A recap report is the recap of one closed period, frozen: the tech snapshot exactly as it was computed,
+stored once, with the deliveries that carried it out. A subscription in `Hub:Recaps:Subscriptions`
+produces one per cadence and period; a caller can also ask for one. Reading a report never recomputes
+it, so a link keeps showing what the team was told on the day.
+
+| Route                                   | Does                                                                    |
+|-----------------------------------------|-------------------------------------------------------------------------|
+| `GET /api/recap/reports`                | The newest 200 reports, without snapshots, each with its deliveries     |
+| `POST /api/recap/reports`               | Generates a report on demand, `201` with the same item                  |
+| `GET /api/recap/reports/{id}`           | `{"report": …, "snapshot": …}`, the snapshot served as it was stored    |
+| `GET /recaps/{id}/{view}.html`          | The frozen page of one view, `pilotage` or `tech`                       |
+
+A report item holds `id` (32 lowercase hex), `subscription` (`null` for an on-demand report),
+`period` (`kind`, `from`, `to`), `views[]`, `complete` (no `incomplete` reason in the snapshot),
+`nothing_moved`, `created_by` (`null` for a subscription report), `generated_at_ms` and
+`deliveries[]`: `channel` (`webhook` or `email`), `target`, `state` (`pending`, `delivered` or
+`failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` and `last_status`. The HTML page lives
+outside `/api`, so a browser that follows a mailed link and holds no session is sent to sign in.
+
+**On demand.** The body is a JSON object, at most 4 KiB, with the same-origin rule and the
+JSON content type of the other writes:
+
+| Field                       | Does                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| `period`                    | Required: `day`, `week` or `month`                                                     |
+| `at`                        | Any day of the period, `yyyy-MM-dd`, from 1900; default: the last closed period        |
+| `environment`, `source_id`  | As on `/api/recap`; an unknown one is `400 Unknown environment or source_id.`          |
+| `service`, `grouping`       | As on `/api/recap`                                                                     |
+
+Each string is 1 to 256 characters with no control character. A period that has not ended before
+today is `400 A report covers a closed period; pick a date in an earlier one.` The report is built
+from the copies the caller reads under `findings.read`, as `GET /api/recap` is, stored in the
+caller's name with both views and no delivery. A caller the Hub cannot name gets `403`, a
+cross-site request `403`, a wrong content type `415`, a body over 4 KiB `413`.
+
+**Who reads what.** A holder of `recaps.read` reads every report. Anyone else with `findings.read`
+reads the reports they generated, matched on the identity that generated them, and nothing else;
+a subscription report has no creator, so no one matches it. A report the caller may not read
+answers the `404` an unknown id gets, with the same body, on the three routes that name one; the
+list answers `403 {"detail":"You may not read recap reports."}` to a caller holding neither
+permission, and only the caller's own reports otherwise.
+
+**The page.** `Content-Type: text/html; charset=utf-8`, `Content-Disposition: inline;
+filename="perf-sentinel-recap-<from>-<view>.html"`, `Cache-Control: no-store`,
+`X-Content-Type-Options: nosniff` and a `Content-Security-Policy` that allows nothing but the two
+inline scripts of the page, by hash. `pilotage` is the management projection of the stored
+snapshot, made when the page is served. An id that is not 32 lowercase hex, an unknown id and a
+view the report does not hold are all `404`. Reports are purged after `Hub:Recaps:Retention`.
+
 ## Actions
 
 An action says who works on a finding and where it stands. The Hub keeps it itself: nothing
@@ -1070,6 +1121,11 @@ token or a machine token, and each answer covers what the caller's grants cover.
   caller reads, as `/api/findings` is, and a caller holding `findings.read` nowhere gets the
   same `403`. A `source_id` or an `environment` outside the caller's `/api/sources` is the
   `400` of an unknown one.
+- **Recap reports** are read through `recaps.read` (Hub level, no machine token holds it) or, for
+  a report a caller generated on demand, through `findings.read` and the identity that generated
+  it. A subscription report needs `recaps.read`. A report the caller may not read answers the `404`
+  an unknown one gets. Generating needs a caller the Hub can name and `findings.read`, and the
+  report is built from the copies that caller reads.
 - **Actions** need a caller the Hub can name, then `actions.write` somewhere, or
   `403 {"detail":"You may not act on findings."}`, before the body is read. An action is
   global to the signature, so it is judged on the copies of the finding the caller reads, at

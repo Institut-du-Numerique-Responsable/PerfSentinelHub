@@ -119,7 +119,7 @@ scope, and the answer is built from in-scope copies only.
 | `labels.write`  | Naming an endpoint in business words                                            |
 | `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
 | `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
-| `recaps.read`   | The recap reports subscriptions produce (Hub level)                             |
+| `recaps.read`   | Reading every recap report: the list, a report and its page (Hub level)         |
 
 | Built-in role | Permissions                                                     |
 |---------------|-----------------------------------------------------------------|
@@ -154,6 +154,8 @@ does not depend on the provider at all.
 | `GET /api/status`, `GET /api/sources`                                  | any permission anywhere                                         | `403`                   |
 | `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtered                                       | `403` when held nowhere |
 | `GET /api/recap`                                                       | `findings.read`, filtered                                       | `403` when held nowhere |
+| `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` on `*`, or the creator of an on-demand report with `findings.read` | `403` (list), `404` (one report) |
+| `POST /api/recap/reports`                                              | `findings.read`, filtered, and somebody to name                 | `403`                   |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtered; the richest copy in scope            | `403`; `404`            |
 | `POST /api/incidents/refresh`                                          | `findings.read`; reads only the daemons in scope                | `403`                   |
 | `GET /api/correlations`                                                | `findings.read`, filtered to the episodes whose two services the caller reads at that source | `403` when held nowhere |

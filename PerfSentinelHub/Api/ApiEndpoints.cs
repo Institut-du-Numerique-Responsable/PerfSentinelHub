@@ -76,6 +76,12 @@ public static partial class ApiEndpoints
         app.MapPut("/api/labels", SetLabelAsync);
         // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
         app.MapGet("/api/recap", GetRecapAsync);
+        // Never anonymous: a frozen report is read by who made it or by a recaps.read holder, and made in a name.
+        // The page sits outside /api so a browser that follows the mailed link is signed in by redirect.
+        app.MapGet("/api/recap/reports", GetRecapReportsAsync);
+        app.MapPost("/api/recap/reports", CreateRecapReportAsync);
+        app.MapGet("/api/recap/reports/{id}", GetRecapReportAsync);
+        app.MapGet("/recaps/{id}/{view}.html", GetRecapReportHtmlAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
         // correlations, a daemon pushes with its key. With Hub:Access the reads need a
