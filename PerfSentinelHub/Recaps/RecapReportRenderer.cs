@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using PerfSentinelHub.Api;
+using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Recaps;
 
@@ -28,6 +29,9 @@ public static class RecapReportRenderer
     private const string FoldedAt = "<details class=\"more\">";
 
     private const string NameIt = "Name it in the Hub to see it here.";
+    private const string SpanEnd = "</span>";
+    private const string DivEnd = "</div>";
+    private const string DivEndLine = "</div>\n";
 
     private static readonly Lazy<string> Style = new(() =>
         Resource("recap-tokens.css") + "\n" + Resource("recap-report.css"));
@@ -89,7 +93,7 @@ public static class RecapReportRenderer
     private static string Scope(RecapSnapshot snapshot)
     {
         var filters = snapshot.Filters;
-        var parts = snapshot.View == "pilotage"
+        var parts = snapshot.View == RecapViewNames.Pilotage
             ? new[] { filters.Environment, filters.Service }.Where(value => value is not null).Select(value => value!)
             : new[]
             {
@@ -128,7 +132,7 @@ public static class RecapReportRenderer
         (string Io, string Findings, string Moved) labels)
     {
         var tiles = snapshot.Tiles;
-        var management = snapshot.View == "pilotage";
+        var management = snapshot.View == RecapViewNames.Pilotage;
         var actions = tiles.Actions;
         html.Append("<div class=\"tiles\">\n");
         Tile(html, labels.Io, snapshot.Period.InProgress, Count(tiles.AvoidableIoOps) ?? "—",
@@ -144,7 +148,7 @@ public static class RecapReportRenderer
             $"{actions.Confirmed} confirmed, {actions.Contradicted} still detected, {actions.CameBack} came back",
             $"{actions.InProgress} in progress, {actions.Todo} to do"
         ], true);
-        html.Append("</div>\n");
+        html.Append(DivEndLine);
     }
 
     private static void Co2Tile(StringBuilder html, RecapSnapshot snapshot)
@@ -172,15 +176,15 @@ public static class RecapReportRenderer
         html.Append("</span><span class=\"tile-value\"");
         if (title is not null)
             html.Append(" title=\"").Append(E(title)).Append('"');
-        html.Append('>').Append(valueIsHtml ? value : E(value)).Append("</span>");
+        html.Append('>').Append(valueIsHtml ? value : E(value)).Append(SpanEnd);
         foreach (var sub in subs.Where(sub => sub.Length > 0))
-            html.Append("<span class=\"tile-sub\">").Append(E(sub)).Append("</span>");
-        html.Append("</div>\n");
+            html.Append("<span class=\"tile-sub\">").Append(E(sub)).Append(SpanEnd);
+        html.Append(DivEndLine);
     }
 
     private static string Unit(string text)
     {
-        return "<span class=\"tile-unit\">" + E(text) + "</span>";
+        return "<span class=\"tile-unit\">" + E(text) + SpanEnd;
     }
 
     // "previous week 168,900", with the days it was cut to when this period was not over.
@@ -188,9 +192,14 @@ public static class RecapReportRenderer
     {
         if (value is null)
             return "";
-        var days = snapshot.Previous.TruncatedToDays;
-        return "previous " + snapshot.Previous.Kind +
-               (days is > 0 ? $" (first {days} day{(days == 1 ? "" : "s")})" : "") + " " + value;
+        return "previous " + snapshot.Previous.Kind + CutTo(snapshot.Previous.TruncatedToDays) + " " + value;
+    }
+
+    private static string CutTo(int? days)
+    {
+        if (days is not > 0)
+            return "";
+        return $" (first {days} day{(days == 1 ? "" : "s")})";
     }
 
     private static string? Count(long? value)
@@ -203,7 +212,7 @@ public static class RecapReportRenderer
     private static void Priorities(StringBuilder html, RecapSnapshot snapshot,
         (string Io, string Findings, string Moved) labels)
     {
-        var management = snapshot.View == "pilotage";
+        var management = snapshot.View == RecapViewNames.Pilotage;
         var all = snapshot.Priorities;
         var hint = "ranked by " + Lower(labels.Io) + " over the period" + (management ? "" : ", CO2 never ranks") +
                    (snapshot.Period.InProgress ? ", trends on closed days" : "");
@@ -239,7 +248,7 @@ public static class RecapReportRenderer
         StringBuilder html, RecapSnapshot snapshot, int from, int to, long max,
         (string Io, string Findings, string Moved) labels)
     {
-        var management = snapshot.View == "pilotage";
+        var management = snapshot.View == RecapViewNames.Pilotage;
         var all = snapshot.Priorities;
         html.Append("<ol class=\"rows\">\n");
         for (var index = from; index < to; index++)
@@ -293,7 +302,7 @@ public static class RecapReportRenderer
             .Append("</span><span class=\"endpoint\">").Append(E(priority.Endpoint ?? "")).Append("</span></div>");
         if (priority.Suggestion is not null)
             html.Append("<p class=\"suggest\">").Append(RecapText.Prose(priority.Suggestion)).Append("</p>");
-        html.Append("</div>\n");
+        html.Append(DivEndLine);
     }
 
     // The label when someone named the endpoint, else a neutral title: a report never shows the endpoint.
@@ -304,11 +313,11 @@ public static class RecapReportRenderer
             html.Append("<p class=\"label\">").Append(E(priority.Label)).Append("</p>");
         else
             html.Append("<p class=\"label\">").Append(E(Unnamed(priority.Service))).Append("</p><div class=\"where\">")
-                .Append(NameIt).Append("</div>");
+                .Append(NameIt).Append(DivEnd);
         html.Append("<p class=\"plain\">").Append(E(priority.Plain)).Append("</p>");
         if (priority.Label is not null)
-            html.Append("<div class=\"where\">in ").Append(E(priority.Service)).Append("</div>");
-        html.Append("</div>\n");
+            html.Append("<div class=\"where\">in ").Append(E(priority.Service)).Append(DivEnd);
+        html.Append(DivEndLine);
     }
 
     private static string Unnamed(string service)
@@ -334,10 +343,10 @@ public static class RecapReportRenderer
         else
         {
             html.Append("<span class=\"figure-n\">—</span><span class=\"figure-u\">")
-                .Append(management ? "nothing to count" : "no avoidable I/O").Append("</span>");
+                .Append(management ? "nothing to count" : "no avoidable I/O").Append(SpanEnd);
         }
 
-        html.Append(TrendHtml(priority.Trend, priority.Change)).Append("</div>\n");
+        html.Append(TrendHtml(priority.Trend, priority.Change)).Append(DivEndLine);
     }
 
     private static string TrendHtml(string trend, double? change)
@@ -347,7 +356,7 @@ public static class RecapReportRenderer
             ? ""
             : "<span class=\"trend\" data-trend=\"" + E(trend) +
               "\" title=\"against the previous period, on closed days\">" +
-              E(text) + "</span>";
+              E(text) + SpanEnd;
     }
 
     // ---- the folded technical detail (engineering)
@@ -374,18 +383,18 @@ public static class RecapReportRenderer
             return;
         html.Append("<div class=\"fix-box\"><div class=\"sub-head\">Suggested fix");
         if (fix.Framework is not null)
-            html.Append("<span class=\"chip\">").Append(E(fix.Framework)).Append("</span>");
+            html.Append("<span class=\"chip\">").Append(E(fix.Framework)).Append(SpanEnd);
         html.Append("</div><p>").Append(RecapText.Prose(fix.Recommendation)).Append("</p>");
         if (fix.ReferenceUrl is not null)
         {
             var url = RecapText.HttpUrl(fix.ReferenceUrl);
             html.Append("<div class=\"fix-ref\">").Append(url is null
-                    ? "<span>Reference: " + E(fix.ReferenceUrl) + "</span>"
+                    ? "<span>Reference: " + E(fix.ReferenceUrl) + SpanEnd
                     : "<a href=\"" + E(url) + "\" rel=\"noopener noreferrer\" target=\"_blank\">Reference</a>")
-                .Append("</div>");
+                .Append(DivEnd);
         }
 
-        html.Append("</div>");
+        html.Append(DivEnd);
     }
 
     // The function on one line and path:line on the next, as a stack trace reads.
@@ -435,13 +444,17 @@ public static class RecapReportRenderer
             _ => DoneState(action.Confirmation, view)
         };
         var done = action.Status == "done" && action.DoneAtMs is not null;
-        return chip +
-               (owner.Text.Length > 0
-                   ? "<span class=\"owner\"" + (owner.Title is null ? "" : " title=\"" + E(owner.Title) + "\"") + ">" +
-                     E(owner.Text) + "</span>"
-                   : "") +
+        return chip + OwnerHtml(owner) +
                "<span class=\"when\">" + (done ? "done " : "updated ") +
-               TimeTag(done ? action.DoneAtMs!.Value : action.UpdatedAtMs) + "</span>";
+               TimeTag(done ? action.DoneAtMs!.Value : action.UpdatedAtMs) + SpanEnd;
+    }
+
+    private static string OwnerHtml((string Text, string? Title) owner)
+    {
+        if (owner.Text.Length == 0)
+            return "";
+        var title = owner.Title is null ? "" : " title=\"" + E(owner.Title) + "\"";
+        return "<span class=\"owner\"" + title + ">" + E(owner.Text) + SpanEnd;
     }
 
     private static string DoneState(string? confirmation, string view)
@@ -452,7 +465,7 @@ public static class RecapReportRenderer
 
     private static string State(string kind, string text)
     {
-        return "<span class=\"state\" data-state=\"" + E(kind) + "\">" + E(text) + "</span>";
+        return "<span class=\"state\" data-state=\"" + E(kind) + "\">" + E(text) + SpanEnd;
     }
 
     // ---- what moved
@@ -481,8 +494,8 @@ public static class RecapReportRenderer
         {
             html.Append("<div class=\"moves\">\n");
             foreach (var group in shown)
-                MoveGroup(html, group.Title, group.Items, group.Sub, group.Tone, snapshot.View == "pilotage");
-            html.Append("</div>\n");
+                MoveGroup(html, group.Title, group.Items, group.Sub, group.Tone, snapshot.View == RecapViewNames.Pilotage);
+            html.Append(DivEndLine);
         }
 
         if (snapshot.SourcesWithoutVolume.Count > 0)
@@ -505,9 +518,9 @@ public static class RecapReportRenderer
     {
         html.Append("<div class=\"move\"").Append(tone.Length > 0 ? " data-tone=\"" + tone + "\"" : "")
             .Append("><h3>").Append(E(title)).Append("<span class=\"n\">")
-            .Append(items.Count.ToString(CultureInfo.InvariantCulture)).Append("</span>");
+            .Append(items.Count.ToString(CultureInfo.InvariantCulture)).Append(SpanEnd);
         if (sub.Length > 0)
-            html.Append("<span class=\"sub\">").Append(E(sub)).Append("</span>");
+            html.Append("<span class=\"sub\">").Append(E(sub)).Append(SpanEnd);
         html.Append("</h3><ul>");
         foreach (var item in items)
         {
@@ -517,8 +530,8 @@ public static class RecapReportRenderer
             else
                 html.Append("<span class=\"chip\">").Append(E(RecapText.Type(item.FindingType)))
                     .Append("</span><span class=\"strong\">").Append(E(item.Service))
-                    .Append("</span><span class=\"endpoint\">").Append(E(item.Endpoint ?? "")).Append("</span>");
-            html.Append("</span>").Append(TrendHtml(item.Trend, item.Change)).Append("</li>");
+                    .Append("</span><span class=\"endpoint\">").Append(E(item.Endpoint ?? "")).Append(SpanEnd);
+            html.Append(SpanEnd).Append(TrendHtml(item.Trend, item.Change)).Append("</li>");
         }
 
         html.Append("</ul></div>\n");
@@ -528,7 +541,7 @@ public static class RecapReportRenderer
     {
         html.Append("<span class=\"plain\"><b>").Append(E((item.Label ?? Unnamed(item.Service)) + ". ")).Append("</b>")
             .Append(E(item.Plain)).Append("</span><span class=\"where\">")
-            .Append(item.Label is null ? NameIt : "In " + E(item.Service) + ".").Append("</span>");
+            .Append(item.Label is null ? NameIt : "In " + E(item.Service) + ".").Append(SpanEnd);
     }
 
     // ---- the closing sections
@@ -545,7 +558,7 @@ public static class RecapReportRenderer
     private static void Footer(StringBuilder html, RecapSnapshot snapshot)
     {
         html.Append("<footer><p>Frozen on ").Append(TimeTag(snapshot.GeneratedAtMs)).Append(". ")
-            .Append(snapshot.View == "pilotage" ? "Management" : "Engineering")
+            .Append(snapshot.View == RecapViewNames.Pilotage ? "Management" : "Engineering")
             .Append(" view. CO2 is an order-of-magnitude estimate.</p></footer>\n");
     }
 

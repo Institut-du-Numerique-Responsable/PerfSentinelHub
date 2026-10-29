@@ -66,9 +66,11 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         var all = await ReadAsync(request, span.Period, true, cancellationToken);
         var unacked = await ReadAsync(request, span.Period, false, cancellationToken);
         // A closed period compares as it stands; one in progress compares its closed days only.
-        var closed = !span.InProgress ? unacked
-            : span.ClosedWindow is { } window ? await ReadAsync(request, window, false, cancellationToken)
-            : Read.None;
+        var closed = unacked;
+        if (span.InProgress)
+            closed = span.ClosedWindow is { } window
+                ? await ReadAsync(request, window, false, cancellationToken)
+                : Read.None;
         var previous = span.PreviousWindow is { } before
             ? await ReadAsync(request, before, false, cancellationToken)
             : null;
@@ -181,7 +183,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
 
     private async Task<Dictionary<string, string>> ConfirmAsync(
         IReadOnlyList<StoredAction> stored,
-        IReadOnlyDictionary<string, HashSet<string>> sources,
+        Dictionary<string, HashSet<string>> sources,
         IReadOnlyList<string> scope,
         CancellationToken cancellationToken)
     {
@@ -338,7 +340,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     private static List<RecapMove> Confirmed(
         Reads reads,
         IReadOnlyDictionary<string, RecapAction> actions,
-        IReadOnlyDictionary<string, RecapPriority> ranked,
+        Dictionary<string, RecapPriority> ranked,
         IReadOnlyDictionary<(string Service, string Endpoint), string> labels,
         string confirmation)
     {
@@ -408,14 +410,19 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         public RecapPeriod PreviousFull => Period.Previous();
 
         // The closed days of the period (the whole of it once over), none on its first day.
-        public RecapPeriod? ClosedWindow =>
-            !InProgress ? Period : ClosedDays >= 1 ? Period.Truncated(ClosedDays) : null;
+        public RecapPeriod? ClosedWindow => Window(Period);
 
         // The previous period cut to the same number of days, not read at all on the first day.
-        public RecapPeriod? PreviousWindow =>
-            !InProgress ? PreviousFull : ClosedDays >= 1 ? PreviousFull.Truncated(ClosedDays) : null;
+        public RecapPeriod? PreviousWindow => Window(PreviousFull);
 
         public int? TruncatedToDays => InProgress ? ClosedDays : null;
+
+        private RecapPeriod? Window(RecapPeriod whole)
+        {
+            if (!InProgress)
+                return whole;
+            return ClosedDays >= 1 ? whole.Truncated(ClosedDays) : null;
+        }
 
         public static Span Of(RecapRequest request, int today)
         {

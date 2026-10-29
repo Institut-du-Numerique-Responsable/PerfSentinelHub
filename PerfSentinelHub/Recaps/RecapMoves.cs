@@ -23,7 +23,8 @@ public static class RecapMoves
         if (prev == 0) return ("flat", 0);
 
         var change = (double)(cur - prev) / prev;
-        return (change >= threshold ? "up" : change <= -threshold ? "down" : "flat", change);
+        if (change >= threshold) return ("up", change);
+        return (change <= -threshold ? "down" : "flat", change);
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Encodings.Web;
+using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Recaps;
 
@@ -64,7 +65,7 @@ public static class RecapText
     public static (string Lead, string Figure, string Unit) Co2Parts(
         double? grams, int sourcesWithoutCoefficient, string? missingReason, string view = "tech")
     {
-        if (grams is null && view == "pilotage")
+        if (grams is null && view == RecapViewNames.Pilotage)
             return ("", "—", "not available");
         if (grams is not { } value)
             return ("", "—",
@@ -95,10 +96,10 @@ public static class RecapText
     {
         if (sourcesWithoutCoefficient <= 0)
             return "";
-        return view == "pilotage"
-            ? ", part of the activity has no CO2 estimate"
-            : ", " + sourcesWithoutCoefficient + (sourcesWithoutCoefficient == 1 ? " source" : " sources") +
-              " without a coefficient";
+        if (view == RecapViewNames.Pilotage)
+            return ", part of the activity has no CO2 estimate";
+        return ", " + sourcesWithoutCoefficient + (sourcesWithoutCoefficient == 1 ? " source" : " sources") +
+               " without a coefficient";
     }
 
     public static string Trend(string trend, double? change)
@@ -121,7 +122,7 @@ public static class RecapText
 
     public static string Confirmation(string? state, string view = "tech")
     {
-        var pilotage = view == "pilotage";
+        var pilotage = view == RecapViewNames.Pilotage;
         return state switch
         {
             "confirmed" => pilotage ? "Confirmed by the measurements" : "Confirmed by the engine",
@@ -134,13 +135,13 @@ public static class RecapText
 
     public static string Truncated(string view)
     {
-        return "The Hub read the first 5,000 " + (view == "pilotage" ? "problems" : "findings") +
+        return "The Hub read the first 5,000 " + (view == RecapViewNames.Pilotage ? "problems" : "findings") +
                " and stopped there. Narrow the filters to see the others.";
     }
 
     public static string SourcesWithoutVolume(IReadOnlyList<string> sources, string view)
     {
-        return (view == "pilotage" ? "No figures came from: " : "Sources without a detection volume: ") +
+        return (view == RecapViewNames.Pilotage ? "No figures came from: " : "Sources without a detection volume: ") +
                string.Join(", ", sources) + ".";
     }
 
@@ -168,7 +169,7 @@ public static class RecapText
     /// <summary>A gap in words. Engineering gets a reason a newer engine adds as it was sent, Management a plain stand-in.</summary>
     public static string Gap(string reason, string view = "tech")
     {
-        if (view == "pilotage")
+        if (view == RecapViewNames.Pilotage)
             return PilotageGapLabels.TryGetValue(reason, out var plain) ? plain : "another measurement gap";
         return GapLabels.TryGetValue(reason, out var label) ? label : reason;
     }
@@ -189,7 +190,7 @@ public static class RecapText
 
     public static (string Io, string Findings, string Moved) Labels(string view)
     {
-        return view == "pilotage" ? PilotageLabels : TechLabels;
+        return view == RecapViewNames.Pilotage ? PilotageLabels : TechLabels;
     }
 
     /// <summary>
@@ -249,7 +250,7 @@ public static class RecapText
     public static IReadOnlyList<(string Term, string Text)> Help(string view)
     {
         var (io, findings, moved) = Labels(view);
-        var pilotage = view == "pilotage";
+        var pilotage = view == RecapViewNames.Pilotage;
         return
         [
             ("The period", pilotage
