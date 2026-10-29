@@ -248,9 +248,9 @@ Pour un appelant et une permission, `AccessPolicy.Scope` rend un `AccessScope`
 choses : la source, le service propre à la copie dans `finding_sources.service`, jamais le
 `findings.service` de la flotte qu'un import réécrit, et les lignes de la copie dans
 `finding_attributes`. Une lecture demande qu'une ligne corresponde, quel que soit le
-regroupement avec lequel elle est arrivée ; une écriture, pour `acks.write` et
-`analyses.run`, demande que chaque identité de regroupement de la copie, marqueur sans
-regroupement compris, porte la clé et que chacune de ses valeurs corresponde. Un run de
+regroupement avec lequel elle est arrivée ; une écriture, pour `acks.write`,
+`actions.write` et `analyses.run`, demande que chaque identité de regroupement de la copie,
+marqueur sans regroupement compris, porte la clé et que chacune de ses valeurs corresponde. Un run de
 traces sur un service est jugé sur les copies de ce service que le Hub tient dans
 l'environnement du backend, et chacune doit correspondre en écriture ; `CoversSubject`
 évalue les copies qu'on lui passe, et l'appelant qu'ajoutera l'application les choisit par

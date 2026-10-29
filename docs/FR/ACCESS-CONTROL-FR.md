@@ -164,6 +164,7 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `GET /api/correlations`                                                | `findings.read`, filtré sur les épisodes dont l'appelant lit les deux services à cette source | `403` s'il n'est détenu nulle part |
 | `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` sur cette source entière                            | `404`                       |
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`                  | `findings.read` et `acks.write` sur le finding dans cette source   | `404`, `403`                |
+| `POST` et `PATCH /api/actions`                                         | `findings.read` et `actions.write` sur une copie du finding, et quelqu'un à nommer | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` et la règle de lecture du run, ci-dessous           | `403`                       |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | la règle de lecture du run                                         | filtré ; `404`              |
 | `GET /reports/{id}.html`                                               | la règle de lecture du run                                         | `404`                       |
@@ -243,6 +244,17 @@ d'attribut peut faire taire le même finding pour le déploiement d'une autre é
 démon**, jusqu'à son expiration ou sa révocation. Le Hub n'impose aucune expiration. Là où
 plusieurs équipes peuvent émettre le même nom de service, donnez à l'équipe propriétaire
 un grant de source ou de service pour `acks.write` et `analyses.run`.
+
+### Actions
+
+Une action est globale à la signature, comme un ack auprès de son démon : elle est donc jugée
+sur chaque copie du finding que l'appelant lit, dans n'importe quelle source, et permise
+quand l'une d'elles est inscriptible. Un appelant qui n'en lit aucune reçoit le `404` d'un
+finding inconnu ; celui qui en lit mais n'en peut écrire aucune reçoit `403`. Un appelant qui
+ne détient `actions.write` nulle part est refusé avant la lecture du corps de la requête, et
+un appelant que le Hub ne sait pas nommer l'est avant tout. Contrairement à un ack, une
+action ne touche aucun démon et ne fait rien taire : c'est une note que tout le Hub partage
+sur qui travaille sur le finding.
 
 ### Votre accès et Couverture
 

@@ -598,6 +598,61 @@ l'écriture. Chaque relais journalise une ligne, l'événement `1310` quand le d
 répondu et `1311` sinon, avec la source, l'action, l'appelant et le statut. La raison et
 l'identifiant ne sont jamais journalisés.
 
+## Actions
+
+Une action dit qui travaille sur un finding et où il en est. Le Hub la tient lui-même :
+rien n'est écrit sur un daemon. Elle est globale à la signature, comme un acquittement, donc
+un finding vu dans deux sources porte une seule action. Deux routes l'écrivent, avec un
+corps JSON, et aucune n'est jamais ouverte : sous `Hub:Auth` elles demandent une session.
+
+| Endpoint             | Corps                                                           | Effet                                       |
+|----------------------|-----------------------------------------------------------------|---------------------------------------------|
+| `POST /api/actions`  | `{"signature":"…","take":true}` ou `{"signature":"…","status":"…","owner":"…"}` | Déclare l'action sur un finding             |
+| `PATCH /api/actions` | `{"signature":"…","status":"…","owner":"…"}`                    | Change le statut ou le responsable de celle-ci |
+
+- `status` vaut `todo`, `in_progress` ou `done`. Rien n'est mis à `todo` par défaut.
+- `owner` est une chaîne de 1 à 256 caractères sans caractère de contrôle. `null` sur un
+  `PATCH` l'efface.
+- `take: true` ne vaut que pour un `POST` et tient lieu de `status: "in_progress"` avec
+  l'appelant pour responsable. Il ne se combine ni avec `status` ni avec `owner`.
+- Un `POST` exige `take: true` ou un `status`, et un `owner` seul ne suffit pas :
+  `400 {"detail":"An action needs a status or take."}`. Un `PATCH` exige un `status` ou un
+  `owner`. Un `by` dans le corps est ignoré : le Hub nomme lui-même l'appelant.
+
+Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'écrit rien.
+
+1. **L'appelant.** Comme pour un acquittement, l'utilisateur connecté, ou l'en-tête du proxy
+   quand `Hub:AckRelay:TrustIdentityHeader` est posé. Sans personne à nommer, un `403`.
+2. **L'origine de la requête.** Les mêmes `403` et `415` qu'un acquittement.
+3. **La permission.** Avec le contrôle d'accès, un appelant qui ne détient `actions.write`
+   nulle part reçoit `403 {"detail":"You may not act on findings."}` avant que le corps soit
+   lu. Un corps de plus de 8 Kio est un `413`.
+4. **Le corps.** Un `400` par règle ci-dessus, la signature tenue aux bornes de celle d'un
+   acquittement. `take` dans un `PATCH` est un `400`.
+5. **Le finding.** Le Hub doit le détenir, et avec le contrôle d'accès l'appelant doit en lire
+   une copie, sinon `404 {"detail":"The Hub holds no such finding."}`, exactement la réponse
+   d'un finding que l'appelant ne peut pas lire. Un finding lisible que l'appelant ne peut
+   pas écrire reçoit un `403`, voir [Avec le contrôle d'accès](#avec-le-contrôle-daccès).
+6. **L'écriture.** Un `POST` sur une signature qui a une action est un `409`, et un `PATCH`
+   sur une signature qui n'en a pas un `404`. Une écriture que le stockage n'a pas pu prendre
+   à temps est un `503` avec `Retry-After: 1`.
+
+Un `POST` répond `201` et un `PATCH` `200`, avec l'action telle qu'elle est désormais :
+
+```json
+{"signature": "n_plus_one_sql:order-svc:…", "status": "done", "owner": "ada@example.com",
+ "created_by": "ada@example.com", "created_at_ms": 1760000000000,
+ "updated_at_ms": 1760003600000, "done_at_ms": 1760003600000}
+```
+
+`done_at_ms` est posé quand l'action entre dans `done` et effacé quand elle en sort. Chaque
+changement de statut ou de responsable ajoute un événement, avec le statut quitté, celui
+atteint, le responsable, l'appelant et l'heure. Les événements ne sont jamais réécrits, et ni
+l'action ni ses événements ne sont purgés avec le finding : une action survit à la rétention
+du finding sur lequel elle a été déclarée, pour qu'un récapitulatif puisse encore dire si le
+correctif a tenu. Un `PATCH` qui ne change rien n'ajoute rien. Chaque refus que le Hub
+formule lui-même porte `{"detail":"…"}`.
+
 ## API d'analyse
 
 Une analyse est un run du binaire perf-sentinel contre une source configurée, produisant
@@ -932,6 +987,13 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   exactement le `404` d'un inconnu, et une copie qu'il lit sans pouvoir l'écrire `403`. La
   révocation d'un ack reflété dont le Hub ne détient plus le finding exige la source
   entière. `expires_at` reste au choix de l'appelant : aucune expiration n'est imposée.
+- **Les actions** exigent un appelant que le Hub sait nommer, puis `actions.write` quelque
+  part, sinon `403 {"detail":"You may not act on findings."}`, avant que le corps soit lu.
+  Une action est globale à la signature, elle est donc jugée sur les copies du finding que
+  l'appelant lit, dans n'importe quelle source : aucune ne reçoit le `404` d'un finding
+  inconnu, et quand aucune n'est inscriptible sous `actions.write` la réponse est
+  `403 {"detail":"You can read this finding but not act on it."}`. Un jeton machine ne détient
+  ni l'une ni l'autre des permissions.
 - **Les analyses.** Une seule règle décide qui voit la ligne d'un run et ouvre son
   rapport : un run de démon exige `findings.read` et `sources.read` sur le démon entier ;
   un run sur un backend de traces exige `traces.read` sur le service demandé, ou sur le
@@ -972,7 +1034,8 @@ machine.
   "admin": false,
   "groups": [{"name": "/teams/shop", "origin": "provider"}, {"name": "oncall", "origin": "internal"}],
   "reach": [{"group": "/teams/shop", "project": "shop", "role": "member",
-             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write"]}],
+             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write",
+                              "actions.write"]}],
   "projects": [{"name": "shop", "patterns": [{"source": null, "service": null, "attribute": "team=shop"}]}],
   "configuration": null,
   "unmatched": null,

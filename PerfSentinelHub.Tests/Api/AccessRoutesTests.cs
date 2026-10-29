@@ -131,6 +131,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("GET", "/api/correlations")]
     [InlineData("POST", "/api/sources/shop-d/acks")]
     [InlineData("GET", "/api/sources/shop-d/acks")]
+    [InlineData("POST", "/api/actions")]
+    [InlineData("PATCH", "/api/actions")]
     [InlineData("GET", "/api/disclosures")]
     [InlineData("GET", "/api/analyses")]
     [InlineData("POST", "/api/analyses")]
@@ -590,6 +592,63 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         using var response = await client.GetAsync("/api/sources/shop-d/acks", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ------------------------------------------------------------ actions
+
+    [Fact]
+    public async Task A_member_acts_on_a_finding_its_attribute_grant_writes()
+    {
+        using var client = await SignedInAsync("attr");
+
+        using var response = await client.SendAsync(Post("/api/actions", ActionBody(F1)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var action = Assert.Single(await Database.ReadActionsAsync([F1], TestContext.Current.CancellationToken));
+        Assert.Equal("attr@example.internal", action.Owner);
+        Assert.Equal("attr@example.internal", action.CreatedBy);
+    }
+
+    [Fact]
+    public async Task A_readable_finding_its_grant_cannot_write_is_a_403()
+    {
+        using var client = await SignedInAsync("attr");
+
+        using var response = await client.SendAsync(Post("/api/actions", ActionBody(F4)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("You can read this finding but not act on it.", await DetailAsync(response));
+        Assert.Empty(await Database.ReadActionsAsync([F4], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_hidden_finding_answers_the_404_an_unknown_one_gets()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = await SignedInAsync("attr");
+
+        using var hidden = await client.SendAsync(Post("/api/actions", ActionBody(F2)), cancellationToken);
+        using var unknown = await client.SendAsync(Post("/api/actions", ActionBody(Orphan)), cancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        Assert.Equal(await unknown.Content.ReadAsByteArrayAsync(cancellationToken),
+            await hidden.Content.ReadAsByteArrayAsync(cancellationToken));
+        Assert.Empty(await Database.ReadActionsAsync([F2, Orphan], cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_caller_without_actions_write_is_refused_before_the_body()
+    {
+        using var client = await SignedInAsync("viewer");
+
+        // No body worth reading: the refusal comes before it is parsed.
+        using var response = await client.SendAsync(Post("/api/actions", "not json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("You may not act on findings.", await DetailAsync(response));
     }
 
     // ------------------------------------------------------------ disclosures
@@ -1247,6 +1306,11 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         var request = Request("POST", path, body ?? "{}");
         request.Headers.Add("Sec-Fetch-Site", "same-origin");
         return request;
+    }
+
+    private static string ActionBody(string signature)
+    {
+        return $$"""{"signature":"{{signature}}","take":true}""";
     }
 
     private static string AckBody(string signature)

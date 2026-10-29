@@ -229,8 +229,8 @@ patterns. An `AccessPattern` matches a finding copy, one signature at one source
 things: the source, the copy's own service in `finding_sources.service` and never the
 fleet-wide `findings.service` an import rewrites, and the copy's rows in
 `finding_attributes`. A read needs one row to match, whatever grouping it came with; a write,
-for `acks.write` and `analyses.run`, needs every grouping identity of the copy, the
-no-grouping marker included, to carry the key and every value of it to match. A trace run
+for `acks.write`, `actions.write` and `analyses.run`, needs every grouping identity of the
+copy, the no-grouping marker included, to carry the key and every value of it to match. A trace run
 on a service is judged on the Hub's copies of that service in the backend's environment,
 every one of which must write-match; `CoversSubject` matches the copies it is given, and
 the caller enforcement adds selects them by environment. Incident copies match on their

@@ -453,4 +453,30 @@ internal static class Schema
                                 );
                                 CREATE INDEX IF NOT EXISTS ix_detection_counts_day ON detection_counts(day);
                                 """;
+
+    // What a team declared about a finding, one action per signature, grouping-blind like an ack
+    // so a finding seen under two groupings carries one. The events are append-only, with no
+    // foreign key and no purge: an action outlives its finding's retention, so a recap can still
+    // confirm it once the finding is gone.
+    internal const string V16 = """
+                                CREATE TABLE IF NOT EXISTS finding_actions (
+                                  signature TEXT PRIMARY KEY,
+                                  status TEXT NOT NULL,
+                                  owner TEXT,
+                                  created_by TEXT NOT NULL,
+                                  created_at_ms INTEGER NOT NULL,
+                                  updated_at_ms INTEGER NOT NULL,
+                                  done_at_ms INTEGER
+                                );
+                                CREATE TABLE IF NOT EXISTS finding_action_events (
+                                  id INTEGER PRIMARY KEY,
+                                  signature TEXT NOT NULL,
+                                  from_status TEXT,
+                                  to_status TEXT NOT NULL,
+                                  owner TEXT,
+                                  by TEXT NOT NULL,
+                                  at_ms INTEGER NOT NULL
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_action_events_signature ON finding_action_events(signature, at_ms);
+                                """;
 }

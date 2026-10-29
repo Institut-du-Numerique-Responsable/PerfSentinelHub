@@ -153,6 +153,7 @@ does not depend on the provider at all.
 | `GET /api/correlations`                                                | `findings.read`, filtered to the episodes whose two services the caller reads at that source | `403` when held nowhere |
 | `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` at that source as a whole                        | `404`                   |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`                 | `findings.read` and `acks.write` on the finding at that source  | `404`, `403`            |
+| `POST` and `PATCH /api/actions`                                        | `findings.read` and `actions.write` on one copy of the finding, and somebody to name | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` and the run's read rule, below                   | `403`                   |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | the run's read rule                                             | filtered; `404`         |
 | `GET /reports/{id}.html`                                               | the run's read rule                                             | `404`                   |
@@ -226,6 +227,16 @@ any that appear later: **an ack made through an attribute grant may silence the 
 finding for another team's deployment at that daemon**, until it expires or is revoked.
 The Hub forces no expiry. Where several teams can emit the same service name, give the
 owning team a source or service grant for `acks.write` and `analyses.run`.
+
+### Actions
+
+An action is global to the signature, as an ack is at its daemon, so it is judged on every
+copy of the finding the caller reads, at any source, and allowed when one of them is
+writable. A caller who reads none gets the `404` an unknown finding gets; one who reads
+some but may write none gets `403`. A caller holding `actions.write` nowhere is refused
+before the request body is read, and a caller the Hub cannot name is refused first of all.
+Unlike an ack, an action reaches no daemon and silences nothing: it is a note the whole Hub
+shares about who works on the finding.
 
 ### Your access and Coverage
 

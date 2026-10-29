@@ -68,6 +68,9 @@ public static partial class ApiEndpoints
         app.MapGet("/api/sources/{sourceId}/acks", GetSourceAcksAsync);
         app.MapPost("/api/sources/{sourceId}/acks", CreateAckAsync);
         app.MapPost("/api/sources/{sourceId}/acks/revoke", RevokeAckAsync);
+        // Never anonymous: an action is taken in somebody's name.
+        app.MapPost("/api/actions", CreateActionAsync);
+        app.MapPatch("/api/actions", UpdateActionAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
         // correlations, a daemon pushes with its key. With Hub:Access the reads need a

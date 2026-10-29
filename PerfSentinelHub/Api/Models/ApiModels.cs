@@ -242,6 +242,16 @@ public sealed record DisclosureImportResponse(
 /// </summary>
 public sealed record SourceAckResponse(string Signature, string By, string? Reason, string At, string? ExpiresAt);
 
+/// <summary>An action on a finding as POST and PATCH /api/actions answer it: who works on it and where it stands.</summary>
+public sealed record ActionResponse(
+    string Signature,
+    string Status,
+    string? Owner,
+    string CreatedBy,
+    long CreatedAtMs,
+    long UpdatedAtMs,
+    long? DoneAtMs);
+
 /// <summary>
 ///     GET /api/access, with Hub:Access:Enabled only: who the caller is and what they
 ///     reach. Configuration, Unmatched and Conflicts are null except for an admin. Never

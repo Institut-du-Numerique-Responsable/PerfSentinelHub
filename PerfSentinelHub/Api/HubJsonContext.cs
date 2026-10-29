@@ -19,6 +19,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(DisclosureDetail))]
 [JsonSerializable(typeof(ShareLinkCreated))]
 [JsonSerializable(typeof(IReadOnlyList<SourceAckResponse>))]
+[JsonSerializable(typeof(ActionResponse))]
 [JsonSerializable(typeof(AccessResponse))]
 [JsonSerializable(typeof(OAuthError))]
 [JsonSerializable(typeof(DeviceAuthorizationResponse))]

@@ -45,7 +45,7 @@ public sealed record AckWrite(string Signature, bool Revoke, string? Reason, lon
         return Accept(new AckWrite(signature, false, reason, expiresAtMs), out error);
     }
 
-    private static string? ReadText(JsonElement root, string name, int maxChars)
+    internal static string? ReadText(JsonElement root, string name, int maxChars)
     {
         return JsonRead.ReadString(root, name) is { Length: > 0 } text &&
                text.Length <= maxChars &&

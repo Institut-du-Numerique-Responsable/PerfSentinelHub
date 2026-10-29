@@ -414,3 +414,32 @@ public sealed record DetectionDayRow(
     long? AvoidableIoOps = null,
     double? AvoidableGco2Low = null,
     long? TotalIoOps = null);
+
+public static class ActionStatuses
+{
+    public const string Todo = "todo";
+    public const string InProgress = "in_progress";
+    public const string Done = "done";
+    public static readonly string[] All = [Todo, InProgress, Done];
+}
+
+/// <summary>What a team declared about one finding, with every change it went through, oldest first.</summary>
+public sealed record StoredAction(
+    string Signature,
+    string Status,
+    string? Owner,
+    string CreatedBy,
+    long CreatedAtMs,
+    long UpdatedAtMs,
+    long? DoneAtMs,
+    IReadOnlyList<StoredActionEvent> Events);
+
+public sealed record StoredActionEvent(string? FromStatus, string ToStatus, string? Owner, string By, long AtMs);
+
+public enum ActionWriteOutcome
+{
+    Written,
+    Exists,
+    Missing,
+    Busy
+}

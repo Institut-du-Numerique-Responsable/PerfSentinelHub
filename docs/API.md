@@ -554,6 +554,61 @@ one line, event `1310` when the daemon answered and `1311` when it did not, with
 source, the action, the caller and the status. The reason and the credential are never
 logged.
 
+## Actions
+
+An action says who works on a finding and where it stands. The Hub keeps it itself: nothing
+is written at a daemon. It is global to the signature, as an ack is, so a finding seen at
+two sources carries one action. Two routes write it, with a JSON body, and neither is ever
+open: under `Hub:Auth` they need a session.
+
+| Endpoint             | Body                                                            | Does                                  |
+|----------------------|-----------------------------------------------------------------|---------------------------------------|
+| `POST /api/actions`  | `{"signature":"…","take":true}` or `{"signature":"…","status":"…","owner":"…"}` | Declares the action on a finding      |
+| `PATCH /api/actions` | `{"signature":"…","status":"…","owner":"…"}`                    | Changes the status or the owner of it |
+
+- `status` is `todo`, `in_progress` or `done`. Nothing defaults to `todo`.
+- `owner` is a string of 1 to 256 characters with no control character. `null` on a `PATCH`
+  clears it.
+- `take: true` is a `POST` only and stands for `status: "in_progress"` with the caller as
+  owner. It cannot be combined with `status` or `owner`.
+- A `POST` needs `take: true` or a `status`, and an `owner` alone is not enough:
+  `400 {"detail":"An action needs a status or take."}`. A `PATCH` needs a `status` or an
+  `owner`. A `by` in the body is ignored: the Hub names the caller itself.
+
+The Hub judges a request in this order, and a request it refuses writes nothing.
+
+1. **The caller.** As for an ack, the signed-in user, or the proxy header when
+   `Hub:AckRelay:TrustIdentityHeader` is set. With nobody to name, a `403`.
+2. **Where the request comes from.** The same `403` and `415` as an ack.
+3. **The permission.** With access control on, a caller holding `actions.write` nowhere gets
+   `403 {"detail":"You may not act on findings."}` before the body is read. A body over
+   8 KiB is a `413`.
+4. **The body.** One `400` per rule above, the signature held to the bounds of an ack's.
+   `take` in a `PATCH` is a `400`.
+5. **The finding.** The Hub must hold it, and with access control on the caller must read a
+   copy of it, otherwise `404 {"detail":"The Hub holds no such finding."}`, the very answer
+   a finding the caller may not read gets. A readable one the caller may not write is a
+   `403`, see [With access control](#with-access-control).
+6. **The write.** A `POST` on a signature that has an action is a `409`, and a `PATCH` on one
+   that has none a `404`. A write the store could not take in time is a `503` with
+   `Retry-After: 1`.
+
+A `POST` answers `201` and a `PATCH` `200` with the action as it now stands:
+
+```json
+{"signature": "n_plus_one_sql:order-svc:…", "status": "done", "owner": "ada@example.com",
+ "created_by": "ada@example.com", "created_at_ms": 1760000000000,
+ "updated_at_ms": 1760003600000, "done_at_ms": 1760003600000}
+```
+
+`done_at_ms` is stamped when the action enters `done` and cleared when it leaves it. Every
+change of the status or the owner appends an event, with the status it left, the one it
+reached, the owner, the caller and the time. The events are never rewritten, and neither the
+action nor its events are purged with the finding: an action outlives the retention of the
+finding it was declared on, so a recap can still tell whether the fix held. A `PATCH` that
+changes nothing appends nothing. Every refusal the Hub words itself carries
+`{"detail":"…"}`.
+
 ## Analysis API
 
 An analysis is a run of the perf-sentinel binary against one configured source, producing
@@ -866,6 +921,13 @@ token or a machine token, and each answer covers what the caller's grants cover.
   cannot read answers the very `404` an unknown one does, and one it reads but may not
   write `403`. A revoke of a mirrored ack whose finding the Hub no longer holds needs the
   source as a whole. `expires_at` stays the caller's choice: no expiry is forced.
+- **Actions** need a caller the Hub can name, then `actions.write` somewhere, or
+  `403 {"detail":"You may not act on findings."}`, before the body is read. An action is
+  global to the signature, so it is judged on the copies of the finding the caller reads, at
+  any source: none answers the `404` an unknown finding gets, and when none of them is
+  writable under `actions.write` the answer is
+  `403 {"detail":"You can read this finding but not act on it."}`. A machine token holds
+  neither permission.
 - **Analyses.** One rule decides who sees a run's row and opens its report: a daemon run
   needs `findings.read` and `sources.read` at the daemon as a whole; a trace-backend run
   needs `traces.read` on the requested service, or at the backend as a whole for a trace
@@ -904,7 +966,8 @@ never lists a machine token's value or fingerprint.
   "admin": false,
   "groups": [{"name": "/teams/shop", "origin": "provider"}, {"name": "oncall", "origin": "internal"}],
   "reach": [{"group": "/teams/shop", "project": "shop", "role": "member",
-             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write"]}],
+             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write",
+                              "actions.write"]}],
   "projects": [{"name": "shop", "patterns": [{"source": null, "service": null, "attribute": "team=shop"}]}],
   "configuration": null,
   "unmatched": null,
