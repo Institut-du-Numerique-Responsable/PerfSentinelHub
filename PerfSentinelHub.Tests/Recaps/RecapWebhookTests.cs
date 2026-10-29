@@ -228,16 +228,15 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task An_email_delivery_is_left_untouched()
+    public async Task An_email_delivery_makes_no_webhook_request()
     {
         var hub = await ReportedAsync(channel: RecapChannels.Email, target: "ops@acme.test");
 
         await RunAsync(hub);
 
+        // No relay is configured here, so the e-mail row fails; the mail tests cover the relay.
         Assert.Empty(_received);
-        var delivery = Assert.Single(await DeliveriesAsync(hub));
-        Assert.Equal(DeliveryStates.Pending, delivery.State);
-        Assert.Equal(0, delivery.Attempts);
+        Assert.Equal(DeliveryStates.Failed, Assert.Single(await DeliveriesAsync(hub)).State);
     }
 
     [Fact]

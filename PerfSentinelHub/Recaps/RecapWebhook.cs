@@ -34,7 +34,7 @@ public static class RecapWebhook
         return [.. buffer.WrittenSpan];
     }
 
-    private static string? LinkTo(RecapReportSummary report, string view, Uri? publicUrl)
+    internal static string? LinkTo(RecapReportSummary report, string view, Uri? publicUrl)
     {
         return publicUrl is null || !report.Views.Contains(view)
             ? null
