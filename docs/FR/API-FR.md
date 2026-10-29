@@ -680,10 +680,15 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   ne contient aucune détection, `contradicted` quand il est détecté avant tout jour propre,
   `came_back` quand il l'est après un, `awaiting` tant qu'aucun jour n'est scellé. Une source
   injoignable ne confirme jamais. Le jugement reste dans les filtres de la requête.
+- **Libellés.** Une priorité et chaque élément de mouvement portent `label`, le nom métier que
+  quelqu'un a donné à l'endpoint dont ils viennent (voir [Libellés d'endpoint](#libellés-dendpoint)),
+  ou `null`.
 - **Deux vues.** `pilotage` est l'instantané `tech` avec `view: "pilotage"`, les cinq premières
   priorités, une phrase en langage courant fixe par type de finding dans `plain`, et aucune
-  clé technique : `signature`, `endpoint`, `template`, `suggestion`, `suggested_fix`,
-  `code_location`, `confidence` et les `events` de l'action sont absentes, pas `null`.
+  clé technique : `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
+  `confidence` et les `events` de l'action sont absentes, pas `null`. `endpoint` l'est aussi,
+  sauf sur une priorité ou un élément de mouvement dont le `label` est `null` : deux lignes du
+  même type restent distinguées par la seule valeur technique qui reste.
 - **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
   `truncated: true` ; resserrez la requête avec un filtre.
 
@@ -745,6 +750,31 @@ l'action ni ses événements ne sont purgés avec le finding : une action survit
 du finding sur lequel elle a été déclarée, pour qu'un récapitulatif puisse encore dire si le
 correctif a tenu. Un `PATCH` qui ne change rien n'ajoute rien. Chaque refus que le Hub
 formule lui-même porte `{"detail":"…"}`.
+
+## Libellés d'endpoint
+
+Un libellé est ce qu'une personne appelle un endpoint, en mots du métier (`Showing a cart` pour
+`checkout-api` `GET /api/cart/{id}`). Il appartient à un couple `(service, endpoint)` pour tout
+le Hub, quelle que soit la source qui détient les findings, et le recap l'affiche comme titre
+d'une ligne. Une route l'écrit, avec un corps JSON, et elle n'est jamais ouverte : sous
+`Hub:Auth` elle demande une session.
+
+| Endpoint          | Corps                                                     | Effet                           |
+|-------------------|-----------------------------------------------------------|---------------------------------|
+| `PUT /api/labels` | `{"service":"…","endpoint":"…","label":"Showing a cart"}` | Le pose, le remplace ou l'efface |
+
+- `service` et `endpoint` sont ceux du finding, de 1 à 1024 caractères sans caractère de
+  contrôle, tels qu'ils se lisent dans `/api/findings` (`endpoint` est son `source_endpoint`).
+- `label` est rogné, puis de 1 à 80 caractères sans caractère de contrôle. `null`, ou un
+  libellé qui ne contient plus rien une fois rogné, l'efface. Un corps sans `label` est un
+  `400 {"detail":"A label needs a label value; send null to remove it."}`.
+- Le Hub juge la requête comme une action : l'appelant d'abord (personne à nommer, un `403`),
+  puis l'origine (`403`, `415`), la permission, le corps (`400`, ou `413` au-delà de 8 Kio),
+  l'endpoint (`404` quand le Hub ne détient aucun finding là que l'appelant lit, `403` quand il
+  en lit un qu'il ne peut pas nommer), puis l'écriture (`503` avec `Retry-After: 1` quand le
+  stockage n'a pas pu la prendre à temps). Une requête qu'il refuse n'écrit rien.
+
+Il répond `204`, sans corps.
 
 ## API d'analyse
 
@@ -1090,6 +1120,14 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   l'appelant lit, dans n'importe quelle source : aucune ne reçoit le `404` d'un finding
   inconnu, et quand aucune n'est inscriptible sous `actions.write` la réponse est
   `403 {"detail":"You can read this finding but not act on it."}`. Un jeton machine ne détient
+  ni l'une ni l'autre des permissions.
+- **Les libellés** suivent l'ordre des actions : un appelant que le Hub sait nommer, puis
+  `labels.write` quelque part, sinon `403 {"detail":"You may not name endpoints."}`, avant que
+  le corps soit lu. Un libellé est global au couple `(service, endpoint)`, il est donc jugé sur
+  chaque copie de chaque finding de cet endpoint que l'appelant lit : aucune reçoit
+  `404 {"detail":"The Hub holds no finding at this endpoint."}`, la réponse d'un endpoint
+  inconnu, et quand aucune n'est inscriptible sous `labels.write` la réponse est
+  `403 {"detail":"You can read this endpoint but not name it."}`. Un jeton machine ne détient
   ni l'une ni l'autre des permissions.
 - **Les analyses.** Une seule règle décide qui voit la ligne d'un run et ouvre son
   rapport : un run de démon exige `findings.read` et `sources.read` sur le démon entier ;

@@ -171,12 +171,12 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, see below                                                                                                                           |
 
 **Permissions and roles.** The permissions are `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `disclosures.read`,
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `disclosures.read`,
 `disclosures.manage` and `recaps.read`, plus `access.admin`, which only the built-in
 `admin` role carries. The two disclosure permissions and `recaps.read` apply to the whole
 Hub, so a role carrying any of them is granted on `*` only. The built-in roles are
-`reader` (`findings.read`, `traces.read`, `analyses.run`), `member` (`reader`, `acks.write`
-and `actions.write`) and `admin` (all ten, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
+`reader` (`findings.read`, `traces.read`, `analyses.run`), `member` (`reader`, `acks.write`,
+`actions.write` and `labels.write`) and `admin` (all eleven, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
 is a configured one, such as `auditor` with `findings.read` and `traces.read`.
 
 **Patterns.** A record is in a project when one of its patterns matches. A part is exact,

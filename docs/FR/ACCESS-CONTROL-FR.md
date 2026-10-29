@@ -126,6 +126,7 @@ seules copies dans le périmètre.
 | `analyses.run`  | Lancer un run                                                                          |
 | `acks.write`    | Acquitter un finding, ou révoquer un ack                                               |
 | `actions.write` | Déclarer et modifier une action sur un finding                                         |
+| `labels.write`  | Nommer un endpoint en mots du métier                                                   |
 | `disclosures.read` | L'onglet Disclosures, le détail de chaque divulgation et ses fichiers               |
 | `disclosures.manage` | Les liens de partage, les retraits, les relances de livraison et les rendus d'une divulgation |
 | `recaps.read`   | Les rapports de récap que produisent les abonnements (niveau Hub)                      |
@@ -133,7 +134,7 @@ seules copies dans le périmètre.
 | Rôle intégré | Permissions                                                  |
 |--------------|--------------------------------------------------------------|
 | `reader`     | `findings.read`, `traces.read`, `analyses.run`               |
-| `member`     | `reader` plus `acks.write` et `actions.write`                |
+| `member`     | `reader` plus `acks.write`, `actions.write` et `labels.write` |
 | `admin`      | Tout, sur `*` seulement, plus la configuration de l'accès    |
 
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture seule se
@@ -170,6 +171,7 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` sur cette source entière                            | `404`                       |
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`                  | `findings.read` et `acks.write` sur le finding dans cette source   | `404`, `403`                |
 | `POST` et `PATCH /api/actions`                                         | `findings.read` et `actions.write` sur une copie du finding, et quelqu'un à nommer | `404`, `403` |
+| `PUT /api/labels`                                                      | `findings.read` et `labels.write` sur une copie d'un finding de l'endpoint, et quelqu'un à nommer | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` et la règle de lecture du run, ci-dessous           | `403`                       |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | la règle de lecture du run                                         | filtré ; `404`              |
 | `GET /reports/{id}.html`                                               | la règle de lecture du run                                         | `404`                       |
@@ -260,6 +262,17 @@ ne détient `actions.write` nulle part est refusé avant la lecture du corps de 
 un appelant que le Hub ne sait pas nommer l'est avant tout. Contrairement à un ack, une
 action ne touche aucun démon et ne fait rien taire : c'est une note que tout le Hub partage
 sur qui travaille sur le finding.
+
+### Libellés d'endpoint
+
+Un libellé est global à un couple `(service, endpoint)` : il est donc jugé sur chaque copie de
+chaque finding de cet endpoint que l'appelant lit, dans n'importe quelle source, et permis
+quand l'une d'elles est inscriptible sous `labels.write`. Un appelant qui n'en lit aucune
+reçoit le `404` d'un endpoint inconnu ; celui qui en lit mais n'en peut écrire aucune reçoit
+`403`. Un appelant qui ne détient `labels.write` nulle part est refusé avant la lecture du
+corps de la requête, et un appelant que le Hub ne sait pas nommer l'est avant tout. Un
+libellé ne touche aucun démon : c'est un nom que tout le Hub partage, pour le recap et les
+cartes qui le citent.
 
 ### Votre accès et Couverture
 

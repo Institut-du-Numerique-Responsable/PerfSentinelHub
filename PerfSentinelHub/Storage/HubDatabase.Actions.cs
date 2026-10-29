@@ -226,29 +226,40 @@ public sealed partial class HubDatabase
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
-                              SELECT fs.source_id, fs.service,
-                                     fa.grouping_key, fa.grouping_value, fa.attr_key, fa.attr_value
-                              FROM finding_sources AS fs
-                              LEFT JOIN finding_attributes AS fa
-                                ON fa.signature = fs.signature AND fa.source_id = fs.source_id
-                              WHERE fs.signature = $signature
-                              ORDER BY fs.source_id;
-                              """;
+        command.CommandText = CopiesSelect + "WHERE fs.signature = $signature" + CopiesOrder;
         command.Parameters.AddWithValue(SignatureParameter, signature);
+        return await ReadCopiesAsync(command, cancellationToken);
+    }
 
-        var copies = new Dictionary<string, (string? Service, List<AccessAttribute> Rows)>(StringComparer.Ordinal);
+    private const string CopiesSelect = """
+                                        SELECT fs.signature, fs.source_id, fs.service,
+                                               fa.grouping_key, fa.grouping_value, fa.attr_key, fa.attr_value
+                                        FROM finding_sources AS fs
+                                        JOIN findings AS f ON f.signature = fs.signature
+                                        LEFT JOIN finding_attributes AS fa
+                                          ON fa.signature = fs.signature AND fa.source_id = fs.source_id
+
+                                        """;
+
+    private const string CopiesOrder = "\nORDER BY fs.signature, fs.source_id;";
+
+    // One copy per (signature, source), in the order the select gives.
+    internal static async Task<IReadOnlyList<AccessCopy>> ReadCopiesAsync(
+        SqliteCommand command,
+        CancellationToken cancellationToken)
+    {
+        var copies = new Dictionary<(string, string), (string? Service, List<AccessAttribute> Rows)>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var source = reader.GetString(0);
-            if (!copies.TryGetValue(source, out var copy))
-                copies[source] = copy = (reader.IsDBNull(1) ? null : reader.GetString(1), []);
-            if (!reader.IsDBNull(2))
-                copy.Rows.Add(new AccessAttribute(reader.GetString(2), reader.GetString(3), reader.GetString(4),
-                    reader.GetString(5)));
+            var key = (reader.GetString(0), reader.GetString(1));
+            if (!copies.TryGetValue(key, out var copy))
+                copies[key] = copy = (reader.IsDBNull(2) ? null : reader.GetString(2), []);
+            if (!reader.IsDBNull(3))
+                copy.Rows.Add(new AccessAttribute(reader.GetString(3), reader.GetString(4), reader.GetString(5),
+                    reader.GetString(6)));
         }
 
-        return [.. copies.Select(copy => new AccessCopy(copy.Key, copy.Value.Service, copy.Value.Rows))];
+        return [.. copies.Select(copy => new AccessCopy(copy.Key.Item2, copy.Value.Service, copy.Value.Rows))];
     }
 }

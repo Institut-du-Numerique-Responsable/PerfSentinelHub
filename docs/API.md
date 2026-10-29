@@ -632,10 +632,14 @@ and `truncated`.
   detection, `contradicted` when it is detected before any clean day, `came_back` when it
   is detected after one, `awaiting` while no day is sealed yet. A source that is
   unreachable never confirms. The judgment stays within the filters of the request.
+- **Labels.** A priority and every movement item carry `label`, the business name someone gave
+  to the endpoint they come from (see [Endpoint labels](#endpoint-labels)), or `null`.
 - **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
   priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
-  technical keys: `signature`, `endpoint`, `template`, `suggestion`, `suggested_fix`,
-  `code_location`, `confidence` and the action `events` are absent, not `null`.
+  technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
+  `confidence` and the action `events` are absent, not `null`. So is `endpoint`, except on a
+  priority or a movement item whose `label` is `null`: two rows of the same type stay apart
+  by the one technical value left.
 - **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
   `truncated: true`; narrow the request with a filter.
 
@@ -696,6 +700,31 @@ action nor its events are purged with the finding: an action outlives the retent
 finding it was declared on, so a recap can still tell whether the fix held. A `PATCH` that
 changes nothing appends nothing. Every refusal the Hub words itself carries
 `{"detail":"…"}`.
+
+## Endpoint labels
+
+A label is what a person calls an endpoint in business words (`Showing a cart` for
+`checkout-api` `GET /api/cart/{id}`). It belongs to one `(service, endpoint)` pair for the
+whole Hub, whichever source holds the findings, and the recap shows it as the title of a row.
+One route writes it, with a JSON body, and it is never open: under `Hub:Auth` it needs a
+session.
+
+| Endpoint          | Body                                                      | Does                         |
+|-------------------|-----------------------------------------------------------|------------------------------|
+| `PUT /api/labels` | `{"service":"…","endpoint":"…","label":"Showing a cart"}` | Sets, replaces or removes it |
+
+- `service` and `endpoint` are the finding's own, 1 to 1024 characters with no control
+  character, as they read in `/api/findings` (`endpoint` is its `source_endpoint`).
+- `label` is trimmed, then 1 to 80 characters with no control character. `null`, or a label
+  with nothing left once trimmed, removes it. A body without a `label` is a
+  `400 {"detail":"A label needs a label value; send null to remove it."}`.
+- The Hub judges the request like an action: the caller first (nobody to name is a `403`),
+  then where it comes from (`403`, `415`), the permission, the body (`400`, or `413` over 8 KiB),
+  the endpoint (`404` when the Hub holds no finding there that the caller reads, `403` when it
+  reads one it may not name), then the write (`503` with `Retry-After: 1` when the store could
+  not take it in time). A request it refuses writes nothing.
+
+It answers `204` with no body.
 
 ## Analysis API
 
@@ -1020,6 +1049,13 @@ token or a machine token, and each answer covers what the caller's grants cover.
   writable under `actions.write` the answer is
   `403 {"detail":"You can read this finding but not act on it."}`. A machine token holds
   neither permission.
+- **Labels** follow the same order as actions: a caller the Hub can name, then `labels.write`
+  somewhere, or `403 {"detail":"You may not name endpoints."}`, before the body is read. A label
+  is global to the `(service, endpoint)` pair, so it is judged on every copy of every finding
+  there that the caller reads: none answers `404 {"detail":"The Hub holds no finding at this
+  endpoint."}`, the answer an unknown endpoint gets, and when none of them is writable under
+  `labels.write` the answer is `403 {"detail":"You can read this endpoint but not name it."}`. A
+  machine token holds neither permission.
 - **Analyses.** One rule decides who sees a run's row and opens its report: a daemon run
   needs `findings.read` and `sources.read` at the daemon as a whole; a trace-backend run
   needs `traces.read` on the requested service, or at the backend as a whole for a trace

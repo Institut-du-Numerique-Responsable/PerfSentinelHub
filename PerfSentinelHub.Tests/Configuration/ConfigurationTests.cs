@@ -35,7 +35,7 @@ public sealed class ConfigurationTests
 
     private const string RolePermissions =
         "Hub:Access:Roles:0:Permissions must list one or more of findings.read, traces.read, sources.read, "
-        + "analyses.run, acks.write, actions.write, disclosures.read, disclosures.manage and recaps.read, each once.";
+        + "analyses.run, acks.write, actions.write, labels.write, disclosures.read, disclosures.manage and recaps.read, each once.";
 
     private const string TokenName =
         "Hub:Access:MachineTokens:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
@@ -483,7 +483,7 @@ public sealed class ConfigurationTests
 
         Assert.Equal(
             $"Hub:Access:Roles:{AccessOn().Access.Roles.Count}:Permissions must list one or more of findings.read, "
-            + "traces.read, sources.read, analyses.run, acks.write, actions.write, disclosures.read, "
+            + "traces.read, sources.read, analyses.run, acks.write, actions.write, labels.write, disclosures.read, "
             + "disclosures.manage and recaps.read, each once.",
             Assert.Single(failures));
     }

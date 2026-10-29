@@ -116,6 +116,7 @@ scope, and the answer is built from in-scope copies only.
 | `analyses.run`  | Starting a run                                                                  |
 | `acks.write`    | Acknowledging a finding, or revoking an ack                                     |
 | `actions.write` | Declaring and changing an action on a finding                                   |
+| `labels.write`  | Naming an endpoint in business words                                            |
 | `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
 | `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
 | `recaps.read`   | The recap reports subscriptions produce (Hub level)                             |
@@ -123,7 +124,7 @@ scope, and the answer is built from in-scope copies only.
 | Built-in role | Permissions                                                     |
 |---------------|-----------------------------------------------------------------|
 | `reader`      | `findings.read`, `traces.read`, `analyses.run`                  |
-| `member`      | `reader` plus `acks.write` and `actions.write`                  |
+| `member`      | `reader` plus `acks.write`, `actions.write` and `labels.write`  |
 | `admin`       | Everything, on `*` only, plus the access configuration          |
 
 `reader` is not read-only: it starts analyses. A read-only role is configured, for
@@ -159,6 +160,7 @@ does not depend on the provider at all.
 | `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` at that source as a whole                        | `404`                   |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`                 | `findings.read` and `acks.write` on the finding at that source  | `404`, `403`            |
 | `POST` and `PATCH /api/actions`                                        | `findings.read` and `actions.write` on one copy of the finding, and somebody to name | `404`, `403` |
+| `PUT /api/labels`                                                      | `findings.read` and `labels.write` on one copy of a finding at the endpoint, and somebody to name | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` and the run's read rule, below                   | `403`                   |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | the run's read rule                                             | filtered; `404`         |
 | `GET /reports/{id}.html`                                               | the run's read rule                                             | `404`                   |
@@ -242,6 +244,16 @@ some but may write none gets `403`. A caller holding `actions.write` nowhere is 
 before the request body is read, and a caller the Hub cannot name is refused first of all.
 Unlike an ack, an action reaches no daemon and silences nothing: it is a note the whole Hub
 shares about who works on the finding.
+
+### Endpoint labels
+
+A label is global to a `(service, endpoint)` pair, so it is judged on every copy of every
+finding at that endpoint that the caller reads, at any source, and allowed when one of them is
+writable under `labels.write`. A caller who reads none gets the `404` an unknown endpoint gets;
+one who reads some but may write none gets `403`. A caller holding `labels.write` nowhere is
+refused before the request body is read, and a caller the Hub cannot name is refused first of
+all. A label reaches no daemon: it is a name the whole Hub shares for the recap and the cards
+that quote it.
 
 ### Your access and Coverage
 

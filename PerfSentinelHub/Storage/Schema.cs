@@ -479,4 +479,17 @@ internal static class Schema
                                 );
                                 CREATE INDEX IF NOT EXISTS ix_action_events_signature ON finding_action_events(signature, at_ms);
                                 """;
+
+    // What a person calls an endpoint in business words, one label per (service, endpoint) for the
+    // whole Hub. No foreign key ties it to a finding: the name stays with the endpoint.
+    internal const string V17 = """
+                                CREATE TABLE IF NOT EXISTS endpoint_labels (
+                                  service TEXT NOT NULL,
+                                  endpoint TEXT NOT NULL,
+                                  label TEXT NOT NULL,
+                                  set_by TEXT NOT NULL,
+                                  set_at_ms INTEGER NOT NULL,
+                                  PRIMARY KEY (service, endpoint)
+                                );
+                                """;
 }

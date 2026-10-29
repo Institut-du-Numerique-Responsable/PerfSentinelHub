@@ -275,6 +275,40 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_snapshot_carries_the_labels()
+    {
+        await SeedAsync("a", S, LastMon, endpoint: "GET /vanished");
+        await SeedAsync("a", T, Thu, endpoint: "GET /named");
+        await SeedAsync("a", U, Thu, endpoint: "GET /bare");
+        await _database.SetEndpointLabelAsync("order-svc", "GET /named", "Showing a cart", "alice", Token);
+        await _database.SetEndpointLabelAsync("order-svc", "GET /vanished", "Paying an invoice", "alice", Token);
+        // A label on another service's endpoint of the same text names nothing here.
+        await _database.SetEndpointLabelAsync("other-svc", "GET /bare", "Elsewhere", "alice", Token);
+
+        var snapshot = await RecapAsync();
+
+        Assert.Equal("Showing a cart", snapshot.Priorities.Single(priority => priority.Signature == T).Label);
+        Assert.Null(snapshot.Priorities.Single(priority => priority.Signature == U).Label);
+        Assert.Equal("Paying an invoice", Assert.Single(snapshot.Movements.Gone).Label);
+    }
+
+    [Fact]
+    public async Task A_moving_priority_carries_its_label_into_the_movement()
+    {
+        await SeedAsync("a", S, Thu, endpoint: "GET /named");
+        await LedgerAsync(
+            "a",
+            [.. Days(Mon, 3), Open(Thu), .. Days(LastMon, 7)],
+            [Count(Mon, S, 60), Count(Mon + 1, S, 40), Count(Mon + 2, S, 40), Count(LastMon, S, 100)]);
+        await _database.SetEndpointLabelAsync("order-svc", "GET /named", "Showing a cart", "alice", Token);
+
+        var snapshot = await RecapAsync();
+
+        Assert.Equal("Showing a cart", Assert.Single(snapshot.Priorities).Label);
+        Assert.Equal("Showing a cart", Assert.Single(snapshot.Movements.Up).Label);
+    }
+
+    [Fact]
     public async Task Up_and_down_follow_the_configured_threshold()
     {
         await SeedAsync("a", S, Thu);
@@ -431,12 +465,17 @@ public sealed class RecapServiceTests : IAsyncLifetime
             new RecapFilters(environment, null, null, null));
     }
 
-    private Task SeedAsync(string source, string signature, int day, string severity = "warning")
+    private Task SeedAsync(
+        string source,
+        string signature,
+        int day,
+        string severity = "warning",
+        string endpoint = "GET /orders")
     {
         var configured = Sources.Single(item => item.Id == source);
         return _database.UpsertBatchAsync(
             new SourceSnapshot(source, configured.Name, configured.Environment, "0.37.1"),
-            FindingJson.Batch(FindingJson.Envelope(signature, severity: severity)),
+            FindingJson.Batch(FindingJson.Envelope(signature, severity: severity, endpoint: endpoint)),
             day * DayMs + 3_600_000, Token);
     }
 

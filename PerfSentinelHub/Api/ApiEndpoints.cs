@@ -71,6 +71,8 @@ public static partial class ApiEndpoints
         // Never anonymous: an action is taken in somebody's name.
         app.MapPost("/api/actions", CreateActionAsync);
         app.MapPatch("/api/actions", UpdateActionAsync);
+        // Never anonymous: a label is set in somebody's name.
+        app.MapPut("/api/labels", SetLabelAsync);
         // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
         app.MapGet("/api/recap", GetRecapAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a

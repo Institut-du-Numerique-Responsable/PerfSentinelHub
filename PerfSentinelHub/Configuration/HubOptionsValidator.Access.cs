@@ -225,8 +225,8 @@ public sealed partial class HubOptionsValidator
                      role.Permissions.Any(permission =>
                          !AccessPermissions.All.Contains(permission, StringComparer.Ordinal)))
                 errors.Add($"Hub:Access:Roles:{i}:Permissions must list one or more of findings.read, traces.read, "
-                           + "sources.read, analyses.run, acks.write, actions.write, disclosures.read, disclosures.manage and "
-                           + "recaps.read, each once.");
+                           + "sources.read, analyses.run, acks.write, actions.write, labels.write, disclosures.read, "
+                           + "disclosures.manage and recaps.read, each once.");
         }
 
         return roles;

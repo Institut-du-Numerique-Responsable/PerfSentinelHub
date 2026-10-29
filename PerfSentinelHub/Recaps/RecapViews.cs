@@ -4,7 +4,10 @@ public static class RecapViews
 {
     public const int PilotagePriorities = 5;
 
-    /// <summary>The management view of a tech snapshot: top five, the plain sentence, no technical key at all.</summary>
+    /// <summary>
+    ///     The management view of a tech snapshot: top five, the plain sentence, no technical key. The
+    ///     endpoint stays only where no label names it, so two rows of one type stay apart.
+    /// </summary>
     public static RecapSnapshot Pilotage(RecapSnapshot tech)
     {
         return tech with
@@ -28,7 +31,7 @@ public static class RecapViews
         return priority with
         {
             Signature = null,
-            Endpoint = null,
+            Endpoint = priority.Label is null ? priority.Endpoint : null,
             Template = null,
             Suggestion = null,
             SuggestedFix = null,
@@ -40,6 +43,13 @@ public static class RecapViews
 
     private static List<RecapMove> Plain(IReadOnlyList<RecapMove> moves)
     {
-        return [.. moves.Select(move => move with { Signature = null, Endpoint = null })];
+        return
+        [
+            .. moves.Select(move => move with
+            {
+                Signature = null,
+                Endpoint = move.Label is null ? move.Endpoint : null
+            })
+        ];
     }
 }

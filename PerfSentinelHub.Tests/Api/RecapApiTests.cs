@@ -52,6 +52,8 @@ public sealed class RecapApiTests(HubApplicationFactory factory) : IClassFixture
         await factory.Database.UpsertBatchAsync(
             new SourceSnapshot("test", "Test", "test", "0.26.2"),
             FindingJson.Batch(FindingJson.Envelope(signature)), 5_000, Token);
+        // Every endpoint the day names is labelled, so the pilotage view keeps no endpoint at all.
+        await factory.Database.SetEndpointLabelAsync("order-svc", "GET /orders", "Listing orders", "alice", Token);
         using var client = factory.CreateClient();
 
         using var tech = await client.GetAsync("/api/recap?period=day", Token);
@@ -62,6 +64,7 @@ public sealed class RecapApiTests(HubApplicationFactory factory) : IClassFixture
         Assert.Contains(signature, techText);
         Assert.Contains("\"plain\"", pilotageText);
         Assert.Contains("\"view\":\"pilotage\"", pilotageText);
+        Assert.Contains("\"label\":\"Listing orders\"", pilotageText);
         foreach (var key in new[]
                  {
                      "signature", "endpoint", "template", "suggestion", "suggested_fix", "code_location",

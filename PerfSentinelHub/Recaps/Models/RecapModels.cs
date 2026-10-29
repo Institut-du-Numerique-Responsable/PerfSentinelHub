@@ -2,8 +2,10 @@ using System.Text.Json.Serialization;
 
 namespace PerfSentinelHub.Recaps;
 
-// The recap snapshot GET /api/recap serves, snake_case through HubJsonContext. Fields marked
-// "tech" are absent, not null, in the pilotage view.
+// The recap snapshot GET /api/recap serves, snake_case through HubJsonContext. In the pilotage
+// view the technical keys (signature, template, suggestion, suggested_fix, code_location,
+// confidence, events) are absent, not null, and so is endpoint, kept only on a priority or a move
+// with no label. label is always there, null while nobody has named the endpoint.
 
 public sealed record RecapSnapshot(
     int SchemaVersion,
@@ -66,6 +68,7 @@ public sealed record RecapPriority(
     bool VolumeKnown,
     string Trend,
     double? Change,
+    string? Label,
     RecapAction? Action,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Signature,
@@ -113,6 +116,7 @@ public sealed record RecapMove(
     string Plain,
     string Trend,
     double? Change,
+    string? Label,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Signature,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

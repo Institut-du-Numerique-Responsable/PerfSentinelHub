@@ -183,12 +183,12 @@ service.
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, voir plus bas                                                                                                                                         |
 
 **Permissions et rôles.** Les permissions sont `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `disclosures.read`,
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `disclosures.read`,
 `disclosures.manage` et `recaps.read`, plus `access.admin`, que seul le rôle intégré
 `admin` porte. Les deux permissions de divulgation et `recaps.read` valent pour le Hub
 entier, donc un rôle qui porte l'une d'elles s'attribue sur `*` seulement. Les rôles
 intégrés sont `reader` (`findings.read`, `traces.read`, `analyses.run`), `member`
-(`reader`, `acks.write` et `actions.write`) et `admin` (les dix, sur `*` seulement).
+(`reader`, `acks.write`, `actions.write` et `labels.write`) et `admin` (les onze, sur `*` seulement).
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture
 seule est un rôle configuré, comme `auditor` avec `findings.read` et `traces.read`.
 

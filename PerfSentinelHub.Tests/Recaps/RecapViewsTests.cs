@@ -9,19 +9,19 @@ public sealed class RecapViewsTests
     private static readonly JsonSerializerOptions Wire = new()
     { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
-    private static RecapPriority Priority(int rank)
+    private static RecapPriority Priority(int rank, string? label = "Showing a cart")
     {
         return new RecapPriority(
-            rank, "n_plus_one_sql", "warning", "svc", "plain", 3, 40, null, false, true, "flat", 0.0,
+            rank, "n_plus_one_sql", "warning", "svc", "plain", 3, 40, null, false, true, "flat", 0.0, label,
             new RecapAction("done", "ana", "Ana", 1, 2, "confirmed",
                 [new RecapActionEvent(null, "done", "ana", "Ana", "me", 2)]),
             $"sig-{rank}", "GET /x", "SELECT ?", "batch it", new RecapFix("do it", "ef", "https://e.x"),
             new RecapCodeLocation("F", "a.cs", 3, "N"), "daemon_production");
     }
 
-    private static RecapMove Move()
+    private static RecapMove Move(string? label = "Placing an order")
     {
-        return new RecapMove("n_plus_one_sql", "svc", "plain", "up", null, "sig-m", "GET /m");
+        return new RecapMove("n_plus_one_sql", "svc", "plain", "up", null, label, "sig-m", "GET /m");
     }
 
     private static RecapSnapshot Tech(int priorities)
@@ -30,7 +30,7 @@ public sealed class RecapViewsTests
         return new RecapSnapshot(
             1, "tech", 0, period, period, new RecapFilters(null, null, null, null), true,
             new RecapTiles(1, 1, null, null, 0, null, priorities, 0, 0, new RecapActionCounts(0, 0, 0, 0, 0, 0)),
-            [.. Enumerable.Range(1, priorities).Select(Priority)], 0,
+            [.. Enumerable.Range(1, priorities).Select(rank => Priority(rank))], 0,
             new RecapMovements([Move()], [Move()], 0, [Move()], [Move()], [Move()], [Move()]), false, [], false);
     }
 
@@ -46,6 +46,27 @@ public sealed class RecapViewsTests
                      "confidence", "events"
                  })
             Assert.DoesNotContain($"\"{key}\"", json);
+    }
+
+    [Fact]
+    public void Pilotage_keeps_the_endpoint_only_without_a_label()
+    {
+        var tech = Tech(2) with
+        {
+            Priorities = [Priority(1), Priority(2, null)],
+            Movements = Tech(2).Movements with { New = [Move(), Move(null)] }
+        };
+
+        var view = RecapViews.Pilotage(tech);
+
+        Assert.Null(view.Priorities[0].Endpoint);
+        Assert.Equal("GET /x", view.Priorities[1].Endpoint);
+        Assert.Null(view.Movements.New[0].Endpoint);
+        Assert.Equal("GET /m", view.Movements.New[1].Endpoint);
+        var json = JsonSerializer.Serialize(view, Wire);
+        Assert.Equal(2, json.Split("\"endpoint\"").Length - 1);
+        Assert.Contains("\"label\":\"Showing a cart\"", json);
+        Assert.Contains("\"label\":null", json);
     }
 
     [Fact]

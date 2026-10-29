@@ -38,9 +38,10 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         var current = await CarbonAsync(reads.Ranked, span.Period, scope, cancellationToken);
         var previous = await CarbonAsync(reads.Previous, span.PreviousWindow, scope, cancellationToken);
         var actions = await ReadActionsAsync(reads, scope, cancellationToken);
+        var labels = await ReadLabelsAsync(reads, cancellationToken);
 
-        var priorities = PrioritiesOf(reads, current, actions);
-        var movements = MovementsOf(reads, priorities, actions);
+        var priorities = PrioritiesOf(reads, current, actions, labels);
+        var movements = MovementsOf(reads, priorities, actions, labels);
         return new RecapSnapshot(
             1,
             "tech",
@@ -231,12 +232,34 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             ]);
     }
 
+    // ------------------------------------------------------------ labels
+
+    // One read over the (service, endpoint) pairs of everything the snapshot names, gone included.
+    private async Task<IReadOnlyDictionary<(string Service, string Endpoint), string>> ReadLabelsAsync(
+        Reads reads,
+        CancellationToken cancellationToken)
+    {
+        var pairs = reads.All.Concat(reads.Previous ?? [])
+            .Select(finding => (finding.Service, finding.Endpoint))
+            .Distinct()
+            .ToList();
+        return await database.ReadEndpointLabelsAsync(pairs, cancellationToken);
+    }
+
+    private static string? LabelOf(
+        IReadOnlyDictionary<(string Service, string Endpoint), string> labels,
+        RecapFinding finding)
+    {
+        return labels.GetValueOrDefault((finding.Service, finding.Endpoint));
+    }
+
     // ------------------------------------------------------------ priorities and movements
 
     private IReadOnlyList<RecapPriority> PrioritiesOf(
         Reads reads,
         Carbon? carbon,
-        IReadOnlyDictionary<string, RecapAction> actions)
+        IReadOnlyDictionary<string, RecapAction> actions,
+        IReadOnlyDictionary<(string Service, string Endpoint), string> labels)
     {
         return
         [
@@ -257,6 +280,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
                     finding.VolumeKnown,
                     trend,
                     change,
+                    LabelOf(labels, finding),
                     actions.GetValueOrDefault(finding.Signature),
                     finding.Signature,
                     finding.Endpoint,
@@ -282,7 +306,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     private static RecapMovements MovementsOf(
         Reads reads,
         IReadOnlyList<RecapPriority> priorities,
-        IReadOnlyDictionary<string, RecapAction> actions)
+        IReadOnlyDictionary<string, RecapAction> actions,
+        IReadOnlyDictionary<(string Service, string Endpoint), string> labels)
     {
         var current = reads.All.Select(finding => finding.Signature).ToHashSet(StringComparer.Ordinal);
         var gone = RecapRanking.Order(reads.Previous ?? []).Where(finding => !current.Contains(finding.Signature))
@@ -291,12 +316,12 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
 
         return new RecapMovements(
             Trended(priorities, "new"),
-            [.. gone.Select(finding => Move(finding, "gone", null))],
+            [.. gone.Select(finding => Move(finding, "gone", null, LabelOf(labels, finding)))],
             gone.Count(finding => actions.GetValueOrDefault(finding.Signature)?.Confirmation == "confirmed"),
             Trended(priorities, "up"),
             Trended(priorities, "down"),
-            Confirmed(reads, actions, trends, "came_back"),
-            Confirmed(reads, actions, trends, "contradicted"));
+            Confirmed(reads, actions, trends, labels, "came_back"),
+            Confirmed(reads, actions, trends, labels, "contradicted"));
     }
 
     private static List<RecapMove> Trended(IReadOnlyList<RecapPriority> priorities, string trend)
@@ -305,7 +330,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         [
             .. priorities.Where(priority => priority.Trend == trend).Select(priority => new RecapMove(
                 priority.FindingType, priority.Service, priority.Plain, priority.Trend, priority.Change,
-                priority.Signature, priority.Endpoint))
+                priority.Label, priority.Signature, priority.Endpoint))
         ];
     }
 
@@ -314,6 +339,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         Reads reads,
         IReadOnlyDictionary<string, RecapAction> actions,
         IReadOnlyDictionary<string, RecapPriority> ranked,
+        IReadOnlyDictionary<(string Service, string Endpoint), string> labels,
         string confirmation)
     {
         return
@@ -321,15 +347,15 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             .. RecapRanking.Order(reads.All)
                 .Where(finding => actions.GetValueOrDefault(finding.Signature)?.Confirmation == confirmation)
                 .Select(finding => ranked.TryGetValue(finding.Signature, out var priority)
-                    ? Move(finding, priority.Trend, priority.Change)
-                    : Move(finding, Unknown, null))
+                    ? Move(finding, priority.Trend, priority.Change, LabelOf(labels, finding))
+                    : Move(finding, Unknown, null, LabelOf(labels, finding)))
         ];
     }
 
-    private static RecapMove Move(RecapFinding finding, string trend, double? change)
+    private static RecapMove Move(RecapFinding finding, string trend, double? change, string? label)
     {
         return new RecapMove(
-            finding.FindingType, finding.Service, RecapSentences.For(finding.FindingType), trend, change,
+            finding.FindingType, finding.Service, RecapSentences.For(finding.FindingType), trend, change, label,
             finding.Signature, finding.Endpoint);
     }
 
