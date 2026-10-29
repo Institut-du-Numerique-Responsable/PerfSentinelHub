@@ -6423,7 +6423,7 @@
         const key = 'recap:' + priority.signature;
         const open = state.panelOpen[key] === undefined ? priority.rank === 1 : state.panelOpen[key] === true;
         const details = el('details', {class: 'recap-detail'}, [
-            el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12), document.createTextNode('Where and how to fix')]),
+            el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12), document.createTextNode('How to fix')]),
             el('div', {class: 'recap-detail-body'}, [
                 priority.template ? el('pre', {class: 'recap-code', text: priority.template}) : null,
                 recapFix(priority.suggested_fix),
