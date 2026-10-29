@@ -108,7 +108,7 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
             cancellationToken);
 
         var all = await _database.ListRecapReportsAsync(null, 10, cancellationToken);
-        var mine = await _database.ListRecapReportsAsync("ana", 10, cancellationToken);
+        var mine = await _database.ListRecapReportsAsync("sub-ana", 10, cancellationToken);
         var limited = await _database.ListRecapReportsAsync(null, 2, cancellationToken);
 
         Assert.Equal(["new", "mid", "old"], all.Select(report => report.Id));
@@ -169,6 +169,6 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
         return new RecapReportRecord(
             new RecapReportSummary(id, subscription, "week", "2026-10-19", "2026-10-25",
                 views ?? RecapViewNames.All, true, false, createdBy, generatedAtMs),
-            snapshotJson);
+            snapshotJson, createdBy is null ? null : "sub-" + createdBy);
     }
 }

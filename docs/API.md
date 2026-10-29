@@ -709,8 +709,9 @@ caller's name with both views and no delivery. A caller the Hub cannot name gets
 cross-site request `403`, a wrong content type `415`, a body over 4 KiB `413`.
 
 **Who reads what.** A holder of `recaps.read` reads every report. Anyone else with `findings.read`
-reads the reports they generated, matched on the identity that generated them, and nothing else;
-a subscription report has no creator, so no one matches it. A report the caller may not read
+reads the reports they generated, matched on the account's immutable subject
+(`Hub:Auth:SubjectClaim`), never on the name shown in `created_by`, and nothing else; a caller
+without a subject owns none, and a subscription report has no creator, so no one matches it. A report the caller may not read
 answers the `404` an unknown id gets, with the same body, on the three routes that name one; the
 list answers `403 {"detail":"You may not read recap reports."}` to a caller holding neither
 permission, and only the caller's own reports otherwise.

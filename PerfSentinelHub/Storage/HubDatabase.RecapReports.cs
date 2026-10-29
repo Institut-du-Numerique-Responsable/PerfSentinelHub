@@ -50,9 +50,9 @@ public sealed partial class HubDatabase
         command.CommandText = """
                               INSERT INTO recap_reports(
                                 id, subscription, period_kind, period_from, period_to, views, complete,
-                                nothing_moved, created_by, generated_at_ms, snapshot_json)
+                                nothing_moved, created_by, created_by_subject, generated_at_ms, snapshot_json)
                               VALUES ($id, $subscription, $kind, $from, $to, $views, $complete,
-                                      $nothing_moved, $created_by, $generated_at_ms, $snapshot)
+                                      $nothing_moved, $created_by, $created_by_subject, $generated_at_ms, $snapshot)
                               ON CONFLICT DO NOTHING;
                               """;
         command.Parameters.AddWithValue("$id", summary.Id);
@@ -64,6 +64,7 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue("$complete", summary.Complete);
         command.Parameters.AddWithValue("$nothing_moved", summary.NothingMoved);
         command.Parameters.AddWithValue("$created_by", Nullable(summary.CreatedBy));
+        command.Parameters.AddWithValue("$created_by_subject", Nullable(report.CreatorSubject));
         command.Parameters.AddWithValue("$generated_at_ms", summary.GeneratedAtMs);
         command.Parameters.AddWithValue("$snapshot", report.SnapshotJson);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
@@ -112,9 +113,11 @@ public sealed partial class HubDatabase
         return (long)(await command.ExecuteScalarAsync(cancellationToken))! == 1;
     }
 
-    /// <summary>Newest first, optionally the ones one person generated. Never reads a snapshot.</summary>
+    /// <summary>
+    ///     Newest first, optionally the ones one account generated, by its subject. Never reads a snapshot.
+    /// </summary>
     public async Task<IReadOnlyList<RecapReportSummary>> ListRecapReportsAsync(
-        string? createdBy,
+        string? creatorSubject,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -122,11 +125,11 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = SelectRecapSummary + """
 
-                                                   WHERE ($by IS NULL OR created_by = $by)
+                                                   WHERE ($by IS NULL OR created_by_subject = $by)
                                                    ORDER BY generated_at_ms DESC, id
                                                    LIMIT $limit;
                                                    """;
-        command.Parameters.AddWithValue("$by", Nullable(createdBy));
+        command.Parameters.AddWithValue("$by", Nullable(creatorSubject));
         command.Parameters.AddWithValue("$limit", limit);
         var reports = new List<RecapReportSummary>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -141,13 +144,14 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = """
                               SELECT id, subscription, period_kind, period_from, period_to, views,
-                                     complete, nothing_moved, created_by, generated_at_ms, snapshot_json
+                                     complete, nothing_moved, created_by, generated_at_ms, snapshot_json,
+                                     created_by_subject
                               FROM recap_reports WHERE id = $id;
                               """;
         command.Parameters.AddWithValue("$id", id);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken)
-            ? new RecapReportRecord(ReadRecapSummary(reader), reader.GetString(10))
+            ? new RecapReportRecord(ReadRecapSummary(reader), reader.GetString(10), NullableString(reader, 11))
             : null;
     }
 

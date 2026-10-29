@@ -87,6 +87,7 @@ public sealed partial class HubDatabase
             await EnsureFindingSourceServiceColumnAsync(connection, transaction, cancellationToken);
             await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -263,6 +264,24 @@ public sealed partial class HubDatabase
                             ALTER TABLE finding_actions ADD COLUMN owner_display TEXT;
                             ALTER TABLE finding_action_events ADD COLUMN owner_display TEXT;
                             """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The creator's immutable subject beside the name an on-demand report shows. NULL for a
+    ///     scheduled report and for one generated before the column existed, which then has no owner.
+    /// </summary>
+    private static async Task EnsureRecapCreatorSubjectColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "recap_reports", "created_by_subject", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = "ALTER TABLE recap_reports ADD COLUMN created_by_subject TEXT;";
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 

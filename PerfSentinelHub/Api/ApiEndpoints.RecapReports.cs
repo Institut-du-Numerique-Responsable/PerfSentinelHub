@@ -21,13 +21,12 @@ public static partial class ApiEndpoints
         HttpRequest request,
         HubDatabase database,
         AccessPolicy access,
-        IOptions<HubOptions> options,
         CancellationToken cancellationToken)
     {
-        if (!TryRecapReader(request, access, options.Value, out var createdBy))
+        if (!TryRecapReader(request, access, out var creator))
             return Problem(StatusCodes.Status403Forbidden, "You may not read recap reports.");
 
-        var reports = await database.ListRecapReportsAsync(createdBy, RecapReportListLimit, cancellationToken);
+        var reports = await database.ListRecapReportsAsync(creator, RecapReportListLimit, cancellationToken);
         var deliveries = (await database.ListRecapDeliveriesAsync([.. reports.Select(report => report.Id)],
             cancellationToken)).ToLookup(delivery => delivery.ReportId);
         IReadOnlyList<RecapReportItem> items = [.. reports.Select(report => RecapItem(report, deliveries[report.Id]))];
@@ -79,7 +78,8 @@ public static partial class ApiEndpoints
                 snapshot.NothingMoved,
                 identity,
                 now.ToUnixTimeMilliseconds()),
-            JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot));
+            JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot),
+            AccessCaller.Of(request.HttpContext)?.Subject);
         // No subscription, so the unique period index does not apply: only an id collision could refuse.
         if (!await database.InsertRecapReportAsync(report, [], cancellationToken))
             throw new InvalidOperationException("The Hub could not store the recap report.");
@@ -94,10 +94,9 @@ public static partial class ApiEndpoints
         HttpRequest request,
         HubDatabase database,
         AccessPolicy access,
-        IOptions<HubOptions> options,
         CancellationToken cancellationToken)
     {
-        if (await VisibleReportAsync(id, request, database, access, options.Value, cancellationToken) is not { } report)
+        if (await VisibleReportAsync(id, request, database, access, cancellationToken) is not { } report)
             return TypedResults.NotFound();
 
         var deliveries = await database.ListRecapDeliveriesAsync([id], cancellationToken);
@@ -116,11 +115,9 @@ public static partial class ApiEndpoints
         HttpContext context,
         HubDatabase database,
         AccessPolicy access,
-        IOptions<HubOptions> options,
         CancellationToken cancellationToken)
     {
-        if (await VisibleReportAsync(id, context.Request, database, access, options.Value, cancellationToken)
-                is not { } report ||
+        if (await VisibleReportAsync(id, context.Request, database, access, cancellationToken) is not { } report ||
             !report.Summary.Views.Contains(view))
             return TypedResults.NotFound();
 
@@ -158,20 +155,17 @@ public static partial class ApiEndpoints
         return null;
     }
 
-    // The one read rule. recaps.read reads every report (createdBy null); findings.read alone reads the
-    // ones that identity generated, and a caller with no identity reads none: a scheduled report has no
-    // creator, and null must not match null.
-    private static bool TryRecapReader(
-        HttpRequest request,
-        AccessPolicy access,
-        HubOptions options,
-        out string? createdBy)
+    // The one read rule. recaps.read reads every report (creator null); findings.read alone reads the
+    // ones the caller's subject generated, and a caller with no subject reads none: a scheduled report
+    // has no creator, and null must not match null. The display name never decides: two accounts can
+    // share one, and an address can be reassigned.
+    private static bool TryRecapReader(HttpRequest request, AccessPolicy access, out string? creator)
     {
-        createdBy = null;
+        creator = null;
         if (!access.Scope(request.HttpContext, AccessPermissions.RecapsRead).IsNothing)
             return true;
-        createdBy = RelayIdentity(request, options);
-        return createdBy is not null && !access.Scope(request.HttpContext, AccessPermissions.FindingsRead).IsNothing;
+        creator = AccessCaller.Of(request.HttpContext)?.Subject;
+        return creator is not null && !access.Scope(request.HttpContext, AccessPermissions.FindingsRead).IsNothing;
     }
 
     // A report the caller may not read answers as an unknown one does.
@@ -180,13 +174,12 @@ public static partial class ApiEndpoints
         HttpRequest request,
         HubDatabase database,
         AccessPolicy access,
-        HubOptions options,
         CancellationToken cancellationToken)
     {
-        if (!IsRecapReportId(id) || !TryRecapReader(request, access, options, out var createdBy))
+        if (!IsRecapReportId(id) || !TryRecapReader(request, access, out var creator))
             return null;
         var report = await database.GetRecapReportAsync(id, cancellationToken);
-        return report is not null && (createdBy is null || report.Summary.CreatedBy == createdBy) ? report : null;
+        return report is not null && (creator is null || report.CreatorSubject == creator) ? report : null;
     }
 
     // 32 lowercase hex, the shape the Hub gives every report.

@@ -388,7 +388,9 @@ public sealed record RecapReportSummary(
     long GeneratedAtMs);
 
 /// <summary>A report with the snapshot exactly as it was generated, the one thing a listing never reads.</summary>
-public sealed record RecapReportRecord(RecapReportSummary Summary, string SnapshotJson);
+// CreatorSubject is the immutable account id of an on-demand report's creator, the only key
+// ownership is decided on; Summary.CreatedBy is the name shown.
+public sealed record RecapReportRecord(RecapReportSummary Summary, string SnapshotJson, string? CreatorSubject = null);
 
 public sealed record RecapDeliveryRecord(
     string Id,

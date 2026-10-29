@@ -70,6 +70,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         ["ss"] = """{"sub":"u-ss","email":"ss@example.internal","groups":"/ss"}""",
         ["lab"] = """{"sub":"u-lab","email":"lab@example.internal","groups":["/lab"]}""",
         ["tempo"] = """{"sub":"u-tempo","email":"tempo@example.internal","groups":["/tempo"]}""",
+        // attr's e-mail under another subject, as a reassigned address would be.
+        ["attrtwin"] = """{"sub":"u-attr-2","email":"attr@example.internal","groups":["/shop"]}""",
         ["viewer"] = """{"sub":"u-view","email":"view@example.internal","groups":["/viewers"]}""",
         ["tracer"] = """{"sub":"u-tracer","email":"tracer@example.internal","groups":["/tracers"]}""",
         ["nogrant"] = """{"sub":"u-none","email":"none@example.internal","groups":42}""",
@@ -488,6 +490,27 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         foreach (var path in new[] { $"/api/recap/reports/{subscription}", $"/recaps/{subscription}/tech.html" })
         {
             using var hidden = await attr.GetAsync(path, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        }
+    }
+
+    // Ownership follows the immutable subject, never the display name two callers can share.
+    [Fact]
+    public async Task A_caller_sharing_the_creators_name_but_not_its_subject_reads_nothing()
+    {
+        _clock.Advance(TimeSpan.FromDays(7));
+        using var attr = await SignedInAsync("attr");
+        var own = await ReportIdAsync(await attr.SendAsync(Post("/api/recap/reports", """{"period":"week"}"""),
+            TestContext.Current.CancellationToken));
+        using var twin = await SignedInAsync("attrtwin");
+
+        using var list = await twin.GetAsync("/api/recap/reports", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Empty(await ListedIdsAsync(list));
+        foreach (var path in new[] { $"/api/recap/reports/{own}", $"/recaps/{own}/tech.html" })
+        {
+            using var hidden = await twin.GetAsync(path, TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
         }
     }

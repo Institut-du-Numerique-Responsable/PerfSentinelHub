@@ -762,8 +762,10 @@ le Hub ne sait pas nommer reçoit `403`, une requête d'un autre site `403`, un 
 contenu `415`, un corps de plus de 4 Kio `413`.
 
 **Qui lit quoi.** Un détenteur de `recaps.read` lit tous les rapports. Tout autre appelant avec
-`findings.read` lit ceux qu'il a générés, reconnus à l'identité qui les a générés, et rien d'autre ;
-un rapport d'abonnement n'a pas de créateur, donc personne ne le reconnaît. Un rapport que l'appelant
+`findings.read` lit ceux qu'il a générés, reconnus au sujet immuable du compte
+(`Hub:Auth:SubjectClaim`), jamais au nom affiché dans `created_by`, et rien d'autre ; un appelant
+sans sujet n'en possède aucun, et un rapport d'abonnement n'a pas de créateur, donc personne ne le
+reconnaît. Un rapport que l'appelant
 ne peut pas lire reçoit le `404` d'un id inconnu, avec le même corps, sur les trois routes qui en
 nomment un ; la liste répond `403 {"detail":"You may not read recap reports."}` à un appelant qui ne
 détient aucune des deux permissions, et seulement ses propres rapports sinon.
