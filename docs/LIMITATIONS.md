@@ -148,8 +148,9 @@ coefficient leaves it a partial minimum, never extrapolated.
 
 `gone` is a presumption, like `likely_resolved`: a finding the period no longer holds may
 have been fixed, or the traffic that produced it may have stopped. `gone_with_confirmed_action`
-counts the ones backed by a done action the engine confirmed, which is the only evidence
-the recap holds.
+counts the ones backed by a done action the Hub confirmed from the sealed ledger days the
+engine sends (see [API.md](API.md#recap), Actions and confirmation), which is the only
+evidence the recap holds.
 
 A period reads incomplete, and its comparison is not exact, for four reasons:
 `uncovered_days` (days the ledgers do not cover), `open_day` (a past day not sealed),
@@ -171,8 +172,10 @@ so mark it done again once the fix has actually shipped. Actions and their event
 never purged, not with their finding and not by retention, so the tables only grow. Labels
 are Hub-wide as well, and are not purged either.
 
-A recap reads at most 5,000 findings. Past that it keeps the first 5,000, sets
-`truncated`, and every figure covers those alone. Narrow the request with a filter.
+A recap reads the findings in up to four reads: the period with its acknowledged findings,
+the period without them, the closed days of a period in progress, and the previous window.
+Each read stops at 5,000 findings and keeps the first 5,000; any read that overflows sets
+`truncated`, and the figures built on it cover those alone. Narrow the request with a filter.
 
 A report is frozen when it is generated and never follows later data: a finding detected or
 acknowledged afterwards, an action marked done or a label renamed changes the screen and leaves

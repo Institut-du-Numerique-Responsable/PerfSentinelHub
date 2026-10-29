@@ -215,8 +215,9 @@ serves and the reasons it falls short, see
 upgrade has no row and reads as unknown.
 
 The recap, `GET /api/recap`, writes nothing and keeps nothing of its own. `RecapService` makes
-three windowed reads of the findings, the period with its acknowledged findings, the period
-without them and the previous period, then a coverage read of the sources' days and a carbon
+up to four windowed reads of the findings, each capped at 5,000: the period with its acknowledged
+findings, the period without them, the closed days of a period in progress, and the previous
+window, skipped on a period's first day. Then it makes a coverage read of the sources' days and a carbon
 read of their avoidable grams, and joins the actions and the labels last. The folding is pure
 and lives in `Recaps/`: the period, the ranking, the trends, the moves, the coverage judgment,
 the carbon pricing and the sentence per type. The service is a plain class on purpose: the

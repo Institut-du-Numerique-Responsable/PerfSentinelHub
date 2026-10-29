@@ -160,8 +160,9 @@ n'envoie aucun coefficient le laisse en minimum partiel, jamais extrapolé.
 
 `gone` est une présomption, comme `likely_resolved` : un finding que la période ne porte plus
 peut avoir été corrigé, ou le trafic qui l'a produit peut s'être arrêté.
-`gone_with_confirmed_action` compte ceux qu'appuie une action terminée que le moteur a
-confirmée, seule preuve que le récap détienne.
+`gone_with_confirmed_action` compte ceux qu'appuie une action terminée que le Hub a confirmée
+à partir des jours scellés du registre qu'envoie le moteur (voir [API-FR.md](API-FR.md#recap),
+Actions et confirmation), seule preuve que le récap détienne.
 
 Une période se lit incomplète, et sa comparaison n'est pas exacte, pour quatre raisons :
 `uncovered_days` (jours que les ledgers ne couvrent pas), `open_day` (un jour passé non scellé),
@@ -185,8 +186,11 @@ correctif réellement livré. Les actions et leurs événements ne sont jamais p
 leur finding ni par la rétention, donc les tables ne font que grossir. Les libellés sont
 aussi communs à tout le Hub et jamais purgés.
 
-Un récap lit au plus 5 000 findings. Au-delà il garde les 5 000 premiers, pose `truncated`, et
-tous les chiffres ne couvrent que ceux-là. Restreignez la requête avec un filtre.
+Un récap lit les findings en quatre lectures au plus : la période avec ses findings acquittés,
+la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente. Chaque
+lecture s'arrête à 5 000 findings et garde les 5 000 premiers ; toute lecture qui déborde pose
+`truncated`, et les chiffres bâtis sur elle ne couvrent que ceux-là. Restreignez la requête avec
+un filtre.
 
 Un rapport est figé à sa génération et ne suit jamais les données ultérieures : un finding détecté
 ou acquitté après coup, une action marquée terminée ou un libellé renommé change l'écran et laisse
