@@ -541,7 +541,10 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
                 services.PostConfigure<HubOptions>(options =>
                 {
                     options.Analysis = new AnalysisOptions
-                    { EngineBinaryPath = "/usr/bin/false", ReportDirectory = reports };
+                    {
+                        EngineBinaryPath = "/usr/bin/false",
+                        ReportDirectory = reports
+                    };
                     options.Sources =
                     [
                         .. options.Sources,

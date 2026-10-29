@@ -23,7 +23,9 @@ public sealed partial class RecapGeneratorTests : IAsyncLifetime
 
     // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
     private static readonly JsonSerializerOptions Wire = new()
-    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
 
     private static readonly SourceOptions[] Sources =
     [

@@ -295,7 +295,11 @@ public sealed class ConfigurationTests
     public void Invalid_disclosures_are_refused(string rule, string expected)
     {
         var webhook = new WebhookOptions
-        { Name = "auditors", Url = new Uri("https://hooks.example/x"), Secret = WebhookSecret };
+        {
+            Name = "auditors",
+            Url = new Uri("https://hooks.example/x"),
+            Secret = WebhookSecret
+        };
         var disclosures = new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] };
         var options = ValidOptions() with { Disclosures = disclosures };
         options = rule switch
@@ -349,7 +353,11 @@ public sealed class ConfigurationTests
     public void A_webhook_to_a_loopback_address_may_use_http()
     {
         var webhook = new WebhookOptions
-        { Name = "local", Url = new Uri("http://127.0.0.1:9000/hook"), Secret = WebhookSecret };
+        {
+            Name = "local",
+            Url = new Uri("http://127.0.0.1:9000/hook"),
+            Secret = WebhookSecret
+        };
 
         Assert.Empty(DisclosureFailures(new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] }));
     }
@@ -466,7 +474,11 @@ public sealed class ConfigurationTests
     private static WebhookOptions RecapWebhook(string name = "ops")
     {
         return new WebhookOptions
-        { Name = name, Url = new Uri("https://hooks.example/recap"), Secret = WebhookSecret };
+        {
+            Name = name,
+            Url = new Uri("https://hooks.example/recap"),
+            Secret = WebhookSecret
+        };
     }
 
     [Fact]
@@ -670,7 +682,9 @@ public sealed class ConfigurationTests
     public void A_subscription_name_must_be_valid_and_unique()
     {
         var options = WithRecaps(new RecapsOptions
-        { Subscriptions = [Subscription(), Subscription() with { Name = "a b" }] });
+        {
+            Subscriptions = [Subscription(), Subscription() with { Name = "a b" }]
+        });
 
         Assert.Equal(
             "Hub:Recaps:Subscriptions:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', and unique.",
@@ -713,12 +727,16 @@ public sealed class ConfigurationTests
             Assert.Single(AccessFailures(options with
             {
                 Recaps = new RecapsOptions
-                { Subscriptions = [Subscription() with { SourceId = "stg", Environment = "prod" }] }
+                {
+                    Subscriptions = [Subscription() with { SourceId = "stg", Environment = "prod" }]
+                }
             })));
         Assert.Empty(AccessFailures(options with
         {
             Recaps = new RecapsOptions
-            { Subscriptions = [Subscription() with { SourceId = "stg", Environment = "staging" }] }
+            {
+                Subscriptions = [Subscription() with { SourceId = "stg", Environment = "staging" }]
+            }
         }));
     }
 

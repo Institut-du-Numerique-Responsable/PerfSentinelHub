@@ -22,7 +22,9 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
 {
     // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
     private static readonly JsonSerializerOptions Wire = new()
-    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
 
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
 
@@ -296,7 +298,9 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
         string? site = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/recap/reports")
-        { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
         if (identity is not null)
             request.Headers.TryAddWithoutValidation("X-Forwarded-User", identity);
         if (site is not null)

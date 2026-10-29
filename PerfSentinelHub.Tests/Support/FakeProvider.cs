@@ -35,7 +35,10 @@ internal sealed class FakeProvider : IAsyncDisposable
                     var form = await context.Request.ReadFormAsync();
                     await context.Response.WriteAsJsonAsync(
                         new Dictionary<string, string>
-                        { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
+                        {
+                            ["access_token"] = form["code"].ToString(),
+                            ["token_type"] = "Bearer"
+                        });
                     break;
                 case "/userinfo":
                     var code = context.Request.Headers.Authorization.ToString()["Bearer ".Length..];

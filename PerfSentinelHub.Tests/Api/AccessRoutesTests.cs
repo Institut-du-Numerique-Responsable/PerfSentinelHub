@@ -60,7 +60,9 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
     private static readonly JsonSerializerOptions Wire = new()
-    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
 
     private static readonly Dictionary<string, string> Users = new(StringComparer.Ordinal)
     {
@@ -1274,7 +1276,10 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                 services.PostConfigure<HubOptions>(options =>
                 {
                     options.Analysis = new AnalysisOptions
-                    { EngineBinaryPath = "/usr/bin/false", ReportDirectory = _reports };
+                    {
+                        EngineBinaryPath = "/usr/bin/false",
+                        ReportDirectory = _reports
+                    };
                     options.Sources =
                     [
                         .. options.Sources,

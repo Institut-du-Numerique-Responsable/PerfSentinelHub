@@ -17,7 +17,9 @@ namespace PerfSentinelHub.Tests.Recaps;
 public sealed class RecapMailDeliveryTests : IAsyncLifetime
 {
     private static readonly JsonSerializerOptions Wire = new()
-    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
 
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
     private FakeSmtp _relay = null!;

@@ -87,8 +87,8 @@ public sealed partial class RecapDeliveryWorker(
             settings.RecapPublicUrl);
         var status = await mailer.SendAsync(message, cancellationToken);
         if (status == 250)
-        // Past the stopping token: the relay has it, and a restart must not send it again.
         {
+            // Past the stopping token: the relay has it, and a restart must not send it again.
             await database.RecordRecapDeliveryAttemptAsync(
                 delivery.Id, status, DeliveryStates.Delivered, Now(), null, CancellationToken.None);
         }

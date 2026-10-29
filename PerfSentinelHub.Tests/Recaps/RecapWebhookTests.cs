@@ -25,7 +25,9 @@ public sealed class RecapWebhookTests : IAsyncLifetime
 
     // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
     private static readonly JsonSerializerOptions Wire = new()
-    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
 
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
     private readonly ConcurrentQueue<Received> _received = new();

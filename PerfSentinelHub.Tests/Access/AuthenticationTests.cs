@@ -61,7 +61,10 @@ public sealed class AuthenticationTests : IAsyncLifetime
                     var form = await context.Request.ReadFormAsync();
                     await context.Response.WriteAsJsonAsync(
                         new Dictionary<string, string>
-                        { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
+                        {
+                            ["access_token"] = form["code"].ToString(),
+                            ["token_type"] = "Bearer"
+                        });
                     break;
                 case "/userinfo" when GroupedUsers.TryGetValue(
                     context.Request.Headers.Authorization.ToString(), out var user):
