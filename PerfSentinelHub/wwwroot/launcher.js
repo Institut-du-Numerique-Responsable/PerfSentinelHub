@@ -2376,6 +2376,16 @@
     }
 
     /**
+     * Whether a ranked item carries a volume to read. The Hub ranks on a volume above zero, so a
+     * zero is as much "nothing to count" as null and must never show as a figure.
+     * @param {{avoidable_io_ops?: number | null}} item
+     * @returns {boolean}
+     */
+    function hasAvoidableVolume(item) {
+        return item.avoidable_io_ops != null && item.avoidable_io_ops > 0;
+    }
+
+    /**
      * A row's trend as a person reads it: a word, or the relative change as a signed percentage.
      * @param {string} trend `new`, `up`, `down`, `flat`, `gone` or `unknown`
      * @param {number | null | undefined} change
@@ -2614,6 +2624,7 @@
         co2Parts,
         co2Text,
         trendText,
+        hasAvoidableVolume,
         confirmationLabel,
         periodText,
         incompleteText,

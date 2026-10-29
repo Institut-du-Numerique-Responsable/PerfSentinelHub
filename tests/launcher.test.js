@@ -1610,6 +1610,13 @@ test("the carbon figure says it is an estimate and what it lacks", () => {
     assert.deepEqual(PSL.co2Parts(null, 0, "no_avoidable_io"), {lead: "", figure: "—", unit: "no avoidable I/O"});
 });
 
+test("a zero or an unknown avoidable volume is not a figure to rank", () => {
+    assert.equal(PSL.hasAvoidableVolume({avoidable_io_ops: 12}), true);
+    assert.equal(PSL.hasAvoidableVolume({avoidable_io_ops: 0}), false, "a known ledger with no avoidable call");
+    assert.equal(PSL.hasAvoidableVolume({avoidable_io_ops: null}), false);
+    assert.equal(PSL.hasAvoidableVolume({}), false);
+});
+
 test("a trend reads in a word or a percentage", () => {
     assert.equal(PSL.trendText("new", null), "new");
     assert.equal(PSL.trendText("up", 0.35), "+35%");

@@ -6299,7 +6299,7 @@
         const list = el('ol', {class: 'recap-list'});
         let divided = false;
         shown.forEach(function (priority) {
-            if (priority.avoidable_io_ops === null || priority.avoidable_io_ops === undefined) {
+            if (!PSL.hasAvoidableVolume(priority)) {
                 if (!divided) {
                     divided = true;
                     list.appendChild(el('li', {
@@ -6401,7 +6401,7 @@
 
     function recapFigure(priority, max, labels, management) {
         const lower = labels.io.charAt(0).toLowerCase() + labels.io.slice(1);
-        if (priority.avoidable_io_ops === null || priority.avoidable_io_ops === undefined) {
+        if (!PSL.hasAvoidableVolume(priority)) {
             return el('div', {class: 'recap-figure'}, [
                 el('span', {class: 'recap-figure-n', text: '—'}),
                 el('span', {class: 'recap-figure-u', text: management ? 'nothing to count' : 'no avoidable I/O'}),
