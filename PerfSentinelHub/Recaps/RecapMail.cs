@@ -34,7 +34,8 @@ public static class RecapMail
     {
         yield return $"Recap \"{report.Subscription}\" for {period}.";
         if (!report.Complete)
-            yield return "Some days of this period are incomplete, so the comparison with the previous period is not exact.";
+            yield return
+                "Some days of this period are incomplete, so the comparison with the previous period is not exact.";
         if (report.Views.Contains(RecapViewNames.Pilotage))
             yield return "The management view is attached. Open it in a browser; it needs no network.";
         if (report.Views.Contains(RecapViewNames.Tech))

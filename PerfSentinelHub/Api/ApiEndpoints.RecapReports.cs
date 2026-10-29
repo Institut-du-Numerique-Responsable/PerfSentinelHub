@@ -126,7 +126,8 @@ public static partial class ApiEndpoints
         headers.ContentSecurityPolicy = RecapReportRenderer.ContentSecurityPolicy;
         headers.XContentTypeOptions = "nosniff";
         headers.CacheControl = "no-store";
-        headers.ContentDisposition = $"inline; filename=\"perf-sentinel-recap-{report.Summary.PeriodFrom}-{view}.html\"";
+        headers.ContentDisposition =
+            $"inline; filename=\"perf-sentinel-recap-{report.Summary.PeriodFrom}-{view}.html\"";
         return TypedResults.Bytes(
             RecapReportRenderer.Render(view == RecapViewNames.Pilotage ? RecapViews.Frozen(snapshot) : snapshot),
             "text/html; charset=utf-8");
@@ -185,7 +186,7 @@ public static partial class ApiEndpoints
     // 32 lowercase hex, the shape the Hub gives every report.
     private static bool IsRecapReportId(string id)
     {
-        return id.Length == 32 && id.All(character => character is (>= '0' and <= '9') or (>= 'a' and <= 'f'));
+        return id.Length == 32 && id.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
     }
 
     private static RecapReportItem RecapItem(RecapReportSummary report, IEnumerable<RecapDeliveryRecord> deliveries)

@@ -67,7 +67,8 @@ public static class RecapText
         if (grams is null && view == "pilotage")
             return ("", "—", "not available");
         if (grams is not { } value)
-            return ("", "—", missingReason == "no_avoidable_io" ? "no avoidable I/O" : "no coefficient from the engine");
+            return ("", "—",
+                missingReason == "no_avoidable_io" ? "no avoidable I/O" : "no coefficient from the engine");
         // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".
         if (value is > 0 and < 1)
             return ("", "< 1 g", "CO2e");
@@ -201,12 +202,14 @@ public static class RecapText
             return (ownerDisplay, string.IsNullOrEmpty(owner) ? null : owner);
         if (string.IsNullOrEmpty(owner))
             return ("", null);
-        if (owner.StartsWith("machine:", StringComparison.Ordinal) || owner.Any(c => char.IsWhiteSpace(c) || char.IsUpper(c)))
+        if (owner.StartsWith("machine:", StringComparison.Ordinal) ||
+            owner.Any(c => char.IsWhiteSpace(c) || char.IsUpper(c)))
             return (owner, null);
         var identity = owner.StartsWith("local:", StringComparison.Ordinal) ? owner["local:".Length..] : owner;
         var local = identity.Split('@')[0];
         var name = string.Join(' ', local.Split(['.', '_'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(word => string.Join('-', word.Split('-', StringSplitOptions.RemoveEmptyEntries).Select(Capitalize))));
+            .Select(word =>
+                string.Join('-', word.Split('-', StringSplitOptions.RemoveEmptyEntries).Select(Capitalize))));
         return name.Length > 0 ? (name, owner) : (owner, null);
     }
 

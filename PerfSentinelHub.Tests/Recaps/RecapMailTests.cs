@@ -3,7 +3,6 @@ using System.Text;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Recaps;
 
@@ -46,8 +45,8 @@ public sealed class RecapMailTests
     {
         var snapshot = RecapSnapshots.Distinctive() with
         {
-            Priorities = [RecapSnapshots.Priority(1, label: null)],
-            Movements = new RecapMovements([RecapSnapshots.Move(label: null)], [], 0, [], [], [], [])
+            Priorities = [RecapSnapshots.Priority(1, null)],
+            Movements = new RecapMovements([RecapSnapshots.Move(null)], [], 0, [], [], [], [])
         };
         using var mail = Build(null, snapshot: snapshot);
 
@@ -87,7 +86,7 @@ public sealed class RecapMailTests
     [Fact]
     public void A_tech_only_subscription_attaches_nothing()
     {
-        using var mail = Build(new Uri("https://hub.example/"), views: [RecapViewNames.Tech]);
+        using var mail = Build(new Uri("https://hub.example/"), [RecapViewNames.Tech]);
 
         Assert.Empty(mail.Attachments);
         Assert.DoesNotContain("attached", mail.Body, StringComparison.Ordinal);
@@ -97,7 +96,7 @@ public sealed class RecapMailTests
     [Fact]
     public void A_management_only_subscription_has_no_engineering_line()
     {
-        using var mail = Build(null, views: [RecapViewNames.Pilotage]);
+        using var mail = Build(null, [RecapViewNames.Pilotage]);
 
         Assert.Single(mail.Attachments);
         Assert.DoesNotContain("engineering", mail.Body, StringComparison.OrdinalIgnoreCase);

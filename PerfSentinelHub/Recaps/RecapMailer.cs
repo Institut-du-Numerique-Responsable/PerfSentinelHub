@@ -40,8 +40,8 @@ public sealed class RecapMailer(IOptions<HubOptions> options)
             return (int)exception.StatusCode;
         }
         catch (Exception exception) when (exception is SmtpException or IOException
-                                              || (exception is OperationCanceledException
-                                                  && !cancellationToken.IsCancellationRequested))
+                                          || (exception is OperationCanceledException
+                                              && !cancellationToken.IsCancellationRequested))
         {
             return null;
         }

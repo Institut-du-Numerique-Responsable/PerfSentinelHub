@@ -60,7 +60,8 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
         Assert.Equal("alice", body["owner"]!.GetValue<string>());
         Assert.Equal("alice", body["created_by"]!.GetValue<string>());
         var action = Assert.Single(await ReadAsync(signature));
-        Assert.Equal(new StoredActionEvent(null, "in_progress", "alice", null, "alice", NowMs), Assert.Single(action.Events));
+        Assert.Equal(new StoredActionEvent(null, "in_progress", "alice", null, "alice", NowMs),
+            Assert.Single(action.Events));
     }
 
     [Fact]

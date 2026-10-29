@@ -23,7 +23,6 @@ public sealed partial class RecapGenerator(
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         foreach (var subscription in options.Value.Recaps.Subscriptions)
-        {
             foreach (var cadence in subscription.Cadences)
                 try
                 {
@@ -33,7 +32,6 @@ public sealed partial class RecapGenerator(
                 {
                     LogFailed(logger, subscription.Name, cadence, exception);
                 }
-        }
     }
 
     private async Task GenerateAsync(
@@ -44,7 +42,8 @@ public sealed partial class RecapGenerator(
         var settings = options.Value;
         var now = timeProvider.GetUtcNow();
         if (!RecapPeriod.TryParseKind(cadence, out var kind) ||
-            !RecapSchedule.TryScope(subscription.Environment, subscription.SourceId, settings.Sources, out var sourceIds))
+            !RecapSchedule.TryScope(subscription.Environment, subscription.SourceId, settings.Sources,
+                out var sourceIds))
             throw new InvalidOperationException("The subscription names a cadence or a scope the Hub does not know.");
 
         var period = RecapPeriod.Of(kind, DateOnly.FromDateTime(now.UtcDateTime)).Previous();
@@ -79,7 +78,8 @@ public sealed partial class RecapGenerator(
             JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot));
 
         if (await database.InsertRecapReportAsync(report, DeliveriesOf(subscription, snapshot), cancellationToken))
-            LogGenerated(logger, subscription.Name, cadence, from, report.Summary.Complete, report.Summary.NothingMoved);
+            LogGenerated(logger, subscription.Name, cadence, from, report.Summary.Complete,
+                report.Summary.NothingMoved);
     }
 
     // A report that moved nothing is archived and sent nowhere.
@@ -102,6 +102,7 @@ public sealed partial class RecapGenerator(
     private static partial void LogGenerated(
         ILogger logger, string subscription, string cadence, string from, bool complete, bool nothingMoved);
 
-    [LoggerMessage(2506, LogLevel.Warning, "Recap {Subscription} ({Cadence}) could not be generated; the next pass retries.")]
+    [LoggerMessage(2506, LogLevel.Warning,
+        "Recap {Subscription} ({Cadence}) could not be generated; the next pass retries.")]
     private static partial void LogFailed(ILogger logger, string subscription, string cadence, Exception exception);
 }

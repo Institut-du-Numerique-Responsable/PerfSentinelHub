@@ -11,8 +11,8 @@ public sealed class LabelStorageTests(HubApplicationFactory factory) : IClassFix
     [Fact]
     public async Task A_label_is_set_read_and_replaced()
     {
-        (string, string) key = ("labelled-svc", "GET /api/cart/{id}");
-        (string, string) other = ("labelled-svc", "GET /api/other");
+        var key = ("labelled-svc", "GET /api/cart/{id}");
+        var other = ("labelled-svc", "GET /api/other");
 
         Assert.True(await Database.SetEndpointLabelAsync(key.Item1, key.Item2, "Showing a cart", "alice", Token));
         Assert.Equal("Showing a cart", (await Database.ReadEndpointLabelsAsync([key, other], Token))[key]);
@@ -27,7 +27,7 @@ public sealed class LabelStorageTests(HubApplicationFactory factory) : IClassFix
     [Fact]
     public async Task An_empty_label_deletes_it()
     {
-        (string, string) key = ("deleted-svc", "POST /orders");
+        var key = ("deleted-svc", "POST /orders");
         await Database.SetEndpointLabelAsync(key.Item1, key.Item2, "Placing an order", "alice", Token);
 
         Assert.True(await Database.SetEndpointLabelAsync(key.Item1, key.Item2, null, "alice", Token));

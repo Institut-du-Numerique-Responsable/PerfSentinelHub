@@ -9,13 +9,13 @@ namespace PerfSentinelHub.Tests.Recaps;
 
 public sealed partial class RecapReportRendererTests
 {
-    // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
-    private static readonly JsonSerializerOptions Wire = new()
-    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-
     // The script the renderer pins, spelled out here so a change to it fails a test.
     private const string ThemeScript =
         "if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.dataset.theme='dark';";
+
+    // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
+    private static readonly JsonSerializerOptions Wire = new()
+    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private static string Html(RecapSnapshot snapshot)
     {
@@ -37,8 +37,12 @@ public sealed partial class RecapReportRendererTests
 
     private static List<string> ExecutableScripts(string html)
     {
-        return [.. Script().Matches(html).Where(match => !match.Groups[1].Value.Contains("type=\"application/json\"", StringComparison.Ordinal))
-            .Select(match => match.Groups[2].Value)];
+        return
+        [
+            .. Script().Matches(html).Where(match =>
+                    !match.Groups[1].Value.Contains("type=\"application/json\"", StringComparison.Ordinal))
+                .Select(match => match.Groups[2].Value)
+        ];
     }
 
     private static string Island(string html)
@@ -178,8 +182,8 @@ public sealed partial class RecapReportRendererTests
     {
         var snapshot = RecapSnapshots.Distinctive() with
         {
-            Priorities = [RecapSnapshots.Priority(1, label: null)],
-            Movements = new RecapMovements([RecapSnapshots.Move(label: null)], [], 0, [], [], [], [])
+            Priorities = [RecapSnapshots.Priority(1, null)],
+            Movements = new RecapMovements([RecapSnapshots.Move(null)], [], 0, [], [], [], [])
         };
 
         var html = Html(RecapViews.Frozen(snapshot));
@@ -250,9 +254,11 @@ public sealed partial class RecapReportRendererTests
         var visible = Visible(html);
         Assert.Contains("Done, confirmed by the measurements", visible, StringComparison.Ordinal);
         Assert.Contains("Done, waiting for a full day of measurements", visible, StringComparison.Ordinal);
-        Assert.Contains("order of magnitude, part of the activity has no CO2 estimate", visible, StringComparison.Ordinal);
+        Assert.Contains("order of magnitude, part of the activity has no CO2 estimate", visible,
+            StringComparison.Ordinal);
         Assert.Contains("Incomplete: days with no data, a day not finished yet, a restart of the measuring tool, " +
-                        "too many problems to count them all, another measurement gap", visible, StringComparison.Ordinal);
+                        "too many problems to count them all, another measurement gap", visible,
+            StringComparison.Ordinal);
         Assert.Contains("No figures came from: svc-quiet.", visible, StringComparison.Ordinal);
         Assert.Contains("The Hub read the first 5,000 problems", visible, StringComparison.Ordinal);
         Assert.Contains("2 more in the engineering view.", visible, StringComparison.Ordinal);
@@ -311,7 +317,8 @@ public sealed partial class RecapReportRendererTests
     {
         var html = Html(RecapSnapshots.Distinctive());
 
-        Assert.Contains("<pre class=\"code\">TechOnly.load\nsrc/TechOnly.java:42</pre>", html, StringComparison.Ordinal);
+        Assert.Contains("<pre class=\"code\">TechOnly.load\nsrc/TechOnly.java:42</pre>", html,
+            StringComparison.Ordinal);
         Assert.Contains("<code class=\"code-inline\">sig-TECH-1</code>", html, StringComparison.Ordinal);
         Assert.Contains("<code class=\"code-inline\">batch_size</code>", html, StringComparison.Ordinal);
         Assert.Contains("Alice Martin", Visible(html), StringComparison.Ordinal);
@@ -384,7 +391,8 @@ public sealed partial class RecapReportRendererTests
         var snapshot = RecapSnapshots.Distinctive(volumes.Length);
         snapshot = snapshot with
         {
-            Priorities = [.. snapshot.Priorities.Select((priority, index) => priority with { AvoidableIoOps = volumes[index] })]
+            Priorities =
+            [.. snapshot.Priorities.Select((priority, index) => priority with { AvoidableIoOps = volumes[index] })]
         };
 
         Assert.Equal(dividers, Regex.Count(Html(snapshot), "<li class=\"divider\">Below, "));

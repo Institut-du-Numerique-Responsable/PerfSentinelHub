@@ -17,9 +17,7 @@ using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
-using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Api;
 

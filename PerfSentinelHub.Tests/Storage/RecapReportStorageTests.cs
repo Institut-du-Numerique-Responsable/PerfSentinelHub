@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -34,7 +33,7 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         // Spacing, key order and non-ASCII text a re-serialisation would lose.
         var snapshot = "{ \"z\" : 1,\n  \"a\": \"é\" }\n";
-        var report = Report("r1", "weekly", snapshotJson: snapshot, views: [RecapViewNames.Pilotage, RecapViewNames.Tech]);
+        var report = Report("r1", "weekly", snapshot, views: [RecapViewNames.Pilotage, RecapViewNames.Tech]);
 
         Assert.True(await _database.InsertRecapReportAsync(report, [], cancellationToken));
 
@@ -121,8 +120,11 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
     public async Task Due_deliveries_skip_the_future_and_the_settled()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        (string, string)[] deliveries = [(RecapChannels.Webhook, "a"), (RecapChannels.Webhook, "b"),
-            (RecapChannels.Webhook, "c")];
+        (string, string)[] deliveries =
+        [
+            (RecapChannels.Webhook, "a"), (RecapChannels.Webhook, "b"),
+            (RecapChannels.Webhook, "c")
+        ];
         await _database.InsertRecapReportAsync(Report("r1", "weekly"), deliveries, cancellationToken);
         var ids = (await _database.ListRecapDeliveriesAsync(["r1"], cancellationToken)).Select(d => d.Id).ToArray();
 
@@ -135,7 +137,7 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
         var retried = (await _database.DueRecapDeliveriesAsync(NowMs + 30_000, cancellationToken)).Select(d => d.Id);
         Assert.Equal(ids[1..].Order(), retried.Order());
         var settled = (await _database.ListRecapDeliveriesAsync(["r1"], cancellationToken))[0];
-        Assert.Equal((DeliveryStates.Delivered, 1, 200, NowMs, (long?)null),
+        Assert.Equal((DeliveryStates.Delivered, 1, 200, NowMs, null),
             (settled.State, settled.Attempts, settled.LastStatus, settled.LastAttemptMs, settled.NextAttemptMs));
     }
 

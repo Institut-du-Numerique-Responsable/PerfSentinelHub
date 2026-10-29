@@ -103,7 +103,8 @@ public sealed partial class HubOptionsValidator
 
     private static bool IsDistinctNonEmpty(IReadOnlyList<string> values, Func<string, bool> isKnown)
     {
-        return values.Count > 0 && values.All(isKnown) && values.Distinct(StringComparer.Ordinal).Count() == values.Count;
+        return values.Count > 0 && values.All(isKnown) &&
+               values.Distinct(StringComparer.Ordinal).Count() == values.Count;
     }
 
     private static void ValidateSubscriptionScope(RecapSubscriptionOptions sub, string path,

@@ -111,7 +111,8 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 100, cancellationToken);
 
         Assert.Equal(ActionWriteOutcome.Exists,
-            await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "bob", 200, cancellationToken));
+            await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "bob", 200,
+                cancellationToken));
         Assert.Equal(ActionWriteOutcome.Missing,
             await Database.UpdateActionAsync("never", ActionStatuses.Done, null, false, "bob", 200,
                 cancellationToken));
@@ -123,7 +124,8 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "leaving";
-        await Database.CreateActionAsync(signature, ActionStatuses.Done, "alice", null, "alice", 100, cancellationToken);
+        await Database.CreateActionAsync(signature, ActionStatuses.Done, "alice", null, "alice", 100,
+            cancellationToken);
 
         await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, true, "bob", 200,
             cancellationToken);

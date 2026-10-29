@@ -127,8 +127,8 @@ public sealed class RecapTextTests
         Assert.Equal("No figures came from: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "pilotage"));
         Assert.Equal("Sources without a detection volume: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "tech"));
         // The Engineering view keeps the engine's words.
-        Assert.Equal("Incomplete: a day still open, x", RecapText.Incomplete(["open_day", "x"], "tech"));
-        Assert.Equal("Confirmed by the engine", RecapText.Confirmation("confirmed", "tech"));
+        Assert.Equal("Incomplete: a day still open, x", RecapText.Incomplete(["open_day", "x"]));
+        Assert.Equal("Confirmed by the engine", RecapText.Confirmation("confirmed"));
     }
 
     [Fact]

@@ -12,9 +12,9 @@ namespace PerfSentinelHub.Tests.Support;
 /// </summary>
 public sealed class FakeSmtp : IAsyncDisposable
 {
-    private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentBag<Task> _connections = [];
     private readonly TcpListener _listener;
+    private readonly CancellationTokenSource _stop = new();
     private Task _accepting = Task.CompletedTask;
 
     private FakeSmtp(TcpListener listener)
@@ -76,7 +76,8 @@ public sealed class FakeSmtp : IAsyncDisposable
             {
                 await using var stream = client.GetStream();
                 using var reader = new StreamReader(stream, Encoding.UTF8);
-                await using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { NewLine = "\r\n", AutoFlush = true };
+                await using var writer = new StreamWriter(stream, new UTF8Encoding(false))
+                { NewLine = "\r\n", AutoFlush = true };
                 await Converse(reader, writer, cancellationToken);
             }
         }

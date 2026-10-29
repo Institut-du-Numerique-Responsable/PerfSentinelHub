@@ -51,8 +51,8 @@ running against daemons that really answer, so `global-setup.ts` stands up:
   in: two succeed, one hits an unreachable source, one is refused before it is
   queued because the window outruns what the backend keeps,
 - a second Hub from the same build with `Hub:Auth` and `Hub:Access` on: a fake
-  OAuth provider (`demo/fake-provider.js`) whose account chooser signs in Ada
-  (an admin group), Sam (two team groups) or Noor (a group no grant names), a
+  OAuth provider (`demo/fake-provider.js`) whose account chooser signs in Ada (an admin group), Sam (two team groups) or
+  Noor (a group no grant names), a
   local account, which puts the Hub's own sign-in page in front, three projects,
   their grants, a machine token, `TrustedProxyNetworks` for terminal sign-in and
   a `MetricsPort` bound beside the main port. It polls two of the fake daemons.

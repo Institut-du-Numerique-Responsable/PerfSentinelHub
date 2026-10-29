@@ -9,7 +9,6 @@ using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Api;
 
@@ -22,7 +21,8 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
     : IClassFixture<HubApplicationFactory>, IAsyncLifetime
 {
     // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
-    private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    private static readonly JsonSerializerOptions Wire = new()
+    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
 
@@ -135,7 +135,8 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
     {
         using var client = Client(7);
 
-        using var response = await PostAsync(client, $$"""{"period":"week","service":"{{new string('a', 5 * 1024)}}"}""");
+        using var response =
+            await PostAsync(client, $$"""{"period":"week","service":"{{new string('a', 5 * 1024)}}"}""");
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
     }
@@ -176,7 +177,8 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/html; charset=utf-8", response.Content.Headers.ContentType!.ToString());
-        Assert.Equal(RecapReportRenderer.ContentSecurityPolicy, Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal(RecapReportRenderer.ContentSecurityPolicy,
+            Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
         Assert.Equal("nosniff", Assert.Single(response.Headers.GetValues("X-Content-Type-Options")));
         Assert.Equal("no-store", Assert.Single(response.Headers.GetValues("Cache-Control")));
         Assert.Equal("inline; filename=\"perf-sentinel-recap-2026-10-19-tech.html\"",

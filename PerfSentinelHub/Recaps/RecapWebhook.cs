@@ -6,7 +6,10 @@ using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Recaps;
 
-/// <summary>What a recap webhook receives: the report's coordinates, links when the Hub knows its own address, and the management snapshot.</summary>
+/// <summary>
+///     What a recap webhook receives: the report's coordinates, links when the Hub knows its own address, and the
+///     management snapshot.
+/// </summary>
 public static class RecapWebhook
 {
     public static byte[] Body(RecapReportSummary report, RecapSnapshot pilotage, Uri? publicUrl)

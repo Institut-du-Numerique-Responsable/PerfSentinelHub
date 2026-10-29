@@ -227,7 +227,8 @@ public sealed class LabelsAccessTests(HubApplicationFactory factory) : IClassFix
         using var unknown = await Send(client, callback, Service, "GET /unknown");
 
         Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
-        Assert.Equal(await unknown.Content.ReadAsByteArrayAsync(Token), await hidden.Content.ReadAsByteArrayAsync(Token));
+        Assert.Equal(await unknown.Content.ReadAsByteArrayAsync(Token),
+            await hidden.Content.ReadAsByteArrayAsync(Token));
     }
 
     private static Task<HttpResponseMessage> Send(

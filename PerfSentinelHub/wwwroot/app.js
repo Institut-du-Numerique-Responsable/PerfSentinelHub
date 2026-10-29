@@ -6109,7 +6109,11 @@
 
     function recapErrorBanner(status, view) {
         const sentence = PSL.recapErrorText(status, view);
-        return el('div', {class: 'banner', 'data-tone': 'crit', role: 'alert'}, [critGlyph(16), el('div', {text: sentence})]);
+        return el('div', {
+            class: 'banner',
+            'data-tone': 'crit',
+            role: 'alert'
+        }, [critGlyph(16), el('div', {text: sentence})]);
     }
 
     function recapFilterLine(route) {
@@ -6177,7 +6181,11 @@
     /** A heading with its "?" beside it, never inside it, centred on the heading's line. */
     function recapHeading(id, text, hint, help, topic) {
         return el('div', {class: 'title-row'}, [
-            el('h2', {class: 'recap-h2', id: id, tabindex: '-1'}, [document.createTextNode(text), hint ? el('span', {text: hint}) : null]),
+            el('h2', {
+                class: 'recap-h2',
+                id: id,
+                tabindex: '-1'
+            }, [document.createTextNode(text), hint ? el('span', {text: hint}) : null]),
             helpDot(help, topic)
         ]);
     }
@@ -6254,7 +6262,8 @@
             ? null : PSL.co2Parts(tiles.previous_co2_grams, 0, null).figure;
         // The full sentence stays on the figure for a reader the small print does not reach.
         const value = el('span', {
-            class: 'disc-figure-value', title: PSL.co2Text(tiles.co2_grams, without, tiles.co2_missing_reason, snapshot.view)
+            class: 'disc-figure-value',
+            title: PSL.co2Text(tiles.co2_grams, without, tiles.co2_missing_reason, snapshot.view)
         }, [
             co2.lead ? el('small', {text: co2.lead}) : null,
             document.createTextNode(co2.figure),
@@ -6331,7 +6340,11 @@
 
     function recapPriorityNotes(snapshot, all, section) {
         if (snapshot.view !== 'pilotage' && all.length > RECAP_FIRST_PAGE && !state.recapShowAll) {
-            const more = el('button', {class: 'pill-button recap-showall', type: 'button', text: 'Show all ' + all.length});
+            const more = el('button', {
+                class: 'pill-button recap-showall',
+                type: 'button',
+                text: 'Show all ' + all.length
+            });
             more.addEventListener('click', function () {
                 state.recapShowAll = true;
                 renderFocus('#recap-h-prio');
@@ -6394,7 +6407,12 @@
     function recapTrend(item) {
         const text = PSL.trendText(item.trend, item.change);
         return text
-            ? el('span', {class: 'recap-trend', 'data-trend': item.trend, title: 'against the previous period, on closed days', text: text})
+            ? el('span', {
+                class: 'recap-trend',
+                'data-trend': item.trend,
+                title: 'against the previous period, on closed days',
+                text: text
+            })
             : null;
     }
 
@@ -6465,7 +6483,10 @@
         }).join(':');
         const lines = [location.function, at].filter(Boolean).join('\n');
         if (!lines) return null;
-        return el('div', {}, [el('div', {class: 'recap-fix-head', text: 'Where in the code'}), el('pre', {class: 'recap-code', text: lines})]);
+        return el('div', {}, [el('div', {
+            class: 'recap-fix-head',
+            text: 'Where in the code'
+        }), el('pre', {class: 'recap-code', text: lines})]);
     }
 
     function recapFacts(priority) {
@@ -6492,7 +6513,11 @@
             el('ul', {class: 'recap-events'}, action.events.map(function (event) {
                 const owner = PSL.ownerLabel(event.owner, event.owner_display);
                 return el('li', {}, [
-                    el('time', {datetime: PSL.isoUtc(event.at_ms), title: PSL.isoUtc(event.at_ms), text: PSL.localTime(event.at_ms)}),
+                    el('time', {
+                        datetime: PSL.isoUtc(event.at_ms),
+                        title: PSL.isoUtc(event.at_ms),
+                        text: PSL.localTime(event.at_ms)
+                    }),
                     document.createTextNode((event.from ? RECAP_TODO_LABEL[event.from] + ' → ' : '')
                         + (RECAP_TODO_LABEL[event.to] || event.to) + (owner.text ? ', ' + owner.text : '')
                         + ', by ' + event.by)
@@ -6546,20 +6571,32 @@
             state.ackReturn = location.hash;
         });
         if (!action) {
-            const take = el('button', {class: 'pill-button pill-sm', type: 'button', text: 'Take', disabled: busy ? 'disabled' : null});
+            const take = el('button', {
+                class: 'pill-button pill-sm',
+                type: 'button',
+                text: 'Take',
+                disabled: busy ? 'disabled' : null
+            });
             take.addEventListener('click', function () {
                 recapWrite(priority.signature, 'POST', '/api/actions', {signature: priority.signature, take: true});
             });
             return [take, ack];
         }
-        const select = el('select', {class: 'refresh-select', 'aria-label': 'action status', disabled: busy ? 'disabled' : null},
+        const select = el('select', {
+                class: 'refresh-select',
+                'aria-label': 'action status',
+                disabled: busy ? 'disabled' : null
+            },
             ['todo', 'in_progress', 'done'].map(function (status) {
                 const option = el('option', {value: status, text: RECAP_TODO_LABEL[status]});
                 if (status === action.status) option.selected = true;
                 return option;
             }));
         select.addEventListener('change', function () {
-            recapWrite(priority.signature, 'PATCH', '/api/actions', {signature: priority.signature, status: select.value});
+            recapWrite(priority.signature, 'PATCH', '/api/actions', {
+                signature: priority.signature,
+                status: select.value
+            });
         });
         const confirmation = PSL.confirmationLabel(action.confirmation);
         return [recapOwner(action), select,
@@ -6571,8 +6608,10 @@
         if (!management) {
             kids.push(el('span', {class: 'facts'}, [
                 el('span', {}, [
-                    el('b', {text: priority.detections === null || priority.detections === undefined
-                        ? '—' : priority.detections.toLocaleString('en-US')}),
+                    el('b', {
+                        text: priority.detections === null || priority.detections === undefined
+                            ? '—' : priority.detections.toLocaleString('en-US')
+                    }),
                     document.createTextNode(' detections')
                 ]),
                 recapNameButton(priority)
@@ -6632,9 +6671,12 @@
     /** The business name of an endpoint, in a line of its own under the row. Enter saves, an empty name removes it. */
     function recapNameEditor(priority) {
         const input = el('input', {
-            class: 'recap-input recap-name-input', type: 'text', maxlength: '80',
+            class: 'recap-input recap-name-input',
+            type: 'text',
+            maxlength: '80',
             value: state.recapNameDraft !== null ? state.recapNameDraft : priority.label || '',
-            placeholder: 'Showing a cart', 'aria-label': 'Business name for ' + priority.service + ' ' + priority.endpoint,
+            placeholder: 'Showing a cart',
+            'aria-label': 'Business name for ' + priority.service + ' ' + priority.endpoint,
             spellcheck: 'false'
         });
         const save = el('button', {class: 'pill-button pill-sm', type: 'submit', text: 'Save'});
@@ -6674,7 +6716,10 @@
     function recapMoveWho(item) {
         const where = item.label || !item.endpoint
             ? [document.createTextNode('In ' + item.service + '.')]
-            : [document.createTextNode('In ' + item.service + ', '), el('code', {class: 'code-inline', text: item.endpoint}),
+            : [document.createTextNode('In ' + item.service + ', '), el('code', {
+                class: 'code-inline',
+                text: item.endpoint
+            }),
                 document.createTextNode('.')];
         return el('span', {class: 'who'}, [
             el('span', {class: 'plain'}, [
@@ -6769,7 +6814,11 @@
             recapGenerateBar(route)
         ]);
         if (state.recapGenerateError) {
-            section.appendChild(el('p', {class: 'recap-alert recap-alert-wide', role: 'alert', text: state.recapGenerateError}));
+            section.appendChild(el('p', {
+                class: 'recap-alert recap-alert-wide',
+                role: 'alert',
+                text: state.recapGenerateError
+            }));
         }
         if (reports === 'error') {
             section.appendChild(el('p', {class: 'sources-note', text: PSL.RECAP_REPORTS_COPY.failed}));
@@ -6783,7 +6832,9 @@
 
     function recapGenerateBar(route) {
         const button = el('button', {
-            class: 'pill-button pill-sm recap-generate-button', type: 'button', disabled: state.recapGenerating ? 'disabled' : null,
+            class: 'pill-button pill-sm recap-generate-button',
+            type: 'button',
+            disabled: state.recapGenerating ? 'disabled' : null,
             text: state.recapGenerating ? PSL.RECAP_REPORTS_COPY.generating : PSL.RECAP_REPORTS_COPY.generate
         });
         button.addEventListener('click', function () {
@@ -6829,8 +6880,10 @@
             el('div', {class: 'recap-report-links'}, links),
             el('div', {class: 'recap-report-foot'}, [
                 el('time', {
-                    class: 'recap-when', datetime: PSL.isoUtc(report.generated_at_ms),
-                    title: PSL.isoUtc(report.generated_at_ms), text: 'generated ' + PSL.localTime(report.generated_at_ms)
+                    class: 'recap-when',
+                    datetime: PSL.isoUtc(report.generated_at_ms),
+                    title: PSL.isoUtc(report.generated_at_ms),
+                    text: 'generated ' + PSL.localTime(report.generated_at_ms)
                 }),
                 status ? el('span', {class: 'recap-report-status', text: status}) : null
             ].concat(report.deliveries.map(function (delivery) {
@@ -7282,6 +7335,7 @@
         }, 0) + hosts.reduce(function (sum, host) {
             return sum + host.energy_kwh;
         }, 0);
+
         function shareCell(kwh) {
             const share = total > 0 ? (Number(kwh) || 0) / total : 0;
             const bar = el('span', {class: 'disc-share-fill'});
@@ -7289,6 +7343,7 @@
             return el('td', {}, [el('span', {class: 'disc-share'}, [el('span', {class: 'disc-share-track'}, [bar]),
                 el('span', {class: 'table-mono', text: Math.round(share * 100) + ' %'})])]);
         }
+
         const rows = applications.map(function (app) {
             return el('tr', {}, [
                 el('td', {class: 'table-strong', text: app.display_name || app.service_name}),

@@ -11,7 +11,6 @@ using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Recaps;
 
@@ -94,8 +93,8 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     {
         var snapshot = RecapSnapshots.Distinctive() with
         {
-            Priorities = [RecapSnapshots.Priority(1, label: null)],
-            Movements = new RecapMovements([RecapSnapshots.Move(label: null)], [], 0, [], [], [], [])
+            Priorities = [RecapSnapshots.Priority(1, null)],
+            Movements = new RecapMovements([RecapSnapshots.Move(null)], [], 0, [], [], [], [])
         };
         var hub = await ReportedAsync(snapshot: snapshot);
 
@@ -113,7 +112,7 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     [Fact]
     public async Task With_a_public_url_the_links_name_the_hub()
     {
-        var hub = await ReportedAsync(publicUrl: "https://hub.example/");
+        var hub = await ReportedAsync("https://hub.example/");
 
         await RunAsync(hub);
 
@@ -128,7 +127,7 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     [Fact]
     public async Task A_report_without_the_engineering_view_has_no_engineering_link()
     {
-        var hub = await ReportedAsync(publicUrl: "https://hub.example/", views: [RecapViewNames.Pilotage]);
+        var hub = await ReportedAsync("https://hub.example/", views: [RecapViewNames.Pilotage]);
 
         await RunAsync(hub);
 
@@ -270,7 +269,7 @@ public sealed class RecapWebhookTests : IAsyncLifetime
             await first.DisposeAsync();
             _hubs.Remove(first);
 
-            var second = Hub(null, null, databasePath: path);
+            var second = Hub(null, null, path);
             await RunAsync(second);
             await RunAsync(second);
 
@@ -322,7 +321,7 @@ public sealed class RecapWebhookTests : IAsyncLifetime
                     Webhooks =
                     [
                         new WebhookOptions
-                        { Name = "ops-chat", Url = new Uri(_receiver.BaseUrl, "hook"), Secret = Secret }
+                            { Name = "ops-chat", Url = new Uri(_receiver.BaseUrl, "hook"), Secret = Secret }
                     ]
                 };
             })));

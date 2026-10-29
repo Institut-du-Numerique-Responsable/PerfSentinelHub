@@ -13,7 +13,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Storage;
 using PerfSentinelHub.Tests.Api;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Access;
 

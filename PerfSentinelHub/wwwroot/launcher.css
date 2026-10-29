@@ -191,6 +191,7 @@ button {
         justify-content: flex-end;
         min-width: 0;
     }
+
     /* On a phone a long chip breaks rather than pushing the page sideways. */
     .shell-main .code-inline {
         white-space: normal;

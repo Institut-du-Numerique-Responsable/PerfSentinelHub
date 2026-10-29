@@ -13,6 +13,18 @@ public sealed partial class HubDatabase
                                              VALUES ($signature, $from_status, $to_status, $owner, $owner_display, $by, $at_ms);
                                              """;
 
+    private const string CopiesSelect = """
+                                        SELECT fs.signature, fs.source_id, fs.service,
+                                               fa.grouping_key, fa.grouping_value, fa.attr_key, fa.attr_value
+                                        FROM finding_sources AS fs
+                                        JOIN findings AS f ON f.signature = fs.signature
+                                        LEFT JOIN finding_attributes AS fa
+                                          ON fa.signature = fs.signature AND fa.source_id = fs.source_id
+
+                                        """;
+
+    private const string CopiesOrder = "\nORDER BY fs.signature, fs.source_id;";
+
     /// <summary>
     ///     Files a new action and its first event, in one transaction. <c>Exists</c> when the
     ///     signature already has one, <c>Busy</c> when the write lock stays held past the wait.
@@ -53,7 +65,8 @@ public sealed partial class HubDatabase
             if (await insert.ExecuteNonQueryAsync(cancellationToken) == 0)
                 return ActionWriteOutcome.Exists;
 
-            await InsertActionEventAsync(connection, transaction, signature, null, status, owner, ownerDisplay, by, nowMs,
+            await InsertActionEventAsync(connection, transaction, signature, null, status, owner, ownerDisplay, by,
+                nowMs,
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return ActionWriteOutcome.Written;
@@ -230,18 +243,6 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue(SignatureParameter, signature);
         return await ReadCopiesAsync(command, cancellationToken);
     }
-
-    private const string CopiesSelect = """
-                                        SELECT fs.signature, fs.source_id, fs.service,
-                                               fa.grouping_key, fa.grouping_value, fa.attr_key, fa.attr_value
-                                        FROM finding_sources AS fs
-                                        JOIN findings AS f ON f.signature = fs.signature
-                                        LEFT JOIN finding_attributes AS fa
-                                          ON fa.signature = fs.signature AND fa.source_id = fs.source_id
-
-                                        """;
-
-    private const string CopiesOrder = "\nORDER BY fs.signature, fs.source_id;";
 
     // One copy per (signature, source), in the order the select gives.
     internal static async Task<IReadOnlyList<AccessCopy>> ReadCopiesAsync(

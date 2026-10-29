@@ -17,10 +17,10 @@ public static class RecapSnapshots
     public const string Fix = "TECH-FIX";
     public const string Confidence = "daemon_production";
 
-    public static readonly string[] Values = [Signature, Endpoint, Template, File, Suggestion, Fix, Confidence];
-
     /// <summary>2026-10-29 14:32:05 UTC.</summary>
     public const long GeneratedAtMs = 1793284325000;
+
+    public static readonly string[] Values = [Signature, Endpoint, Template, File, Suggestion, Fix, Confidence];
 
     public static RecapPriority Priority(int rank, string? label = "Label OK", string? template = Template)
     {
@@ -29,8 +29,12 @@ public static class RecapSnapshots
             300, false, true, "up", 0.35, label,
             new RecapAction("done", "alice.martin@acme.com", null, GeneratedAtMs - 86400000, GeneratedAtMs - 3600000,
                 "confirmed",
-                [new RecapActionEvent("todo", "done", "alice.martin@acme.com", null, "alice", GeneratedAtMs - 3600000)]),
-            $"sig-TECH-{rank}", Endpoint, template, $"{Suggestion} with `batch_size` set", new RecapFix($"{Fix} use a join", "ef", "https://example.test/ref"),
+                [
+                    new RecapActionEvent("todo", "done", "alice.martin@acme.com", null, "alice",
+                        GeneratedAtMs - 3600000)
+                ]),
+            $"sig-TECH-{rank}", Endpoint, template, $"{Suggestion} with `batch_size` set",
+            new RecapFix($"{Fix} use a join", "ef", "https://example.test/ref"),
             new RecapCodeLocation("TechOnly.load", File, 42, null), Confidence);
     }
 

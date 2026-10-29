@@ -390,7 +390,8 @@ public sealed class WorkerAndRetentionTests : IDisposable
         using var worker = new RetentionWorker(database, options, clock, new ListLogger<RetentionWorker>());
 
         await worker.StartAsync(cancellationToken);
-        for (var attempt = 0; attempt < 500 && (await database.ListRecapReportsAsync(null, 10, cancellationToken)).Count > 1;
+        for (var attempt = 0;
+             attempt < 500 && (await database.ListRecapReportsAsync(null, 10, cancellationToken)).Count > 1;
              attempt++)
             await Task.Delay(10, cancellationToken);
 

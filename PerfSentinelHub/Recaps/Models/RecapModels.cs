@@ -100,7 +100,13 @@ public sealed record RecapAction(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<RecapActionEvent>? Events);
 
-public sealed record RecapActionEvent(string? From, string To, string? Owner, string? OwnerDisplay, string By, long AtMs);
+public sealed record RecapActionEvent(
+    string? From,
+    string To,
+    string? Owner,
+    string? OwnerDisplay,
+    string By,
+    long AtMs);
 
 public sealed record RecapMovements(
     IReadOnlyList<RecapMove> New,

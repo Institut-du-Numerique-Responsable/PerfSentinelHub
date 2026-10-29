@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
-using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
@@ -32,9 +31,10 @@ public sealed partial class RecapGeneratorTests : IAsyncLifetime
         new() { Id = "b", Name = "Lab", Environment = "prod", BaseUrl = new Uri("http://127.0.0.1:2") }
     ];
 
-    private readonly string _path = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-gen-{Guid.NewGuid():N}.db");
+    private readonly FakeTimeProvider _clock =
+        new(DateTimeOffset.Parse("2026-10-26T00:30:00Z", CultureInfo.InvariantCulture));
 
-    private FakeTimeProvider _clock = new(DateTimeOffset.Parse("2026-10-26T00:30:00Z", CultureInfo.InvariantCulture));
+    private readonly string _path = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-gen-{Guid.NewGuid():N}.db");
     private HubDatabase _database = null!;
     private RecapGenerator _generator = null!;
     private ListLogger<RecapGenerator> _logger = null!;

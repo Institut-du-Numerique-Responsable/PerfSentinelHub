@@ -1035,8 +1035,10 @@ test("what you reach spells a grant on * as everything, and Admins as your own i
         ]
     });
     assert.deepEqual(rows, [
-        {project: "Everything, including records no project covers", group: "your id, in Admins", role: "admin",
-            permissions: "findings.read, access.admin"},
+        {
+            project: "Everything, including records no project covers", group: "your id, in Admins", role: "admin",
+            permissions: "findings.read, access.admin"
+        },
         {project: "shop", group: "/teams/shop", role: "member", permissions: "findings.read, acks.write"}
     ]);
     assert.deepEqual(PSL.accessReachRows({reach: []}), []);
@@ -1099,29 +1101,50 @@ test("the source count says how many sources the caller may run on, and why the 
 
 test("a revoke outcome says what happened to the terminal, or what to do next", () => {
     const row = {owner: "sam@example.com", created: "2026-10-14 14:23"};
-    assert.deepEqual(PSL.revokeOutcome(204, row), {ok: true,
-        text: "Revoked the token of sam@example.com created 2026-10-14 14:23. That terminal gets a 401 on its next request."});
-    assert.deepEqual(PSL.revokeOutcome(404, row), {ok: true,
-        text: "The token of sam@example.com created 2026-10-14 14:23 was already gone."});
-    assert.deepEqual(PSL.revokeOutcome(500, row), {ok: false,
-        text: "The Hub could not revoke this token (status 500). It is still valid. Try again in a moment."});
-    assert.deepEqual(PSL.revokeOutcome(0, row), {ok: false,
-        text: "The Hub did not answer. The token is still valid. Try again in a moment."});
+    assert.deepEqual(PSL.revokeOutcome(204, row), {
+        ok: true,
+        text: "Revoked the token of sam@example.com created 2026-10-14 14:23. That terminal gets a 401 on its next request."
+    });
+    assert.deepEqual(PSL.revokeOutcome(404, row), {
+        ok: true,
+        text: "The token of sam@example.com created 2026-10-14 14:23 was already gone."
+    });
+    assert.deepEqual(PSL.revokeOutcome(500, row), {
+        ok: false,
+        text: "The Hub could not revoke this token (status 500). It is still valid. Try again in a moment."
+    });
+    assert.deepEqual(PSL.revokeOutcome(0, row), {
+        ok: false,
+        text: "The Hub did not answer. The token is still valid. Try again in a moment."
+    });
 });
 
 test("the token table names each token's owner, origin, dates and last use", () => {
     const at = (h, m) => new Date(2026, 9, 14, h, m).getTime();
     const rows = PSL.tokenRows([
-        {id: "0123456789abcdef0123456789abcdef", identity: "ada@example.com", subject: "2f6d", client_address: "203.0.113.7",
-            created_at_ms: at(9, 5), expires_at_ms: at(17, 5), last_used_at_ms: at(10, 40)},
-        {id: "fedcba9876543210fedcba9876543210", identity: "bob@example.com", subject: "9a1b", client_address: null,
-            created_at_ms: at(11, 0), expires_at_ms: at(19, 0), last_used_at_ms: null}
+        {
+            id: "0123456789abcdef0123456789abcdef",
+            identity: "ada@example.com",
+            subject: "2f6d",
+            client_address: "203.0.113.7",
+            created_at_ms: at(9, 5),
+            expires_at_ms: at(17, 5),
+            last_used_at_ms: at(10, 40)
+        },
+        {
+            id: "fedcba9876543210fedcba9876543210", identity: "bob@example.com", subject: "9a1b", client_address: null,
+            created_at_ms: at(11, 0), expires_at_ms: at(19, 0), last_used_at_ms: null
+        }
     ]);
     assert.deepEqual(rows, [
-        {id: "0123456789abcdef0123456789abcdef", owner: "ada@example.com", from: "203.0.113.7",
-            created: "2026-10-14 09:05", expires: "2026-10-14 17:05", lastUsed: "2026-10-14 10:40"},
-        {id: "fedcba9876543210fedcba9876543210", owner: "bob@example.com", from: "unknown",
-            created: "2026-10-14 11:00", expires: "2026-10-14 19:00", lastUsed: "never"}
+        {
+            id: "0123456789abcdef0123456789abcdef", owner: "ada@example.com", from: "203.0.113.7",
+            created: "2026-10-14 09:05", expires: "2026-10-14 17:05", lastUsed: "2026-10-14 10:40"
+        },
+        {
+            id: "fedcba9876543210fedcba9876543210", owner: "bob@example.com", from: "unknown",
+            created: "2026-10-14 11:00", expires: "2026-10-14 19:00", lastUsed: "never"
+        }
     ]);
 });
 
@@ -1171,7 +1194,13 @@ test("the incident filters wait for the first read only, even on a fleet with no
 });
 
 test("running a past analysis again fills the form back from its request", () => {
-    const window = PSL.formFromRequest({service: "orders", from_ms: 10, to_ms: 20, max_traces: 300, detection: {n_plus_one_threshold: 4}});
+    const window = PSL.formFromRequest({
+        service: "orders",
+        from_ms: 10,
+        to_ms: 20,
+        max_traces: 300,
+        detection: {n_plus_one_threshold: 4}
+    });
     assert.equal(window.mode, "service");
     assert.equal(window.service, "orders");
     assert.equal(window.rangeMode, "absolute");
@@ -1186,7 +1215,13 @@ test("running a past analysis again fills the form back from its request", () =>
     assert.equal(trace.mode, "trace");
     assert.equal(trace.traceId, "abc");
     assert.equal(trace.rangeMode, undefined, "a trace run leaves the window alone");
-    assert.deepEqual(PSL.formFromRequest(null), {detection: {}, pickerOpen: false, mode: "service", service: "", traceId: ""});
+    assert.deepEqual(PSL.formFromRequest(null), {
+        detection: {},
+        pickerOpen: false,
+        mode: "service",
+        service: "",
+        traceId: ""
+    });
 });
 
 test("a light read keeps the verdict calm over hints that only describe the daemon", () => {
@@ -1221,7 +1256,10 @@ test("an incident's findings sort by the column asked, worst and most seen first
 test("the folded incident filters say how many of them are in force", () => {
     const filter = {service: "a", kind: "oom_kill", namespace: "", environment: "", source_id: ""};
     assert.equal(PSL.moreFiltersLabel(filter), "More filters", "service and kind stay in sight");
-    assert.equal(PSL.moreFiltersLabel(Object.assign({}, filter, {environment: "prod", source_id: "x"})), "More filters, 2 set");
+    assert.equal(PSL.moreFiltersLabel(Object.assign({}, filter, {
+        environment: "prod",
+        source_id: "x"
+    })), "More filters, 2 set");
 });
 
 test("the ack expiry reads back in UTC, whatever the browser shows the date as", () => {
@@ -1232,7 +1270,12 @@ test("the ack expiry reads back in UTC, whatever the browser shows the date as",
 });
 
 test("a frozen finding is told apart by its template, and found by it", () => {
-    const row = {finding: {source_endpoint: "/api/catalog/search", pattern: {template: "SELECT * FROM item WHERE id = ?"}}};
+    const row = {
+        finding: {
+            source_endpoint: "/api/catalog/search",
+            pattern: {template: "SELECT * FROM item WHERE id = ?"}
+        }
+    };
     assert.equal(PSL.findingTemplate(row), "SELECT * FROM item WHERE id = ?");
     assert.equal(PSL.findingTemplate({finding: {}}), "");
     assert.ok(PSL.findingMatches(row, "  FROM ITEM "));
@@ -1333,8 +1376,8 @@ test("the last pair's traces open New analysis on the first one, the other carri
 
 test("a strip places each span on its range, clipped, and never thinner than three", () => {
     assert.deepEqual(PSL.timelineMarks(
-        [{from: 250, to: 500}, {from: -100, to: 50}, {from: 900, to: null}, {from: 400, to: 401}], 0, 1000, 640),
-    [{x: 160, w: 160}, {x: 0, w: 32}, {x: 576, w: 64}, {x: 256, w: 3}]);
+            [{from: 250, to: 500}, {from: -100, to: 50}, {from: 900, to: null}, {from: 400, to: 401}], 0, 1000, 640),
+        [{x: 160, w: 160}, {x: 0, w: 32}, {x: 576, w: 64}, {x: 256, w: 3}]);
 });
 
 test("a lag keeps its tenth of a second, which dur() would round away", () => {
@@ -1584,17 +1627,38 @@ test("the recap route reads its defaults and drops what it does not know", () =>
 
 test("the recap hash carries only what differs from the defaults", () => {
     assert.equal(PSL.recapHash(PSL.readRecapRoute("#/recap")), "#/recap");
-    const route = {period: "day", at: "2026-10-29", environment: "pre prod", service: "a/b", grouping: null, view: "pilotage"};
+    const route = {
+        period: "day",
+        at: "2026-10-29",
+        environment: "pre prod",
+        service: "a/b",
+        grouping: null,
+        view: "pilotage"
+    };
     assert.equal(PSL.recapHash(route),
         "#/recap?period=day&at=2026-10-29&environment=pre%20prod&service=a%2Fb&view=pilotage");
     assert.deepEqual(PSL.readRecapRoute(PSL.recapHash(route)), route);
-    assert.equal(PSL.recapHash({period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"}),
+    assert.equal(PSL.recapHash({
+            period: "week",
+            at: null,
+            environment: null,
+            service: null,
+            grouping: null,
+            view: "tech"
+        }),
         "#/recap");
 });
 
 test("the recap path always names its period and view", () => {
     assert.equal(PSL.recapPath(PSL.readRecapRoute("#/recap")), "/api/recap?period=week&view=tech");
-    assert.equal(PSL.recapPath({period: "day", at: "2026-10-29", environment: "prod", service: "a b", grouping: "g", view: "pilotage"}),
+    assert.equal(PSL.recapPath({
+            period: "day",
+            at: "2026-10-29",
+            environment: "prod",
+            service: "a b",
+            grouping: "g",
+            view: "pilotage"
+        }),
         "/api/recap?period=day&view=pilotage&at=2026-10-29&environment=prod&service=a%20b&grouping=g");
 });
 
@@ -1715,7 +1779,11 @@ test("Management_text_matches_the_launcher_helpers", () => {
     assert.equal(PSL.co2Text(300, 0, null, "pilotage"), "~300 g CO2e, estimate");
     assert.equal(PSL.co2Text(null, 0, "no_coefficient", "pilotage"), "\u2014 not available");
     assert.equal(PSL.co2Text(null, 0, "no_avoidable_io", "pilotage"), "\u2014 not available");
-    assert.deepEqual(PSL.co2Parts(null, 0, "no_coefficient", "pilotage"), {lead: "", figure: "\u2014", unit: "not available"});
+    assert.deepEqual(PSL.co2Parts(null, 0, "no_coefficient", "pilotage"), {
+        lead: "",
+        figure: "\u2014",
+        unit: "not available"
+    });
     assert.equal(PSL.co2Tail(1, "pilotage"), ", part of the activity has no CO2 estimate");
     assert.equal(PSL.co2Tail(2, "tech"), ", 2 sources without a coefficient");
     assert.equal(PSL.co2Tail(1, "tech"), ", 1 source without a coefficient");
@@ -1736,8 +1804,10 @@ test("Management_text_matches_the_launcher_helpers", () => {
 
 test("Management_copy_carries_no_technical_word", () => {
     const route = PSL.readRecapRoute("#/recap?period=month&at=2026-10-02&service=checkout&view=pilotage");
-    const report = {subscription: null, created_by: "alice", nothing_moved: false, complete: false,
-        period: {kind: "week", from: "2026-10-19", to: "2026-10-25"}, deliveries: []};
+    const report = {
+        subscription: null, created_by: "alice", nothing_moved: false, complete: false,
+        period: {kind: "week", from: "2026-10-19", to: "2026-10-25"}, deliveries: []
+    };
     const texts = [
         ...GAP_REASONS.concat("brand_new").map((reason) => PSL.gapLabel(reason, "pilotage")),
         PSL.incompleteText(GAP_REASONS, "pilotage"),
@@ -1759,8 +1829,20 @@ test("Management_copy_carries_no_technical_word", () => {
         PSL.recapReportStatus(report),
         PSL.recapReportStatus({...report, subscription: "weekly-shop", nothing_moved: true}),
         PSL.recapReportStatus({...report, subscription: "weekly-shop"}),
-        PSL.recapDeliveryText({channel: "webhook", target: "ops-chat", state: "delivered", attempts: 1, last_status: 204}),
-        PSL.recapDeliveryText({channel: "email", target: "pm@acme.test", state: "failed", attempts: 8, last_status: null}),
+        PSL.recapDeliveryText({
+            channel: "webhook",
+            target: "ops-chat",
+            state: "delivered",
+            attempts: 1,
+            last_status: 204
+        }),
+        PSL.recapDeliveryText({
+            channel: "email",
+            target: "pm@acme.test",
+            state: "failed",
+            attempts: 8,
+            last_status: null
+        }),
         // app.js: the more-priorities note and the Reports row's download links.
         "2 more priorities, lower down, in the Engineering view.", "Management", "Engineering"
     ];
@@ -1783,15 +1865,25 @@ test("Management_help_carries_no_technical_word", () => {
 });
 
 test("a recap report is named by its period and who it came from", () => {
-    const week = {subscription: "weekly-shop", period: {kind: "week", from: "2026-10-19", to: "2026-10-25"}, complete: true};
+    const week = {
+        subscription: "weekly-shop",
+        period: {kind: "week", from: "2026-10-19", to: "2026-10-25"},
+        complete: true
+    };
     assert.equal(PSL.recapReportLabel(week), "Week 2026-10-19 to 2026-10-25 · weekly-shop");
     assert.equal(PSL.recapReportLabel({...week, complete: false}),
         "Week 2026-10-19 to 2026-10-25 · weekly-shop · incomplete");
     assert.equal(PSL.recapReportLabel({
-        subscription: null, created_by: "alice", period: {kind: "day", from: "2026-10-28", to: "2026-10-28"}, complete: true
+        subscription: null,
+        created_by: "alice",
+        period: {kind: "day", from: "2026-10-28", to: "2026-10-28"},
+        complete: true
     }), "Day 2026-10-28 · on demand by alice");
     assert.equal(PSL.recapReportLabel({
-        subscription: null, created_by: "bob", period: {kind: "month", from: "2026-09-01", to: "2026-09-30"}, complete: false
+        subscription: null,
+        created_by: "bob",
+        period: {kind: "month", from: "2026-09-01", to: "2026-09-30"},
+        complete: false
     }), "Month 2026-09-01 to 2026-09-30 · on demand by bob · incomplete");
 });
 
@@ -1799,18 +1891,44 @@ test("a recap report says why nothing was sent", () => {
     const sent = {subscription: "weekly-shop", nothing_moved: false, deliveries: [{channel: "webhook"}]};
     assert.equal(PSL.recapReportStatus({...sent, nothing_moved: true, deliveries: []}),
         "Archived, not sent: nothing moved");
-    assert.equal(PSL.recapReportStatus({subscription: null, nothing_moved: false, deliveries: []}), "On demand, not sent");
-    assert.equal(PSL.recapReportStatus({subscription: null, nothing_moved: true, deliveries: []}), "On demand, not sent");
+    assert.equal(PSL.recapReportStatus({
+        subscription: null,
+        nothing_moved: false,
+        deliveries: []
+    }), "On demand, not sent");
+    assert.equal(PSL.recapReportStatus({
+        subscription: null,
+        nothing_moved: true,
+        deliveries: []
+    }), "On demand, not sent");
     assert.equal(PSL.recapReportStatus({...sent, deliveries: []}), "Archived, no destination");
     assert.equal(PSL.recapReportStatus(sent), "");
 });
 
 test("a recap delivery reads as where it went and how it fared", () => {
-    assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops-chat", state: "delivered", attempts: 0, last_status: null}),
+    assert.equal(PSL.recapDeliveryText({
+            channel: "webhook",
+            target: "ops-chat",
+            state: "delivered",
+            attempts: 0,
+            last_status: null
+        }),
         "webhook ops-chat: delivered");
-    assert.equal(PSL.recapDeliveryText({channel: "email", target: "pm@example.test", state: "failed", attempts: 1, last_status: 550}),
+    assert.equal(PSL.recapDeliveryText({
+            channel: "email",
+            target: "pm@example.test",
+            state: "failed",
+            attempts: 1,
+            last_status: 550
+        }),
         "email pm@example.test: failed (550), 1 try");
-    assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops", state: "pending", attempts: 3, last_status: 500}),
+    assert.equal(PSL.recapDeliveryText({
+            channel: "webhook",
+            target: "ops",
+            state: "pending",
+            attempts: 3,
+            last_status: 500
+        }),
         "webhook ops: pending (500), 3 tries");
     assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops", state: "pending", attempts: 2}),
         "webhook ops: pending, 2 tries");
@@ -1818,7 +1936,12 @@ test("a recap delivery reads as where it went and how it fared", () => {
 
 test("a generate request carries the screen's period and filters, and a date only when one is set", () => {
     const route = PSL.readRecapRoute("#/recap?period=month&service=shop&view=pilotage");
-    assert.deepEqual(PSL.recapOnDemandBody(route), {period: "month", environment: null, service: "shop", grouping: null});
+    assert.deepEqual(PSL.recapOnDemandBody(route), {
+        period: "month",
+        environment: null,
+        service: "shop",
+        grouping: null
+    });
     assert.deepEqual(
         PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?at=2026-10-14&environment=prod&namespace=x&grouping=checkout")),
         {period: "week", at: "2026-10-14", environment: "prod", service: null, grouping: "checkout"});

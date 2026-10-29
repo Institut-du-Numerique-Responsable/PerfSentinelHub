@@ -168,7 +168,8 @@ public sealed partial class HubDatabase
         CancellationToken cancellationToken)
     {
         return ReadRecapDeliveriesAsync(
-            SelectRecapDeliveries + " WHERE report_id IN (SELECT value FROM json_each($key)) ORDER BY created_at_ms, rowid;",
+            SelectRecapDeliveries +
+            " WHERE report_id IN (SELECT value FROM json_each($key)) ORDER BY created_at_ms, rowid;",
             JsonArray(reportIds), cancellationToken);
     }
 
@@ -178,7 +179,8 @@ public sealed partial class HubDatabase
         CancellationToken cancellationToken)
     {
         return ReadRecapDeliveriesAsync(
-            SelectRecapDeliveries + " WHERE state = 'pending' AND next_attempt_ms <= $key ORDER BY next_attempt_ms, id;",
+            SelectRecapDeliveries +
+            " WHERE state = 'pending' AND next_attempt_ms <= $key ORDER BY next_attempt_ms, id;",
             nowMs, cancellationToken);
     }
 

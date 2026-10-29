@@ -518,7 +518,8 @@ public sealed class ConfigurationTests
         Assert.Null(ValidOptions().RecapPublicUrl);
         Assert.Equal(
             "Hub:Recaps:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.",
-            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { PublicUrl = new Uri("https://hub.example/x") }))));
+            Assert.Single(
+                AccessFailures(WithRecaps(new RecapsOptions { PublicUrl = new Uri("https://hub.example/x") }))));
     }
 
     [Fact]
@@ -668,12 +669,14 @@ public sealed class ConfigurationTests
     [Fact]
     public void A_subscription_name_must_be_valid_and_unique()
     {
-        var options = WithRecaps(new RecapsOptions { Subscriptions = [Subscription(), Subscription() with { Name = "a b" }] });
+        var options = WithRecaps(new RecapsOptions
+        { Subscriptions = [Subscription(), Subscription() with { Name = "a b" }] });
 
         Assert.Equal(
             "Hub:Recaps:Subscriptions:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', and unique.",
             Assert.Single(AccessFailures(options)));
-        Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Subscriptions = [Subscription(), Subscription()] })));
+        Assert.Single(
+            AccessFailures(WithRecaps(new RecapsOptions { Subscriptions = [Subscription(), Subscription()] })));
     }
 
     [Fact]
@@ -696,7 +699,10 @@ public sealed class ConfigurationTests
     [Fact]
     public void A_subscription_source_must_exist_and_sit_in_its_environment()
     {
-        var options = ValidOptions() with { Sources = [ValidSource(), ValidSource() with { Id = "stg", Environment = "staging" }] };
+        var options = ValidOptions() with
+        {
+            Sources = [ValidSource(), ValidSource() with { Id = "stg", Environment = "staging" }]
+        };
 
         Assert.Equal("Hub:Recaps:Subscriptions:0:SourceId matches no source.",
             Assert.Single(AccessFailures(options with
@@ -721,10 +727,12 @@ public sealed class ConfigurationTests
     [InlineData("a\nb")]
     public void A_subscription_service_or_grouping_outside_the_shape_is_refused(string value)
     {
-        const string message = "Hub:Recaps:Subscriptions:0:Service and Grouping are 1 to 256 characters with no control character.";
+        const string message =
+            "Hub:Recaps:Subscriptions:0:Service and Grouping are 1 to 256 characters with no control character.";
 
         Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with { Service = value }))));
-        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with { Grouping = value }))));
+        Assert.Equal(message,
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Grouping = value }))));
         Assert.Equal(message,
             Assert.Single(AccessFailures(WithSubscription(Subscription() with { Service = new string('x', 257) }))));
         Assert.Empty(AccessFailures(WithSubscription(Subscription() with { Service = "shop", Grouping = "team-a" })));
@@ -773,7 +781,8 @@ public sealed class ConfigurationTests
 
         Assert.Single(AccessFailures(WithSubscription(Subscription() with { Emails = many },
             new RecapsOptions { Smtp = smtp })));
-        Assert.Single(AccessFailures(WithSubscription(Subscription() with { Emails = ["a@example.test", "a@example.test"] },
+        Assert.Single(AccessFailures(WithSubscription(
+            Subscription() with { Emails = ["a@example.test", "a@example.test"] },
             new RecapsOptions { Smtp = smtp })));
         Assert.Empty(AccessFailures(WithSubscription(Subscription() with { Emails = many[..50] },
             new RecapsOptions { Smtp = smtp })));

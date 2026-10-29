@@ -4,10 +4,8 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using PerfSentinelHub.Configuration;
-using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Recaps;
 
