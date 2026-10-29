@@ -156,6 +156,10 @@ Hub a cessé de refléter cette source, parce qu'elle a été retirée ou parce 
 a échoué pendant toute la rétention. `ack_reads` et `incident_reads` tiennent une ligne
 par source et ne sont jamais purgés.
 
+Les rapports de récap suivent aussi le worker quotidien, sur une horloge à eux : `generated_at_ms`
+contre `Hub:Recaps:Retention`, comme les runs terminés suivent `Hub:Analysis:RunRetention`. Un
+rapport et ses livraisons partent ensemble, dans un même passage de ce worker.
+
 La fenêtre de statut n'est pas un worker du tout, c'est un `CASE` évalué à la lecture,
 ce qui explique que le statut d'un finding puisse changer sans que rien n'ait été écrit.
 Les rapports rendus expirent sur un balayage qui tourne toutes les soixante secondes,
@@ -201,6 +205,8 @@ soit la source, et rien d'autre.
 | `disclosures`                  | divulgation publiée, ses fichiers en BLOB                            | jamais, un retrait la garde                    |
 | `disclosure_share_links`       | lien de partage, par le SHA-256 de son jeton                         | jamais, révocation et expiration le marquent seulement |
 | `disclosure_deliveries`        | événement de webhook d'une divulgation                               | jamais                                         |
+| `recap_reports`                | récap figé d'une période, généré ou à la demande                     | `Hub:Recaps:Retention`, sur `generated_at_ms`  |
+| `recap_deliveries`             | livraison d'un rapport par webhook ou par e-mail                     | avec son rapport                               |
 
 `finding_attributes` garde chaque attribut de regroupement qu'un daemon a capté, jusqu'aux
 huit du moteur, chacun sous l'identité de regroupement avec laquelle il est arrivé : la
@@ -230,7 +236,12 @@ la période précédente, puis une lecture de couverture des jours des sources e
 carbone de leurs grammes évitables, et joint les actions et les libellés en dernier. Le calcul
 est pur et vit dans `Recaps/` : la période, le classement, les tendances, les mouvements, le
 jugement de couverture, la valorisation carbone et la phrase par type. Le service est une
-classe simple à dessein : les rapports qu'enverra un abonnement le réutilisent tel quel.
+classe simple à dessein : les rapports qu'envoie un abonnement le réutilisent tel quel.
+`RecapGenerator` fige la dernière période close de chaque abonnement dans `recap_reports` une
+fois ses ledgers scellés, `RecapReportRenderer` écrit le HTML autonome d'un instantané stocké,
+`RecapDeliveryWorker` envoie les lignes dues de `recap_deliveries` aux webhooks et, par
+`RecapMailer`, au relais SMTP, et `RecapLoop` fait tourner le générateur et le worker toutes les
+15 secondes.
 
 Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : les lignes
 d'attributs d'une copie dont l'observation la plus récente n'en a aucune, le service d'une

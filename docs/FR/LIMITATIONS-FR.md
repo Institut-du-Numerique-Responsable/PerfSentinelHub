@@ -188,6 +188,21 @@ aussi communs à tout le Hub et jamais purgés.
 Un récap lit au plus 5 000 findings. Au-delà il garde les 5 000 premiers, pose `truncated`, et
 tous les chiffres ne couvrent que ceux-là. Restreignez la requête avec un filtre.
 
+Un rapport est figé à sa génération et ne suit jamais les données ultérieures : un finding détecté
+ou acquitté après coup, une action marquée terminée ou un libellé renommé change l'écran et laisse
+le rapport tel qu'il était. Un rapport généré passé `Hub:Recaps:MaxDelay` dit quels jours étaient
+encore ouverts, et ces jours y restent ouverts. Les périodes manquées pendant que le Hub était
+arrêté ne sont pas générées après coup, sauf la dernière période close. Un rapport à la demande
+reflète le périmètre de son créateur au moment où il a été fait, et hors des détenteurs de
+`recaps.read` seul son créateur le lit.
+
+Le HTML utilise les polices du système : il s'ouvre hors ligne et diffère un peu d'une machine à
+l'autre. Un rapport figé ne porte aucun lien d'acquittement : il survit aux routes qu'il
+appellerait, et les acquittements se prennent sur l'écran du Hub. Le courrier passe par un relais
+qui offre STARTTLS et, quand des identifiants sont posés, `AUTH LOGIN`. Le Hub ne parle pas le TLS
+implicite et ne fait pas d'OAuth : un compte restreint à OAuth demande le relais de l'organisation
+devant lui.
+
 ## À quoi un finding est attribué
 
 Le moteur range un groupe N+1 ou d'appels redondants qui traverse plusieurs

@@ -174,6 +174,19 @@ are Hub-wide as well, and are not purged either.
 A recap reads at most 5,000 findings. Past that it keeps the first 5,000, sets
 `truncated`, and every figure covers those alone. Narrow the request with a filter.
 
+A report is frozen when it is generated and never follows later data: a finding detected or
+acknowledged afterwards, an action marked done or a label renamed changes the screen and leaves
+the report as it was. A report generated past `Hub:Recaps:MaxDelay` says which days were still
+open, and those days stay open in it. Periods missed while the Hub was down are not generated
+afterwards, except the last closed one. An on-demand report reflects its creator's scope at the
+moment it was made, and beyond `recaps.read` holders only its creator reads it.
+
+The HTML uses the system fonts, so it opens offline and looks a little different on each machine.
+A frozen report carries no ack link: it outlives the routes it would call, and acks are taken on
+the Hub's screen. E-mail goes through a relay that offers STARTTLS and, when credentials are set,
+`AUTH LOGIN`. The Hub does not speak implicit TLS and does not do OAuth, so an account restricted
+to OAuth needs the organisation's relay in front of it.
+
 ## What a finding is attributed to
 
 The engine files an N+1 or redundant-call group that spans several services

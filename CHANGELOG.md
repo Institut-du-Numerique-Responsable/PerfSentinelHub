@@ -19,6 +19,12 @@ All notable changes to PerfSentinelHub are recorded here.
   in the recap, with the `labels.write` permission.
 - `Hub:Recaps:MovementThreshold` (default `0.2`), the relative change past which a finding
   reads `up` or `down`.
+- Frozen recap reports. `Hub:Recaps:Subscriptions` freezes the last closed day, week or month
+  once the ledgers have sealed it (or after `Hub:Recaps:MaxDelay`) and delivers it by signed
+  webhook (`Hub:Recaps:Webhooks`) and by e-mail through the organisation's SMTP relay
+  (`Hub:Recaps:Smtp`), the management view attached and the engineering view linked. Reports
+  leave after `Hub:Recaps:Retention`. Four routes list, read, generate and show them, behind
+  `findings.read` and `recaps.read`, and the recap screen gets a Reports panel.
 - The Hub reads the carbon day fields that perf-sentinel engines send with their ledger days
   (avoidable grams, avoidable I/O and total I/O) and keeps them per day. Engines that send
   none leave the recap's carbon figure empty.

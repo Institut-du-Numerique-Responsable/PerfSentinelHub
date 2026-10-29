@@ -143,6 +143,10 @@ a row only grows old once the Hub has stopped mirroring that source, because it 
 retired or because its listing failed for the whole retention. `ack_reads` and
 `incident_reads` hold one row per source and are never purged.
 
+Recap reports ride the daily worker as well, on a clock of their own: `generated_at_ms` against
+`Hub:Recaps:Retention`, the way finished runs ride `Hub:Analysis:RunRetention`. A report and its
+deliveries leave together, in one pass of that worker.
+
 The status window is not a worker at all, it is a `CASE` evaluated at read time, which
 is why a finding's status can change without anything having been written. Rendered
 reports expire on a sweep that runs every sixty seconds, finer than the lifetime it
@@ -186,6 +190,8 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `disclosures`                  | published disclosure, its files in BLOBs                       | never, a withdrawal keeps it               |
 | `disclosure_share_links`       | share link, by the SHA-256 of its token                        | never, revocation and expiry only mark it  |
 | `disclosure_deliveries`        | webhook event of a disclosure                                  | never                                      |
+| `recap_reports`                | frozen recap of one period, generated or on demand             | `Hub:Recaps:Retention`, on `generated_at_ms` |
+| `recap_deliveries`             | webhook or e-mail delivery of a report                         | with its report                            |
 
 `finding_attributes` keeps every grouping attribute a daemon captured, up to the engine's
 eight, each under the grouping identity it came with: the first pair of that observation,
@@ -214,7 +220,11 @@ without them and the previous period, then a coverage read of the sources' days 
 read of their avoidable grams, and joins the actions and the labels last. The folding is pure
 and lives in `Recaps/`: the period, the ranking, the trends, the moves, the coverage judgment,
 the carbon pricing and the sentence per type. The service is a plain class on purpose: the
-reports a subscription will send reuse it as it is.
+reports a subscription sends reuse it as it is. `RecapGenerator` freezes the last closed period of
+each subscription into `recap_reports` once its ledgers have sealed, `RecapReportRenderer` writes
+the self-contained HTML of a stored snapshot, `RecapDeliveryWorker` sends the due rows of
+`recap_deliveries` to the webhooks and, through `RecapMailer`, to the SMTP relay, and `RecapLoop`
+runs the generator and the worker every 15 seconds.
 
 Each start fills in what an older build left out: the attribute rows of a copy whose newest
 observation has none, the service of a copy that has none, both from that copy's own
