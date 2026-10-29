@@ -26,6 +26,12 @@
         <NativeDebugSymbols Condition="'$(RuntimeIdentifier)' != '' and !$(RuntimeIdentifier.StartsWith('osx'))">true</NativeDebugSymbols>
     </PropertyGroup>
 
+    <!-- The frozen recap report carries these two sheets inline, read once at first use. -->
+    <ItemGroup>
+        <EmbeddedResource Include="wwwroot/tokens.css" LogicalName="recap-tokens.css" />
+        <EmbeddedResource Include="Recaps/RecapReport.css" LogicalName="recap-report.css" />
+    </ItemGroup>
+
     <ItemGroup>
       <PackageReference Include="Microsoft.Data.Sqlite" />
       <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
