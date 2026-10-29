@@ -7,7 +7,7 @@ public sealed class RecapViewsTests
 {
     // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
     private static readonly JsonSerializerOptions Wire = new()
-    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private static RecapPriority Priority(int rank, string? label = "Showing a cart")
     {
@@ -89,6 +89,24 @@ public sealed class RecapViewsTests
         Assert.DoesNotContain("\"endpoint\"", json);
         Assert.DoesNotContain("GET /", json);
         Assert.Contains("\"label\":null", json);
+    }
+
+    [Fact]
+    public void Frozen_carries_an_owner_by_name_only()
+    {
+        var owned = Priority(1) with
+        {
+            Action = new RecapAction("in_progress", "alice.martin@acme.com", null, 1, null, null, null)
+        };
+
+        var view = RecapViews.Frozen(Tech(1) with { Priorities = [owned] });
+
+        var action = view.Priorities[0].Action!;
+        Assert.Null(action.Owner);
+        Assert.Equal("Alice Martin", action.OwnerDisplay);
+        var json = JsonSerializer.Serialize(view, Wire);
+        Assert.DoesNotContain("@", json);
+        Assert.DoesNotContain("acme", json);
     }
 
     [Fact]

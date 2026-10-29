@@ -27,6 +27,8 @@ public static class RecapReportRenderer
     private const int FirstPage = 10;
     private const string FoldedAt = "<details class=\"more\">";
 
+    private const string NameIt = "Name it in the Hub to see it here.";
+
     private static readonly Lazy<string> Style = new(() =>
         Resource("recap-tokens.css") + "\n" + Resource("recap-report.css"));
 
@@ -39,8 +41,6 @@ public static class RecapReportRenderer
 
     public static byte[] Render(RecapSnapshot snapshot)
     {
-        if (snapshot.View == "pilotage")
-            snapshot = snapshot with { Priorities = [.. snapshot.Priorities.Select(ByName)] };
         var labels = RecapText.Labels(snapshot.View);
         var html = new StringBuilder(32 * 1024);
         html.Append("<!doctype html>\n<html lang=\"en\" data-theme=\"light\">\n<head>\n<meta charset=\"utf-8\">\n")
@@ -58,36 +58,6 @@ public static class RecapReportRenderer
             .Append(JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot))
             .Append("</script>\n<script>").Append(TimeScript).Append("</script>\n</body>\n</html>\n");
         return Encoding.UTF8.GetBytes(html.ToString());
-    }
-
-    // A mailed report leaves the Hub: its owner is the name a person reads, never the identity behind it,
-    // not even in a title or the data island.
-    private static RecapPriority ByName(RecapPriority priority)
-    {
-        if (priority.Action is not { } action)
-            return priority;
-        var name = NameOnly(RecapText.Owner(action.Owner, action.OwnerDisplay).Text);
-        return priority with
-        {
-            Action = action with { Owner = null, OwnerDisplay = name.Length > 0 ? name : null, Events = null }
-        };
-    }
-
-    // Owner keeps a mixed-case or hand-typed identity as it is. Here a name beside an e-mail stays, and
-    // a bare e-mail or local: identity becomes the name built from it, else no owner shows.
-    private static string NameOnly(string text)
-    {
-        var local = text.StartsWith("local:", StringComparison.OrdinalIgnoreCase);
-        if (!local && !text.Contains('@'))
-            return text;
-        var words = (local ? text["local:".Length..] : text).Split([' ', '<'], StringSplitOptions.RemoveEmptyEntries);
-        var kept = words.Where(word => !word.Contains('@')).ToList();
-        if (words.Length > 1 && kept.Count > 0)
-            return string.Join(' ', kept);
-        var identity = words.FirstOrDefault(word => word.Contains('@'), words.FirstOrDefault(""))
-            .Trim('<', '>', '(', ')', '"').ToLowerInvariant();
-        var name = RecapText.Owner(identity, null).Text;
-        return name.Contains('@') ? "" : name;
     }
 
     // ---- the head of the page
@@ -144,7 +114,8 @@ public static class RecapReportRenderer
         reasons.RemoveAll(reason => reason.Length == 0);
         if (reasons.Count == 0)
             return;
-        html.Append("<div class=\"banner\" role=\"note\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" ")
+        html.Append(
+                "<div class=\"banner\" role=\"note\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" ")
             .Append("stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">")
             .Append("<path d=\"M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z\"/>")
             .Append("<path d=\"M12 9v4M12 17h.01\"/></svg><p>").Append(E(string.Join("; ", reasons)))
@@ -153,7 +124,8 @@ public static class RecapReportRenderer
 
     // ---- the four tiles
 
-    private static void Tiles(StringBuilder html, RecapSnapshot snapshot, (string Io, string Findings, string Moved) labels)
+    private static void Tiles(StringBuilder html, RecapSnapshot snapshot,
+        (string Io, string Findings, string Moved) labels)
     {
         var tiles = snapshot.Tiles;
         var management = snapshot.View == "pilotage";
@@ -171,7 +143,7 @@ public static class RecapReportRenderer
         [
             $"{actions.Confirmed} confirmed, {actions.Contradicted} still detected, {actions.CameBack} came back",
             $"{actions.InProgress} in progress, {actions.Todo} to do"
-        ], valueIsHtml: true);
+        ], true);
         html.Append("</div>\n");
     }
 
@@ -187,7 +159,7 @@ public static class RecapReportRenderer
         [
             known ? "order of magnitude" + RecapText.Co2Tail(without, snapshot.View) : "",
             previous is null ? "" : PreviousText(snapshot, previous)
-        ], valueIsHtml: true, title: RecapText.Co2(tiles.Co2Grams, without, tiles.Co2MissingReason, snapshot.View));
+        ], true, RecapText.Co2(tiles.Co2Grams, without, tiles.Co2MissingReason, snapshot.View));
     }
 
     private static void Tile(
@@ -228,7 +200,8 @@ public static class RecapReportRenderer
 
     // ---- the priorities
 
-    private static void Priorities(StringBuilder html, RecapSnapshot snapshot, (string Io, string Findings, string Moved) labels)
+    private static void Priorities(StringBuilder html, RecapSnapshot snapshot,
+        (string Io, string Findings, string Moved) labels)
     {
         var management = snapshot.View == "pilotage";
         var all = snapshot.Priorities;
@@ -254,7 +227,8 @@ public static class RecapReportRenderer
         }
 
         if (management && snapshot.MorePriorities > 0)
-            html.Append("<p class=\"more-note\">").Append(snapshot.MorePriorities.ToString(CultureInfo.InvariantCulture))
+            html.Append("<p class=\"more-note\">")
+                .Append(snapshot.MorePriorities.ToString(CultureInfo.InvariantCulture))
                 .Append(" more in the engineering view.</p>\n");
         if (snapshot.Truncated)
             html.Append("<p class=\"sources-note\">").Append(E(RecapText.Truncated(snapshot.View))).Append("</p>\n");
@@ -274,12 +248,10 @@ public static class RecapReportRenderer
             // The ranking puts the rows with a volume first: the divider goes before the first one without,
             // and only after one with, as launcher.js dividesBefore.
             if (index > 0 && !HasVolume(priority) && HasVolume(all[index - 1]))
-            {
                 html.Append("<li class=\"divider\">")
                     .Append(management
                         ? "Below, slowness rather than extra work: ranked by severity"
                         : "Below, no avoidable I/O to count: ranked by severity").Append("</li>\n");
-            }
 
             html.Append("<li class=\"row\"><span class=\"rank\">")
                 .Append(priority.Rank.ToString(CultureInfo.InvariantCulture)).Append("</span>\n");
@@ -339,8 +311,6 @@ public static class RecapReportRenderer
         html.Append("</div>\n");
     }
 
-    private const string NameIt = "Name it in the Hub to see it here.";
-
     private static string Unnamed(string service)
     {
         return "An unnamed step in " + service;
@@ -353,7 +323,9 @@ public static class RecapReportRenderer
         html.Append("<div class=\"figure\">");
         if (HasVolume(priority))
         {
-            var share = max > 0 ? Math.Max(2, (int)Math.Floor((double)priority.AvoidableIoOps!.Value / max * 100 + 0.5)) : 2;
+            var share = max > 0
+                ? Math.Max(2, (int)Math.Floor((double)priority.AvoidableIoOps!.Value / max * 100 + 0.5))
+                : 2;
             html.Append("<span class=\"figure-n\">").Append(Count(priority.AvoidableIoOps))
                 .Append("</span><span class=\"figure-u\">").Append(E(Lower(labels.Io)))
                 .Append("</span><span class=\"bar\" aria-hidden=\"true\"><i style=\"width:")
@@ -373,7 +345,8 @@ public static class RecapReportRenderer
         var text = RecapText.Trend(trend, change);
         return text.Length == 0
             ? ""
-            : "<span class=\"trend\" data-trend=\"" + E(trend) + "\" title=\"against the previous period, on closed days\">" +
+            : "<span class=\"trend\" data-trend=\"" + E(trend) +
+              "\" title=\"against the previous period, on closed days\">" +
               E(text) + "</span>";
     }
 
@@ -407,8 +380,9 @@ public static class RecapReportRenderer
         {
             var url = RecapText.HttpUrl(fix.ReferenceUrl);
             html.Append("<div class=\"fix-ref\">").Append(url is null
-                ? "<span>Reference: " + E(fix.ReferenceUrl) + "</span>"
-                : "<a href=\"" + E(url) + "\" rel=\"noopener noreferrer\" target=\"_blank\">Reference</a>").Append("</div>");
+                    ? "<span>Reference: " + E(fix.ReferenceUrl) + "</span>"
+                    : "<a href=\"" + E(url) + "\" rel=\"noopener noreferrer\" target=\"_blank\">Reference</a>")
+                .Append("</div>");
         }
 
         html.Append("</div>");
@@ -483,7 +457,8 @@ public static class RecapReportRenderer
 
     // ---- what moved
 
-    private static void Moves(StringBuilder html, RecapSnapshot snapshot, (string Io, string Findings, string Moved) labels)
+    private static void Moves(StringBuilder html, RecapSnapshot snapshot,
+        (string Io, string Findings, string Moved) labels)
     {
         var moves = snapshot.Movements;
         var confirmed = moves.GoneWithConfirmedAction;
@@ -512,7 +487,8 @@ public static class RecapReportRenderer
 
         if (snapshot.SourcesWithoutVolume.Count > 0)
             html.Append("<p class=\"sources-note\">")
-                .Append(E(RecapText.SourcesWithoutVolume(snapshot.SourcesWithoutVolume, snapshot.View))).Append("</p>\n");
+                .Append(E(RecapText.SourcesWithoutVolume(snapshot.SourcesWithoutVolume, snapshot.View)))
+                .Append("</p>\n");
         html.Append("</section>\n");
     }
 
@@ -559,7 +535,8 @@ public static class RecapReportRenderer
 
     private static void Help(StringBuilder html, RecapSnapshot snapshot)
     {
-        html.Append("<section class=\"section help\">\n").Append(Overline("// help")).Append("<h2>How to read this report</h2>\n<dl>\n");
+        html.Append("<section class=\"section help\">\n").Append(Overline("// help"))
+            .Append("<h2>How to read this report</h2>\n<dl>\n");
         foreach (var (term, text) in RecapText.Help(snapshot.View))
             html.Append("<dt>").Append(E(term)).Append("</dt><dd>").Append(E(text)).Append("</dd>\n");
         html.Append("</dl>\n</section>\n");

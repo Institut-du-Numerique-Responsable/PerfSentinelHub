@@ -29,6 +29,7 @@ public static class RecapViews
     /// <summary>
     ///     The management view a frozen report and its webhook carry: as <see cref="Pilotage" />, but a
     ///     row no label names loses its endpoint too, so the report reads "an unnamed step" there.
+    ///     An action owner is the name a person reads, never the identity behind it.
     /// </summary>
     public static RecapSnapshot Frozen(RecapSnapshot tech)
     {
@@ -36,7 +37,7 @@ public static class RecapViews
         var moves = view.Movements;
         return view with
         {
-            Priorities = [.. view.Priorities.Select(priority => priority with { Endpoint = null })],
+            Priorities = [.. view.Priorities.Select(priority => ByName(priority with { Endpoint = null }))],
             Movements = moves with
             {
                 New = Unnamed(moves.New),
@@ -47,6 +48,36 @@ public static class RecapViews
                 DoneStillDetected = Unnamed(moves.DoneStillDetected)
             }
         };
+    }
+
+    // A frozen report and its webhook leave the Hub: an owner is the name a person reads, never the
+    // identity behind it, not in a title, the data island or the webhook body.
+    private static RecapPriority ByName(RecapPriority priority)
+    {
+        if (priority.Action is not { } action)
+            return priority;
+        var name = NameOnly(RecapText.Owner(action.Owner, action.OwnerDisplay).Text);
+        return priority with
+        {
+            Action = action with { Owner = null, OwnerDisplay = name.Length > 0 ? name : null, Events = null }
+        };
+    }
+
+    // Owner keeps a mixed-case or hand-typed identity as it is. Here a name beside an e-mail stays, and
+    // a bare e-mail or local: identity becomes the name built from it, else no owner shows.
+    private static string NameOnly(string text)
+    {
+        var local = text.StartsWith("local:", StringComparison.OrdinalIgnoreCase);
+        if (!local && !text.Contains('@'))
+            return text;
+        var words = (local ? text["local:".Length..] : text).Split([' ', '<'], StringSplitOptions.RemoveEmptyEntries);
+        var kept = words.Where(word => !word.Contains('@')).ToList();
+        if (words.Length > 1 && kept.Count > 0)
+            return string.Join(' ', kept);
+        var identity = words.FirstOrDefault(word => word.Contains('@'), words.FirstOrDefault(""))
+            .Trim('<', '>', '(', ')', '"').ToLowerInvariant();
+        var name = RecapText.Owner(identity, null).Text;
+        return name.Contains('@') ? "" : name;
     }
 
     private static List<RecapMove> Unnamed(IReadOnlyList<RecapMove> moves)

@@ -700,9 +700,9 @@ JSON quand le rapport de l'abonnement pour une période close est figé. Une pé
 bougé est archivée et envoyée nulle part. Le corps ne porte que la vue de pilotage : l'objet `recap`
 est le snapshot `pilotage` décrit plus haut, il ne contient donc aucune clé d'ingénierie, et aucun
 `endpoint` : une ligne sans libellé garde son `label` à `null` et son `service`, rien de plus. Une
-action garde son `owner` et son `owner_display` tels que le Hub les stocke : seule la page jointe
-change le responsable en nom. La vue d'ingénierie arrive chez le destinataire sous forme de lien,
-jamais de contenu.
+action a un `owner` à `null` et ne porte que le nom du responsable, dans `owner_display`, comme la
+page jointe le montre : aucun e-mail ni compte n'arrive chez le destinataire. La vue d'ingénierie
+arrive chez le destinataire sous forme de lien, jamais de contenu.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
