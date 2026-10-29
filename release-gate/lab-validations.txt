@@ -290,3 +290,15 @@ v0.8.0	b05a023	2026-10-21	PASS
 # hub-access-control used a local release binary reporting perf-sentinel
 # 0.34.1. The lab ran with a local, uncommitted image pin in its Hub manifest.
 v0.8.4	9e37063	2026-10-27	PASS
+# v0.8.6: targeted pass at lab commit 8faf9a4, on a cluster rebuilt from
+# scratch: hub-ingestion, hub-derived-status, hub-lineage-mutation,
+# hub-retention-purge, hub-access-control and hub-plugin-contract, the
+# scenarios the last_seen fix and schema V15 reach, plus hub-detection-volume,
+# 97 checks ok and no skip. The image perf-sentinel-hub:0.8.6-32ab9f1 was built
+# by seed-hub-local from 32ab9f1, the merge of the release, and embeds the
+# published perf-sentinel 0.37.1 image pinned by digest. The shared and the
+# isolated daemons ran the published perf-sentinel 0.37.1 image, pinned by
+# digest sha256:c09459b1, and the CLI was a local 0.37.1 release build.
+# hub-detection-volume ran two local 0.37.1 daemons against a Release build of
+# 32ab9f1. The lab ran with local, uncommitted image pins in its manifests.
+v0.8.6	8faf9a4	2026-10-29	PASS
