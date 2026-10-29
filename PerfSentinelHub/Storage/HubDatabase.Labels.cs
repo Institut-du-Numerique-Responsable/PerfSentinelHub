@@ -107,6 +107,10 @@ public sealed partial class HubDatabase
         return labels;
     }
 
+    // One constant text for both scopes: a null $endpoint reads the whole service.
+    private const string LabelCopiesSelect =
+        CopiesSelect + "WHERE f.service = $service AND ($endpoint IS NULL OR f.endpoint = $endpoint)" + CopiesOrder;
+
     /// <summary>
     ///     The Hub copies of the findings at one service and endpoint, or of the whole service for a
     ///     null endpoint, one per signature and source, with their own service and attribute rows:
@@ -121,11 +125,9 @@ public sealed partial class HubDatabase
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = CopiesSelect + "WHERE f.service = $service" +
-                              (endpoint is null ? "" : " AND f.endpoint = $endpoint") + CopiesOrder;
+        command.CommandText = LabelCopiesSelect;
         command.Parameters.AddWithValue("$service", service);
-        if (endpoint is not null)
-            command.Parameters.AddWithValue("$endpoint", endpoint);
+        command.Parameters.AddWithValue("$endpoint", Nullable(endpoint));
         return await ReadCopiesAsync(command, cancellationToken, enough);
     }
 
