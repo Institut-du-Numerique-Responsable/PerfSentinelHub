@@ -301,6 +301,52 @@ celui-ci posé. `allowInternal`, `expectedIdentity`, `expectedIssuer`, `shareLin
 secretKey, includeShareLink, shareLinkDays }` : son URL et son secret viennent tous deux de ce
 Secret.
 
+## Rapports de récap
+
+Le récap d'une période close peut être figé en rapport stocké, servi en HTML autonome dans une
+version de pilotage et une version technique, et livré par webhook signé et par e-mail. Rien ici
+n'est actif par défaut : un Hub sans `Hub:Recaps:Subscriptions` ne génère aucun rapport de lui-même
+et n'envoie rien. Chaque règle ci-dessous est contrôlée au démarrage et son message nomme la clé.
+`Hub:Recaps` porte aussi `MovementThreshold`, dans le tableau des réglages plus haut.
+
+| Réglage                      | Défaut                       | Validation                                                                                                                                     |
+|------------------------------|------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Recaps:Retention`       | `365.00:00:00`               | Au moins 32 jours, pour que le rapport d'un mois survive à son mois comme dernier mois clos. La durée de conservation d'un rapport stocké et de ses livraisons |
+| `Hub:Recaps:MaxDelay`        | `06:00:00`                   | Au-dessus de zéro, au plus 7 jours. Le temps qu'un rapport attend que les registres scellent son dernier jour                                  |
+| `Hub:Recaps:PublicUrl`       | `Hub:Disclosures:PublicUrl`  | Comme celle-ci : une URL HTTP(S) absolue sans chemin. L'adresse que nomme le lien technique                                                    |
+| `Hub:Recaps:Webhooks[]`      | aucun                        | `{ Name, Url, Secret, Confidentiality, IncludeShareLink, ShareLinkDays }`, la forme des divulgations, voir plus bas                             |
+| `Hub:Recaps:Smtp:*`          | désactivé                    | `Host`, `Port`, `StartTls`, `UserName`, `Password`, `From`, voir plus bas                                                                      |
+| `Hub:Recaps:Subscriptions[]` | aucun                        | Au plus 100, voir plus bas                                                                                                                     |
+
+**Les webhooks** suivent les règles des [webhooks de divulgation](#divulgations) : `Name`, `Url`,
+`Secret` et `Confidentiality` ont le même sens, et la signature est la même. `IncludeShareLink` et
+`ShareLinkDays` ne valent que pour les divulgations, et le Hub refuse un webhook de récap qui
+pose `IncludeShareLink`. Un webhook de récap ne porte que l'instantané de pilotage.
+
+**Le relais SMTP.** `Host` active l'e-mail, et avec lui `From`, qui est obligatoire. Le Hub remet
+chaque message à ce relais et ne cherche jamais le serveur de messagerie d'un destinataire, donc il
+n'a besoin d'aucun enregistrement DNS propre. Prenez un `From` pour lequel le relais envoie déjà,
+dont le SPF et le DKIM couvrent alors le courrier du Hub. `Port` vaut 587 avec `StartTls` actif, le
+défaut : le Hub parle STARTTLS, jamais TLS implicite, donc 465 est refusé. `UserName` et `Password`
+vont ensemble, s'authentifient en `AUTH LOGIN`, et exigent `StartTls` sauf si le relais est sur la
+boucle locale, puisqu'un mot de passe ne circule jamais en clair. Un compte Microsoft 365 ou Gmail
+restreint à OAuth n'offre pas `AUTH LOGIN` : pointez plutôt le Hub vers le relais de
+l'organisation. `From` est une seule adresse sans nom d'affichage. Le mot de passe passe par un
+Secret (`Hub__Recaps__Smtp__Password`).
+
+**Les abonnements.** Chacun vaut `{ Name, Cadences, Views, Environment, SourceId, Service,
+Grouping, Webhooks, Emails }`. `Name` compte de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`,
+et est unique. `Cadences` liste `day`, `week` ou `month`, chacune une fois, au moins une. `Views`
+liste `pilotage`, `tech` ou les deux, chacune une fois. `Environment` et `SourceId` doivent
+correspondre à une source déclarée, et un `SourceId` doit appartenir à l'`Environment` quand les
+deux sont posés. `Service` et `Grouping` comptent de 1 à 256 caractères sans caractère de
+contrôle. `Webhooks` nomme des entrées de `Hub:Recaps:Webhooks`, et `Emails` compte au plus 50
+adresses distinctes sans nom d'affichage, ce qui exige `Hub:Recaps:Smtp:Host`. Un abonnement sans
+destination est valide : il archive ses rapports et n'en livre aucun.
+
+Sous Helm, le chart ne porte pas encore le bloc `Hub:Recaps`. Passez-le en variables
+d'environnement `Hub__Recaps__*` d'ici là.
+
 ## Ce qu'est une source, et ce qui est mesuré
 
 La liste est de la configuration, jamais une découverte. Rien n'est détecté
@@ -363,7 +409,7 @@ n'est pas un défaut.
 
 ## Où le Hub se connecte
 
-Chaque requête sortante va vers un `Sources[].BaseUrl` configuré, avec une exception. Une
+Chaque requête sortante va vers un `Sources[].BaseUrl` configuré, avec une exception active par défaut. Une
 fois par jour, le Hub demande à l'API des releases GitHub la version publiée la plus
 récente du moteur et de lui-même, pour que la pastille de version puisse dire que ce que
 vous faites tourner n'est plus le plus récent. C'est un GET non authentifié, qui ne porte
@@ -372,6 +418,11 @@ aucun identifiant de votre déploiement.
 Pour un déploiement sans sortie réseau, réglez `Hub:UpdateCheck:Enabled` à `false`. La
 pastille n'affiche alors rien plutôt que d'affirmer que vous êtes à jour, ce qu'elle
 affiche aussi quand la requête échoue.
+
+Les rapports de récap ajoutent deux destinations, toutes deux déclarées par vous et inactives
+tant que vous ne les déclarez pas : chaque `Hub:Recaps:Webhooks[].Url` reçoit l'événement signé du
+rapport, et `Hub:Recaps:Smtp:Host` reçoit chaque e-mail. Le Hub n'atteint aucun autre serveur de
+messagerie.
 
 ## Une source https avec une CA privée
 

@@ -443,6 +443,342 @@ public sealed class ConfigurationTests
         }));
     }
 
+    private static RecapSubscriptionOptions Subscription()
+    {
+        return new RecapSubscriptionOptions { Name = "weekly-shop", Cadences = ["week"], Views = ["pilotage", "tech"] };
+    }
+
+    private static string[] Split(string csv)
+    {
+        return csv.Length == 0 ? [] : csv.Split(',');
+    }
+
+    private static HubOptions WithRecaps(RecapsOptions recaps)
+    {
+        return ValidOptions() with { Recaps = recaps };
+    }
+
+    private static HubOptions WithSubscription(RecapSubscriptionOptions subscription, RecapsOptions? recaps = null)
+    {
+        return WithRecaps((recaps ?? new RecapsOptions()) with { Subscriptions = [subscription] });
+    }
+
+    private static WebhookOptions RecapWebhook(string name = "ops")
+    {
+        return new WebhookOptions
+        { Name = name, Url = new Uri("https://hooks.example/recap"), Secret = WebhookSecret };
+    }
+
+    [Fact]
+    public void Recap_settings_default_to_a_year_and_six_hours()
+    {
+        var recaps = new HubOptions().Recaps;
+
+        Assert.Equal(TimeSpan.FromDays(365), recaps.Retention);
+        Assert.Equal(TimeSpan.FromHours(6), recaps.MaxDelay);
+        Assert.Null(recaps.PublicUrl);
+        Assert.Empty(recaps.Webhooks);
+        Assert.Empty(recaps.Subscriptions);
+        Assert.False(recaps.Smtp.Enabled);
+        Assert.Equal(587, recaps.Smtp.Port);
+        Assert.True(recaps.Smtp.StartTls);
+        Assert.Empty(AccessFailures(ValidOptions()));
+    }
+
+    [Theory]
+    [InlineData("31.00:00:00")]
+    [InlineData("00:00:00")]
+    public void A_retention_under_32_days_is_refused(string retention)
+    {
+        Assert.Equal(
+            "Hub:Recaps:Retention must be at least 32 days: a shorter one purges a month's report while it is "
+            + "still the last closed month, and the next pass would generate and send it again.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Retention = TimeSpan.Parse(retention) }))));
+        Assert.Empty(AccessFailures(WithRecaps(new RecapsOptions { Retention = TimeSpan.FromDays(32) })));
+    }
+
+    [Theory]
+    [InlineData("00:00:00")]
+    [InlineData("7.00:00:01")]
+    public void A_max_delay_outside_zero_to_seven_days_is_refused(string delay)
+    {
+        Assert.Equal("Hub:Recaps:MaxDelay must be above zero and at most 7 days.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { MaxDelay = TimeSpan.Parse(delay) }))));
+    }
+
+    [Fact]
+    public void The_recap_public_url_falls_back_to_the_disclosure_one()
+    {
+        var disclosure = new Uri("https://hub.example");
+        var own = new Uri("https://recaps.example");
+        var options = ValidOptions() with { Disclosures = new DisclosuresOptions { PublicUrl = disclosure } };
+
+        Assert.Equal(disclosure, options.RecapPublicUrl);
+        Assert.Equal(own, (options with { Recaps = new RecapsOptions { PublicUrl = own } }).RecapPublicUrl);
+        Assert.Null(ValidOptions().RecapPublicUrl);
+        Assert.Equal(
+            "Hub:Recaps:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { PublicUrl = new Uri("https://hub.example/x") }))));
+    }
+
+    [Fact]
+    public void A_recap_webhook_with_IncludeShareLink_is_refused()
+    {
+        var webhook = RecapWebhook() with { IncludeShareLink = true };
+
+        Assert.Equal("Hub:Recaps:Webhooks:0:IncludeShareLink applies to disclosures only.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Webhooks = [webhook] }))));
+        Assert.Empty(AccessFailures(WithRecaps(new RecapsOptions { Webhooks = [RecapWebhook()] })));
+    }
+
+    [Fact]
+    public void A_recap_webhook_goes_through_the_disclosure_webhook_rules()
+    {
+        var webhook = RecapWebhook() with { Secret = "short" };
+
+        Assert.Equal("Hub:Recaps:Webhooks:0:Secret must be at least 32 characters with no control character.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Webhooks = [webhook] }))));
+    }
+
+    [Fact]
+    public void An_smtp_port_of_465_is_refused()
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", Port = 465, From = "hub@example.test" };
+
+        Assert.Equal(
+            "Hub:Recaps:Smtp:Port must be between 1 and 65535, and not 465: the Hub speaks STARTTLS, "
+            + "not implicit TLS, so use 587.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Smtp = smtp }))));
+        Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Smtp = smtp with { Port = 0 } })));
+        Assert.Empty(AccessFailures(WithRecaps(new RecapsOptions { Smtp = smtp with { Port = 587 } })));
+    }
+
+    [Fact]
+    public void An_smtp_host_that_is_no_host_is_refused()
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp example", From = "hub@example.test" };
+
+        Assert.Equal("Hub:Recaps:Smtp:Host must be a host name or an IP address.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Smtp = smtp }))));
+    }
+
+    [Fact]
+    public void An_smtp_host_without_from_is_refused()
+    {
+        Assert.Equal("Hub:Recaps:Smtp:From is required with Hub:Recaps:Smtp:Host.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions
+            {
+                Smtp = new RecapSmtpOptions { Host = "smtp.example" }
+            }))));
+    }
+
+    [Theory]
+    [InlineData("Hub <hub@example.test>")]
+    [InlineData("not an address")]
+    [InlineData("hub@example.test\r\nBcc: x@example.test")]
+    public void A_from_with_a_display_name_is_refused(string from)
+    {
+        Assert.Equal("Hub:Recaps:Smtp:From must be one e-mail address, without a display name.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions
+            {
+                Smtp = new RecapSmtpOptions { Host = "smtp.example", From = from }
+            }))));
+    }
+
+    [Fact]
+    public void Smtp_credentials_without_starttls_are_refused_off_loopback()
+    {
+        var smtp = new RecapSmtpOptions
+        {
+            Host = "smtp.example",
+            From = "hub@example.test",
+            UserName = "hub",
+            Password = "pw",
+            StartTls = false
+        };
+
+        Assert.Equal(
+            "Hub:Recaps:Smtp:UserName needs StartTls unless the relay is on loopback: a password never travels in clear.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Smtp = smtp }))));
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("localhost")]
+    public void Smtp_credentials_without_starttls_pass_on_loopback(string host)
+    {
+        var smtp = new RecapSmtpOptions
+        {
+            Host = host,
+            From = "hub@example.test",
+            UserName = "hub",
+            Password = "pw",
+            StartTls = false
+        };
+
+        Assert.Empty(AccessFailures(WithRecaps(new RecapsOptions { Smtp = smtp })));
+    }
+
+    [Fact]
+    public void An_smtp_user_and_password_go_together()
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", From = "hub@example.test", UserName = "hub" };
+
+        Assert.Equal("Hub:Recaps:Smtp:UserName and Password go together or not at all.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Smtp = smtp }))));
+    }
+
+    [Fact]
+    public void The_smtp_password_binds_trimmed()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Hub:Recaps:Smtp:Password"] = "pw\n" })
+            .Build();
+
+        Assert.Equal("pw", configuration.GetSection(HubOptions.SectionName).Get<HubOptions>()!.Recaps.Smtp.Password);
+    }
+
+    [Fact]
+    public void A_subscription_with_no_destination_is_valid()
+    {
+        Assert.Empty(AccessFailures(WithSubscription(Subscription())));
+    }
+
+    [Theory]
+    [InlineData("year")]
+    [InlineData("Week")]
+    [InlineData("week,week")]
+    [InlineData("")]
+    public void A_subscription_cadence_outside_the_three_is_refused(string cadences)
+    {
+        Assert.Equal("Hub:Recaps:Subscriptions:0:Cadences must list day, week or month, each once.",
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Cadences = Split(cadences) }))));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("management")]
+    [InlineData("tech,tech")]
+    public void A_subscription_without_views_is_refused(string views)
+    {
+        Assert.Equal("Hub:Recaps:Subscriptions:0:Views must list pilotage, tech or both, each once.",
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Views = Split(views) }))));
+    }
+
+    [Fact]
+    public void A_subscription_name_must_be_valid_and_unique()
+    {
+        var options = WithRecaps(new RecapsOptions { Subscriptions = [Subscription(), Subscription() with { Name = "a b" }] });
+
+        Assert.Equal(
+            "Hub:Recaps:Subscriptions:1:Name must be 1 to 64 ASCII letters, digits, '.', '_' or '-', and unique.",
+            Assert.Single(AccessFailures(options)));
+        Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Subscriptions = [Subscription(), Subscription()] })));
+    }
+
+    [Fact]
+    public void A_hundred_and_one_subscriptions_are_refused()
+    {
+        var many = Enumerable.Range(0, 101).Select(i => Subscription() with { Name = $"s{i}" }).ToArray();
+
+        Assert.Equal("Hub:Recaps:Subscriptions holds 100 subscriptions at most.",
+            Assert.Single(AccessFailures(WithRecaps(new RecapsOptions { Subscriptions = many }))));
+    }
+
+    [Fact]
+    public void A_subscription_environment_matching_no_source_is_refused()
+    {
+        Assert.Equal("Hub:Recaps:Subscriptions:0:Environment matches no source.",
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Environment = "staging" }))));
+        Assert.Empty(AccessFailures(WithSubscription(Subscription() with { Environment = "prod" })));
+    }
+
+    [Fact]
+    public void A_subscription_source_must_exist_and_sit_in_its_environment()
+    {
+        var options = ValidOptions() with { Sources = [ValidSource(), ValidSource() with { Id = "stg", Environment = "staging" }] };
+
+        Assert.Equal("Hub:Recaps:Subscriptions:0:SourceId matches no source.",
+            Assert.Single(AccessFailures(options with
+            {
+                Recaps = new RecapsOptions { Subscriptions = [Subscription() with { SourceId = "nope" }] }
+            })));
+        Assert.Equal("Hub:Recaps:Subscriptions:0:SourceId is not in Hub:Recaps:Subscriptions:0:Environment.",
+            Assert.Single(AccessFailures(options with
+            {
+                Recaps = new RecapsOptions
+                { Subscriptions = [Subscription() with { SourceId = "stg", Environment = "prod" }] }
+            })));
+        Assert.Empty(AccessFailures(options with
+        {
+            Recaps = new RecapsOptions
+            { Subscriptions = [Subscription() with { SourceId = "stg", Environment = "staging" }] }
+        }));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("a\nb")]
+    public void A_subscription_service_or_grouping_outside_the_shape_is_refused(string value)
+    {
+        const string message = "Hub:Recaps:Subscriptions:0:Service and Grouping are 1 to 256 characters with no control character.";
+
+        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with { Service = value }))));
+        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with { Grouping = value }))));
+        Assert.Equal(message,
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Service = new string('x', 257) }))));
+        Assert.Empty(AccessFailures(WithSubscription(Subscription() with { Service = "shop", Grouping = "team-a" })));
+    }
+
+    [Fact]
+    public void A_subscription_naming_an_unknown_webhook_is_refused()
+    {
+        var subscription = Subscription() with { Webhooks = ["ops"] };
+
+        Assert.Equal(
+            "Hub:Recaps:Subscriptions:0:Webhooks names a webhook Hub:Recaps:Webhooks does not declare: 'ops'.",
+            Assert.Single(AccessFailures(WithSubscription(subscription))));
+        Assert.Empty(AccessFailures(WithSubscription(subscription, new RecapsOptions { Webhooks = [RecapWebhook()] })));
+    }
+
+    [Fact]
+    public void Emails_without_an_smtp_host_are_refused()
+    {
+        Assert.Equal("Hub:Recaps:Subscriptions:0:Emails needs Hub:Recaps:Smtp:Host.",
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Emails = ["pm@example.test"] }))));
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", From = "hub@example.test" };
+        Assert.Empty(AccessFailures(WithSubscription(Subscription() with { Emails = ["pm@example.test"] },
+            new RecapsOptions { Smtp = smtp })));
+    }
+
+    [Theory]
+    [InlineData("pm@example.test\r\nBcc: x@example.test")]
+    [InlineData("Pat <pm@example.test>")]
+    [InlineData("nobody")]
+    public void An_address_carrying_a_newline_is_refused(string address)
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", From = "hub@example.test" };
+        const string message = "Hub:Recaps:Subscriptions:0:Emails holds 50 addresses at most, each one e-mail address "
+                               + "without a display name, each once.";
+
+        Assert.Equal(message, Assert.Single(AccessFailures(
+            WithSubscription(Subscription() with { Emails = [address] }, new RecapsOptions { Smtp = smtp }))));
+    }
+
+    [Fact]
+    public void Fifty_one_or_repeated_addresses_are_refused()
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", From = "hub@example.test" };
+        var many = Enumerable.Range(0, 51).Select(i => $"u{i}@example.test").ToArray();
+
+        Assert.Single(AccessFailures(WithSubscription(Subscription() with { Emails = many },
+            new RecapsOptions { Smtp = smtp })));
+        Assert.Single(AccessFailures(WithSubscription(Subscription() with { Emails = ["a@example.test", "a@example.test"] },
+            new RecapsOptions { Smtp = smtp })));
+        Assert.Empty(AccessFailures(WithSubscription(Subscription() with { Emails = many[..50] },
+            new RecapsOptions { Smtp = smtp })));
+    }
+
     [Fact]
     public void Recaps_read_granted_on_a_project_is_refused()
     {

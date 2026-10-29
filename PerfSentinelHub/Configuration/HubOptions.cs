@@ -34,6 +34,9 @@ public sealed record HubOptions
     public int? MetricsPort { get; set; }
 
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
+
+    // Computed, so binding ignores it: the address a recap's engineering link names.
+    public Uri? RecapPublicUrl => Recaps.PublicUrl ?? Disclosures.PublicUrl;
 }
 
 /// <summary>
@@ -163,10 +166,69 @@ public static class AccessPermissions
     public static readonly IReadOnlyList<string> MachineTokenPermissions = [FindingsRead];
 }
 
-/// <summary>The review recap: MovementThreshold is the share of change past which a finding reads up or down.</summary>
+/// <summary>
+///     The review recap. MovementThreshold is the share of change past which a finding reads up or down.
+///     The rest declares the frozen reports: how long they are kept, who gets them and through what.
+/// </summary>
 public sealed record RecapsOptions
 {
     public double MovementThreshold { get; set; } = 0.2;
+
+    // Kept past a month and a day: a month's report must outlive its month as the last closed one,
+    // or the next pass would generate and send it again.
+    public TimeSpan Retention { get; set; } = TimeSpan.FromDays(365);
+
+    // How long a report waits for the ledgers to seal the period's last day.
+    public TimeSpan MaxDelay { get; set; } = TimeSpan.FromHours(6);
+
+    // The Hub's own address for the engineering link; falls back to Hub:Disclosures:PublicUrl.
+    public Uri? PublicUrl { get; set; }
+
+    // Lists default empty: a bound list appends to its default.
+    public IReadOnlyList<WebhookOptions> Webhooks { get; set; } = [];
+    public RecapSmtpOptions Smtp { get; set; } = new();
+    public IReadOnlyList<RecapSubscriptionOptions> Subscriptions { get; set; } = [];
+}
+
+/// <summary>The relay the Hub hands each recap e-mail to. It never looks up a recipient's mail server.</summary>
+public sealed record RecapSmtpOptions
+{
+    public string? Host { get; set; }
+    public int Port { get; set; } = 587;
+    public bool StartTls { get; set; } = true;
+    public string? UserName { get; set; }
+
+    // Trimmed on binding, like a webhook secret, so a password mounted from a file compares right.
+    public string? Password
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    public string? From { get; set; }
+
+    public bool Enabled => Host is not null;
+}
+
+/// <summary>One scope, its cadences and views, and where the frozen report of each closed period goes.</summary>
+public sealed record RecapSubscriptionOptions
+{
+    public string Name { get; set; } = "";
+    public IReadOnlyList<string> Cadences { get; set; } = [];
+    public IReadOnlyList<string> Views { get; set; } = [];
+    public string? Environment { get; set; }
+    public string? SourceId { get; set; }
+    public string? Service { get; set; }
+    public string? Grouping { get; set; }
+    public IReadOnlyList<string> Webhooks { get; set; } = [];
+    public IReadOnlyList<string> Emails { get; set; } = [];
+}
+
+public static class RecapViewNames
+{
+    public const string Pilotage = "pilotage";
+    public const string Tech = "tech";
+    public static readonly string[] All = [Pilotage, Tech];
 }
 
 /// <summary>

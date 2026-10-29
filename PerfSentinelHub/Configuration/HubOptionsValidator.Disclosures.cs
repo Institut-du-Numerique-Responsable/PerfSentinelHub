@@ -15,7 +15,7 @@ public sealed partial class HubOptionsValidator
         if (disclosures.ShareLinkDays is < 1 or > 30)
             errors.Add("Hub:Disclosures:ShareLinkDays must be between 1 and 30.");
 
-        ValidateDisclosurePublicUrl(disclosures.PublicUrl, errors);
+        ValidatePublicUrl("Hub:Disclosures:PublicUrl", disclosures.PublicUrl, errors);
         if (disclosures.PublicUrl is null && disclosures.Webhooks.Any(webhook => webhook.IncludeShareLink))
             errors.Add("Hub:Disclosures:PublicUrl is required by a webhook with IncludeShareLink: "
                        + "the link it sends must name the Hub.");
@@ -35,13 +35,12 @@ public sealed partial class HubOptionsValidator
             errors.Add("Hub:Disclosures:ImportKey must differ from every source import API key and machine token.");
     }
 
-    private static void ValidateDisclosurePublicUrl(Uri? publicUrl, List<string> errors)
+    private static void ValidatePublicUrl(string key, Uri? publicUrl, List<string> errors)
     {
         if (publicUrl is not null && IsInvalidSourceUrl(publicUrl))
-            errors.Add("Hub:Disclosures:PublicUrl must be an absolute HTTP(S) URL " + UrlShape);
+            errors.Add($"{key} must be an absolute HTTP(S) URL " + UrlShape);
         else if (publicUrl is { AbsolutePath: not "/" })
-            errors.Add(
-                "Hub:Disclosures:PublicUrl must name the Hub's root, with no path: the Hub serves every route from /.");
+            errors.Add($"{key} must name the Hub's root, with no path: the Hub serves every route from /.");
     }
 
     private static void ValidateWebhook(WebhookOptions webhook, string path, HashSet<string> names, List<string> errors)

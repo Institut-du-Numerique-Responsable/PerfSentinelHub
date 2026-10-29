@@ -279,6 +279,51 @@ set. `allowInternal`, `expectedIdentity`, `expectedIssuer`, `shareLinkDays` and 
 follow the settings above. A webhook is `{ name, secretName, urlKey, secretKey,
 includeShareLink, shareLinkDays }`: its URL and its secret both come from that Secret.
 
+## Recap reports
+
+A recap of a closed period can be frozen into a stored report, served as self-contained HTML in a
+management and an engineering version, and delivered by signed webhook and by e-mail. Nothing here
+is on by default: a Hub with no `Hub:Recaps:Subscriptions` generates no report on its own and sends
+nothing. Each rule below is checked at startup and its message names the key. `Hub:Recaps` also
+holds `MovementThreshold`, in the settings table above.
+
+| Setting                      | Default                      | Validation                                                                                                                                     |
+|------------------------------|------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Recaps:Retention`       | `365.00:00:00`               | At least 32 days, so a month's report outlives its month as the last closed one. How long a stored report and its deliveries are kept          |
+| `Hub:Recaps:MaxDelay`        | `06:00:00`                   | Above zero, at most 7 days. How long a report waits for the ledgers to seal its last day                                                       |
+| `Hub:Recaps:PublicUrl`       | `Hub:Disclosures:PublicUrl`  | As that one: an absolute HTTP(S) URL with no path. The address the engineering link names                                                      |
+| `Hub:Recaps:Webhooks[]`      | none                         | `{ Name, Url, Secret, Confidentiality, IncludeShareLink, ShareLinkDays }`, the disclosure shape, see below                                      |
+| `Hub:Recaps:Smtp:*`          | off                          | `Host`, `Port`, `StartTls`, `UserName`, `Password`, `From`, see below                                                                          |
+| `Hub:Recaps:Subscriptions[]` | none                         | At most 100, see below                                                                                                                         |
+
+**Webhooks** follow the rules of [disclosure webhooks](#disclosures): `Name`, `Url`, `Secret` and
+`Confidentiality` mean the same, and the signature is the same. `IncludeShareLink` and
+`ShareLinkDays` apply to disclosures only, and the Hub refuses a recap webhook that sets
+`IncludeShareLink`. A recap webhook carries the management snapshot only.
+
+**The SMTP relay.** `Host` turns the e-mail on, and with it `From`, which is required. The Hub
+hands each message to this relay and never looks up a recipient's mail server, so it needs no DNS
+record of its own. Use a `From` the relay already sends for, whose SPF and DKIM then cover the
+Hub's mail. `Port` is 587 with `StartTls` on, the default: the Hub speaks STARTTLS, never implicit
+TLS, so 465 is refused. `UserName` and `Password` go together, authenticate with `AUTH LOGIN`, and
+need `StartTls` unless the relay is on loopback, since a password never travels in clear. A
+Microsoft 365 or Gmail account restricted to OAuth does not offer `AUTH LOGIN`: point the Hub at
+the organisation's relay instead. `From` is one address with no display name. The password comes
+through a Secret (`Hub__Recaps__Smtp__Password`).
+
+**Subscriptions.** Each one is `{ Name, Cadences, Views, Environment, SourceId, Service, Grouping,
+Webhooks, Emails }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
+`Cadences` lists `day`, `week` or `month`, each once, at least one. `Views` lists `pilotage`,
+`tech` or both, each once. `Environment` and `SourceId` must match a declared source, and a
+`SourceId` must belong to the `Environment` when both are set. `Service` and `Grouping` are 1 to
+256 characters with no control character. `Webhooks` names entries of `Hub:Recaps:Webhooks`, and
+`Emails` holds at most 50 distinct addresses without a display name, which needs
+`Hub:Recaps:Smtp:Host`. A subscription with no destination is valid: it archives its reports and
+delivers none.
+
+Under Helm, the chart does not carry the `Hub:Recaps` block yet. Pass it as `Hub__Recaps__*`
+environment variables until it does.
+
 ## What a source is, and what is measured
 
 The list is configuration, never discovery. Nothing is auto-detected, the launcher cannot
@@ -339,7 +384,7 @@ shows no producer version and no last success, and it is not a fault.
 
 ## Where the Hub connects
 
-Every outbound request goes to a configured `Sources[].BaseUrl`, with one exception. Once
+Every outbound request goes to a configured `Sources[].BaseUrl`, with one exception on by default. Once
 a day the Hub asks the GitHub releases API for the newest published version of the engine
 and of itself, so the version chip can say that what you are running is no longer current.
 The request is an unauthenticated GET and carries no identifier of your deployment.
@@ -347,6 +392,10 @@ The request is an unauthenticated GET and carries no identifier of your deployme
 For a deployment with no egress, set `Hub:UpdateCheck:Enabled` to `false`. The chip then
 shows nothing rather than claiming you are current, which is also what it shows when the
 request fails.
+
+Recap reports add two more destinations, both declared by you and both off until you declare
+them: each `Hub:Recaps:Webhooks[].Url` receives the signed report event, and `Hub:Recaps:Smtp:Host`
+receives each e-mail. The Hub reaches no other mail server.
 
 ## An https source with a private CA
 
