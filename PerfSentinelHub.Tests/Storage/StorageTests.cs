@@ -362,6 +362,48 @@ public sealed class StorageTests
             (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    [Fact]
+    public async Task A_v16_database_gains_the_owner_display_columns()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // Dropped rather than hand-written as the old DDL, as the cases above do.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE finding_actions DROP COLUMN owner_display;
+                               ALTER TABLE finding_action_events DROP COLUMN owner_display;
+                               INSERT INTO finding_actions(signature, status, owner, created_by, created_at_ms, updated_at_ms)
+                               VALUES ('sig', 'todo', 'alice', 'alice', 1, 1);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(table_name || '.' || name || ' ' || type, ',') FROM
+                                    (SELECT 'finding_actions' AS table_name, name, type FROM pragma_table_info('finding_actions')
+                                     WHERE name = 'owner_display'
+                                     UNION ALL
+                                     SELECT 'finding_action_events', name, type FROM pragma_table_info('finding_action_events')
+                                     WHERE name = 'owner_display'))
+                             || ' | ' || (SELECT IFNULL(owner_display, '-') FROM finding_actions);
+                           """;
+        Assert.Equal(
+            "finding_actions.owner_display TEXT,finding_action_events.owner_display TEXT | -",
+            (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
     private static async Task<List<string>> SourceColumnsAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)

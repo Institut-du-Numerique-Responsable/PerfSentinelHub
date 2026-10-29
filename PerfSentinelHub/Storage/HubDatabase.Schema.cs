@@ -86,6 +86,7 @@ public sealed partial class HubDatabase
             await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceServiceColumnAsync(connection, transaction, cancellationToken);
             await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -240,6 +241,27 @@ public sealed partial class HubDatabase
                             ALTER TABLE detection_days ADD COLUMN avoidable_io_ops INTEGER;
                             ALTER TABLE detection_days ADD COLUMN avoidable_gco2_low REAL;
                             ALTER TABLE detection_days ADD COLUMN total_io_ops INTEGER;
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The name the SSO gave an action's owner, kept beside the owner it was read with. NULL for
+    ///     a hand-typed owner and for an action filed before the column existed.
+    /// </summary>
+    private static async Task EnsureActionOwnerDisplayColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "finding_actions", "owner_display", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE finding_actions ADD COLUMN owner_display TEXT;
+                            ALTER TABLE finding_action_events ADD COLUMN owner_display TEXT;
                             """;
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }

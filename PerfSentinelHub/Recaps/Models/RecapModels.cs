@@ -89,13 +89,14 @@ public sealed record RecapCodeLocation(string? Function, string? Filepath, int? 
 public sealed record RecapAction(
     string Status,
     string? Owner,
+    string? OwnerDisplay,
     long UpdatedAtMs,
     long? DoneAtMs,
     string? Confirmation,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<RecapActionEvent>? Events);
 
-public sealed record RecapActionEvent(string? From, string To, string? Owner, string By, long AtMs);
+public sealed record RecapActionEvent(string? From, string To, string? Owner, string? OwnerDisplay, string By, long AtMs);
 
 public sealed record RecapMovements(
     IReadOnlyList<RecapMove> New,

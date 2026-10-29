@@ -7,13 +7,14 @@ public sealed class RecapViewsTests
 {
     // HubJsonContext is internal to the Hub; its options are snake_case_lower, which these mirror.
     private static readonly JsonSerializerOptions Wire = new()
-        { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private static RecapPriority Priority(int rank)
     {
         return new RecapPriority(
             rank, "n_plus_one_sql", "warning", "svc", "plain", 3, 40, null, false, true, "flat", 0.0,
-            new RecapAction("done", "ana", 1, 2, "confirmed", [new RecapActionEvent(null, "done", "ana", "me", 2)]),
+            new RecapAction("done", "ana", "Ana", 1, 2, "confirmed",
+                [new RecapActionEvent(null, "done", "ana", "Ana", "me", 2)]),
             $"sig-{rank}", "GET /x", "SELECT ?", "batch it", new RecapFix("do it", "ef", "https://e.x"),
             new RecapCodeLocation("F", "a.cs", 3, "N"), "daemon_production");
     }

@@ -115,6 +115,7 @@ chaque client et qu'un client qui lui parle directement ne peut pas en forger.
 | `Hub:Auth:ClientSecret`            | aucun                  | Obligatoire, fourni par un Secret                                                                  |
 | `Hub:Auth:Scopes`                  | `openid profile email` | Séparés par des espaces                                                                            |
 | `Hub:Auth:IdentityClaim`           | `email`                | Le champ userinfo enregistré comme utilisateur, un nom affiché                                     |
+| `Hub:Auth:DisplayNameClaim`        | `name`                 | Le champ userinfo affiché comme responsable d'une action quand le fournisseur l'envoie, ignoré s'il est vide, de plus de 128 caractères ou pas une chaîne ; jamais utilisé pour l'accès |
 | `Hub:Auth:SubjectClaim`            | `sub`                  | La clé d'autorisation, lue seulement avec le contrôle d'accès : `sub`, `oid`, `uuid` ou `account_id` |
 | `Hub:Auth:GroupsClaim`             | `groups`               | Le champ userinfo des groupes, lu avec `RequiredGroups` ou le contrôle d'accès                     |
 | `Hub:Auth:RequiredGroups`          | aucun                  | Aucune entrée vide, refusé si `Enabled` est désactivé, voir plus bas                               |

@@ -9,18 +9,20 @@ namespace PerfSentinelHub.Storage;
 public sealed partial class HubDatabase
 {
     private const string ActionEventInsert = """
-                                             INSERT INTO finding_action_events(signature, from_status, to_status, owner, by, at_ms)
-                                             VALUES ($signature, $from_status, $to_status, $owner, $by, $at_ms);
+                                             INSERT INTO finding_action_events(signature, from_status, to_status, owner, owner_display, by, at_ms)
+                                             VALUES ($signature, $from_status, $to_status, $owner, $owner_display, $by, $at_ms);
                                              """;
 
     /// <summary>
     ///     Files a new action and its first event, in one transaction. <c>Exists</c> when the
     ///     signature already has one, <c>Busy</c> when the write lock stays held past the wait.
+    ///     <paramref name="ownerDisplay" /> is the name the SSO gave <paramref name="owner" />, if any.
     /// </summary>
     public async Task<ActionWriteOutcome> CreateActionAsync(
         string signature,
         string status,
         string? owner,
+        string? ownerDisplay,
         string by,
         long nowMs,
         CancellationToken cancellationToken)
@@ -35,12 +37,14 @@ public sealed partial class HubDatabase
             insert.Transaction = transaction;
             insert.CommandText = """
                                  INSERT OR IGNORE INTO finding_actions(
-                                   signature, status, owner, created_by, created_at_ms, updated_at_ms, done_at_ms)
-                                 VALUES ($signature, $status, $owner, $by, $at_ms, $at_ms, $done_at_ms);
+                                   signature, status, owner, owner_display, created_by, created_at_ms, updated_at_ms,
+                                   done_at_ms)
+                                 VALUES ($signature, $status, $owner, $owner_display, $by, $at_ms, $at_ms, $done_at_ms);
                                  """;
             insert.Parameters.AddWithValue(SignatureParameter, signature);
             insert.Parameters.AddWithValue("$status", status);
             insert.Parameters.AddWithValue("$owner", (object?)owner ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$owner_display", (object?)ownerDisplay ?? DBNull.Value);
             insert.Parameters.AddWithValue("$by", by);
             insert.Parameters.AddWithValue("$at_ms", nowMs);
             insert.Parameters.AddWithValue(
@@ -49,7 +53,7 @@ public sealed partial class HubDatabase
             if (await insert.ExecuteNonQueryAsync(cancellationToken) == 0)
                 return ActionWriteOutcome.Exists;
 
-            await InsertActionEventAsync(connection, transaction, signature, null, status, owner, by, nowMs,
+            await InsertActionEventAsync(connection, transaction, signature, null, status, owner, ownerDisplay, by, nowMs,
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return ActionWriteOutcome.Written;
@@ -64,7 +68,8 @@ public sealed partial class HubDatabase
     ///     Changes the status, the owner, or both, and logs it when one of them differs.
     ///     <paramref name="status" /> null leaves the status; <paramref name="ownerSet" /> false
     ///     leaves the owner and true sets it, to null to clear it. <c>done_at_ms</c> is stamped
-    ///     when the action enters done and cleared when it leaves it.
+    ///     when the action enters done and cleared when it leaves it. An owner set from the body
+    ///     is a typed one, so it drops the display name; a status change or the same owner keeps it.
     /// </summary>
     public async Task<ActionWriteOutcome> UpdateActionAsync(
         string signature,
@@ -83,23 +88,26 @@ public sealed partial class HubDatabase
             await using var transaction = connection.BeginTransaction(false);
             string currentStatus;
             string? currentOwner;
+            string? currentDisplay;
             long? currentDoneAt;
             await using (var read = connection.CreateCommand())
             {
                 read.Transaction = transaction;
                 read.CommandText =
-                    "SELECT status, owner, done_at_ms FROM finding_actions WHERE signature = $signature;";
+                    "SELECT status, owner, owner_display, done_at_ms FROM finding_actions WHERE signature = $signature;";
                 read.Parameters.AddWithValue(SignatureParameter, signature);
                 await using var reader = await read.ExecuteReaderAsync(cancellationToken);
                 if (!await reader.ReadAsync(cancellationToken))
                     return ActionWriteOutcome.Missing;
                 currentStatus = reader.GetString(0);
                 currentOwner = reader.IsDBNull(1) ? null : reader.GetString(1);
-                currentDoneAt = reader.IsDBNull(2) ? null : reader.GetInt64(2);
+                currentDisplay = reader.IsDBNull(2) ? null : reader.GetString(2);
+                currentDoneAt = reader.IsDBNull(3) ? null : reader.GetInt64(3);
             }
 
             var newStatus = status ?? currentStatus;
             var newOwner = ownerSet ? owner : currentOwner;
+            var newDisplay = newOwner == currentOwner ? currentDisplay : null;
             if (newStatus == currentStatus && newOwner == currentOwner)
                 return ActionWriteOutcome.Written;
 
@@ -109,19 +117,21 @@ public sealed partial class HubDatabase
                 update.Transaction = transaction;
                 update.CommandText = """
                                      UPDATE finding_actions
-                                     SET status = $status, owner = $owner, updated_at_ms = $at_ms, done_at_ms = $done_at_ms
+                                     SET status = $status, owner = $owner, owner_display = $owner_display, updated_at_ms = $at_ms,
+                                         done_at_ms = $done_at_ms
                                      WHERE signature = $signature;
                                      """;
                 update.Parameters.AddWithValue(SignatureParameter, signature);
                 update.Parameters.AddWithValue("$status", newStatus);
                 update.Parameters.AddWithValue("$owner", (object?)newOwner ?? DBNull.Value);
+                update.Parameters.AddWithValue("$owner_display", (object?)newDisplay ?? DBNull.Value);
                 update.Parameters.AddWithValue("$at_ms", nowMs);
                 update.Parameters.AddWithValue("$done_at_ms", (object?)doneAt ?? DBNull.Value);
                 await update.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await InsertActionEventAsync(connection, transaction, signature, currentStatus, newStatus, newOwner, by,
-                nowMs, cancellationToken);
+            await InsertActionEventAsync(connection, transaction, signature, currentStatus, newStatus, newOwner,
+                newDisplay, by, nowMs, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return ActionWriteOutcome.Written;
         }
@@ -139,11 +149,11 @@ public sealed partial class HubDatabase
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-                              SELECT signature, status, owner, created_by, created_at_ms, updated_at_ms, done_at_ms
+                              SELECT signature, status, owner, owner_display, created_by, created_at_ms, updated_at_ms, done_at_ms
                               FROM finding_actions
                               WHERE signature IN (SELECT value FROM json_each($signatures))
                               ORDER BY signature;
-                              SELECT signature, from_status, to_status, owner, by, at_ms
+                              SELECT signature, from_status, to_status, owner, owner_display, by, at_ms
                               FROM finding_action_events
                               WHERE signature IN (SELECT value FROM json_each($signatures))
                               ORDER BY at_ms, id;
@@ -151,12 +161,12 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue("$signatures", JsonArray(signatures));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        var rows = new List<(string Signature, string Status, string? Owner, string By, long Created, long Updated,
-            long? Done)>();
+        var rows = new List<(string Signature, string Status, string? Owner, string? Display, string By, long Created,
+            long Updated, long? Done)>();
         while (await reader.ReadAsync(cancellationToken))
             rows.Add((reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
-                reader.GetString(3), reader.GetInt64(4), reader.GetInt64(5),
-                reader.IsDBNull(6) ? null : reader.GetInt64(6)));
+                reader.IsDBNull(3) ? null : reader.GetString(3), reader.GetString(4), reader.GetInt64(5),
+                reader.GetInt64(6), reader.IsDBNull(7) ? null : reader.GetInt64(7)));
         var events = new Dictionary<string, List<StoredActionEvent>>(StringComparer.Ordinal);
         await reader.NextResultAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -168,14 +178,15 @@ public sealed partial class HubDatabase
                 reader.IsDBNull(1) ? null : reader.GetString(1),
                 reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3),
-                reader.GetString(4),
-                reader.GetInt64(5)));
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetString(5),
+                reader.GetInt64(6)));
         }
 
         return
         [
-            .. rows.Select(row => new StoredAction(row.Signature, row.Status, row.Owner, row.By, row.Created,
-                row.Updated, row.Done, events.GetValueOrDefault(row.Signature) ?? []))
+            .. rows.Select(row => new StoredAction(row.Signature, row.Status, row.Owner, row.Display, row.By,
+                row.Created, row.Updated, row.Done, events.GetValueOrDefault(row.Signature) ?? []))
         ];
     }
 
@@ -186,6 +197,7 @@ public sealed partial class HubDatabase
         string? fromStatus,
         string toStatus,
         string? owner,
+        string? ownerDisplay,
         string by,
         long nowMs,
         CancellationToken cancellationToken)
@@ -197,6 +209,7 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue("$from_status", (object?)fromStatus ?? DBNull.Value);
         command.Parameters.AddWithValue("$to_status", toStatus);
         command.Parameters.AddWithValue("$owner", (object?)owner ?? DBNull.Value);
+        command.Parameters.AddWithValue("$owner_display", (object?)ownerDisplay ?? DBNull.Value);
         command.Parameters.AddWithValue("$by", by);
         command.Parameters.AddWithValue("$at_ms", nowMs);
         await command.ExecuteNonQueryAsync(cancellationToken);

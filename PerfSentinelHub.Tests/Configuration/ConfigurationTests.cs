@@ -295,7 +295,7 @@ public sealed class ConfigurationTests
     public void Invalid_disclosures_are_refused(string rule, string expected)
     {
         var webhook = new WebhookOptions
-            { Name = "auditors", Url = new Uri("https://hooks.example/x"), Secret = WebhookSecret };
+        { Name = "auditors", Url = new Uri("https://hooks.example/x"), Secret = WebhookSecret };
         var disclosures = new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] };
         var options = ValidOptions() with { Disclosures = disclosures };
         options = rule switch
@@ -349,7 +349,7 @@ public sealed class ConfigurationTests
     public void A_webhook_to_a_loopback_address_may_use_http()
     {
         var webhook = new WebhookOptions
-            { Name = "local", Url = new Uri("http://127.0.0.1:9000/hook"), Secret = WebhookSecret };
+        { Name = "local", Url = new Uri("http://127.0.0.1:9000/hook"), Secret = WebhookSecret };
 
         Assert.Empty(DisclosureFailures(new DisclosuresOptions { ImportKey = DisclosureKey, Webhooks = [webhook] }));
     }
@@ -700,6 +700,7 @@ public sealed class ConfigurationTests
             ValidAuth() with { ClientId = "" },
             ValidAuth() with { ClientSecret = null },
             ValidAuth() with { IdentityClaim = " " },
+            ValidAuth() with { DisplayNameClaim = " " },
             ValidAuth() with { AuthorizationEndpoint = null },
             ValidAuth() with { TokenEndpoint = new Uri("/token", UriKind.Relative) },
             // Plain http carries the code and the access token in clear, loopback excepted.

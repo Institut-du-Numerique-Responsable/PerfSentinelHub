@@ -61,6 +61,10 @@ utilisateur qui se renomme chez le fournisseur change une étiquette, pas ses dr
 | Jeton machine         | `machine:<nom>`                       | `machine:<nom>`                         | son seul groupe configuré                                |
 | Compte local          | `local:<nom>`                         | `local:<nom>`                           | groupes internes seuls                                   |
 
+Une session du navigateur porte aussi le nom que le fournisseur donne à l'utilisateur, lu
+dans `Hub:Auth:DisplayNameClaim` (par défaut `name`). Il s'affiche comme responsable d'une
+action et ne sert jamais à l'accès.
+
 `Hub:Auth:SubjectClaim` (par défaut `sub`) n'accepte que `sub`, `oid`, `uuid` et
 `account_id`, des identifiants qu'un fournisseur ne réattribue jamais. `sub` convient à
 Keycloak, Google, GitLab et Entra ID ; Bitbucket Cloud n'a pas de `sub` et prend

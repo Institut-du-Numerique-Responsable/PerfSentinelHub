@@ -26,6 +26,9 @@ public sealed record AccessCaller(string Kind, string Subject, IReadOnlyList<str
     // The step-1 group that admitted a provider session, which a terminal token carries on.
     public const string RequiredGroupClaim = "hub_required_group";
 
+    // The name the provider gave the user, shown beside their identity and never judged.
+    public const string DisplayNameClaim = "ps_display_name";
+
     // Resolved once per request. Null for a principal that carries no access claims.
     public static AccessCaller? Of(HttpContext context)
     {

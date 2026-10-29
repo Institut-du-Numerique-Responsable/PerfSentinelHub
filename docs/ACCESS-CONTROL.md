@@ -55,6 +55,10 @@ provider changes a label, not their rights.
 | Machine token    | `machine:<name>`                | `machine:<name>`                 | Its configured group alone                   |
 | Local account    | `local:<name>`                  | `local:<name>`                   | Internal groups alone                        |
 
+A browser session also carries the name the provider gave the user, from
+`Hub:Auth:DisplayNameClaim` (default `name`). It is shown as an action's owner and never
+used for access.
+
 `Hub:Auth:SubjectClaim` (default `sub`) accepts only `sub`, `oid`, `uuid` and
 `account_id`, ids a provider never reassigns. `sub` fits Keycloak, Google, GitLab and
 Entra ID; Bitbucket Cloud has no `sub` and takes `account_id`. A userinfo whose subject

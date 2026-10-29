@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Access;
@@ -74,6 +75,7 @@ public static partial class ApiEndpoints
                 write.Signature,
                 write.Take ? ActionStatuses.InProgress : write.Status!,
                 write.Take ? identity : write.Owner,
+                write.Take ? request.HttpContext.User.FindFirstValue(AccessCaller.DisplayNameClaim) : null,
                 identity,
                 nowMs,
                 cancellationToken)
@@ -119,8 +121,8 @@ public static partial class ApiEndpoints
 
         var action = (await database.ReadActionsAsync([signature], cancellationToken)).Single();
         return TypedResults.Json(
-            new ActionResponse(action.Signature, action.Status, action.Owner, action.CreatedBy, action.CreatedAtMs,
-                action.UpdatedAtMs, action.DoneAtMs),
+            new ActionResponse(action.Signature, action.Status, action.Owner, action.OwnerDisplay, action.CreatedBy,
+                action.CreatedAtMs, action.UpdatedAtMs, action.DoneAtMs),
             HubJsonContext.Default.ActionResponse,
             statusCode: create ? StatusCodes.Status201Created : StatusCodes.Status200OK);
     }

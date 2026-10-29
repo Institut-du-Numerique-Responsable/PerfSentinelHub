@@ -74,6 +74,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Auth:ClientId and Hub:Auth:ClientSecret are required.");
         if (string.IsNullOrWhiteSpace(auth.IdentityClaim))
             errors.Add("Hub:Auth:IdentityClaim must name a userinfo field.");
+        if (string.IsNullOrWhiteSpace(auth.DisplayNameClaim))
+            errors.Add("Hub:Auth:DisplayNameClaim must name a userinfo field.");
         if (auth.RequiredGroups.Count > 0 && string.IsNullOrWhiteSpace(auth.GroupsClaim))
             errors.Add("Hub:Auth:GroupsClaim must name a userinfo field when Hub:Auth:RequiredGroups is set.");
         if (auth.RequiredGroups.Any(string.IsNullOrWhiteSpace))

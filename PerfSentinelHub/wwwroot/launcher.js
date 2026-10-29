@@ -2204,6 +2204,27 @@
         return sameNetwork || armed ? 'send' : 'arm';
     }
 
+    /**
+     * An action owner as a person reads it. The name the SSO gave wins, with the full identity
+     * on hover. A machine owner or one typed by hand (a space or an upper-case letter) shows
+     * as it is, and an identity (`alice.martin@acme.com`, `local:alice`) is turned into a name.
+     * @param {string | null | undefined} owner
+     * @param {string | null | undefined} ownerDisplay
+     * @returns {{text: string, title: string | null}}
+     */
+    function ownerLabel(owner, ownerDisplay) {
+        if (ownerDisplay) return {text: ownerDisplay, title: owner || null};
+        if (!owner) return {text: '', title: null};
+        if (owner.startsWith('machine:') || /\s|\p{Lu}/u.test(owner)) return {text: owner, title: null};
+        const upper = (word) => {
+            const first = String.fromCodePoint(word.codePointAt(0));
+            return first.toLocaleUpperCase() + word.slice(first.length);
+        };
+        const name = owner.replace(/^local:/, '').split('@')[0].split(/[._]/).filter(Boolean)
+            .map((word) => word.split('-').filter(Boolean).map(upper).join('-')).join(' ');
+        return name ? {text: name, title: owner} : {text: owner, title: null};
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -2331,6 +2352,7 @@
         deviceIntro,
         deviceRequestLine,
         deviceNetworkAlert,
-        deviceApproveStep
+        deviceApproveStep,
+        ownerLabel
     };
 })(globalThis);

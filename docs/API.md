@@ -626,8 +626,8 @@ and `truncated`.
   extrapolated. With none, `co2_grams` is `null` and `co2_missing_reason` is
   `no_coefficient`, or `no_avoidable_io` when there is nothing to price. A priority carries
   its own `co2_grams` and `co2_partial`.
-- **Actions and confirmation.** A priority carries its `action` (status, owner, times and,
-  in `tech`, the `events`). A `done` action is judged on the days after the one it was
+- **Actions and confirmation.** A priority carries its `action` (status, owner, `owner_display`,
+  times and, in `tech`, the `events`). A `done` action is judged on the days after the one it was
   marked done: `confirmed` once a day sealed at a reachable source of the finding holds no
   detection, `contradicted` when it is detected before any clean day, `came_back` when it
   is detected after one, `awaiting` while no day is sealed yet. A source that is
@@ -682,11 +682,14 @@ A `POST` answers `201` and a `PATCH` `200` with the action as it now stands:
 
 ```json
 {"signature": "n_plus_one_sql:order-svc:…", "status": "done", "owner": "ada@example.com",
- "created_by": "ada@example.com", "created_at_ms": 1760000000000,
+ "owner_display": "Ada Lovelace", "created_by": "ada@example.com", "created_at_ms": 1760000000000,
  "updated_at_ms": 1760003600000, "done_at_ms": 1760003600000}
 ```
 
-`done_at_ms` is stamped when the action enters `done` and cleared when it leaves it. Every
+`owner_display` is the name the identity provider gave the caller who took the finding, or
+`null`: a proxy-header or token caller has none, and an `owner` set from the body is typed by
+hand, so it clears it. A status change or the same owner keeps it. Events carry it too. It is
+shown, never judged. `done_at_ms` is stamped when the action enters `done` and cleared when it leaves it. Every
 change of the status or the owner appends an event, with the status it left, the one it
 reached, the owner, the caller and the time. The events are never rewritten, and neither the
 action nor its events are purged with the finding: an action outlives the retention of the

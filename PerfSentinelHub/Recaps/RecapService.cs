@@ -220,12 +220,14 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         return new RecapAction(
             action.Status,
             action.Owner,
+            action.OwnerDisplay,
             action.UpdatedAtMs,
             action.DoneAtMs,
             confirmation,
             [
                 .. action.Events.Select(item =>
-                    new RecapActionEvent(item.FromStatus, item.ToStatus, item.Owner, item.By, item.AtMs))
+                    new RecapActionEvent(item.FromStatus, item.ToStatus, item.Owner, item.OwnerDisplay, item.By,
+                        item.AtMs))
             ]);
     }
 

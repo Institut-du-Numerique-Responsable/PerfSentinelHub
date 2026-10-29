@@ -352,6 +352,26 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_snapshot_carries_the_owner_display()
+    {
+        await SeedAsync("a", S, Mon);
+        await ActionAsync(S, ActionStatuses.InProgress, owner: "alice@acme.com", ownerDisplay: "Alice Martin");
+
+        var snapshot = await RecapAsync();
+
+        var action = Assert.Single(snapshot.Priorities).Action!;
+        Assert.Equal("alice@acme.com", action.Owner);
+        Assert.Equal("Alice Martin", action.OwnerDisplay);
+        var change = Assert.Single(action.Events!);
+        Assert.Equal("Alice Martin", change.OwnerDisplay);
+        // Names are not technical: the Management view keeps both owner fields.
+        var shown = Assert.Single(RecapViews.Pilotage(snapshot).Priorities).Action!;
+        Assert.Equal("alice@acme.com", shown.Owner);
+        Assert.Equal("Alice Martin", shown.OwnerDisplay);
+        Assert.Null(shown.Events);
+    }
+
+    [Fact]
     public async Task A_done_action_still_detected_is_listed_as_done_but_still_detected()
     {
         await SeedAsync("a", S, Mon);
@@ -421,9 +441,15 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     // Done on Monday noon unless said otherwise: the actions here are written by the test, not the route.
-    private async Task ActionAsync(string signature, string status, long? atMs = null)
+    private async Task ActionAsync(
+        string signature,
+        string status,
+        long? atMs = null,
+        string? owner = null,
+        string? ownerDisplay = null)
     {
-        await _database.CreateActionAsync(signature, status, null, "alice", atMs ?? Mon * DayMs + 43_200_000, Token);
+        await _database.CreateActionAsync(signature, status, owner, ownerDisplay, "alice",
+            atMs ?? Mon * DayMs + 43_200_000, Token);
     }
 
     private static DetectionDayRow Sealed(

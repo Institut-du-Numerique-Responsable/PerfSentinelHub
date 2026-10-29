@@ -674,8 +674,8 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   compte et le chiffre n'est jamais extrapolé. Sans aucun coefficient, `co2_grams` vaut `null`
   et `co2_missing_reason` vaut `no_coefficient`, ou `no_avoidable_io` quand il n'y a rien à
   valoriser. Une priorité porte son propre `co2_grams` et `co2_partial`.
-- **Actions et confirmation.** Une priorité porte son `action` (statut, responsable, dates et,
-  en `tech`, les `events`). Une action `done` est jugée sur les jours après celui où elle a
+- **Actions et confirmation.** Une priorité porte son `action` (statut, responsable, `owner_display`,
+  dates et, en `tech`, les `events`). Une action `done` est jugée sur les jours après celui où elle a
   été marquée faite : `confirmed` dès qu'un jour scellé dans une source joignable du finding
   ne contient aucune détection, `contradicted` quand il est détecté avant tout jour propre,
   `came_back` quand il l'est après un, `awaiting` tant qu'aucun jour n'est scellé. Une source
@@ -730,10 +730,14 @@ Un `POST` répond `201` et un `PATCH` `200`, avec l'action telle qu'elle est dé
 
 ```json
 {"signature": "n_plus_one_sql:order-svc:…", "status": "done", "owner": "ada@example.com",
- "created_by": "ada@example.com", "created_at_ms": 1760000000000,
+ "owner_display": "Ada Lovelace", "created_by": "ada@example.com", "created_at_ms": 1760000000000,
  "updated_at_ms": 1760003600000, "done_at_ms": 1760003600000}
 ```
 
+`owner_display` est le nom que le fournisseur d'identité donne à l'appelant qui a pris le
+finding, ou `null` : un appelant par en-tête de proxy ou par jeton n'en a pas, et un `owner`
+posé par le corps est saisi à la main, il l'efface. Un changement de statut ou le même
+responsable le garde. Les événements le portent aussi. Il est affiché, jamais jugé.
 `done_at_ms` est posé quand l'action entre dans `done` et effacé quand elle en sort. Chaque
 changement de statut ou de responsable ajoute un événement, avec le statut quitté, celui
 atteint, le responsable, l'appelant et l'heure. Les événements ne sont jamais réécrits, et ni

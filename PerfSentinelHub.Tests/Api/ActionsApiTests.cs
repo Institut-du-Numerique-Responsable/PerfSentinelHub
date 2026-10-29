@@ -2,6 +2,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Api;
@@ -58,7 +60,55 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
         Assert.Equal("alice", body["owner"]!.GetValue<string>());
         Assert.Equal("alice", body["created_by"]!.GetValue<string>());
         var action = Assert.Single(await ReadAsync(signature));
-        Assert.Equal(new StoredActionEvent(null, "in_progress", "alice", "alice", NowMs), Assert.Single(action.Events));
+        Assert.Equal(new StoredActionEvent(null, "in_progress", "alice", null, "alice", NowMs), Assert.Single(action.Events));
+    }
+
+    [Fact]
+    public async Task Take_with_a_session_display_name_returns_it()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var signature = await SeedAsync("session-display");
+        await using var provider = await FakeProvider.StartAsync(new Dictionary<string, string>
+        {
+            ["alice"] = """{"email":"alice@acme.com","name":"Alice Martin"}"""
+        });
+        // The factory's clock sits in 1970, where every cookie the handlers write has already expired.
+        await using var signedIn = factory.WithWebHostBuilder(builder =>
+        {
+            provider.Configure(builder);
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton(TimeProvider.System);
+            });
+        });
+        using var client = FakeProvider.Client(signedIn);
+        using var callback = await FakeProvider.SignInAsync(client, "alice");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/actions");
+        request.Headers.Add("Cookie", FakeProvider.SessionCookie(callback));
+        request.Content = new StringContent(Body(signature, take: true), Encoding.UTF8, "application/json");
+
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await JsonOf(response);
+        Assert.Equal("alice@acme.com", body["owner"]!.GetValue<string>());
+        Assert.Equal("Alice Martin", body["owner_display"]!.GetValue<string>());
+        var action = Assert.Single(await ReadAsync(signature));
+        Assert.Equal("Alice Martin", Assert.Single(action.Events).OwnerDisplay);
+    }
+
+    [Fact]
+    public async Task Take_through_the_proxy_header_has_no_display_name()
+    {
+        var signature = await SeedAsync("no-display");
+
+        using var response = await SendAsync("POST", Body(signature, take: true));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await JsonOf(response);
+        Assert.Equal("alice", body["owner"]!.GetValue<string>());
+        Assert.Null(body["owner_display"]);
     }
 
     [Fact]
@@ -110,7 +160,7 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
         Assert.Equal(NowMs, body["done_at_ms"]!.GetValue<long>());
         var action = Assert.Single(await ReadAsync(signature));
         Assert.Equal(2, action.Events.Count);
-        Assert.Equal(new StoredActionEvent("in_progress", "done", "alice", "alice", NowMs), action.Events[1]);
+        Assert.Equal(new StoredActionEvent("in_progress", "done", "alice", null, "alice", NowMs), action.Events[1]);
     }
 
     [Fact]

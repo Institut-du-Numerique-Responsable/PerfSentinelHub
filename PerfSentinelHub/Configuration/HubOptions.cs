@@ -318,6 +318,9 @@ public sealed record AuthOptions
     // The userinfo field recorded as the identity.
     public string IdentityClaim { get; set; } = "email";
 
+    // The userinfo field shown as the action owner when the provider sends it. Never used for access.
+    public string DisplayNameClaim { get; set; } = "name";
+
     // The userinfo field holding the authorization key, an id the provider never reassigns.
     // Read only with Hub:Access:Enabled; IdentityClaim stays the name people read.
     public string SubjectClaim { get; set; } = "sub";

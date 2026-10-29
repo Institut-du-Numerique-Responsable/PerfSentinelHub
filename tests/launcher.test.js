@@ -1546,6 +1546,26 @@ test("a download goes through fetch, and a 401 signs back in instead of saving t
     assert.equal(saved.length, 1);
 });
 
+test("an action owner reads as a name", () => {
+    // The SSO display name wins and the full identity stays on hover.
+    assert.deepEqual(PSL.ownerLabel("alice.martin@acme.com", null),
+        {text: "Alice Martin", title: "alice.martin@acme.com"});
+    assert.deepEqual(PSL.ownerLabel("local:alice", null), {text: "Alice", title: "local:alice"});
+    assert.deepEqual(PSL.ownerLabel("jean-eric.dupont@acme.fr", null),
+        {text: "Jean-Eric Dupont", title: "jean-eric.dupont@acme.fr"});
+    assert.deepEqual(PSL.ownerLabel("jean-eric.dupont@acme.fr", "Jean-\u00c9ric Dupont"),
+        {text: "Jean-\u00c9ric Dupont", title: "jean-eric.dupont@acme.fr"});
+    // Typed by hand, or a machine: as it is.
+    assert.deepEqual(PSL.ownerLabel("\u00c9quipe paiement", null),
+        {text: "\u00c9quipe paiement", title: null});
+    assert.deepEqual(PSL.ownerLabel("machine:ci", null), {text: "machine:ci", title: null});
+    assert.deepEqual(PSL.ownerLabel("\u00c9lodie", null), {text: "\u00c9lodie", title: null});
+    assert.deepEqual(PSL.ownerLabel("alice_martin", null), {text: "Alice Martin", title: "alice_martin"});
+    // Nothing to show.
+    assert.deepEqual(PSL.ownerLabel(null, null), {text: "", title: null});
+    assert.deepEqual(PSL.ownerLabel("", null), {text: "", title: null});
+});
+
 test("app.js declares each of its top-level functions once", () => {
     // app.js is one IIFE: a second declaration of a name silently replaces the
     // first for every caller, as the Disclosures screen's actionButton did to

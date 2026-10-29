@@ -247,6 +247,7 @@ public sealed record ActionResponse(
     string Signature,
     string Status,
     string? Owner,
+    string? OwnerDisplay,
     string CreatedBy,
     long CreatedAtMs,
     long UpdatedAtMs,

@@ -428,13 +428,20 @@ public sealed record StoredAction(
     string Signature,
     string Status,
     string? Owner,
+    string? OwnerDisplay,
     string CreatedBy,
     long CreatedAtMs,
     long UpdatedAtMs,
     long? DoneAtMs,
     IReadOnlyList<StoredActionEvent> Events);
 
-public sealed record StoredActionEvent(string? FromStatus, string ToStatus, string? Owner, string By, long AtMs);
+public sealed record StoredActionEvent(
+    string? FromStatus,
+    string ToStatus,
+    string? Owner,
+    string? OwnerDisplay,
+    string By,
+    long AtMs);
 
 public enum ActionWriteOutcome
 {
