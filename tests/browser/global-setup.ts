@@ -236,8 +236,13 @@ function localPasswordHash(): string {
 // seen under two groupings is what a conflict is: a signature first seen under team=shop
 // then under team=payments, another seen under team=shop then under no grouping at all.
 async function pushGroupedFindings(importKey: string): Promise<void> {
-    const findings = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-findings.json"), "utf8")) as
-        { finding: Record<string, unknown> }[];
+    const captured = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-findings.json"), "utf8")) as
+        { finding: Record<string, unknown>, stored_at_ms: number, first_seen_ms: number }[];
+    // The Hub dates last_seen by stored_at_ms, so the captured stamps slide to now as
+    // fake-daemon.js slides them, or the findings would sit past the retention.
+    const delta = Date.now() - 120_000 - Math.max(...captured.map((f) => f.stored_at_ms));
+    const findings = captured.map((f) =>
+        ({...f, stored_at_ms: f.stored_at_ms + delta, first_seen_ms: f.first_seen_ms + delta}));
     const {version} = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-status-busy.json"), "utf8")) as
         { version: string };
     const grouped = (envelope: { finding: Record<string, unknown> }, team?: string) =>
