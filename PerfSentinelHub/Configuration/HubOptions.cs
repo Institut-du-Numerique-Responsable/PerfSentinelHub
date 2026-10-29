@@ -27,6 +27,7 @@ public sealed record HubOptions
     public AckRelayOptions AckRelay { get; set; } = new();
     public AccessOptions Access { get; set; } = new();
     public DisclosuresOptions Disclosures { get; set; } = new();
+    public RecapsOptions Recaps { get; set; } = new();
 
     // The one port /metrics answers on, and nothing else answers there. Unset, /metrics
     // answers on every port as it always has; access control needs one (A14).
@@ -123,7 +124,7 @@ public sealed record LocalAccountOptions
     }
 }
 
-/// <summary>The eight permissions, the three built-in roles and what a machine token may hold.</summary>
+/// <summary>The ten permissions, the three built-in roles and what a machine token may hold.</summary>
 public static class AccessPermissions
 {
     public const string FindingsRead = "findings.read";
@@ -131,11 +132,13 @@ public static class AccessPermissions
     public const string SourcesRead = "sources.read";
     public const string AnalysesRun = "analyses.run";
     public const string AcksWrite = "acks.write";
+    public const string ActionsWrite = "actions.write";
     public const string AccessAdmin = "access.admin";
 
     // Hub-level, granted on '*' only: a disclosure belongs to no source.
     public const string DisclosuresRead = "disclosures.read";
     public const string DisclosuresManage = "disclosures.manage";
+    public const string RecapsRead = "recaps.read";
 
     private const string ReaderRole = "reader";
     private const string MemberRole = "member";
@@ -143,7 +146,8 @@ public static class AccessPermissions
 
     public static readonly IReadOnlyList<string> All =
     [
-        FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin, DisclosuresRead, DisclosuresManage
+        FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, ActionsWrite, AccessAdmin, DisclosuresRead,
+        DisclosuresManage, RecapsRead
     ];
 
     // reader is not read-only: it starts analyses.
@@ -151,11 +155,17 @@ public static class AccessPermissions
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
             [ReaderRole] = [FindingsRead, TracesRead, AnalysesRun],
-            [MemberRole] = [FindingsRead, TracesRead, AnalysesRun, AcksWrite],
+            [MemberRole] = [FindingsRead, TracesRead, AnalysesRun, AcksWrite, ActionsWrite],
             [AdminRole] = All
         };
 
     public static readonly IReadOnlyList<string> MachineTokenPermissions = [FindingsRead];
+}
+
+/// <summary>The review recap: MovementThreshold is the share of change past which a finding reads up or down.</summary>
+public sealed record RecapsOptions
+{
+    public double MovementThreshold { get; set; } = 0.2;
 }
 
 /// <summary>

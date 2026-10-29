@@ -111,13 +111,15 @@ scope, and the answer is built from in-scope copies only.
 | `sources.read`  | A daemon's settings view, and with `findings.read` and `analyses.run` a daemon run; source level only |
 | `analyses.run`  | Starting a run                                                                  |
 | `acks.write`    | Acknowledging a finding, or revoking an ack                                     |
+| `actions.write` | Declaring and changing an action on a finding                                   |
 | `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
 | `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
+| `recaps.read`   | The recap reports subscriptions produce (Hub level)                             |
 
 | Built-in role | Permissions                                                     |
 |---------------|-----------------------------------------------------------------|
 | `reader`      | `findings.read`, `traces.read`, `analyses.run`                  |
-| `member`      | `reader` plus `acks.write`                                      |
+| `member`      | `reader` plus `acks.write` and `actions.write`                  |
 | `admin`       | Everything, on `*` only, plus the access configuration          |
 
 `reader` is not read-only: it starts analyses. A read-only role is configured, for
@@ -126,8 +128,8 @@ instance `auditor: [findings.read, traces.read]`.
 `sources.read` is source level: it counts only on `*` or through a pattern that sets
 `source` alone. So do `analyses.run` and `findings.read` for a daemon run.
 
-`disclosures.read` and `disclosures.manage` are Hub level: a disclosure belongs to no source.
-The built-in `admin` role carries them, `reader` and `member` never do, and a machine token
+`disclosures.read`, `disclosures.manage` and `recaps.read` are Hub level: a disclosure or a
+recap report belongs to no source. The built-in `admin` role carries them, `reader` and `member` never do, and a machine token
 never holds them. A configured role may carry them, granted on `*` only: the Hub refuses to
 start on a grant of such a role to a project.
 

@@ -23,6 +23,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:NewSignaturesPerHourWarning`  | `1000`                                                                         | 0 ou plus, 0 le désactive. Un daemon au-delà est signalé sur `/api/sources` et journalisé               |
 | `Hub:DefaultReadLimit`             | `1000`                                                                         | 1 à `MaxReadLimit`                                                                                      |
 | `Hub:MaxReadLimit`                 | `10000`                                                                        | 1 à 10000                                                                                               |
+| `Hub:Recaps:MovementThreshold`     | `0.2`                                                                          | Au-dessus de 0, au plus 10. Un finding monte ou descend sur le récap au-delà de cette part de variation |
 | `Hub:MetricsPort`                  | aucun                                                                          | 1 à 65535. Le seul port où répond `/metrics`, voir [OPERATIONS-FR.md](OPERATIONS-FR.md#métriques)        |
 | `Hub:Analysis:EngineBinaryPath`    | aucun                                                                          | Optionnel, chemin absolu vers le binaire perf-sentinel. Absent, les runs d'analyse sont indisponibles   |
 | `Hub:Analysis:ReportDirectory`     | `/data/reports`                                                                | Absolu, accessible en écriture. Les rapports rendus vivent ici                                          |
@@ -182,12 +183,13 @@ service.
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, voir plus bas                                                                                                                                         |
 
 **Permissions et rôles.** Les permissions sont `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `disclosures.read` et `disclosures.manage`,
-plus `access.admin`, que seul le rôle intégré `admin` porte. Les deux permissions de
-divulgation valent pour le Hub entier, donc un rôle qui porte l'une d'elles s'attribue sur
-`*` seulement. Les rôles intégrés sont `reader` (`findings.read`, `traces.read`,
-`analyses.run`), `member` (`reader` et `acks.write`) et `admin` (les huit, sur `*`
-seulement). `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `disclosures.read`,
+`disclosures.manage` et `recaps.read`, plus `access.admin`, que seul le rôle intégré
+`admin` porte. Les deux permissions de divulgation et `recaps.read` valent pour le Hub
+entier, donc un rôle qui porte l'une d'elles s'attribue sur `*` seulement. Les rôles
+intégrés sont `reader` (`findings.read`, `traces.read`, `analyses.run`), `member`
+(`reader`, `acks.write` et `actions.write`) et `admin` (les dix, sur `*` seulement).
+`reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture
 seule est un rôle configuré, comme `auditor` avec `findings.read` et `traces.read`.
 
 **Motifs.** Un enregistrement est dans un projet quand l'un de ses motifs correspond. Une

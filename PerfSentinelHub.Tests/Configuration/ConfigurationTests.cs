@@ -35,7 +35,7 @@ public sealed class ConfigurationTests
 
     private const string RolePermissions =
         "Hub:Access:Roles:0:Permissions must list one or more of findings.read, traces.read, sources.read, "
-        + "analyses.run, acks.write, disclosures.read and disclosures.manage, each once.";
+        + "analyses.run, acks.write, actions.write, disclosures.read, disclosures.manage and recaps.read, each once.";
 
     private const string TokenName =
         "Hub:Access:MachineTokens:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
@@ -391,7 +391,7 @@ public sealed class ConfigurationTests
         });
 
         Assert.Equal(
-            $"Grant {options.Access.Grants.Count - 1}: disclosures.read and disclosures.manage apply to the whole Hub; "
+            $"Grant {options.Access.Grants.Count - 1}: disclosures.read, disclosures.manage and recaps.read apply to the whole Hub; "
             + "grant a role carrying them on '*'.",
             Assert.Single(AccessFailures(options)));
         Assert.Empty(AccessFailures(options with
@@ -416,6 +416,76 @@ public sealed class ConfigurationTests
             permission => Assert.DoesNotContain(permission, AccessPermissions.BuiltInRoles["member"]));
         Assert.All(disclosures,
             permission => Assert.DoesNotContain(permission, AccessPermissions.MachineTokenPermissions));
+    }
+
+    [Fact]
+    public void Movement_threshold_defaults_to_a_fifth()
+    {
+        Assert.Equal(0.2, new HubOptions().Recaps.MovementThreshold);
+        Assert.Empty(AccessFailures(ValidOptions()));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-0.1)]
+    [InlineData(10.5)]
+    [InlineData(double.NaN)]
+    public void A_movement_threshold_of_zero_or_above_ten_is_refused(double threshold)
+    {
+        Assert.Equal("Hub:Recaps:MovementThreshold must be above 0 and at most 10.",
+            Assert.Single(AccessFailures(ValidOptions() with
+            {
+                Recaps = new RecapsOptions { MovementThreshold = threshold }
+            })));
+        Assert.Empty(AccessFailures(ValidOptions() with
+        {
+            Recaps = new RecapsOptions { MovementThreshold = 10 }
+        }));
+    }
+
+    [Fact]
+    public void Recaps_read_granted_on_a_project_is_refused()
+    {
+        var options = AccessOn(access => access with
+        {
+            Roles = [.. access.Roles, new RoleOptions { Name = "briefer", Permissions = ["recaps.read"] }],
+            Grants =
+            [
+                .. access.Grants, new GrantOptions { Group = "/teams/shop", Project = "shop", Role = "briefer" }
+            ]
+        });
+
+        Assert.Equal(
+            $"Grant {options.Access.Grants.Count - 1}: disclosures.read, disclosures.manage and recaps.read apply "
+            + "to the whole Hub; grant a role carrying them on '*'.",
+            Assert.Single(AccessFailures(options)));
+    }
+
+    [Fact]
+    public void A_role_may_carry_actions_write()
+    {
+        Assert.Empty(AccessFailures(AccessOn(access => access with
+        {
+            Roles = [.. access.Roles, new RoleOptions { Name = "owner", Permissions = ["actions.write"] }]
+        })));
+        Assert.Contains(AccessPermissions.ActionsWrite, AccessPermissions.BuiltInRoles["member"]);
+        Assert.DoesNotContain(AccessPermissions.ActionsWrite, AccessPermissions.BuiltInRoles["reader"]);
+        Assert.DoesNotContain(AccessPermissions.ActionsWrite, AccessPermissions.MachineTokenPermissions);
+    }
+
+    [Fact]
+    public void An_unknown_role_permission_lists_the_nine()
+    {
+        var failures = AccessFailures(AccessOn(access => access with
+        {
+            Roles = [.. access.Roles, new RoleOptions { Name = "odd", Permissions = ["nope"] }]
+        }));
+
+        Assert.Equal(
+            $"Hub:Access:Roles:{AccessOn().Access.Roles.Count}:Permissions must list one or more of findings.read, "
+            + "traces.read, sources.read, analyses.run, acks.write, actions.write, disclosures.read, "
+            + "disclosures.manage and recaps.read, each once.",
+            Assert.Single(failures));
     }
 
     private static string[] DisclosureFailures(DisclosuresOptions disclosures)

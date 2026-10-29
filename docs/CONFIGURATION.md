@@ -22,6 +22,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:NewSignaturesPerHourWarning`  | `1000`                                                                      | 0 or more, 0 turning it off. A daemon past it is flagged on `/api/sources` and logged           |
 | `Hub:DefaultReadLimit`             | `1000`                                                                      | 1 to `MaxReadLimit`                                                                             |
 | `Hub:MaxReadLimit`                 | `10000`                                                                     | 1 to 10000                                                                                      |
+| `Hub:Recaps:MovementThreshold`     | `0.2`                                                                       | Above 0, at most 10. A finding moves up or down on the recap past this share of change          |
 | `Hub:MetricsPort`                  | none                                                                        | 1 to 65535. The only port `/metrics` answers on, see [OPERATIONS.md](OPERATIONS.md#metrics)     |
 | `Hub:Analysis:EngineBinaryPath`    | none                                                                        | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
 | `Hub:Analysis:ReportDirectory`     | `/data/reports`                                                             | Absolute, writable. Rendered reports live here                                                  |
@@ -170,12 +171,13 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, see below                                                                                                                           |
 
 **Permissions and roles.** The permissions are `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `disclosures.read` and `disclosures.manage`,
-plus `access.admin`, which only the built-in `admin` role carries. The two disclosure
-permissions apply to the whole Hub, so a role carrying either is granted on `*` only. The
-built-in roles are `reader` (`findings.read`, `traces.read`, `analyses.run`), `member`
-(`reader` and `acks.write`) and `admin` (all eight, on `*` only). `reader` is not read-only: it starts analyses. A read-only role is a
-configured one, such as `auditor` with `findings.read` and `traces.read`.
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `disclosures.read`,
+`disclosures.manage` and `recaps.read`, plus `access.admin`, which only the built-in
+`admin` role carries. The two disclosure permissions and `recaps.read` apply to the whole
+Hub, so a role carrying any of them is granted on `*` only. The built-in roles are
+`reader` (`findings.read`, `traces.read`, `analyses.run`), `member` (`reader`, `acks.write`
+and `actions.write`) and `admin` (all ten, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
+is a configured one, such as `auditor` with `findings.read` and `traces.read`.
 
 **Patterns.** A record is in a project when one of its patterns matches. A part is exact,
 or a prefix: at least one character, then a single `*` at the end. A bare `*` is refused in

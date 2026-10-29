@@ -121,13 +121,15 @@ seules copies dans le périmètre.
 | `sources.read`  | La vue des réglages d'un démon, et avec `findings.read` et `analyses.run` un run de démon ; source seulement |
 | `analyses.run`  | Lancer un run                                                                          |
 | `acks.write`    | Acquitter un finding, ou révoquer un ack                                               |
+| `actions.write` | Déclarer et modifier une action sur un finding                                         |
 | `disclosures.read` | L'onglet Disclosures, le détail de chaque divulgation et ses fichiers               |
 | `disclosures.manage` | Les liens de partage, les retraits, les relances de livraison et les rendus d'une divulgation |
+| `recaps.read`   | Les rapports de récap que produisent les abonnements (niveau Hub)                      |
 
 | Rôle intégré | Permissions                                                  |
 |--------------|--------------------------------------------------------------|
 | `reader`     | `findings.read`, `traces.read`, `analyses.run`               |
-| `member`     | `reader` plus `acks.write`                                   |
+| `member`     | `reader` plus `acks.write` et `actions.write`                |
 | `admin`      | Tout, sur `*` seulement, plus la configuration de l'accès    |
 
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture seule se
@@ -137,8 +139,8 @@ configure, par exemple `auditor: [findings.read, traces.read]`.
 ne renseigne que `source`. De même pour `analyses.run` et `findings.read` pour un run de
 démon.
 
-`disclosures.read` et `disclosures.manage` sont au niveau du Hub : une divulgation
-n'appartient à aucune source. Le rôle intégré `admin` les porte, `reader` et `member` jamais,
+`disclosures.read`, `disclosures.manage` et `recaps.read` sont au niveau du Hub : une
+divulgation ou un rapport de récap n'appartient à aucune source. Le rôle intégré `admin` les porte, `reader` et `member` jamais,
 et un jeton machine ne les détient jamais. Un rôle configuré peut les porter, attribué sur `*`
 seulement : le Hub refuse de démarrer sur l'attribution d'un tel rôle à un projet.
 

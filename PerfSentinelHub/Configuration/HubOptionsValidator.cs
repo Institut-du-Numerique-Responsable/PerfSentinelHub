@@ -50,6 +50,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         // M1. Whether Kestrel listens there is known only once it has started (Program.cs).
         if (options.MetricsPort is < 1 or > 65535)
             errors.Add("Hub:MetricsPort must be between 1 and 65535.");
+        if (!(options.Recaps.MovementThreshold > 0 && options.Recaps.MovementThreshold <= 10))
+            errors.Add("Hub:Recaps:MovementThreshold must be above 0 and at most 10.");
         ValidateAnalysisSettings(options.Analysis, errors);
         ValidateUpdateCheckSettings(options.UpdateCheck, errors);
         ValidateAuthSettings(options.Auth, errors);
