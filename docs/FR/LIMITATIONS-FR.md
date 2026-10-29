@@ -163,8 +163,13 @@ peut avoir été corrigé, ou le trafic qui l'a produit peut s'être arrêté.
 `gone_with_confirmed_action` compte ceux qu'appuie une action terminée que le moteur a
 confirmée, seule preuve que le récap détienne.
 
-Les raisons pour lesquelles une période se lit incomplète, et les notes qui laissent sa
-comparaison tenir, sont celles du compte de détections ci-dessus. Des mois de longueurs
+Une période se lit incomplète, et sa comparaison n'est pas exacte, pour quatre raisons :
+`uncovered_days` (jours que les ledgers ne couvrent pas), `open_day` (un jour passé non scellé),
+`restart` (un redémarrage du daemon a interrompu ses comptes, comme ci-dessus) et `overflow`.
+Quatre notes laissent la comparaison tenir : `sampling` et `shed` (le compte est ce que le
+daemon a analysé), `ingest_rejected` (le daemon a refusé une partie de l'ingestion) et
+`multi_instance` (deux ledgers interrogés d'une même source vivants en même temps). Voir
+[API-FR.md](API-FR.md#recap). Des mois de longueurs
 différentes se comparent tels quels, 31 jours contre 28, donc une tendance mensuelle est un
 rapport de volumes, pas de débits quotidiens. Une période en cours compare ses jours clos aux
 mêmes premiers jours de la période précédente. Aujourd'hui ne compte que dans les tuiles et le

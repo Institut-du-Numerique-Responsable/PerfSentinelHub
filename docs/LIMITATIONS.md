@@ -151,8 +151,13 @@ have been fixed, or the traffic that produced it may have stopped. `gone_with_co
 counts the ones backed by a done action the engine confirmed, which is the only evidence
 the recap holds.
 
-The reasons a period reads incomplete, and the notes that leave its comparison standing,
-are the ones of the detection count above. Months of different lengths compare as they
+A period reads incomplete, and its comparison is not exact, for four reasons:
+`uncovered_days` (days the ledgers do not cover), `open_day` (a past day not sealed),
+`restart` (a daemon restart interrupted its counts, as above) and `overflow`. Four notes
+leave the comparison standing: `sampling` and `shed` (the count is what the daemon
+analyzed), `ingest_rejected` (the daemon refused part of the ingest) and `multi_instance`
+(two polled ledgers of one source alive at once). See
+[API.md](API.md#recap). Months of different lengths compare as they
 are, 31 days against 28, so a monthly trend is a ratio of volumes, not of daily rates. A
 period in progress compares its closed days with the same number of first days of the
 previous period. Today counts in the tiles and the ranking only, and on the first day of
