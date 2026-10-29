@@ -243,4 +243,67 @@ public sealed class DetectionLedgerParserTests
         Assert.Throws<InvalidDataException>(() =>
             DetectionLedgerParser.ParsePage(Encoding.UTF8.GetBytes(body), NowMs));
     }
+
+    [Fact]
+    public void Absent_carbon_fields_read_as_null()
+    {
+        var day = Assert.Single(Parse(Valid()).Days);
+
+        Assert.Null(day.AvoidableGco2);
+        Assert.Null(day.AvoidableIoOps);
+        Assert.Null(day.AvoidableGco2Low);
+        Assert.Null(day.TotalIoOps);
+    }
+
+    [Fact]
+    public void Carbon_fields_are_read()
+    {
+        var json = Valid();
+        json["days"] = new JsonArray(DetectionLedgerJson.Day(
+            Today, avoidableGco2: 12.5, avoidableIoOps: 400, avoidableGco2Low: 6.25, totalIoOps: 5200));
+
+        var day = Assert.Single(Parse(json).Days);
+
+        Assert.Equal(12.5, day.AvoidableGco2);
+        Assert.Equal(400, day.AvoidableIoOps);
+        Assert.Equal(6.25, day.AvoidableGco2Low);
+        Assert.Equal(5200, day.TotalIoOps);
+    }
+
+    [Theory]
+    [InlineData("avoidable_gco2", "-0.5")]
+    [InlineData("avoidable_gco2", "\"12\"")]
+    [InlineData("avoidable_gco2", "9007199254740994")]
+    [InlineData("avoidable_gco2_low", "-0.5")]
+    [InlineData("avoidable_gco2_low", "\"12\"")]
+    [InlineData("avoidable_io_ops", "-1")]
+    [InlineData("total_io_ops", "-1")]
+    public void A_carbon_field_out_of_range_is_refused(string field, string literal)
+    {
+        var json = Valid();
+        var day = DetectionLedgerJson.Day(Today);
+        day[field] = JsonNode.Parse(literal);
+        json["days"] = new JsonArray(day);
+
+        var error = Assert.Throws<InvalidDataException>(() => Parse(json));
+
+        Assert.Contains(field, error.Message);
+    }
+
+    [Theory]
+    [InlineData("avoidable_gco2")]
+    [InlineData("avoidable_gco2_low")]
+    public void A_null_carbon_number_reads_as_null(string field)
+    {
+        var json = Valid();
+        var day = DetectionLedgerJson.Day(Today);
+        day[field] = null;
+        json["days"] = new JsonArray(day);
+
+        var read = Assert.Single(Parse(json).Days);
+
+        Assert.Null(read.AvoidableGco2);
+        Assert.Null(read.AvoidableGco2Low);
+    }
+
 }

@@ -53,7 +53,11 @@ ligne de compte est acceptée, puisque le daemon scelle un jour en poussant son 
 jour poussé `sealed` reste scellé, et chaque valeur fusionne par son maximum, un taux
 d'échantillonnage par son minimum, donc un push, un poll et un renvoi aboutissent aux mêmes lignes
 dans n'importe quel ordre. Le push n'écrit ni l'accessibilité ni l'heure du dernier push de
-findings de la source. Les refus se comptent sur `perf_sentinel_hub_detection_import_rejected_total`.
+findings de la source. Chaque objet jour peut aussi porter `avoidable_gco2` et `avoidable_gco2_low`
+(grammes de CO2eq, de 0 à 2^53), `avoidable_io_ops` et `total_io_ops` (entiers), qu'envoie ensemble
+un daemon qui calcule le carbone. Ils fusionnent par maximum, une valeur absente n'abaissant
+jamais une valeur stockée, et sont absents des moteurs antérieurs à la version du récapitulatif.
+Les refus se comptent sur `perf_sentinel_hub_detection_import_rejected_total`.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de

@@ -316,6 +316,52 @@ public sealed class StorageTests
         Assert.IsType<DBNull>(await read.ExecuteScalarAsync(cancellationToken));
     }
 
+    [Fact]
+    public async Task A_v15_database_gains_the_carbon_columns()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // Dropped rather than hand-written as the old DDL, as the cases above do.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE detection_days DROP COLUMN avoidable_gco2;
+                               ALTER TABLE detection_days DROP COLUMN avoidable_io_ops;
+                               ALTER TABLE detection_days DROP COLUMN avoidable_gco2_low;
+                               ALTER TABLE detection_days DROP COLUMN total_io_ops;
+                               INSERT INTO detection_days(
+                                 source_id, ledger_id, day, sealed, gap, overflow_detections, shed_traces,
+                                 ingest_rejected, sampling_rate, last_read_ms)
+                               VALUES ('prod', 'ledger', 20400, 1, 0, 0, 0, 0, 1.0, 500);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(name || ' ' || type, ',') FROM
+                                    (SELECT name, type FROM pragma_table_info('detection_days')
+                                     WHERE name IN ('avoidable_gco2', 'avoidable_io_ops', 'avoidable_gco2_low',
+                                                    'total_io_ops') ORDER BY cid))
+                             || ' | ' || (SELECT IFNULL(avoidable_gco2, '-') || IFNULL(avoidable_io_ops, '-')
+                                          || IFNULL(avoidable_gco2_low, '-') || IFNULL(total_io_ops, '-')
+                                          FROM detection_days);
+                           """;
+        Assert.Equal(
+            "avoidable_gco2 REAL,avoidable_io_ops INTEGER,avoidable_gco2_low REAL,total_io_ops INTEGER | ----",
+            (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
     private static async Task<List<string>> SourceColumnsAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)

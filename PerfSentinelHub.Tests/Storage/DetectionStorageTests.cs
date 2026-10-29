@@ -51,6 +51,46 @@ public sealed class DetectionStorageTests : IAsyncLifetime
             null);
     }
 
+    private static DetectionLedgerPage CarbonPage(
+        double? avoidableGco2 = null,
+        long? avoidableIoOps = null,
+        double? avoidableGco2Low = null,
+        long? totalIoOps = null)
+    {
+        return new DetectionLedgerPage(
+            Ledger, 1_799_000_000_000, Day, Day, null, [],
+            [new DetectionDayRow(Day, false, false, 0, 0, 0, 0, 1.0, avoidableGco2, avoidableIoOps, avoidableGco2Low,
+                totalIoOps)],
+            null);
+    }
+
+    private const string CarbonRow = """
+                                     SELECT IFNULL(avoidable_gco2, '-') || ' ' || IFNULL(avoidable_gco2_low, '-') || ' '
+                                       || IFNULL(avoidable_io_ops, '-') || ' ' || IFNULL(total_io_ops, '-')
+                                     FROM detection_days;
+                                     """;
+
+    [Fact]
+    public async Task Carbon_fields_absent_then_present_keep_the_present_values()
+    {
+        await PollAsync(CarbonPage());
+        Assert.Equal("- - - -", await ScalarAsync(CarbonRow));
+
+        await PollAsync(CarbonPage(3.0, 120, 1.5, 900));
+        await PollAsync(CarbonPage(2.0, 100, 1.0, 800));
+
+        Assert.Equal("3.0 1.5 120 900", await ScalarAsync(CarbonRow));
+    }
+
+    [Fact]
+    public async Task Carbon_fields_never_go_back_to_null()
+    {
+        await PushAsync(CarbonPage(3.0, 120, 1.5, 900));
+        await PushAsync(CarbonPage());
+
+        Assert.Equal("3.0 1.5 120 900", await ScalarAsync(CarbonRow));
+    }
+
     private static DetectionLedgerPage Days(params int[] days)
     {
         return new DetectionLedgerPage(

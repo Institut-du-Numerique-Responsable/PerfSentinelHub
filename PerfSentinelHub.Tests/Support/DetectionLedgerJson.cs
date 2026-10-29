@@ -28,9 +28,17 @@ internal static class DetectionLedgerJson
         return count;
     }
 
-    public static JsonObject Day(int day, bool sealedDay = false, double samplingRate = 1.0)
+    // As the daemon writes a day: the four carbon fields are omitted, not null, while it scores no carbon.
+    public static JsonObject Day(
+        int day,
+        bool sealedDay = false,
+        double samplingRate = 1.0,
+        double? avoidableGco2 = null,
+        long? avoidableIoOps = null,
+        double? avoidableGco2Low = null,
+        long? totalIoOps = null)
     {
-        return new JsonObject
+        var json = new JsonObject
         {
             ["day"] = day,
             ["sealed"] = sealedDay,
@@ -41,6 +49,15 @@ internal static class DetectionLedgerJson
             ["ingest_rejected"] = 0,
             ["sampling_rate"] = samplingRate
         };
+        if (avoidableGco2 is { } grams)
+            json["avoidable_gco2"] = grams;
+        if (avoidableIoOps is { } avoidable)
+            json["avoidable_io_ops"] = avoidable;
+        if (avoidableGco2Low is { } low)
+            json["avoidable_gco2_low"] = low;
+        if (totalIoOps is { } total)
+            json["total_io_ops"] = total;
+        return json;
     }
 
     /// <summary>A page whose ledger began two days before <paramref name="currentDay" /> and sealed the one before it.</summary>

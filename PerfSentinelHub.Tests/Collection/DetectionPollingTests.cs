@@ -207,6 +207,31 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_polled_day_keeps_its_carbon_fields()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (poller, database, _) = await BuildAsync(cancellationToken);
+        var page = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(Today)],
+            [DetectionLedgerJson.Day(
+                Today, avoidableGco2: 12.5, avoidableIoOps: 400, avoidableGco2Low: 6.25, totalIoOps: 5200)],
+            Today);
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()), context => Serve(context, page), cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT avoidable_gco2 || ' ' || avoidable_gco2_low || ' ' || avoidable_io_ops || ' '
+                                || total_io_ops FROM detection_days WHERE source_id = 'prod' AND day = $day;
+                              """;
+        command.Parameters.AddWithValue("$day", Today);
+        Assert.Equal("12.5 6.25 400 5200", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
     public async Task A_complete_pass_never_seals_a_day_below_what_it_read()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

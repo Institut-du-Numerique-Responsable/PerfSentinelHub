@@ -87,7 +87,11 @@ public static class DetectionLedgerParser
             OptionalInteger(row, "overflow_extra_io_ops"),
             Integer(row, "shed_traces"),
             Integer(row, "ingest_rejected"),
-            samplingRate);
+            samplingRate,
+            OptionalNumber(row, "avoidable_gco2"),
+            OptionalInteger(row, "avoidable_io_ops"),
+            OptionalNumber(row, "avoidable_gco2_low"),
+            OptionalInteger(row, "total_io_ops"));
     }
 
     // The daemon writes a lower-case hyphenated UUID, and the ledger is keyed on it: an
@@ -122,6 +126,18 @@ public static class DetectionLedgerParser
         return JsonRead.ReadLong(element, name) is { } value and >= 0 and <= MaxInteger
             ? value
             : throw Invalid($"{name} is not an integer in [0, 2^53].");
+    }
+
+    // Absent while the daemon scores no carbon: the grams are unknown, not zero.
+    private static double? OptionalNumber(JsonElement element, string name)
+    {
+        if (IsAbsent(element, name))
+            return null;
+        return element.GetProperty(name) is { ValueKind: JsonValueKind.Number } value &&
+               value.TryGetDouble(out var number) &&
+               number is >= 0 and <= MaxInteger
+            ? number
+            : throw Invalid($"{name} is not a number in [0, 2^53].");
     }
 
     // Absent while green is off on the daemon: the I/O is unknown, not zero.

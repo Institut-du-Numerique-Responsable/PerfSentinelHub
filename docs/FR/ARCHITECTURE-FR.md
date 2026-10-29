@@ -215,7 +215,8 @@ fera correspondre les projets, pour que l'activer ne parte pas d'un historique v
 Les trois tables de détections, ajoutées par le schéma V15, tiennent les registres des daemons
 tels que lus. Une ligne de `detection_days` porte ce que ce jour dit de sa propre complétude :
 scellé ou encore ouvert, un redémarrage, son taux d'échantillonnage, des traces délestées, des
-ingestions rejetées et les détections au-delà du plafond de signatures du registre. Une lecture
+ingestions rejetées et les détections au-delà du plafond de signatures du registre. Quand le daemon calcule le carbone, la ligne porte aussi les
+grammes évitables du jour (médian et bas), les E/S évitables et les E/S totales. Une lecture
 fenêtrée de `/api/findings` les replie, par source, en un compte servi et les raisons qui le
 rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Rien n'est
 rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.

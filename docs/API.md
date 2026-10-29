@@ -48,8 +48,11 @@ character, integers from 0 to 2^53, a sampling rate from 0 to 1. One value out o
 since the daemon seals a day by pushing its day object alone. A day pushed `sealed` stays
 sealed, and every value merges by its maximum, a sampling rate by its minimum, so a push, a poll
 and a replay land on the same rows in any order. The push writes neither reachability nor the
-time of the source's last findings push. Refusals count on
-`perf_sentinel_hub_detection_import_rejected_total`.
+time of the source's last findings push. Each day object may also carry `avoidable_gco2` and
+`avoidable_gco2_low` (grams of CO2eq, from 0 to 2^53), `avoidable_io_ops` and `total_io_ops`
+(integers), which a daemon that scores carbon sends together. They merge by maximum, an absent
+value never lowering a stored one, and are absent on engines before the recap release. Refusals
+count on `perf_sentinel_hub_detection_import_rejected_total`.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that

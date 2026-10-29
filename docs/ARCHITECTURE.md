@@ -199,7 +199,8 @@ does not start from an empty history.
 The three detection tables, added by schema V15, hold the daemons' ledgers as read. A row of
 `detection_days` carries what that day says of its own completeness: sealed or still open, a
 restart, its sampling rate, shed traces, rejected ingest and the detections past the ledger's
-signature cap. A windowed read of `/api/findings` folds them, per source, into the count it
+signature cap. When the daemon scores carbon, the row also carries the day's avoidable grams
+(mid and low), avoidable I/O and total I/O. A windowed read of `/api/findings` folds them, per source, into the count it
 serves and the reasons it falls short, see
 [API.md](API.md#what-the-hub-adds-to-a-finding). Nothing is backfilled: a day before the
 upgrade has no row and reads as unknown.

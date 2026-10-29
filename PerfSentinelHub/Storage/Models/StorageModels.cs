@@ -397,7 +397,10 @@ public sealed record DetectionLedgerPage(
 /// <summary>How many times one signature was detected on one UTC epoch day, null I/O when green was off.</summary>
 public sealed record DetectionCountRow(int Day, string Signature, long Detections, long? ExtraIoOps);
 
-/// <summary>What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.</summary>
+/// <summary>
+///     What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.
+///     The trailing four are the day's carbon inputs, null on an engine that does not send them.
+/// </summary>
 public sealed record DetectionDayRow(
     int Day,
     bool Sealed,
@@ -406,4 +409,8 @@ public sealed record DetectionDayRow(
     long? OverflowExtraIoOps,
     long ShedTraces,
     long IngestRejected,
-    double SamplingRate);
+    double SamplingRate,
+    double? AvoidableGco2 = null,
+    long? AvoidableIoOps = null,
+    double? AvoidableGco2Low = null,
+    long? TotalIoOps = null);

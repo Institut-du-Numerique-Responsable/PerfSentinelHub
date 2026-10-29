@@ -77,6 +77,24 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task A_pushed_day_keeps_its_carbon_fields()
+    {
+        var page = DetectionLedgerJson.Page(
+            [],
+            [DetectionLedgerJson.Day(
+                2, avoidableGco2: 12.5, avoidableIoOps: 400, avoidableGco2Low: 6.25, totalIoOps: 5200)]);
+        using var request = Request(ApiKey, page);
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("12.5 6.25 400 5200", await ScalarAsync("""
+                                                            SELECT avoidable_gco2 || ' ' || avoidable_gco2_low || ' ' || avoidable_io_ops
+                                                              || ' ' || total_io_ops
+                                                            FROM detection_days WHERE source_id = 'test' AND day = 2;
+                                                            """));
+    }
+
+    [Fact]
     public async Task A_meta_only_sealed_page_seals_the_day()
     {
         // The daemon pushes only the rows changed since its last ack, so the midnight seal
