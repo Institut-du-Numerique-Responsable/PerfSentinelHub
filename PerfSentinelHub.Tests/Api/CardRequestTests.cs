@@ -55,6 +55,23 @@ public sealed class CardRequestTests
             Refused(Body(("angle", "curve"), ("period", "month"), ("at", "1 November"))));
     }
 
+    // The last day the calendar holds: the end of its period would overflow, which must be a 400.
+    [Theory]
+    [InlineData("week")]
+    [InlineData("month")]
+    [InlineData("quarter")]
+    [InlineData("semester")]
+    [InlineData("year")]
+    public void A_date_beyond_today_is_refused_without_overflowing(string period)
+    {
+        Assert.Equal("A card covers a closed period. Pick an earlier one.",
+            Refused(Body(("angle", "curve"), ("period", period), ("at", "9999-12-31"))));
+
+        var context = new DefaultHttpContext();
+        context.Request.QueryString = new QueryString($"?period={period}&at=9999-12-31");
+        Assert.False(CardRequest.TryParseOptionsQuery(context.Request, Today, out _));
+    }
+
     [Fact]
     public void The_last_closed_period_is_the_default()
     {

@@ -68,7 +68,7 @@ public sealed record CardRequest(
             return false;
 
         var at = RecapPeriod.Of(kind, today).Previous().From;
-        if (Optional(request, "at") is { } raw && !TryReadDay(raw, out at))
+        if (Optional(request, "at") is { } raw && (!TryReadDay(raw, out at) || at > today))
             return false;
         query = (kind, at, Optional(request, "environment"), Optional(request, "source_id"));
         return true;
@@ -91,7 +91,8 @@ public sealed record CardRequest(
         if (root.TryGetProperty("at", out var value) &&
             (value.ValueKind != JsonValueKind.String || !TryReadDay(value.GetString()!, out at)))
             return Refuse("at must be a date, yyyy-MM-dd.", out error);
-        if (RecapPeriod.Of(kind, at).To >= today)
+        // A date after today first: the end of a period near 9999 would not fit the calendar.
+        if (at > today || RecapPeriod.Of(kind, at).To >= today)
             return Refuse("A card covers a closed period. Pick an earlier one.", out error);
 
         return TryReadRest(root, angle, kind, at, out error);
