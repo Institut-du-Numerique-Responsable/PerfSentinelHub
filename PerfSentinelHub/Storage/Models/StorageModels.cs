@@ -469,6 +469,12 @@ public sealed record DetectionThresholds(
     long? PoolSaturationThreshold,
     long? SerializedMinCalls);
 
+/// <summary>One source's day of the scope's activity, as a share card's curve sums it.</summary>
+public sealed record DayTotals(string SourceId, int Day, long? AvoidableIoOps, long? TotalIoOps, double? AvoidableGco2Low);
+
+/// <summary>A sealed day a fixed signature was not detected at one source while the daemon still saw it pass below its threshold (C1).</summary>
+public sealed record SignalDay(string Signature, string SourceId, int Day, DetectionThresholds Thresholds);
+
 public static class ActionStatuses
 {
     public const string Todo = "todo";

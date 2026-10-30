@@ -73,7 +73,7 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = """
                               SELECT dc.signature, dc.source_id, dc.ledger_id, dc.day, dc.extra_io_ops,
-                                     dd.avoidable_gco2, dd.avoidable_io_ops
+                                     dd.avoidable_gco2, dd.avoidable_io_ops, dd.avoidable_gco2_low
                               FROM detection_counts AS dc
                               LEFT JOIN detection_days AS dd
                                 ON dd.source_id = dc.source_id AND dd.ledger_id = dc.ledger_id AND dd.day = dc.day
@@ -93,7 +93,8 @@ public sealed partial class HubDatabase
         while (await reader.ReadAsync(cancellationToken))
             rows.Add((reader.GetString(0), new CarbonDay(
                 reader.GetString(1), reader.GetString(2), reader.GetInt32(3), reader.GetInt64(4),
-                reader.IsDBNull(5) ? null : reader.GetDouble(5), reader.IsDBNull(6) ? null : reader.GetInt64(6))));
+                reader.IsDBNull(5) ? null : reader.GetDouble(5), reader.IsDBNull(6) ? null : reader.GetInt64(6),
+                reader.IsDBNull(7) ? null : reader.GetDouble(7))));
         return rows;
     }
 

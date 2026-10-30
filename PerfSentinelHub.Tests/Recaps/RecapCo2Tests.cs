@@ -53,6 +53,16 @@ public sealed class RecapCo2Tests
     }
 
     [Fact]
+    public void Low_grams_price_each_day_at_its_low_coefficient()
+    {
+        CarbonDay[] rows = [new("a", "L", 20750, 40, null, 120, 1.5), new("b", "L", 20750, 10, null, 120)];
+
+        Assert.Equal(0.5, RecapCo2.LowGrams(rows));
+        Assert.Null(RecapCo2.LowGrams([rows[1]]));
+        Assert.Null(RecapCo2.LowGrams([new CarbonDay("a", "L", 20750, 0, null, 120, 1.5)]));
+    }
+
+    [Fact]
     public void Each_day_is_priced_at_its_own_coefficient()
     {
         var estimate = RecapCo2.Estimate([Row("a", 100, 1.0, 100), Row("a", 100, 3.0, 100, 20751)]);
