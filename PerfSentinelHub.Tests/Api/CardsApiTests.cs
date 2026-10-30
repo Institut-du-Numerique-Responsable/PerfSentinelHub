@@ -37,7 +37,9 @@ public sealed class CardsApiTests : IDisposable
     {
         ["reader"] = """{"sub":"u-reader","email":"reader@example.internal","groups":["/readers"]}""",
         // A member at prod-eu, a reader only at prod-us.
-        ["split"] = """{"sub":"u-split","email":"split@example.internal","groups":["/split"]}"""
+        ["split"] = """{"sub":"u-split","email":"split@example.internal","groups":["/split"]}""",
+        // cards.write everywhere, findings.read nowhere.
+        ["storyteller"] = """{"sub":"u-story","email":"story@example.internal","groups":["/storytellers"]}"""
     };
 
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
@@ -62,7 +64,8 @@ public sealed class CardsApiTests : IDisposable
     [Theory]
     [InlineData("reader", "a", "You may not create cards.")]
     [InlineData("split", "b", "You may not create cards for these sources.")]
-    public async Task Rendering_needs_cards_write(string user, string sourceId, string detail)
+    [InlineData("storyteller", "a", "No grant gives you findings.read on this Hub.")]
+    public async Task Rendering_needs_cards_write_and_findings_read(string user, string sourceId, string detail)
     {
         await using var provider = await FakeProvider.StartAsync(Users);
         var hub = AccessHub(provider);
@@ -108,15 +111,18 @@ public sealed class CardsApiTests : IDisposable
             await DetailAsync(response));
     }
 
-    [Fact]
-    public async Task A_cross_site_render_is_refused()
+    [Theory]
+    [InlineData(RenderPath, "card-args.txt")]
+    [InlineData(AttachmentPath, "verify-args.txt")]
+    public async Task A_cross_site_render_or_attachment_is_refused(string path, string engineCall)
     {
         using var client = Hub().CreateClient();
 
-        using var response = await client.SendAsync(Send("POST", RenderPath, Collective, "cross-site"), Token);
+        using var response = await client.SendAsync(Send("POST", path, Collective, "cross-site"), Token);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal("A request from another site is refused.", await DetailAsync(response));
+        Assert.False(File.Exists(Path.Combine(_workspace, "reports", engineCall)));
     }
 
     [Fact]
@@ -726,8 +732,10 @@ public sealed class CardsApiTests : IDisposable
                             new ProjectOptions { Name = "eu", Patterns = [new PatternOptions { Source = "a" }] },
                             new ProjectOptions { Name = "us", Patterns = [new PatternOptions { Source = "b" }] }
                         ],
+                        Roles = [new RoleOptions { Name = "storyteller", Permissions = ["cards.write"] }],
                         Grants =
                         [
+                            new GrantOptions { Group = "/storytellers", Project = "*", Role = "storyteller" },
                             new GrantOptions { Group = "/readers", Project = "*", Role = "reader" },
                             new GrantOptions { Group = "/split", Project = "eu", Role = "member" },
                             new GrantOptions { Group = "/split", Project = "us", Role = "reader" }

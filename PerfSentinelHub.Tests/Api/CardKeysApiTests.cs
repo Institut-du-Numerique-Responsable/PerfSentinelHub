@@ -23,7 +23,8 @@ public sealed class CardKeysApiTests : IDisposable
 
     private static readonly Dictionary<string, string> Users = new(StringComparer.Ordinal)
     {
-        ["member"] = """{"sub":"u-member","email":"member@example.internal","groups":["/members"]}"""
+        ["member"] = """{"sub":"u-member","email":"member@example.internal","groups":["/members"]}""",
+        ["admin"] = """{"sub":"u-admin","email":"admin@example.internal","groups":[]}"""
     };
 
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
@@ -46,43 +47,26 @@ public sealed class CardKeysApiTests : IDisposable
     [Theory]
     [InlineData("GET", KeysPath)]
     [InlineData("POST", RotatePath)]
+    [InlineData("POST", RevokePath)]
     public async Task Keys_need_access_admin(string method, string path)
     {
         await using var provider = await FakeProvider.StartAsync(Users);
-        var hub = Hub(configure: builder =>
-        {
-            provider.Configure(builder);
-            builder.UseSetting("Hub:Access:Enabled", "true");
-            builder.UseSetting("Hub:MetricsPort", "9464");
-            builder.ConfigureServices(services =>
-            {
-                // The factory's clock sits in 1970, where every cookie the handlers write has already expired.
-                services.RemoveAll<TimeProvider>();
-                services.AddSingleton(TimeProvider.System);
-                services.PostConfigure<HubOptions>(options =>
-                {
-                    // Access on names every caller itself, so the proxy header is off.
-                    options.AckRelay = new AckRelayOptions();
-                    options.Access = new AccessOptions
-                    {
-                        Enabled = true,
-                        Admins = ["u-admin"],
-                        Grants = [new GrantOptions { Group = "/members", Project = "*", Role = "member" }]
-                    };
-                });
-            });
-        });
-        using var client = FakeProvider.Client(hub);
-        using var callback = await FakeProvider.SignInAsync(client, "member");
-        using var request = Send(method, path, "{}", "same-origin");
-        request.Headers.Remove("X-Forwarded-User");
-        request.Headers.Add("Cookie", FakeProvider.SessionCookie(callback));
 
-        using var response = await client.SendAsync(request, Token);
+        using var response = await SignedInSendAsync(provider, "member", method, path);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal("You may not manage the card signing key.", await DetailAsync(response));
         Assert.False(File.Exists(Path.Combine(_workspace, "reports", "card-keygen-args.txt")));
+    }
+
+    [Fact]
+    public async Task An_access_admin_reads_the_keys()
+    {
+        await using var provider = await FakeProvider.StartAsync(Users);
+
+        using var response = await SignedInSendAsync(provider, "admin", "GET", KeysPath);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Theory]
@@ -258,6 +242,44 @@ public sealed class CardKeysApiTests : IDisposable
         });
         _hubs.Add(hub);
         return hub;
+    }
+
+    // Access on, so the caller is the signed-in session and never the proxy header.
+    private async Task<HttpResponseMessage> SignedInSendAsync(
+        FakeProvider provider,
+        string user,
+        string method,
+        string path)
+    {
+        var hub = Hub(configure: builder =>
+        {
+            provider.Configure(builder);
+            builder.UseSetting("Hub:Access:Enabled", "true");
+            builder.UseSetting("Hub:MetricsPort", "9464");
+            builder.ConfigureServices(services =>
+            {
+                // The factory's clock sits in 1970, where every cookie the handlers write has already expired.
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton(TimeProvider.System);
+                services.PostConfigure<HubOptions>(options =>
+                {
+                    // Access on names every caller itself, so the proxy header is off.
+                    options.AckRelay = new AckRelayOptions();
+                    options.Access = new AccessOptions
+                    {
+                        Enabled = true,
+                        Admins = ["u-admin"],
+                        Grants = [new GrantOptions { Group = "/members", Project = "*", Role = "member" }]
+                    };
+                });
+            });
+        });
+        using var client = FakeProvider.Client(hub);
+        using var callback = await FakeProvider.SignInAsync(client, user);
+        using var request = Send(method, path, "{}", "same-origin");
+        request.Headers.Remove("X-Forwarded-User");
+        request.Headers.Add("Cookie", FakeProvider.SessionCookie(callback));
+        return await client.SendAsync(request, Token);
     }
 
     private static HttpRequestMessage Send(string method, string path, string? body = null, string? site = null)

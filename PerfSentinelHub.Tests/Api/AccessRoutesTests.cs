@@ -805,6 +805,26 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_done_action_freezes_only_a_copy_the_caller_reads()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = await SignedInAsync("attr");
+
+        // lab-d's copy of F1 is the newest, under team=billing, which attr does not read.
+        using var response = await client.SendAsync(
+            Post("/api/actions", $$"""{"signature":"{{F1}}","status":"done"}"""), cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await using var connection = await Database.OpenConnectionAsync(cancellationToken);
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT frozen_finding_json FROM finding_actions WHERE signature = $signature;";
+        read.Parameters.AddWithValue("$signature", F1);
+        using var frozen = JsonDocument.Parse(Assert.IsType<string>(await read.ExecuteScalarAsync(cancellationToken)));
+        Assert.Equal("shop",
+            frozen.RootElement.GetProperty("finding").GetProperty("grouping")[0].GetProperty("value").GetString());
+    }
+
+    [Fact]
     public async Task A_readable_finding_its_grant_cannot_write_is_a_403()
     {
         using var client = await SignedInAsync("attr");

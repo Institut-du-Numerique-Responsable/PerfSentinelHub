@@ -239,10 +239,12 @@ public sealed partial class CardRendererTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{"result":"input_error","reason":"no_domain"}""")]
-    [InlineData("""{"integrity":"ok","level":"2","domain":null,"key":"current","reason":null}""")]
+    [InlineData("""{"result":"input_error","reason":"no_domain","content":"intact"}""")]
+    [InlineData("""{"integrity":"ok","content":"intact","level":"2","domain":null,"key":"current","reason":null}""")]
+    [InlineData("""{"integrity":"ok","content":"intact","level":2,"key":"current","reason":null}""")]
+    [InlineData("""{"integrity":"ok","content":"intact","level":2,"domain":null,"reason":null}""")]
     [InlineData("not json")]
-    public async Task A_verdict_without_its_five_keys_is_null(string line)
+    public async Task A_verdict_with_a_missing_or_mistyped_key_is_null(string line)
     {
         var renderer = await RendererAsync(new FakeEngine { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = line });
 
