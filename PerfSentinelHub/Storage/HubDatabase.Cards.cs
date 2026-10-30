@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using PerfSentinelHub.Cards;
 
 namespace PerfSentinelHub.Storage;
@@ -53,5 +54,93 @@ public sealed partial class HubDatabase
         while (await reader.ReadAsync(cancellationToken))
             watch.Add(reader.GetString(0));
         return watch;
+    }
+
+    /// <summary>Every card signing key, oldest first, retired and revoked ones included.</summary>
+    public async Task<IReadOnlyList<StoredCardKey>> ReadCardKeysAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT fingerprint, public_key, created_at_ms, retired_at_ms, revoked_on
+                              FROM card_keys
+                              ORDER BY created_at_ms, fingerprint;
+                              """;
+        var keys = new List<StoredCardKey>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            keys.Add(new StoredCardKey(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt64(2),
+                reader.IsDBNull(3) ? null : reader.GetInt64(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)));
+        return keys;
+    }
+
+    public Task InsertCardKeyAsync(StoredCardKey key, CancellationToken cancellationToken)
+    {
+        return WriteCardKeyAsync(
+            """
+            INSERT INTO card_keys(fingerprint, public_key, created_at_ms, retired_at_ms, revoked_on)
+            VALUES ($fingerprint, $public_key, $at_ms, $retired_at_ms, $revoked_on);
+            """,
+            key.Fingerprint, key.CreatedAtMs,
+            parameters =>
+            {
+                parameters.AddWithValue("$public_key", key.PublicKey);
+                parameters.AddWithValue("$retired_at_ms", (object?)key.RetiredAtMs ?? DBNull.Value);
+                parameters.AddWithValue("$revoked_on", (object?)key.RevokedOn ?? DBNull.Value);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>Retires a key, leaving a key retired earlier as it was.</summary>
+    public Task RetireCardKeyAsync(string fingerprint, long atMs, CancellationToken cancellationToken)
+    {
+        return WriteCardKeyAsync(
+            "UPDATE card_keys SET retired_at_ms = $at_ms WHERE fingerprint = $fingerprint AND retired_at_ms IS NULL;",
+            fingerprint, atMs, null, cancellationToken);
+    }
+
+    /// <summary>Revokes a key, current or retired, keeping a retired key's end date. False when unknown.</summary>
+    public async Task<bool> RevokeCardKeyAsync(
+        string fingerprint,
+        string revokedOn,
+        long atMs,
+        CancellationToken cancellationToken)
+    {
+        return await WriteCardKeyAsync(
+            """
+            UPDATE card_keys SET revoked_on = $revoked_on, retired_at_ms = COALESCE(retired_at_ms, $at_ms)
+            WHERE fingerprint = $fingerprint;
+            """,
+            fingerprint, atMs,
+            parameters => parameters.AddWithValue("$revoked_on", revokedOn),
+            cancellationToken) > 0;
+    }
+
+    private async Task<int> WriteCardKeyAsync(
+        string sql,
+        string fingerprint,
+        long atMs,
+        Action<SqliteParameterCollection>? bind,
+        CancellationToken cancellationToken)
+    {
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.Parameters.AddWithValue("$fingerprint", fingerprint);
+            command.Parameters.AddWithValue("$at_ms", atMs);
+            bind?.Invoke(command.Parameters);
+            return await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 }

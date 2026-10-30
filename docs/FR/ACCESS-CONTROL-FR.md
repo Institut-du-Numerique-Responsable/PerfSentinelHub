@@ -168,6 +168,7 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `GET /api/recap`                                                       | `findings.read`, filtré                                            | `403` si détenue nulle part |
 | `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` sur `*`, ou le créateur d'un rapport à la demande avec `findings.read` | `403` (liste), `404` (un rapport) |
 | `POST /api/recap/reports`                                              | `findings.read`, filtré, et quelqu'un à nommer                     | `403`                   |
+| `GET /api/cards/keys`, `POST /api/cards/keys/rotate` et `/revoke`     | `access.admin`, et quelqu'un à nommer                              | `403`                   |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtré ; la copie la plus riche dans le périmètre | `403` ; `404`               |
 | `POST /api/incidents/refresh`                                          | `findings.read` ; ne lit que les démons dans le périmètre          | `403`                       |
 | `GET /api/correlations`                                                | `findings.read`, filtré sur les épisodes dont l'appelant lit les deux services à cette source | `403` s'il n'est détenu nulle part |

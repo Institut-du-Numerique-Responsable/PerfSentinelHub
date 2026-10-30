@@ -758,6 +758,47 @@ gone shows no owner. The `tech` page keeps that identity on hover. An id that is
 hex, an unknown id and a view the report does not hold are all `404`. Reports are purged after
 `Hub:Recaps:Retention`.
 
+## Share cards
+
+A share card is an image or a PDF of a closed period's results that the engine draws and signs,
+for a reader outside the Hub to check. This section starts with the signing key; see
+[OPERATIONS.md](OPERATIONS.md#share-card-keys) for where it lives and how to publish it. The routes
+exist only while `Hub:Cards:Organisation` is set: otherwise every one answers `404`.
+
+| Route                            | Does                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/keys`            | Every signing key, oldest first, and the lines to publish            |
+| `POST /api/cards/keys/rotate`    | Retires the current key and has the engine make a new one            |
+| `POST /api/cards/keys/revoke`    | Revokes a key from the first day it may have leaked                  |
+
+The three routes answer the same object:
+
+```json
+{"record_name": "_perf-sentinel.example.com",
+ "keys": [{"fingerprint": "ps1:…", "public_key": "…", "from": "2026-10-30", "to": null,
+           "revoked": null, "current": true, "dns": "v=ps1; k=ps1:…; from=2026-10-30"}],
+ "well_known": "{\n  \"keys\": [\n …"}
+```
+
+`from` is the UTC day the key was made, `to` the day it was retired (`null` while current),
+`revoked` the day given at revocation. `dns` is the TXT record of that key under `record_name`,
+which is `null` when `Hub:Cards:Domain` is not set. `well_known` is the whole
+`/.well-known/perf-sentinel-key` file, indented with `\n` line ends, to serve as it is. Reading the
+keys never makes one: an empty `keys` says the first card makes it.
+
+`POST /api/cards/keys/revoke` takes `{"fingerprint": "ps1:…", "revoked": "yyyy-MM-dd"}`, at most
+1 KiB. `revoked` has no default: give the first day the key may have leaked, since a day too late
+leaves a card forged before it valid. Missing or not a `yyyy-MM-dd` day, it is
+`400 Give the first day the key may have leaked.`; a day before the key was made or after today
+(UTC) is `400 The revocation date must lie between the key's creation and today.`; an unknown
+fingerprint is `404`. A retired key can be revoked, and keeps its `to`.
+
+The Hub judges a request in this order: cards off `404`; a caller the Hub cannot name `403`; on
+the two `POST`s, the same-origin rule and the JSON content type of the other writes (`403`,
+`415`); a caller without `access.admin` `403 You may not manage the card signing key.`. A rotation
+with an engine that has no `card` subcommand is `503 This Hub's engine cannot make cards yet.`, and
+one whose engine answers out of contract or past 30 seconds is `502`.
+
 ## Actions
 
 An action says who works on a finding and where it stands. The Hub keeps it itself: nothing

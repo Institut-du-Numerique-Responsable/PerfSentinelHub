@@ -815,6 +815,51 @@ données. Un responsable dont il ne reste aucun nom une fois l'e-mail retiré n'
 id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rapports sont purgés après
 `Hub:Recaps:Retention`.
 
+## Cartes à partager
+
+Une carte à partager est une image ou un PDF des résultats d'une période close, que le moteur
+dessine et signe, pour qu'un lecteur hors du Hub puisse la vérifier. Cette section commence par
+la clé de signature ; voir [OPERATIONS-FR.md](OPERATIONS-FR.md#clés-des-cartes-à-partager) pour
+l'endroit où elle vit et la façon de la publier. Les routes n'existent que lorsque
+`Hub:Cards:Organisation` est posé : sinon chacune répond `404`.
+
+| Route                            | Fait                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/keys`            | Toutes les clés, la plus ancienne d'abord, et les lignes à publier   |
+| `POST /api/cards/keys/rotate`    | Retire la clé courante et fait fabriquer une nouvelle par le moteur  |
+| `POST /api/cards/keys/revoke`    | Révoque une clé à partir du premier jour où elle a pu fuiter         |
+
+Les trois routes répondent le même objet :
+
+```json
+{"record_name": "_perf-sentinel.example.com",
+ "keys": [{"fingerprint": "ps1:…", "public_key": "…", "from": "2026-10-30", "to": null,
+           "revoked": null, "current": true, "dns": "v=ps1; k=ps1:…; from=2026-10-30"}],
+ "well_known": "{\n  \"keys\": [\n …"}
+```
+
+`from` est le jour UTC où la clé a été fabriquée, `to` celui où elle a été retirée (`null` tant
+qu'elle est courante), `revoked` le jour donné à la révocation. `dns` est l'enregistrement TXT de
+cette clé sous `record_name`, qui vaut `null` quand `Hub:Cards:Domain` n'est pas posé.
+`well_known` est le fichier `/.well-known/perf-sentinel-key` entier, indenté avec des fins de
+ligne `\n`, à servir tel quel. Lire les clés n'en fabrique jamais : une liste `keys` vide dit que
+la première carte la fabrique.
+
+`POST /api/cards/keys/revoke` prend `{"fingerprint": "ps1:…", "revoked": "yyyy-MM-dd"}`, 1 Kio au
+plus. `revoked` n'a pas de valeur par défaut : donnez le premier jour où la clé a pu fuiter, car
+un jour trop tardif laisse valide une carte forgée avant lui. Absent ou pas un jour `yyyy-MM-dd`,
+c'est `400 Give the first day the key may have leaked.` ; un jour antérieur à la fabrication de la
+clé ou postérieur à aujourd'hui (UTC) donne
+`400 The revocation date must lie between the key's creation and today.` ; une empreinte inconnue
+donne `404`. Une clé retirée peut être révoquée, et garde son `to`.
+
+Le Hub juge une requête dans cet ordre : cartes désactivées `404` ; un appelant que le Hub ne sait
+pas nommer `403` ; sur les deux `POST`, la règle de même origine et le type de contenu JSON des
+autres écritures (`403`, `415`) ; un appelant sans `access.admin`
+`403 You may not manage the card signing key.`. Une rotation avec un moteur sans sous-commande
+`card` donne `503 This Hub's engine cannot make cards yet.`, et une dont le moteur répond hors
+contrat ou au-delà de 30 secondes donne `502`.
+
 ## Actions
 
 Une action dit qui travaille sur un finding et où il en est. Le Hub la tient lui-même :

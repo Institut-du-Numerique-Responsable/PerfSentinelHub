@@ -24,6 +24,13 @@ All notable changes to PerfSentinelHub are recorded here.
   `hub.cards`. A new permission, `cards.write`, held by `member` and `admin`, lets a caller create
   a card from the sources it covers. `GET /api/status` answers `cards: true` to such a caller when
   the engine has `card`, `cards: false` when it does not, and leaves `cards` out otherwise.
+- A share card signing key, made by the engine (`perf-sentinel card keygen`) the first time it is
+  needed. The private key is a file in `card-keys/` beside the database (mode 0600 in a 0700
+  directory), which `backup` does not carry; its public half and dates go in a new table,
+  `card_keys` (schema 20), never purged. A key whose file is gone is retired at next use and a new
+  one made. `GET /api/cards/keys`, `POST /api/cards/keys/rotate` and `POST /api/cards/keys/revoke`,
+  for `access.admin` only, list the keys with their DNS lines and `.well-known` file, rotate the
+  key and revoke one from the first day it may have leaked.
 
 ### Changed
 

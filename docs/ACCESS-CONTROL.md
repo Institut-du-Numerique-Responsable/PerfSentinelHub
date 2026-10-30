@@ -157,6 +157,7 @@ does not depend on the provider at all.
 | `GET /api/recap`                                                       | `findings.read`, filtered                                       | `403` when held nowhere |
 | `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` on `*`, or the creator of an on-demand report with `findings.read` | `403` (list), `404` (one report) |
 | `POST /api/recap/reports`                                              | `findings.read`, filtered, and somebody to name                 | `403`                   |
+| `GET /api/cards/keys`, `POST /api/cards/keys/rotate` and `/revoke`    | `access.admin`, and somebody to name                            | `403`                   |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtered; the richest copy in scope            | `403`; `404`            |
 | `POST /api/incidents/refresh`                                          | `findings.read`; reads only the daemons in scope                | `403`                   |
 | `GET /api/correlations`                                                | `findings.read`, filtered to the episodes whose two services the caller reads at that source | `403` when held nowhere |

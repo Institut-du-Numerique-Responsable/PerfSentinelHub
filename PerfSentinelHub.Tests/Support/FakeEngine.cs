@@ -46,12 +46,28 @@ internal sealed record FakeEngine
     public bool Card { get; init; }
 
     /// <summary>
+    ///     The line <c>card keygen</c> prints. Null prints a valid key whose fingerprint and
+    ///     public key end with the call's letter (A, then B, ...), so each call makes another key.
+    /// </summary>
+    public string? CardKeygenOutput { get; init; }
+
+    public int CardKeygenExitCode { get; init; }
+
+    /// <summary>
     ///     Writes the engine at <paramref name="path" /> and returns what to launch, which on
     ///     Windows carries a <c>.cmd</c> extension. <c>report</c> appends its arguments, one
     ///     render a line, to <c>render-args.txt</c> in its working directory, writes the
     ///     <c>pg_stat</c> auth header it was handed to <c>render-env.txt</c>, and writes an
     ///     HTML file wherever <c>--output</c> points, the two-step shape the real binary imposes.
+    ///     <c>card keygen</c> appends its arguments to <c>card-keygen-args.txt</c> there and writes
+    ///     <c>key.pk8</c> in its <c>--out-dir</c>.
     /// </summary>
+    private const string Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    // The default key less its last character, which is the call's letter.
+    internal static readonly string Fingerprint = new('A', 21);
+    internal static readonly string PublicKey = new('A', 42);
+
     public string WriteTo(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -62,6 +78,8 @@ internal sealed record FakeEngine
         File.WriteAllText($"{path}.html", "<html>report</html>");
         File.WriteAllText($"{path}.disclose", DisclosePdfOutput);
         File.WriteAllText($"{path}.pdf", "%PDF-1.7 fake");
+        File.WriteAllText($"{path}.pk8", "fake pkcs8");
+        File.WriteAllText($"{path}.keygen", CardKeygenOutput ?? "");
 
         if (OperatingSystem.IsWindows())
         {
@@ -90,12 +108,25 @@ internal sealed record FakeEngine
         var version = Version is null
             ? ""
             : $"""if [ "$1" = "--version" ]; then cat "$P.version"; exit {VersionExitCode}; fi""";
+        var keygen = CardKeygenOutput is null
+            ? $$"""echo '{"fingerprint":"ps1:{{Fingerprint}}'"$L"'","public_key":"{{PublicKey}}'"$L"'"}'"""
+            : """cat "$P.keygen" """;
         return $"""
                 #!/bin/sh
                 P={Quote(path)}
                 {version}
                 if [ "$1" = "report" ] && [ "$2" = "--help" ]; then cat "$P.help"; exit {HelpExitCode}; fi
                 if [ "$1" = "card" ] && [ "$3" = "--help" ]; then exit {(Card ? 0 : 2)}; fi
+                if [ "$1" = "card" ] && [ "$2" = "keygen" ]; then
+                  echo "$@" >> card-keygen-args.txt
+                  L=$(echo {Letters} | cut -c"$(wc -l < card-keygen-args.txt | tr -d ' ')")
+                  while [ $# -gt 0 ]; do
+                    if [ "$1" = "--out-dir" ]; then shift; cat "$P.pk8" > "$1/key.pk8"; fi
+                    shift
+                  done
+                  {keygen}
+                  exit {CardKeygenExitCode}
+                fi
                 if [ "$1" = "disclose-pdf" ]; then
                   if [ "$2" = "--help" ]; then exit {(DisclosePdf ? 0 : 2)}; fi
                   echo "$@" > disclose-args.txt
@@ -132,6 +163,9 @@ internal sealed record FakeEngine
         var version = Version is null
             ? ""
             : $"""if "%~1"=="--version" (type "%P%.version" & exit /b {VersionExitCode})""";
+        var keygen = CardKeygenOutput is null
+            ? $$"""echo {"fingerprint":"ps1:{{Fingerprint}}%L%","public_key":"{{PublicKey}}%L%"}"""
+            : """type "%P%.keygen" """;
         // ping stands in for sleep: timeout refuses to run once stdin is redirected.
         var sleep = SleepSeconds > 0 ? $"ping -n {SleepSeconds + 1} 127.0.0.1 >nul" : "";
         return $"""
@@ -140,6 +174,7 @@ internal sealed record FakeEngine
                 {version}
                 if "%~1"=="report" if "%~2"=="--help" (type "%P%.help" & exit /b {HelpExitCode})
                 if "%~1"=="card" if "%~3"=="--help" exit /b {(Card ? 0 : 2)}
+                if "%~1"=="card" if "%~2"=="keygen" goto keygen
                 if "%~1"=="disclose-pdf" goto disclose
                 if not "%~1"=="report" goto query
                 >>render-args.txt echo %*
@@ -161,6 +196,19 @@ internal sealed record FakeEngine
                 if "%~1"=="--output" copy /y "%P%.pdf" "%~2" >nul
                 shift
                 goto dnext
+                :keygen
+                >>card-keygen-args.txt echo %*
+                for /f %%n in ('find /c /v "" ^< card-keygen-args.txt') do set /a I=%%n-1
+                set "LETTERS={Letters}"
+                call set "L=%%LETTERS:~%I%,1%%"
+                :knext
+                if "%~1"=="" goto kprint
+                if "%~1"=="--out-dir" copy /y "%P%.pk8" "%~2\key.pk8" >nul
+                shift
+                goto knext
+                :kprint
+                {keygen}
+                exit /b {CardKeygenExitCode}
                 :query
                 {sleep}
                 type "%P%.err" 1>&2

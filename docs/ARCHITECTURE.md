@@ -203,6 +203,10 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `disclosure_deliveries`        | webhook event of a disclosure                                  | never                                      |
 | `recap_reports`                | frozen recap of one period, generated or on demand             | `Hub:Recaps:Retention`, on `generated_at_ms` |
 | `recap_deliveries`             | webhook or e-mail delivery of a report                         | with its report                            |
+| `card_keys`                    | one signing key's public half and dates                        | never                                      |
+
+`card_keys` holds public keys only: each private key is a file in `card-keys/` beside the
+database, outside SQLite and so outside `backup` (see [OPERATIONS.md](OPERATIONS.md#share-card-keys)).
 
 `finding_attributes` keeps every grouping attribute a daemon captured, up to the engine's
 eight, each under the grouping identity it came with: the first pair of that observation,

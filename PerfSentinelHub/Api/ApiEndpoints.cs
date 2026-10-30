@@ -90,6 +90,10 @@ public static partial class ApiEndpoints
         app.MapPost("/api/recap/reports", CreateRecapReportAsync);
         app.MapGet("/api/recap/reports/{id}", GetRecapReportAsync);
         app.MapGet("/recaps/{id}/{view}.html", GetRecapReportHtmlAsync);
+        // Never anonymous: a key is managed in somebody's name.
+        app.MapGet("/api/cards/keys", GetCardKeysAsync);
+        app.MapPost("/api/cards/keys/rotate", RotateCardKeyAsync);
+        app.MapPost("/api/cards/keys/revoke", RevokeCardKeyAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
         // correlations, a daemon pushes with its key. With Hub:Access the reads need a

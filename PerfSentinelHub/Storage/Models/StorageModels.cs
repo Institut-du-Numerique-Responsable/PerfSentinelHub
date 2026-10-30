@@ -504,3 +504,11 @@ public enum ActionWriteOutcome
     Missing,
     Busy
 }
+
+/// <summary>One share card signing key's public half and dates; its private file lives beside the database.</summary>
+public sealed record StoredCardKey(
+    string Fingerprint,
+    string PublicKey,
+    long CreatedAtMs,
+    long? RetiredAtMs,
+    string? RevokedOn);

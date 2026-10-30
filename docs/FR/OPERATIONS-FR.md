@@ -415,6 +415,40 @@ abonnement est déclaré.
 | `2505`    | Warning     | Un passage de récap a échoué en entier. Le suivant réessaie                                               |
 | `2506`    | Warning     | Le rapport d'un abonnement n'a pu être généré. Les autres ont continué                                    |
 
+## Clés des cartes à partager
+
+Une carte à partager est signée avec une clé que le moteur fabrique la première fois que
+quelqu'un crée une carte (`perf-sentinel card keygen`) ; voir
+[CONFIGURATION-FR.md](CONFIGURATION-FR.md#cartes-à-partager) pour les clés qui activent les cartes
+et [API-FR.md](API-FR.md#cartes-à-partager) pour les routes.
+
+**Où vit la clé.** La clé privée est un fichier, `card-keys/<empreinte>.pk8`, dans le répertoire
+qui contient `Hub:DatabasePath` (`/data/card-keys/` avec le chart). Le répertoire n'est lisible
+que par l'utilisateur du Hub (mode 0700), chaque fichier aussi (mode 0600). La clé publique et
+ses dates sont dans la base, table `card_keys`.
+
+**La sauvegarde ne l'emporte pas.** `backup` copie la base : elle emporte les clés publiques et
+leurs dates, jamais une clé privée. Pour continuer à signer avec la même clé après une
+restauration, copiez `card-keys/` à côté de la sauvegarde et remettez-le à côté de la base
+restaurée. Sans lui, rien ne casse : la carte suivante retire l'ancienne clé, en fabrique une
+nouvelle et signe avec. L'ancienne clé publique reste publiée avec sa date de fin, donc chaque
+carte signée avant se vérifie toujours.
+
+**Rotation et révocation.** Un administrateur (`access.admin`) fait tourner la clé : la clé
+courante est retirée, son fichier privé supprimé, et une nouvelle est fabriquée. Révoquer une clé
+la retire aussi et supprime son fichier, et demande le premier jour où la clé a pu fuiter : une
+carte signée à partir de ce jour se lit révoquée, celles d'avant restent valides. Donnez le jour
+le plus ancien que vous ne pouvez pas écarter, car un jour trop tardif laisse valide une carte
+forgée. Une clé déjà retirée peut aussi être révoquée.
+
+**Publier les lignes.** Une carte nomme le domaine de son signataire (`Hub:Cards:Domain`) ; un
+lecteur la vérifie contre ce que ce domaine publie. `GET /api/cards/keys` répond les deux formes,
+prêtes à copier : un enregistrement TXT par clé sous `_perf-sentinel.<domaine>`, et le fichier
+`/.well-known/perf-sentinel-key` à servir sur `https://<domaine>/`. Republiez-les après chaque
+rotation ou révocation, et gardez les lignes des clés retirées : en retirer une rend invérifiables
+les cartes qu'elle a signées. Sans domaine, les cartes se font quand même, et `record_name` est
+null puisqu'il n'y a nulle part où publier.
+
 ## Sauvegarde
 
 L'historique `first_seen` est la seule chose que le Hub stocke qu'aucun amont ne peut

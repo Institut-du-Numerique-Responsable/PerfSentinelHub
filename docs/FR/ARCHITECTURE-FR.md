@@ -218,6 +218,11 @@ soit la source, et rien d'autre.
 | `disclosure_deliveries`        | événement de webhook d'une divulgation                               | jamais                                         |
 | `recap_reports`                | récap figé d'une période, généré ou à la demande                     | `Hub:Recaps:Retention`, sur `generated_at_ms`  |
 | `recap_deliveries`             | livraison d'un rapport par webhook ou par e-mail                     | avec son rapport                               |
+| `card_keys`                    | moitié publique et dates d'une clé de signature                      | jamais                                         |
+
+`card_keys` ne tient que des clés publiques : chaque clé privée est un fichier de `card-keys/` à
+côté de la base, hors de SQLite et donc hors de `backup` (voir
+[OPERATIONS-FR.md](OPERATIONS-FR.md#clés-des-cartes-à-partager)).
 
 `finding_attributes` garde chaque attribut de regroupement qu'un daemon a capté, jusqu'aux
 huit du moteur, chacun sous l'identité de regroupement avec laquelle il est arrivé : la
