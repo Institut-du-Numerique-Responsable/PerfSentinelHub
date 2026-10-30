@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -24,6 +25,40 @@ public static class WebhookDelivery
         prefix.CopyTo(message, 0);
         body.CopyTo(message.AsSpan(prefix.Length));
         return "sha256=" + Convert.ToHexStringLower(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), message));
+    }
+
+    /// <summary>
+    ///     Posts a signed body and answers the status, or null when nothing answered within the timeout.
+    ///     A redirect is an answer and is never followed by the client it is given.
+    /// </summary>
+    internal static async Task<int?> PostAsync(
+        HttpClient client,
+        Uri url,
+        string secret,
+        byte[] body,
+        TimeProvider timeProvider,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        var timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        request.Content = new ByteArrayContent(body);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        request.Headers.Add(TimestampHeader, timestamp.ToString(CultureInfo.InvariantCulture));
+        request.Headers.Add(SignatureHeader, Sign(secret, timestamp, body));
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout);
+        try
+        {
+            using var response = await client.SendAsync(request, limit.Token);
+            return (int)response.StatusCode;
+        }
+        catch (Exception exception) when (exception is HttpRequestException ||
+                                          (exception is OperationCanceledException &&
+                                           !cancellationToken.IsCancellationRequested))
+        {
+            return null;
+        }
     }
 
     public static byte[] Body(DisclosureSummary disclosure, string eventName, string? shareUrl)

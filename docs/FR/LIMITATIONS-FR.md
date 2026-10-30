@@ -147,6 +147,67 @@ qu'à un appelant qui lit cette source entière, et une lecture restreinte n'att
 les findings qui ont au moins une copie dans sa portée. Une source retirée de
 `Hub:Sources` sort du compte, puisque le Hub n'a aucun nom à servir pour elle.
 
+## Ce qu'affirme un récap
+
+Le chiffre de carbone du récap est un ordre de grandeur, jamais une mesure. Il valorise les
+E/S en trop des findings classés au nombre de grammes par E/S évitable propre à chaque jour,
+et ce coefficient vient du palier opérationnel du modèle carbone du daemon. Les E/S en trop
+sont les `extra_io_ops` des findings, qui ne sont pas dédupliquées comme le sont les
+`avoidable_io_ops` d'une fenêtre : elles peuvent dépasser ce que la fenêtre a compté. Le
+coefficient du jour valorise aussi les E/S des lots dont le daemon n'a pas pu résoudre la
+région. Le chiffre est arrondi à un chiffre significatif pour cette raison, et une source qui
+n'envoie aucun coefficient le laisse en minimum partiel, jamais extrapolé.
+
+`gone` est une présomption, comme `likely_resolved` : un finding que la période ne porte plus
+peut avoir été corrigé, ou le trafic qui l'a produit peut s'être arrêté.
+`gone_with_confirmed_action` compte ceux qu'appuie une action terminée que le Hub a confirmée
+à partir des jours scellés du registre qu'envoie le moteur (voir [API-FR.md](API-FR.md#recap),
+Actions et confirmation), seule preuve que le récap détienne.
+
+Une période se lit incomplète, et sa comparaison n'est pas exacte, pour quatre raisons :
+`uncovered_days` (jours que les ledgers ne couvrent pas), `open_day` (un jour passé non scellé),
+`restart` (un redémarrage du daemon a interrompu ses comptes, comme ci-dessus) et `overflow`.
+Quatre notes laissent la comparaison tenir : `sampling` et `shed` (le compte est ce que le
+daemon a analysé), `ingest_rejected` (le daemon a refusé une partie de l'ingestion) et
+`multi_instance` (deux ledgers interrogés d'une même source vivants en même temps). Voir
+[API-FR.md](API-FR.md#recap). Des mois de longueurs
+différentes se comparent tels quels, 31 jours contre 28, donc une tendance mensuelle est un
+rapport de volumes, pas de débits quotidiens. Une période en cours compare ses jours clos aux
+mêmes premiers jours de la période précédente. Aujourd'hui ne compte que dans les tuiles et le
+classement, et le premier jour d'une période rien n'est comparé, ce que le récap dit au lieu
+de lire que rien n'a bougé.
+
+Une action est globale à la signature, comme un acquittement, quelle que soit la source qui
+porte le finding. Sa confirmation est jugée dans les filtres de la requête : une même action
+peut donc se lire différemment dans un récap filtré et dans un récap non filtré. Toute
+détection après le jour où une action a été marquée terminée la contredit, une trace
+retardataire ou un déploiement lent compris : marquez-la de nouveau terminée une fois le
+correctif réellement livré. Les actions et leurs événements ne sont jamais purgés, ni avec
+leur finding ni par la rétention, donc les tables ne font que grossir. Les libellés sont
+aussi communs à tout le Hub et jamais purgés : le nom d'un endpoint comme celui d'un service
+survit aux findings qu'il nommait.
+
+Un récap lit les findings en quatre lectures au plus : la période avec ses findings acquittés,
+la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente. Chaque
+lecture s'arrête à 5 000 findings et garde les 5 000 premiers ; toute lecture qui déborde pose
+`truncated`, et les chiffres bâtis sur elle ne couvrent que ceux-là. Restreignez la requête avec
+un filtre.
+
+Un rapport est figé à sa génération et ne suit jamais les données ultérieures : un finding détecté
+ou acquitté après coup, une action marquée terminée ou un libellé renommé change l'écran et laisse
+le rapport tel qu'il était. Un rapport généré passé `Hub:Recaps:MaxDelay` dit quels jours étaient
+encore ouverts, et ces jours y restent ouverts. Les périodes manquées pendant que le Hub était
+arrêté ne sont pas générées après coup, sauf la dernière période close. Un rapport à la demande
+reflète le périmètre de son créateur au moment où il a été fait, et hors des détenteurs de
+`recaps.read` seul son créateur le lit.
+
+Le HTML utilise les polices du système : il s'ouvre hors ligne et diffère un peu d'une machine à
+l'autre. Un rapport figé ne porte aucun lien d'acquittement : il survit aux routes qu'il
+appellerait, et les acquittements se prennent sur l'écran du Hub. Le courrier passe par un relais
+qui offre STARTTLS et, quand des identifiants sont posés, `AUTH LOGIN`. Le Hub ne parle pas le TLS
+implicite et ne fait pas d'OAuth : un compte restreint à OAuth demande le relais de l'organisation
+devant lui.
+
 ## À quoi un finding est attribué
 
 Le moteur range un groupe N+1 ou d'appels redondants qui traverse plusieurs

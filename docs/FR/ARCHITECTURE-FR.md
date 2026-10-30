@@ -156,6 +156,10 @@ Hub a cessé de refléter cette source, parce qu'elle a été retirée ou parce 
 a échoué pendant toute la rétention. `ack_reads` et `incident_reads` tiennent une ligne
 par source et ne sont jamais purgés.
 
+Les rapports de récap suivent aussi le worker quotidien, sur une horloge à eux : `generated_at_ms`
+contre `Hub:Recaps:Retention`, comme les runs terminés suivent `Hub:Analysis:RunRetention`. Un
+rapport et ses livraisons partent ensemble, dans un même passage de ce worker.
+
 La fenêtre de statut n'est pas un worker du tout, c'est un `CASE` évalué à la lecture,
 ce qui explique que le statut d'un finding puisse changer sans que rien n'ait été écrit.
 Les rapports rendus expirent sur un balayage qui tourne toutes les soixante secondes,
@@ -192,12 +196,18 @@ soit la source, et rien d'autre.
 | `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
 | `correlation_episodes`         | épisode et source                                                    | rétention, sur `last_seen_ms`              |
 | `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
+| `finding_actions`              | signature, avec son statut et son responsable                        | jamais                                     |
+| `finding_action_events`        | changement de statut ou de responsable d'une action                  | jamais                                     |
+| `endpoint_labels`              | service et endpoint, avec son nom métier                             | jamais                                     |
+| `service_labels`               | service, avec son nom métier                                         | jamais                                     |
 | `incident_reads`, `ack_reads`  | source                                                               | jamais                                     |
 | `analysis_runs`                | run                                                                  | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | jeton de terminal, par le SHA-256 de sa valeur                       | révocation, ou rétention passé `expires_at_ms` |
 | `disclosures`                  | divulgation publiée, ses fichiers en BLOB                            | jamais, un retrait la garde                    |
 | `disclosure_share_links`       | lien de partage, par le SHA-256 de son jeton                         | jamais, révocation et expiration le marquent seulement |
 | `disclosure_deliveries`        | événement de webhook d'une divulgation                               | jamais                                         |
+| `recap_reports`                | récap figé d'une période, généré ou à la demande                     | `Hub:Recaps:Retention`, sur `generated_at_ms`  |
+| `recap_deliveries`             | livraison d'un rapport par webhook ou par e-mail                     | avec son rapport                               |
 
 `finding_attributes` garde chaque attribut de regroupement qu'un daemon a capté, jusqu'aux
 huit du moteur, chacun sous l'identité de regroupement avec laquelle il est arrivé : la
@@ -215,10 +225,25 @@ fera correspondre les projets, pour que l'activer ne parte pas d'un historique v
 Les trois tables de détections, ajoutées par le schéma V15, tiennent les registres des daemons
 tels que lus. Une ligne de `detection_days` porte ce que ce jour dit de sa propre complétude :
 scellé ou encore ouvert, un redémarrage, son taux d'échantillonnage, des traces délestées, des
-ingestions rejetées et les détections au-delà du plafond de signatures du registre. Une lecture
+ingestions rejetées et les détections au-delà du plafond de signatures du registre. Quand le daemon calcule le carbone, la ligne porte aussi les
+grammes évitables du jour (médian et bas), les E/S évitables et les E/S totales. Une lecture
 fenêtrée de `/api/findings` les replie, par source, en un compte servi et les raisons qui le
 rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Rien n'est
 rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.
+
+Le récap, `GET /api/recap`, n'écrit rien et ne garde rien en propre. `RecapService` fait jusqu'à
+quatre lectures fenêtrées des findings, chacune plafonnée à 5 000 : la période avec ses findings
+acquittés, la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente,
+sautée le premier jour d'une période. Il fait ensuite une lecture de couverture des jours des sources et une lecture
+carbone de leurs grammes évitables, et joint les actions et les libellés en dernier. Le calcul
+est pur et vit dans `Recaps/` : la période, le classement, les tendances, les mouvements, le
+jugement de couverture, la valorisation carbone et la phrase par type. Le service est une
+classe simple à dessein : les rapports qu'envoie un abonnement le réutilisent tel quel.
+`RecapGenerator` fige la dernière période close de chaque abonnement dans `recap_reports` une
+fois ses ledgers scellés, `RecapReportRenderer` écrit le HTML autonome d'un instantané stocké,
+`RecapDeliveryWorker` envoie les lignes dues de `recap_deliveries` aux webhooks et, par
+`RecapMailer`, au relais SMTP, et `RecapLoop` fait tourner le générateur et le worker toutes les
+15 secondes.
 
 Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : les lignes
 d'attributs d'une copie dont l'observation la plus récente n'en a aucune, le service d'une
@@ -247,9 +272,9 @@ Pour un appelant et une permission, `AccessPolicy.Scope` rend un `AccessScope`
 choses : la source, le service propre à la copie dans `finding_sources.service`, jamais le
 `findings.service` de la flotte qu'un import réécrit, et les lignes de la copie dans
 `finding_attributes`. Une lecture demande qu'une ligne corresponde, quel que soit le
-regroupement avec lequel elle est arrivée ; une écriture, pour `acks.write` et
-`analyses.run`, demande que chaque identité de regroupement de la copie, marqueur sans
-regroupement compris, porte la clé et que chacune de ses valeurs corresponde. Un run de
+regroupement avec lequel elle est arrivée ; une écriture, pour `acks.write`,
+`actions.write` et `analyses.run`, demande que chaque identité de regroupement de la copie,
+marqueur sans regroupement compris, porte la clé et que chacune de ses valeurs corresponde. Un run de
 traces sur un service est jugé sur les copies de ce service que le Hub tient dans
 l'environnement du backend, et chacune doit correspondre en écriture ; `CoversSubject`
 évalue les copies qu'on lui passe, et l'appelant qu'ajoutera l'application les choisit par

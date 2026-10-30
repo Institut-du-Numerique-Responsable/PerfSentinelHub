@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Storage;
 using PerfSentinelHub.Tests.Api;
 
 namespace PerfSentinelHub.Tests.Access;
@@ -35,7 +36,13 @@ public sealed class AuthenticationTests : IAsyncLifetime
         ["Bearer malformed"] = """{"email":"grace@example.internal","groups":42}""",
         ["Bearer near"] =
             """{"email":"heidi@example.internal","groups":["/parent/hub-users","/hub-users/readers","hub-users","/hub-users "]}""",
-        ["Bearer renamed"] = """{"email":"ivan@example.internal","hub_groups":["/hub-users"],"groups":["/other"]}"""
+        ["Bearer renamed"] = """{"email":"ivan@example.internal","hub_groups":["/hub-users"],"groups":["/other"]}""",
+        ["Bearer named"] = """{"email":"alice@example.internal","name":"  Alice Martin "}""",
+        ["Bearer unnamed"] = """{"email":"alice@example.internal"}""",
+        ["Bearer blankname"] = """{"email":"alice@example.internal","name":"   "}""",
+        ["Bearer longname"] = $$"""{"email":"alice@example.internal","name":"{{new string('a', 200)}}"}""",
+        ["Bearer controlname"] = """{"email":"alice@example.internal","name":"Alice\u0007Martin"}""",
+        ["Bearer numbername"] = """{"email":"alice@example.internal","name":42}"""
     };
 
     private readonly HubApplicationFactory _hub = new();
@@ -54,7 +61,10 @@ public sealed class AuthenticationTests : IAsyncLifetime
                     var form = await context.Request.ReadFormAsync();
                     await context.Response.WriteAsJsonAsync(
                         new Dictionary<string, string>
-                        { ["access_token"] = form["code"].ToString(), ["token_type"] = "Bearer" });
+                        {
+                            ["access_token"] = form["code"].ToString(),
+                            ["token_type"] = "Bearer"
+                        });
                     break;
                 case "/userinfo" when GroupedUsers.TryGetValue(
                     context.Request.Headers.Authorization.ToString(), out var user):
@@ -299,6 +309,26 @@ public sealed class AuthenticationTests : IAsyncLifetime
         Assert.Equal(trustIdentityHeader ? 1 : 0, calls.Count(call => call.Method != "GET"));
     }
 
+    [Fact]
+    public async Task A_display_name_claim_is_kept()
+    {
+        var owner = await TakeAsOwnerAsync("named", "display-kept");
+
+        Assert.Equal("Alice Martin", owner);
+    }
+
+    [Theory]
+    [InlineData("unnamed")]
+    [InlineData("blankname")]
+    [InlineData("longname")]
+    [InlineData("controlname")]
+    [InlineData("numbername")]
+    public async Task A_missing_or_bad_display_name_is_ignored(string code)
+    {
+        // The sign-in succeeds (TakeAsOwnerAsync asserts the take) and the action has no display name.
+        Assert.Null(await TakeAsOwnerAsync(code, $"display-{code}"));
+    }
+
     [Theory]
     [InlineData("member", "bob@example.internal")]
     [InlineData("single", "carol@example.internal")]
@@ -429,6 +459,30 @@ public sealed class AuthenticationTests : IAsyncLifetime
     {
         return factory.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
             .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+    }
+
+    // Signs in as the code's user and takes a fresh finding in the session's name: the display
+    // name the action then carries is the one the session's claim held.
+    private async Task<string?> TakeAsOwnerAsync(string code, string name)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var signature = $"n_plus_one_sql:order-svc:{name}";
+        await _hub.Database.UpsertBatchAsync(
+            new SourceSnapshot("test", "Test", "test", "0.26.2"),
+            FindingJson.Batch(FindingJson.Envelope(signature)), 5_000, cancellationToken);
+        using var client = Client();
+        using var callback = await SignInAsync(client, code);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+
+        using var response = await client.PostAsync(
+            "/api/actions",
+            new StringContent($$"""{"signature":"{{signature}}","take":true}""", Encoding.UTF8, "application/json"),
+            cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal("alice@example.internal", body.GetProperty("owner").GetString());
+        return body.GetProperty("owner_display").GetString();
     }
 
     private static async Task<HttpResponseMessage> SignInAsync(HttpClient client, string code)

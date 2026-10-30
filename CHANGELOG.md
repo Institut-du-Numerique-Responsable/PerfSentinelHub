@@ -2,6 +2,53 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.9.0] - 2026-10-29
+
+### Added
+
+- A recap screen, `#/recap`, and `GET /api/recap`: the findings to fix first, what moved since
+  the previous period of the same length, what the teams did about them and a carbon estimate,
+  by day, week or month, in an Engineering and a Management view. The page and the route follow
+  `findings.read`.
+- Actions on findings: `POST /api/actions` and `PATCH /api/actions` declare who works on a
+  finding and where it stands (`todo`, `in_progress`, `done`). The Hub judges a done action on
+  the days after it and reports it `confirmed`, `contradicted` or `came_back`. Two permissions
+  go with them: `actions.write` for the routes, carried by the built-in `member` role, and
+  `recaps.read` for the recap reports, Hub level, carried by `admin`.
+- Endpoint labels: `PUT /api/labels` names an endpoint in business words, which titles its row
+  in the recap, with the `labels.write` permission. `PUT /api/labels/services` names a whole
+  service once, so every unnamed step of it reads in business words (`in Payment`,
+  `An unnamed step in Payment`, a Management scope line too); the recap carries it as
+  `service_label` beside `service` and in `filters`, and the Engineering view names a service from
+  the first card of it. A label with a format character (U+202E and the like) is refused.
+- `Hub:Recaps:MovementThreshold` (default `0.2`), the relative change past which a finding
+  reads `up` or `down`.
+- Frozen recap reports. `Hub:Recaps:Subscriptions` freezes the last closed day, week or month
+  once the ledgers have sealed it (or after `Hub:Recaps:MaxDelay`) and delivers it by signed
+  webhook (`Hub:Recaps:Webhooks`) and by e-mail through the organisation's SMTP relay
+  (`Hub:Recaps:Smtp`), the management view attached and the engineering view linked. Reports
+  leave after `Hub:Recaps:Retention`. Four routes list, read, generate and show them, behind
+  `findings.read` and `recaps.read`, and the recap screen gets a Reports panel.
+- The Hub reads the carbon day fields that perf-sentinel engines send with their ledger days
+  (avoidable grams, avoidable I/O and total I/O) and keeps them per day. Engines that send
+  none leave the recap's carbon figure empty.
+- The chart takes `hub.recaps`: the movement threshold, retention, delay and public URL, the
+  subscriptions, the webhooks and the SMTP relay. Webhook URLs and secrets and the SMTP password
+  come from Secrets as `Hub__Recaps__*` environment variables, never from the ConfigMap.
+
+### Changed
+
+- The image ships perf-sentinel `0.38.0` as its analysis engine, repinned by digest from
+  `0.37.1`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.37.1` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.38.0` adds the day's avoidable carbon
+  to the detection ledger (`avoidable_gco2`, `avoidable_gco2_low`, `avoidable_io_ops` and
+  `total_io_ops` on each day of `GET /api/detections` and of the push), which the recap reads
+  for its CO2 estimate. Upgrade the Hub before or with the daemons: a Hub older than this one
+  drops the four keys, and a day it already acknowledged is not sent again until it changes.
+  A backend analysis gives the same findings, signatures and energy figures as on `0.37.1`.
+
 ## [0.8.6] - 2026-10-28
 
 ### Changed

@@ -348,6 +348,73 @@ secret. Une livraison qui abandonne après 8 tentatives compte sur
 | `2404`    | Warning     | Une livraison a abandonné après sa dernière tentative                       |
 | `2405`    | Warning     | Un passage de livraison a échoué en entier. Le suivant réessaie             |
 
+## Rapports de récap
+
+Avec `Hub:Recaps:Subscriptions` posé, le Hub fige le récap de chaque période close en un rapport
+stocké et le livre, voir [CONFIGURATION-FR.md](CONFIGURATION-FR.md#rapports-de-récap) pour les
+clés et [API-FR.md](API-FR.md#rapports-de-récap) pour les routes. Un Hub sans abonnement ne
+génère rien et n'envoie rien.
+
+**Quand un rapport est généré.** Un passage tourne toutes les 15 secondes. Pour chaque abonnement
+et chacune de ses cadences, il ne regarde que la dernière période close : hier, la semaine
+dernière ou le mois dernier, en UTC. Le rapport est dû une fois que chaque source qui a lu un
+ledger pendant la période tient une ligne scellée pour le dernier jour de la période, ce que le
+daemon écrit après son minuit UTC, ou une fois que `Hub:Recaps:MaxDelay` (six heures par défaut)
+s'est écoulé depuis la fin de la période, selon ce qui arrive en premier. Un rapport généré passé
+ce délai dit quels jours étaient encore ouverts, et se lit incomplet. La table tient un rapport
+par abonnement, cadence et période : un redémarrage ou un second passage n'ajoute rien. Les
+périodes manquées pendant que le Hub était arrêté ne sont pas générées après coup, sauf la
+dernière période close. Un abonnement ajouté à la configuration reçoit le rapport de sa dernière
+période close au premier passage qui la trouve due, pas à la fin de la période en cours.
+
+**Ce qui est envoyé.** Un rapport dont la période n'a rien bougé est archivé et n'est envoyé
+nulle part. Un rapport qui a bougé est livré à chaque webhook et à chaque adresse e-mail de son
+abonnement, une fois. Le webhook et le courrier portent la vue de pilotage seule, et la vue
+technique est un lien vers le Hub, qui reste derrière sa connexion. Aucun des deux ne nomme
+l'endpoint d'une ligne que personne n'a libellée, et les deux montrent chaque responsable
+d'action par son nom, sans l'e-mail ni le compte derrière (voir [API-FR.md](API-FR.md#rapports-de-récap),
+La page).
+
+**Livraisons.** Elles tournent dans le même passage de 15 secondes et reprennent après un
+redémarrage. Un 2xx règle un webhook ; toute autre réponse, une redirection comprise, et le silence
+sont retentés avec un délai qui commence à 30 secondes, double et s'arrête à une heure, et une
+livraison abandonne après 8 tentatives. Un e-mail est réglé par le 250 du relais. Un 5xx du relais
+le fait échouer aussitôt, puisque retenter un refus ne fait que le répéter, et un 4xx ou le silence
+est retenté comme un webhook. Après le premier silence d'un passage, les autres e-mails attendent
+le suivant : un relais mort coûte donc un délai de 60 secondes par passage, et le générateur et
+les webhooks qui le suivent attendent d'autant. Rien de tout cela ne compte sur une métrique
+Prometheus : les événements ci-dessous sont le signal.
+
+**Aucun enregistrement DNS.** Le Hub remet chaque message au relais posé dans
+`Hub:Recaps:Smtp:Host` et ne cherche jamais le serveur de courrier d'un destinataire : il n'a donc
+besoin d'aucun enregistrement MX, SPF ou DKIM à lui. Envoyez depuis une adresse pour laquelle le
+relais envoie déjà, et les enregistrements du relais couvrent le courrier du Hub.
+
+**Ce qui n'atteint jamais un journal.** Un webhook est nommé, jamais donné par son URL, et son
+secret n'est pas journalisé. Une adresse e-mail ne l'est pas non plus : une livraison qui abandonne
+dit « an e-mail address ». L'hôte, l'utilisateur et le mot de passe du relais restent aussi hors du
+journal, et la journalisation des requêtes du client HTTP est coupée, comme pour les divulgations.
+
+**Taille.** Un instantané technique tient tous les findings classés de sa période, jusqu'à 5 000,
+et il est stocké par abonnement, cadence et période pendant toute la durée de
+`Hub:Recaps:Retention` (un an par défaut). Dimensionnez le disque en conséquence : un abonnement
+quotidien sur une flotte chargée stocke un instantané par jour. Les rapports partent avec le
+worker de rétention quotidien, sur `generated_at_ms`, et leurs livraisons avec eux. Quand le
+dernier abonnement est retiré de la configuration, les lignes encore en attente le restent
+jusqu'à ce que la rétention les purge : le passage de livraison ne tourne que tant qu'un
+abonnement est déclaré.
+
+**Événements de journal.**
+
+| Événement | Niveau      | Dit                                                                                                      |
+|-----------|-------------|----------------------------------------------------------------------------------------------------------|
+| `2501`    | Information | Un rapport a été généré, avec son abonnement, sa période, s'il est complet et s'il a bougé                |
+| `2502`    | Warning     | Un webhook de récap n'a pu être joint, par son nom. La livraison est retentée                             |
+| `2503`    | Warning     | Le relais SMTP n'a pu être joint. Les e-mails sont retentés                                               |
+| `2504`    | Warning     | Une livraison de récap a abandonné, ou le relais l'a refusée pour de bon                                  |
+| `2505`    | Warning     | Un passage de récap a échoué en entier. Le suivant réessaie                                               |
+| `2506`    | Warning     | Le rapport d'un abonnement n'a pu être généré. Les autres ont continué                                    |
+
 ## Sauvegarde
 
 L'historique `first_seen` est la seule chose que le Hub stocke qu'aucun amont ne peut

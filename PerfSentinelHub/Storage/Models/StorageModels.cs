@@ -369,6 +369,40 @@ public static class DeliveryStates
     public const string Failed = "failed";
 }
 
+public static class RecapChannels
+{
+    public const string Webhook = "webhook";
+    public const string Email = "email";
+}
+
+public sealed record RecapReportSummary(
+    string Id,
+    string? Subscription,
+    string PeriodKind,
+    string PeriodFrom,
+    string PeriodTo,
+    IReadOnlyList<string> Views,
+    bool Complete,
+    bool NothingMoved,
+    string? CreatedBy,
+    long GeneratedAtMs);
+
+/// <summary>A report with the snapshot exactly as it was generated, the one thing a listing never reads.</summary>
+// CreatorSubject is the immutable account id of an on-demand report's creator, the only key
+// ownership is decided on; Summary.CreatedBy is the name shown.
+public sealed record RecapReportRecord(RecapReportSummary Summary, string SnapshotJson, string? CreatorSubject = null);
+
+public sealed record RecapDeliveryRecord(
+    string Id,
+    string ReportId,
+    string Channel,
+    string Target,
+    string State,
+    int Attempts,
+    long? LastAttemptMs,
+    long? NextAttemptMs,
+    int? LastStatus);
+
 /// <summary>An ack's target at one source: the held copy, if any, and whether the mirror lists an ack of it.</summary>
 public sealed record AckTarget(bool Held, string? Service, bool Mirrored, IReadOnlyList<AccessAttribute> Rows);
 
@@ -397,7 +431,10 @@ public sealed record DetectionLedgerPage(
 /// <summary>How many times one signature was detected on one UTC epoch day, null I/O when green was off.</summary>
 public sealed record DetectionCountRow(int Day, string Signature, long Detections, long? ExtraIoOps);
 
-/// <summary>What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.</summary>
+/// <summary>
+///     What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.
+///     The trailing four are the day's carbon inputs, null on an engine that does not send them.
+/// </summary>
 public sealed record DetectionDayRow(
     int Day,
     bool Sealed,
@@ -406,4 +443,44 @@ public sealed record DetectionDayRow(
     long? OverflowExtraIoOps,
     long ShedTraces,
     long IngestRejected,
-    double SamplingRate);
+    double SamplingRate,
+    double? AvoidableGco2 = null,
+    long? AvoidableIoOps = null,
+    double? AvoidableGco2Low = null,
+    long? TotalIoOps = null);
+
+public static class ActionStatuses
+{
+    public const string Todo = "todo";
+    public const string InProgress = "in_progress";
+    public const string Done = "done";
+    public static readonly string[] All = [Todo, InProgress, Done];
+}
+
+/// <summary>What a team declared about one finding, with every change it went through, oldest first.</summary>
+public sealed record StoredAction(
+    string Signature,
+    string Status,
+    string? Owner,
+    string? OwnerDisplay,
+    string CreatedBy,
+    long CreatedAtMs,
+    long UpdatedAtMs,
+    long? DoneAtMs,
+    IReadOnlyList<StoredActionEvent> Events);
+
+public sealed record StoredActionEvent(
+    string? FromStatus,
+    string ToStatus,
+    string? Owner,
+    string? OwnerDisplay,
+    string By,
+    long AtMs);
+
+public enum ActionWriteOutcome
+{
+    Written,
+    Exists,
+    Missing,
+    Busy
+}

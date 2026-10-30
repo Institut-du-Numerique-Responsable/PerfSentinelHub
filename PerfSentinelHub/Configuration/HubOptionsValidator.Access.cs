@@ -225,7 +225,8 @@ public sealed partial class HubOptionsValidator
                      role.Permissions.Any(permission =>
                          !AccessPermissions.All.Contains(permission, StringComparer.Ordinal)))
                 errors.Add($"Hub:Access:Roles:{i}:Permissions must list one or more of findings.read, traces.read, "
-                           + "sources.read, analyses.run, acks.write, disclosures.read and disclosures.manage, each once.");
+                           + "sources.read, analyses.run, acks.write, actions.write, labels.write, disclosures.read, "
+                           + "disclosures.manage and recaps.read, each once.");
         }
 
         return roles;
@@ -258,8 +259,9 @@ public sealed partial class HubOptionsValidator
                 errors.Add($"Grant {i}: the admin role applies to the whole Hub; grant it on '*', or use "
                            + "Hub:Access:Admins or Hub:Access:AdminGroups.");
             else if (grant.Project != Wildcard && permissions.Any(permission =>
-                         permission is AccessPermissions.DisclosuresRead or AccessPermissions.DisclosuresManage))
-                errors.Add($"Grant {i}: disclosures.read and disclosures.manage apply to the whole Hub; "
+                         permission is AccessPermissions.DisclosuresRead or AccessPermissions.DisclosuresManage
+                             or AccessPermissions.RecapsRead))
+                errors.Add($"Grant {i}: disclosures.read, disclosures.manage and recaps.read apply to the whole Hub; "
                            + "grant a role carrying them on '*'.");
         }
     }

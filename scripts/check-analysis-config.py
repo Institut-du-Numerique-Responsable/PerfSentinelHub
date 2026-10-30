@@ -31,7 +31,7 @@ SONAR_SCANNER_ARGUMENTS = (
     '"/d:sonar.coverage.exclusions=scripts/**,tests/**,PerfSentinelHub/wwwroot/**"',
     # secrets:S6338 reads the base64 NuGet lock hashes as Azure Storage keys, and pythonsecurity:S8707
     # flags CLI paths in tooling the workflow itself invokes with fixed arguments.
-    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin,entrypoint,demopacing",
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin,entrypoint,demopacing,smtpplain",
     "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338",
     "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json",
     "/d:sonar.issue.ignore.multicriteria.clipath.ruleKey=pythonsecurity:S8707",
@@ -60,6 +60,10 @@ SONAR_SCANNER_ARGUMENTS = (
     # cannot pause it, so they are the deliverable rather than a missing synchronization.
     "/d:sonar.issue.ignore.multicriteria.demopacing.ruleKey=typescript:S2925",
     '"/d:sonar.issue.ignore.multicriteria.demopacing.resourceKey=tests/browser/demo/**"',
+    # StartTls stays switchable for a relay on loopback or inside the cluster that speaks no TLS. The
+    # validator refuses a password without it off loopback, and the default is on.
+    "/d:sonar.issue.ignore.multicriteria.smtpplain.ruleKey=csharpsquid:S5332",
+    "/d:sonar.issue.ignore.multicriteria.smtpplain.resourceKey=PerfSentinelHub/Recaps/RecapMailer.cs",
 )
 SONAR_WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/sonar-main.yml")
 # A shallow clone leaves Sonar without blame, so new code and issue assignment go blind, and a pull

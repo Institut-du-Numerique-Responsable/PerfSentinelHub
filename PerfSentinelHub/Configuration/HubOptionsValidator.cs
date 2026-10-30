@@ -15,6 +15,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         ValidateHubSettings(options, errors);
         ValidateAccessSettings(options, _timeProvider.GetUtcNow(), errors);
         ValidateDisclosures(options, errors);
+        ValidateRecaps(options, errors);
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in options.Sources)
@@ -50,6 +51,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         // M1. Whether Kestrel listens there is known only once it has started (Program.cs).
         if (options.MetricsPort is < 1 or > 65535)
             errors.Add("Hub:MetricsPort must be between 1 and 65535.");
+        if (!(options.Recaps.MovementThreshold > 0 && options.Recaps.MovementThreshold <= 10))
+            errors.Add("Hub:Recaps:MovementThreshold must be above 0 and at most 10.");
         ValidateAnalysisSettings(options.Analysis, errors);
         ValidateUpdateCheckSettings(options.UpdateCheck, errors);
         ValidateAuthSettings(options.Auth, errors);
@@ -72,6 +75,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Auth:ClientId and Hub:Auth:ClientSecret are required.");
         if (string.IsNullOrWhiteSpace(auth.IdentityClaim))
             errors.Add("Hub:Auth:IdentityClaim must name a userinfo field.");
+        if (string.IsNullOrWhiteSpace(auth.DisplayNameClaim))
+            errors.Add("Hub:Auth:DisplayNameClaim must name a userinfo field.");
         if (auth.RequiredGroups.Count > 0 && string.IsNullOrWhiteSpace(auth.GroupsClaim))
             errors.Add("Hub:Auth:GroupsClaim must name a userinfo field when Hub:Auth:RequiredGroups is set.");
         if (auth.RequiredGroups.Any(string.IsNullOrWhiteSpace))

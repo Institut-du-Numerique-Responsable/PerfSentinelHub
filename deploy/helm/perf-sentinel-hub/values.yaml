@@ -111,6 +111,33 @@ hub:
     # with includeShareLink: the link it sends must name the Hub.
     publicUrl: ""
     webhooks: []
+  # Review recaps. movementThreshold (above 0, at most 10) is the share of change
+  # past which a finding reads up or down on the recap page. Frozen reports are
+  # off until subscriptions lists one: items { name, cadences (day, week,
+  # month), views (pilotage, tech), environment, sourceId, service, grouping,
+  # webhooks (names declared below), emails (needs smtp.host) }. retention is at
+  # least 32 days, maxDelay above zero and at most 7 days. publicUrl falls back to
+  # hub.disclosures.publicUrl. Webhooks are items { name, secretName, urlKey,
+  # secretKey }, as for disclosures but without a share link: the URL and the
+  # HMAC secret both come from that Secret. smtp.host turns e-mail on and needs
+  # from; the Hub speaks STARTTLS, so 465 is refused. userName goes with
+  # passwordSecretName and passwordSecretKey, and needs startTls unless the
+  # relay is on loopback. See docs/CONFIGURATION.md.
+  recaps:
+    movementThreshold: 0.2
+    retention: "365.00:00:00"
+    maxDelay: "06:00:00"
+    publicUrl: ""
+    webhooks: []
+    smtp:
+      host: ""
+      port: 587
+      startTls: true
+      userName: ""
+      passwordSecretName: ""
+      passwordSecretKey: ""
+      from: ""
+    subscriptions: []
   access:
     # Who reaches which findings, sources and runs: projects, roles, grants,
     # internal groups, admins and machine tokens, passed to the Hub as is. On,

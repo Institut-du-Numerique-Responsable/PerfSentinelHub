@@ -7,6 +7,7 @@ using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -68,6 +69,20 @@ public static partial class ApiEndpoints
         app.MapGet("/api/sources/{sourceId}/acks", GetSourceAcksAsync);
         app.MapPost("/api/sources/{sourceId}/acks", CreateAckAsync);
         app.MapPost("/api/sources/{sourceId}/acks/revoke", RevokeAckAsync);
+        // Never anonymous: an action is taken in somebody's name.
+        app.MapPost("/api/actions", CreateActionAsync);
+        app.MapPatch("/api/actions", UpdateActionAsync);
+        // Never anonymous: a label is set in somebody's name.
+        app.MapPut("/api/labels", SetLabelAsync);
+        app.MapPut("/api/labels/services", SetServiceLabelAsync);
+        // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
+        app.MapGet("/api/recap", GetRecapAsync);
+        // Never anonymous: a frozen report is read by who made it or by a recaps.read holder, and made in a name.
+        // The page sits outside /api so a browser that follows the mailed link is signed in by redirect.
+        app.MapGet("/api/recap/reports", GetRecapReportsAsync);
+        app.MapPost("/api/recap/reports", CreateRecapReportAsync);
+        app.MapGet("/api/recap/reports/{id}", GetRecapReportAsync);
+        app.MapGet("/recaps/{id}/{view}.html", GetRecapReportHtmlAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
         // correlations, a daemon pushes with its key. With Hub:Access the reads need a
@@ -324,7 +339,8 @@ public static partial class ApiEndpoints
             return refused;
         try
         {
-            var (import, rejected) = await ReadImportAsync(request, maxBytes, parse, admission.Refuse, cancellationToken);
+            var (import, rejected) =
+                await ReadImportAsync(request, maxBytes, parse, admission.Refuse, cancellationToken);
             if (rejected is not null)
                 return rejected;
             if (await store(source, import) is { } stored)
@@ -512,42 +528,14 @@ public static partial class ApiEndpoints
         return true;
     }
 
-    /// <summary>
-    ///     The source scope the findings and the incidents reads share, null for
-    ///     the whole fleet. A source id or an environment is configuration, so an
-    ///     unknown one is a bad request rather than an empty page: a typo would
-    ///     otherwise read as "nothing there". Given together they intersect, and a
-    ///     source outside the named environment leaves the empty set, since a
-    ///     screen offers the two as filters that both apply. With access on, the
-    ///     sources are the caller's own list, so one outside it reads as unknown.
-    /// </summary>
+    // The rule lives in RecapSchedule.TryScope, which the scheduled reports share.
     private static bool TryReadSourceScope(
         HttpRequest request,
         IReadOnlyList<SourceOptions> sources,
         out IReadOnlyList<string>? sourceIds)
     {
-        sourceIds = null;
-        var sourceId = ReadOptional(request, "source_id");
-        if (sourceId is not null &&
-            !sources.Any(source => string.Equals(source.Id, sourceId, StringComparison.Ordinal)))
-            return false;
-
-        var environment = ReadOptional(request, "environment");
-        if (environment is not null)
-        {
-            sourceIds =
-            [
-                .. sources
-                    .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
-                    .Select(source => source.Id)
-            ];
-            if (sourceIds.Count == 0)
-                return false;
-        }
-
-        if (sourceId is not null)
-            sourceIds = sourceIds is null || sourceIds.Contains(sourceId) ? [sourceId] : [];
-        return true;
+        return RecapSchedule.TryScope(
+            ReadOptional(request, "environment"), ReadOptional(request, "source_id"), sources, out sourceIds);
     }
 
     // Null when absent or blank. The shape of a signature is the daemon's rule,

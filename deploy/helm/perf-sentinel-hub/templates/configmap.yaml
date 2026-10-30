@@ -56,4 +56,27 @@ data:
     {{- if $disclosures.publicUrl }}{{- $_ := set $section "PublicUrl" $disclosures.publicUrl }}{{- end }}
     {{- $_ := set $hub "Disclosures" $section }}
     {{- end }}
+    {{- /* Nil-safe for --reuse-values: a release that predates hub.recaps keeps the
+           Hub's defaults. The webhook URLs and secrets and the SMTP password reach
+           the pod as environment variables, never here. Subscriptions are passed as
+           is: their keys bind case-insensitively and none holds a secret. */}}
+    {{- $recaps := .Values.hub.recaps | default dict }}
+    {{- if $recaps }}
+    {{- $recapWebhooks := list }}
+    {{- range $recaps.webhooks | default list }}
+    {{- $recapWebhooks = append $recapWebhooks (dict "Name" .name) }}
+    {{- end }}
+    {{- $recapSection := dict "MovementThreshold" (default 0.2 $recaps.movementThreshold) "Retention" (default "365.00:00:00" $recaps.retention) "MaxDelay" (default "06:00:00" $recaps.maxDelay) "Webhooks" $recapWebhooks "Subscriptions" ($recaps.subscriptions | default list) }}
+    {{- if $recaps.publicUrl }}{{- $_ := set $recapSection "PublicUrl" $recaps.publicUrl }}{{- end }}
+    {{- $smtpValues := $recaps.smtp | default dict }}
+    {{- if $smtpValues.host }}
+    {{- /* hasKey, as for updateCheck: default true would read an explicit false as absent. */}}
+    {{- $startTls := true }}
+    {{- if hasKey $smtpValues "startTls" }}{{- $startTls = $smtpValues.startTls }}{{- end }}
+    {{- $smtp := dict "Host" $smtpValues.host "Port" (default 587 $smtpValues.port) "StartTls" $startTls "From" $smtpValues.from }}
+    {{- if $smtpValues.userName }}{{- $_ := set $smtp "UserName" $smtpValues.userName }}{{- end }}
+    {{- $_ := set $recapSection "Smtp" $smtp }}
+    {{- end }}
+    {{- $_ := set $hub "Recaps" $recapSection }}
+    {{- end }}
     {{ dict "Hub" $hub | toJson }}

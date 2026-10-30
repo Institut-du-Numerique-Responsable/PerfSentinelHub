@@ -39,11 +39,11 @@ public sealed class StorageTests
             [
                 "ack_reads", "analysis_runs", "correlation_episodes", "detection_counts", "detection_days",
                 "detection_ledgers", "disclosure_deliveries", "disclosure_share_links",
-                "disclosures", "endpoint_heartbeats", "finding_attributes", "finding_groupings",
-                "finding_lineage", "finding_observations",
+                "disclosures", "endpoint_heartbeats", "endpoint_labels", "finding_action_events",
+                "finding_actions", "finding_attributes", "finding_groupings", "finding_lineage", "finding_observations",
                 "finding_sources", "findings", "incident_attributes", "incident_reads", "incidents",
-                "schema_migrations", "source_acks", "source_finding_imports", "source_imports", "source_state",
-                "terminal_tokens"
+                "recap_deliveries", "recap_reports", "schema_migrations", "service_labels", "source_acks",
+                "source_finding_imports", "source_imports", "source_state", "terminal_tokens"
             ],
             names.Order(StringComparer.Ordinal));
         Assert.True(database.IsReady);
@@ -60,7 +60,7 @@ public sealed class StorageTests
         await using var command = connection.CreateCommand();
         command.CommandText =
             "SELECT group_concat(version, ',') FROM (SELECT version FROM schema_migrations ORDER BY version);";
-        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15",
+        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",
             (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
@@ -314,6 +314,94 @@ public sealed class StorageTests
         await using var read = reopened.CreateCommand();
         read.CommandText = Groupings;
         Assert.IsType<DBNull>(await read.ExecuteScalarAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_v15_database_gains_the_carbon_columns()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // Dropped rather than hand-written as the old DDL, as the cases above do.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE detection_days DROP COLUMN avoidable_gco2;
+                               ALTER TABLE detection_days DROP COLUMN avoidable_io_ops;
+                               ALTER TABLE detection_days DROP COLUMN avoidable_gco2_low;
+                               ALTER TABLE detection_days DROP COLUMN total_io_ops;
+                               INSERT INTO detection_days(
+                                 source_id, ledger_id, day, sealed, gap, overflow_detections, shed_traces,
+                                 ingest_rejected, sampling_rate, last_read_ms)
+                               VALUES ('prod', 'ledger', 20400, 1, 0, 0, 0, 0, 1.0, 500);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(name || ' ' || type, ',') FROM
+                                    (SELECT name, type FROM pragma_table_info('detection_days')
+                                     WHERE name IN ('avoidable_gco2', 'avoidable_io_ops', 'avoidable_gco2_low',
+                                                    'total_io_ops') ORDER BY cid))
+                             || ' | ' || (SELECT IFNULL(avoidable_gco2, '-') || IFNULL(avoidable_io_ops, '-')
+                                          || IFNULL(avoidable_gco2_low, '-') || IFNULL(total_io_ops, '-')
+                                          FROM detection_days);
+                           """;
+        Assert.Equal(
+            "avoidable_gco2 REAL,avoidable_io_ops INTEGER,avoidable_gco2_low REAL,total_io_ops INTEGER | ----",
+            (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
+    public async Task A_v16_database_gains_the_owner_display_columns()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // Dropped rather than hand-written as the old DDL, as the cases above do.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE finding_actions DROP COLUMN owner_display;
+                               ALTER TABLE finding_action_events DROP COLUMN owner_display;
+                               INSERT INTO finding_actions(signature, status, owner, created_by, created_at_ms, updated_at_ms)
+                               VALUES ('sig', 'todo', 'alice', 'alice', 1, 1);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(table_name || '.' || name || ' ' || type, ',') FROM
+                                    (SELECT 'finding_actions' AS table_name, name, type FROM pragma_table_info('finding_actions')
+                                     WHERE name = 'owner_display'
+                                     UNION ALL
+                                     SELECT 'finding_action_events', name, type FROM pragma_table_info('finding_action_events')
+                                     WHERE name = 'owner_display'))
+                             || ' | ' || (SELECT IFNULL(owner_display, '-') FROM finding_actions);
+                           """;
+        Assert.Equal(
+            "finding_actions.owner_display TEXT,finding_action_events.owner_display TEXT | -",
+            (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
     private static async Task<List<string>> SourceColumnsAsync(

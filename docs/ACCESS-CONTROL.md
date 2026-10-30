@@ -55,6 +55,10 @@ provider changes a label, not their rights.
 | Machine token    | `machine:<name>`                | `machine:<name>`                 | Its configured group alone                   |
 | Local account    | `local:<name>`                  | `local:<name>`                   | Internal groups alone                        |
 
+A browser session also carries the name the provider gave the user, from
+`Hub:Auth:DisplayNameClaim` (default `name`). It is shown as an action's owner and never
+used for access.
+
 `Hub:Auth:SubjectClaim` (default `sub`) accepts only `sub`, `oid`, `uuid` and
 `account_id`, ids a provider never reassigns. `sub` fits Keycloak, Google, GitLab and
 Entra ID; Bitbucket Cloud has no `sub` and takes `account_id`. A userinfo whose subject
@@ -111,13 +115,16 @@ scope, and the answer is built from in-scope copies only.
 | `sources.read`  | A daemon's settings view, and with `findings.read` and `analyses.run` a daemon run; source level only |
 | `analyses.run`  | Starting a run                                                                  |
 | `acks.write`    | Acknowledging a finding, or revoking an ack                                     |
+| `actions.write` | Declaring and changing an action on a finding                                   |
+| `labels.write`  | Naming an endpoint or a service in business words                               |
 | `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
 | `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
+| `recaps.read`   | Reading every recap report: the list, a report and its page (Hub level)         |
 
 | Built-in role | Permissions                                                     |
 |---------------|-----------------------------------------------------------------|
 | `reader`      | `findings.read`, `traces.read`, `analyses.run`                  |
-| `member`      | `reader` plus `acks.write`                                      |
+| `member`      | `reader` plus `acks.write`, `actions.write` and `labels.write`  |
 | `admin`       | Everything, on `*` only, plus the access configuration          |
 
 `reader` is not read-only: it starts analyses. A read-only role is configured, for
@@ -126,8 +133,8 @@ instance `auditor: [findings.read, traces.read]`.
 `sources.read` is source level: it counts only on `*` or through a pattern that sets
 `source` alone. So do `analyses.run` and `findings.read` for a daemon run.
 
-`disclosures.read` and `disclosures.manage` are Hub level: a disclosure belongs to no source.
-The built-in `admin` role carries them, `reader` and `member` never do, and a machine token
+`disclosures.read`, `disclosures.manage` and `recaps.read` are Hub level: a disclosure or a
+recap report belongs to no source. The built-in `admin` role carries them, `reader` and `member` never do, and a machine token
 never holds them. A configured role may carry them, granted on `*` only: the Hub refuses to
 start on a grant of such a role to a project.
 
@@ -146,11 +153,17 @@ does not depend on the provider at all.
 | `/` and the launcher's files                                           | any caller                                                      | redirect or `401`       |
 | `GET /api/status`, `GET /api/sources`                                  | any permission anywhere                                         | `403`                   |
 | `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtered                                       | `403` when held nowhere |
+| `GET /api/recap`                                                       | `findings.read`, filtered                                       | `403` when held nowhere |
+| `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` on `*`, or the creator of an on-demand report with `findings.read` | `403` (list), `404` (one report) |
+| `POST /api/recap/reports`                                              | `findings.read`, filtered, and somebody to name                 | `403`                   |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtered; the richest copy in scope            | `403`; `404`            |
 | `POST /api/incidents/refresh`                                          | `findings.read`; reads only the daemons in scope                | `403`                   |
 | `GET /api/correlations`                                                | `findings.read`, filtered to the episodes whose two services the caller reads at that source | `403` when held nowhere |
 | `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` at that source as a whole                        | `404`                   |
 | `POST /api/sources/{sourceId}/acks` and `/acks/revoke`                 | `findings.read` and `acks.write` on the finding at that source  | `404`, `403`            |
+| `POST` and `PATCH /api/actions`                                        | `findings.read` and `actions.write` on one copy of the finding, and somebody to name | `404`, `403` |
+| `PUT /api/labels`                                                      | `findings.read` and `labels.write` on one copy of a finding at the endpoint, and somebody to name | `404`, `403` |
+| `PUT /api/labels/services`                                             | `findings.read` and `labels.write` on one copy of a finding of the service, and somebody to name | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` and the run's read rule, below                   | `403`                   |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | the run's read rule                                             | filtered; `404`         |
 | `GET /reports/{id}.html`                                               | the run's read rule                                             | `404`                   |
@@ -224,6 +237,27 @@ any that appear later: **an ack made through an attribute grant may silence the 
 finding for another team's deployment at that daemon**, until it expires or is revoked.
 The Hub forces no expiry. Where several teams can emit the same service name, give the
 owning team a source or service grant for `acks.write` and `analyses.run`.
+
+### Actions
+
+An action is global to the signature, as an ack is at its daemon, so it is judged on every
+copy of the finding the caller reads, at any source, and allowed when one of them is
+writable. A caller who reads none gets the `404` an unknown finding gets; one who reads
+some but may write none gets `403`. A caller holding `actions.write` nowhere is refused
+before the request body is read, and a caller the Hub cannot name is refused first of all.
+Unlike an ack, an action reaches no daemon and silences nothing: it is a note the whole Hub
+shares about who works on the finding.
+
+### Endpoint labels
+
+A label is global to a `(service, endpoint)` pair, so it is judged on every copy of every
+finding at that endpoint that the caller reads, at any source, and allowed when one of them is
+writable under `labels.write`. A caller who reads none gets the `404` an unknown endpoint gets;
+one who reads some but may write none gets `403`. A caller holding `labels.write` nowhere is
+refused before the request body is read, and a caller the Hub cannot name is refused first of
+all. A label reaches no daemon: it is a name the whole Hub shares for the recap and the cards
+that quote it. A service name, `PUT /api/labels/services`, is judged the same way on every copy
+of every finding of that service.
 
 ### Your access and Coverage
 

@@ -108,6 +108,7 @@ and a client that talks to it directly cannot forge one.
 | `Hub:Auth:ClientSecret`            | none                   | Required, supplied through a Secret                                          |
 | `Hub:Auth:Scopes`                  | `openid profile email` | Space-separated                                                              |
 | `Hub:Auth:IdentityClaim`           | `email`                | The userinfo field recorded as the user, a display name                      |
+| `Hub:Auth:DisplayNameClaim`        | `name`                 | The userinfo field shown as an action's owner when the provider sends it, ignored when blank, over 128 characters or not a string; never used for access |
 | `Hub:Auth:SubjectClaim`            | `sub`                  | The authorization key, read only with access control: `sub`, `oid`, `uuid` or `account_id` |
 | `Hub:Auth:GroupsClaim`             | `groups`               | The userinfo field of the groups, read with `RequiredGroups` or access control |
 | `Hub:Auth:RequiredGroups`          | none                   | No blank entry, refused while `Enabled` is off, see below                    |

@@ -113,7 +113,7 @@ public sealed class AccessApiTests : IAsyncLifetime
             """[{"name":"/teams/shop","origin":"provider"},{"name":"oncall","origin":"internal"}]""",
             access.GetProperty("groups").GetRawText());
         Assert.Equal(
-            """[{"group":"/teams/shop","project":"shop","role":"member","permissions":["findings.read","traces.read","analyses.run","acks.write"]},""" +
+            """[{"group":"/teams/shop","project":"shop","role":"member","permissions":["findings.read","traces.read","analyses.run","acks.write","actions.write","labels.write"]},""" +
             """{"group":"internal:oncall","project":"lab","role":"auditor","permissions":["findings.read","traces.read"]}]""",
             access.GetProperty("reach").GetRawText());
         Assert.Equal(
@@ -174,7 +174,7 @@ public sealed class AccessApiTests : IAsyncLifetime
 
         Assert.True(access.GetProperty("admin").GetBoolean());
         Assert.Equal(
-            """[{"group":null,"project":"*","role":"admin","permissions":["findings.read","traces.read","sources.read","analyses.run","acks.write","access.admin","disclosures.read","disclosures.manage"]}]""",
+            """[{"group":null,"project":"*","role":"admin","permissions":["findings.read","traces.read","sources.read","analyses.run","acks.write","actions.write","labels.write","access.admin","disclosures.read","disclosures.manage","recaps.read"]}]""",
             access.GetProperty("reach").GetRawText());
     }
 
@@ -208,15 +208,15 @@ public sealed class AccessApiTests : IAsyncLifetime
 
         Assert.True(access.GetProperty("admin").GetBoolean());
         Assert.Equal(
-            """[{"group":"/hub-admins","project":"*","role":"admin","permissions":["findings.read","traces.read","sources.read","analyses.run","acks.write","access.admin","disclosures.read","disclosures.manage"]}]""",
+            """[{"group":"/hub-admins","project":"*","role":"admin","permissions":["findings.read","traces.read","sources.read","analyses.run","acks.write","actions.write","labels.write","access.admin","disclosures.read","disclosures.manage","recaps.read"]}]""",
             access.GetProperty("reach").GetRawText());
         Assert.Equal("[]", access.GetProperty("projects").GetRawText());
         var configuration = access.GetProperty("configuration");
         Assert.Equal("shop,lab", Names(configuration.GetProperty("projects")));
         Assert.Equal(
             """[{"name":"reader","permissions":["findings.read","traces.read","analyses.run"],"built_in":true},""" +
-            """{"name":"member","permissions":["findings.read","traces.read","analyses.run","acks.write"],"built_in":true},""" +
-            """{"name":"admin","permissions":["findings.read","traces.read","sources.read","analyses.run","acks.write","access.admin","disclosures.read","disclosures.manage"],"built_in":true},""" +
+            """{"name":"member","permissions":["findings.read","traces.read","analyses.run","acks.write","actions.write","labels.write"],"built_in":true},""" +
+            """{"name":"admin","permissions":["findings.read","traces.read","sources.read","analyses.run","acks.write","actions.write","labels.write","access.admin","disclosures.read","disclosures.manage","recaps.read"],"built_in":true},""" +
             """{"name":"auditor","permissions":["findings.read","traces.read"],"built_in":false}]""",
             configuration.GetProperty("roles").GetRawText());
         Assert.Equal(
@@ -366,7 +366,12 @@ public sealed class AccessApiTests : IAsyncLifetime
     private static SourceOptions Daemon(string id, string environment)
     {
         return new SourceOptions
-        { Id = id, Name = id, Environment = environment, BaseUrl = new Uri("http://127.0.0.1:1") };
+        {
+            Id = id,
+            Name = id,
+            Environment = environment,
+            BaseUrl = new Uri("http://127.0.0.1:1")
+        };
     }
 
     private async Task SeedAsync()

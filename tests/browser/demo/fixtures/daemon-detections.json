@@ -81,7 +81,11 @@
       "overflow_extra_io_ops": 0,
       "shed_traces": 0,
       "ingest_rejected": 0,
-      "sampling_rate": 1.0
+      "sampling_rate": 1.0,
+      "avoidable_gco2": 0.0029,
+      "avoidable_gco2_low": 0.0012,
+      "avoidable_io_ops": 66,
+      "total_io_ops": 412
     }
   ],
   "next_after": null

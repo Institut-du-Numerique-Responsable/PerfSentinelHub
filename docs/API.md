@@ -48,8 +48,11 @@ character, integers from 0 to 2^53, a sampling rate from 0 to 1. One value out o
 since the daemon seals a day by pushing its day object alone. A day pushed `sealed` stays
 sealed, and every value merges by its maximum, a sampling rate by its minimum, so a push, a poll
 and a replay land on the same rows in any order. The push writes neither reachability nor the
-time of the source's last findings push. Refusals count on
-`perf_sentinel_hub_detection_import_rejected_total`.
+time of the source's last findings push. Each day object may also carry `avoidable_gco2` and
+`avoidable_gco2_low` (grams of CO2eq, from 0 to 2^53), `avoidable_io_ops` and `total_io_ops`
+(integers), which a daemon that scores carbon sends together. They merge by maximum, an absent
+value never lowering a stored one, and are absent on engines before the recap release. Refusals
+count on `perf_sentinel_hub_detection_import_rejected_total`.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that
@@ -551,6 +554,284 @@ one line, event `1310` when the daemon answered and `1311` when it did not, with
 source, the action, the caller and the status. The reason and the credential are never
 logged.
 
+## Recap
+
+`GET /api/recap` answers a review recap of one period: the findings worth a look first, what
+moved since the period before, what the teams did about them, and what the avoidable I/O
+may cost in carbon. It is computed from the same reads as `/api/findings`, so the scope,
+the filters, access control and the detection volume are the ones of that list. It is never
+open: under `Hub:Auth` it needs a session or a token, and a caller with `findings.read`
+nowhere gets the `403` the findings list gives.
+
+| Parameter                   | Default           | Does                                                             |
+|-----------------------------|-------------------|------------------------------------------------------------------|
+| `period`                    | `week`            | `day`, `week` (ISO, Monday to Sunday, UTC) or `month` (calendar) |
+| `at`                        | today, UTC        | Any day of the period, `yyyy-MM-dd`; a day after today is a `400` |
+| `view`                      | `tech`            | `tech` (Engineering) or `pilotage` (Management)                  |
+| `environment`, `source_id`  | the whole fleet   | As on `/api/findings`                                            |
+| `service`, `grouping`       | none              | As on `/api/findings`                                            |
+
+A repeated parameter, a value the list does not know or invalid UTF-8 is a `400`.
+
+The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, `period` and
+`previous` (each `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
+`sampling_rate`, `truncated_to_days`), `filters` (as asked), `comparison_exact`, `tiles`,
+`priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`
+and `truncated`.
+
+- **Comparing.** A period in progress is compared on its closed days: `FromDay` to
+  yesterday against the same number of first days of the previous period, reported in
+  `previous.truncated_to_days`. Today is partial and would read as a drop against a full
+  day. On the first day of a period there is no closed day: every trend is `unknown`, the
+  `new`, `gone`, `up` and `down` lists are empty, the previous period is not read and
+  `truncated_to_days` is `0`. The tiles and the ranking keep today's partial volume and
+  are labelled in progress by `period.in_progress`.
+- **Ranking.** Unacknowledged findings only. First those with avoidable I/O on the period,
+  by that volume, then the others by severity (critical, warning, info); ties go to the
+  finding detected more often, then to the signature. `rank` starts at `1`. The `tech` view
+  lists every ranked finding, `pilotage` the first five and `more_priorities` counts the rest.
+- **Trends.** Each ranked finding is `new` (absent from the previous period), `up`, `down`
+  or `flat` against its own volume in the previous period, `change` being the relative
+  difference. The metric is the avoidable I/O when either side has it, the detections
+  otherwise. `Hub:Recaps:MovementThreshold` (default `0.2`, above `0` and at most `10`)
+  is the change past which a finding reads `up` or `down`. A finding the data cannot
+  compare, or seen today only, reads `unknown`, never `down`.
+- **Movements.** `new`, `up` and `down` follow the trends, in ranking order. `gone` lists the
+  unacknowledged findings of the previous period that the current period does not hold at
+  all, an acknowledged finding not being gone, in their previous ranking, with the trend
+  `gone` and no change; `gone_with_confirmed_action`
+  counts those whose fix was confirmed. `came_back` and `done_still_detected` list the
+  findings of the period whose `done` action came back or was contradicted.
+  `nothing_moved` is true when none of those lists holds anything and no finding of ranks 1
+  to 10 went `up` or `down`.
+- **Incomplete and notes.** `incomplete` names what forbids an exact comparison:
+  `uncovered_days`, `open_day` (a past day not sealed), `restart` (a daemon restart
+  interrupted its counts) and `overflow`. `notes` names what is worth a line and leaves the
+  comparison standing: `sampling` (with `sampling_rate`, the lowest over the period), `shed`,
+  `ingest_rejected` and `multi_instance`. `comparison_exact` is true when neither period is
+  incomplete. Today alone never makes a period incomplete.
+- **Sources without volume.** `sources_without_volume` names the sources holding a finding of
+  either period and no detection ledger (a daemon that predates the ledger, or one that
+  sends no day). Their findings are ranked by severity and carry `volume_known: false`.
+- **Tiles.** `avoidable_io_ops` is the sum over the ranked findings, `null` when none has a
+  known volume, next to `previous_avoidable_io_ops`, `null` when the previous period was
+  not read. `active_findings` counts the ranked findings, `acked_findings` the
+  acknowledged ones of the period, and `actions` counts the actions of the period's
+  findings by status (`todo`, `in_progress`, `done`) and, among the `done` ones, the
+  confirmations `confirmed`, `contradicted` and `came_back`.
+- **Carbon.** `co2_grams` is context, never a sort key: an estimate, rounded to one
+  significant figure, of the extra I/O priced at each day's own grams per avoidable I/O, as the
+  engine sent them with its ledger days. It is a partial minimum when some sources send
+  no coefficient: `co2_sources_without_coefficient` counts them and the figure is never
+  extrapolated. With none, `co2_grams` is `null` and `co2_missing_reason` is
+  `no_coefficient`, or `no_avoidable_io` when there is nothing to price. A priority carries
+  its own `co2_grams` and `co2_partial`.
+- **Actions and confirmation.** A priority carries its `action` (status, owner, `owner_display`,
+  times and, in `tech`, the `events`). A `done` action is judged on the days after the one it was
+  marked done: `confirmed` once a day sealed at a reachable source of the finding holds no
+  detection, `contradicted` when it is detected before any clean day, `came_back` when it
+  is detected after one, `awaiting` while no day is sealed yet. A source that is
+  unreachable never confirms. The judgment stays within the filters of the request.
+- **Labels.** A priority and every movement item carry `label`, the business name someone gave
+  to the endpoint they come from (see [Endpoint labels](#endpoint-labels)), or `null`, and
+  `service_label`, the business name of their service, or `null`. Both keys are always there,
+  in every view, and `service` stays beside `service_label`, so a receiver can still group by
+  the technical service. `filters.service_label` is the name of the service filter, or `null`,
+  and `null` too when the caller reads no finding of that service in either period: a typed
+  filter never reveals the name of a service outside the caller's scope.
+- **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
+  priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
+  technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
+  `confidence` and the action `events` are absent, not `null`. So is `endpoint`, except on a
+  priority or a movement item whose `label` is `null`: two rows of the same type stay apart
+  by the one technical value left. A frozen report and a recap webhook drop `endpoint` on those
+  rows too (see [Recap reports](#recap-reports)).
+- **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
+  `truncated: true`; narrow the request with a filter.
+
+### Recap webhooks
+
+Each webhook named by a subscription, declared in `Hub:Recaps:Webhooks`, receives a `POST` with a JSON
+body when the subscription's report of a closed period is frozen. A period in which nothing moved is
+archived and sent nowhere. The body carries the management view only: the `recap` object is the
+`pilotage` snapshot described above, so it holds none of the engineering keys, and no `endpoint` at
+all: a row that has no label keeps its `null` `label` and its `service`, nothing more. An action has
+a `null` `owner` and carries the owner's name only, in `owner_display`, as the attached page shows it:
+no e-mail or account reaches a receiver. The engineering view reaches a receiver as a link, never as
+content.
+
+```json
+{"event":"recap","report_id":"…","subscription":"weekly-shop",
+ "period":{"kind":"week","from":"2026-10-19","to":"2026-10-25"},"complete":true,
+ "pilotage_url":"https://hub.example/recaps/<id>/pilotage.html","tech_url":null,
+ "recap":{"schema_version":1,"view":"pilotage"}}
+```
+
+`pilotage_url` and `tech_url` name the frozen page when the report holds that view and
+`Hub:Recaps:PublicUrl` (or `Hub:Disclosures:PublicUrl` when unset) is set, and are `null`
+otherwise. `recap` is shortened above. The signature headers, the retries and the 8 attempts are those of
+[disclosure webhooks](#webhooks): `X-PerfSentinel-Timestamp`, `X-PerfSentinel-Signature` under the
+webhook's `Secret`, no redirect followed, a `2xx` settles a delivery, anything else is tried again
+after 30 seconds then a doubling wait capped at one hour. A recap webhook with `IncludeShareLink`
+set is rejected at startup. `Confidentiality` (which must stay `public`) and `ShareLinkDays` (1 to 30)
+are validated but unused here.
+
+Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart resumes them. A
+delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a
+request.
+
+## Recap reports
+
+A recap report is the recap of one closed period, frozen: the tech snapshot exactly as it was computed,
+stored once, with the deliveries that carried it out. A subscription in `Hub:Recaps:Subscriptions`
+produces one per cadence and period; a caller can also ask for one. Reading a report never recomputes
+it, so a link keeps showing what the team was told on the day.
+
+| Route                                   | Does                                                                    |
+|-----------------------------------------|-------------------------------------------------------------------------|
+| `GET /api/recap/reports`                | The newest 200 reports, without snapshots, each with its deliveries     |
+| `POST /api/recap/reports`               | Generates a report on demand, `201` with the same item                  |
+| `GET /api/recap/reports/{id}`           | `{"report": …, "snapshot": …}`, the snapshot served as it was stored    |
+| `GET /recaps/{id}/{view}.html`          | The frozen page of one view, `pilotage` or `tech`                       |
+
+A report item holds `id` (32 lowercase hex), `subscription` (`null` for an on-demand report),
+`period` (`kind`, `from`, `to`), `views[]`, `complete` (no `incomplete` reason in the snapshot),
+`nothing_moved`, `created_by` (`null` for a subscription report), `generated_at_ms` and
+`deliveries[]`: `channel` (`webhook` or `email`), `target`, `state` (`pending`, `delivered` or
+`failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` and `last_status`. The HTML page lives
+outside `/api`, so a browser that follows a mailed link and holds no session is sent to sign in.
+
+**On demand.** The body is a JSON object, at most 4 KiB, with the same-origin rule and the
+JSON content type of the other writes:
+
+| Field                       | Does                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| `period`                    | Required: `day`, `week` or `month`                                                     |
+| `at`                        | Any day of the period, `yyyy-MM-dd`, from 1900; default: the last closed period        |
+| `environment`, `source_id`  | As on `/api/recap`; an unknown one is `400 Unknown environment or source_id.`          |
+| `service`, `grouping`       | As on `/api/recap`                                                                     |
+
+Each string is 1 to 256 characters with no control character. A period that has not ended before
+today is `400 A report covers a closed period; pick a date in an earlier one.` The report is built
+from the copies the caller reads under `findings.read`, as `GET /api/recap` is, stored in the
+caller's name with both views and no delivery. A caller the Hub cannot name gets `403`, a
+cross-site request `403`, a wrong content type `415`, a body over 4 KiB `413`.
+
+**Who reads what.** A holder of `recaps.read` reads every report. Anyone else with `findings.read`
+reads the reports they generated, matched on the account's immutable subject
+(`Hub:Auth:SubjectClaim`), never on the name shown in `created_by`, and nothing else; a caller
+without a subject owns none, and a subscription report has no creator, so no one matches it. A report the caller may not read
+answers the `404` an unknown id gets, with the same body, on the three routes that name one; the
+list answers `403 {"detail":"You may not read recap reports."}` to a caller holding neither
+permission, and only the caller's own reports otherwise.
+
+**The page.** `Content-Type: text/html; charset=utf-8`,
+`Content-Disposition: inline; filename="perf-sentinel-recap-<from>-<view>.html"`,
+`Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and a `Content-Security-Policy` that
+allows nothing but the two inline scripts of the page, by hash. `pilotage` is the management
+projection of the stored snapshot, made when the page is served, with two cuts the live screen does
+not make. A row with no label shows no endpoint: its title reads "An unnamed step in" and the
+service, with "Name it in the Hub to see it here." under it. Wherever a management row names its
+service, it uses the service's business name when someone gave one (`An unnamed step in Payment`,
+`in Payment`, and `Scope: Payment` for a service filter). An action owner is the name a person reads
+(`Alice Martin` for `alice.martin@acme.com` or `Alice.Martin@Acme.com`, `Alice` for
+`Alice <alice@acme.com>`), and the identity behind it (an e-mail, a `local:` name, a subject) is in
+neither the text, a `title` nor the data island. An owner that leaves no name once the e-mail is
+gone shows no owner. The `tech` page keeps that identity on hover. An id that is not 32 lowercase
+hex, an unknown id and a view the report does not hold are all `404`. Reports are purged after
+`Hub:Recaps:Retention`.
+
+## Actions
+
+An action says who works on a finding and where it stands. The Hub keeps it itself: nothing
+is written at a daemon. It is global to the signature, as an ack is, so a finding seen at
+two sources carries one action. Two routes write it, with a JSON body, and neither is ever
+open: under `Hub:Auth` they need a session.
+
+| Endpoint             | Body                                                            | Does                                  |
+|----------------------|-----------------------------------------------------------------|---------------------------------------|
+| `POST /api/actions`  | `{"signature":"…","take":true}` or `{"signature":"…","status":"…","owner":"…"}` | Declares the action on a finding      |
+| `PATCH /api/actions` | `{"signature":"…","status":"…","owner":"…"}`                    | Changes the status or the owner of it |
+
+- `status` is `todo`, `in_progress` or `done`. Nothing defaults to `todo`.
+- `owner` is a string of 1 to 256 characters with no control character. `null` on a `PATCH`
+  clears it.
+- `take: true` is a `POST` only and stands for `status: "in_progress"` with the caller as
+  owner. It cannot be combined with `status` or `owner`.
+- A `POST` needs `take: true` or a `status`, and an `owner` alone is not enough:
+  `400 {"detail":"An action needs a status or take."}`. A `PATCH` needs a `status` or an
+  `owner`. A `by` in the body is ignored: the Hub names the caller itself.
+
+The Hub judges a request in this order, and a request it refuses writes nothing.
+
+1. **The caller.** As for an ack, the signed-in user, or the proxy header when
+   `Hub:AckRelay:TrustIdentityHeader` is set. With nobody to name, a `403`.
+2. **Where the request comes from.** The same `403` and `415` as an ack.
+3. **The permission.** With access control on, a caller holding `actions.write` nowhere gets
+   `403 {"detail":"You may not act on findings."}` before the body is read. A body over
+   8 KiB is a `413`.
+4. **The body.** One `400` per rule above, the signature held to the bounds of an ack's.
+   `take` in a `PATCH` is a `400`.
+5. **The finding.** The Hub must hold it, and with access control on the caller must read a
+   copy of it, otherwise `404 {"detail":"The Hub holds no such finding."}`, the very answer
+   a finding the caller may not read gets. A readable one the caller may not write is a
+   `403`, see [With access control](#with-access-control).
+6. **The write.** A `POST` on a signature that has an action is a `409`, and a `PATCH` on one
+   that has none a `404`. A write the store could not take in time is a `503` with
+   `Retry-After: 1`.
+
+A `POST` answers `201` and a `PATCH` `200` with the action as it now stands:
+
+```json
+{"signature": "n_plus_one_sql:order-svc:…", "status": "done", "owner": "ada@example.com",
+ "owner_display": "Ada Lovelace", "created_by": "ada@example.com", "created_at_ms": 1760000000000,
+ "updated_at_ms": 1760003600000, "done_at_ms": 1760003600000}
+```
+
+`owner_display` is the name the identity provider gave the caller who took the finding, or
+`null`: a proxy-header or token caller has none, and an `owner` set from the body is typed by
+hand, so it clears it. A status change or the same owner keeps it. Events carry it too. It is
+shown, never judged. `done_at_ms` is stamped when the action enters `done` and cleared when it leaves it. Every
+change of the status or the owner appends an event, with the status it left, the one it
+reached, the owner, the caller and the time. The events are never rewritten, and neither the
+action nor its events are purged with the finding: an action outlives the retention of the
+finding it was declared on, so a recap can still tell whether the fix held. A `PATCH` that
+changes nothing appends nothing. Every refusal the Hub words itself carries
+`{"detail":"…"}`.
+
+## Endpoint labels
+
+A label is what a person calls an endpoint in business words (`Showing a cart` for
+`checkout-api` `GET /api/cart/{id}`). It belongs to one `(service, endpoint)` pair for the
+whole Hub, whichever source holds the findings, and the recap shows it as the title of a row.
+A service name does the same for a whole service (`Payment` for `checkout-api`), once for every
+step of it, and the recap shows it wherever a row names its service. Two routes write them,
+each with a JSON body, and neither is open: under `Hub:Auth` both need a session.
+
+| Endpoint                   | Body                                                      | Does                         |
+|----------------------------|-----------------------------------------------------------|------------------------------|
+| `PUT /api/labels`          | `{"service":"…","endpoint":"…","label":"Showing a cart"}` | Sets, replaces or removes it |
+| `PUT /api/labels/services` | `{"service":"…","label":"Payment"}`                       | Sets, replaces or removes it |
+
+- `service` and `endpoint` are the finding's own, 1 to 1024 characters with no control
+  character, as they read in `/api/findings` (`endpoint` is its `source_endpoint`).
+- `label` is trimmed, then 1 to 80 characters with no control character and no format
+  character (a direction override such as U+202E, a zero-width one). `null`, or a label with
+  nothing left once trimmed, removes it. A body without a `label` is a
+  `400 {"detail":"A label needs a label value; send null to remove it."}`.
+- `PUT /api/labels/services` names a whole service, once for every step of it: the recap's
+  Management rows say `in Payment` rather than `in checkout-api`, and an unnamed step reads
+  `An unnamed step in Payment`. It takes `service` and `label` under the same rules, and is
+  judged on every copy of every finding of that service: `404 {"detail":"The Hub holds no
+  finding of this service."}` when the caller reads none.
+- The Hub judges the request like an action: the caller first (nobody to name is a `403`),
+  then where it comes from (`403`, `415`), the permission, the body (`400`, or `413` over 8 KiB),
+  the endpoint (`404` when the Hub holds no finding there that the caller reads, `403` when it
+  reads one it may not name), then the write (`503` with `Retry-After: 1` when the store could
+  not take it in time). A request it refuses writes nothing.
+
+It answers `204` with no body.
+
 ## Analysis API
 
 An analysis is a run of the perf-sentinel binary against one configured source, producing
@@ -863,6 +1144,32 @@ token or a machine token, and each answer covers what the caller's grants cover.
   cannot read answers the very `404` an unknown one does, and one it reads but may not
   write `403`. A revoke of a mirrored ack whose finding the Hub no longer holds needs the
   source as a whole. `expires_at` stays the caller's choice: no expiry is forced.
+- **The recap** follows `findings.read` the same way: it is built from the copies the
+  caller reads, as `/api/findings` is, and a caller holding `findings.read` nowhere gets the
+  same `403`. A `source_id` or an `environment` outside the caller's `/api/sources` is the
+  `400` of an unknown one.
+- **Recap reports** are read through `recaps.read` (Hub level, no machine token holds it) or, for
+  a report a caller generated on demand, through `findings.read` and the identity that generated
+  it. A subscription report needs `recaps.read`. A report the caller may not read answers the `404`
+  an unknown one gets. Generating needs a caller the Hub can name and `findings.read`, and the
+  report is built from the copies that caller reads.
+- **Actions** need a caller the Hub can name, then `actions.write` somewhere, or
+  `403 {"detail":"You may not act on findings."}`, before the body is read. An action is
+  global to the signature, so it is judged on the copies of the finding the caller reads, at
+  any source: none answers the `404` an unknown finding gets, and when none of them is
+  writable under `actions.write` the answer is
+  `403 {"detail":"You can read this finding but not act on it."}`. A machine token holds
+  neither permission.
+- **Labels** follow the same order as actions: a caller the Hub can name, then `labels.write`
+  somewhere, or `403 {"detail":"You may not name endpoints."}`, before the body is read. A label
+  is global to the `(service, endpoint)` pair, so it is judged on every copy of every finding
+  there that the caller reads: none answers `404 {"detail":"The Hub holds no finding at this
+  endpoint."}`, the answer an unknown endpoint gets, and when none of them is writable under
+  `labels.write` the answer is `403 {"detail":"You can read this endpoint but not name it."}`. A
+  service name follows the same order on the copies of every finding of the service:
+  `403 {"detail":"You may not name services."}`, then `404 {"detail":"The Hub holds no finding
+  of this service."}` or `403 {"detail":"You can read this service but not name it."}`. A
+  machine token holds neither permission.
 - **Analyses.** One rule decides who sees a run's row and opens its report: a daemon run
   needs `findings.read` and `sources.read` at the daemon as a whole; a trace-backend run
   needs `traces.read` on the requested service, or at the backend as a whole for a trace
@@ -901,7 +1208,8 @@ never lists a machine token's value or fingerprint.
   "admin": false,
   "groups": [{"name": "/teams/shop", "origin": "provider"}, {"name": "oncall", "origin": "internal"}],
   "reach": [{"group": "/teams/shop", "project": "shop", "role": "member",
-             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write"]}],
+             "permissions": ["findings.read", "traces.read", "analyses.run", "acks.write",
+                              "actions.write"]}],
   "projects": [{"name": "shop", "patterns": [{"source": null, "service": null, "attribute": "team=shop"}]}],
   "configuration": null,
   "unmatched": null,

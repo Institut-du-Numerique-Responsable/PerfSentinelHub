@@ -18,6 +18,8 @@ se lise avant de déployer quoi que ce soit.
 | greffon d'IDE ou job de CI | entrant | `GET /api/findings`, rien d'autre                                                                               |
 | job de CI vers Hub, divulgations | entrant | `POST /api/import/disclosures` avec sa propre `X-API-Key`, une fois par période, quand les divulgations sont actives |
 | Hub vers destinataires de webhook | sortant | un `POST` signé par divulgation publiée ou retirée, vers chaque entrée de `Hub:Disclosures:Webhooks` |
+| Hub vers destinataires de récap | sortant | un `POST` signé par rapport de récap, vers chaque entrée de `Hub:Recaps:Webhooks` qu'un abonnement nomme |
+| Hub vers relais SMTP | sortant | les e-mails de récap, vers `Hub:Recaps:Smtp:Host` seulement, en STARTTLS sur le port 587 par défaut |
 | n'importe qui vers Hub, liens de partage | entrant | `GET /share/{token}/{name}`, les fichiers d'une divulgation sous un jeton qui expire |
 | Hub vers api.github.com    | sortant | la vérification de version, que `Hub:UpdateCheck:Enabled` désactive                                             |
 

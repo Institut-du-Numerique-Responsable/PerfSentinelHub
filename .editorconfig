@@ -10,3 +10,8 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 dotnet_sort_system_directives_first = true
+# Rider indents a nested loop without braces as dotnet format does, so a Rider reformat keeps
+# `make format` green. Write a wrapped object initializer one member per line for the same reason.
+resharper_indent_nested_foreach_stmt = true
+resharper_indent_nested_for_stmt = true
+resharper_indent_nested_while_stmt = true

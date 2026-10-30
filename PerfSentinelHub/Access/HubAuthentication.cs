@@ -318,6 +318,8 @@ public static partial class HubAuthentication
         // provider's userinfo does not carry the configured field.
         if (context.Identity?.Name is not { Length: > 0 } name)
             throw new InvalidOperationException("The provider's userinfo lacks the Hub:Auth:IdentityClaim field.");
+        if (ReadDisplayName(user.RootElement, auth.DisplayNameClaim) is { } display)
+            context.Identity.AddClaim(new Claim(AccessCaller.DisplayNameClaim, display));
         var access = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
         // One read of the field for both gates, so they can never disagree on a user's groups.
         var groups = auth.RequiredGroups.Count > 0 || access.Enabled
@@ -336,6 +338,16 @@ public static partial class HubAuthentication
 
         if (access.Enabled)
             AddAccessClaims(context, context.Identity, user.RootElement, auth, access, name, groups ?? []);
+    }
+
+    // A cosmetic field: anything but a short string with no control character is ignored, never a
+    // sign-in failure.
+    private static string? ReadDisplayName(JsonElement user, string claim)
+    {
+        if (!user.TryGetProperty(claim, out var field) || field.ValueKind != JsonValueKind.String)
+            return null;
+        var value = field.GetString()!.Trim();
+        return value.Length is >= 1 and <= 128 && !value.Any(char.IsControl) ? value : null;
     }
 
     /// <summary>

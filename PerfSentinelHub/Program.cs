@@ -11,6 +11,7 @@ using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
 using PerfSentinelHub.Maintenance;
+using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
 // Each subcommand stays a block of its own, handled before the host is built.
@@ -66,6 +67,7 @@ builder.Services.AddOptions<HubOptions>()
     .ValidateOnStart();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HubDatabase>();
+builder.Services.AddSingleton<RecapService>();
 // Always registered, disabled with access off: registered only with it on, a handler taking it
 // would have the Request Delegate Generator read it as a JSON body, which a GET refuses.
 builder.Services.AddSingleton<AccessPolicy>();
@@ -99,6 +101,10 @@ builder.Services.AddSingleton<ShareDownloadCounter>();
 builder.Services.AddHostedService<ShareDownloadFlusher>();
 builder.Services.AddSingleton<DeliveryWorker>();
 builder.Services.AddHostedService<DeliveryLoop>();
+builder.Services.AddSingleton<RecapGenerator>();
+builder.Services.AddSingleton<RecapMailer>();
+builder.Services.AddSingleton<RecapDeliveryWorker>();
+builder.Services.AddHostedService<RecapLoop>();
 // Its own client: a webhook is a destination of its own, never followed elsewhere. No
 // request logging: the factory would log each URL, and a chat webhook URL is a secret.
 builder.Services.AddHttpClient(DeliveryWorker.ClientName)

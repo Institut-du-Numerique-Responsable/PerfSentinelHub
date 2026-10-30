@@ -59,6 +59,11 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     private const string
         DisclosureKey = "disclosure-import-0123456789abcdef0123"; // gitleaks:allow -- synthetic test credential
 
+    private static readonly JsonSerializerOptions Wire = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+    };
+
     private static readonly Dictionary<string, string> Users = new(StringComparer.Ordinal)
     {
         ["admin"] = """{"sub":"u-admin","email":"admin@example.internal","groups":[]}""",
@@ -68,6 +73,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         ["ss"] = """{"sub":"u-ss","email":"ss@example.internal","groups":"/ss"}""",
         ["lab"] = """{"sub":"u-lab","email":"lab@example.internal","groups":["/lab"]}""",
         ["tempo"] = """{"sub":"u-tempo","email":"tempo@example.internal","groups":["/tempo"]}""",
+        // attr's e-mail under another subject, as a reassigned address would be.
+        ["attrtwin"] = """{"sub":"u-attr-2","email":"attr@example.internal","groups":["/shop"]}""",
         ["viewer"] = """{"sub":"u-view","email":"view@example.internal","groups":["/viewers"]}""",
         ["tracer"] = """{"sub":"u-tracer","email":"tracer@example.internal","groups":["/tracers"]}""",
         ["nogrant"] = """{"sub":"u-none","email":"none@example.internal","groups":42}""",
@@ -131,6 +138,15 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("GET", "/api/correlations")]
     [InlineData("POST", "/api/sources/shop-d/acks")]
     [InlineData("GET", "/api/sources/shop-d/acks")]
+    [InlineData("POST", "/api/actions")]
+    [InlineData("PATCH", "/api/actions")]
+    [InlineData("PUT", "/api/labels")]
+    [InlineData("PUT", "/api/labels/services")]
+    [InlineData("GET", "/api/recap")]
+    [InlineData("GET", "/api/recap/reports")]
+    [InlineData("POST", "/api/recap/reports")]
+    [InlineData("GET", "/api/recap/reports/0123456789abcdef0123456789abcdef")]
+    [InlineData("GET", "/recaps/0123456789abcdef0123456789abcdef/tech.html")]
     [InlineData("GET", "/api/disclosures")]
     [InlineData("GET", "/api/analyses")]
     [InlineData("POST", "/api/analyses")]
@@ -403,6 +419,180 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_recap_reads_only_the_copies_in_scope()
+    {
+        // F1 is acked at shop-d, the only copy attr reads: counted, not ranked. F2 is outside its scope.
+        using var attr = await SignedInAsync("attr");
+
+        using var response = await attr.GetAsync("/api/recap", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = document.RootElement;
+        var ranked = root.GetProperty("priorities").EnumerateArray()
+            .Select(priority => priority.GetProperty("signature").GetString()).ToList();
+        // Both warnings with no volume, so the signature breaks the tie.
+        Assert.Equal([F4, F5], ranked);
+        Assert.DoesNotContain(F2, ranked);
+        Assert.DoesNotContain(F1, ranked);
+        Assert.Equal(1, root.GetProperty("tiles").GetProperty("acked_findings").GetInt32());
+    }
+
+    [Fact]
+    public async Task A_caller_without_findings_read_gets_403_on_the_recap()
+    {
+        using var client = await SignedInAsync("tracer");
+
+        using var response = await client.GetAsync("/api/recap", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("No grant gives you findings.read on this Hub.", await DetailAsync(response));
+    }
+
+    // The findings are seeded at the clock's now and the Hub shares this clock, so a week on, the seeded
+    // week is the last closed one.
+    [Fact]
+    public async Task An_on_demand_report_keeps_the_callers_scope()
+    {
+        _clock.Advance(TimeSpan.FromDays(7));
+        using var attr = await SignedInAsync("attr");
+
+        using var created = await attr.SendAsync(Post("/api/recap/reports", """{"period":"week"}"""),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = await ReportIdAsync(created);
+        using var detail = await attr.GetAsync($"/api/recap/reports/{id}", TestContext.Current.CancellationToken);
+        using var document =
+            JsonDocument.Parse(await detail.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var ranked = document.RootElement.GetProperty("snapshot").GetProperty("priorities").EnumerateArray()
+            .Select(priority => priority.GetProperty("signature").GetString()).Order().ToList();
+        Assert.Equal([F4, F5], ranked);
+        Assert.DoesNotContain(F2, ranked);
+    }
+
+    [Fact]
+    public async Task The_creator_lists_and_reads_its_own_report()
+    {
+        _clock.Advance(TimeSpan.FromDays(7));
+        using var attr = await SignedInAsync("attr");
+        var own = await ReportIdAsync(await attr.SendAsync(Post("/api/recap/reports", """{"period":"week"}"""),
+            TestContext.Current.CancellationToken));
+        var subscription = await StoreSubscriptionReportAsync();
+
+        using var list = await attr.GetAsync("/api/recap/reports", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Equal([own], await ListedIdsAsync(list));
+        foreach (var path in new[] { $"/api/recap/reports/{own}", $"/recaps/{own}/tech.html" })
+        {
+            using var read = await attr.GetAsync(path, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        }
+
+        foreach (var path in new[] { $"/api/recap/reports/{subscription}", $"/recaps/{subscription}/tech.html" })
+        {
+            using var hidden = await attr.GetAsync(path, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        }
+    }
+
+    // Ownership follows the immutable subject, never the display name two callers can share.
+    [Fact]
+    public async Task A_caller_sharing_the_creators_name_but_not_its_subject_reads_nothing()
+    {
+        _clock.Advance(TimeSpan.FromDays(7));
+        using var attr = await SignedInAsync("attr");
+        var own = await ReportIdAsync(await attr.SendAsync(Post("/api/recap/reports", """{"period":"week"}"""),
+            TestContext.Current.CancellationToken));
+        using var twin = await SignedInAsync("attrtwin");
+
+        using var list = await twin.GetAsync("/api/recap/reports", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Empty(await ListedIdsAsync(list));
+        foreach (var path in new[] { $"/api/recap/reports/{own}", $"/recaps/{own}/tech.html" })
+        {
+            using var hidden = await twin.GetAsync(path, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task A_reader_without_recaps_read_gets_the_404_an_unknown_report_gets()
+    {
+        _clock.Advance(TimeSpan.FromDays(7));
+        using var attr = await SignedInAsync("attr");
+        var own = await ReportIdAsync(await attr.SendAsync(Post("/api/recap/reports", """{"period":"week"}"""),
+            TestContext.Current.CancellationToken));
+        var subscription = await StoreSubscriptionReportAsync();
+        using var viewer = await SignedInAsync("viewer");
+
+        foreach (var template in new[] { "/api/recap/reports/{0}", "/recaps/{0}/tech.html" })
+        {
+            using var unknown = await viewer.GetAsync(string.Format(template, "0123456789abcdef0123456789abcdef"),
+                TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+            var expected = await unknown.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+            foreach (var id in new[] { own, subscription })
+            {
+                using var hidden = await viewer.GetAsync(string.Format(template, id),
+                    TestContext.Current.CancellationToken);
+                Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+                Assert.Equal(expected, await hidden.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+            }
+        }
+
+        using var list = await viewer.GetAsync("/api/recap/reports", TestContext.Current.CancellationToken);
+        Assert.Empty(await ListedIdsAsync(list));
+    }
+
+    [Fact]
+    public async Task Admin_lists_every_report()
+    {
+        _clock.Advance(TimeSpan.FromDays(7));
+        using var attr = await SignedInAsync("attr");
+        var own = await ReportIdAsync(await attr.SendAsync(Post("/api/recap/reports", """{"period":"week"}"""),
+            TestContext.Current.CancellationToken));
+        var subscription = await StoreSubscriptionReportAsync();
+        using var admin = await SignedInAsync("admin");
+
+        using var list = await admin.GetAsync("/api/recap/reports", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Equal(new[] { own, subscription }.Order(), (await ListedIdsAsync(list)).Order());
+        foreach (var id in new[] { own, subscription })
+        {
+            using var read = await admin.GetAsync($"/recaps/{id}/tech.html", TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task A_caller_without_findings_read_cannot_generate()
+    {
+        using var tracer = await SignedInAsync("tracer");
+
+        using var response = await tracer.SendAsync(Post("/api/recap/reports", """{"period":"week"}"""),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("No grant gives you findings.read on this Hub.", await DetailAsync(response));
+    }
+
+    [Fact]
+    public async Task A_caller_with_neither_permission_cannot_list()
+    {
+        using var tracer = await SignedInAsync("tracer");
+
+        using var response = await tracer.GetAsync("/api/recap/reports", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("You may not read recap reports.", await DetailAsync(response));
+    }
+
+    [Fact]
     public async Task A_caller_without_findings_read_anywhere_gets_403_on_both_findings_routes()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -590,6 +780,63 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         using var response = await client.GetAsync("/api/sources/shop-d/acks", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ------------------------------------------------------------ actions
+
+    [Fact]
+    public async Task A_member_acts_on_a_finding_its_attribute_grant_writes()
+    {
+        using var client = await SignedInAsync("attr");
+
+        using var response = await client.SendAsync(Post("/api/actions", ActionBody(F1)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var action = Assert.Single(await Database.ReadActionsAsync([F1], TestContext.Current.CancellationToken));
+        Assert.Equal("attr@example.internal", action.Owner);
+        Assert.Equal("attr@example.internal", action.CreatedBy);
+    }
+
+    [Fact]
+    public async Task A_readable_finding_its_grant_cannot_write_is_a_403()
+    {
+        using var client = await SignedInAsync("attr");
+
+        using var response = await client.SendAsync(Post("/api/actions", ActionBody(F4)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("You can read this finding but not act on it.", await DetailAsync(response));
+        Assert.Empty(await Database.ReadActionsAsync([F4], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_hidden_finding_answers_the_404_an_unknown_one_gets()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = await SignedInAsync("attr");
+
+        using var hidden = await client.SendAsync(Post("/api/actions", ActionBody(F2)), cancellationToken);
+        using var unknown = await client.SendAsync(Post("/api/actions", ActionBody(Orphan)), cancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        Assert.Equal(await unknown.Content.ReadAsByteArrayAsync(cancellationToken),
+            await hidden.Content.ReadAsByteArrayAsync(cancellationToken));
+        Assert.Empty(await Database.ReadActionsAsync([F2, Orphan], cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_caller_without_actions_write_is_refused_before_the_body()
+    {
+        using var client = await SignedInAsync("viewer");
+
+        // No body worth reading: the refusal comes before it is parsed.
+        using var response = await client.SendAsync(Post("/api/actions", "not json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("You may not act on findings.", await DetailAsync(response));
     }
 
     // ------------------------------------------------------------ disclosures
@@ -1029,7 +1276,10 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                 services.PostConfigure<HubOptions>(options =>
                 {
                     options.Analysis = new AnalysisOptions
-                    { EngineBinaryPath = "/usr/bin/false", ReportDirectory = _reports };
+                    {
+                        EngineBinaryPath = "/usr/bin/false",
+                        ReportDirectory = _reports
+                    };
                     options.Sources =
                     [
                         .. options.Sources,
@@ -1247,6 +1497,41 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         var request = Request("POST", path, body ?? "{}");
         request.Headers.Add("Sec-Fetch-Site", "same-origin");
         return request;
+    }
+
+    private static async Task<string> ReportIdAsync(HttpResponseMessage created)
+    {
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using var document =
+            JsonDocument.Parse(await created.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        return document.RootElement.GetProperty("id").GetString()!;
+    }
+
+    private static async Task<List<string>> ListedIdsAsync(HttpResponseMessage list)
+    {
+        using var document =
+            JsonDocument.Parse(await list.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        return [.. document.RootElement.EnumerateArray().Select(item => item.GetProperty("id").GetString()!)];
+    }
+
+    // A scheduled report: nobody asked for it, so no caller created it.
+    private async Task<string> StoreSubscriptionReportAsync()
+    {
+        var id = Guid.NewGuid().ToString("N");
+        var snapshot = JsonSerializer.Serialize(RecapSnapshots.Distinctive(), Wire);
+        Assert.True(await Database.InsertRecapReportAsync(
+            new RecapReportRecord(
+                new RecapReportSummary(
+                    id, "weekly-shop", "week", "2026-10-19", "2026-10-25",
+                    [RecapViewNames.Pilotage, RecapViewNames.Tech], true, false, null, NowMs),
+                snapshot),
+            [], TestContext.Current.CancellationToken));
+        return id;
+    }
+
+    private static string ActionBody(string signature)
+    {
+        return $$"""{"signature":"{{signature}}","take":true}""";
     }
 
     private static string AckBody(string signature)

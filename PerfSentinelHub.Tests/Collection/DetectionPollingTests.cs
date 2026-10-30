@@ -33,14 +33,19 @@ public sealed class DetectionPollingTests : IDisposable
 
     [Theory]
     [InlineData(null)]
-    [InlineData("""{"ledger_id":"not-a-guid","started_ms":1,"retained_days":31,"oldest_day":20398,"current_day":20400,"sealed_through":20399}""")]
-    [InlineData("""{"ledger_id":"00000000-0000-4000-8000-000000000001","started_ms":"1","oldest_day":20398,"current_day":20400}""")]
-    [InlineData("""{"ledger_id":"00000000-0000-4000-8000-000000000001","started_ms":1,"oldest_day":20398,"current_day":20400,"sealed_through":"x"}""")]
+    [InlineData(
+        """{"ledger_id":"not-a-guid","started_ms":1,"retained_days":31,"oldest_day":20398,"current_day":20400,"sealed_through":20399}""")]
+    [InlineData(
+        """{"ledger_id":"00000000-0000-4000-8000-000000000001","started_ms":"1","oldest_day":20398,"current_day":20400}""")]
+    [InlineData(
+        """{"ledger_id":"00000000-0000-4000-8000-000000000001","started_ms":1,"oldest_day":20398,"current_day":20400,"sealed_through":"x"}""")]
     [InlineData("[]")]
     public async Task A_daemon_without_a_ledger_is_never_asked(string? ledger)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var status = ledger is null ? new JsonObject() : new JsonObject { ["detection_ledger"] = JsonNode.Parse(ledger) };
+        var status = ledger is null
+            ? new JsonObject()
+            : new JsonObject { ["detection_ledger"] = JsonNode.Parse(ledger) };
         await using var daemon = await DaemonAsync(status, _ => Task.CompletedTask, cancellationToken);
         var (poller, database, watch) = await BuildAsync(cancellationToken);
 
@@ -186,8 +191,8 @@ public sealed class DetectionPollingTests : IDisposable
         var first = Page([Today - 2], "a");
         first["sealed_through"] = Today - 2;
         // The daemon sealed yesterday between the two pages, and says so on the second.
-        var second = Page([Today - 1], null, sealedDay: true);
-        var pages = new Queue<JsonObject>([first, second, Page([Today - 1], null, sealedDay: true)]);
+        var second = Page([Today - 1], null, true);
+        var pages = new Queue<JsonObject>([first, second, Page([Today - 1], null, true)]);
         await using var daemon = await DaemonAsync(
             Status(Ledger(Today - 2)), context => Serve(context, pages.Dequeue()), cancellationToken);
         var (poller, database, _) = await BuildAsync(cancellationToken);
@@ -204,6 +209,33 @@ public sealed class DetectionPollingTests : IDisposable
 
         Assert.Equal([$"?since_day={Today - 1}&limit=5000"], _requests);
         Assert.Equal([(Today - 2, true), (Today - 1, true)], await DaysAsync(database, cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_polled_day_keeps_its_carbon_fields()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (poller, database, _) = await BuildAsync(cancellationToken);
+        var page = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(Today)],
+            [
+                DetectionLedgerJson.Day(
+                    Today, avoidableGco2: 12.5, avoidableIoOps: 400, avoidableGco2Low: 6.25, totalIoOps: 5200)
+            ],
+            Today);
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()), context => Serve(context, page), cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT avoidable_gco2 || ' ' || avoidable_gco2_low || ' ' || avoidable_io_ops || ' '
+                                || total_io_ops FROM detection_days WHERE source_id = 'prod' AND day = $day;
+                              """;
+        command.Parameters.AddWithValue("$day", Today);
+        Assert.Equal("12.5 6.25 400 5200", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
     [Fact]

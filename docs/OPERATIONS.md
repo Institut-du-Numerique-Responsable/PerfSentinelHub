@@ -322,6 +322,67 @@ carries its own secret. A delivery that gives up after 8 attempts counts on
 | `2404` | Warning     | A delivery gave up after its last attempt                                   |
 | `2405` | Warning     | A delivery pass failed as a whole. The next one retries                     |
 
+## Recap reports
+
+With `Hub:Recaps:Subscriptions` set, the Hub freezes the recap of each closed period into a stored
+report and delivers it, see [CONFIGURATION.md](CONFIGURATION.md#recap-reports) for the keys and
+[API.md](API.md#recap-reports) for the routes. A Hub with no subscription generates nothing and
+sends nothing.
+
+**When a report is generated.** A pass runs every 15 seconds. For each subscription and each of
+its cadences it looks at the last closed period only: yesterday, last week or last month, in UTC.
+The report is due once every source that read a ledger during the period holds a sealed row for
+the period's last day, which the daemon writes after its UTC midnight, or once `Hub:Recaps:MaxDelay`
+(six hours by default) has passed since the period ended, whichever comes first. A report
+generated past that delay says which days were still open, and reads incomplete. The table holds
+one report per subscription, cadence and period, so a restart or a second tick adds nothing.
+Periods missed while the Hub was down are not generated afterwards, except the last closed one.
+A subscription added to the configuration gets the report of its last closed period at the next
+tick that finds it due, not at the end of the current period.
+
+**What is sent.** A report whose period moved nothing is archived and sent nowhere. A report
+that moved is delivered to each webhook and each e-mail address of its subscription, once. The
+webhook and the mail carry the management view only, and the engineering view is a link to the Hub,
+which stays behind its sign-in. Neither names the endpoint of a row nobody labelled, and both show
+each action owner by name, without the e-mail or account behind it (see
+[API.md](API.md#recap-reports), The page).
+
+**Deliveries.** They run in the same 15 second pass and resume after a restart. A 2xx settles a
+webhook; any other answer, a redirect included, and silence are retried with a backoff that starts
+at 30 seconds, doubles and stops at one hour, and a delivery gives up after 8 attempts. An e-mail
+is settled by the relay's 250. A 5xx from the relay fails it at once, since retrying a refusal
+only repeats it, and a 4xx or silence is retried like a webhook. After the first silence of a
+pass the other e-mails wait for the next one, so a dead relay costs one timeout of 60 seconds
+per pass, and the generator and the webhooks behind it wait that long as well. Nothing here
+counts on a Prometheus metric: the events below are the signal.
+
+**No DNS record.** The Hub hands each message to the relay set in `Hub:Recaps:Smtp:Host` and never
+looks up a recipient's mail server, so it needs no MX, SPF or DKIM record of its own. Send from an
+address the relay already sends for, and the relay's records cover the Hub's mail.
+
+**What never reaches a log.** A webhook is named, never given by URL, and its secret is not
+logged. An e-mail address is not logged either: a delivery that gives up says "an e-mail address".
+The relay's host, user name and password stay out of the log too, and the HTTP client's own request
+logging is off, as for disclosures.
+
+**Size.** A tech snapshot holds every ranked finding of its period, up to 5,000, and is stored per
+subscription, cadence and period for the whole of `Hub:Recaps:Retention` (a year by default).
+Size the disk accordingly: a daily subscription over a busy fleet stores a snapshot a day.
+Reports leave on the daily retention worker, on `generated_at_ms`, and their deliveries leave with
+them. When the last subscription is removed from the configuration, the rows still pending stay
+pending until retention purges them: the delivery pass only runs while a subscription is declared.
+
+**Log events.**
+
+| Event  | Level       | Says                                                                                               |
+|--------|-------------|----------------------------------------------------------------------------------------------------|
+| `2501` | Information | A report was generated, with its subscription, period, whether it is complete and whether it moved |
+| `2502` | Warning     | A recap webhook could not be reached, by name. The delivery is retried                              |
+| `2503` | Warning     | The SMTP relay could not be reached. The e-mails are retried                                        |
+| `2504` | Warning     | A recap delivery gave up, or the relay refused it for good                                          |
+| `2505` | Warning     | A recap pass failed as a whole. The next one retries                                                |
+| `2506` | Warning     | One subscription's report could not be generated. The others went on                                |
+
 ## Backup
 
 `first_seen` history is the one thing the Hub stores that nothing upstream can

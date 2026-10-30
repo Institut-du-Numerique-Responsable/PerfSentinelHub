@@ -27,12 +27,16 @@ public sealed record HubOptions
     public AckRelayOptions AckRelay { get; set; } = new();
     public AccessOptions Access { get; set; } = new();
     public DisclosuresOptions Disclosures { get; set; } = new();
+    public RecapsOptions Recaps { get; set; } = new();
 
     // The one port /metrics answers on, and nothing else answers there. Unset, /metrics
     // answers on every port as it always has; access control needs one (A14).
     public int? MetricsPort { get; set; }
 
     public IReadOnlyList<SourceOptions> Sources { get; set; } = [];
+
+    // Computed, so binding ignores it: the address a recap's engineering link names.
+    public Uri? RecapPublicUrl => Recaps.PublicUrl ?? Disclosures.PublicUrl;
 }
 
 /// <summary>
@@ -123,7 +127,7 @@ public sealed record LocalAccountOptions
     }
 }
 
-/// <summary>The eight permissions, the three built-in roles and what a machine token may hold.</summary>
+/// <summary>The eleven permissions, the three built-in roles and what a machine token may hold.</summary>
 public static class AccessPermissions
 {
     public const string FindingsRead = "findings.read";
@@ -131,11 +135,14 @@ public static class AccessPermissions
     public const string SourcesRead = "sources.read";
     public const string AnalysesRun = "analyses.run";
     public const string AcksWrite = "acks.write";
+    public const string ActionsWrite = "actions.write";
+    public const string LabelsWrite = "labels.write";
     public const string AccessAdmin = "access.admin";
 
     // Hub-level, granted on '*' only: a disclosure belongs to no source.
     public const string DisclosuresRead = "disclosures.read";
     public const string DisclosuresManage = "disclosures.manage";
+    public const string RecapsRead = "recaps.read";
 
     private const string ReaderRole = "reader";
     private const string MemberRole = "member";
@@ -143,7 +150,8 @@ public static class AccessPermissions
 
     public static readonly IReadOnlyList<string> All =
     [
-        FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, AccessAdmin, DisclosuresRead, DisclosuresManage
+        FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, ActionsWrite, LabelsWrite, AccessAdmin,
+        DisclosuresRead, DisclosuresManage, RecapsRead
     ];
 
     // reader is not read-only: it starts analyses.
@@ -151,11 +159,76 @@ public static class AccessPermissions
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
             [ReaderRole] = [FindingsRead, TracesRead, AnalysesRun],
-            [MemberRole] = [FindingsRead, TracesRead, AnalysesRun, AcksWrite],
+            [MemberRole] = [FindingsRead, TracesRead, AnalysesRun, AcksWrite, ActionsWrite, LabelsWrite],
             [AdminRole] = All
         };
 
     public static readonly IReadOnlyList<string> MachineTokenPermissions = [FindingsRead];
+}
+
+/// <summary>
+///     The review recap. MovementThreshold is the share of change past which a finding reads up or down.
+///     The rest declares the frozen reports: how long they are kept, who gets them and through what.
+/// </summary>
+public sealed record RecapsOptions
+{
+    public double MovementThreshold { get; set; } = 0.2;
+
+    // Kept past a month and a day: a month's report must outlive its month as the last closed one,
+    // or the next pass would generate and send it again.
+    public TimeSpan Retention { get; set; } = TimeSpan.FromDays(365);
+
+    // How long a report waits for the ledgers to seal the period's last day.
+    public TimeSpan MaxDelay { get; set; } = TimeSpan.FromHours(6);
+
+    // The Hub's own address for the engineering link; falls back to Hub:Disclosures:PublicUrl.
+    public Uri? PublicUrl { get; set; }
+
+    // Lists default empty: a bound list appends to its default.
+    public IReadOnlyList<WebhookOptions> Webhooks { get; set; } = [];
+    public RecapSmtpOptions Smtp { get; set; } = new();
+    public IReadOnlyList<RecapSubscriptionOptions> Subscriptions { get; set; } = [];
+}
+
+/// <summary>The relay the Hub hands each recap e-mail to. It never looks up a recipient's mail server.</summary>
+public sealed record RecapSmtpOptions
+{
+    public string? Host { get; set; }
+    public int Port { get; set; } = 587;
+    public bool StartTls { get; set; } = true;
+    public string? UserName { get; set; }
+
+    // Trimmed on binding, like a webhook secret, so a password mounted from a file compares right.
+    public string? Password
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    public string? From { get; set; }
+
+    public bool Enabled => Host is not null;
+}
+
+/// <summary>One scope, its cadences and views, and where the frozen report of each closed period goes.</summary>
+public sealed record RecapSubscriptionOptions
+{
+    public string Name { get; set; } = "";
+    public IReadOnlyList<string> Cadences { get; set; } = [];
+    public IReadOnlyList<string> Views { get; set; } = [];
+    public string? Environment { get; set; }
+    public string? SourceId { get; set; }
+    public string? Service { get; set; }
+    public string? Grouping { get; set; }
+    public IReadOnlyList<string> Webhooks { get; set; } = [];
+    public IReadOnlyList<string> Emails { get; set; } = [];
+}
+
+public static class RecapViewNames
+{
+    public const string Pilotage = "pilotage";
+    public const string Tech = "tech";
+    public static readonly string[] All = [Pilotage, Tech];
 }
 
 /// <summary>
@@ -307,6 +380,9 @@ public sealed record AuthOptions
 
     // The userinfo field recorded as the identity.
     public string IdentityClaim { get; set; } = "email";
+
+    // The userinfo field shown as the action owner when the provider sends it. Never used for access.
+    public string DisplayNameClaim { get; set; } = "name";
 
     // The userinfo field holding the authorization key, an id the provider never reassigns.
     // Read only with Hub:Access:Enabled; IdentityClaim stays the name people read.

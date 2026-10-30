@@ -19,7 +19,7 @@ SCANNER = (
     "/d:sonar.python.version=3.12 "
     '"/d:sonar.exclusions=**/bin/**,**/obj/**,TestResults/**,artifacts/coverage/**,artifacts/sonar/**,graphify-out/**,PerfSentinelHub/wwwroot/fonts.css" '
     '"/d:sonar.coverage.exclusions=scripts/**,tests/**,PerfSentinelHub/wwwroot/**" '
-    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin,entrypoint,demopacing "
+    "/d:sonar.issue.ignore.multicriteria=nugethash,clipath,clishell,cliargs,sqlbuilder,asciiclass,imagepin,entrypoint,demopacing,smtpplain "
     "/d:sonar.issue.ignore.multicriteria.nugethash.ruleKey=secrets:S6338 "
     "/d:sonar.issue.ignore.multicriteria.nugethash.resourceKey=config/supply-chain.json "
     "/d:sonar.issue.ignore.multicriteria.clipath.ruleKey=pythonsecurity:S8707 "
@@ -37,7 +37,9 @@ SCANNER = (
     "/d:sonar.issue.ignore.multicriteria.entrypoint.ruleKey=csharpsquid:S1118 "
     "/d:sonar.issue.ignore.multicriteria.entrypoint.resourceKey=PerfSentinelHub/Program.cs "
     "/d:sonar.issue.ignore.multicriteria.demopacing.ruleKey=typescript:S2925 "
-    '"/d:sonar.issue.ignore.multicriteria.demopacing.resourceKey=tests/browser/demo/**"\n'
+    '"/d:sonar.issue.ignore.multicriteria.demopacing.resourceKey=tests/browser/demo/**" '
+    "/d:sonar.issue.ignore.multicriteria.smtpplain.ruleKey=csharpsquid:S5332 "
+    "/d:sonar.issue.ignore.multicriteria.smtpplain.resourceKey=PerfSentinelHub/Recaps/RecapMailer.cs\n"
 )
 SONAR = "      - uses: actions/checkout\n        with:\n          fetch-depth: 0\n" + SCANNER
 

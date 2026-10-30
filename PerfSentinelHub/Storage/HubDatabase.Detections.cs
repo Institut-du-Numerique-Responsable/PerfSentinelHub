@@ -26,14 +26,18 @@ public sealed partial class HubDatabase
                                                  """;
 
     // A day keeps the lowest sampling rate it was ever read at, and a sealed day stays sealed.
+    // The four carbon columns merge by a null-tolerant maximum: NULL there means "not yet
+    // accumulated", unlike overflow_extra_io_ops where NULL means green off and stays sticky.
     private const string DetectionDayUpsert = """
                                               INSERT INTO detection_days(
                                                 source_id, ledger_id, day, sealed, gap, overflow_detections,
                                                 overflow_extra_io_ops, shed_traces, ingest_rejected, sampling_rate,
-                                                last_read_ms)
+                                                last_read_ms, avoidable_gco2, avoidable_io_ops, avoidable_gco2_low,
+                                                total_io_ops)
                                               VALUES ($source_id, $ledger_id, $day, $sealed, $gap, $overflow_detections,
                                                       $overflow_extra_io_ops, $shed_traces, $ingest_rejected,
-                                                      $sampling_rate, $observed_at)
+                                                      $sampling_rate, $observed_at, $avoidable_gco2,
+                                                      $avoidable_io_ops, $avoidable_gco2_low, $total_io_ops)
                                               ON CONFLICT(source_id, ledger_id, day) DO UPDATE SET
                                                 sealed = MAX(detection_days.sealed, excluded.sealed),
                                                 gap = MAX(detection_days.gap, excluded.gap),
@@ -45,7 +49,19 @@ public sealed partial class HubDatabase
                                                 ingest_rejected = MAX(detection_days.ingest_rejected,
                                                                       excluded.ingest_rejected),
                                                 sampling_rate = MIN(detection_days.sampling_rate, excluded.sampling_rate),
-                                                last_read_ms = MAX(detection_days.last_read_ms, excluded.last_read_ms);
+                                                last_read_ms = MAX(detection_days.last_read_ms, excluded.last_read_ms),
+                                                avoidable_gco2 = CASE WHEN detection_days.avoidable_gco2 IS NULL THEN excluded.avoidable_gco2
+                                                                 WHEN excluded.avoidable_gco2 IS NULL THEN detection_days.avoidable_gco2
+                                                                 ELSE MAX(detection_days.avoidable_gco2, excluded.avoidable_gco2) END,
+                                                avoidable_io_ops = CASE WHEN detection_days.avoidable_io_ops IS NULL THEN excluded.avoidable_io_ops
+                                                                   WHEN excluded.avoidable_io_ops IS NULL THEN detection_days.avoidable_io_ops
+                                                                   ELSE MAX(detection_days.avoidable_io_ops, excluded.avoidable_io_ops) END,
+                                                avoidable_gco2_low = CASE WHEN detection_days.avoidable_gco2_low IS NULL THEN excluded.avoidable_gco2_low
+                                                                     WHEN excluded.avoidable_gco2_low IS NULL THEN detection_days.avoidable_gco2_low
+                                                                     ELSE MAX(detection_days.avoidable_gco2_low, excluded.avoidable_gco2_low) END,
+                                                total_io_ops = CASE WHEN detection_days.total_io_ops IS NULL THEN excluded.total_io_ops
+                                                               WHEN excluded.total_io_ops IS NULL THEN detection_days.total_io_ops
+                                                               ELSE MAX(detection_days.total_io_ops, excluded.total_io_ops) END;
                                               """;
 
     private const string DetectionCountUpsert = """
@@ -161,6 +177,10 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$shed_traces", day.ShedTraces);
             parameters.AddWithValue("$ingest_rejected", day.IngestRejected);
             parameters.AddWithValue("$sampling_rate", day.SamplingRate);
+            parameters.AddWithValue("$avoidable_gco2", (object?)day.AvoidableGco2 ?? DBNull.Value);
+            parameters.AddWithValue("$avoidable_io_ops", (object?)day.AvoidableIoOps ?? DBNull.Value);
+            parameters.AddWithValue("$avoidable_gco2_low", (object?)day.AvoidableGco2Low ?? DBNull.Value);
+            parameters.AddWithValue("$total_io_ops", (object?)day.TotalIoOps ?? DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -177,7 +197,7 @@ public sealed partial class HubDatabase
 
         if (fromPush)
             await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken,
-                table: "source_imports");
+                "source_imports");
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -303,7 +323,8 @@ public sealed partial class HubDatabase
                         reader.IsDBNull(4) ? null : reader.GetInt64(4))));
             await reader.NextResultAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
-                days.Add((reader.GetString(0), new DayCoverage(reader.GetString(8), reader.GetInt32(1), reader.GetBoolean(2),
+                days.Add((reader.GetString(0), new DayCoverage(reader.GetString(8), reader.GetInt32(1),
+                    reader.GetBoolean(2),
                     reader.GetBoolean(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6),
                     reader.GetDouble(7))));
             await reader.NextResultAsync(cancellationToken);
@@ -326,8 +347,10 @@ public sealed partial class HubDatabase
             foreach (var source in finding.Sources)
                 source.Volume = DetectionVolumeFold.ForSource(
                     [.. daysBySource[source.SourceId]],
-                    [.. findingCounts.Where(item => item.SourceId == source.SourceId)
-                        .Select(item => (item.LedgerId, item.Row))],
+                    [
+                        .. findingCounts.Where(item => item.SourceId == source.SourceId)
+                            .Select(item => (item.LedgerId, item.Row))
+                    ],
                     window, today, multiInstance.Contains(source.SourceId));
             finding.Window = window;
             finding.Volume = DetectionVolumeFold.ForFinding([.. finding.Sources.Select(source => source.Volume!)]);

@@ -59,7 +59,7 @@ public sealed record AccessPattern(
                (Key is null || copy.Rows.Any(row => row.Key == Key && M(Value!, ValueIsPrefix, row.Value)));
     }
 
-    // Write (all), for acks.write and analyses.run.
+    // Write (all), for acks.write, actions.write and analyses.run.
     public bool Writes(AccessCopy copy)
     {
         return MatchesSource(copy.Source) && MatchesService(copy.Service) && (Key is null || AttributeWrites(copy));

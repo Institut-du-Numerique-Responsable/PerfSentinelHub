@@ -22,6 +22,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:NewSignaturesPerHourWarning`  | `1000`                                                                      | 0 or more, 0 turning it off. A daemon past it is flagged on `/api/sources` and logged           |
 | `Hub:DefaultReadLimit`             | `1000`                                                                      | 1 to `MaxReadLimit`                                                                             |
 | `Hub:MaxReadLimit`                 | `10000`                                                                     | 1 to 10000                                                                                      |
+| `Hub:Recaps:MovementThreshold`     | `0.2`                                                                       | Above 0, at most 10. A finding moves up or down on the recap past this share of change          |
 | `Hub:MetricsPort`                  | none                                                                        | 1 to 65535. The only port `/metrics` answers on, see [OPERATIONS.md](OPERATIONS.md#metrics)     |
 | `Hub:Analysis:EngineBinaryPath`    | none                                                                        | Optional, absolute path to the perf-sentinel binary. Absent means analysis runs are unavailable |
 | `Hub:Analysis:ReportDirectory`     | `/data/reports`                                                             | Absolute, writable. Rendered reports live here                                                  |
@@ -170,12 +171,13 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, see below                                                                                                                           |
 
 **Permissions and roles.** The permissions are `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `disclosures.read` and `disclosures.manage`,
-plus `access.admin`, which only the built-in `admin` role carries. The two disclosure
-permissions apply to the whole Hub, so a role carrying either is granted on `*` only. The
-built-in roles are `reader` (`findings.read`, `traces.read`, `analyses.run`), `member`
-(`reader` and `acks.write`) and `admin` (all eight, on `*` only). `reader` is not read-only: it starts analyses. A read-only role is a
-configured one, such as `auditor` with `findings.read` and `traces.read`.
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `disclosures.read`,
+`disclosures.manage` and `recaps.read`, plus `access.admin`, which only the built-in
+`admin` role carries. The two disclosure permissions and `recaps.read` apply to the whole
+Hub, so a role carrying any of them is granted on `*` only. The built-in roles are
+`reader` (`findings.read`, `traces.read`, `analyses.run`), `member` (`reader`, `acks.write`,
+`actions.write` and `labels.write`) and `admin` (all eleven, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
+is a configured one, such as `auditor` with `findings.read` and `traces.read`.
 
 **Patterns.** A record is in a project when one of its patterns matches. A part is exact,
 or a prefix: at least one character, then a single `*` at the end. A bare `*` is refused in
@@ -277,6 +279,59 @@ set. `allowInternal`, `expectedIdentity`, `expectedIssuer`, `shareLinkDays` and 
 follow the settings above. A webhook is `{ name, secretName, urlKey, secretKey,
 includeShareLink, shareLinkDays }`: its URL and its secret both come from that Secret.
 
+## Recap reports
+
+A recap of a closed period can be frozen into a stored report, served as self-contained HTML in a
+management and an engineering version, and delivered by signed webhook and by e-mail. Nothing here
+is on by default: a Hub with no `Hub:Recaps:Subscriptions` generates no report on its own and sends
+nothing. Each rule below is checked at startup and its message names the key. `Hub:Recaps` also
+holds `MovementThreshold`, in the settings table above.
+
+| Setting                      | Default                      | Validation                                                                                                                                     |
+|------------------------------|------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Recaps:Retention`       | `365.00:00:00`               | At least 32 days, so a month's report outlives its month as the last closed one. How long a stored report and its deliveries are kept          |
+| `Hub:Recaps:MaxDelay`        | `06:00:00`                   | Above zero, at most 7 days. How long a report waits for the ledgers to seal its last day                                                       |
+| `Hub:Recaps:PublicUrl`       | `Hub:Disclosures:PublicUrl`  | As that one: an absolute HTTP(S) URL with no path. The address the engineering link names                                                      |
+| `Hub:Recaps:Webhooks[]`      | none                         | `{ Name, Url, Secret, Confidentiality, IncludeShareLink, ShareLinkDays }`, the disclosure shape, see below                                      |
+| `Hub:Recaps:Smtp:*`          | off                          | `Host`, `Port`, `StartTls`, `UserName`, `Password`, `From`, see below                                                                          |
+| `Hub:Recaps:Subscriptions[]` | none                         | At most 100, see below                                                                                                                         |
+
+**Webhooks** follow the rules of [disclosure webhooks](#disclosures): `Name`, `Url`, `Secret` and
+`Confidentiality` mean the same, and the signature is the same. `IncludeShareLink` and
+`ShareLinkDays` apply to disclosures only, and the Hub refuses a recap webhook that sets
+`IncludeShareLink`. A recap webhook carries the management snapshot only.
+
+**The SMTP relay.** `Host` turns the e-mail on, and with it `From`, which is required. The Hub
+hands each message to this relay and never looks up a recipient's mail server, so it needs no DNS
+record of its own. Use a `From` the relay already sends for, whose SPF and DKIM then cover the
+Hub's mail. `Port` is 587 with `StartTls` on, the default: the Hub speaks STARTTLS, never implicit
+TLS, so 465 is refused. `UserName` and `Password` go together, authenticate with `AUTH LOGIN`, and
+need `StartTls` unless the relay is on loopback, since a password never travels in clear. A
+Microsoft 365 or Gmail account restricted to OAuth does not offer `AUTH LOGIN`: point the Hub at
+the organisation's relay instead. `From` is one address with no display name. The password comes
+through a Secret (`Hub__Recaps__Smtp__Password`).
+
+**Subscriptions.** Each one is `{ Name, Cadences, Views, Environment, SourceId, Service, Grouping,
+Webhooks, Emails }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
+`Cadences` lists `day`, `week` or `month`, each once, at least one. `Views` lists `pilotage`,
+`tech` or both, each once. `Environment` and `SourceId` must match a declared source, and a
+`SourceId` must belong to the `Environment` when both are set. `Service` and `Grouping` are 1 to
+256 characters with no control character. `Webhooks` names entries of `Hub:Recaps:Webhooks`, and
+`Emails` holds at most 50 distinct addresses without a display name, which needs
+`Hub:Recaps:Smtp:Host`. A subscription with no destination is valid: it archives its reports and
+delivers none.
+
+Under Helm the block is `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` and
+`publicUrl` follow the settings above. `subscriptions` passes its items as they are, keys in
+camel case: `{ name, cadences, views, environment, sourceId, service, grouping, webhooks,
+emails }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
+come from that Secret. `smtp` takes `host`, `port`, `startTls`, `userName` and `from`, and the
+chart writes it only once `host` is set. `passwordSecretName` and `passwordSecretKey` name the
+Secret holding the password, which reaches the pod as `Hub__Recaps__Smtp__Password`. The chart
+refuses a duplicate subscription or webhook name and a subscription naming an undeclared webhook.
+The schema refuses `emails` without `smtp.host`, port 465, and a `userName` without `startTls` on
+a relay off loopback. A wrong `environment` or `sourceId` is left to the Hub's startup check.
+
 ## What a source is, and what is measured
 
 The list is configuration, never discovery. Nothing is auto-detected, the launcher cannot
@@ -337,7 +392,7 @@ shows no producer version and no last success, and it is not a fault.
 
 ## Where the Hub connects
 
-Every outbound request goes to a configured `Sources[].BaseUrl`, with one exception. Once
+Every outbound request goes to a configured `Sources[].BaseUrl`, with one exception on by default. Once
 a day the Hub asks the GitHub releases API for the newest published version of the engine
 and of itself, so the version chip can say that what you are running is no longer current.
 The request is an unauthenticated GET and carries no identifier of your deployment.
@@ -345,6 +400,10 @@ The request is an unauthenticated GET and carries no identifier of your deployme
 For a deployment with no egress, set `Hub:UpdateCheck:Enabled` to `false`. The chip then
 shows nothing rather than claiming you are current, which is also what it shows when the
 request fails.
+
+Recap reports add two more destinations, both declared by you and both off until you declare
+them: each `Hub:Recaps:Webhooks[].Url` receives the signed report event, and `Hub:Recaps:Smtp:Host`
+receives each e-mail. The Hub reaches no other mail server.
 
 ## An https source with a private CA
 

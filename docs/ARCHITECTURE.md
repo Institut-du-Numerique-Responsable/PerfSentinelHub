@@ -143,6 +143,10 @@ a row only grows old once the Hub has stopped mirroring that source, because it 
 retired or because its listing failed for the whole retention. `ack_reads` and
 `incident_reads` hold one row per source and are never purged.
 
+Recap reports ride the daily worker as well, on a clock of their own: `generated_at_ms` against
+`Hub:Recaps:Retention`, the way finished runs ride `Hub:Analysis:RunRetention`. A report and its
+deliveries leave together, in one pass of that worker.
+
 The status window is not a worker at all, it is a `CASE` evaluated at read time, which
 is why a finding's status can change without anything having been written. Rendered
 reports expire on a sweep that runs every sixty seconds, finer than the lifetime it
@@ -177,12 +181,18 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
 | `correlation_episodes`         | episode and source                                             | retention, on `last_seen_ms`               |
 | `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
+| `finding_actions`              | signature, with its status and owner                           | never                                      |
+| `finding_action_events`        | status or owner change of an action                            | never                                      |
+| `endpoint_labels`              | service and endpoint, with its business name                   | never                                      |
+| `service_labels`               | service, with its business name                                | never                                      |
 | `incident_reads`, `ack_reads`  | source                                                         | never                                      |
 | `analysis_runs`                | run                                                            | `Hub:Analysis:RunRetention`                |
 | `terminal_tokens`              | terminal token, by the SHA-256 of its value                    | revocation, or retention past `expires_at_ms` |
 | `disclosures`                  | published disclosure, its files in BLOBs                       | never, a withdrawal keeps it               |
 | `disclosure_share_links`       | share link, by the SHA-256 of its token                        | never, revocation and expiry only mark it  |
 | `disclosure_deliveries`        | webhook event of a disclosure                                  | never                                      |
+| `recap_reports`                | frozen recap of one period, generated or on demand             | `Hub:Recaps:Retention`, on `generated_at_ms` |
+| `recap_deliveries`             | webhook or e-mail delivery of a report                         | with its report                            |
 
 `finding_attributes` keeps every grouping attribute a daemon captured, up to the engine's
 eight, each under the grouping identity it came with: the first pair of that observation,
@@ -199,10 +209,24 @@ does not start from an empty history.
 The three detection tables, added by schema V15, hold the daemons' ledgers as read. A row of
 `detection_days` carries what that day says of its own completeness: sealed or still open, a
 restart, its sampling rate, shed traces, rejected ingest and the detections past the ledger's
-signature cap. A windowed read of `/api/findings` folds them, per source, into the count it
+signature cap. When the daemon scores carbon, the row also carries the day's avoidable grams
+(mid and low), avoidable I/O and total I/O. A windowed read of `/api/findings` folds them, per source, into the count it
 serves and the reasons it falls short, see
 [API.md](API.md#what-the-hub-adds-to-a-finding). Nothing is backfilled: a day before the
 upgrade has no row and reads as unknown.
+
+The recap, `GET /api/recap`, writes nothing and keeps nothing of its own. `RecapService` makes
+up to four windowed reads of the findings, each capped at 5,000: the period with its acknowledged
+findings, the period without them, the closed days of a period in progress, and the previous
+window, skipped on a period's first day. Then it makes a coverage read of the sources' days and a carbon
+read of their avoidable grams, and joins the actions and the labels last. The folding is pure
+and lives in `Recaps/`: the period, the ranking, the trends, the moves, the coverage judgment,
+the carbon pricing and the sentence per type. The service is a plain class on purpose: the
+reports a subscription sends reuse it as it is. `RecapGenerator` freezes the last closed period of
+each subscription into `recap_reports` once its ledgers have sealed, `RecapReportRenderer` writes
+the self-contained HTML of a stored snapshot, `RecapDeliveryWorker` sends the due rows of
+`recap_deliveries` to the webhooks and, through `RecapMailer`, to the SMTP relay, and `RecapLoop`
+runs the generator and the worker every 15 seconds.
 
 Each start fills in what an older build left out: the attribute rows of a copy whose newest
 observation has none, the service of a copy that has none, both from that copy's own
@@ -228,8 +252,8 @@ patterns. An `AccessPattern` matches a finding copy, one signature at one source
 things: the source, the copy's own service in `finding_sources.service` and never the
 fleet-wide `findings.service` an import rewrites, and the copy's rows in
 `finding_attributes`. A read needs one row to match, whatever grouping it came with; a write,
-for `acks.write` and `analyses.run`, needs every grouping identity of the copy, the
-no-grouping marker included, to carry the key and every value of it to match. A trace run
+for `acks.write`, `actions.write` and `analyses.run`, needs every grouping identity of the
+copy, the no-grouping marker included, to carry the key and every value of it to match. A trace run
 on a service is judged on the Hub's copies of that service in the backend's environment,
 every one of which must write-match; `CoversSubject` matches the copies it is given, and
 the caller enforcement adds selects them by environment. Incident copies match on their

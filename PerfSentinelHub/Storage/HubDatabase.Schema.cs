@@ -78,13 +78,16 @@ public sealed partial class HubDatabase
                 migration.CommandText =
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
                     Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12 + Schema.V13 + Schema.V14 +
-                    Schema.V15;
+                    Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18 + Schema.V19;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
             await EnsureLineageColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceServiceColumnAsync(connection, transaction, cancellationToken);
+            await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -96,7 +99,9 @@ public sealed partial class HubDatabase
                                              (4, $applied_at_ms), (5, $applied_at_ms), (6, $applied_at_ms),
                                              (7, $applied_at_ms), (8, $applied_at_ms), (9, $applied_at_ms),
                                              (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms),
-                                             (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms);
+                                             (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
+                                             (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
+                                             (19, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -216,6 +221,68 @@ public sealed partial class HubDatabase
         await using var alter = connection.CreateCommand();
         alter.Transaction = transaction;
         alter.CommandText = "ALTER TABLE finding_sources ADD COLUMN service TEXT;";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The day's avoidable grams (mid and low), avoidable I/O and total I/O, as a
+    ///     daemon that scores carbon reports them. NULL on a row an older engine wrote.
+    /// </summary>
+    private static async Task EnsureDetectionDayCarbonColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "detection_days", "avoidable_gco2", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE detection_days ADD COLUMN avoidable_gco2 REAL;
+                            ALTER TABLE detection_days ADD COLUMN avoidable_io_ops INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN avoidable_gco2_low REAL;
+                            ALTER TABLE detection_days ADD COLUMN total_io_ops INTEGER;
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The name the SSO gave an action's owner, kept beside the owner it was read with. NULL for
+    ///     a hand-typed owner and for an action filed before the column existed.
+    /// </summary>
+    private static async Task EnsureActionOwnerDisplayColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "finding_actions", "owner_display", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE finding_actions ADD COLUMN owner_display TEXT;
+                            ALTER TABLE finding_action_events ADD COLUMN owner_display TEXT;
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The creator's immutable subject beside the name an on-demand report shows. NULL for a
+    ///     scheduled report and for one generated before the column existed, which then has no owner.
+    /// </summary>
+    private static async Task EnsureRecapCreatorSubjectColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "recap_reports", "created_by_subject", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = "ALTER TABLE recap_reports ADD COLUMN created_by_subject TEXT;";
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 

@@ -252,6 +252,77 @@ the page does not.
   <img alt="An unfolded incident listing the correlations active during it" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-incident-correlations.png">
 </picture>
 
+## The recap screen
+
+The recap is the support for a team review: what wastes the most, and what moved since the previous
+period of the same length. It reads `GET /api/recap` ([the API](API.md#recap)), so its scope, its
+filters and its detection volume are the ones of the findings list. A period (day, week or month, the
+week by default), any day inside it, an environment, a service, a namespace and an Engineering or
+Management switch narrow it, and each choice is written in the address, `#/recap?period=day&view=pilotage`,
+so a view can be sent as a link. The period is counted in UTC days and says so, while every timestamp
+on the page, the moment an action was taken or finished included, shows in your own time with its zone
+(`2026-10-29 14:32 CET`), the UTC moment on hover.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap-dark.png">
+  <img alt="The recap screen: the period, four tiles, then the findings to fix first with their trend and their action" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap.png">
+</picture>
+
+The page reads like an agenda. Under the period line, the notes (sampled traces, traces shed under
+memory pressure) and, when a daemon restarted or a day is not sealed yet, a banner saying the
+comparison is not exact. Four tiles follow: the avoidable I/O, the carbon estimate (an order of
+magnitude, "at least" when a source sends no coefficient, never a ranking key), the active findings
+with the acknowledged ones counted apart, and the actions with what the engine confirmed. While the
+period is in progress the first two say so, and trends compare only its closed days with the same
+days of the previous period. Seven "?" explain the period, the tiles, the ranking and what moved.
+
+What to fix first lists the unacknowledged findings, those with avoidable I/O first by volume, the
+others by severity below a separator, ten at first and every one behind Show all. A card carries the
+type, the service, the endpoint, the suggestion, a magnitude bar relative to the first row and the
+trend. Folded under it, open on the first card: the query or call, the suggested fix with its
+framework and its reference link (only an http or https address becomes a link), the place in the
+code, the confidence, the signature and the history of the action. Take declares the action in the
+name the Hub knows you by, the select beside it moves it between to do, in progress and done, and
+the engine's verdict on a done action (confirmed, still detected, came back, waiting for a sealed
+day) appears beside it. Acknowledge opens the ack page. Name this, or Rename, gives the endpoint a
+business name that titles the row, in Management too. An action's owner reads as a name: the one the
+sign-in gave, else one made from the identity (`alice.martin@acme.com` reads Alice Martin), with the
+identity on hover. A refusal, no identity or no permission, shows the Hub's own sentence in the card.
+
+What moved lists new, gone, up, down, came back and done but still detected findings, the groups that
+hold something only. Gone is a presumption, not proof that the fix shipped. On the first day of a
+period nothing is compared, and the page says so rather than claiming nothing moved.
+
+The Management view reads the same ranking in plain words: the top five problems as a fixed sentence per
+type, the label of the endpoint when someone named it (else the endpoint under the service), the
+figure as unnecessary operations, the trend and the action, read only. It carries no technical
+word, and its seven help texts do not either.
+
+### Reports
+
+Under What moved, Reports lists the frozen copies of closed periods, newest first, from
+`GET /api/recap/reports` ([the API](API.md#recap-reports)). The section is absent for a caller the Hub
+does not let read them: it needs `recaps.read`, or `findings.read` for the reports one generated. A row
+names the period and where the report came from, `Week 2026-10-19 to 2026-10-25 · weekly-shop` for a
+subscription, `Day 2026-10-28 · on demand by alice` for one somebody asked for, with `· incomplete`
+when a day was not sealed or a daemon restarted. Under it come the moment it was written, in your own
+time, and what became of it: one pill per delivery (`webhook ops-chat: delivered`,
+`email pm@example.test: failed (550), 1 try`, `webhook ops: pending (500), 3 tries`), green once
+delivered, red once failed, grey while the Hub still retries. A report that went nowhere says why:
+`Archived, not sent: nothing moved` (a period where nothing moved is archived and never delivered),
+`Archived, no destination` for a subscription that lists no webhook or address, and
+`On demand, not sent` for a report somebody generated, which is never delivered.
+
+Management and Engineering download the frozen page of each view, one self-contained file that opens
+offline, in light and dark, with no script but the two that set the theme and the times. A report
+carries only the views it was frozen with.
+
+Generate a report freezes the period and the filters the screen shows, in your name, from the
+copies you can read: with no date chosen it is the last closed period, and a day inside a period that
+has not ended is refused with the Hub's sentence in the section. It also refuses when the Hub does not
+know who is asking, which is the case of a browser behind no sign-in or identity proxy, and when your
+access holds no `findings.read`. A success adds the row at once.
+
 ## The disclosures screen
 
 The periodic disclosures a scheduled job published, see [API.md](API.md#disclosures). A rail of

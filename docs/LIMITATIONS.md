@@ -135,6 +135,62 @@ reads that whole source, and a scoped read reaches only findings with at least o
 copy in scope. A source removed from `Hub:Sources` drops out of the count, since the
 Hub has no name to serve for it.
 
+## What a recap claims
+
+The carbon figure of the recap is an order of magnitude, never a measurement. It prices
+the extra I/O of the ranked findings at each day's own grams per avoidable I/O, and that
+coefficient comes from the operational tier of the daemon's carbon model. The extra I/O
+is the findings' `extra_io_ops`, which is not deduplicated the way a window's
+`avoidable_io_ops` is, so it can exceed what the window counted. The day's coefficient
+also prices the I/O of the batches whose region the daemon could not resolve. The figure
+is rounded to one significant figure for that reason, and a source that sends no
+coefficient leaves it a partial minimum, never extrapolated.
+
+`gone` is a presumption, like `likely_resolved`: a finding the period no longer holds may
+have been fixed, or the traffic that produced it may have stopped. `gone_with_confirmed_action`
+counts the ones backed by a done action the Hub confirmed from the sealed ledger days the
+engine sends (see [API.md](API.md#recap), Actions and confirmation), which is the only
+evidence the recap holds.
+
+A period reads incomplete, and its comparison is not exact, for four reasons:
+`uncovered_days` (days the ledgers do not cover), `open_day` (a past day not sealed),
+`restart` (a daemon restart interrupted its counts, as above) and `overflow`. Four notes
+leave the comparison standing: `sampling` and `shed` (the count is what the daemon
+analyzed), `ingest_rejected` (the daemon refused part of the ingest) and `multi_instance`
+(two polled ledgers of one source alive at once). See
+[API.md](API.md#recap). Months of different lengths compare as they
+are, 31 days against 28, so a monthly trend is a ratio of volumes, not of daily rates. A
+period in progress compares its closed days with the same number of first days of the
+previous period. Today counts in the tiles and the ranking only, and on the first day of
+a period nothing is compared, which the recap says instead of reading nothing moved.
+
+An action is global to the signature, as an ack is, whichever source holds the finding.
+Its confirmation is judged within the request's filters, so the same action can read
+differently in a filtered and in an unfiltered recap. Any detection after the day an
+action was marked done contradicts it, a straggling trace or a slow deployment included,
+so mark it done again once the fix has actually shipped. Actions and their events are
+never purged, not with their finding and not by retention, so the tables only grow. Labels
+are Hub-wide as well, and are not purged either: an endpoint's name and a service's name both
+outlive the findings they named.
+
+A recap reads the findings in up to four reads: the period with its acknowledged findings,
+the period without them, the closed days of a period in progress, and the previous window.
+Each read stops at 5,000 findings and keeps the first 5,000; any read that overflows sets
+`truncated`, and the figures built on it cover those alone. Narrow the request with a filter.
+
+A report is frozen when it is generated and never follows later data: a finding detected or
+acknowledged afterwards, an action marked done or a label renamed changes the screen and leaves
+the report as it was. A report generated past `Hub:Recaps:MaxDelay` says which days were still
+open, and those days stay open in it. Periods missed while the Hub was down are not generated
+afterwards, except the last closed one. An on-demand report reflects its creator's scope at the
+moment it was made, and beyond `recaps.read` holders only its creator reads it.
+
+The HTML uses the system fonts, so it opens offline and looks a little different on each machine.
+A frozen report carries no ack link: it outlives the routes it would call, and acks are taken on
+the Hub's screen. E-mail goes through a relay that offers STARTTLS and, when credentials are set,
+`AUTH LOGIN`. The Hub does not speak implicit TLS and does not do OAuth, so an account restricted
+to OAuth needs the organisation's relay in front of it.
+
 ## What a finding is attributed to
 
 The engine files an N+1 or redundant-call group that spans several services

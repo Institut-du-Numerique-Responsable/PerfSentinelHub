@@ -302,3 +302,19 @@ v0.8.4	9e37063	2026-10-27	PASS
 # hub-detection-volume ran two local 0.37.1 daemons against a Release build of
 # 32ab9f1. The lab ran with local, uncommitted image pins in its manifests.
 v0.8.6	8faf9a4	2026-10-29	PASS
+# v0.9.0: targeted pass at lab commit d51eb78 on the review recap. hub-recap
+# (new, R1-R8: the day carbon behind the CO2 estimate, actions and labels with an
+# identity, on-demand and scheduled reports, the signed webhook, the e-mail
+# through a local SMTP sink, report reads under access control, 16 checks) and
+# hub-detection-volume (6 checks) ran a Release build of 6217142 with a local
+# perf-sentinel 0.38.0 release build. hub-ingestion, hub-derived-status,
+# hub-lineage-mutation, hub-retention-purge, hub-plugin-contract,
+# hub-access-control, hub-source-reachability, hub-incidents-mirror,
+# hub-incidents-push, hub-correlations-push and hub-disclosures (108 checks) ran
+# on a cluster rebuilt from scratch, with perf-sentinel-hub:0.9.0-6217142 built by
+# seed-hub-local and perf-sentinel:0.38.0-6978358f, the published 0.38.0 merge,
+# built by seed-daemon-local. 130 checks ok and no skip. hub-lineage-mutation
+# failed once on a scenario flake (a shape read as redundant_sql), fixed in the
+# scenario by d51eb78, then passed twice. The lab ran with local, uncommitted
+# image pins in its manifests.
+v0.9.0	d51eb78	2026-10-29	PASS

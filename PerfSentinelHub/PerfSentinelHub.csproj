@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
-        <Version>0.8.6</Version>
+        <Version>0.9.0</Version>
         <InvariantGlobalization>false</InvariantGlobalization>
         <PublishAot>true</PublishAot>
         <!-- Implied by PublishAot at publish time, stated here so the generator
@@ -25,6 +25,12 @@
              Mach-O UUID between two otherwise identical builds. -->
         <NativeDebugSymbols Condition="'$(RuntimeIdentifier)' != '' and !$(RuntimeIdentifier.StartsWith('osx'))">true</NativeDebugSymbols>
     </PropertyGroup>
+
+    <!-- The frozen recap report carries these two sheets inline, read once at first use. -->
+    <ItemGroup>
+        <EmbeddedResource Include="wwwroot/tokens.css" LogicalName="recap-tokens.css" />
+        <EmbeddedResource Include="Recaps/RecapReport.css" LogicalName="recap-report.css" />
+    </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Data.Sqlite" />

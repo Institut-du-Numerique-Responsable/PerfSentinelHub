@@ -31,7 +31,9 @@ public sealed class FakeEngineTests : IDisposable
                 try
                 {
                     using var process = Process.Start(new ProcessStartInfo(path, "--version")
-                    { RedirectStandardOutput = true })!;
+                    {
+                        RedirectStandardOutput = true
+                    })!;
                     await process.WaitForExitAsync(cancellationToken);
                 }
                 catch (Exception exception)

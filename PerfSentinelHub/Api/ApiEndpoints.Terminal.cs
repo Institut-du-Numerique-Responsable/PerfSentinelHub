@@ -222,7 +222,9 @@ public static partial class ApiEndpoints
         var session = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!session.Succeeded || EndsWithinTheHour(session, timeProvider))
             return TypedResults.Challenge(new AuthenticationProperties
-            { RedirectUri = context.Request.PathBase + "/device" });
+            {
+                RedirectUri = context.Request.PathBase + "/device"
+            });
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers.ContentSecurityPolicy =
             "default-src 'self'; font-src 'self' data:; frame-ancestors 'none'";

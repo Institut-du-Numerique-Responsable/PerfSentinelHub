@@ -61,6 +61,10 @@ utilisateur qui se renomme chez le fournisseur change une étiquette, pas ses dr
 | Jeton machine         | `machine:<nom>`                       | `machine:<nom>`                         | son seul groupe configuré                                |
 | Compte local          | `local:<nom>`                         | `local:<nom>`                           | groupes internes seuls                                   |
 
+Une session du navigateur porte aussi le nom que le fournisseur donne à l'utilisateur, lu
+dans `Hub:Auth:DisplayNameClaim` (par défaut `name`). Il s'affiche comme responsable d'une
+action et ne sert jamais à l'accès.
+
 `Hub:Auth:SubjectClaim` (par défaut `sub`) n'accepte que `sub`, `oid`, `uuid` et
 `account_id`, des identifiants qu'un fournisseur ne réattribue jamais. `sub` convient à
 Keycloak, Google, GitLab et Entra ID ; Bitbucket Cloud n'a pas de `sub` et prend
@@ -121,13 +125,16 @@ seules copies dans le périmètre.
 | `sources.read`  | La vue des réglages d'un démon, et avec `findings.read` et `analyses.run` un run de démon ; source seulement |
 | `analyses.run`  | Lancer un run                                                                          |
 | `acks.write`    | Acquitter un finding, ou révoquer un ack                                               |
+| `actions.write` | Déclarer et modifier une action sur un finding                                         |
+| `labels.write`  | Nommer un endpoint ou un service en mots du métier                                     |
 | `disclosures.read` | L'onglet Disclosures, le détail de chaque divulgation et ses fichiers               |
 | `disclosures.manage` | Les liens de partage, les retraits, les relances de livraison et les rendus d'une divulgation |
+| `recaps.read`   | Lire tous les rapports de récap : la liste, un rapport et sa page (niveau Hub)         |
 
 | Rôle intégré | Permissions                                                  |
 |--------------|--------------------------------------------------------------|
 | `reader`     | `findings.read`, `traces.read`, `analyses.run`               |
-| `member`     | `reader` plus `acks.write`                                   |
+| `member`     | `reader` plus `acks.write`, `actions.write` et `labels.write` |
 | `admin`      | Tout, sur `*` seulement, plus la configuration de l'accès    |
 
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture seule se
@@ -137,8 +144,8 @@ configure, par exemple `auditor: [findings.read, traces.read]`.
 ne renseigne que `source`. De même pour `analyses.run` et `findings.read` pour un run de
 démon.
 
-`disclosures.read` et `disclosures.manage` sont au niveau du Hub : une divulgation
-n'appartient à aucune source. Le rôle intégré `admin` les porte, `reader` et `member` jamais,
+`disclosures.read`, `disclosures.manage` et `recaps.read` sont au niveau du Hub : une
+divulgation ou un rapport de récap n'appartient à aucune source. Le rôle intégré `admin` les porte, `reader` et `member` jamais,
 et un jeton machine ne les détient jamais. Un rôle configuré peut les porter, attribué sur `*`
 seulement : le Hub refuse de démarrer sur l'attribution d'un tel rôle à un projet.
 
@@ -157,11 +164,17 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `/` et les fichiers du launcher                                        | n'importe quel appelant                                            | redirection ou `401`        |
 | `GET /api/status`, `GET /api/sources`                                  | une permission quelque part                                        | `403`                       |
 | `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtré                                            | `403` si détenue nulle part |
+| `GET /api/recap`                                                       | `findings.read`, filtré                                            | `403` si détenue nulle part |
+| `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` sur `*`, ou le créateur d'un rapport à la demande avec `findings.read` | `403` (liste), `404` (un rapport) |
+| `POST /api/recap/reports`                                              | `findings.read`, filtré, et quelqu'un à nommer                     | `403`                   |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtré ; la copie la plus riche dans le périmètre | `403` ; `404`               |
 | `POST /api/incidents/refresh`                                          | `findings.read` ; ne lit que les démons dans le périmètre          | `403`                       |
 | `GET /api/correlations`                                                | `findings.read`, filtré sur les épisodes dont l'appelant lit les deux services à cette source | `403` s'il n'est détenu nulle part |
 | `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` sur cette source entière                            | `404`                       |
 | `POST /api/sources/{sourceId}/acks` et `/acks/revoke`                  | `findings.read` et `acks.write` sur le finding dans cette source   | `404`, `403`                |
+| `POST` et `PATCH /api/actions`                                         | `findings.read` et `actions.write` sur une copie du finding, et quelqu'un à nommer | `404`, `403` |
+| `PUT /api/labels`                                                      | `findings.read` et `labels.write` sur une copie d'un finding de l'endpoint, et quelqu'un à nommer | `404`, `403` |
+| `PUT /api/labels/services`                                             | `findings.read` et `labels.write` sur une copie d'un finding du service, et quelqu'un à nommer | `404`, `403` |
 | `POST /api/analyses`                                                   | `analyses.run` et la règle de lecture du run, ci-dessous           | `403`                       |
 | `GET /api/analyses`, `GET /api/analyses/{id}`                          | la règle de lecture du run                                         | filtré ; `404`              |
 | `GET /reports/{id}.html`                                               | la règle de lecture du run                                         | `404`                       |
@@ -241,6 +254,29 @@ d'attribut peut faire taire le même finding pour le déploiement d'une autre é
 démon**, jusqu'à son expiration ou sa révocation. Le Hub n'impose aucune expiration. Là où
 plusieurs équipes peuvent émettre le même nom de service, donnez à l'équipe propriétaire
 un grant de source ou de service pour `acks.write` et `analyses.run`.
+
+### Actions
+
+Une action est globale à la signature, comme un ack auprès de son démon : elle est donc jugée
+sur chaque copie du finding que l'appelant lit, dans n'importe quelle source, et permise
+quand l'une d'elles est inscriptible. Un appelant qui n'en lit aucune reçoit le `404` d'un
+finding inconnu ; celui qui en lit mais n'en peut écrire aucune reçoit `403`. Un appelant qui
+ne détient `actions.write` nulle part est refusé avant la lecture du corps de la requête, et
+un appelant que le Hub ne sait pas nommer l'est avant tout. Contrairement à un ack, une
+action ne touche aucun démon et ne fait rien taire : c'est une note que tout le Hub partage
+sur qui travaille sur le finding.
+
+### Libellés d'endpoint
+
+Un libellé est global à un couple `(service, endpoint)` : il est donc jugé sur chaque copie de
+chaque finding de cet endpoint que l'appelant lit, dans n'importe quelle source, et permis
+quand l'une d'elles est inscriptible sous `labels.write`. Un appelant qui n'en lit aucune
+reçoit le `404` d'un endpoint inconnu ; celui qui en lit mais n'en peut écrire aucune reçoit
+`403`. Un appelant qui ne détient `labels.write` nulle part est refusé avant la lecture du
+corps de la requête, et un appelant que le Hub ne sait pas nommer l'est avant tout. Un
+libellé ne touche aucun démon : c'est un nom que tout le Hub partage, pour le recap et les
+cartes qui le citent. Le nom d'un service, `PUT /api/labels/services`, se juge de la même façon
+sur chaque copie de chaque finding de ce service.
 
 ### Votre accès et Couverture
 
