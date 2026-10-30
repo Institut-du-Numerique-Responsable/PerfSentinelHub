@@ -238,22 +238,7 @@ test("correlations open every episode of an incident's pair", async ({page}) => 
 });
 
 test("recap", async ({page}, info) => {
-    // A team named one service, so the cards show the pair and Management reads the name.
-    const named = await page.request.put("/api/labels/services", {
-        headers: {"x-forwarded-user": "alice.martin@acme.example"},
-        data: {service: "order-svc", label: "Ordering"}
-    });
-    expect(named.status()).toBe(204);
-    // One report on demand, written once for both colour schemes: the Hub trusts the identity
-    // header in this setup, and the screen's own button cannot send one.
-    const known = await page.request.get("/api/recap/reports");
-    if ((await known.json()).length === 0) {
-        const made = await page.request.post("/api/recap/reports", {
-            headers: {"x-forwarded-user": "alice.martin@acme.example"},
-            data: {period: "week"}
-        });
-        expect(made.status()).toBe(201);
-    }
+    // global-setup named order-svc and froze one report, so the cards show the pair.
     await page.goto("/#/recap");
     await settled(page, "What wastes the most");
     // The heading is drawn before the read answers, and the tiles and the priorities come from
