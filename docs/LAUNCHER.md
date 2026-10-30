@@ -365,7 +365,9 @@ the card from the form as it stands. Under the preview, the line the check page 
 Verify attachment, which renders the card once more and has the engine check its key under the
 organisation's domain, through `cloudflare-dns.com` and the domain itself, the only call of the
 section that leaves the Hub. When one of the two places that publish the key, the DNS line and the
-`.well-known` file, does not answer, the check reads "Could not check", never attached. Without
+`.well-known` file, does not answer, the check reads "Could not check", never attached. The check
+also says whether the card file is the one signed, and lists the figures as signed, exact, to
+compare with the preview, which rounds them down. Without
 `Hub:Cards:Domain`, a sentence says the check page shows the
 Hub's cards as "Signer not verified". The card language, English or French, is remembered in this
 browser.

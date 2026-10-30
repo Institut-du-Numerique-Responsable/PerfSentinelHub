@@ -129,17 +129,20 @@ public sealed record CardRequest(
         for (var i = 0; i < fields.Length; i++)
         {
             var (name, maxChars) = fields[i];
-            if (!TryReadFreeText(root, name, maxChars, out texts[i]))
-                return Refuse<CardFree>(
-                    $"{name} must be 1 to {maxChars} characters with no control or format character.", out error);
+            if (TryReadFreeText(root, name, maxChars, out texts[i]))
+                continue;
+            var detail = Holds(root, name, CardRules.EnvelopeMarker)
+                ? $"{name} cannot contain {CardRules.EnvelopeMarker}, the text the card file keeps for its signature."
+                : $"{name} must be 1 to {maxChars} characters with no control or format character.";
+            return Refuse<CardFree>(detail, out error);
         }
 
         error = null;
         return new CardFree(texts[0], texts[1], texts[2]);
     }
 
-    // Trimmed; absent, null or blank reads as absent. A format character (a direction override, a
-    // zero-width one) would make the card read other than it is signed.
+    // Trimmed; absent, null or blank reads as absent. The rest follows CardRules.Printable, as the figures'
+    // names do: a format character would make the card read other than it is signed.
     private static bool TryReadFreeText(JsonElement root, string name, int maxChars, out string? text)
     {
         text = null;
@@ -148,10 +151,16 @@ public sealed record CardRequest(
         if (value.ValueKind != JsonValueKind.String)
             return false;
         var trimmed = value.GetString()!.Trim();
-        if (trimmed.Length > maxChars || trimmed.Any(LabelWrite.Hidden))
+        if (trimmed.Length > 0 && !CardRules.Printable(trimmed, maxChars))
             return false;
         text = trimmed.Length == 0 ? null : trimmed;
         return true;
+    }
+
+    private static bool Holds(JsonElement root, string name, string part)
+    {
+        return root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String &&
+               value.GetString()!.Contains(part, StringComparison.Ordinal);
     }
 
     // Absent or null is no filter; anything else must be a bounded string.

@@ -7595,7 +7595,7 @@
     /** What the shown card carries: the note on the file, and the level its proof reaches. */
     function cardPreviewProof(card, format, domain) {
         const attached = !!(card.attach && card.attach.result && card.attach.result.integrity === 'ok'
-            && card.attach.result.level === 2);
+            && card.attach.result.content !== 'modified' && card.attach.result.level === 2);
         const level = PSL.levelLine(attached, domain);
         const at = level.indexOf(': ') + 2;
         return [
@@ -7626,14 +7626,30 @@
             const result = answer.result;
             const said = PSL.attachmentText(result, admin);
             let tone = 'info';
-            if (result.integrity !== 'ok') tone = 'crit';
+            if (result.integrity !== 'ok' || result.content === 'modified') tone = 'crit';
             else if (result.level === 2) tone = 'ok';
             else if (said.title) tone = 'warn';
             const glyph = {crit: critGlyph(16), ok: svg(RECAP_STATE_GLYPH.confirmed, 16), warn: warningGlyph(16)}[tone];
             box.appendChild(el('div', {class: 'banner', 'data-tone': tone, role: 'status', title: said.title},
                 [glyph || infoGlyph(16), el('div', {text: said.text})]));
+            const intact = PSL.contentLine(result);
+            if (intact) box.appendChild(el('p', {class: 'attach-content', text: intact}));
+            const figures = PSL.signedFigureLines(result.figures);
+            if (figures.length) box.appendChild(cardSignedFigures(figures));
         }
         return box;
+    }
+
+    /** The figures as signed, exact, for the person to hold against the preview before sharing. */
+    function cardSignedFigures(figures) {
+        return el('section', {class: 'card-signed', 'aria-labelledby': 'card-signed-title'}, [
+            el('p', {class: 'card-signed-title', id: 'card-signed-title', text: 'The signed figures'}),
+            el('p', {class: 'card-signed-note',
+                text: 'Exact values as signed. The card rounds them down: compare them with the preview.'}),
+            el('dl', {class: 'card-signed-figures'}, figures.flatMap(function (figure) {
+                return [el('dt', {text: figure.label}), el('dd', {text: figure.value})];
+            }))
+        ]);
     }
 
     /** A POST of the card form; a file comes back as a Blob, a refusal as the Hub's own detail. */

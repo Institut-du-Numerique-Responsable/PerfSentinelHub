@@ -123,6 +123,15 @@ public sealed class CardRequestTests
     }
 
     [Fact]
+    public void A_title_holding_the_card_file_marker_is_a_400()
+    {
+        foreach (var field in new[] { "title", "team", "label" })
+            Assert.Equal(
+                $$"""{{field}} cannot contain {"content_sig":", the text the card file keeps for its signature.""",
+                Refused(Story((field, """Q3 {"content_sig":" review"""))));
+    }
+
+    [Fact]
     public void Lang_is_en_or_fr()
     {
         Assert.Equal("en", Accepted(Body(("angle", "curve"), ("period", "month"))).Lang);

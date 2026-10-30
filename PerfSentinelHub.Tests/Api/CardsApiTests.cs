@@ -401,7 +401,7 @@ public sealed class CardsApiTests : IDisposable
             Card = true,
             VerifyCardExitCode = 4,
             VerifyCardOutput =
-                """{"integrity":"ok","level":1,"domain":"example.com","key":"unknown","reason":"binding_check_failed"}"""
+                """{"integrity":"ok","content":"intact","level":1,"domain":"example.com","key":"unknown","reason":"binding_check_failed"}"""
         });
         using var client = hub.CreateClient();
         await OneFixAsync(hub);
@@ -439,6 +439,48 @@ public sealed class CardsApiTests : IDisposable
         var arguments = await File.ReadAllTextAsync(Path.Combine(_workspace, "reports", "card-args.txt"), Token);
         Assert.Contains("--format png", arguments, StringComparison.Ordinal);
         Assert.DoesNotContain($"--format {format}", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_modified_file_reaches_the_screen()
+    {
+        var hub = Hub(new FakeEngine
+        {
+            Card = true,
+            VerifyCardExitCode = 1,
+            VerifyCardOutput =
+                """{"integrity":"ok","content":"modified","level":1,"domain":null,"key":"unknown","reason":"content_modified","figures":null}"""
+        });
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+
+        using var response = await client.SendAsync(Send("POST", AttachmentPath, Collective), Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Token));
+        var root = body.RootElement;
+        Assert.Equal(("modified", "content_modified"),
+            (root.GetProperty("content").GetString(), root.GetProperty("reason").GetString()));
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("figures").ValueKind);
+    }
+
+    [Fact]
+    public async Task Attachment_answers_the_signed_figures_by_the_engine_names()
+    {
+        var hub = Hub();
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+
+        using var response = await client.SendAsync(Send("POST", AttachmentPath, Collective), Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Token));
+        var figures = body.RootElement.GetProperty("figures");
+        Assert.Equal("intact", body.RootElement.GetProperty("content").GetString());
+        Assert.Equal(("story", "month", "2026-07-01", 41, 1937000),
+            (figures.GetProperty("angle").GetString(), figures.GetProperty("period").GetProperty("kind").GetString(),
+                figures.GetProperty("before_fix_period").GetProperty("from").GetString(),
+                figures.GetProperty("cited_ops").GetInt32(), figures.GetProperty("before_fix_ops").GetInt32()));
     }
 
     [Fact]

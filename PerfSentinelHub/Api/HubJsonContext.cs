@@ -31,6 +31,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(CardKeysResponse))]
 [JsonSerializable(typeof(CardOptions))]
 [JsonSerializable(typeof(CardAttachmentResponse))]
+[JsonSerializable(typeof(CardSignedFigures))]
 [JsonSerializable(typeof(CardFieldProblem))]
 [JsonSerializable(typeof(OAuthError))]
 [JsonSerializable(typeof(DeviceAuthorizationResponse))]

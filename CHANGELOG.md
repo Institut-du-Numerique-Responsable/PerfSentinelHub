@@ -39,9 +39,13 @@ All notable changes to PerfSentinelHub are recorded here.
   or send, LinkedIn does not accept it) or the PDF carousel; only the title, the team and a story's
   label are free, any other key is a `400`. An SVG comes with
   `Content-Security-Policy: default-src 'none'; sandbox`, so opened from its URL it runs nothing.
-  `POST /api/cards/attachment` checks a fresh card's DNS attachment with `perf-sentinel verify-card --online`, the one card
-  route that reaches the network (`cloudflare-dns.com` and the configured domain). The three
-  need `cards.write` and `findings.read` and somebody to name.
+  `POST /api/cards/attachment` checks a fresh card's DNS attachment with
+  `perf-sentinel verify-card --online`, the one card route that reaches the network
+  (`cloudflare-dns.com` and the configured domain), and answers whether the file is the one
+  signed (`content`) and its figures as signed (`figures`), which Verify attachment lists to
+  compare with the preview. A free field holding `{"content_sig":"`, the text the card file keeps
+  for its signature, is a `400`. The three need `cards.write` and `findings.read` and somebody to
+  name.
 
 ### Changed
 

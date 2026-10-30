@@ -40,11 +40,17 @@ public static class CardRules
         return rate is { } value && value < 1 ? Math.Max(0, (int)decimal.Floor((decimal)value * 1000m)) : 1000;
     }
 
-    /// <summary>The engine's text rule: trimmed, non-empty, at most maxChars, no control or format character.</summary>
+    /// <summary>Where the engine places the card file's signature; refused in every card text.</summary>
+    public const string EnvelopeMarker = "{\"content_sig\":\"";
+
+    /// <summary>
+    ///     The engine's text rule: trimmed, non-empty, at most maxChars, no control or format character,
+    ///     and never the card file's marker.
+    /// </summary>
     public static bool Printable(string? text, int maxChars)
     {
         return !string.IsNullOrEmpty(text) && text.Length <= maxChars && text == text.Trim() &&
-               !text.Any(LabelWrite.Hidden);
+               !text.Any(LabelWrite.Hidden) && !text.Contains(EnvelopeMarker, StringComparison.Ordinal);
     }
 
     /// <summary>A card period in words, as the Hub screen names it.</summary>

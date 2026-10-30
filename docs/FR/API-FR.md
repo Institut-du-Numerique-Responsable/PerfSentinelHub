@@ -908,7 +908,11 @@ origine et le type de contenu JSON des autres écritures :
 
 Les champs libres sont rognés, et un champ vide est laissé de côté. Un champ plus long que sa
 borne, ou qui porte un caractère de contrôle ou de format (un forçage de direction, une espace de
-largeur nulle), donne `400`. Toute autre clé, `figures`, `org`, `scope` ou `generated_at_ms` par
+largeur nulle), donne `400`. Un champ qui contient `{"content_sig":"`, le texte que le fichier de la
+carte garde pour sa signature, donne
+`400 <name> cannot contain {"content_sig":", the text the card file keeps for its signature.`, la
+règle que suivent aussi les noms de service, d'endpoint, d'environnement et de source. Toute autre
+clé, `figures`, `org`, `scope` ou `generated_at_ms` par
 exemple, donne
 `400 Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may be sent: the figures come from the Hub.`
 Une période qui ne s'est pas terminée avant aujourd'hui donne
@@ -944,14 +948,25 @@ privé, supprimé ensuite, et la clé n'apparaît jamais sur une ligne de comman
 **Rattachement.** `409 Set Hub:Cards:Domain to check an attachment.` sans domaine. Sinon le Hub
 dessine la carte en PNG et lance `verify-card --online`, qui lit l'enregistrement TXT via
 `cloudflare-dns.com` et `https://<domain>/.well-known/perf-sentinel-key`. La réponse est le verdict
-du moteur et ce que la vérification a joint :
+du moteur, les grands chiffres de la carte tels que signés et ce que la vérification a joint :
 
 ```json
-{"integrity": "ok", "level": 2, "domain": "acme.example", "key": "current", "reason": null,
+{"integrity": "ok", "content": "intact", "level": 2, "domain": "acme.example", "key": "current",
+ "reason": null,
+ "figures": {"angle": "curve", "period": {"kind": "month", "from": "2026-09-01", "to": "2026-09-30"},
+             "before_fix_period": null, "cited_ops": null, "cited_ms": null, "before_fix_ops": null,
+             "threshold_ops": null, "threshold_ms": null, "last_waste_permille": 83,
+             "previous_waste_permille": 200, "confirmed_fixes_count": null, "services_count": null},
  "contacted": ["cloudflare-dns.com", "acme.example"]}
 ```
 
-Une ligne de verdict sans ses cinq clés, ou aucune en 20 secondes, donne `502`.
+`content` dit si le fichier est celui qui a été signé : `intact`, ou `modified` avec la raison
+`content_modified` et `figures` à null. `figures` porte les noms du moteur, valeurs exactes, `null`
+quand l'angle n'en a pas : `period`, `before_fix_period`, `cited_ops` ou `cited_ms`,
+`before_fix_ops`, `threshold_ops` ou `threshold_ms`, `last_waste_permille`,
+`previous_waste_permille`, `confirmed_fixes_count`, `services_count`. Une ligne de verdict hors
+contrat (une de ses clés absente, un `content` autre que `intact`, `modified` ou `not_checked`, des
+chiffres sans leur angle ou leur période), ou aucune en 20 secondes, donne `502`.
 
 **Qui peut.** Le Hub juge ces trois routes dans cet ordre : cartes désactivées `404` ; un appelant
 que le Hub ne sait pas nommer

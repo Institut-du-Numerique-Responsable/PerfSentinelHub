@@ -2781,6 +2781,21 @@
         key_revoked: 'This card was signed with a key that is now revoked.'
     };
 
+    /** The signed figures verify-card reads back, in the order the screen lists them. */
+    const SIGNED_FIGURE_LABELS = {
+        period: 'Period',
+        before_fix_period: 'Period before the fix',
+        cited_ops: 'Headline figure on the card',
+        cited_ms: 'Headline figure on the card',
+        before_fix_ops: 'Unnecessary operations before the fix',
+        threshold_ops: 'Alert threshold the card cites',
+        threshold_ms: 'Alert threshold the card cites',
+        last_waste_permille: 'Share of the work that was avoidable, period of the card',
+        previous_waste_permille: 'Share of the work that was avoidable, period before',
+        confirmed_fixes_count: 'Fixes confirmed by measurement',
+        services_count: 'Services concerned'
+    };
+
     /** @param {string} day yyyy-MM-dd @returns {Date} midnight UTC */
     function cardDate(day) {
         return new Date(day + 'T00:00:00Z');
@@ -2942,6 +2957,12 @@
         if (result.integrity !== 'ok') {
             return {text: 'This card does not verify: its figures changed after signing.', title: null};
         }
+        if (result.content === 'modified') {
+            return {
+                text: 'This card file was changed after it was signed. Make the card again before sharing it.',
+                title: 'content_modified'
+            };
+        }
         if (result.level === 2) return {text: 'Attached: cards read "Signed by ' + result.domain + '".', title: null};
         if (ATTACH_VERDICTS[result.reason]) return {text: ATTACH_VERDICTS[result.reason], title: result.reason};
         if (result.reason && result.reason !== 'key_not_published') {
@@ -2959,6 +2980,33 @@
                 + ', then you can check again.',
             title: null
         };
+    }
+
+    /**
+     * The sentence under the verdict when the file is the one signed; a modified file already has its own.
+     * @param {{content: string}} result @returns {string|null}
+     */
+    function contentLine(result) {
+        return result.content === 'intact' ? 'File intact: this is the file that was signed.' : null;
+    }
+
+    /**
+     * The signed figures as label and exact value, in SIGNED_FIGURE_LABELS order; the card rounds them down.
+     * @param {Object<string, *>|null} figures
+     * @returns {{label: string, value: string}[]}
+     */
+    function signedFigureLines(figures) {
+        if (!figures) return [];
+        return Object.keys(SIGNED_FIGURE_LABELS).filter((key) => figures[key] != null).map((key) => {
+            const value = figures[key];
+            let text;
+            if (key === 'period') text = cardPeriodName(value.kind, value.from);
+            else if (key === 'before_fix_period') text = cardPeriodName(figures.period.kind, value.from);
+            else if (key.endsWith('_permille')) text = (value / 10).toFixed(1) + '%';
+            else if (key.endsWith('_ms')) text = value.toLocaleString('en-US') + ' milliseconds';
+            else text = value.toLocaleString('en-US');
+            return {label: SIGNED_FIGURE_LABELS[key], value: text};
+        });
     }
 
     /**
@@ -3187,6 +3235,7 @@
         CARD_COPY,
         ATTACH_REASONS,
         ATTACH_VERDICTS,
+        SIGNED_FIGURE_LABELS,
         cardPeriodStart,
         stepPeriod,
         lastClosedPeriod,
@@ -3202,6 +3251,8 @@
         isPreviousRefusal,
         cardContactText,
         attachmentText,
+        contentLine,
+        signedFigureLines,
         revokeText,
         levelLine,
         cardEnvironmentLine,

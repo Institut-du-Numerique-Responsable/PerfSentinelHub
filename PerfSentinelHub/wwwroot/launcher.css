@@ -6208,6 +6208,57 @@ a.chip {
     font-size: 12.5px;
 }
 
+.attach-content {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-2);
+}
+
+.card-signed {
+    display: grid;
+    gap: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.card-signed-title {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.card-signed-note {
+    margin: 0 0 4px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-3);
+}
+
+/* Long labels wrap on a phone; the exact value keeps its line, right-aligned in tabular figures. */
+.card-signed-figures {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 16px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.card-signed-figures dt {
+    color: var(--text-2);
+}
+
+.card-signed-figures dd {
+    margin: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--text);
+}
+
 .attach p.muted {
     margin: 0;
     font-size: 12.5px;

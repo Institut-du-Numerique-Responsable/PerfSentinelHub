@@ -80,7 +80,7 @@ internal sealed record FakeEngine
 
     /// <summary>The verdict line <c>verify-card</c> prints, whatever its exit code.</summary>
     public string VerifyCardOutput { get; init; } =
-        """{"integrity":"ok","level":2,"domain":"example.com","key":"current","reason":null}""";
+        """{"integrity":"ok","content":"intact","level":2,"domain":"example.com","key":"current","reason":null,"figures":{"angle":"story","period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"before_fix_period":{"from":"2026-07-01","to":"2026-07-31"},"cited_ops":41,"before_fix_ops":1937000}}""";
 
     public int VerifyCardExitCode { get; init; }
 

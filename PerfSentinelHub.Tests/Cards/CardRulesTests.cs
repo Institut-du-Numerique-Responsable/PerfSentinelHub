@@ -125,4 +125,12 @@ public sealed class CardRulesTests
         Assert.True(CardRules.Printable(new string('a', 120), 120));
         Assert.False(CardRules.Printable(new string('a', 121), 120));
     }
+
+    [Fact]
+    public void Printable_refuses_the_card_file_marker()
+    {
+        Assert.False(CardRules.Printable("Q3 {\"content_sig\":\" review", 120));
+        Assert.True(CardRules.Printable("{\"content", 120));
+        Assert.True(CardRules.Printable("content_sig", 120));
+    }
 }

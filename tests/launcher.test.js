@@ -2115,6 +2115,56 @@ test("a revoked key reads as a verdict, not as a check that failed", () => {
     {text: "This card was signed with a key that is now revoked.", title: "key_revoked"});
 });
 
+test("a modified file never reads attached", () => {
+    const result = PSL.attachmentText({
+        integrity: "ok", content: "modified", level: 2, domain: "acme.example", key: "current",
+        reason: "content_modified"
+    }, true);
+    assert.deepEqual(result, {
+        text: "This card file was changed after it was signed. Make the card again before sharing it.",
+        title: "content_modified"
+    });
+    assert.ok(!result.text.includes("Attached"));
+});
+
+test("the content line says the file is the one signed, and only then", () => {
+    assert.equal(PSL.contentLine({content: "intact"}), "File intact: this is the file that was signed.");
+    assert.equal(PSL.contentLine({content: "modified"}), null);
+    assert.equal(PSL.contentLine({content: "not_checked"}), null);
+});
+
+test("the signed figures read in the label order, exact", () => {
+    assert.deepEqual(PSL.signedFigureLines({
+        angle: "story",
+        period: {kind: "month", from: "2026-09-01", to: "2026-09-30"},
+        before_fix_period: {from: "2026-07-01", to: "2026-07-31"},
+        cited_ops: 41,
+        before_fix_ops: 1937000
+    }), [
+        {label: "Period", value: "September 2026"},
+        {label: "Period before the fix", value: "July 2026"},
+        {label: "Headline figure on the card", value: "41"},
+        {label: "Unnecessary operations before the fix", value: "1,937,000"}
+    ]);
+    const month = {kind: "month", from: "2026-09-01", to: "2026-09-30"};
+    assert.deepEqual(PSL.signedFigureLines(
+        {angle: "curve", period: month, last_waste_permille: 31, previous_waste_permille: 48}).slice(1), [
+        {label: "Share of the work that was avoidable, period of the card", value: "3.1%"},
+        {label: "Share of the work that was avoidable, period before", value: "4.8%"}
+    ]);
+    assert.deepEqual(PSL.signedFigureLines(
+        {angle: "story", period: month, cited_ms: 2349, threshold_ms: 500}).slice(1), [
+        {label: "Headline figure on the card", value: "2,349 milliseconds"},
+        {label: "Alert threshold the card cites", value: "500 milliseconds"}
+    ]);
+    assert.deepEqual(PSL.signedFigureLines(
+        {angle: "collective", period: month, confirmed_fixes_count: 1200, services_count: 3}).slice(1), [
+        {label: "Fixes confirmed by measurement", value: "1,200"},
+        {label: "Services concerned", value: "3"}
+    ]);
+    assert.deepEqual(PSL.signedFigureLines(null), []);
+});
+
 test("a partial lookup reads as could not check", () => {
     const result = PSL.attachmentText(
         {integrity: "ok", level: 1, domain: "acme.example", key: "unknown", reason: "binding_partial"}, true);
@@ -2190,7 +2240,11 @@ test("Card_copy_carries_no_technical_word", () => {
         PSL.cardEnvironmentLine(null, "pilotage"),
         PSL.cardContactText("acme.example", "pilotage"),
         ...types.map((type) => PSL.cardFixLine({finding_type: type, before_fix_ops: null}).text),
-        PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 5, before_period_name: "May 2026"}).text
+        PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 5, before_period_name: "May 2026"}).text,
+        ...Object.values(PSL.SIGNED_FIGURE_LABELS),
+        PSL.contentLine({content: "intact"}),
+        PSL.attachmentText({integrity: "ok", content: "modified", level: 1, domain: null, reason: "content_modified"},
+            false).text
     ];
     for (const text of texts) {
         for (const word of words) assert.ok(!text.includes(word), `"${text}" holds "${word}"`);

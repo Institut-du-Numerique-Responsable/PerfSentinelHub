@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
@@ -65,7 +66,7 @@ public sealed class CardRenderer(EngineProbe engine, IOptions<HubOptions> option
         }
     }
 
-    /// <summary>verify-card's verdict, read whatever its exit code; null when its line lacks one of the five keys.</summary>
+    /// <summary>verify-card's verdict, read whatever its exit code; null when its line is out of contract.</summary>
     public async Task<CardAttachmentResponse?> VerifyAsync(byte[] png, CancellationToken cancellationToken)
     {
         if (Binary is not { } binary)
@@ -163,9 +164,32 @@ public sealed class CardRenderer(EngineProbe engine, IOptions<HubOptions> option
             !level.TryGetInt32(out var number) ||
             !TryNullableText(root, "domain", out var domain) ||
             Text(root, "key") is not { } key ||
-            !TryNullableText(root, "reason", out var reason))
+            !TryNullableText(root, "reason", out var reason) ||
+            Text(root, "content") is not { } content || content is not ("intact" or "modified" or "not_checked") ||
+            !TryFigures(root, out var figures))
             return null;
-        return new CardAttachmentResponse(integrity, number, domain, key, reason, []);
+        return new CardAttachmentResponse(integrity, content, number, domain, key, reason, figures, []);
+    }
+
+    // Absent or null reads none; an object must carry its angle and a whole period, every figure a long.
+    private static bool TryFigures(JsonElement root, out CardSignedFigures? figures)
+    {
+        figures = null;
+        if (!root.TryGetProperty("figures", out var value) || value.ValueKind == JsonValueKind.Null)
+            return true;
+        if (value.ValueKind != JsonValueKind.Object)
+            return false;
+        try
+        {
+            figures = value.Deserialize(HubJsonContext.Default.CardSignedFigures);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return figures is { Angle: not null, Period: { Kind: not null, From: not null, To: not null } } &&
+               figures.BeforeFixPeriod is null or { From: not null, To: not null };
     }
 
     private static JsonDocument? Line(byte[] output)

@@ -396,7 +396,9 @@ vérification imprimera, et Verify attachment, qui rend la carte une fois de plu
 le moteur sa clé sous le domaine de l'organisation, par `cloudflare-dns.com` et le domaine lui-même,
 le seul appel de la section qui sort du Hub. Quand l'un des deux endroits qui publient la clé, la
 ligne DNS et le fichier `.well-known`, ne répond pas, la vérification dit « Could not check »,
-jamais rattachée. Sans `Hub:Cards:Domain`, une phrase dit que la page de
+jamais rattachée. La vérification dit aussi si le fichier de la carte est celui qui a été signé, et
+liste les chiffres tels que signés, exacts, à comparer avec l'aperçu, qui les arrondit vers le bas.
+Sans `Hub:Cards:Domain`, une phrase dit que la page de
 vérification montre les cartes du Hub comme « Signer not verified ». La langue de la carte, anglais ou
 français, est retenue dans ce navigateur.
 

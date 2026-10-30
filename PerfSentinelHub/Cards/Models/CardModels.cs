@@ -161,11 +161,28 @@ public abstract record CardRender
 /// <summary>verify-card's verdict on a fresh card, and the hosts the check reached.</summary>
 public sealed record CardAttachmentResponse(
     string Integrity,
+    string Content,
     int Level,
     string? Domain,
     string Key,
     string? Reason,
+    CardSignedFigures? Figures,
     IReadOnlyList<string> Contacted);
+
+/// <summary>The card's big figures as the engine signed them, null where the angle has none.</summary>
+public sealed record CardSignedFigures(
+    string Angle,
+    CardPeriod Period,
+    CardDayRange? BeforeFixPeriod,
+    long? CitedOps,
+    long? CitedMs,
+    long? BeforeFixOps,
+    long? ThresholdOps,
+    long? ThresholdMs,
+    long? LastWastePermille,
+    long? PreviousWastePermille,
+    long? ConfirmedFixesCount,
+    long? ServicesCount);
 
 /// <summary>A refusal the screen shows under one free field: title, team or label.</summary>
 public sealed record CardFieldProblem(string Detail, string Field);

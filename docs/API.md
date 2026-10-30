@@ -845,7 +845,10 @@ the JSON content type of the other writes:
 | `format`                    | `png` (default), `svg`, `jxl` or `pdf` (the carousel); the attachment check always renders a PNG |
 
 Free fields are trimmed, and a blank one is left out. One longer than its bound, or holding a
-control or format character (a direction override, a zero-width space), is `400`. Any other key,
+control or format character (a direction override, a zero-width space), is `400`. One holding
+`{"content_sig":"`, the text the card file keeps for its signature, is
+`400 <name> cannot contain {"content_sig":", the text the card file keeps for its signature.`, the
+same rule the service, endpoint, environment and source names follow. Any other key,
 `figures`, `org`, `scope` or `generated_at_ms` for instance, is
 `400 Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may be sent: the figures come from the Hub.`
 A period that has not ended before today is `400 A card covers a closed period. Pick an earlier one.`,
@@ -879,14 +882,25 @@ deleted afterwards, and the key never appears on a command line.
 **Attachment.** `409 Set Hub:Cards:Domain to check an attachment.` without a domain. Otherwise the
 Hub renders the card as a PNG and runs `verify-card --online`, which reads the TXT record through
 `cloudflare-dns.com` and `https://<domain>/.well-known/perf-sentinel-key`. The answer is the
-engine's verdict and what the check reached:
+engine's verdict, the card's big figures as signed and what the check reached:
 
 ```json
-{"integrity": "ok", "level": 2, "domain": "acme.example", "key": "current", "reason": null,
+{"integrity": "ok", "content": "intact", "level": 2, "domain": "acme.example", "key": "current",
+ "reason": null,
+ "figures": {"angle": "curve", "period": {"kind": "month", "from": "2026-09-01", "to": "2026-09-30"},
+             "before_fix_period": null, "cited_ops": null, "cited_ms": null, "before_fix_ops": null,
+             "threshold_ops": null, "threshold_ms": null, "last_waste_permille": 83,
+             "previous_waste_permille": 200, "confirmed_fixes_count": null, "services_count": null},
  "contacted": ["cloudflare-dns.com", "acme.example"]}
 ```
 
-A verdict line without its five keys, or none within 20 seconds, is `502`.
+`content` says whether the file is the one signed: `intact`, or `modified` with the reason
+`content_modified` and `figures` null. `figures` carries the engine's names, exact, `null` where the
+angle has none: `period`, `before_fix_period`, `cited_ops` or `cited_ms`, `before_fix_ops`,
+`threshold_ops` or `threshold_ms`, `last_waste_permille`, `previous_waste_permille`,
+`confirmed_fixes_count`, `services_count`. A verdict line out of contract (one of its keys missing,
+a `content` other than `intact`, `modified` or `not_checked`, figures without their angle or
+period), or none within 20 seconds, is `502`.
 
 **Who may.** The Hub judges these three routes in this order: cards off `404`; a caller the Hub
 cannot name `403 The Hub does not know who is asking, and a card is made in somebody's name.`; on

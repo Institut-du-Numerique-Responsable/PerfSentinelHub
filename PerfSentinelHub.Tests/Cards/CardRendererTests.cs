@@ -225,7 +225,7 @@ public sealed partial class CardRendererTests : IDisposable
             Card = true,
             VerifyCardExitCode = 4,
             VerifyCardOutput =
-                """{"integrity":"ok","level":1,"domain":"example.com","key":"unknown","reason":"binding_check_failed"}"""
+                """{"integrity":"ok","content":"intact","level":1,"domain":"example.com","key":"unknown","reason":"binding_check_failed"}"""
         });
 
         var verdict = await renderer.VerifyAsync([0x89, .. "PNG fake"u8], Token);
@@ -247,6 +247,85 @@ public sealed partial class CardRendererTests : IDisposable
         var renderer = await RendererAsync(new FakeEngine { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = line });
 
         Assert.Null(await renderer.VerifyAsync([1], Token));
+    }
+
+    [Fact]
+    public async Task Verify_reads_the_content_verdict_and_the_figures()
+    {
+        var renderer = await RendererAsync(new FakeEngine { Card = true });
+
+        var verdict = await renderer.VerifyAsync([1], Token);
+
+        Assert.NotNull(verdict);
+        Assert.Equal("intact", verdict.Content);
+        Assert.NotNull(verdict.Figures);
+        Assert.Equal(("story", 41L, "2026-09-01", "2026-07-01"),
+            (verdict.Figures.Angle, verdict.Figures.CitedOps, verdict.Figures.Period.From,
+                verdict.Figures.BeforeFixPeriod?.From));
+        Assert.Equal(1937000L, verdict.Figures.BeforeFixOps);
+        Assert.Null(verdict.Figures.CitedMs);
+    }
+
+    [Fact]
+    public async Task A_verify_line_without_content_is_out_of_contract()
+    {
+        var renderer = await RendererAsync(new FakeEngine
+        {
+            Card = true,
+            VerifyCardOutput = """{"integrity":"ok","level":2,"domain":"example.com","key":"current","reason":null}"""
+        });
+
+        Assert.Null(await renderer.VerifyAsync([1], Token));
+    }
+
+    [Fact]
+    public async Task A_verify_line_with_an_unknown_content_is_out_of_contract()
+    {
+        var renderer = await RendererAsync(new FakeEngine
+        {
+            Card = true,
+            VerifyCardOutput =
+                """{"integrity":"ok","content":"maybe","level":2,"domain":"example.com","key":"current","reason":null}"""
+        });
+
+        Assert.Null(await renderer.VerifyAsync([1], Token));
+    }
+
+    [Theory]
+    [InlineData("""{"period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":41}""")]
+    [InlineData("""{"angle":"story","period":{"kind":"month","from":"2026-09-01"},"cited_ops":41}""")]
+    [InlineData("""{"angle":"story","cited_ops":41}""")]
+    [InlineData("""{"angle":"story","period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":"41"}""")]
+    [InlineData("""{"angle":"story","period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":18446744073709551615}""")]
+    [InlineData("""[41]""")]
+    public async Task A_verify_line_with_unreadable_figures_is_out_of_contract(string figures)
+    {
+        var renderer = await RendererAsync(new FakeEngine
+        {
+            Card = true,
+            VerifyCardOutput =
+                $$"""{"integrity":"ok","content":"intact","level":2,"domain":"example.com","key":"current","reason":null,"figures":{{figures}}}"""
+        });
+
+        Assert.Null(await renderer.VerifyAsync([1], Token));
+    }
+
+    [Fact]
+    public async Task A_verify_line_without_figures_reads_none()
+    {
+        var renderer = await RendererAsync(new FakeEngine
+        {
+            Card = true,
+            VerifyCardExitCode = 1,
+            VerifyCardOutput =
+                """{"integrity":"ok","content":"modified","level":1,"domain":null,"key":"unknown","reason":"content_modified","figures":null}"""
+        });
+
+        var verdict = await renderer.VerifyAsync([1], Token);
+
+        Assert.NotNull(verdict);
+        Assert.Equal(("modified", "content_modified"), (verdict.Content, verdict.Reason));
+        Assert.Null(verdict.Figures);
     }
 
     // ------------------------------------------------------------ helpers
