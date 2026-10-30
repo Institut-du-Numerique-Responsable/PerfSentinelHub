@@ -6199,11 +6199,18 @@ a.chip {
 }
 
 .attach-title {
+    /* Wraps inside its own column, so the button stays on the title's line on a phone. */
+    flex: 1 1 0;
+    min-width: 0;
     margin: 0;
     font-size: 13px;
     font-weight: 600;
     color: var(--text);
     overflow-wrap: anywhere;
+}
+
+.attach-head .pill-button {
+    flex: none;
 }
 
 .attach-contact {

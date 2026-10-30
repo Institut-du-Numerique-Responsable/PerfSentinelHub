@@ -645,6 +645,52 @@
         else if (tabBox.right > rowBox.right) row.scrollLeft += tabBox.right - rowBox.right;
     }
 
+    /**
+     * Swaps in a fresh screen but leaves the shown PDF preview's iframe in the page: an iframe taken out
+     * reloads its file and loses the reader's page. Its ancestors stay too, given the fresh ones' attributes
+     * and siblings; none of them carries a listener. Any other shape is a plain swap.
+     */
+    function replaceKeepingPdf(main, fresh) {
+        const kept = main.querySelector('iframe.card-preview-pdf');
+        const slot = fresh.querySelector('iframe.card-preview-pdf');
+        let old = kept;
+        let now = slot;
+        while (old && now && now !== fresh && old.parentNode !== main) {
+            old = old.parentNode;
+            now = now.parentNode;
+        }
+        if (!kept || !slot || kept.getAttribute('src') !== slot.getAttribute('src') || now !== fresh
+            || old.parentNode !== main) {
+            main.replaceChildren(fresh);
+            return;
+        }
+        for (old = kept, now = slot; now !== fresh; old = old.parentNode, now = now.parentNode) {
+            adoptAround(old.parentNode, now.parentNode, old, now);
+        }
+        Array.from(main.childNodes).forEach(function (child) {
+            if (child !== old) child.remove();
+        });
+    }
+
+    /** Gives `into` the attributes and children of `model`, with `keep` standing where `place` stands. */
+    function adoptAround(into, model, keep, place) {
+        Array.from(into.attributes).forEach(function (attribute) {
+            into.removeAttribute(attribute.name);
+        });
+        Array.from(model.attributes).forEach(function (attribute) {
+            into.setAttribute(attribute.name, attribute.value);
+        });
+        Array.from(into.childNodes).forEach(function (child) {
+            if (child !== keep) child.remove();
+        });
+        let before = true;
+        Array.from(model.childNodes).forEach(function (child) {
+            if (child === place) before = false;
+            else if (before) into.insertBefore(child, keep);
+            else into.appendChild(child);
+        });
+    }
+
     function render() {
         // A tip whose anchor is about to be replaced would never see its mouseleave.
         closeTip();
@@ -684,7 +730,7 @@
         else if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
         else if (state.screen === 'incidents') main.replaceChildren(renderIncidentsScreen());
         else if (state.screen === 'correlations') main.replaceChildren(renderCorrelationsScreen());
-        else if (state.screen === 'recap') main.replaceChildren(renderRecapScreen());
+        else if (state.screen === 'recap') replaceKeepingPdf(main, renderRecapScreen());
         else if (state.screen === 'disclosures') main.replaceChildren(renderDisclosuresScreen());
         else if (state.screen === 'disclosure') main.replaceChildren(renderDisclosureScreen());
         else if (state.screen === 'ack') main.replaceChildren(renderAckScreen());
