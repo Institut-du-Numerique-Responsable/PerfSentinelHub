@@ -4,6 +4,13 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- The detection import and poll store the card signal a daemon sends from the card release:
+  `below_threshold_passes` on a count row, the passes below the threshold of a watched
+  signature, and `thresholds` on a day, the six detection thresholds the daemon applied. Both
+  merge by maximum. A count row with zero detections is accepted and no read counts it.
+
 ### Changed
 
 - Detection counts, days and ledgers leave on a clock of their own, `Hub:DetectionRetention`

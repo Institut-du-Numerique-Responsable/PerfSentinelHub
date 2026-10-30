@@ -88,6 +88,7 @@ public sealed partial class HubDatabase
             await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
             await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
+            await EnsureDetectionSignalColumnsAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -243,6 +244,33 @@ public sealed partial class HubDatabase
                             ALTER TABLE detection_days ADD COLUMN avoidable_io_ops INTEGER;
                             ALTER TABLE detection_days ADD COLUMN avoidable_gco2_low REAL;
                             ALTER TABLE detection_days ADD COLUMN total_io_ops INTEGER;
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The C1 signal: the passes below the threshold of a watched signature, and the thresholds
+    ///     the daemon applied that day, named as the engine sends them. NULL on a row an older engine wrote.
+    /// </summary>
+    private static async Task EnsureDetectionSignalColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(
+                connection, transaction, "detection_counts", "below_threshold_passes", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE detection_counts ADD COLUMN below_threshold_passes INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN slow_query_threshold_ms INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN slow_http_threshold_ms INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN max_fanout INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN chatty_threshold INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN pool_saturation_threshold INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN serialized_min_calls INTEGER;
                             """;
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }

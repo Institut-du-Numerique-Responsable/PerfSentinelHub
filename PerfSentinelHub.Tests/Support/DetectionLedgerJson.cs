@@ -20,11 +20,18 @@ internal static class DetectionLedgerJson
     }
 
     // As the daemon writes a row: extra_io_ops is omitted, not null, while green is off.
-    public static JsonObject Count(int day, string signature = Signature, long detections = 5, long? extraIoOps = 40)
+    public static JsonObject Count(
+        int day,
+        string signature = Signature,
+        long detections = 5,
+        long? extraIoOps = 40,
+        long? belowThresholdPasses = null)
     {
         var count = new JsonObject { ["day"] = day, ["signature"] = signature, ["detections"] = detections };
         if (extraIoOps is { } io)
             count["extra_io_ops"] = io;
+        if (belowThresholdPasses is { } passes)
+            count["below_threshold_passes"] = passes;
         return count;
     }
 
@@ -36,7 +43,8 @@ internal static class DetectionLedgerJson
         double? avoidableGco2 = null,
         long? avoidableIoOps = null,
         double? avoidableGco2Low = null,
-        long? totalIoOps = null)
+        long? totalIoOps = null,
+        JsonObject? thresholds = null)
     {
         var json = new JsonObject
         {
@@ -57,6 +65,8 @@ internal static class DetectionLedgerJson
             json["avoidable_gco2_low"] = low;
         if (totalIoOps is { } total)
             json["total_io_ops"] = total;
+        if (thresholds is not null)
+            json["thresholds"] = thresholds.DeepClone();
         return json;
     }
 

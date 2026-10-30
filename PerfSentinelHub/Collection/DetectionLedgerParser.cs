@@ -69,7 +69,8 @@ public static class DetectionLedgerParser
             signature.Any(char.IsControl))
             throw Invalid("A detection count has no readable signature.");
         return new DetectionCountRow(
-            window.Day(row, "day"), signature, Integer(row, "detections"), OptionalInteger(row, "extra_io_ops"));
+            window.Day(row, "day"), signature, Integer(row, "detections"), OptionalInteger(row, "extra_io_ops"),
+            OptionalInteger(row, "below_threshold_passes"));
     }
 
     private static DetectionDayRow ReadDay(JsonElement row, DayWindow window)
@@ -91,7 +92,25 @@ public static class DetectionLedgerParser
             OptionalNumber(row, "avoidable_gco2"),
             OptionalInteger(row, "avoidable_io_ops"),
             OptionalNumber(row, "avoidable_gco2_low"),
-            OptionalInteger(row, "total_io_ops"));
+            OptionalInteger(row, "total_io_ops"),
+            ReadThresholds(row));
+    }
+
+    // Absent on an engine before C1. Unknown keys are ignored so a later engine may add one.
+    private static DetectionThresholds? ReadThresholds(JsonElement row)
+    {
+        if (IsAbsent(row, "thresholds"))
+            return null;
+        var thresholds = row.GetProperty("thresholds");
+        if (thresholds.ValueKind != JsonValueKind.Object)
+            throw Invalid("thresholds is not an object.");
+        return new DetectionThresholds(
+            OptionalInteger(thresholds, "slow_query_threshold_ms"),
+            OptionalInteger(thresholds, "slow_http_threshold_ms"),
+            OptionalInteger(thresholds, "max_fanout"),
+            OptionalInteger(thresholds, "chatty_threshold"),
+            OptionalInteger(thresholds, "pool_saturation_threshold"),
+            OptionalInteger(thresholds, "serialized_min_calls"));
     }
 
     // The daemon writes a lower-case hyphenated UUID, and the ledger is keyed on it: an

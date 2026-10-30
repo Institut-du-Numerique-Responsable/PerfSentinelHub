@@ -178,8 +178,8 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `finding_attributes`           | signature, source, grouping identity and captured pair         | retention, on `last_seen_ms`               |
 | `finding_lineage`              | successor and predecessor signature                            | with its successor                         |
 | `detection_ledgers`            | source and daemon ledger, with its start and the poll's cursor | retention, on `last_read_ms`               |
-| `detection_days`               | source, ledger and UTC day, with what the day says of itself   | retention, by whole day                    |
-| `detection_counts`             | signature, source, ledger and UTC day, with its detections     | retention, by whole day                    |
+| `detection_days`               | source, ledger and UTC day, with what the day says of itself and the thresholds it applied | retention, by whole day                    |
+| `detection_counts`             | signature, source, ledger and UTC day, with its detections and passes below the threshold | retention, by whole day                    |
 | `endpoint_heartbeats`          | source, service and endpoint                                   | retention, on `last_seen_any_ms`           |
 | `source_state`                 | source, the poll's reachability                                | retention, on `last_attempt_ms`            |
 | `source_imports`               | source, its last push                                          | never                                      |
@@ -217,7 +217,9 @@ The three detection tables, added by schema V15, hold the daemons' ledgers as re
 `detection_days` carries what that day says of its own completeness: sealed or still open, a
 restart, its sampling rate, shed traces, rejected ingest and the detections past the ledger's
 signature cap. When the daemon scores carbon, the row also carries the day's avoidable grams
-(mid and low), avoidable I/O and total I/O. A windowed read of `/api/findings` folds them, per source, into the count it
+(mid and low), avoidable I/O and total I/O, and the thresholds it applied. A row of
+`detection_counts` may carry the passes below the threshold of a watched signature with zero
+detections, which no read counts. A windowed read of `/api/findings` folds them, per source, into the count it
 serves and the reasons it falls short, see
 [API.md](API.md#what-the-hub-adds-to-a-finding). Nothing is backfilled: a day before the
 upgrade has no row and reads as unknown.

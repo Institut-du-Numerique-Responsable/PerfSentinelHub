@@ -80,6 +80,7 @@ public sealed partial class HubDatabase
                               WHERE dc.signature IN (SELECT value FROM json_each($signatures))
                                 AND dc.source_id IN (SELECT value FROM json_each($source_ids))
                                 AND dc.day BETWEEN $from_day AND $to_day
+                                AND dc.detections > 0
                                 AND dc.extra_io_ops IS NOT NULL;
                               """;
         command.Parameters.AddWithValue("$signatures", JsonArray(signatures));

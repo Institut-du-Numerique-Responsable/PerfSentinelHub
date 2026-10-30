@@ -193,8 +193,8 @@ soit la source, et rien d'autre.
 | `finding_attributes`           | signature, source, identité de regroupement et paire captée          | rétention, sur `last_seen_ms`              |
 | `finding_lineage`              | signature successeur et prédécesseur                                 | avec son successeur                        |
 | `detection_ledgers`            | source et registre du daemon, avec son départ et le curseur du poll  | rétention, sur `last_read_ms`              |
-| `detection_days`               | source, registre et jour UTC, avec ce que le jour dit de lui-même    | rétention, par jour entier                 |
-| `detection_counts`             | signature, source, registre et jour UTC, avec ses détections         | rétention, par jour entier                 |
+| `detection_days`               | source, registre et jour UTC, avec ce que le jour dit de lui-même et les seuils appliqués | rétention, par jour entier                 |
+| `detection_counts`             | signature, source, registre et jour UTC, avec ses détections et passages sous le seuil | rétention, par jour entier                 |
 | `endpoint_heartbeats`          | source, service et endpoint                                          | rétention, sur `last_seen_any_ms`          |
 | `source_state`                 | source, la joignabilité vue par le poll                              | rétention, sur `last_attempt_ms`           |
 | `source_imports`               | source, son dernier push                                             | jamais                                     |
@@ -233,7 +233,9 @@ Les trois tables de détections, ajoutées par le schéma V15, tiennent les regi
 tels que lus. Une ligne de `detection_days` porte ce que ce jour dit de sa propre complétude :
 scellé ou encore ouvert, un redémarrage, son taux d'échantillonnage, des traces délestées, des
 ingestions rejetées et les détections au-delà du plafond de signatures du registre. Quand le daemon calcule le carbone, la ligne porte aussi les
-grammes évitables du jour (médian et bas), les E/S évitables et les E/S totales. Une lecture
+grammes évitables du jour (médian et bas), les E/S évitables et les E/S totales, et les seuils
+qu'il a appliqués. Une ligne de `detection_counts` peut porter les passages sous le seuil d'une
+signature surveillée avec zéro détection, qu'aucune lecture ne compte. Une lecture
 fenêtrée de `/api/findings` les replie, par source, en un compte servi et les raisons qui le
 rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Rien n'est
 rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.

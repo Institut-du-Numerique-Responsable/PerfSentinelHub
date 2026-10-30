@@ -51,8 +51,15 @@ and a replay land on the same rows in any order. The push writes neither reachab
 time of the source's last findings push. Each day object may also carry `avoidable_gco2` and
 `avoidable_gco2_low` (grams of CO2eq, from 0 to 2^53), `avoidable_io_ops` and `total_io_ops`
 (integers), which a daemon that scores carbon sends together. They merge by maximum, an absent
-value never lowering a stored one, and are absent on engines before the recap release. Refusals
-count on `perf_sentinel_hub_detection_import_rejected_total`.
+value never lowering a stored one, and are absent on engines before the recap release. From the
+card release, a count row may carry `below_threshold_passes` (an integer), the passes below the
+threshold of a signature the Hub asks the daemon to watch, and such a row may carry `detections: 0`,
+which no read counts as a detection. A day object may carry `thresholds`, an object with the
+integer keys `slow_query_threshold_ms`, `slow_http_threshold_ms`, `max_fanout`, `chatty_threshold`,
+`pool_saturation_threshold` and `serialized_min_calls`, the thresholds the daemon applied that
+day; a key the Hub does not know is ignored. Both are optional and merge by maximum, an absent
+value never lowering a stored one. Refusals count on
+`perf_sentinel_hub_detection_import_rejected_total`.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that

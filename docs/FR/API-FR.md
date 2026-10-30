@@ -57,7 +57,15 @@ findings de la source. Chaque objet jour peut aussi porter `avoidable_gco2` et `
 (grammes de CO2eq, de 0 à 2^53), `avoidable_io_ops` et `total_io_ops` (entiers), qu'envoie ensemble
 un daemon qui calcule le carbone. Ils fusionnent par maximum, une valeur absente n'abaissant
 jamais une valeur stockée, et sont absents des moteurs antérieurs à la version du récapitulatif.
-Les refus se comptent sur `perf_sentinel_hub_detection_import_rejected_total`.
+Depuis la version de la carte, une ligne de compte peut porter `below_threshold_passes` (un
+entier), les passages sous le seuil d'une signature que le Hub demande au daemon de surveiller, et
+une telle ligne peut porter `detections: 0`, qu'aucune lecture ne compte comme une détection. Un
+objet jour peut porter `thresholds`, un objet aux clés entières `slow_query_threshold_ms`,
+`slow_http_threshold_ms`, `max_fanout`, `chatty_threshold`, `pool_saturation_threshold` et
+`serialized_min_calls`, les seuils que le daemon a appliqués ce jour-là ; une clé que le Hub ne
+connaît pas est ignorée. Les deux sont facultatifs et fusionnent par maximum, une valeur absente
+n'abaissant jamais une valeur stockée. Les refus se comptent sur
+`perf_sentinel_hub_detection_import_rejected_total`.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de

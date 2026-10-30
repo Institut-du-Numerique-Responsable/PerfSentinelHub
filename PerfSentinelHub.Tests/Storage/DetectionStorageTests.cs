@@ -107,6 +107,41 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         Assert.Equal("3.0 1.5 120 900", await ScalarAsync(CarbonRow));
     }
 
+    private static DetectionLedgerPage SignalPage(long? belowThresholdPasses, DetectionThresholds? thresholds = null)
+    {
+        return new DetectionLedgerPage(
+            Ledger, 1_799_000_000_000, Day, Day, null,
+            [new DetectionCountRow(Day, Signature, 0, null, belowThresholdPasses)],
+            [new DetectionDayRow(Day, false, false, 0, 0, 0, 0, 1.0, Thresholds: thresholds)],
+            null);
+    }
+
+    [Fact]
+    public async Task Below_threshold_passes_merge_by_maximum_and_survive_an_absent_copy()
+    {
+        await PushAsync(SignalPage(4));
+        await PollAsync(SignalPage(null));
+        await PushAsync(SignalPage(3));
+
+        Assert.Equal("4", await ScalarAsync("SELECT IFNULL(below_threshold_passes, '-') FROM detection_counts;"));
+    }
+
+    [Fact]
+    public async Task Thresholds_merge_by_maximum_per_key()
+    {
+        const string thresholds = """
+                                  SELECT IFNULL(slow_query_threshold_ms, '-') || ' ' || IFNULL(slow_http_threshold_ms, '-')
+                                    || ' ' || IFNULL(max_fanout, '-') || ' ' || IFNULL(chatty_threshold, '-') || ' '
+                                    || IFNULL(pool_saturation_threshold, '-') || ' ' || IFNULL(serialized_min_calls, '-')
+                                  FROM detection_days;
+                                  """;
+        await PushAsync(SignalPage(null, new DetectionThresholds(500, 1000, 20, 15, 10, 3)));
+        await PushAsync(SignalPage(null, new DetectionThresholds(800, null, 10, null, null, null)));
+        await PushAsync(SignalPage(null));
+
+        Assert.Equal("800 1000 20 15 10 3", await ScalarAsync(thresholds));
+    }
+
     private static DetectionLedgerPage Days(params int[] days)
     {
         return new DetectionLedgerPage(

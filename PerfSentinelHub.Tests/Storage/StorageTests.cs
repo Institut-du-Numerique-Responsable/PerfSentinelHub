@@ -404,6 +404,65 @@ public sealed class StorageTests
             (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    [Fact]
+    public async Task A_v19_database_gains_the_signal_columns()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // Dropped rather than hand-written as the old DDL, as the cases above do.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE detection_counts DROP COLUMN below_threshold_passes;
+                               ALTER TABLE detection_days DROP COLUMN slow_query_threshold_ms;
+                               ALTER TABLE detection_days DROP COLUMN slow_http_threshold_ms;
+                               ALTER TABLE detection_days DROP COLUMN max_fanout;
+                               ALTER TABLE detection_days DROP COLUMN chatty_threshold;
+                               ALTER TABLE detection_days DROP COLUMN pool_saturation_threshold;
+                               ALTER TABLE detection_days DROP COLUMN serialized_min_calls;
+                               INSERT INTO detection_days(
+                                 source_id, ledger_id, day, sealed, gap, overflow_detections, shed_traces,
+                                 ingest_rejected, sampling_rate, last_read_ms)
+                               VALUES ('prod', 'ledger', 20400, 1, 0, 0, 0, 0, 1.0, 500);
+                               INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections)
+                               VALUES ('sig', 'prod', 'ledger', 20400, 5);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(name || ' ' || type, ',') FROM
+                                    (SELECT name, type FROM pragma_table_info('detection_counts')
+                                     WHERE name = 'below_threshold_passes'
+                                     UNION ALL
+                                     SELECT name, type FROM pragma_table_info('detection_days')
+                                     WHERE name IN ('slow_query_threshold_ms', 'slow_http_threshold_ms', 'max_fanout',
+                                                    'chatty_threshold', 'pool_saturation_threshold',
+                                                    'serialized_min_calls')))
+                             || ' | ' || (SELECT IFNULL(below_threshold_passes, '-') FROM detection_counts)
+                             || (SELECT IFNULL(slow_query_threshold_ms, '-') || IFNULL(slow_http_threshold_ms, '-')
+                                        || IFNULL(max_fanout, '-') || IFNULL(chatty_threshold, '-')
+                                        || IFNULL(pool_saturation_threshold, '-') || IFNULL(serialized_min_calls, '-')
+                                 FROM detection_days);
+                           """;
+        Assert.Equal(
+            "below_threshold_passes INTEGER,slow_query_threshold_ms INTEGER,slow_http_threshold_ms INTEGER," +
+            "max_fanout INTEGER,chatty_threshold INTEGER,pool_saturation_threshold INTEGER," +
+            "serialized_min_calls INTEGER | -------",
+            (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
     private static async Task<List<string>> SourceColumnsAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)

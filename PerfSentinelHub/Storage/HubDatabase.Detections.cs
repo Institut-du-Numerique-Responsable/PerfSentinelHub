@@ -28,16 +28,24 @@ public sealed partial class HubDatabase
     // A day keeps the lowest sampling rate it was ever read at, and a sealed day stays sealed.
     // The four carbon columns merge by a null-tolerant maximum: NULL there means "not yet
     // accumulated", unlike overflow_extra_io_ops where NULL means green off and stays sticky.
+    // The six thresholds take the same maximum, written COALESCE(MAX(a, b), a, b): a day spanning
+    // two daemon configurations keeps the looser threshold, which every pass below either one is
+    // also below.
     private const string DetectionDayUpsert = """
                                               INSERT INTO detection_days(
                                                 source_id, ledger_id, day, sealed, gap, overflow_detections,
                                                 overflow_extra_io_ops, shed_traces, ingest_rejected, sampling_rate,
                                                 last_read_ms, avoidable_gco2, avoidable_io_ops, avoidable_gco2_low,
-                                                total_io_ops)
+                                                total_io_ops, slow_query_threshold_ms, slow_http_threshold_ms,
+                                                max_fanout, chatty_threshold, pool_saturation_threshold,
+                                                serialized_min_calls)
                                               VALUES ($source_id, $ledger_id, $day, $sealed, $gap, $overflow_detections,
                                                       $overflow_extra_io_ops, $shed_traces, $ingest_rejected,
                                                       $sampling_rate, $observed_at, $avoidable_gco2,
-                                                      $avoidable_io_ops, $avoidable_gco2_low, $total_io_ops)
+                                                      $avoidable_io_ops, $avoidable_gco2_low, $total_io_ops,
+                                                      $slow_query_threshold_ms, $slow_http_threshold_ms, $max_fanout,
+                                                      $chatty_threshold, $pool_saturation_threshold,
+                                                      $serialized_min_calls)
                                               ON CONFLICT(source_id, ledger_id, day) DO UPDATE SET
                                                 sealed = MAX(detection_days.sealed, excluded.sealed),
                                                 gap = MAX(detection_days.gap, excluded.gap),
@@ -61,17 +69,40 @@ public sealed partial class HubDatabase
                                                                      ELSE MAX(detection_days.avoidable_gco2_low, excluded.avoidable_gco2_low) END,
                                                 total_io_ops = CASE WHEN detection_days.total_io_ops IS NULL THEN excluded.total_io_ops
                                                                WHEN excluded.total_io_ops IS NULL THEN detection_days.total_io_ops
-                                                               ELSE MAX(detection_days.total_io_ops, excluded.total_io_ops) END;
+                                                               ELSE MAX(detection_days.total_io_ops, excluded.total_io_ops) END,
+                                                slow_query_threshold_ms = COALESCE(
+                                                  MAX(detection_days.slow_query_threshold_ms, excluded.slow_query_threshold_ms),
+                                                  detection_days.slow_query_threshold_ms, excluded.slow_query_threshold_ms),
+                                                slow_http_threshold_ms = COALESCE(
+                                                  MAX(detection_days.slow_http_threshold_ms, excluded.slow_http_threshold_ms),
+                                                  detection_days.slow_http_threshold_ms, excluded.slow_http_threshold_ms),
+                                                max_fanout = COALESCE(MAX(detection_days.max_fanout, excluded.max_fanout),
+                                                                      detection_days.max_fanout, excluded.max_fanout),
+                                                chatty_threshold = COALESCE(
+                                                  MAX(detection_days.chatty_threshold, excluded.chatty_threshold),
+                                                  detection_days.chatty_threshold, excluded.chatty_threshold),
+                                                pool_saturation_threshold = COALESCE(
+                                                  MAX(detection_days.pool_saturation_threshold, excluded.pool_saturation_threshold),
+                                                  detection_days.pool_saturation_threshold, excluded.pool_saturation_threshold),
+                                                serialized_min_calls = COALESCE(
+                                                  MAX(detection_days.serialized_min_calls, excluded.serialized_min_calls),
+                                                  detection_days.serialized_min_calls, excluded.serialized_min_calls);
                                               """;
 
+    // below_threshold_passes takes the null-tolerant maximum: a copy from an engine before C1
+    // sends none and must not erase what another copy counted.
     private const string DetectionCountUpsert = """
                                                 INSERT INTO detection_counts(
-                                                  signature, source_id, ledger_id, day, detections, extra_io_ops)
+                                                  signature, source_id, ledger_id, day, detections, extra_io_ops,
+                                                  below_threshold_passes)
                                                 VALUES ($signature, $source_id, $ledger_id, $day, $detections,
-                                                        $extra_io_ops)
+                                                        $extra_io_ops, $below_threshold_passes)
                                                 ON CONFLICT(signature, source_id, ledger_id, day) DO UPDATE SET
                                                   detections = MAX(detection_counts.detections, excluded.detections),
-                                                  extra_io_ops = MAX(detection_counts.extra_io_ops, excluded.extra_io_ops);
+                                                  extra_io_ops = MAX(detection_counts.extra_io_ops, excluded.extra_io_ops),
+                                                  below_threshold_passes = COALESCE(
+                                                    MAX(detection_counts.below_threshold_passes, excluded.below_threshold_passes),
+                                                    detection_counts.below_threshold_passes, excluded.below_threshold_passes);
                                                 """;
 
     // A windowed page's volume inputs in one round trip: the page's counts in the window,
@@ -85,6 +116,7 @@ public sealed partial class HubDatabase
                                                           LEFT JOIN source_state AS ss ON ss.source_id = dc.source_id
                                                           WHERE dc.signature IN (SELECT value FROM json_each($signatures))
                                                             AND dc.day BETWEEN $vol_from_day AND $vol_to_day
+                                                            AND dc.detections > 0
                                                             AND {Copies(false, "dc")};
                                                           SELECT dd.source_id, dd.day, dd.sealed, dd.gap,
                                                                  dd.overflow_detections, dd.shed_traces,
@@ -181,6 +213,7 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$avoidable_io_ops", (object?)day.AvoidableIoOps ?? DBNull.Value);
             parameters.AddWithValue("$avoidable_gco2_low", (object?)day.AvoidableGco2Low ?? DBNull.Value);
             parameters.AddWithValue("$total_io_ops", (object?)day.TotalIoOps ?? DBNull.Value);
+            BindThresholds(parameters, day.Thresholds);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -192,6 +225,7 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$signature", count.Signature);
             parameters.AddWithValue("$detections", count.Detections);
             parameters.AddWithValue("$extra_io_ops", (object?)count.ExtraIoOps ?? DBNull.Value);
+            parameters.AddWithValue("$below_threshold_passes", (object?)count.BelowThresholdPasses ?? DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -209,6 +243,17 @@ public sealed partial class HubDatabase
         parameters.AddWithValue(SourceIdParameter, sourceId);
         parameters.AddWithValue(LedgerIdParameter, ledgerId);
         parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+    }
+
+    private static void BindThresholds(SqliteParameterCollection parameters, DetectionThresholds? thresholds)
+    {
+        parameters.AddWithValue("$slow_query_threshold_ms", (object?)thresholds?.SlowQueryThresholdMs ?? DBNull.Value);
+        parameters.AddWithValue("$slow_http_threshold_ms", (object?)thresholds?.SlowHttpThresholdMs ?? DBNull.Value);
+        parameters.AddWithValue("$max_fanout", (object?)thresholds?.MaxFanout ?? DBNull.Value);
+        parameters.AddWithValue("$chatty_threshold", (object?)thresholds?.ChattyThreshold ?? DBNull.Value);
+        parameters.AddWithValue(
+            "$pool_saturation_threshold", (object?)thresholds?.PoolSaturationThreshold ?? DBNull.Value);
+        parameters.AddWithValue("$serialized_min_calls", (object?)thresholds?.SerializedMinCalls ?? DBNull.Value);
     }
 
     /// <summary>

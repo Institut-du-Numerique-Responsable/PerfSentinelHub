@@ -97,6 +97,24 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task A_pushed_page_keeps_the_signal_fields()
+    {
+        var page = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(2, "signal-pushed", 0, null, 12)],
+            [DetectionLedgerJson.Day(2, thresholds: new JsonObject { ["slow_query_threshold_ms"] = 500 })]);
+        using var request = Request(ApiKey, page);
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("0 12", await ScalarAsync("""
+                                               SELECT detections || ' ' || below_threshold_passes FROM detection_counts
+                                               WHERE source_id = 'test' AND signature = 'signal-pushed';
+                                               """));
+        Assert.Equal("500", await ScalarAsync(
+            "SELECT slow_query_threshold_ms FROM detection_days WHERE source_id = 'test' AND day = 2;"));
+    }
+
+    [Fact]
     public async Task A_meta_only_sealed_page_seals_the_day()
     {
         // The daemon pushes only the rows changed since its last ack, so the midnight seal

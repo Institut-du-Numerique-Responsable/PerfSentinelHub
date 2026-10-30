@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -35,6 +37,8 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     private static readonly SourceSnapshot VolumeCount = new("volume-count", "Volume Count", "volume-count", "0.37.0");
     private static readonly SourceSnapshot VolumeAdmitted = new("volume-admitted", "Volume Admitted", "volume", "0.37.0");
     private static readonly SourceSnapshot VolumeClamp = new("volume-clamp", "Volume Clamp", "volume", "0.37.0");
+    private static readonly SourceSnapshot WatchFixed = new("watch-fixed", "Watch Fixed", "volume", "0.39.0");
+    private static readonly SourceSnapshot WatchVolume = new("watch-volume", "Watch Volume", "volume", "0.39.0");
 
     private const string VolumeLedger = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
 
@@ -794,6 +798,74 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         Assert.Equal("1970-01-02", ahead.GetProperty("detections_from").GetString());
         Assert.Equal("1970-01-01", ahead.GetProperty("detections_to").GetString());
         Assert.Equal("null null null [] null", DescribeVolume(ahead));
+    }
+
+    [Fact]
+    public async Task A_watch_only_row_does_not_bring_a_fixed_finding_back()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var hub = AtDay(20_747);
+        var database = hub.Services.GetRequiredService<HubDatabase>();
+        await database.UpsertBatchAsync(
+            WatchFixed, new ParsedBatch([await VariantAsync("watch-fixed:x", "watch-fixed")], 0),
+            20_740 * DayMs + 1000, cancellationToken);
+        // Seen under the threshold only, after the fix.
+        await RecordSignalAsync(database, WatchFixed, (20_745, "watch-fixed:x", 0, null, 12));
+        using var client = hub.CreateClient();
+
+        var listed = await ListAsync(
+            $"/api/findings?service=watch-fixed&from={20_744 * DayMs}&to={20_746 * DayMs}", client);
+
+        Assert.Empty(listed.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task A_watch_only_row_adds_no_volume()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var hub = AtDay(20_747);
+        var database = hub.Services.GetRequiredService<HubDatabase>();
+        await database.UpsertBatchAsync(
+            WatchVolume, new ParsedBatch([await VariantAsync("watch-volume:x", "watch-volume")], 0),
+            20_745 * DayMs + 1000, cancellationToken);
+        // The zero row omits extra_io_ops, one shape the engine may send for a watched signature.
+        await RecordSignalAsync(database, WatchVolume,
+            (20_745, "watch-volume:x", 5, 50, null), (20_746, "watch-volume:x", 0, null, 12));
+        using var client = hub.CreateClient();
+
+        var finding = Assert.Single((await ListAsync(
+            $"/api/findings?service=watch-volume&from={20_744 * DayMs}&to={20_746 * DayMs}", client))
+            .EnumerateArray());
+
+        Assert.Equal(5, finding.GetProperty("detections").GetInt64());
+        Assert.Equal(50, finding.GetProperty("avoidable_io_ops").GetInt64());
+    }
+
+    // The fixture's host on another clock, sharing its database file.
+    private WebApplicationFactory<Program> AtDay(int day)
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(day * DayMs + 3_600_000));
+        return factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(clock);
+        }));
+    }
+
+    // One pushed page of a ledger with a day row for each count, unsampled and open.
+    private static Task RecordSignalAsync(
+        HubDatabase database,
+        SourceSnapshot source,
+        params (int Day, string Signature, long Detections, long? ExtraIoOps, long? BelowThresholdPasses)[] counts)
+    {
+        var page = new DetectionLedgerPage(
+            VolumeLedger, 0, counts[^1].Day, counts[0].Day, null,
+            [.. counts.Select(count => new DetectionCountRow(
+                count.Day, count.Signature, count.Detections, count.ExtraIoOps, count.BelowThresholdPasses))],
+            [.. counts.Select(count => new DetectionDayRow(count.Day, false, false, 0, null, 0, 0, 1.0))],
+            null);
+        return database.MergeDetectionPageAsync(
+            source.SourceId, page, true, 10_000, TestContext.Current.CancellationToken);
     }
 
     // The five volume fields a finding and each of its sources carry, as served.

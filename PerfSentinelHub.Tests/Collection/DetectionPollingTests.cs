@@ -239,6 +239,31 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_polled_page_keeps_the_signal_fields()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (poller, database, _) = await BuildAsync(cancellationToken);
+        var page = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(Today, detections: 0, extraIoOps: null, belowThresholdPasses: 12)],
+            [DetectionLedgerJson.Day(Today, thresholds: new JsonObject { ["max_fanout"] = 20 })],
+            Today);
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()), context => Serve(context, page), cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT (SELECT detections || ' ' || below_threshold_passes FROM detection_counts
+                                      WHERE source_id = 'prod' AND day = $day)
+                                || ' | ' || (SELECT max_fanout FROM detection_days WHERE source_id = 'prod' AND day = $day);
+                              """;
+        command.Parameters.AddWithValue("$day", Today);
+        Assert.Equal("0 12 | 20", (string)(await command.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
     public async Task A_complete_pass_never_seals_a_day_below_what_it_read()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

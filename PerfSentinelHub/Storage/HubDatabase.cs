@@ -801,7 +801,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     }
 
     // A finding counted in the volume window is present too, observed or not: the ring may
-    // have turned between two polls, or the listing hit its cap.
+    // have turned between two polls, or the listing hit its cap. A row with zero detections
+    // (a watched signature seen only below its threshold) is no detection.
     private static string InWindow(string row, string copies, string countCopies)
     {
         return $"""
@@ -819,6 +820,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                     SELECT 1 FROM detection_counts AS dc
                     WHERE dc.signature = {row}.signature
                       AND dc.day BETWEEN $vol_from_day AND $vol_to_day
+                      AND dc.detections > 0
                       AND {countCopies}))
                 """;
     }
