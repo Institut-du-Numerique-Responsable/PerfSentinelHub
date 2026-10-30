@@ -91,13 +91,17 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
             return "open_period";
         if (judged.Count == 0)
             return "uncovered_days";
-        return CardRules.Refusal(info) ?? (Printable(scope) ? null : "unprintable_scope");
+        return CardRules.Refusal(info) ?? ScopeRefusal(scope);
     }
 
-    private static bool Printable(CardScope scope)
+    // The engine prints environment and sources on one line, joined with ", ", within the same bound.
+    // A curve signs a subset of these sources, so its scope fits whenever this one does.
+    private static string? ScopeRefusal(CardScope scope)
     {
-        return (scope.Environment is null || CardRules.Printable(scope.Environment, MaxScopeChars)) &&
-               scope.Sources.All(name => CardRules.Printable(name, MaxScopeChars));
+        string[] names = scope.Environment is null ? [.. scope.Sources] : [scope.Environment, .. scope.Sources];
+        if (!names.All(name => CardRules.Printable(name, MaxScopeChars)))
+            return "unprintable_scope";
+        return string.Join(", ", names).Length > MaxScopeChars ? "scope_too_long" : null;
     }
 
     private static CardScope ScopeOf(

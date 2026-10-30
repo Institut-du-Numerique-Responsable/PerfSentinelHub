@@ -174,6 +174,28 @@ public sealed class CardServiceTests : IAsyncLifetime
             await RefusedAsync(Ask("collective", Scope(environment: new string('e', 121)))));
     }
 
+    [Fact]
+    public async Task A_scope_line_the_card_cannot_hold_refuses_it()
+    {
+        await _seed.LedgerAsync("a", Sealed(October));
+        await _seed.LedgerAsync("b", Sealed(October));
+        await _seed.FixAsync("a", N1, Done);
+        // Each name fits alone; the card prints environment and sources on one line, joined with ", ", in 120.
+        var fits = Scope(environment: null, sources: Named(59));
+        var over = Scope(environment: null, sources: Named(60));
+
+        Assert.Null((await _service.OptionsAsync(fits, Token)).Refusal);
+        Assert.Equal("scope_too_long", (await _service.OptionsAsync(over, Token)).Refusal);
+        Assert.Equal("scope_too_long", await RefusedAsync(Ask("story", over)));
+        Assert.Equal("scope_too_long", await RefusedAsync(Ask("collective", fits with { Environment = "prod" })));
+        return;
+
+        static SourceOptions[] Named(int length)
+        {
+            return [Sources[0] with { Name = new string('e', length) }, Sources[1] with { Name = new string('u', length) }];
+        }
+    }
+
     // ------------------------------------------------------------ fixes
 
     [Fact]

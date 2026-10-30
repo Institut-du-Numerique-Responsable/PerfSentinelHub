@@ -50,6 +50,9 @@ All notable changes to PerfSentinelHub are recorded here.
   `503` with `Retry-After: 5`, which the screen waits out once before asking again.
 - A story whose service or endpoint name the card cannot print is refused with `unprintable_fix`
   and its sentence, rather than reading as an unknown or unconfirmed fix.
+- A card whose environment and source names, joined with `", "`, take more than 120 characters is
+  refused with `scope_too_long` and its sentence, which asks for an environment or a source,
+  rather than the engine's `502`.
 - The recap screen gains Share a result: pick a story, a curve or a collective card over a closed
   period, add a title, a team and, for a story, an everyday name for the action, preview the card,
   download it as PNG, SVG, JPEG XL or PDF, and verify its attachment. Administrators find the

@@ -926,9 +926,11 @@ même que les options portent en `refusal_text`. Les raisons : `open_period`, `u
 `previous_open_day`, `previous_overflow` (une courbe dont la période d'avant n'est pas entière),
 `no_confirmed_fix`, `unknown_fix`, `unprintable_fix` (une histoire dont le nom de service ou
 d'endpoint ne peut pas s'imprimer sur la carte), `no_total_io` (pas d'activité totale pour tracer
-la courbe), `curve_needs_whole_sources` (l'appelant ne lit qu'une partie d'une source) et
-`unprintable_scope` (un nom de source ou d'environnement que la carte ne peut pas imprimer). Le
-moteur peut encore refuser ce que le Hub a envoyé :
+la courbe), `curve_needs_whole_sources` (l'appelant ne lit qu'une partie d'une source),
+`unprintable_scope` (un nom de source ou d'environnement que la carte ne peut pas imprimer) et
+`scope_too_long` (les noms d'environnement et de sources, joints par `", "`, dépassent 120
+caractères, la borne du moteur sur la ligne de périmètre). Le moteur peut encore refuser ce que le
+Hub a envoyé :
 
 | Raison du moteur                              | Réponse                                                                                                                       |
 |-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
