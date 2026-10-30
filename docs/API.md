@@ -812,7 +812,10 @@ shown, never judged. `done_at_ms` is stamped when the action enters `done` and c
 change of the status or the owner appends an event, with the status it left, the one it
 reached, the owner, the caller and the time. The events are never rewritten, and neither the
 action nor its events are purged with the finding: an action outlives the retention of the
-finding it was declared on, so a recap can still tell whether the fix held. A `PATCH` that
+finding it was declared on, so a recap can still tell whether the fix held. An action that
+enters `done` also keeps the finding as it stood then, from the newest copy the caller reads,
+for the share card. It is never served, survives the finding's purge and is dropped when the
+action leaves `done`. A `PATCH` that
 changes nothing appends nothing. Every refusal the Hub words itself carries
 `{"detail":"…"}`.
 

@@ -191,7 +191,7 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
 | `correlation_episodes`         | episode and source                                             | retention, on `last_seen_ms`               |
 | `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
-| `finding_actions`              | signature, with its status and owner                           | never                                      |
+| `finding_actions`              | signature, with its status and owner, and the finding's envelope once done | never                          |
 | `finding_action_events`        | status or owner change of an action                            | never                                      |
 | `endpoint_labels`              | service and endpoint, with its business name                   | never                                      |
 | `service_labels`               | service, with its business name                                | never                                      |

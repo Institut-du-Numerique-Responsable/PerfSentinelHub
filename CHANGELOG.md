@@ -14,6 +14,9 @@ All notable changes to PerfSentinelHub are recorded here.
   (`slow_*`, `excessive_fanout`, `chatty_service`, `pool_saturation`, `serialized_calls`) that
   source detected and has not yet confirmed fixed, newest first, at most 10,000, `[]` when none.
   The daemon counts their passes below the threshold, the signal a share card stands on.
+- An action that enters `done` keeps the finding's envelope as it stood then, from the newest
+  copy the caller reads, in `finding_actions.frozen_finding_json`. It is never served, outlives
+  the finding's purge and is cleared when the action leaves `done`. A share card reads it.
 
 ### Changed
 

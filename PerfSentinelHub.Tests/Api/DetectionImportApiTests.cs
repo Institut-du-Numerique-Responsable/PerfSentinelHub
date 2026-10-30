@@ -282,7 +282,7 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         var client = host.CreateClient();
         Assert.Empty(await PushAsync(client, TodayPage(DetectionLedgerJson.Count(Today - 1, signature, 3))));
         await host.Services.GetRequiredService<HubDatabase>().CreateActionAsync(
-            signature, status, null, null, "alice", NowMs(host), TestContext.Current.CancellationToken);
+            signature, status, null, null, "alice", NowMs(host), null, TestContext.Current.CancellationToken);
         return client;
     }
 
@@ -342,7 +342,8 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         await database.MergeDetectionPageAsync(
             "elsewhere", DetectionLedgerJson.Parse(TodayPage(DetectionLedgerJson.Count(Today - 1, Slow, 3)), nowMs),
             true, nowMs, cancellationToken);
-        await database.CreateActionAsync(Slow, ActionStatuses.Done, null, null, "alice", nowMs, cancellationToken);
+        await database.CreateActionAsync(Slow, ActionStatuses.Done, null, null, "alice", nowMs, null,
+            cancellationToken);
         using var client = host.CreateClient();
 
         Assert.Empty(await PushAsync(client, TodayPage()));

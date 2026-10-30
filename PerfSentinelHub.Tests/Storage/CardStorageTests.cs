@@ -29,7 +29,7 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
 
     private Task DoneAsync(string signature, long atMs)
     {
-        return Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", atMs, Token);
+        return Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", atMs, null, Token);
     }
 
     [Fact]

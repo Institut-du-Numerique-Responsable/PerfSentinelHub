@@ -206,7 +206,7 @@ soit la source, et rien d'autre.
 | `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
 | `correlation_episodes`         | épisode et source                                                    | rétention, sur `last_seen_ms`              |
 | `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
-| `finding_actions`              | signature, avec son statut et son responsable                        | jamais                                     |
+| `finding_actions`              | signature, avec son statut, son responsable et l'enveloppe du finding une fois `done` | jamais                    |
 | `finding_action_events`        | changement de statut ou de responsable d'une action                  | jamais                                     |
 | `endpoint_labels`              | service et endpoint, avec son nom métier                             | jamais                                     |
 | `service_labels`               | service, avec son nom métier                                         | jamais                                     |

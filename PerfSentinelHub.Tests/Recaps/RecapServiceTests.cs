@@ -532,7 +532,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
         string? ownerDisplay = null)
     {
         await _database.CreateActionAsync(signature, status, owner, ownerDisplay, "alice",
-            atMs ?? Mon * DayMs + 43_200_000, Token);
+            atMs ?? Mon * DayMs + 43_200_000, null, Token);
     }
 
     private static DetectionDayRow Sealed(

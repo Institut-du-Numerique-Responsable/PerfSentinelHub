@@ -165,6 +165,28 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Marking_done_freezes_the_envelope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string signature = "n_plus_one_sql:order-svc:frozen";
+        var envelope = FindingJson.Envelope(signature);
+        envelope["finding"]!["pattern"]!["occurrences"] = 41;
+        await factory.Database.UpsertBatchAsync(new SourceSnapshot("test", "Test", "test", "0.26.2"),
+            FindingJson.Batch(envelope), NowMs, cancellationToken);
+        using var created = await SendAsync("POST", Body(signature, take: true));
+
+        using var response = await SendAsync("PATCH", Body(signature, "done"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT frozen_finding_json FROM finding_actions WHERE signature = $signature;";
+        read.Parameters.AddWithValue("$signature", signature);
+        var frozen = Assert.IsType<string>(await read.ExecuteScalarAsync(cancellationToken));
+        Assert.Equal(41, JsonNode.Parse(frozen)!["finding"]!["pattern"]!["occurrences"]!.GetValue<int>());
+    }
+
+    [Fact]
     public async Task Leaving_done_clears_done_at()
     {
         var signature = await SeedAsync("reopen");

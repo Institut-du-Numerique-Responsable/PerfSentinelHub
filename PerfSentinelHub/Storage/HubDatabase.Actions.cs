@@ -13,6 +13,18 @@ public sealed partial class HubDatabase
                                              VALUES ($signature, $from_status, $to_status, $owner, $owner_display, $by, $at_ms);
                                              """;
 
+    // The newest copy's envelope among the listed sources, or the shared row when every source
+    // counts: what a done action keeps once the finding's own rows are purged.
+    private const string FreezeUpdate = """
+                                        UPDATE finding_actions SET frozen_finding_json = COALESCE(
+                                          (SELECT fs.finding_json FROM finding_sources AS fs
+                                           WHERE fs.signature = $signature AND fs.finding_json IS NOT NULL
+                                             AND ($sources IS NULL OR fs.source_id IN (SELECT value FROM json_each($sources)))
+                                           ORDER BY fs.last_seen_ms DESC, fs.source_id LIMIT 1),
+                                          CASE WHEN $sources IS NULL THEN (SELECT finding_json FROM findings WHERE signature = $signature) END)
+                                        WHERE signature = $signature;
+                                        """;
+
     private const string CopiesSelect = """
                                         SELECT fs.signature, fs.source_id, fs.service,
                                                fa.grouping_key, fa.grouping_value, fa.attr_key, fa.attr_value
@@ -29,7 +41,11 @@ public sealed partial class HubDatabase
     ///     Files a new action and its first event, in one transaction. <c>Exists</c> when the
     ///     signature already has one, <c>Busy</c> when the write lock stays held past the wait.
     ///     <paramref name="ownerDisplay" /> is the name the SSO gave <paramref name="owner" />, if any.
+    ///     A done action keeps the finding's envelope from <paramref name="freezeFrom" />'s sources,
+    ///     every source when null.
     /// </summary>
+    // The action's fields, the caller and the clock, each its own column or check.
+#pragma warning disable S107
     public async Task<ActionWriteOutcome> CreateActionAsync(
         string signature,
         string status,
@@ -37,7 +53,9 @@ public sealed partial class HubDatabase
         string? ownerDisplay,
         string by,
         long nowMs,
+        IReadOnlyList<string>? freezeFrom,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
             return ActionWriteOutcome.Busy;
@@ -65,6 +83,8 @@ public sealed partial class HubDatabase
             if (await insert.ExecuteNonQueryAsync(cancellationToken) == 0)
                 return ActionWriteOutcome.Exists;
 
+            if (status == ActionStatuses.Done)
+                await FreezeAsync(connection, transaction, signature, freezeFrom, cancellationToken);
             await InsertActionEventAsync(connection, transaction, signature,
                 new StoredActionEvent(null, status, owner, ownerDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -82,7 +102,11 @@ public sealed partial class HubDatabase
     ///     leaves the owner and true sets it, to null to clear it. <c>done_at_ms</c> is stamped
     ///     when the action enters done and cleared when it leaves it. An owner set from the body
     ///     is a typed one, so it drops the display name; a status change or the same owner keeps it.
+    ///     Entering done freezes the envelope as <see cref="CreateActionAsync" /> does, and leaving
+    ///     done clears it.
     /// </summary>
+    // The action's fields, the caller and the clock, each its own column or check.
+#pragma warning disable S107
     public async Task<ActionWriteOutcome> UpdateActionAsync(
         string signature,
         string? status,
@@ -90,7 +114,9 @@ public sealed partial class HubDatabase
         bool ownerSet,
         string by,
         long nowMs,
+        IReadOnlyList<string>? freezeFrom,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
             return ActionWriteOutcome.Busy;
@@ -130,7 +156,8 @@ public sealed partial class HubDatabase
                 update.CommandText = """
                                      UPDATE finding_actions
                                      SET status = $status, owner = $owner, owner_display = $owner_display, updated_at_ms = $at_ms,
-                                         done_at_ms = $done_at_ms
+                                         done_at_ms = $done_at_ms,
+                                         frozen_finding_json = CASE WHEN $status = 'done' THEN frozen_finding_json END
                                      WHERE signature = $signature;
                                      """;
                 update.Parameters.AddWithValue(SignatureParameter, signature);
@@ -142,6 +169,8 @@ public sealed partial class HubDatabase
                 await update.ExecuteNonQueryAsync(cancellationToken);
             }
 
+            if (newStatus == ActionStatuses.Done && currentStatus != ActionStatuses.Done)
+                await FreezeAsync(connection, transaction, signature, freezeFrom, cancellationToken);
             await InsertActionEventAsync(connection, transaction, signature,
                 new StoredActionEvent(currentStatus, newStatus, newOwner, newDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -210,6 +239,21 @@ public sealed partial class HubDatabase
         }
 
         return events;
+    }
+
+    private static async Task FreezeAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string signature,
+        IReadOnlyList<string>? freezeFrom,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = FreezeUpdate;
+        command.Parameters.AddWithValue(SignatureParameter, signature);
+        command.Parameters.AddWithValue("$sources", freezeFrom is null ? DBNull.Value : (object)JsonArray(freezeFrom));
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task InsertActionEventAsync(

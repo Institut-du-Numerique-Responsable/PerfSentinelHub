@@ -463,6 +463,41 @@ public sealed class StorageTests
             (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    [Fact]
+    public async Task A_v19_database_gains_the_frozen_finding_column()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE finding_actions DROP COLUMN frozen_finding_json;
+                               INSERT INTO finding_actions(
+                                 signature, status, created_by, created_at_ms, updated_at_ms, done_at_ms)
+                               VALUES ('sig', 'done', 'alice', 100, 100, 100);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT name || ' ' || type FROM pragma_table_info('finding_actions')
+                                   WHERE name = 'frozen_finding_json')
+                             || ' | ' || (SELECT IFNULL(frozen_finding_json, '-') FROM finding_actions);
+                           """;
+        Assert.Equal("frozen_finding_json TEXT | -", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
     private static async Task<List<string>> SourceColumnsAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)

@@ -871,7 +871,10 @@ changement de statut ou de responsable ajoute un événement, avec le statut qui
 atteint, le responsable, l'appelant et l'heure. Les événements ne sont jamais réécrits, et ni
 l'action ni ses événements ne sont purgés avec le finding : une action survit à la rétention
 du finding sur lequel elle a été déclarée, pour qu'un récapitulatif puisse encore dire si le
-correctif a tenu. Un `PATCH` qui ne change rien n'ajoute rien. Chaque refus que le Hub
+correctif a tenu. Une action qui entre dans `done` garde aussi le finding tel qu'il était à ce
+moment, depuis la copie la plus récente que l'appelant lit, pour la carte à partager. Il n'est
+jamais servi, survit à la purge du finding et disparaît quand l'action sort de `done`. Un
+`PATCH` qui ne change rien n'ajoute rien. Chaque refus que le Hub
 formule lui-même porte `{"detail":"…"}`.
 
 ## Libellés d'endpoint

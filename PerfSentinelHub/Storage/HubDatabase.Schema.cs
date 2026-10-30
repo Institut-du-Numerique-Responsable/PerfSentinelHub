@@ -89,6 +89,7 @@ public sealed partial class HubDatabase
             await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
             await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
             await EnsureDetectionSignalColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureActionFrozenFindingColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -272,6 +273,25 @@ public sealed partial class HubDatabase
                             ALTER TABLE detection_days ADD COLUMN pool_saturation_threshold INTEGER;
                             ALTER TABLE detection_days ADD COLUMN serialized_min_calls INTEGER;
                             """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The finding's envelope as it stood when its action entered done, for the share card. NULL
+    ///     while the action is not done and for an action done before the column existed.
+    /// </summary>
+    private static async Task EnsureActionFrozenFindingColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(
+                connection, transaction, "finding_actions", "frozen_finding_json", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = "ALTER TABLE finding_actions ADD COLUMN frozen_finding_json TEXT;";
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 
