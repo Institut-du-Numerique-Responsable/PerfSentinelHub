@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using PerfSentinelHub.Access;
+using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 
 namespace PerfSentinelHub.Cards;
@@ -82,6 +84,58 @@ public sealed record CardBefore(RecapPeriod Period, long? Ops, long? Co2LowUg);
 
 /// <summary>One period of the curve; only its ratio is signed, the dates and totals stay in the Hub.</summary>
 public sealed record CardPoint(string From, string To, long WastePermille, long AvoidableOps, long TotalOps);
+
+/// <summary>
+///     The perimeter a card is asked for: the candidate sources (both scopes reach them), those
+///     both scopes hold whole (the curve's), the environment filter, the findings.read scope
+///     (null = unrestricted) and the configured sources, for their names.
+/// </summary>
+public sealed record CardScopeAsk(
+    RecapPeriodKind Kind,
+    DateOnly At,
+    IReadOnlyList<string> SourceIds,
+    IReadOnlyList<string> WholeSourceIds,
+    string? Environment,
+    AccessScope? Reads,
+    IReadOnlyList<SourceOptions> Sources);
+
+public sealed record CardAsk(CardScopeAsk Scope, string Angle, string Lang, string? Signature, CardFree Free);
+
+public abstract record CardOutcome
+{
+    public sealed record Ready(CardInput Input) : CardOutcome;
+
+    public sealed record Refused(string Reason) : CardOutcome;
+}
+
+/// <summary>
+///     What the screen shows before anyone signs: the period's own refusal and its sentence, the
+///     signed scope, whether a collective card keeps its comparison, and the fixes a story can tell.
+/// </summary>
+public sealed record CardOptions(
+    CardPeriod Period,
+    string PeriodName,
+    string? Refusal,
+    string? RefusalText,
+    int RestartDays,
+    int SampledPermille,
+    string? Environment,
+    IReadOnlyList<string> Sources,
+    bool PreviousComplete,
+    IReadOnlyList<CardFix> Fixes,
+    string? DefaultSignature,
+    CardOrg Org);
+
+public sealed record CardFix(
+    string Signature,
+    string FindingType,
+    string Service,
+    string Endpoint,
+    string Plain,
+    long DoneAtMs,
+    long? BeforeFixOps,
+    string? BeforePeriodName,
+    string? Label);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,

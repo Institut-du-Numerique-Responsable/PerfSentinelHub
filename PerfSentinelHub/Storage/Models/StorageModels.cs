@@ -475,6 +475,9 @@ public sealed record DayTotals(string SourceId, int Day, long? AvoidableIoOps, l
 /// <summary>A sealed day a fixed signature was not detected at one source while the daemon still saw it pass below its threshold (C1).</summary>
 public sealed record SignalDay(string Signature, string SourceId, int Day, DetectionThresholds Thresholds);
 
+/// <summary>A done action with the finding as it stood when it moved to done, as a share card reads it.</summary>
+public sealed record DoneAction(string Signature, long DoneAtMs, string FrozenFindingJson);
+
 public static class ActionStatuses
 {
     public const string Todo = "todo";

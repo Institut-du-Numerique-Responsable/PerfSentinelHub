@@ -107,6 +107,7 @@ builder.Services.AddSingleton<RecapMailer>();
 builder.Services.AddSingleton<RecapDeliveryWorker>();
 builder.Services.AddHostedService<RecapLoop>();
 builder.Services.AddSingleton<CardKeys>();
+builder.Services.AddSingleton<CardService>();
 // Its own client: a webhook is a destination of its own, never followed elsewhere. No
 // request logging: the factory would log each URL, and a chat webhook URL is a secret.
 builder.Services.AddHttpClient(DeliveryWorker.ClientName)

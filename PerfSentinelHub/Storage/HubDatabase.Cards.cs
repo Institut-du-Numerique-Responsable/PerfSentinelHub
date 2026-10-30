@@ -56,6 +56,138 @@ public sealed partial class HubDatabase
         return watch;
     }
 
+    /// <summary>The done actions that kept their finding, done within the days, oldest first.</summary>
+    public async Task<IReadOnlyList<DoneAction>> ReadDoneActionsAsync(
+        int fromDay,
+        int toDay,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT signature, done_at_ms, frozen_finding_json
+                              FROM finding_actions
+                              WHERE status = 'done' AND frozen_finding_json IS NOT NULL
+                                AND done_at_ms BETWEEN $from_ms AND $to_ms
+                              ORDER BY done_at_ms, signature;
+                              """;
+        command.Parameters.AddWithValue("$from_ms", fromDay * DayMs);
+        command.Parameters.AddWithValue("$to_ms", (toDay + 1L) * DayMs - 1);
+
+        var actions = new List<DoneAction>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            actions.Add(new DoneAction(reader.GetString(0), reader.GetInt64(1), reader.GetString(2)));
+        return actions;
+    }
+
+    /// <summary>The sources that detected each signature at least once.</summary>
+    public async Task<IReadOnlyList<(string Signature, string SourceId)>> ReadCountedSourcesAsync(
+        IReadOnlyList<string> signatures,
+        IReadOnlyList<string> sourceIds,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT DISTINCT signature, source_id FROM detection_counts
+                              WHERE signature IN (SELECT value FROM json_each($signatures))
+                                AND source_id IN (SELECT value FROM json_each($source_ids))
+                                AND detections > 0;
+                              """;
+        command.Parameters.AddWithValue("$signatures", JsonArray(signatures));
+        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+
+        var pairs = new List<(string, string)>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            pairs.Add((reader.GetString(0), reader.GetString(1)));
+        return pairs;
+    }
+
+    /// <summary>Every ledger day of the sources in the range, with the activity counts a curve sums.</summary>
+    public async Task<IReadOnlyList<DayTotals>> ReadDayTotalsAsync(
+        IReadOnlyList<string> sourceIds,
+        int fromDay,
+        int toDay,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT source_id, day, avoidable_io_ops, total_io_ops, avoidable_gco2_low
+                              FROM detection_days
+                              WHERE source_id IN (SELECT value FROM json_each($source_ids))
+                                AND day BETWEEN $from_day AND $to_day;
+                              """;
+        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue("$from_day", fromDay);
+        command.Parameters.AddWithValue("$to_day", toDay);
+
+        var totals = new List<DayTotals>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            totals.Add(new DayTotals(
+                reader.GetString(0), reader.GetInt32(1),
+                NullableInt64(reader, 2), NullableInt64(reader, 3),
+                reader.IsDBNull(4) ? null : reader.GetDouble(4)));
+        return totals;
+    }
+
+    /// <summary>
+    ///     The C1 signal days after <paramref name="afterDay" />: sealed, no detection of the signature
+    ///     at that source in any ledger, passes below the threshold, with the thresholds applied.
+    /// </summary>
+    public async Task<IReadOnlyList<SignalDay>> ReadSignalDaysAsync(
+        IReadOnlyList<string> signatures,
+        IReadOnlyList<string> sourceIds,
+        int afterDay,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT dc.signature, dc.source_id, dc.day, dd.slow_query_threshold_ms,
+                                     dd.slow_http_threshold_ms, dd.max_fanout, dd.chatty_threshold,
+                                     dd.pool_saturation_threshold, dd.serialized_min_calls
+                              FROM detection_counts AS dc
+                              JOIN detection_days AS dd
+                                ON dd.source_id = dc.source_id AND dd.ledger_id = dc.ledger_id AND dd.day = dc.day
+                              WHERE dc.signature IN (SELECT value FROM json_each($signatures))
+                                AND dc.source_id IN (SELECT value FROM json_each($source_ids))
+                                AND dc.day > $after_day
+                                AND dd.sealed = 1
+                                AND dc.detections = 0
+                                AND dc.below_threshold_passes > 0
+                                AND NOT EXISTS (SELECT 1 FROM detection_counts AS d2
+                                                WHERE d2.signature = dc.signature AND d2.source_id = dc.source_id
+                                                  AND d2.day = dc.day AND d2.detections > 0);
+                              """;
+        command.Parameters.AddWithValue("$signatures", JsonArray(signatures));
+        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue("$after_day", afterDay);
+
+        var days = new List<SignalDay>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            days.Add(new SignalDay(
+                reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
+                new DetectionThresholds(
+                    NullableInt64(reader, 3), NullableInt64(reader, 4), NullableInt64(reader, 5),
+                    NullableInt64(reader, 6), NullableInt64(reader, 7), NullableInt64(reader, 8))));
+        return days;
+    }
+
+    /// <summary>When the Hub applied a schema version, null when it never did.</summary>
+    public async Task<long?> ReadSchemaAppliedAtAsync(int version, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT applied_at_ms FROM schema_migrations WHERE version = $version;";
+        command.Parameters.AddWithValue("$version", version);
+        return await command.ExecuteScalarAsync(cancellationToken) is long appliedAtMs ? appliedAtMs : null;
+    }
+
     /// <summary>Every card signing key, oldest first, retired and revoked ones included.</summary>
     public async Task<IReadOnlyList<StoredCardKey>> ReadCardKeysAsync(CancellationToken cancellationToken)
     {
