@@ -164,6 +164,9 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
         await (await fetch(`${BASE}/api/disclosures/${id}`)).json() as { share_links: { id: string }[] }));
     for (const detail of details)
         for (const link of detail.share_links) stable.set(link.id, (0xe1 + stable.size).toString(16).padStart(16, "0"));
+    // A frozen report's id is a random 32-hex Guid, so it takes the same treatment.
+    const reports = await (await fetch(`${BASE}/api/recap/reports`)).json() as { id: string }[];
+    for (const report of reports) stable.set(report.id, (0xf1 + stable.size).toString(16).padStart(32, "0"));
     const renumber = (text: string) =>
         [...stable].reduce((acc, [from, to]) => acc.split(from).join(to), text);
     const read = async (path: string): Promise<[string, unknown]> => {
@@ -205,6 +208,10 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
         // its figures.
         "/api/disclosures",
         ...disclosures.flatMap((id) => [`/api/disclosures/${id}`, `/api/disclosures/${id}/files/report.json`]),
+        // The Recap tab, each period in each view, and the frozen reports listed under it.
+        ...["day", "week", "month"].flatMap((period) =>
+            ["tech", "pilotage"].map((view) => `/api/recap?period=${period}&view=${view}`)),
+        "/api/recap/reports",
     ]);
     await readAll((routes[incidents] as { id: string }[]).map((incident) => `/api/incidents/${incident.id}`));
     // The ack card's windowed read takes from and to off the clock, so no exact URL can
@@ -216,8 +223,40 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
         + `&from=${(Math.floor(capturedAt / day) - 6) * day}&to=${capturedAt}&limit=1`);
     routes[`/api/findings?signature=${signature}&window=7d&limit=1`] = windowed;
 
+    // A frozen report's two pages are links, not reads, so they are kept as text for the
+    // site to serve as files. Frozen is what they are, so they are not rebased.
+    const pages: Record<string, string> = {};
+    for (const report of reports)
+        for (const view of ["tech", "pilotage"]) {
+            const response = await fetch(`${BASE}/recaps/${report.id}/${view}.html`);
+            if (!response.ok) throw new Error(`/recaps/${report.id}/${view}.html answered ${response.status}`);
+            pages[renumber(`/recaps/${report.id}/${view}.html`)] = renumber(await response.text());
+        }
+
     writeFileSync(join(__dirname, "demo", "fixtures", "hub-embed.json"),
-        JSON.stringify({epoch_ms: EPOCH_MS, routes}, null, 2) + "\n");
+        JSON.stringify({epoch_ms: EPOCH_MS, routes, pages}, null, 2) + "\n");
+}
+
+// The recap as its still shows it: one service named, so the cards show the pair and
+// Management reads the name, and one report frozen on demand. Seeded here rather than in
+// the still so the embed capture reads the same screen. The Hub trusts the identity header
+// in this setup, and the screen's own button cannot send one. It waits for the first
+// ledger pull, since a report frozen before it would hold no volume.
+async function seedRecap(): Promise<void> {
+    await poll(async () => {
+        const recap = await (await fetch(`${BASE}/api/recap?period=week&view=tech`)).json() as
+            { tiles: { avoidable_io_ops: number | null } };
+        return recap.tiles.avoidable_io_ops ?? undefined;
+    }, Date.now() + 60_000, 500, "the recap never read a volume from the daemons' ledgers");
+    const as = {"content-type": "application/json", "x-forwarded-user": "alice.martin@acme.example"};
+    const named = await fetch(`${BASE}/api/labels/services`, {
+        method: "PUT", headers: as, body: JSON.stringify({service: "order-svc", label: "Ordering"})
+    });
+    if (named.status !== 204) throw new Error(`naming order-svc answered ${named.status}`);
+    const made = await fetch(`${BASE}/api/recap/reports`, {
+        method: "POST", headers: as, body: JSON.stringify({period: "week"})
+    });
+    if (made.status !== 201) throw new Error(`freezing a report answered ${made.status}`);
 }
 
 // Hub configuration written as nested values, the shape of the Helm values, and flattened
@@ -658,6 +697,8 @@ async function startAll(children: ChildProcess[]): Promise<void> {
     const refused = await submit("tempo-eu",
         {service: "checkout", lookback: "999h", max_traces: 100});
     await Promise.all([succeeded, alsoSucceeded, unreachable, refused].map((id) => settle(id, 120)));
+
+    await seedRecap();
 
     try {
         await captureEmbedFixtures([succeeded, alsoSucceeded, unreachable, refused], disclosures);

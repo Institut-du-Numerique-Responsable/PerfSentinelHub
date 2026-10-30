@@ -317,6 +317,10 @@ listen_port_grpc = $((LEDGER_PORT + 1))
 json_socket = "$work/l"
 trace_ttl_ms = 500
 api_enabled = true
+
+# A resolved region, so each day carries the avoidable carbon the recap prices.
+[green]
+default_region = "eu-west-3"
 EOF
 "$ENGINE" watch --config "$work/ledger.toml" > "$work/ledger-daemon.log" 2>&1 &
 daemon=$!
