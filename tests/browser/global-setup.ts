@@ -420,7 +420,7 @@ async function seedCardLedger(importKey: string): Promise<void> {
             method: "POST",
             headers: {"content-type": "application/json", "x-api-key": importKey},
             body: JSON.stringify({
-                ledger_id: `00000000-0000-4000-8000-0000000c${String(first).padStart(4, "0")}`,
+                ledger_id: `00000000-0000-4000-8000-${String(first).padStart(12, "0")}`,
                 started_ms: first * dayMs + 1_000, current_day: last + 1, oldest_day: first, sealed_through: last,
                 counts: [], days, next_after: null
             })

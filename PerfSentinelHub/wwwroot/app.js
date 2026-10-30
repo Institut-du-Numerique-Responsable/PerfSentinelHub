@@ -7529,44 +7529,67 @@
     function cardPreviewAside(card, route, management, admin) {
         const blocked = cardBlocked(card);
         const pdf = (card.preview ? card.preview.format : card.format) === 'pdf';
+        const shown = cardPreviewShown(card, blocked);
         const aside = el('aside', {class: 'share-preview', 'aria-label': 'Preview', tabindex: '-1'}, [
             el('div', {class: 'preview-head'}, [document.createTextNode('Preview'),
                 el('span', {text: pdf ? 'the PDF, in your browser\'s viewer' : 'as shared, light on every theme'})])
         ]);
+        if (shown && card.stale) {
+            aside.appendChild(el('div', {class: 'banner', 'data-tone': 'info', role: 'status'},
+                [infoGlyph(16), el('div', {text: PSL.CARD_COPY.stale})]));
+        }
+        aside.appendChild(cardPreviewFrame(card, blocked, pdf));
+        const options = cardOptionsReady(card);
+        const domain = options && options.org.domain;
+        if (shown) cardPreviewProof(card, pdf, domain).forEach(function (line) {
+            aside.appendChild(line);
+        });
+        if (options) aside.appendChild(cardAttachBlock(card, route, domain, management, admin));
+        return aside;
+    }
+
+    function cardPreviewShown(card, blocked) {
+        return !!card.preview && !blocked && card.busy !== 'preview';
+    }
+
+    /** The frame holds one of three things: the render in progress, the card, or why there is none yet. */
+    function cardPreviewFrame(card, blocked, pdf) {
         const frame = el('div', {class: 'preview-frame'});
         if (card.busy === 'preview') {
             frame.appendChild(el('div', {class: 'preview-loading', role: 'status', text: PSL.CARD_COPY.rendering}));
-        } else if (card.preview && !blocked) {
-            if (card.stale) {
-                aside.appendChild(el('div', {class: 'banner', 'data-tone': 'info', role: 'status'},
-                    [infoGlyph(16), el('div', {text: PSL.CARD_COPY.stale})]));
-                frame.setAttribute('data-stale', '');
-            }
-            frame.appendChild(pdf
-                ? el('iframe', {class: 'card-preview-pdf', src: card.preview.url, title: 'The card, as a PDF'})
-                : el('img', {class: 'card-preview', src: card.preview.url, alt: 'The card, as an image'}));
+        } else if (cardPreviewShown(card, blocked)) {
+            if (card.stale) frame.setAttribute('data-stale', '');
+            frame.appendChild(cardPreviewCard(card, pdf));
         } else {
-            frame.appendChild(el('div', {class: 'preview-empty' + (blocked && blocked !== 'options' ? ' slim' : '')}, [
-                cardImageGlyph(),
-                el('span', {
-                    text: blocked && blocked !== 'options' ? PSL.CARD_COPY.previewBlocked : PSL.CARD_COPY.previewEmpty
-                })
-            ]));
+            frame.appendChild(cardPreviewEmpty(blocked));
         }
-        aside.appendChild(frame);
-        const options = cardOptionsReady(card);
-        const domain = options && options.org.domain;
+        return frame;
+    }
+
+    function cardPreviewCard(card, pdf) {
+        return pdf
+            ? el('iframe', {class: 'card-preview-pdf', src: card.preview.url, title: 'The card, as a PDF'})
+            : el('img', {class: 'card-preview', src: card.preview.url, alt: 'The card, as an image'});
+    }
+
+    function cardPreviewEmpty(blocked) {
+        const slim = blocked && blocked !== 'options';
+        return el('div', {class: 'preview-empty' + (slim ? ' slim' : '')}, [
+            cardImageGlyph(),
+            el('span', {text: slim ? PSL.CARD_COPY.previewBlocked : PSL.CARD_COPY.previewEmpty})
+        ]);
+    }
+
+    /** What the shown card carries: the note on the file, and the level its proof reaches. */
+    function cardPreviewProof(card, pdf, domain) {
         const attached = !!(card.attach && card.attach.result && card.attach.result.integrity === 'ok'
             && card.attach.result.level === 2);
-        if (card.preview && !blocked && card.busy !== 'preview') {
-            aside.appendChild(el('p', {class: 'preview-note', text: pdf ? PSL.CARD_COPY.pdfNote : PSL.CARD_COPY.pngNote}));
-            const level = PSL.levelLine(attached, domain);
-            const at = level.indexOf(': ') + 2;
-            aside.appendChild(el('p', {class: 'proof-line'}, [document.createTextNode(level.slice(0, at)),
-                el('b', {text: level.slice(at)})]));
-        }
-        if (options) aside.appendChild(cardAttachBlock(card, route, domain, management, admin));
-        return aside;
+        const level = PSL.levelLine(attached, domain);
+        const at = level.indexOf(': ') + 2;
+        return [
+            el('p', {class: 'preview-note', text: pdf ? PSL.CARD_COPY.pdfNote : PSL.CARD_COPY.pngNote}),
+            el('p', {class: 'proof-line'}, [document.createTextNode(level.slice(0, at)), el('b', {text: level.slice(at)})])
+        ];
     }
 
     function cardAttachBlock(card, route, domain, management, admin) {
@@ -7722,13 +7745,18 @@
         });
         const body = el('div', {class: 'key-body'});
         panel.appendChild(body);
+        cardKeysFill(card, body);
+        return panel;
+    }
+
+    function cardKeysFill(card, body) {
         if (card.keys === 'loading') {
             body.appendChild(el('p', {class: 'key-p', role: 'status', text: 'Reading the keys\u2026'}));
-            return panel;
+            return;
         }
         if (card.keys === 'error') {
             body.appendChild(el('p', {class: 'recap-alert', role: 'alert', text: 'The Hub did not return the keys.'}));
-            return panel;
+            return;
         }
         const options = cardOptionsReady(card);
         const domain = card.keys.record_name ? card.keys.record_name.replace(/^_perf-sentinel\./, '') : null;
@@ -7744,7 +7772,7 @@
         if (card.keysError) body.appendChild(el('p', {class: 'recap-alert', role: 'alert', text: card.keysError}));
         if (card.keys.keys.length === 0) {
             body.appendChild(el('p', {class: 'key-p', text: PSL.CARD_COPY.keysNone}));
-            return panel;
+            return;
         }
         if (domain) {
             body.appendChild(el('div', {}, [
@@ -7756,21 +7784,11 @@
         body.appendChild(el('ul', {class: 'key-list'}, card.keys.keys.map(function (key) {
             return cardKeyRow(card, key, domain);
         })));
-        if (domain) {
-            let shown = card.keys.well_known;
-            try {
-                shown = JSON.stringify(JSON.parse(card.keys.well_known), null, 2);
-            } catch (error) {
-                // Shown as served.
-            }
-            body.appendChild(el('div', {}, [
-                el('p', {class: 'key-h', text: 'Or serve this file'}),
-                el('p', {class: 'key-p'}, [document.createTextNode('At '),
-                    el('code', {text: 'https://' + domain + '/.well-known/perf-sentinel-key'}),
-                    document.createTextNode('. ' + PSL.CARD_COPY.keysFile)]),
-                cardCopyLine(shown, card.keys.well_known, 'Copy the file')
-            ]));
-        }
+        if (domain) body.appendChild(cardKeysFile(card, domain));
+        body.appendChild(cardKeyRotate(card));
+    }
+
+    function cardKeyRotate(card) {
         const rotate = el('button', {
             class: 'pill-button pill-sm', type: 'button', id: 'card-rotate',
             disabled: card.keysBusy ? 'disabled' : null, text: card.keysBusy ? 'Working\u2026' : 'Rotate key'
@@ -7778,8 +7796,24 @@
         rotate.addEventListener('click', function () {
             cardKeyWrite('/api/cards/keys/rotate', {});
         });
-        body.appendChild(el('div', {class: 'key-rotate'}, [rotate, el('p', {text: PSL.CARD_COPY.rotate})]));
-        return panel;
+        return el('div', {class: 'key-rotate'}, [rotate, el('p', {text: PSL.CARD_COPY.rotate})]);
+    }
+
+    /** The .well-known file, indented on screen when it parses and copied as served. */
+    function cardKeysFile(card, domain) {
+        let shown = card.keys.well_known;
+        try {
+            shown = JSON.stringify(JSON.parse(card.keys.well_known), null, 2);
+        } catch (error) {
+            // Shown as served.
+        }
+        return el('div', {}, [
+            el('p', {class: 'key-h', text: 'Or serve this file'}),
+            el('p', {class: 'key-p'}, [document.createTextNode('At '),
+                el('code', {text: 'https://' + domain + '/.well-known/perf-sentinel-key'}),
+                document.createTextNode('. ' + PSL.CARD_COPY.keysFile)]),
+            cardCopyLine(shown, card.keys.well_known, 'Copy the file')
+        ]);
     }
 
     /** A line to paste: shown as `text`, copied as `raw`, the .well-known file indented only on screen. */
