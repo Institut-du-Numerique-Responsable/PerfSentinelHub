@@ -190,6 +190,9 @@ public sealed record CardsOptions
         set => field = value?.Trim();
     }
 
+    /// <summary>How many card renders run the engine at once; one more is refused with a 503, never queued.</summary>
+    public int MaxConcurrentRenders { get; set; } = 2;
+
     public bool Enabled => Organisation is not null;
 }
 

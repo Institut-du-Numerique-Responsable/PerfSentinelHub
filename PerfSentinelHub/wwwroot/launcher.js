@@ -2715,6 +2715,16 @@
         return format === 'jxl' ? 'png' : format;
     }
 
+    /**
+     * The wait a busy render gate asks for, or null: its 503 carries Retry-After, the engine-off 503 does not.
+     * Whole seconds from 1 to 10; a date form, or anything else, reads as 1.
+     */
+    function cardBusy(status, retryAfter) {
+        if (status !== 503 || retryAfter === null || retryAfter === undefined) return null;
+        const seconds = /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter.trim()) : 1;
+        return {text: CARD_COPY.busy, delayMs: Math.min(10, Math.max(1, seconds)) * 1000};
+    }
+
     /** Every other sentence of the card section, in one place for the copy review. */
     const CARD_COPY = {
         title: 'Share a result',
@@ -2746,6 +2756,7 @@
         previewEmpty: 'Choose, then Preview. The card appears here as people will see it.',
         previewBlocked: 'No card can be made with these choices.',
         rendering: 'Rendering the card\u2026',
+        busy: 'Another card is being made. Trying again in a few seconds.',
         pngNote: '1080 by 1350 pixels. Its code links to perf-sentinel.dev/verifier, which shows the signed figures.',
         svgNote: 'Sharp at any size, to print or to enlarge. Its code links to perf-sentinel.dev/verifier, which '
             + 'shows the signed figures.',
@@ -3232,6 +3243,7 @@
         CARD_FORMAT_LABELS,
         CARD_FORMAT_NOTES,
         previewFormat,
+        cardBusy,
         CARD_COPY,
         ATTACH_REASONS,
         ATTACH_VERDICTS,

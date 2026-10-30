@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Access;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Cards;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -26,6 +27,8 @@ public sealed class CardsApiTests : IDisposable
     private const string OptionsPath = "/api/cards/options";
     private const string RenderPath = "/api/cards/render";
     private const string AttachmentPath = "/api/cards/attachment";
+    private const string RotatePath = "/api/cards/keys/rotate";
+    private const string Busy = "Another card is being made. Try again in a few seconds.";
     private const string N1 = "n_plus_one_sql:order-svc:0000000000000000000000000000000000000001";
     private const int Done = 20741; // 2026-10-15
     private const string Collective = """{"angle":"collective","period":"month","at":"2026-10-01"}""";
@@ -127,6 +130,8 @@ public sealed class CardsApiTests : IDisposable
         Assert.Equal(
             "This Hub's engine cannot render cards: it needs a perf-sentinel release with the card subcommand.",
             await DetailAsync(response));
+        // The screen tells this 503 from a busy gate by the header alone.
+        Assert.Null(response.Headers.RetryAfter);
     }
 
     [Fact]
@@ -495,7 +500,149 @@ public sealed class CardsApiTests : IDisposable
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
     }
 
+    // ------------------------------------------------------------ the render gate
+
+    [Theory]
+    [InlineData(RenderPath)]
+    [InlineData(AttachmentPath)]
+    [InlineData(RotatePath)]
+    public async Task A_third_card_render_while_two_run_is_a_503_with_retry_after(string path)
+    {
+        var hub = Hub();
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+        var body = path == RotatePath ? "{}" : Collective;
+        var gate = hub.Services.GetRequiredService<CardRenderGate>();
+
+        var entered = Enumerable.Range(0, 2).Count(_ => gate.TryEnter());
+        try
+        {
+            Assert.Equal(2, entered);
+
+            using var refused = await client.SendAsync(Send("POST", path, body), Token);
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
+            Assert.Equal("5", refused.Headers.RetryAfter?.ToString());
+            Assert.Equal(Busy, await DetailAsync(refused));
+            Assert.Empty(EngineRuns());
+            Assert.Empty(await Database(hub).ReadCardKeysAsync(Token));
+        }
+        finally
+        {
+            for (var slot = 0; slot < entered; slot++)
+                gate.Exit();
+        }
+
+        using var accepted = await client.SendAsync(Send("POST", path, body), Token);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_render_gate_follows_its_setting()
+    {
+        var hub = Hub(configure: builder => builder.UseSetting("Hub:Cards:MaxConcurrentRenders", "1"));
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+        var gate = hub.Services.GetRequiredService<CardRenderGate>();
+
+        Assert.True(gate.TryEnter());
+        try
+        {
+            using var refused = await client.SendAsync(Send("POST", RenderPath, Collective), Token);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
+        }
+        finally
+        {
+            gate.Exit();
+        }
+
+        Assert.Equal(1, FreeSlots(gate, 3));
+    }
+
+    [Fact]
+    public async Task A_request_refused_before_the_engine_takes_no_slot()
+    {
+        var hub = Hub();
+        var off = Hub(organisation: null);
+        using var client = hub.CreateClient();
+        using var offClient = off.CreateClient();
+        await new CardSeed(Database(hub)).LedgerAsync("a", Sealed(October, day => day.Day == 20730 ? null : day));
+        CardRenderGate[] gates = [.. new[] { hub, off }.Select(each => each.Services.GetRequiredService<CardRenderGate>())];
+
+        var entered = gates.Select(gate => Enumerable.Range(0, 2).Count(_ => gate.TryEnter())).ToList();
+        try
+        {
+            using var figures = await client.SendAsync(
+                Send("POST", RenderPath, """{"angle":"curve","period":"month","figures":{"avoidable_ops":1}}"""), Token);
+            using var incomplete = await client.SendAsync(Send("POST", RenderPath, Collective), Token);
+            using var cardsOff = await offClient.SendAsync(Send("POST", RenderPath, Collective), Token);
+
+            Assert.Equal(HttpStatusCode.BadRequest, figures.StatusCode);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, incomplete.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, cardsOff.StatusCode);
+        }
+        finally
+        {
+            for (var each = 0; each < gates.Length; each++)
+            {
+                for (var slot = 0; slot < entered[each]; slot++)
+                    gates[each].Exit();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task A_failed_or_timed_out_render_frees_its_slot()
+    {
+        // The keygen failure first: the hubs share one database, and the first key made would be reused.
+        (FakeEngine Engine, string Path, HttpStatusCode Status)[] cases =
+        [
+            (new FakeEngine { Card = true, CardKeygenExitCode = 1 }, RenderPath, HttpStatusCode.BadGateway),
+            (new FakeEngine
+            {
+                Card = true,
+                CardRenderExitCode = 5,
+                CardRenderOutput = """{"result":"unrenderable","reason":"unsupported_characters","field":"free.team"}"""
+            }, RenderPath, HttpStatusCode.UnprocessableEntity),
+            (new FakeEngine { Card = true, SleepSeconds = 5 }, RenderPath, HttpStatusCode.BadGateway),
+            (new FakeEngine { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = "{}" }, AttachmentPath,
+                HttpStatusCode.BadGateway)
+        ];
+
+        foreach (var (engine, path, status) in cases)
+        {
+            var hub = Hub(engine);
+            using var client = hub.CreateClient();
+            await OneFixAsync(hub);
+            hub.Services.GetRequiredService<CardRenderer>().Timeout = TimeSpan.FromMilliseconds(300);
+
+            using var response = await client.SendAsync(Send("POST", path, Collective), Token);
+
+            Assert.Equal(status, response.StatusCode);
+            Assert.Equal(2, FreeSlots(hub.Services.GetRequiredService<CardRenderGate>(), 2));
+        }
+    }
+
     // ------------------------------------------------------------ helpers
+
+    // Takes every free slot, counts them and hands them back.
+    private static int FreeSlots(CardRenderGate gate, int tries)
+    {
+        var free = Enumerable.Range(0, tries).Count(_ => gate.TryEnter());
+        for (var slot = 0; slot < free; slot++)
+            gate.Exit();
+        return free;
+    }
+
+    // The argument files the engine's card subcommands append to, in the reports directory they run in.
+    private string[] EngineRuns()
+    {
+        return
+        [
+            .. new[] { "card-args.txt", "card-keygen-args.txt", "verify-args.txt" }
+                .Where(name => File.Exists(Path.Combine(_workspace, "reports", name)))
+        ];
+    }
 
     private static HubDatabase Database(WebApplicationFactory<Program> hub)
     {
@@ -535,7 +682,8 @@ public sealed class CardsApiTests : IDisposable
                         EngineBinaryPath = enginePath,
                         ReportDirectory = Path.Combine(_workspace, "reports")
                     };
-                    options.Cards = new CardsOptions
+                    // A with, so a test's Hub:Cards:MaxConcurrentRenders setting stays bound.
+                    options.Cards = options.Cards with
                     {
                         Organisation = organisation,
                         Domain = organisation is null ? null : domain

@@ -117,6 +117,7 @@ builder.Services.AddHttpClient(DeliveryWorker.ClientName)
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();
+builder.Services.AddSingleton<CardRenderGate>();
 builder.Services.AddSingleton<AnalysisRunner>();
 builder.Services.AddHostedService<AnalysisWorker>();
 builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler

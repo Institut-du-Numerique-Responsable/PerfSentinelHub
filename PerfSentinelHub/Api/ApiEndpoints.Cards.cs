@@ -55,6 +55,7 @@ public static partial class ApiEndpoints
         CardService cards,
         CardKeys keys,
         CardRenderer renderer,
+        CardRenderGate gate,
         EngineProbe engine,
         AccessPolicy access,
         IOptions<HubOptions> options,
@@ -63,15 +64,29 @@ public static partial class ApiEndpoints
 #pragma warning restore S107
     {
         var call = new CardCall(request, cards, keys, renderer, engine, access, options.Value, timeProvider);
-        var (refused, ask, bytes) = await MakeCardAsync(call, false, cancellationToken);
+        var (refused, ask, input) = await PrepareCardAsync(call, false, cancellationToken);
         if (refused is not null)
             return refused;
+        if (!gate.TryEnter())
+            return CardsBusy(request);
+        (IResult? Failed, byte[]? Bytes) made;
+        try
+        {
+            made = await RenderCardUnderGateAsync(call, input!, ask!.Format, cancellationToken);
+        }
+        finally
+        {
+            gate.Exit();
+        }
+
+        if (made.Failed is not null)
+            return made.Failed;
 
         var headers = request.HttpContext.Response.Headers;
         headers.XContentTypeOptions = "nosniff";
         headers.CacheControl = "no-store";
         // Set first, so the access policy's TryAdd keeps it: an SVG opened from its URL runs and fetches nothing.
-        if (ask!.Format == "svg")
+        if (ask.Format == "svg")
             headers.ContentSecurityPolicy = "default-src 'none'; sandbox";
         var period = RecapPeriod.Of(ask.Kind, ask.At);
         var type = ask.Format switch
@@ -81,7 +96,7 @@ public static partial class ApiEndpoints
             "jxl" => "image/jxl",
             _ => "image/png"
         };
-        return TypedResults.File(bytes!, type,
+        return TypedResults.File(made.Bytes!, type,
             $"perf-sentinel-card-{period.KindName}-{period.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.{ask.Format}");
     }
 
@@ -96,6 +111,7 @@ public static partial class ApiEndpoints
         CardService cards,
         CardKeys keys,
         CardRenderer renderer,
+        CardRenderGate gate,
         EngineProbe engine,
         AccessPolicy access,
         IOptions<HubOptions> options,
@@ -104,19 +120,31 @@ public static partial class ApiEndpoints
 #pragma warning restore S107
     {
         var call = new CardCall(request, cards, keys, renderer, engine, access, options.Value, timeProvider);
-        var (refused, _, png) = await MakeCardAsync(call, true, cancellationToken);
+        var (refused, _, input) = await PrepareCardAsync(call, true, cancellationToken);
         if (refused is not null)
             return refused;
-
-        return await renderer.VerifyAsync(png!, cancellationToken) is { } verdict
-            ? TypedResults.Json(verdict with { Contacted = [CardRenderer.DohHost, options.Value.Cards.Domain!] },
-                HubJsonContext.Default.CardAttachmentResponse)
-            : Problem(StatusCodes.Status502BadGateway, "The engine could not check this card's attachment.");
+        if (!gate.TryEnter())
+            return CardsBusy(request);
+        // One slot for the key, the render and the online check.
+        try
+        {
+            var (failed, png) = await RenderCardUnderGateAsync(call, input!, "png", cancellationToken);
+            if (failed is not null)
+                return failed;
+            return await renderer.VerifyAsync(png!, cancellationToken) is { } verdict
+                ? TypedResults.Json(verdict with { Contacted = [CardRenderer.DohHost, options.Value.Cards.Domain!] },
+                    HubJsonContext.Default.CardAttachmentResponse)
+                : Problem(StatusCodes.Status502BadGateway, "The engine could not check this card's attachment.");
+        }
+        finally
+        {
+            gate.Exit();
+        }
     }
 
-    // The guard, the body, the scope, the figures, the key and the render, in that order; the
-    // attachment check always renders a PNG and needs the domain it checks.
-    private static async Task<(IResult? Refused, CardRequest? Ask, byte[]? Bytes)> MakeCardAsync(
+    // The guard, the body, the scope and the figures, in that order: every refusal that runs no engine,
+    // so none of them waits on or reports a busy render gate. The attachment check needs the domain it checks.
+    private static async Task<(IResult? Refused, CardRequest? Ask, CardInput? Input)> PrepareCardAsync(
         CardCall call,
         bool attachment,
         CancellationToken cancellationToken)
@@ -138,10 +166,19 @@ public static partial class ApiEndpoints
 
         var outcome = await call.Cards.ComputeAsync(
             new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free), cancellationToken);
-        if (outcome is CardOutcome.Refused { Reason: var reason })
-            return (Problem(StatusCodes.Status422UnprocessableEntity,
-                CardRules.Explain(reason, RecapPeriod.Of(ask.Kind, ask.At))), null, null);
+        return outcome is CardOutcome.Refused { Reason: var reason }
+            ? (Problem(StatusCodes.Status422UnprocessableEntity,
+                CardRules.Explain(reason, RecapPeriod.Of(ask.Kind, ask.At))), null, null)
+            : (null, ask, ((CardOutcome.Ready)outcome).Input);
+    }
 
+    // The engine runs, under the slot the caller holds: the key on first use, then the render.
+    private static async Task<(IResult? Failed, byte[]? Bytes)> RenderCardUnderGateAsync(
+        CardCall call,
+        CardInput input,
+        string format,
+        CancellationToken cancellationToken)
+    {
         StoredCardKey key;
         try
         {
@@ -149,12 +186,19 @@ public static partial class ApiEndpoints
         }
         catch (CardEngineException exception)
         {
-            return (CardEngineProblem(exception), null, null);
+            return (CardEngineProblem(exception), null);
         }
 
-        var render = await call.Renderer.RenderAsync(((CardOutcome.Ready)outcome).Input, key, call.Keys.KeyFile(key),
-            attachment ? "png" : ask.Format, cancellationToken);
-        return render is CardRender.Rendered rendered ? (null, ask, rendered.Bytes) : (CardRenderProblem(render), null, null);
+        var render = await call.Renderer.RenderAsync(input, key, call.Keys.KeyFile(key), format, cancellationToken);
+        return render is CardRender.Rendered rendered ? (null, rendered.Bytes) : (CardRenderProblem(render), null);
+    }
+
+    // A render lasts seconds, so one retry after the 1 s of the other gates would likely meet the same renders.
+    private static IResult CardsBusy(HttpRequest request)
+    {
+        request.HttpContext.Response.Headers.RetryAfter = "5";
+        return Problem(StatusCodes.Status503ServiceUnavailable,
+            "Another card is being made. Try again in a few seconds.");
     }
 
     // The engine names the card.json path of the text it cannot draw; the screen shows the error under
@@ -273,19 +317,25 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>Retires the current key, deletes its private file and has the engine make a new one.</summary>
+    // Every parameter is a collaborator the router injects.
+#pragma warning disable S107
     private static async Task<IResult> RotateCardKeyAsync(
         HttpRequest request,
         HubDatabase database,
         CardKeys keys,
+        CardRenderGate gate,
         EngineProbe engine,
         AccessPolicy access,
         IOptions<HubOptions> options,
         CancellationToken cancellationToken)
+#pragma warning restore S107
     {
         if (CardKeyRefusal(request, access, options.Value, true) is { } refused)
             return refused;
         if (!engine.SupportsCard)
             return Problem(StatusCodes.Status503ServiceUnavailable, NoCardEngine);
+        if (!gate.TryEnter())
+            return CardsBusy(request);
         try
         {
             await keys.RotateAsync(cancellationToken);
@@ -293,6 +343,10 @@ public static partial class ApiEndpoints
         catch (CardEngineException exception)
         {
             return CardEngineProblem(exception);
+        }
+        finally
+        {
+            gate.Exit();
         }
 
         return await CardKeysAsync(database, options.Value, cancellationToken);

@@ -6975,7 +6975,7 @@
                 remember: false, rememberError: null, title: '', team: '', lang: lang, format: 'png',
                 options: null, optionsPath: null, curveRefusal: null, showAllFixes: false,
                 preview: null, stale: false, busy: null, renderError: null, fieldErrors: {},
-                attach: null, attachBusy: false,
+                attach: null, attachBusy: false, busyNote: null, attachNote: null,
                 keys: undefined, keysError: null, keysBusy: false, revoking: null, revokeDate: ''
             };
         }
@@ -7532,6 +7532,7 @@
         return el('div', {class: 'share-actions'}, [
             preview, download,
             el('span', {class: 'share-file', text: cardFileName(card, route)}),
+            cardBusyNote(card.busyNote),
             invalid ? el('p', {class: 'share-why', text: PSL.CARD_COPY.fieldWhy}) : null,
             card.renderError ? el('p', {class: 'recap-alert', role: 'alert', text: card.renderError}) : null
         ]);
@@ -7616,7 +7617,8 @@
         });
         const box = el('div', {class: 'attach'}, [
             el('div', {class: 'attach-head'}, [el('p', {class: 'attach-title', text: 'Attached to ' + domain + '?'}), button]),
-            el('p', {class: 'attach-contact', text: PSL.cardContactText(domain, management ? 'pilotage' : 'tech')})
+            el('p', {class: 'attach-contact', text: PSL.cardContactText(domain, management ? 'pilotage' : 'tech')}),
+            cardBusyNote(card.attachNote)
         ]);
         const answer = card.attach;
         if (answer && answer.error) {
@@ -7652,16 +7654,35 @@
         ]);
     }
 
-    /** A POST of the card form; a file comes back as a Blob, a refusal as the Hub's own detail. */
-    function cardPost(path, body, read) {
-        return fetch(path, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                accept: 'application/json, image/png, image/svg+xml, image/jxl, application/pdf'
-            },
-            body: JSON.stringify(body)
-        }).then(signInOn401).then(function (response) {
+    /** Under the button that waits: another card holds the engine, the Hub asks again by itself. */
+    function cardBusyNote(text) {
+        return text ? el('div', {class: 'banner card-busy', 'data-tone': 'info', role: 'status'},
+            [infoGlyph(16), el('div', {text: text})]) : null;
+    }
+
+    /**
+     * A POST of the card form; a file comes back as a Blob, a refusal as the Hub's own detail. A busy render
+     * gate is told through onWait and asked once more after its Retry-After; that second answer stands.
+     */
+    function cardPost(path, body, read, onWait) {
+        const send = function () {
+            return fetch(path, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    accept: 'application/json, image/png, image/svg+xml, image/jxl, application/pdf'
+                },
+                body: JSON.stringify(body)
+            }).then(signInOn401);
+        };
+        return send().then(function (response) {
+            const busy = onWait ? PSL.cardBusy(response.status, response.headers.get('Retry-After')) : null;
+            if (!busy) return response;
+            onWait(busy.text);
+            return new Promise(function (resolve) {
+                setTimeout(resolve, busy.delayMs);
+            }).then(send);
+        }).then(function (response) {
             if (response.ok) {
                 return read === 'blob' ? response.blob().then(function (blob) {
                     return {blob: blob};
@@ -7718,9 +7739,13 @@
         card.renderError = null;
         cardRender();
         cardRememberLabel(card).then(function () {
-            return cardPost('/api/cards/render', body, 'blob');
+            return cardPost('/api/cards/render', body, 'blob', function (text) {
+                card.busyNote = text;
+                if (currentScreen() === 'recap') cardRender();
+            });
         }).then(function (answer) {
             card.busy = null;
+            card.busyNote = null;
             if (answer.blob) then(card, answer.blob, body);
             else cardFailure(card, answer);
             if (currentScreen() === 'recap') cardRender();
@@ -7757,8 +7782,12 @@
         card.attachBusy = true;
         card.attach = null;
         cardRender();
-        cardPost('/api/cards/attachment', PSL.cardBody(cardForm(card, route)), 'json').then(function (answer) {
+        cardPost('/api/cards/attachment', PSL.cardBody(cardForm(card, route)), 'json', function (text) {
+            card.attachNote = text;
+            if (currentScreen() === 'recap') cardRender();
+        }).then(function (answer) {
             card.attachBusy = false;
+            card.attachNote = null;
             card.attach = answer.result ? {result: answer.result} : {error: answer.detail};
             if (currentScreen() === 'recap') cardRender();
         });

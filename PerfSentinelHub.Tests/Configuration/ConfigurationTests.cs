@@ -196,6 +196,8 @@ public sealed class ConfigurationTests
             ValidOptions() with { Retention = TimeSpan.Zero },
             ValidOptions() with { MaxConcurrentPolls = 0 },
             ValidOptions() with { MaxConcurrentPolls = 33 },
+            ValidOptions() with { Cards = new CardsOptions { MaxConcurrentRenders = 0 } },
+            ValidOptions() with { Cards = new CardsOptions { MaxConcurrentRenders = 17 } },
             ValidOptions() with { DefaultReadLimit = 0 },
             ValidOptions() with { MaxReadLimit = 10_001 },
             ValidOptions() with { DefaultReadLimit = 101, MaxReadLimit = 100 },
@@ -882,6 +884,7 @@ public sealed class ConfigurationTests
         Assert.Null(cards.Organisation);
         Assert.Null(cards.Domain);
         Assert.False(cards.Enabled);
+        Assert.Equal(2, cards.MaxConcurrentRenders);
         Assert.True(new CardsOptions { Organisation = "  Acme\n" } is { Organisation: "Acme", Enabled: true });
         Assert.Equal("acme.example", new CardsOptions { Domain = " acme.example\n" }.Domain);
     }
@@ -937,6 +940,34 @@ public sealed class ConfigurationTests
         var label = new string('a', 62);
         Assert.Empty(AccessFailures(WithCards("Acme", $"{label}.{label}.{label}.{label}.a")));
         Assert.Single(AccessFailures(WithCards("Acme", $"{label}.{label}.{label}.{label}.ab")));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(17)]
+    public void Card_renders_outside_1_to_16_are_refused_whether_cards_are_on_or_off(int renders)
+    {
+        const string message = "Hub:Cards:MaxConcurrentRenders must be between 1 and 16.";
+
+        Assert.Equal(message, Assert.Single(AccessFailures(WithRenders(null, renders))));
+        Assert.Equal(message, Assert.Single(AccessFailures(WithRenders("Acme", renders))));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(16)]
+    public void Card_renders_accept_1_to_16(int renders)
+    {
+        Assert.Empty(AccessFailures(WithRenders(null, renders)));
+        Assert.Empty(AccessFailures(WithRenders("Acme", renders)));
+    }
+
+    private static HubOptions WithRenders(string? organisation, int renders)
+    {
+        return ValidOptions() with
+        {
+            Cards = new CardsOptions { Organisation = organisation, MaxConcurrentRenders = renders }
+        };
     }
 
     private static HubOptions WithCards(string? organisation, string? domain)

@@ -798,7 +798,8 @@ The Hub judges a request in this order: cards off `404`; a caller the Hub cannot
 the two `POST`s, the same-origin rule and the JSON content type of the other writes (`403`,
 `415`); a caller without `access.admin` `403 You may not manage the card signing key.`. A rotation
 with an engine that has no `card` subcommand is `503 This Hub's engine cannot make cards yet.`, and
-one whose engine answers out of contract or past 30 seconds is `502`.
+one whose engine answers out of contract or past 30 seconds is `502`. A rotation shares the card
+renders' limit and may answer the busy `503` described under [Making a card](#making-a-card).
 
 ### Making a card
 
@@ -912,6 +913,12 @@ Then the scope: the sources asked for that both permissions reach, or
 `403 You may not create cards for these sources.` when none is left. A fix on a service the caller
 cannot read is left out, and the curve, drawn from daemon-wide totals, keeps only the sources both
 permissions hold whole.
+
+**Busy.** At most `Hub:Cards:MaxConcurrentRenders` cards run the engine at once (default 2). Once
+every check above has passed, a render, an attachment check or a key rotation that finds them all
+running is
+`503 Another card is being made. Try again in a few seconds.` with `Retry-After: 5`, never queued.
+The engine-off `503` carries no `Retry-After`, which is how a client tells the two apart.
 
 ## Actions
 

@@ -859,7 +859,8 @@ pas nommer `403` ; sur les deux `POST`, la règle de même origine et le type de
 autres écritures (`403`, `415`) ; un appelant sans `access.admin`
 `403 You may not manage the card signing key.`. Une rotation avec un moteur sans sous-commande
 `card` donne `503 This Hub's engine cannot make cards yet.`, et une dont le moteur répond hors
-contrat ou au-delà de 30 secondes donne `502`.
+contrat ou au-delà de 30 secondes donne `502`. Une rotation partage la limite des rendus de cartes
+et peut répondre le `503` d'occupation décrit sous [Faire une carte](#faire-une-carte).
 
 ### Faire une carte
 
@@ -979,6 +980,13 @@ Puis le périmètre : les sources demandées que les deux permissions atteignent
 `403 You may not create cards for these sources.` quand il n'en reste aucune. Une correction sur un
 service que l'appelant ne lit pas est laissée de côté, et la courbe, tracée sur des totaux de tout
 le démon, ne garde que les sources que les deux permissions tiennent entières.
+
+**Occupé.** Au plus `Hub:Cards:MaxConcurrentRenders` cartes font tourner le moteur en même temps
+(2 par défaut). Une fois tous les contrôles ci-dessus passés, un rendu, une vérification de
+rattachement ou une rotation de clé qui les trouve toutes en cours donne
+`503 Another card is being made. Try again in a few seconds.` avec `Retry-After: 5`, sans file
+d'attente. Le `503` du moteur sans `card` ne porte pas de `Retry-After`, c'est ainsi qu'un client
+distingue les deux.
 
 ## Actions
 

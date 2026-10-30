@@ -11,6 +11,9 @@ public sealed partial class HubOptionsValidator
     private static void ValidateCards(HubOptions options, List<string> errors)
     {
         var cards = options.Cards;
+        // Checked with cards off too, as Hub:MaxConcurrentPolls is: a wrong value waits for the day they turn on.
+        if (cards.MaxConcurrentRenders is < 1 or > 16)
+            errors.Add("Hub:Cards:MaxConcurrentRenders must be between 1 and 16.");
         if (cards.Organisation is { } organisation &&
             (organisation.Length is 0 or > MaxOrganisationChars || organisation.Any(LabelWrite.Hidden)))
             errors.Add("Hub:Cards:Organisation must be 1 to 60 characters with no control or hidden character.");

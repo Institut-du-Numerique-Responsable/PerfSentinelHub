@@ -2228,6 +2228,17 @@ test("the preview of a JPEG XL choice renders a PNG", () => {
         {angle: "collective", period: "month", format: "jxl"});
 });
 
+test("a busy render gate says so and when to try again", () => {
+    assert.deepEqual(PSL.cardBusy(503, "5"),
+        {text: "Another card is being made. Trying again in a few seconds.", delayMs: 5000});
+    // The engine-off 503 carries no Retry-After.
+    assert.equal(PSL.cardBusy(503, null), null);
+    assert.equal(PSL.cardBusy(422, "5"), null);
+    assert.equal(PSL.cardBusy(503, "600").delayMs, 10000);
+    assert.equal(PSL.cardBusy(503, "0").delayMs, 1000);
+    assert.equal(PSL.cardBusy(503, "Wed, 21 Oct 2026 07:28:00 GMT").delayMs, 1000);
+});
+
 test("Card_copy_carries_no_technical_word", () => {
     const words = ["I/O", "finding", "query", "endpoint", "signature", "DNS"];
     const types = Object.keys(PSL.FINDING_TYPE_LABEL);
@@ -2244,7 +2255,8 @@ test("Card_copy_carries_no_technical_word", () => {
         ...Object.values(PSL.SIGNED_FIGURE_LABELS),
         PSL.contentLine({content: "intact"}),
         PSL.attachmentText({integrity: "ok", content: "modified", level: 1, domain: null, reason: "content_modified"},
-            false).text
+            false).text,
+        PSL.CARD_COPY.busy
     ];
     for (const text of texts) {
         for (const word of words) assert.ok(!text.includes(word), `"${text}" holds "${word}"`);

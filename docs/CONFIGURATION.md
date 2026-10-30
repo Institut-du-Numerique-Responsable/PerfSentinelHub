@@ -344,12 +344,17 @@ key.
 |--------------------------|---------|--------------------------------------------------------------------------------------------------------------------------------|
 | `Hub:Cards:Organisation` | none    | 1 to 60 characters with no control or hidden character. The name that signs every card                                        |
 | `Hub:Cards:Domain`       | none    | Needs `Organisation`. A lower-case DNS name such as `example.com`, with no scheme, port or trailing dot. What a card's DNS line attaches |
+| `Hub:Cards:MaxConcurrentRenders` | `2` | 1 to 16, checked with cards off too. How many cards the engine renders at once; one more gets `503` with `Retry-After: 5` |
 
 A card is verified without the domain. With it, the card's DNS line names a record under that
 domain, which the organisation publishes to attach its cards to it. Both values are trimmed on
 binding.
 
-Under Helm the block is `hub.cards`, with `organisation` and `domain`. The chart writes the
+One render holds an engine process, a 1080 by 1350 image and its encoder for up to 45 seconds, and
+an attachment check adds up to 20 seconds of online check. Raise `MaxConcurrentRenders` on a host
+with spare CPU and memory when people often see the card screen wait its turn.
+
+Under Helm the block is `hub.cards`, with `organisation`, `domain` and `maxConcurrentRenders`. The chart writes the
 section only once `organisation` is set, and its schema refuses a `domain` that is not a lower-case
 DNS name.
 

@@ -368,12 +368,18 @@ ci-dessous est contrôlée au démarrage et son message nomme la clé.
 |--------------------------|--------|------------------------------------------------------------------------------------------------------------------------------------|
 | `Hub:Cards:Organisation` | aucun  | 1 à 60 caractères sans caractère de contrôle ni caractère caché. Le nom qui signe chaque carte                                     |
 | `Hub:Cards:Domain`       | aucun  | Exige `Organisation`. Un nom DNS en minuscules comme `example.com`, sans schéma, port ni point final. Ce que rattache la ligne DNS d'une carte |
+| `Hub:Cards:MaxConcurrentRenders` | `2` | 1 à 16, contrôlé même cartes désactivées. Combien de cartes le moteur dessine en même temps ; une de plus reçoit `503` avec `Retry-After: 5` |
 
 Une carte se vérifie sans le domaine. Avec lui, la ligne DNS de la carte nomme un enregistrement
 sous ce domaine, que l'organisation publie pour y rattacher ses cartes. Les deux valeurs sont
 rognées à la liaison.
 
-Sous Helm le bloc est `hub.cards`, avec `organisation` et `domain`. Le chart n'écrit la section
+Un rendu occupe un processus du moteur, une image de 1080 sur 1350 et son encodeur jusqu'à 45
+secondes, et une vérification de rattachement ajoute jusqu'à 20 secondes de vérification en ligne.
+Augmentez `MaxConcurrentRenders` sur un hôte qui a du CPU et de la mémoire en réserve quand l'écran
+des cartes fait souvent attendre son tour.
+
+Sous Helm le bloc est `hub.cards`, avec `organisation`, `domain` et `maxConcurrentRenders`. Le chart n'écrit la section
 qu'une fois `organisation` posé, et son schéma refuse un `domain` qui n'est pas un nom DNS en
 minuscules.
 

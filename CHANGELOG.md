@@ -45,7 +45,9 @@ All notable changes to PerfSentinelHub are recorded here.
   signed (`content`) and its figures as signed (`figures`), which Verify attachment lists to
   compare with the preview. A free field holding `{"content_sig":"`, the text the card file keeps
   for its signature, is a `400`. The three need `cards.write` and `findings.read` and somebody to
-  name.
+  name. `Hub:Cards:MaxConcurrentRenders` (default 2, chart `hub.cards.maxConcurrentRenders`) bounds
+  how many renders, attachment checks and key rotations run the engine at once. One more is a
+  `503` with `Retry-After: 5`, which the screen waits out once before asking again.
 
 ### Changed
 
