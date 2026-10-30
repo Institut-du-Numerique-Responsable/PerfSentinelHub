@@ -8006,7 +8006,8 @@
         const said = card.revokeDate ? PSL.revokeText(card.revokeDate, key.current, domain) : null;
         return el('div', {class: 'key-confirm'}, [
             el('div', {}, [el('label', {for: 'card-leak-date', text: PSL.CARD_COPY.leaked}), date]),
-            said ? el('p', {role: 'alert', style: 'margin:0', text: said}) : null,
+            said ? el('p', {role: 'alert', style: 'margin:0', text: said.alert}) : null,
+            said ? el('p', {class: 'key-confirm-step', text: said.step}) : null,
             el('div', {}, [revoke, cancel])
         ]);
     }

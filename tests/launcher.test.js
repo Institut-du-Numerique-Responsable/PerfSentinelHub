@@ -2101,8 +2101,7 @@ test("an attachment verdict reads as one sentence, the raw reason in the title o
         text: "Not attached yet. An administrator publishes one line under acme.example, then you can check again.",
         title: null
     });
-    for (const reason of ["binding_check_failed", "key_not_published", "public_key_mismatch",
-        "binding_partial", "signed_outside_validity", "no_domain"]) {
+    for (const reason of ["binding_check_failed", "key_not_published", "binding_partial", "no_domain"]) {
         assert.ok(PSL.ATTACH_REASONS[reason], reason);
     }
     assert.equal(PSL.ATTACH_REASONS.signed_after_revocation, undefined);
@@ -2113,6 +2112,20 @@ test("a revoked key reads as a verdict, not as a check that failed", () => {
     assert.deepEqual(PSL.attachmentText(
         {integrity: "ok", level: 1, domain: "acme.example", key: "revoked", reason: "key_revoked"}, true),
     {text: "This card was signed with a key that is now revoked.", title: "key_revoked"});
+});
+
+test("a mismatched key and a date outside the key's window read as verdicts", () => {
+    const base = {integrity: "ok", content: "intact", level: 1, domain: "acme.example", key: "unknown"};
+    assert.deepEqual(PSL.attachmentText({...base, reason: "public_key_mismatch"}, true), {
+        text: "This card was signed with a key other than the one published under acme.example.",
+        title: "public_key_mismatch"
+    });
+    assert.deepEqual(PSL.attachmentText({...base, reason: "signed_outside_validity"}, false), {
+        text: "This card is dated outside the period its key was published for.",
+        title: "signed_outside_validity"
+    });
+    assert.equal(PSL.ATTACH_REASONS.public_key_mismatch, undefined);
+    assert.equal(PSL.ATTACH_REASONS.signed_outside_validity, undefined);
 });
 
 test("a modified file never reads attached", () => {
@@ -2176,15 +2189,15 @@ test("a partial lookup reads as could not check", () => {
 });
 
 test("the revoke confirmation says every card reads revoked", () => {
+    // The consequence is the alert; the DNS steps read apart from it, in plain text.
     const said = PSL.revokeText("2026-10-01", false, "acme.example");
-    assert.ok(said.includes("whatever its date"), said);
-    assert.ok(said.includes("may have been exposed since 2026-10-01"), said);
-    assert.ok(!said.includes("signed from"), said);
-    assert.ok(said.includes("Republish this key's DNS line under acme.example"), said);
-    assert.ok(said.includes("reads the DNS line only"), said);
-    assert.ok(PSL.revokeText("2026-10-01", false, null).includes("Republish this key's DNS line:"));
-    assert.ok(PSL.revokeText("2026-10-01", true, "acme.example").endsWith("publish its line too, under acme.example."));
-    assert.ok(PSL.revokeText("2026-10-01", true, null).endsWith("makes a new key."));
+    assert.equal(said.alert, "Every card this key signed will read as revoked on the check page, whatever its "
+        + "date. The check page will say the key may have been exposed since 2026-10-01. This cannot be undone.");
+    assert.equal(said.step, "Republish this key's DNS line under acme.example: the check page reads the DNS line "
+        + "only, and keeps showing these cards as signed until the line says revoked.");
+    assert.ok(PSL.revokeText("2026-10-01", false, null).step.startsWith("Republish this key's DNS line:"));
+    assert.ok(PSL.revokeText("2026-10-01", true, "acme.example").step.endsWith("publish its line too, under acme.example."));
+    assert.ok(PSL.revokeText("2026-10-01", true, null).step.endsWith("makes a new key."));
 });
 
 test("the level line says what the check page shows", () => {

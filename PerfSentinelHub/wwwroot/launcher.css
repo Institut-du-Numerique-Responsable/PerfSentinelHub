@@ -6470,6 +6470,12 @@ a.chip {
     line-height: 1.5;
 }
 
+/* What to do next, in plain text under the red consequence. */
+.key-confirm .key-confirm-step {
+    margin: 0;
+    color: var(--text);
+}
+
 .key-confirm div {
     display: flex;
     flex-wrap: wrap;
