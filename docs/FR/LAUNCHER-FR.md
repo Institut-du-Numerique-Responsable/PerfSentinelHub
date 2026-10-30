@@ -385,8 +385,12 @@ de la carte ne sait pas dessiner, un emoji par exemple, est signalé sous son ch
 et le refus du moteur arrive au même endroit.
 
 La carte se télécharge en image (PNG), en image à imprimer ou agrandir (SVG), nette à toute taille,
-ou en carrousel (PDF). Preview rend la carte : l'une ou l'autre image dans un cadre clair, quel que
-soit le thème du Hub, le carrousel dans la visionneuse PDF du navigateur. Un choix modifié après un aperçu le grise et le dit ; Download fait
+en image plus légère à archiver (JPEG XL), ou en carrousel (PDF). Le JPEG XL garde les pixels du
+PNG, sans perte : gardez-le pour archiver ou envoyer, et publiez le PNG, car
+[LinkedIn n'accepte pas le JPEG XL](https://www.linkedin.com/help/linkedin/answer/a564109). Preview
+rend la carte : l'image dans un cadre clair, quel que soit le thème du Hub, le PNG pour un choix
+JPEG XL, le carrousel dans la visionneuse PDF du navigateur. Un choix modifié après un aperçu le
+grise et le dit, sauf un passage entre PNG et JPEG XL, qui montre la même image. Download fait
 toujours la carte à partir du formulaire tel qu'il est. Sous l'aperçu, la ligne que la page de
 vérification imprimera, et Verify attachment, qui rend la carte une fois de plus et fait vérifier par
 le moteur sa clé sous le domaine de l'organisation, par `cloudflare-dns.com` et le domaine lui-même,

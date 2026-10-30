@@ -47,7 +47,7 @@ public static partial class ApiEndpoints
             HubJsonContext.Default.CardOptions);
     }
 
-    /// <summary>The card as a file to download: the PNG, the SVG, or the PDF carousel.</summary>
+    /// <summary>The card as a file to download: the PNG, the SVG, the JPEG XL, or the PDF carousel.</summary>
     // Every parameter is a collaborator the router injects.
 #pragma warning disable S107
     private static async Task<IResult> RenderCardAsync(
@@ -78,6 +78,7 @@ public static partial class ApiEndpoints
         {
             "pdf" => "application/pdf",
             "svg" => "image/svg+xml",
+            "jxl" => "image/jxl",
             _ => "image/png"
         };
         return TypedResults.File(bytes!, type,

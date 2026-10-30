@@ -2126,13 +2126,25 @@ test("a fix row says what the card shows when its problem has no volume", () => 
         {figure: null, text: "the card shows how many calls one action made"});
 });
 
-test("a card downloads as a PNG, an SVG or a PDF, each with its label", () => {
-    assert.deepEqual(PSL.CARD_FORMATS, ["png", "svg", "pdf"]);
+test("a card downloads as a PNG, an SVG, a JPEG XL or a PDF, each with its label", () => {
+    assert.deepEqual(PSL.CARD_FORMATS, ["png", "svg", "jxl", "pdf"]);
     for (const format of PSL.CARD_FORMATS) assert.ok(PSL.CARD_FORMAT_LABELS[format], format);
     assert.deepEqual(Object.keys(PSL.CARD_FORMAT_LABELS), PSL.CARD_FORMATS);
     // The preview's note: an SVG has no fixed pixel size.
-    for (const format of PSL.CARD_FORMATS) assert.ok(PSL.CARD_COPY[format + "Note"], format);
+    for (const format of PSL.CARD_FORMATS) assert.ok(PSL.CARD_COPY[PSL.previewFormat(format) + "Note"], format);
     assert.ok(!PSL.CARD_COPY.svgNote.includes("pixels"));
+    // Only the JPEG XL carries a note under the choice: where it does not go.
+    assert.deepEqual(Object.keys(PSL.CARD_FORMAT_NOTES), ["jxl"]);
+    assert.ok(PSL.CARD_FORMAT_NOTES.jxl.includes("LinkedIn"));
+});
+
+test("the preview of a JPEG XL choice renders a PNG", () => {
+    assert.equal(PSL.previewFormat("jxl"), "png");
+    assert.equal(PSL.previewFormat("png"), "png");
+    assert.equal(PSL.previewFormat("svg"), "svg");
+    assert.equal(PSL.previewFormat("pdf"), "pdf");
+    assert.deepEqual(PSL.cardBody({angle: "collective", period: "month", format: "jxl"}),
+        {angle: "collective", period: "month", format: "jxl"});
 });
 
 test("Card_copy_carries_no_technical_word", () => {
@@ -2142,6 +2154,7 @@ test("Card_copy_carries_no_technical_word", () => {
         ...Object.values(PSL.CARD_ANGLE_LINES),
         ...Object.values(PSL.CARD_PERIOD_LABELS),
         ...Object.values(PSL.CARD_FORMAT_LABELS),
+        ...Object.values(PSL.CARD_FORMAT_NOTES),
         PSL.cardEnvironmentLine("prod", "pilotage"),
         PSL.cardEnvironmentLine(null, "pilotage"),
         PSL.cardContactText("acme.example", "pilotage"),

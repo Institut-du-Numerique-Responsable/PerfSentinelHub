@@ -5614,6 +5614,9 @@ a.chip {
     flex-direction: column;
     gap: 24px;
     min-width: 0;
+    /* Queried by the format choice, which has to know the column it was given, not the window. */
+    container-type: inline-size;
+    container-name: share-form;
 }
 
 .share-group {
@@ -5986,8 +5989,8 @@ a.chip {
     white-space: nowrap;
 }
 
-/* The three formats need about 450px in a row; narrower, they stack inside the same frame. */
-@media (max-width: 520px) {
+/* The four formats need about 705px in a row; in a narrower column, they stack in the same frame. */
+@container share-form (max-width: 720px) {
     .card-opt-format .segmented {
         flex-direction: column;
         height: auto;

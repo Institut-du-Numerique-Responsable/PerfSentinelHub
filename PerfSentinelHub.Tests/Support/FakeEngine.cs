@@ -12,6 +12,12 @@ internal sealed record FakeEngine
     /// <summary>The bytes of the <c>card.svg</c> a <c>--format svg</c> render writes.</summary>
     public const string CardSvg = """<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg"/>""";
 
+    /// <summary>
+    ///     The bytes of the <c>card.jxl</c> a <c>--format jxl</c> render writes: the JPEG XL signature box,
+    ///     then <c>fake</c>.
+    /// </summary>
+    public static byte[] CardJxl => [0x00, 0x00, 0x00, 0x0C, 0x4A, 0x58, 0x4C, 0x20, 0x0D, 0x0A, 0x87, 0x0A, .. "fake"u8];
+
     private const string Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     // What the engine prints when its --out-dir does not exist: it never creates it.
@@ -69,7 +75,7 @@ internal sealed record FakeEngine
     public string CardRenderOutput { get; init; } =
         """{"result":"rendered","files":["card.png"],"fingerprint":"ps1:AAAAAAAAAAAAAAAAAAAAAA","compact_url":"https://perf-sentinel.dev/verifier#c=e30.AA"}""";
 
-    /// <summary>Exit 0 writes <c>card.png</c>, <c>card.svg</c> or <c>card.pdf</c> in <c>--out-dir</c>; any other writes nothing.</summary>
+    /// <summary>Exit 0 writes <c>card.png</c>, <c>card.svg</c>, <c>card.jxl</c> or <c>card.pdf</c> in <c>--out-dir</c>; any other writes nothing.</summary>
     public int CardRenderExitCode { get; init; }
 
     /// <summary>The verdict line <c>verify-card</c> prints, whatever its exit code.</summary>
@@ -104,6 +110,7 @@ internal sealed record FakeEngine
         File.WriteAllText($"{path}.keygen", CardKeygenOutput ?? "");
         File.WriteAllBytes($"{path}.png", [0x89, .. "PNG fake"u8]);
         File.WriteAllText($"{path}.svg", CardSvg);
+        File.WriteAllBytes($"{path}.jxl", CardJxl);
         File.WriteAllText($"{path}.cardrender", CardRenderOutput);
         File.WriteAllText($"{path}.verify", VerifyCardOutput);
 

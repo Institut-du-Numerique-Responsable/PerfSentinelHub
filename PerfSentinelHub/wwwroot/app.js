@@ -7093,6 +7093,16 @@
         cardRender();
     }
 
+    /** A format whose preview renders the same file, PNG and JPEG XL, leaves the preview current. */
+    function cardPickFormat(format) {
+        const card = cardState();
+        const same = PSL.previewFormat(card.format) === PSL.previewFormat(format);
+        card.format = format;
+        if (same) card.renderError = null;
+        else cardMarkStale(card);
+        cardRender();
+    }
+
     function loadCardOptions(card, path) {
         card.optionsPath = path;
         card.options = 'loading';
@@ -7491,11 +7501,11 @@
                 el('div', {class: 'card-opt card-opt-format'}, [el('span', {class: 'card-opt-label', text: 'Format'}),
                     cardSegmented('Format', 'format', PSL.CARD_FORMATS.map(function (format) {
                         return [format, PSL.CARD_FORMAT_LABELS[format]];
-                    }), card.format, function (format) {
-                        cardPick({format: format});
-                    })])
+                    }), card.format, cardPickFormat)])
             ]),
-            card.format === 'pdf' ? el('p', {class: 'free-note', text: PSL.CARD_COPY.carouselNote}) : null
+            card.format === 'pdf' ? el('p', {class: 'free-note', text: PSL.CARD_COPY.carouselNote}) : null,
+            PSL.CARD_FORMAT_NOTES[card.format] ? el('p', {class: 'free-note', text: PSL.CARD_FORMAT_NOTES[card.format]})
+                : null
         ]);
     }
 
@@ -7630,7 +7640,10 @@
     function cardPost(path, body, read) {
         return fetch(path, {
             method: 'POST',
-            headers: {'content-type': 'application/json', accept: 'application/json, image/png, image/svg+xml, application/pdf'},
+            headers: {
+                'content-type': 'application/json',
+                accept: 'application/json, image/png, image/svg+xml, image/jxl, application/pdf'
+            },
             body: JSON.stringify(body)
         }).then(signInOn401).then(function (response) {
             if (response.ok) {
@@ -7684,6 +7697,7 @@
         const card = cardState();
         if (card.busy) return;
         const body = PSL.cardBody(cardForm(card, route));
+        if (busy === 'preview' && body.format) body.format = PSL.previewFormat(body.format);
         card.busy = busy;
         card.renderError = null;
         cardRender();
@@ -7697,7 +7711,7 @@
         });
     }
 
-    /** Preview renders the form as it is; a phone then scrolls to the card. */
+    /** Preview renders the form as it is, a JPEG XL as its PNG; a phone then scrolls to the card. */
     function cardPreview(route) {
         cardMake(route, 'preview', function (card, blob, body) {
             if (card.preview) URL.revokeObjectURL(card.preview.url);

@@ -134,6 +134,19 @@ public sealed partial class CardRendererTests : IDisposable
     }
 
     [Fact]
+    public async Task A_jxl_render_passes_the_format_and_reads_card_jxl()
+    {
+        var renderer = await RendererAsync(new FakeEngine { Card = true });
+
+        var rendered = Assert.IsType<CardRender.Rendered>(
+            await renderer.RenderAsync(Collective(), Key, KeyFile(), "jxl", Token));
+
+        Assert.Contains("--format jxl", await File.ReadAllTextAsync(Path.Combine(Reports, "card-args.txt"), Token),
+            StringComparison.Ordinal);
+        Assert.Equal(FakeEngine.CardJxl, rendered.Bytes);
+    }
+
+    [Fact]
     public async Task A_fingerprint_other_than_the_key_is_out_of_contract()
     {
         var renderer = await RendererAsync(new FakeEngine

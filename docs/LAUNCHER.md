@@ -355,8 +355,12 @@ card language. A character the card's font cannot draw, an emoji for one, is fla
 as you type, and the engine's own refusal lands there too.
 
 The card downloads as an image (PNG), an image to print or scale (SVG), which stays sharp at any
-size, or a carousel (PDF). Preview renders the card: either image in a light frame, whatever the
-Hub's theme, the carousel in the browser's own PDF viewer. A choice changed after a preview dims it and says so; Download always makes
+size, a smaller image to archive (JPEG XL), or a carousel (PDF). The JPEG XL holds the PNG's pixels,
+losslessly: keep it to archive or send, and post the PNG, since
+[LinkedIn does not accept JPEG XL](https://www.linkedin.com/help/linkedin/answer/a564109). Preview
+renders the card: the image in a light frame, whatever the Hub's theme, the PNG for a JPEG XL
+choice, the carousel in the browser's own PDF viewer. A choice changed after a preview dims it and
+says so, except a move between PNG and JPEG XL, which shows the same image; Download always makes
 the card from the form as it stands. Under the preview, the line the check page will print, and
 Verify attachment, which renders the card once more and has the engine check its key under the
 organisation's domain, through `cloudflare-dns.com` and the domain itself, the only call of the

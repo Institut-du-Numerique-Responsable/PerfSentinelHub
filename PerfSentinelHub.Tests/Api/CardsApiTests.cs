@@ -222,6 +222,27 @@ public sealed class CardsApiTests : IDisposable
         Assert.Equal("frame-ancestors 'self'", Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
     }
 
+    // Access on, so the global policy is there to keep: a JPEG XL is an image like the PNG.
+    [Fact]
+    public async Task A_jxl_card_downloads_as_an_attachment_with_its_headers()
+    {
+        await using var provider = await FakeProvider.StartAsync(Users);
+        var hub = AccessHub(provider, true);
+        await OneFixAsync(hub);
+
+        using var response = await RenderAsync(hub,
+            """{"angle":"collective","period":"month","at":"2026-10-01","source_id":"a","format":"jxl"}""");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/jxl", response.Content.Headers.ContentType!.MediaType);
+        Assert.StartsWith("attachment; filename=perf-sentinel-card-month-2026-10-01.jxl",
+            Assert.Single(response.Content.Headers.GetValues("Content-Disposition")), StringComparison.Ordinal);
+        Assert.Equal("nosniff", Assert.Single(response.Headers.GetValues("X-Content-Type-Options")));
+        Assert.True(response.Headers.CacheControl!.NoStore);
+        Assert.Equal("frame-ancestors 'self'", Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal(FakeEngine.CardJxl, await response.Content.ReadAsByteArrayAsync(Token));
+    }
+
     [Fact]
     public async Task The_first_card_creates_the_key()
     {
@@ -402,20 +423,22 @@ public sealed class CardsApiTests : IDisposable
         Assert.Contains("--format png", arguments, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task The_attachment_check_renders_a_png_whatever_the_format()
+    [Theory]
+    [InlineData("svg")]
+    [InlineData("jxl")]
+    public async Task The_attachment_check_renders_a_png_whatever_the_format(string format)
     {
         var hub = Hub();
         using var client = hub.CreateClient();
         await OneFixAsync(hub);
 
         using var response = await client.SendAsync(Send("POST", AttachmentPath,
-            """{"angle":"collective","period":"month","at":"2026-10-01","format":"svg"}"""), Token);
+            $$"""{"angle":"collective","period":"month","at":"2026-10-01","format":"{{format}}"}"""), Token);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var arguments = await File.ReadAllTextAsync(Path.Combine(_workspace, "reports", "card-args.txt"), Token);
         Assert.Contains("--format png", arguments, StringComparison.Ordinal);
-        Assert.DoesNotContain("--format svg", arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain($"--format {format}", arguments, StringComparison.Ordinal);
     }
 
     [Fact]

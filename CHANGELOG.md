@@ -34,10 +34,11 @@ All notable changes to PerfSentinelHub are recorded here.
 - Share cards. `GET /api/cards/options` lists what a card of a closed period can show: the
   period's refusal and its sentence, the signed scope, the confirmed fixes with their labels.
   `POST /api/cards/render` computes the figures, has the engine sign and draw the card
-  (`perf-sentinel card render`) and answers the PNG, the SVG or the PDF carousel; only the title,
-  the team and a story's label are free, any other key is a `400`. An SVG comes with
-  `Content-Security-Policy: default-src 'none'; sandbox`, so opened from its URL it runs nothing. `POST /api/cards/attachment`
-  checks a fresh card's DNS attachment with `perf-sentinel verify-card --online`, the one card
+  (`perf-sentinel card render`) and answers the PNG, the SVG, the JPEG XL (`image/jxl`, to archive
+  or send, LinkedIn does not accept it) or the PDF carousel; only the title, the team and a story's
+  label are free, any other key is a `400`. An SVG comes with
+  `Content-Security-Policy: default-src 'none'; sandbox`, so opened from its URL it runs nothing.
+  `POST /api/cards/attachment` checks a fresh card's DNS attachment with `perf-sentinel verify-card --online`, the one card
   route that reaches the network (`cloudflare-dns.com` and the configured domain). The three
   need `cards.write` and `findings.read` and somebody to name.
 

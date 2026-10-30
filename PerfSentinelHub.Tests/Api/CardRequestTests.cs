@@ -131,12 +131,13 @@ public sealed class CardRequestTests
     }
 
     [Fact]
-    public void Format_is_png_svg_or_pdf()
+    public void Format_is_png_svg_jxl_or_pdf()
     {
         Assert.Equal("png", Accepted(Body(("angle", "curve"), ("period", "month"))).Format);
         Assert.Equal("svg", Accepted(Body(("angle", "curve"), ("period", "month"), ("format", "svg"))).Format);
+        Assert.Equal("jxl", Accepted(Body(("angle", "curve"), ("period", "month"), ("format", "jxl"))).Format);
         Assert.Equal("pdf", Accepted(Body(("angle", "curve"), ("period", "month"), ("format", "pdf"))).Format);
-        Assert.Equal("format must be png, svg or pdf.",
+        Assert.Equal("format must be png, svg, jxl or pdf.",
             Refused(Body(("angle", "curve"), ("period", "month"), ("format", "jpg"))));
     }
 

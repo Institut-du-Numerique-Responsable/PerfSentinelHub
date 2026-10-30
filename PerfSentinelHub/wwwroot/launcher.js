@@ -2698,8 +2698,22 @@
         'October', 'November', 'December'];
     const CARD_KIND_MONTHS = {month: 1, quarter: 3, semester: 6, year: 12};
     /** The files a card downloads as; the bracketed type is the one the saved file carries. */
-    const CARD_FORMATS = ['png', 'svg', 'pdf'];
-    const CARD_FORMAT_LABELS = {png: 'Image (PNG)', svg: 'Image to print or scale (SVG)', pdf: 'Carousel (PDF)'};
+    const CARD_FORMATS = ['png', 'svg', 'jxl', 'pdf'];
+    const CARD_FORMAT_LABELS = {
+        png: 'Image (PNG)',
+        svg: 'Image to print or scale (SVG)',
+        jxl: 'Smaller image to archive (JPEG XL)',
+        pdf: 'Carousel (PDF)'
+    };
+    /** The sentence under a format while it is picked, where the choice alone does not say where the file goes. */
+    const CARD_FORMAT_NOTES = {
+        jxl: 'LinkedIn does not accept this format. Post the PNG, and keep this one to archive or send.'
+    };
+
+    /** The format a preview renders: a JPEG XL previews as the PNG of the same card, which every browser shows. */
+    function previewFormat(format) {
+        return format === 'jxl' ? 'png' : format;
+    }
 
     /** Every other sentence of the card section, in one place for the copy review. */
     const CARD_COPY = {
@@ -3148,6 +3162,8 @@
         CARD_ANGLE_LINES,
         CARD_FORMATS,
         CARD_FORMAT_LABELS,
+        CARD_FORMAT_NOTES,
+        previewFormat,
         CARD_COPY,
         ATTACH_REASONS,
         cardPeriodStart,
