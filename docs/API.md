@@ -787,8 +787,9 @@ which is `null` when `Hub:Cards:Domain` is not set. `well_known` is the whole
 keys never makes one: an empty `keys` says the first card makes it.
 
 `POST /api/cards/keys/revoke` takes `{"fingerprint": "ps1:…", "revoked": "yyyy-MM-dd"}`, at most
-1 KiB. `revoked` has no default: give the first day the key may have leaked, since a day too late
-leaves a card forged before it valid. Missing or not a `yyyy-MM-dd` day, it is
+1 KiB. `revoked` has no default: give the first day the key may have leaked, published with the
+key as `revoked`. Every card the key signed then reads as revoked, whatever its day. Missing or
+not a `yyyy-MM-dd` day, it is
 `400 Give the first day the key may have leaked.`; a day before the key was made or after today
 (UTC) is `400 The revocation date must lie between the key's creation and today.`; an unknown
 fingerprint is `404`. A retired key can be revoked, and keeps its `to`.

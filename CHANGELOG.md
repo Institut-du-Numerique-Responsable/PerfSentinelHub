@@ -30,7 +30,8 @@ All notable changes to PerfSentinelHub are recorded here.
   `card_keys` (schema 20), never purged. A key whose file is gone is retired at next use and a new
   one made. `GET /api/cards/keys`, `POST /api/cards/keys/rotate` and `POST /api/cards/keys/revoke`,
   for `access.admin` only, list the keys with their DNS lines and `.well-known` file, rotate the
-  key and revoke one from the first day it may have leaked.
+  key and revoke one from the first day it may have leaked. Every card a revoked key signed reads
+  as revoked, whatever its date.
 - Share cards. `GET /api/cards/options` lists what a card of a closed period can show: the
   period's refusal and its sentence, the signed scope, the confirmed fixes with their labels.
   `POST /api/cards/render` computes the figures, has the engine sign and draw the card

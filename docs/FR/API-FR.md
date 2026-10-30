@@ -846,8 +846,9 @@ ligne `\n`, à servir tel quel. Lire les clés n'en fabrique jamais : une liste 
 la première carte la fabrique.
 
 `POST /api/cards/keys/revoke` prend `{"fingerprint": "ps1:…", "revoked": "yyyy-MM-dd"}`, 1 Kio au
-plus. `revoked` n'a pas de valeur par défaut : donnez le premier jour où la clé a pu fuiter, car
-un jour trop tardif laisse valide une carte forgée avant lui. Absent ou pas un jour `yyyy-MM-dd`,
+plus. `revoked` n'a pas de valeur par défaut : donnez le premier jour où la clé a pu fuiter,
+publié avec la clé comme `revoked`. Chaque carte que la clé a signée se lit alors révoquée, quel
+que soit son jour. Absent ou pas un jour `yyyy-MM-dd`,
 c'est `400 Give the first day the key may have leaked.` ; un jour antérieur à la fabrication de la
 clé ou postérieur à aujourd'hui (UTC) donne
 `400 The revocation date must lie between the key's creation and today.` ; une empreinte inconnue

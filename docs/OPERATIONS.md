@@ -402,9 +402,15 @@ stays published with its end date, so every card signed before still verifies.
 
 **Rotation and revocation.** An administrator (`access.admin`) rotates the key, which retires the
 current one, deletes its private file and makes a new one. Revoking a key also retires it and
-deletes its file, and asks for the first day the key may have leaked: a card signed from that day
-reads revoked, the ones before stay valid. Give the earliest day you cannot rule out, since a day
-too late leaves a forged card valid. A retired key can be revoked as well.
+deletes its file. On the check page, every card the key signed then reads as revoked, whatever its
+date, because the date on a card is written by whoever holds the key. Revoking asks for the first
+day the key may have leaked. That day is published with the key as `revoked`, and tells readers
+since when the key may have been exposed, not when it was withdrawn. Revoke a key that may have
+leaked, and rotate one that did not, since rotation keeps the cards it signed attached. A retired
+key can be revoked as well. After revoking, replace the key's DNS TXT line with the new one that
+carries `revoked=`, not only the well-known file: the check page on perf-sentinel.dev reads the
+DNS line only and keeps printing the card as signed until that line changes, while
+`verify-card --online` reads both.
 
 **Publishing the lines.** A card names its signer's domain (`Hub:Cards:Domain`); a reader checks
 it against what the domain publishes. `GET /api/cards/keys` answers both forms, ready to copy:

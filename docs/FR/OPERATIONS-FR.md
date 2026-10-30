@@ -436,10 +436,16 @@ carte signée avant se vérifie toujours.
 
 **Rotation et révocation.** Un administrateur (`access.admin`) fait tourner la clé : la clé
 courante est retirée, son fichier privé supprimé, et une nouvelle est fabriquée. Révoquer une clé
-la retire aussi et supprime son fichier, et demande le premier jour où la clé a pu fuiter : une
-carte signée à partir de ce jour se lit révoquée, celles d'avant restent valides. Donnez le jour
-le plus ancien que vous ne pouvez pas écarter, car un jour trop tardif laisse valide une carte
-forgée. Une clé déjà retirée peut aussi être révoquée.
+la retire aussi et supprime son fichier. Sur la page de vérification, chaque carte qu'elle a
+signée se lit alors révoquée, quelle que soit sa date, car la date d'une carte est écrite par
+celui qui détient la clé. La révocation demande le premier jour où la clé a pu fuiter. Ce jour est
+publié avec la clé comme `revoked`, et dit aux lecteurs depuis quand la clé a pu être exposée, pas
+quand elle a été retirée. Révoquez une clé qui a pu fuiter, faites tourner celle qui n'a pas fui,
+car la rotation garde rattachées les cartes qu'elle a signées. Une clé déjà retirée peut aussi
+être révoquée. Après une révocation, remplacez la ligne TXT DNS de la clé par la nouvelle, qui
+porte `revoked=`, pas seulement le fichier well-known : la page de vérification de
+perf-sentinel.dev ne lit que la ligne DNS et continue d'afficher la carte comme signée tant que
+cette ligne ne change pas, alors que `verify-card --online` lit les deux.
 
 **Publier les lignes.** Une carte nomme le domaine de son signataire (`Hub:Cards:Domain`) ; un
 lecteur la vérifie contre ce que ce domaine publie. `GET /api/cards/keys` répond les deux formes,

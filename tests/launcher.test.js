@@ -2089,8 +2089,10 @@ test("an attachment verdict reads as one sentence, the raw reason in the title o
         {text: "This card does not verify: its figures changed after signing.", title: null});
     assert.deepEqual(PSL.attachmentText({...base, level: 2, key: "current", reason: "key_published"}, false),
         {text: "Attached: cards read \"Signed by acme.example\".", title: null});
-    assert.deepEqual(PSL.attachmentText({...base, reason: "binding_check_failed"}, true),
-        {text: "Could not check: no DNS service answered.", title: "binding_check_failed"});
+    assert.deepEqual(PSL.attachmentText({...base, reason: "binding_check_failed"}, true), {
+        text: "Could not check: the places that publish the key under acme.example did not answer.",
+        title: "binding_check_failed"
+    });
     assert.deepEqual(PSL.attachmentText({...base, reason: "something_new"}, true),
         {text: "Could not check: an unexpected answer.", title: "something_new"});
     assert.deepEqual(PSL.attachmentText(base, true),
@@ -2100,10 +2102,39 @@ test("an attachment verdict reads as one sentence, the raw reason in the title o
         title: null
     });
     for (const reason of ["binding_check_failed", "key_not_published", "public_key_mismatch",
-        "signed_after_revocation", "signed_outside_validity", "no_domain"]) {
+        "binding_partial", "signed_outside_validity", "no_domain"]) {
         assert.ok(PSL.ATTACH_REASONS[reason], reason);
     }
+    assert.equal(PSL.ATTACH_REASONS.signed_after_revocation, undefined);
     assert.equal(PSL.attachmentText({...base, reason: "key_not_published", level: 1, integrity: "ok"}, true).title, null);
+});
+
+test("a revoked key reads as a verdict, not as a check that failed", () => {
+    assert.deepEqual(PSL.attachmentText(
+        {integrity: "ok", level: 1, domain: "acme.example", key: "revoked", reason: "key_revoked"}, true),
+    {text: "This card was signed with a key that is now revoked.", title: "key_revoked"});
+});
+
+test("a partial lookup reads as could not check", () => {
+    const result = PSL.attachmentText(
+        {integrity: "ok", level: 1, domain: "acme.example", key: "unknown", reason: "binding_partial"}, true);
+    assert.deepEqual(result, {
+        text: "Could not check: one of the two places that publish the key under acme.example did not answer.",
+        title: "binding_partial"
+    });
+    assert.ok(!result.text.includes("Attached"));
+});
+
+test("the revoke confirmation says every card reads revoked", () => {
+    const said = PSL.revokeText("2026-10-01", false, "acme.example");
+    assert.ok(said.includes("whatever its date"), said);
+    assert.ok(said.includes("may have been exposed since 2026-10-01"), said);
+    assert.ok(!said.includes("signed from"), said);
+    assert.ok(said.includes("Republish this key's DNS line under acme.example"), said);
+    assert.ok(said.includes("reads the DNS line only"), said);
+    assert.ok(PSL.revokeText("2026-10-01", false, null).includes("Republish this key's DNS line:"));
+    assert.ok(PSL.revokeText("2026-10-01", true, "acme.example").endsWith("publish its line too, under acme.example."));
+    assert.ok(PSL.revokeText("2026-10-01", true, null).endsWith("makes a new key."));
 });
 
 test("the level line says what the check page shows", () => {

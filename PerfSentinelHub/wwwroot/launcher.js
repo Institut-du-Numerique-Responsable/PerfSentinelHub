@@ -2767,13 +2767,18 @@
 
     /** One plain sentence per verify-card reason the engine answers at level 1. */
     const ATTACH_REASONS = {
-        binding_check_failed: 'no DNS service answered',
+        binding_check_failed: 'the places that publish the key under {domain} did not answer',
+        binding_partial: 'one of the two places that publish the key under {domain} did not answer',
         key_not_published: 'the key is not published under {domain} yet',
         public_key_mismatch: 'the key published under {domain} is not the one that signed this card',
-        signed_after_revocation: 'its key was revoked before it signed this card',
         signed_outside_validity: 'its key was not valid on the day it signed this card',
         no_domain: 'the card names no domain',
         no_http_client: 'this Hub\'s engine cannot reach the network'
+    };
+
+    /** Level 1 answers where the check succeeded: they state the verdict, never "Could not check". */
+    const ATTACH_VERDICTS = {
+        key_revoked: 'This card was signed with a key that is now revoked.'
     };
 
     /** @param {string} day yyyy-MM-dd @returns {Date} midnight UTC */
@@ -2938,6 +2943,7 @@
             return {text: 'This card does not verify: its figures changed after signing.', title: null};
         }
         if (result.level === 2) return {text: 'Attached: cards read "Signed by ' + result.domain + '".', title: null};
+        if (ATTACH_VERDICTS[result.reason]) return {text: ATTACH_VERDICTS[result.reason], title: result.reason};
         if (result.reason && result.reason !== 'key_not_published') {
             const reason = ATTACH_REASONS[result.reason];
             return {
@@ -2953,6 +2959,20 @@
                 + ', then you can check again.',
             title: null
         };
+    }
+
+    /**
+     * The revoke confirmation. The date bounds nothing: the check page reads every card of a revoked
+     * key as revoked, and names the date as the day since when the key may have been exposed.
+     * @param {string} date yyyy-MM-dd @param {boolean} isCurrent @param {string|null} domain @returns {string}
+     */
+    function revokeText(date, isCurrent, domain) {
+        const said = 'Every card this key signed will read as revoked on the check page, whatever its date. The '
+            + 'check page will say the key may have been exposed since ' + date + '. This cannot be undone.'
+            + ' Republish this key\'s DNS line' + (domain ? ' under ' + domain : '') + ': the check page reads the '
+            + 'DNS line only, and keeps showing these cards as signed until the line says revoked.';
+        if (!isCurrent) return said;
+        return said + ' The next card makes a new key' + (domain ? ': publish its line too, under ' + domain + '.' : '.');
     }
 
     /** What the check page prints for the card: the signer only once a check found the key. */
@@ -3166,6 +3186,7 @@
         previewFormat,
         CARD_COPY,
         ATTACH_REASONS,
+        ATTACH_VERDICTS,
         cardPeriodStart,
         stepPeriod,
         lastClosedPeriod,
@@ -3181,6 +3202,7 @@
         isPreviousRefusal,
         cardContactText,
         attachmentText,
+        revokeText,
         levelLine,
         cardEnvironmentLine,
         cardFixLine

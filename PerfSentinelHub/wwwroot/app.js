@@ -7868,7 +7868,7 @@
                 el('span', {
                     class: 'key-dates',
                     text: 'from ' + key.from + (key.to ? ' to ' + key.to : '')
-                        + (key.revoked ? ', leaked on ' + key.revoked : '')
+                        + (key.revoked ? ', possibly exposed since ' + key.revoked : '')
                 })
             ]),
             domain ? cardCopyLine(key.dns, key.dns, 'Copy the DNS line of ' + key.fingerprint) : null
@@ -7890,7 +7890,7 @@
         return el('div', {class: 'key-revoke'}, [el('span', {text: 'Leaked?'}), open]);
     }
 
-    /** No default date: one later than the leak would keep forged cards valid. */
+    /** No default date: it is published as the first day the key may have leaked. */
     function cardRevokeConfirm(card, key, domain) {
         const date = el('input', {
             class: 'recap-input', id: 'card-leak-date', type: 'date', required: '', min: key.from, max: cardToday()
@@ -7912,11 +7912,7 @@
             card.revoking = null;
             renderFocus('#card-revoke-' + key.fingerprint);
         });
-        const said = card.revokeDate
-            ? 'Cards this key signed from ' + card.revokeDate + ' on will read as revoked on the check page. '
-            + 'This cannot be undone.'
-            + (key.current ? ' The next card makes a new key' + (domain ? ': publish its line too, under ' + domain + '.' : '.') : '')
-            : null;
+        const said = card.revokeDate ? PSL.revokeText(card.revokeDate, key.current, domain) : null;
         return el('div', {class: 'key-confirm'}, [
             el('div', {}, [el('label', {for: 'card-leak-date', text: PSL.CARD_COPY.leaked}), date]),
             said ? el('p', {role: 'alert', style: 'margin:0', text: said}) : null,

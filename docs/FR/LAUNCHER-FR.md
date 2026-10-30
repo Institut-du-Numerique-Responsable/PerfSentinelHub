@@ -394,7 +394,9 @@ grise et le dit, sauf un passage entre PNG et JPEG XL, qui montre la même image
 toujours la carte à partir du formulaire tel qu'il est. Sous l'aperçu, la ligne que la page de
 vérification imprimera, et Verify attachment, qui rend la carte une fois de plus et fait vérifier par
 le moteur sa clé sous le domaine de l'organisation, par `cloudflare-dns.com` et le domaine lui-même,
-le seul appel de la section qui sort du Hub. Sans `Hub:Cards:Domain`, une phrase dit que la page de
+le seul appel de la section qui sort du Hub. Quand l'un des deux endroits qui publient la clé, la
+ligne DNS et le fichier `.well-known`, ne répond pas, la vérification dit « Could not check »,
+jamais rattachée. Sans `Hub:Cards:Domain`, une phrase dit que la page de
 vérification montre les cartes du Hub comme « Signer not verified ». La langue de la carte, anglais ou
 français, est retenue dans ce navigateur.
 

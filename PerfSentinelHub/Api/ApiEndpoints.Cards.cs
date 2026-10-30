@@ -299,8 +299,9 @@ public static partial class ApiEndpoints
     }
 
     /// <summary>
-    ///     Revokes a key from the first day it may have leaked. The date has no default: one too late
-    ///     would leave cards forged before it valid.
+    ///     Revokes a key: every card it signed reads as revoked, whatever the day. The date has no
+    ///     default, since only the administrator knows the first day the key may have leaked, and it
+    ///     is published with the key.
     /// </summary>
     private static async Task<IResult> RevokeCardKeyAsync(
         HttpRequest request,
