@@ -10,6 +10,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(StatusResponse))]
 [JsonSerializable(typeof(DetectionKnob))]
 [JsonSerializable(typeof(ImportResponse))]
+[JsonSerializable(typeof(DetectionImportResponse))]
 [JsonSerializable(typeof(IReadOnlyList<SourceResponse>))]
 [JsonSerializable(typeof(IReadOnlyList<StoredEpisode>))]
 [JsonSerializable(typeof(SubmittedAnalysis))]

@@ -26,6 +26,9 @@ public static partial class ApiEndpoints
     // Twice the daemon's own 4 MiB bound on a ledger page.
     private const int DetectionImportMaxBytes = 8 * 1024 * 1024;
 
+    // The engine's default max_signatures_per_day; the daemon caps again at its own value.
+    private const int MaxWatchSignatures = 10_000;
+
     public static void MapHubApi(this WebApplication app)
     {
         var version = HubVersion.Current;
@@ -415,9 +418,14 @@ public static partial class ApiEndpoints
         // No refusal for an empty page: the midnight seal often arrives as a day with no rows.
         return PushImportAsync(request, options, admission, DetectionImportMaxBytes,
             payload => DetectionLedgerParser.ParsePage(payload, nowMs),
-            async (source, page) => await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken)
-                ? TypedResults.Ok(new ImportResponse(page.Counts.Count, 0))
-                : null,
+            async (source, page) =>
+            {
+                if (!await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken))
+                    return null;
+                // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
+                var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
+                return TypedResults.Ok(new DetectionImportResponse(page.Counts.Count, 0, watch));
+            },
             cancellationToken);
     }
 

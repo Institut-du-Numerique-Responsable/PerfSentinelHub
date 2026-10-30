@@ -47,7 +47,10 @@ Detection ledgers take both paths from perf-sentinel 0.37.0: the daemon pushes t
 changed since its last accepted push, and the poll reads the ledger the daemon's status
 names. Both write absolute values per UTC day, merged by their maximum, so the two paths, a replay
 and an overlap all land on the same rows. Each daemon start opens a new ledger, and the Hub adds a
-source's ledgers up rather than letting the next one replace the last.
+source's ledgers up rather than letting the next one replace the last. The answer to a ledger push
+is the one answer that carries data back to a daemon: `watch`, the fixed findings of a threshold
+type this source has not yet confirmed fixed, whose passes below the threshold the daemon then
+counts. A polled daemon never gets it.
 
 A daemon pushing successfully proves that the daemon can reach the Hub. It proves
 nothing about whether the Hub can reach the daemon, which is a different route through

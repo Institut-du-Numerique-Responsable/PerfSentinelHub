@@ -67,6 +67,18 @@ connaît pas est ignorée. Les deux sont facultatifs et fusionnent par maximum, 
 n'abaissant jamais une valeur stockée. Les refus se comptent sur
 `perf_sentinel_hub_detection_import_rejected_total`.
 
+Une page enregistrée répond `{"accepted":…,"rejected":0,"watch":[…]}`, `accepted` étant le nombre
+de lignes de comptes. `watch` liste les signatures dont le Hub demande à ce daemon de compter les
+passages sous le seuil : celles dont l'action est `done`, dont le type (le préfixe de la signature
+avant le premier `:`) est `slow_sql`, `slow_http`, `slow_messaging`, `excessive_fanout`,
+`chatty_service`, `pool_saturation` ou `serialized_calls`, que cette source a détectées au moins
+une fois, et que cette source n'a pas encore confirmées corrigées. Un jour confirme une fois scellé
+après le jour où l'action est passée à done, avec des passages sous le seuil et aucune détection de
+la signature à cette source, quel que soit son registre. Les plus récemment passées à done viennent
+en premier, 10 000 au plus. La liste est toujours envoyée, `[]` quand elle est vide, donc le daemon
+remplace la sienne à chaque réponse. Seul un push la reçoit : un daemon interrogé par le poll ne la
+reçoit jamais.
+
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit

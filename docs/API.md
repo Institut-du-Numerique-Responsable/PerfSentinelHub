@@ -61,6 +61,16 @@ day; a key the Hub does not know is ignored. Both are optional and merge by maxi
 value never lowering a stored one. Refusals count on
 `perf_sentinel_hub_detection_import_rejected_total`.
 
+A stored page answers `{"accepted":…,"rejected":0,"watch":[…]}`, `accepted` the number of count
+rows. `watch` lists the signatures the Hub asks that daemon to count passes below the threshold
+for: those whose action is `done`, whose type (the signature's prefix before the first `:`) is
+`slow_sql`, `slow_http`, `slow_messaging`, `excessive_fanout`, `chatty_service`, `pool_saturation`
+or `serialized_calls`, that this source detected at least once, and that this source has not yet
+confirmed fixed. A day confirms once it is sealed after the day the action was done, with passes
+below the threshold and no detection of the signature at this source, whatever its ledger. The
+newest done come first, at most 10,000. The list is always sent, `[]` when empty, so the daemon
+replaces its own on every answer. Only a push gets it: a polled daemon never does.
+
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that
 cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon

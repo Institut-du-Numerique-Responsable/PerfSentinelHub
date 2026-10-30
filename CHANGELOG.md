@@ -10,6 +10,10 @@ All notable changes to PerfSentinelHub are recorded here.
   `below_threshold_passes` on a count row, the passes below the threshold of a watched
   signature, and `thresholds` on a day, the six detection thresholds the daemon applied. Both
   merge by maximum. A count row with zero detections is accepted and no read counts it.
+- The answer to a detection push carries `watch`, the fixed findings of a threshold type
+  (`slow_*`, `excessive_fanout`, `chatty_service`, `pool_saturation`, `serialized_calls`) that
+  source detected and has not yet confirmed fixed, newest first, at most 10,000, `[]` when none.
+  The daemon counts their passes below the threshold, the signal a share card stands on.
 
 ### Changed
 

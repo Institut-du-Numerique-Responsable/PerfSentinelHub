@@ -50,7 +50,10 @@ pousse les lignes qui ont changé depuis son dernier push accepté, et le poll l
 nomme le statut du daemon. Les deux écrivent des valeurs absolues par jour UTC, fusionnées par leur
 maximum, donc les deux chemins, un renvoi et un chevauchement aboutissent aux mêmes lignes. Chaque
 démarrage du daemon ouvre un nouveau registre, et le Hub additionne les registres d'une source au
-lieu de laisser le suivant remplacer le précédent.
+lieu de laisser le suivant remplacer le précédent. La réponse à un push de registre est la seule
+réponse qui renvoie des données à un daemon : `watch`, les findings corrigés d'un type à seuil que
+cette source n'a pas encore confirmés corrigés, dont le daemon compte ensuite les passages sous le
+seuil. Un daemon interrogé par le poll ne la reçoit jamais.
 
 Un daemon qui pousse avec succès prouve qu'il peut joindre le Hub. Il ne prouve rien
 sur la capacité du Hub à le joindre, qui est une autre route à travers un autre jeu de

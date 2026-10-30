@@ -111,6 +111,10 @@ public sealed record SourceResponse(
 
 public sealed record ImportResponse(int Accepted, int Rejected);
 
+// Watch is the C1 list: the signatures the Hub asks the pushing daemon to count passes
+// below the threshold for, empty when none.
+public sealed record DetectionImportResponse(int Accepted, int Rejected, IReadOnlyList<string> Watch);
+
 // SourceIds is the resolved scope, as on IncidentQuery below. FromMs and ToMs
 // bound the observation window in epoch milliseconds, each side open when null.
 // Signature is an exact match. Access null reads every copy, as with access off;
