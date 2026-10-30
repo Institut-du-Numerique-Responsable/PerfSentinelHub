@@ -56,7 +56,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             movements,
             RecapMoves.NothingMoved(movements, priorities),
             SourcesWithoutVolume(request, reads, coverage.Covered),
-            reads.Truncated);
+            reads.Truncated,
+            NamesOf(request, coverage.Late));
     }
 
     // ------------------------------------------------------------ reads
@@ -110,14 +111,25 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         IReadOnlyList<string> scope,
         CancellationToken cancellationToken)
     {
-        var now = await database.ReadRecapCoverageAsync(scope, span.Period.FromDay, span.Period.ToDay,
-            cancellationToken);
-        var before = await database.ReadRecapCoverageAsync(scope, span.PreviousFull.FromDay, span.PreviousFull.ToDay,
-            cancellationToken);
+        var (now, late) = RecapCoverage.SplitLate(
+            await database.ReadRecapCoverageAsync(scope, span.Period.FromDay, span.Period.ToDay, cancellationToken),
+            span.Period);
+        // A source late for the period is out of both sides; one that started during it leaves the
+        // period before uncovered, since the comparison would set it against nothing.
+        var before = (await database.ReadRecapCoverageAsync(scope, span.PreviousFull.FromDay,
+                span.PreviousFull.ToDay, cancellationToken))
+            .Where(source => !late.Contains(source.SourceId, StringComparer.Ordinal)).ToList();
         return new Coverage(
             RecapCoverage.Judge(span.Period, span.Today, now, null),
             RecapCoverage.Judge(span.PreviousFull, span.Today, before, span.TruncatedToDays),
-            [.. now.Concat(before).Select(source => source.SourceId)]);
+            [.. now.Concat(before).Select(source => source.SourceId)],
+            late);
+    }
+
+    private static List<string> NamesOf(RecapRequest request, IEnumerable<string> ids)
+    {
+        var names = request.Sources.ToDictionary(source => source.Id, source => source.Name, StringComparer.Ordinal);
+        return [.. ids.Select(id => names.GetValueOrDefault(id) ?? id).Order(StringComparer.Ordinal)];
     }
 
     // A source that holds findings in the recap and no ledger: its volume is unknown, not zero.
@@ -445,7 +457,11 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             (Previous ?? []).ToDictionary(finding => finding.Signature, StringComparer.Ordinal);
     }
 
-    private sealed record Coverage(RecapPeriodInfo Current, RecapPeriodInfo Previous, HashSet<string> Covered);
+    private sealed record Coverage(
+        RecapPeriodInfo Current,
+        RecapPeriodInfo Previous,
+        HashSet<string> Covered,
+        IReadOnlyList<string> Late);
 
     // The business names of the endpoints and of the services the snapshot names.
     private sealed record Labels(

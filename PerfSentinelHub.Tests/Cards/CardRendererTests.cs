@@ -413,7 +413,6 @@ public sealed partial class CardRendererTests : IDisposable
         var database = new HubDatabase(options, clock);
         await database.InitializeAsync(Token);
         var seed = new CardSeed(database);
-        await seed.SchemaAppliedAsync(20, new DateOnly(2026, 8, 1));
         await seed.LedgerAsync("a",
             [
                 .. Sealed(September,

@@ -643,7 +643,7 @@ La réponse est un instantané, `schema_version` `1`, avec `view`, `generated_at
 et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
 `sampling_rate`, `truncated_to_days`), `filters` (tels que demandés), `comparison_exact`,
 `tiles`, `priorities[]`, `more_priorities`, `movements`, `nothing_moved`,
-`sources_without_volume[]` et `truncated`.
+`sources_without_volume[]`, `truncated` et `late_sources[]`.
 
 - **Comparer.** Une période en cours se compare sur ses jours clos : du premier jour à hier
   contre le même nombre de premiers jours de la période précédente, indiqué dans
@@ -681,6 +681,10 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   l'une des périodes et n'ont aucun registre de détections (un daemon d'avant le registre,
   ou un daemon qui n'envoie aucun jour). Leurs findings sont classés par sévérité et portent
   `volume_known: false`.
+- **Sources arrivées après.** `late_sources` nomme les sources dont le daemon n'a rien enregistré
+  avant la fin de la période : un daemon ajouté plus tard, ou arrêté toute la période. Elles sont
+  écartées des deux périodes plutôt que lues comme non couvertes. Une source arrivée pendant la
+  période reste, et laisse la période d'avant non couverte. Absent d'un rapport figé avant ce champ.
 - **Tuiles.** `avoidable_io_ops` est la somme des findings classés, `null` quand aucun n'a de
   volume connu, à côté de `previous_avoidable_io_ops`, `null` quand la période précédente n'a
   pas été lue. `active_findings` compte les findings classés, `acked_findings` les acquittés de
@@ -880,6 +884,7 @@ donne `400`. La réponse :
 {"period": {"kind": "month", "from": "2026-10-01", "to": "2026-10-31"}, "period_name": "October 2026",
  "refusal": null, "refusal_text": null, "restart_days": 0, "sampled_permille": 1000,
  "environment": "prod", "sources": ["prod-eu"], "previous_complete": true,
+ "previous_whole": true, "confirmed_fixes_count": 1,
  "fixes": [{"signature": "…", "finding_type": "n_plus_one_sql", "service": "order-svc",
             "endpoint": "GET /orders", "plain": "…", "done_at_ms": 1792058400000,
             "before_fix_ops": 1900, "before_period_name": "September 2026", "label": "Order list"}],
@@ -889,8 +894,11 @@ donne `400`. La réponse :
 `refusal` est la raison propre à la période (ci-dessous) et `refusal_text` sa phrase, celle que
 répondrait un rendu. `sources` est le périmètre signé : les sources demandées qui ont enregistré
 quelque chose sur la période. `previous_complete` vaut `false` quand une carte collective laisse
-de côté sa comparaison avec la période d'avant. `fixes` sont les corrections confirmées qu'une
-histoire peut raconter, avec le libellé de l'endpoint quand il en a un.
+de côté sa comparaison avec la période d'avant, et `previous_whole` dit pourquoi : `false` quand
+cette période n'est pas entière, `true` quand l'une de ses corrections est passée à done avant que
+le Hub garde le détail des corrections. `confirmed_fixes_count` est le nombre que compte une carte
+collective. `fixes` sont les corrections confirmées qu'une histoire peut raconter, celles dont la
+carte peut imprimer les noms, avec le libellé de l'endpoint quand il en a un.
 
 **Rendu et rattachement.** Le corps est un objet JSON, 4 Kio au plus, avec la règle de même
 origine et le type de contenu JSON des autres écritures :
@@ -927,9 +935,11 @@ même que les options portent en `refusal_text`. Les raisons : `open_period`, `u
 `no_confirmed_fix`, `unknown_fix`, `unprintable_fix` (une histoire dont le nom de service ou
 d'endpoint ne peut pas s'imprimer sur la carte), `no_total_io` (pas d'activité totale pour tracer
 la courbe), `curve_needs_whole_sources` (l'appelant ne lit qu'une partie d'une source),
-`unprintable_scope` (un nom de source ou d'environnement que la carte ne peut pas imprimer) et
+`unprintable_scope` (un nom de source ou d'environnement que la carte ne peut pas imprimer),
 `scope_too_long` (les noms d'environnement et de sources, joints par `", "`, dépassent 120
-caractères, la borne du moteur sur la ligne de périmètre). Le moteur peut encore refuser ce que le
+caractères, la borne du moteur sur la ligne de périmètre) et `unkept_fixes` (une collective dont
+la période compte une correction passée à done avant que le Hub garde le détail des corrections,
+que son total laisserait de côté). Le moteur peut encore refuser ce que le
 Hub a envoyé :
 
 | Raison du moteur                              | Réponse                                                                                                                       |

@@ -491,18 +491,16 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
-    public void A_detection_retention_below_the_finding_retention_is_refused()
+    public void A_detection_retention_below_the_finding_retention_is_accepted()
     {
+        // A Hub keeping findings past 1,100 days must still start: the purge reads the longer of the two.
         var options = ValidOptions() with
         {
-            Retention = TimeSpan.FromDays(180),
-            DetectionRetention = TimeSpan.FromDays(90)
+            Retention = TimeSpan.FromDays(1200),
+            ResolutionGrace = TimeSpan.FromDays(7)
         };
 
-        Assert.Equal(
-            "Hub:DetectionRetention must be at least Hub:Retention: the recap reads the detection days of every "
-            + "finding it holds.",
-            Assert.Single(AccessFailures(options)));
+        Assert.Empty(AccessFailures(options));
     }
 
     [Fact]

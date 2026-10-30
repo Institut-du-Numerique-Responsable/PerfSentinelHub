@@ -109,18 +109,6 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
     }
 
     [Fact]
-    public async Task The_schema_applied_date_is_read()
-    {
-        await using var connection = await Database.OpenConnectionAsync(Token);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT applied_at_ms FROM schema_migrations WHERE version = 20;";
-        var applied = (long)(await command.ExecuteScalarAsync(Token))!;
-
-        Assert.Equal(applied, await Database.ReadSchemaAppliedAtAsync(20, Token));
-        Assert.Null(await Database.ReadSchemaAppliedAtAsync(9_999, Token));
-    }
-
-    [Fact]
     public async Task Carbon_days_read_the_low_coefficient()
     {
         const string signature = "n_plus_one_sql:carbon-low:a";

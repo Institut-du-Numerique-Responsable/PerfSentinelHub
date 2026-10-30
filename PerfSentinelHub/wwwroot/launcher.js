@@ -2453,6 +2453,15 @@
     }
 
     /**
+     * The sources left out of the period, as RecapText.LateSources: the same words in both views.
+     * @param {string[]} sources
+     * @returns {string}
+     */
+    function recapLateNote(sources) {
+        return 'Left out, as they recorded nothing until after this period: ' + sources.join(', ') + '.';
+    }
+
+    /**
      * Why a report went nowhere, or an empty string when it went somewhere.
      * @param {{subscription: string | null, nothing_moved: boolean, deliveries: unknown[]}} report
      * @returns {string}
@@ -3224,6 +3233,7 @@
         recapErrorText,
         recapTruncatedText,
         recapSourcesNote,
+        recapLateNote,
         recapReportStatus,
         recapDeliveryText,
         recapOnDemandBody,

@@ -6886,6 +6886,9 @@
                 class: 'sources-note', text: PSL.recapSourcesNote(snapshot.sources_without_volume, snapshot.view)
             }));
         }
+        if (snapshot.late_sources && snapshot.late_sources.length) {
+            section.appendChild(el('p', {class: 'sources-note', text: PSL.recapLateNote(snapshot.late_sources)}));
+        }
         return section;
     }
 
@@ -7084,8 +7087,9 @@
         const options = cardOptionsReady(card);
         if (!options) return 'options';
         if (options.refusal) return 'refused';
-        // A story tells one confirmed fix, a collective counts them: both need one.
-        if (card.angle !== 'curve' && options.fixes.length === 0) return 'no_fix';
+        // A story tells one printable fix, a collective counts every confirmed one: both need one.
+        if (card.angle === 'story' && options.fixes.length === 0) return 'no_fix';
+        if (card.angle === 'collective' && !options.confirmed_fixes_count) return 'no_fix';
         return cardCurveRefusal(card) ? 'previous' : null;
     }
 
@@ -7339,7 +7343,7 @@
             return group;
         }
         group.appendChild(cardPeriodFacts(card, options, previous));
-        if (card.angle === 'collective' && options.fixes.length === 0) group.appendChild(cardNoFix());
+        if (card.angle === 'collective' && !options.confirmed_fixes_count) group.appendChild(cardNoFix());
         return group;
     }
 
@@ -7363,9 +7367,12 @@
             : options.sources[0];
         const facts = [['ok', 'All ' + days + ' days recorded' + (where ? ', at ' + where : '') + '.']];
         const before = previous.charAt(0).toUpperCase() + previous.slice(1) + ', the period before, ';
-        if (card.angle === 'collective' && !options.previous_complete) {
+        if (card.angle === 'collective' && !options.previous_whole) {
             facts.push(['info', before + 'is not whole, so the card leaves out the comparison and the operations '
                 + 'before the fixes.']);
+        } else if (card.angle === 'collective' && !options.previous_complete) {
+            facts.push(['info', before + 'is whole, but some of its fixes were marked done before this Hub kept '
+                + 'their details, so the card leaves out the comparison.']);
         } else if (card.angle !== 'story' && options.previous_complete) {
             facts.push(['ok', before + 'is whole too.']);
         }

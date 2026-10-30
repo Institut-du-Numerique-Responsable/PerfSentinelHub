@@ -85,15 +85,19 @@ internal sealed class CardSeed(HubDatabase database)
             doneDay * DayMs + 36_000_000, null, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>Moves the day the Hub applied a schema version, as an upgrade on that day would have.</summary>
-    public async Task SchemaAppliedAsync(int version, DateOnly day)
+    /// <summary>
+    ///     A fix done before the Hub froze findings: counted at the source and done, but with no
+    ///     envelope kept, as an action done before schema V20 reads.
+    /// </summary>
+    public async Task UnkeptAsync(string source, string signature, int doneDay)
     {
         var token = TestContext.Current.CancellationToken;
+        await LedgerAsync(source, [], new DetectionCountRow(doneDay, signature, 3, null));
+        await DoneAsync(signature, doneDay);
         await using var connection = await database.OpenConnectionAsync(token);
         await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE schema_migrations SET applied_at_ms = $at_ms WHERE version = $version;";
-        command.Parameters.AddWithValue("$at_ms", (day.DayNumber - new DateOnly(1970, 1, 1).DayNumber) * DayMs);
-        command.Parameters.AddWithValue("$version", version);
+        command.CommandText = "UPDATE finding_actions SET frozen_finding_json = NULL WHERE signature = $signature;";
+        command.Parameters.AddWithValue("$signature", signature);
         await command.ExecuteNonQueryAsync(token);
     }
 }

@@ -178,14 +178,31 @@ public sealed partial class HubDatabase
         return days;
     }
 
-    /// <summary>When the Hub applied a schema version, null when it never did.</summary>
-    public async Task<long?> ReadSchemaAppliedAtAsync(int version, CancellationToken cancellationToken)
+    /// <summary>
+    ///     Whether an action done within the days kept no finding, done before the Hub froze them, for a
+    ///     signature a scope source detected: a count of that period's fixes would read short.
+    /// </summary>
+    public async Task<bool> HasUnkeptDoneActionAsync(
+        IReadOnlyList<string> sourceIds,
+        int fromDay,
+        int toDay,
+        CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT applied_at_ms FROM schema_migrations WHERE version = $version;";
-        command.Parameters.AddWithValue("$version", version);
-        return await command.ExecuteScalarAsync(cancellationToken) is long appliedAtMs ? appliedAtMs : null;
+        command.CommandText = """
+                              SELECT EXISTS (
+                                SELECT 1 FROM finding_actions AS fa
+                                WHERE fa.status = 'done' AND fa.frozen_finding_json IS NULL
+                                  AND fa.done_at_ms BETWEEN $from_ms AND $to_ms
+                                  AND EXISTS (SELECT 1 FROM detection_counts AS dc
+                                              WHERE dc.signature = fa.signature AND dc.detections > 0
+                                                AND dc.source_id IN (SELECT value FROM json_each($source_ids))));
+                              """;
+        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue("$from_ms", fromDay * DayMs);
+        command.Parameters.AddWithValue("$to_ms", (toDay + 1L) * DayMs - 1);
+        return await command.ExecuteScalarAsync(cancellationToken) is 1L;
     }
 
     /// <summary>Every card signing key, oldest first, retired and revoked ones included.</summary>

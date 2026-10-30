@@ -60,9 +60,9 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
     {
         if (options.Retention <= TimeSpan.Zero)
             errors.Add("Hub:Retention must be positive.");
-        if (options.DetectionRetention < options.Retention)
-            errors.Add("Hub:DetectionRetention must be at least Hub:Retention: the recap reads the detection days of "
-                       + "every finding it holds.");
+        // Below Retention it reads as Retention (RetentionWorker), so an older Hub keeping findings longer still starts.
+        if (options.DetectionRetention <= TimeSpan.Zero)
+            errors.Add("Hub:DetectionRetention must be positive.");
         if (options.ResolutionGrace <= TimeSpan.Zero || options.ResolutionGrace >= options.Retention)
             errors.Add("Hub:ResolutionGrace must be positive and below Hub:Retention.");
     }

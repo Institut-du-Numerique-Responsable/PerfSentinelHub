@@ -154,7 +154,7 @@ Les comptes et les jours de détections suivent le worker quotidien sur une horl
 `Hub:DetectionRetention`, 1 100 jours par défaut, par jour UTC entier comme les jours
 d'observation, et la ligne d'un registre part avec eux, sur la dernière fois que le Hub l'a lu.
 Une carte annuelle compare une année avec toute l'année d'avant, ce que les 180 jours d'un
-finding ne peuvent pas tenir, et le validateur garde cette horloge au moins égale à
+finding ne peuvent pas tenir, et la purge ne fait jamais tourner cette horloge plus court que
 `Hub:Retention`, puisque le récap lit les jours de détections de chaque finding qu'il tient. Le
 renvoi d'un jour purgé est sans effet néfaste, puisque chaque valeur est absolue, et un daemon
 ne garde de toute façon que 31 jours au plus.

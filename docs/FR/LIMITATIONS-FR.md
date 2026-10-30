@@ -244,17 +244,20 @@ cette liste à un redémarrage jusqu'à sa poussée suivante, un daemon seulemen
 reçoit jamais, et une signature de fanout ne correspond qu'à une partie de ses parents. Une
 correction est confirmée à la date de génération de la carte, et une détection ultérieure ne
 change pas une carte déjà faite. Les actions marquées terminées avant cette version n'ont pas de
-finding figé : aucune carte ne les raconte.
+finding figé : aucune carte ne les raconte, et une carte collective d'une période qui en compte une
+est refusée (`unkept_fixes`) plutôt que de signer un total trop court.
 
 La courbe vaut pour tout le daemon : seuls l'environnement et la source la restreignent, et les
 findings acquittés y comptent. Un redémarrage du daemon dans la période est toléré et imprimé sur
 la carte. Le périmètre signé ne liste que les sources qui ont tenu un registre dans la période : un
 daemon ajouté après elle en est exclu. Une carte collective n'imprime aucune comparaison avec une
-période commencée avant cette version, puisque ses corrections ne pouvaient pas être comptées, ni
+période qui compte une correction marquée terminée avant cette version, puisque ses corrections ne
+pouvaient pas toutes être comptées, ni
 avec une période incomplète, ce qui retire aussi son volume d'avant les corrections. Les jours de
 détection sont gardés 1 100 jours par défaut (`Hub:DetectionRetention`), si bien qu'une carte
 annuelle peut se comparer à toute l'année précédente. Un réglage plus bas refuse les cartes
-annuelles avec `previous_uncovered_days` la plus grande partie de l'année.
+annuelles avec `previous_uncovered_days` la plus grande partie de l'année, et un réglage plus court
+que `Hub:Retention` vaut `Hub:Retention`.
 
 ## À quoi un finding est attribué
 

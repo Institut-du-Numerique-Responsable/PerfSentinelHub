@@ -18,6 +18,7 @@ public sealed class CardServiceTests : IAsyncLifetime
 {
     private const string N1 = "n_plus_one_sql:order-svc:0000000000000000000000000000000000000001";
     private const string N2 = "n_plus_one_sql:order-svc:0000000000000000000000000000000000000002";
+    private const string N3 = "n_plus_one_sql:order-svc:0000000000000000000000000000000000000006";
     private const string R1 = "redundant_sql:order-svc:0000000000000000000000000000000000000003";
     private const string S1 = "slow_sql:pay-svc:0000000000000000000000000000000000000004";
     private const string S2 = "slow_sql:pay-svc:0000000000000000000000000000000000000005";
@@ -205,7 +206,8 @@ public sealed class CardServiceTests : IAsyncLifetime
         await _seed.DoneAsync(N1, Done);
 
         Assert.Empty((await _service.OptionsAsync(Scope(), Token)).Fixes);
-        Assert.Equal("no_confirmed_fix", await RefusedAsync(Ask("collective")));
+        // Counting the others would sign a total short of this one.
+        Assert.Equal("unkept_fixes", await RefusedAsync(Ask("collective")));
     }
 
     [Fact]
@@ -288,7 +290,11 @@ public sealed class CardServiceTests : IAsyncLifetime
         await _seed.LedgerAsync("a", Sealed(October));
         await _seed.FixAsync("a", N1, Done, service: new string('s', 201));
 
-        Assert.Empty((await _service.OptionsAsync(Scope(), Token)).Fixes);
+        var options = await _service.OptionsAsync(Scope(), Token);
+        Assert.Empty(options.Fixes);
+        // The collective counts it all the same, so the screen must not block one.
+        Assert.Equal(1, options.ConfirmedFixesCount);
+        Assert.Equal(1, (await ReadyAsync(Ask("collective"))).Figures.ConfirmedFixesCount);
         Assert.Equal("unprintable_fix", await RefusedAsync(Ask("story")));
         Assert.Equal("unprintable_fix", await RefusedAsync(Ask("story", signature: N1)));
         Assert.Equal("no_confirmed_fix", await RefusedAsync(Ask("story", signature: N2)));
@@ -433,7 +439,7 @@ public sealed class CardServiceTests : IAsyncLifetime
     [Fact]
     public async Task The_collective_counts_fixes_services_and_families_with_the_previous_period()
     {
-        await CollectiveAsync(new DateOnly(2026, 8, 1));
+        await CollectiveAsync();
 
         var figures = (await ReadyAsync(Ask("collective"))).Figures;
 
@@ -441,22 +447,48 @@ public sealed class CardServiceTests : IAsyncLifetime
         Assert.Equal(1, figures.PreviousFixesCount);
         Assert.Equal(2, figures.ServicesCount);
         Assert.Equal(new CardFamilies(2, 1, 0), figures.FixesByFamilyCount);
-        Assert.True((await _service.OptionsAsync(Scope(), Token)).PreviousComplete);
+        var options = await _service.OptionsAsync(Scope(), Token);
+        Assert.True(options.PreviousComplete);
+        Assert.True(options.PreviousWhole);
+        Assert.Equal(3, options.ConfirmedFixesCount);
+    }
+
+    // A fix done before the Hub froze findings kept none: September's count would read short.
+    [Fact]
+    public async Task The_previous_fixes_are_left_out_when_one_was_not_kept()
+    {
+        await CollectiveAsync();
+        await _seed.UnkeptAsync("a", N3, 20715);
+
+        Assert.Null((await ReadyAsync(Ask("collective"))).Figures.PreviousFixesCount);
+        var options = await _service.OptionsAsync(Scope(), Token);
+        Assert.False(options.PreviousComplete);
+        Assert.True(options.PreviousWhole);
+    }
+
+    // The same in the card's own period would sign a count short of the truth.
+    [Fact]
+    public async Task A_collective_refuses_a_period_with_a_fix_not_kept()
+    {
+        await CollectiveAsync();
+        await _seed.UnkeptAsync("a", N3, Done + 3);
+
+        Assert.Equal("unkept_fixes", await RefusedAsync(Ask("collective")));
+        await ReadyAsync(Ask("story"));
     }
 
     [Fact]
-    public async Task The_previous_fixes_are_left_out_before_the_upgrade()
+    public async Task A_fix_not_kept_at_a_source_outside_the_scope_blocks_nothing()
     {
-        await CollectiveAsync(new DateOnly(2026, 10, 10));
+        await CollectiveAsync();
+        await _seed.UnkeptAsync("c", N3, Done + 3);
 
-        Assert.Null((await ReadyAsync(Ask("collective"))).Figures.PreviousFixesCount);
-        Assert.False((await _service.OptionsAsync(Scope(), Token)).PreviousComplete);
+        Assert.Equal(3, (await ReadyAsync(Ask("collective"))).Figures.ConfirmedFixesCount);
     }
 
     [Fact]
     public async Task A_collective_with_an_incomplete_previous_period_drops_its_comparison()
     {
-        await _seed.SchemaAppliedAsync(20, new DateOnly(2026, 8, 1));
         await _seed.LedgerAsync("a", Sealed(October), new DetectionCountRow(20700, N1, 2, 100));
         await _seed.FixAsync("a", N1, Done);
 
@@ -600,9 +632,8 @@ public sealed class CardServiceTests : IAsyncLifetime
     }
 
     // Three October fixes on two services (two of extra calls, one slow) and one September fix.
-    private async Task CollectiveAsync(DateOnly v20Applied)
+    private async Task CollectiveAsync()
     {
-        await _seed.SchemaAppliedAsync(20, v20Applied);
         await _seed.LedgerAsync("a", [.. Sealed(September), .. Sealed(October)]);
         await _seed.FixAsync("a", N1, Done);
         await _seed.FixAsync("a", R1, Done + 1, "redundant_sql");

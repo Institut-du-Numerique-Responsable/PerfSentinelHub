@@ -17,7 +17,7 @@ public static class CardRules
     [
         "open_period", "uncovered_days", "open_day", "overflow", "previous_uncovered_days", "previous_open_day",
         "previous_overflow", "no_confirmed_fix", "unknown_fix", "unprintable_fix", "no_total_io",
-        "curve_needs_whole_sources", "unprintable_scope", "scope_too_long"
+        "curve_needs_whole_sources", "unprintable_scope", "scope_too_long", "unkept_fixes"
     ];
 
     /// <summary>The first incomplete reason but restart, which only shows on the card as a day count.</summary>
@@ -92,6 +92,8 @@ public static class CardRules
                 "A source or environment name is too long or holds a hidden character, so it cannot be printed on a card. Ask an administrator to rename it.",
             "scope_too_long" =>
                 "The environment and source names of this card are too long together to print on it. Pick an environment or a source.",
+            "unkept_fixes" =>
+                "Some fixes of this period were marked done before this Hub kept their details, so it cannot count them all. A story or a curve card still works.",
             _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "Unknown card refusal.")
         };
     }

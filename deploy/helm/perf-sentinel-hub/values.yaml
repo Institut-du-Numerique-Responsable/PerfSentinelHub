@@ -8,7 +8,7 @@ hub:
   maxConcurrentPolls: 4
   retention: "180.00:00:00"
   # Daily detection counts, days and ledgers: a year card compares with the
-  # whole year before it. At least retention.
+  # whole year before it. Shorter than retention reads as retention.
   detectionRetention: "1100.00:00:00"
   resolutionGrace: "7.00:00:00"
   defaultReadLimit: 1000

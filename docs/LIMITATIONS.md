@@ -223,16 +223,18 @@ daemon learns which signatures to watch from the answer to its push: it loses th
 restart until its next push, a polled-only daemon never gets one, and a fanout signature matches
 only part of its parents. A fix is confirmed as of the card's generation, and a later detection
 does not change a card already made. Actions marked done before this release have no frozen
-finding, so no card tells them.
+finding, so no card tells them, and a collective card for a period holding one is refused
+(`unkept_fixes`) rather than signing a count short of it.
 
 The curve is daemon-wide: only the environment and the source narrow it, and acknowledged
 findings count in it. A daemon restart in the period is tolerated and printed on the card. The
 signed scope lists only the sources that recorded a ledger in the period, so a daemon added after
-it is left out. A collective card prints no comparison with a period that began before this
-release, since its fixes could not be counted, nor with an incomplete one, which also drops its
+it is left out. A collective card prints no comparison with a period holding a fix marked done
+before this release, since its fixes could not all be counted, nor with an incomplete one, which also drops its
 volume before the fixes. Detection days are kept 1,100 days by default (`Hub:DetectionRetention`),
 so a year card can compare with the whole year before. A lower setting refuses year cards with
-`previous_uncovered_days` for most of the year.
+`previous_uncovered_days` for most of the year, and one below `Hub:Retention` reads as
+`Hub:Retention`.
 
 ## What a finding is attributed to
 

@@ -77,7 +77,9 @@ public sealed class CardRulesTests
             ["unprintable_scope"] =
                 "A source or environment name is too long or holds a hidden character, so it cannot be printed on a card. Ask an administrator to rename it.",
             ["scope_too_long"] =
-                "The environment and source names of this card are too long together to print on it. Pick an environment or a source."
+                "The environment and source names of this card are too long together to print on it. Pick an environment or a source.",
+            ["unkept_fixes"] =
+                "Some fixes of this period were marked done before this Hub kept their details, so it cannot count them all. A story or a curve card still works."
         };
 
         Assert.Equal(expected.Keys, CardRules.Reasons);

@@ -119,7 +119,8 @@ public abstract record CardOutcome
 
 /// <summary>
 ///     What the screen shows before anyone signs: the period's own refusal and its sentence, the
-///     signed scope, whether a collective card keeps its comparison, and the fixes a story can tell.
+///     signed scope, whether a collective card keeps its comparison and whether the period before is
+///     whole, how many fixes a collective counts, and the fixes a story can tell (the printable ones).
 /// </summary>
 public sealed record CardOptions(
     CardPeriod Period,
@@ -131,6 +132,8 @@ public sealed record CardOptions(
     string? Environment,
     IReadOnlyList<string> Sources,
     bool PreviousComplete,
+    bool PreviousWhole,
+    int ConfirmedFixesCount,
     IReadOnlyList<CardFix> Fixes,
     string? DefaultSignature,
     CardOrg Org);

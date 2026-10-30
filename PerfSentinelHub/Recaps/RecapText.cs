@@ -145,6 +145,12 @@ public static class RecapText
                string.Join(", ", sources) + ".";
     }
 
+    // Plain in both views: it says what happened, not how the Hub reads it.
+    public static string LateSources(IReadOnlyList<string> sources)
+    {
+        return "Left out, as they recorded nothing until after this period: " + string.Join(", ", sources) + ".";
+    }
+
     public static string Period(RecapPeriodInfo period)
     {
         var days = period.Kind == "day" ? period.From : period.From + " to " + period.To;

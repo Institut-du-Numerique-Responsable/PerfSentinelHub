@@ -593,8 +593,8 @@ A repeated parameter, a value the list does not know or invalid UTF-8 is a `400`
 The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, `period` and
 `previous` (each `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
 `sampling_rate`, `truncated_to_days`), `filters` (as asked), `comparison_exact`, `tiles`,
-`priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`
-and `truncated`.
+`priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`,
+`truncated` and `late_sources[]`.
 
 - **Comparing.** A period in progress is compared on its closed days: `FromDay` to
   yesterday against the same number of first days of the previous period, reported in
@@ -630,6 +630,10 @@ and `truncated`.
 - **Sources without volume.** `sources_without_volume` names the sources holding a finding of
   either period and no detection ledger (a daemon that predates the ledger, or one that
   sends no day). Their findings are ranked by severity and carry `volume_known: false`.
+- **Late sources.** `late_sources` names the sources whose daemon recorded nothing until after
+  the period ended: a daemon added later, or one stopped for the whole period. They are left out
+  of both periods rather than read as uncovered. A source that started during the period stays,
+  and leaves the period before uncovered. Absent from a report frozen before the field existed.
 - **Tiles.** `avoidable_io_ops` is the sum over the ranked findings, `null` when none has a
   known volume, next to `previous_avoidable_io_ops`, `null` when the previous period was
   not read. `active_findings` counts the ranked findings, `acked_findings` the
@@ -818,6 +822,7 @@ screen says why before anyone asks for a card. An invalid query is `400`. The an
 {"period": {"kind": "month", "from": "2026-10-01", "to": "2026-10-31"}, "period_name": "October 2026",
  "refusal": null, "refusal_text": null, "restart_days": 0, "sampled_permille": 1000,
  "environment": "prod", "sources": ["prod-eu"], "previous_complete": true,
+ "previous_whole": true, "confirmed_fixes_count": 1,
  "fixes": [{"signature": "…", "finding_type": "n_plus_one_sql", "service": "order-svc",
             "endpoint": "GET /orders", "plain": "…", "done_at_ms": 1792058400000,
             "before_fix_ops": 1900, "before_period_name": "September 2026", "label": "Order list"}],
@@ -827,8 +832,10 @@ screen says why before anyone asks for a card. An invalid query is `400`. The an
 `refusal` is the period's own reason (below) and `refusal_text` its sentence, the one a render
 would answer. `sources` is the signed scope: the sources asked for that recorded something in the
 period. `previous_complete` is `false` when a collective card leaves out its comparison with the
-period before. `fixes` are the confirmed fixes a story can tell, with the endpoint's label when one
-is set.
+period before, and `previous_whole` says why: `false` when that period is not whole, `true` when one
+of its fixes was marked done before the Hub kept fix details. `confirmed_fixes_count` is the
+number a collective card counts. `fixes` are the confirmed fixes a story can tell, those whose names
+the card can print, with the endpoint's label when one is set.
 
 **Render and attachment.** The body is a JSON object, at most 4 KiB, with the same-origin rule and
 the JSON content type of the other writes:
@@ -861,9 +868,10 @@ the options carry as `refusal_text`. The reasons: `open_period`, `uncovered_days
 `previous_overflow` (a curve whose period before is not whole), `no_confirmed_fix`, `unknown_fix`,
 `unprintable_fix` (a story whose service or endpoint name the card cannot print), `no_total_io`
 (no total activity to draw the curve from), `curve_needs_whole_sources` (the caller reads only
-part of a source), `unprintable_scope` (a source or environment name the card cannot print) and
+part of a source), `unprintable_scope` (a source or environment name the card cannot print),
 `scope_too_long` (the environment and source names, joined with `", "`, take more than 120
-characters, the engine's bound on the scope line).
+characters, the engine's bound on the scope line) and `unkept_fixes` (a collective whose period
+holds a fix marked done before the Hub kept fix details, which its count would leave out).
 The engine can still refuse what the Hub sent:
 
 | Engine reason                                 | Answer                                                                                                                        |

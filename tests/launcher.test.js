@@ -1800,6 +1800,7 @@ test("Management_text_matches_the_launcher_helpers", () => {
         "The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.");
     assert.equal(PSL.recapSourcesNote(["a", "b"], "pilotage"), "No figures came from: a, b.");
     assert.equal(PSL.recapSourcesNote(["a", "b"], "tech"), "Sources without a detection volume: a, b.");
+    assert.equal(PSL.recapLateNote(["a", "b"]), "Left out, as they recorded nothing until after this period: a, b.");
 });
 
 test("Management_copy_carries_no_technical_word", () => {

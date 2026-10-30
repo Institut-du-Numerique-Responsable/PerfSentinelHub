@@ -196,16 +196,20 @@ public sealed class WorkerAndRetentionTests : IDisposable
         Assert.Equal("50 | 50", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
-    [Fact]
-    public async Task The_worker_purges_detections_on_their_own_clock()
+    // A detection retention shorter than Retention reads as Retention: the recap reads the detection
+    // days of every finding the Hub holds.
+    [Theory]
+    [InlineData(10, 30)]
+    [InlineData(30, 10)]
+    public async Task The_worker_purges_detections_on_the_longer_clock(int retentionDays, int detectionDays)
     {
         const long dayMs = 86_400_000;
         var cancellationToken = TestContext.Current.CancellationToken;
         var options = Options.Create(new HubOptions
         {
             DatabasePath = _databasePath,
-            Retention = TimeSpan.FromDays(10),
-            DetectionRetention = TimeSpan.FromDays(30)
+            Retention = TimeSpan.FromDays(retentionDays),
+            DetectionRetention = TimeSpan.FromDays(detectionDays)
         });
         var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_800_000_000_000));
         var database = new HubDatabase(options, clock);

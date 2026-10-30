@@ -6,6 +6,14 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Added
 
+- A recap names the sources whose daemon recorded nothing until after its period, `late_sources`,
+  and leaves them out of both periods instead of reading the period as uncovered. A source that
+  started during the period still leaves the period before uncovered. A report waits no longer
+  for such a source to seal the period's last day.
+- The card options carry `previous_whole` and `confirmed_fixes_count`, so the screen says why a
+  collective card drops its comparison and no longer blocks one whose fixes it cannot name. A
+  collective card for a period holding a fix marked done before the Hub kept fix details is
+  refused with `unkept_fixes` rather than signing a short count.
 - The detection import and poll store the card signal a daemon sends from the card release:
   `below_threshold_passes` on a count row, the passes below the threshold of a watched
   signature, and `thresholds` on a day, the six detection thresholds the daemon applied. Both
@@ -61,7 +69,8 @@ All notable changes to PerfSentinelHub are recorded here.
 ### Changed
 
 - Detection counts, days and ledgers leave on a clock of their own, `Hub:DetectionRetention`
-  (default `1100.00:00:00`, at least `Hub:Retention`), instead of the 180 days of a finding: a
+  (default `1100.00:00:00`, read as `Hub:Retention` when shorter, so a Hub keeping findings
+  longer still starts), instead of the 180 days of a finding: a
   year card compares a year with the whole year before it. The chart sets it from
   `hub.detectionRetention`. A database upgraded from 0.9.0 keeps only the detection days its
   former 180-day purge left.

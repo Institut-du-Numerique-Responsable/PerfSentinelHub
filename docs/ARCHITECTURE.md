@@ -142,9 +142,9 @@ incident.
 Detection counts and days ride the daily worker on a clock of their own,
 `Hub:DetectionRetention`, 1,100 days by default, by whole UTC day like observation days, and a
 ledger's own row with them, on the last time the Hub read it. A year card compares a year with
-the whole year before it, which the 180 days of a finding cannot hold, and the validator keeps
-this clock at least `Hub:Retention`, since the recap reads the detection days of every finding
-it holds. A replay of a purged day is harmless, since every value is absolute, and a daemon
+the whole year before it, which the 180 days of a finding cannot hold, and the purge never runs
+this clock shorter than `Hub:Retention`, since the recap reads the detection days of every
+finding it holds. A replay of a purged day is harmless, since every value is absolute, and a daemon
 keeps 31 days at most anyway.
 
 The ack mirror rides that clock as well, on `read_at_ms`, the time of the read that wrote

@@ -512,6 +512,8 @@ public static class RecapReportRenderer
             html.Append("<p class=\"sources-note\">")
                 .Append(E(RecapText.SourcesWithoutVolume(snapshot.SourcesWithoutVolume, snapshot.View)))
                 .Append("</p>\n");
+        if (snapshot.LateSources is { Count: > 0 } late)
+            html.Append("<p class=\"sources-note\">").Append(E(RecapText.LateSources(late))).Append("</p>\n");
         html.Append("</section>\n");
     }
 

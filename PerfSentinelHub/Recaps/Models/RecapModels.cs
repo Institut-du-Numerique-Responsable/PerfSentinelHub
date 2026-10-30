@@ -23,7 +23,10 @@ public sealed record RecapSnapshot(
     RecapMovements Movements,
     bool NothingMoved,
     IReadOnlyList<string> SourcesWithoutVolume,
-    bool Truncated);
+    bool Truncated,
+    // The sources that recorded nothing until after the period, left out of it; null on a report
+    // frozen before the field existed.
+    IReadOnlyList<string>? LateSources = null);
 
 public sealed record RecapPeriodInfo(
     string Kind,

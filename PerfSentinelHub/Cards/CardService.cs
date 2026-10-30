@@ -17,9 +17,6 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
     private const int MaxScopeChars = 120;
     private const int CurvePeriods = 6;
 
-    // Schema V20 froze the finding of a done action: no action done before it is a fix.
-    private const int FrozenFindingVersion = 20;
-
     private CardOrg Org => new(options.Value.Cards.Organisation ?? "", options.Value.Cards.Domain);
 
     /// <summary>What the screen shows before anyone signs, the period's own refusal included.</summary>
@@ -27,7 +24,8 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
     {
         var frame = await FrameAsync(ask, cancellationToken);
         var (previousWhole, countable) = await PreviousAsync(frame, cancellationToken);
-        var stories = frame.Refusal is null ? Stories(await TellAsync(frame, previousWhole, cancellationToken)) : [];
+        var told = frame.Refusal is null ? await TellAsync(frame, previousWhole, cancellationToken) : [];
+        var stories = Stories(told);
         var labels = await database.ReadEndpointLabelsAsync(
             [.. stories.Select(told => (told.Story!.Service, told.Story.Endpoint))], cancellationToken);
 
@@ -41,7 +39,9 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
             frame.Scope.Environment,
             frame.Scope.Sources,
             countable,
-            [.. stories.Select(told => FixOf(told, labels))],
+            previousWhole,
+            told.Count,
+            [.. stories.Select(item => FixOf(item, labels))],
             stories.Count == 0 ? null : Default(stories).Fix.Signature,
             Org);
     }
@@ -68,13 +68,11 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var today = (int)(nowMs / DayMs);
         var period = RecapPeriod.Of(ask.Kind, ask.At);
-        // Only the sources with a ledger in the period are judged, and only they are signed: a ledger read
-        // since the period began but started after it ended (a daemon added later) recorded nothing there.
-        var endMs = (period.ToDay + 1L) * DayMs;
-        var judged = (await database.ReadRecapCoverageAsync(ask.SourceIds, period.FromDay, period.ToDay,
-                cancellationToken))
-            .Where(source => source.Ledgers.Any(ledger => ledger.StartedMs < endMs))
-            .ToList();
+        // Only the sources that recorded the period are judged, and only they are signed. The periods
+        // before keep a source that started during this one: they are compared with it.
+        var (judged, _) = RecapCoverage.SplitLate(
+            await database.ReadRecapCoverageAsync(ask.SourceIds, period.FromDay, period.ToDay, cancellationToken),
+            period);
         var info = RecapCoverage.Judge(period, today, judged, null);
         var scope = ScopeOf(ask, period, info, judged);
         return new Frame(ask, nowMs, period, judged, scope, RefusalOf(period, today, judged, info, scope));
@@ -134,13 +132,17 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
     }
 
     // Whether the previous period holds the period rule, and whether its fixes can be counted:
-    // not when it starts before the Hub began freezing done findings.
+    // not when one of them was done before the Hub froze done findings.
     private async Task<(bool Whole, bool Countable)> PreviousAsync(Frame frame, CancellationToken cancellationToken)
     {
         var previous = frame.Period.Previous();
         var whole = await PeriodRefusalAsync(frame.SourceIds, previous, frame.Today, cancellationToken) is null;
-        var frozenSinceMs = await database.ReadSchemaAppliedAtAsync(FrozenFindingVersion, cancellationToken);
-        return (whole, whole && frozenSinceMs is { } ms && previous.FromDay >= ms / DayMs);
+        return (whole, whole && !await UnkeptAsync(frame, previous, cancellationToken));
+    }
+
+    private Task<bool> UnkeptAsync(Frame frame, RecapPeriod period, CancellationToken cancellationToken)
+    {
+        return database.HasUnkeptDoneActionAsync(frame.SourceIds, period.FromDay, period.ToDay, cancellationToken);
     }
 
     // ------------------------------------------------------------ fixes
@@ -372,6 +374,9 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
 
     private async Task<CardOutcome> CollectiveAsync(Frame frame, CardAsk ask, CancellationToken cancellationToken)
     {
+        // A fix the Hub kept no finding of would leave the count short, and the card would sign it.
+        if (await UnkeptAsync(frame, frame.Period, cancellationToken))
+            return new CardOutcome.Refused("unkept_fixes");
         var (previousWhole, countable) = await PreviousAsync(frame, cancellationToken);
         var told = await TellAsync(frame, previousWhole, cancellationToken);
         if (told.Count == 0)
