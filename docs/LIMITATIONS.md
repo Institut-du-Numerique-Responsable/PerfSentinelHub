@@ -191,6 +191,49 @@ the Hub's screen. E-mail goes through a relay that offers STARTTLS and, when cre
 `AUTH LOGIN`. The Hub does not speak implicit TLS and does not do OAuth, so an account restricted
 to OAuth needs the organisation's relay in front of it.
 
+## What a share card claims
+
+A card proves its figures, not who made them. At level 1 the check page says the figures are
+intact since their signature, by a key whose holder nobody has verified. Only level 2, a key the
+organisation's domain publishes in its DNS TXT record and its `/.well-known` file, names a domain,
+and even then it names the domain that published the key, not the people who used it.
+
+The signing date on a card is written by whoever holds the key, and no third-party timestamp
+backs it. So revoking a key makes every card it signed read as revoked, honest ones included,
+since nothing tells a card signed before the leak from one dated back after it. A key that is
+only rotated out keeps vouching for the cards dated inside its window, a window a stolen key
+could also date a card into.
+
+An original file the Hub downloaded is checked byte for byte, so any edit reads as modified.
+LinkedIn strips a file's metadata, an editor that saves an SVG again usually drops its
+`<metadata>`, and a converter that re-saves a JPEG XL usually drops its `pscd` box, so a reposted
+or edited image keeps only its QR code. The QR code proves the figures, not the pixels around it:
+the check page shows those figures, to compare with the image. LinkedIn does not accept JPEG XL
+at all, so the PNG is the file to post.
+
+The figures are as the Hub held them. A story cites the last sample the Hub held before the
+action was marked done, the newest copy winning. Its fanout counts calls, not systems, its slow
+figure is the p99 of the calls above the threshold, and its pool figure is a peak of simultaneous
+calls. The before-fix period a card prints is the period its volume was summed over, or, for a
+threshold story, the period of the trace it cites. The volume before covers N+1 and redundant
+findings only, and its CO2 is the low tier of the estimate, a partial minimum.
+
+"No longer triggers the alert, set at X" needs a daemon that pushes and a readable trace date. The
+daemon learns which signatures to watch from the answer to its push: it loses that list on a
+restart until its next push, a polled-only daemon never gets one, and a fanout signature matches
+only part of its parents. A fix is confirmed as of the card's generation, and a later detection
+does not change a card already made. Actions marked done before this release have no frozen
+finding, so no card tells them.
+
+The curve is daemon-wide: only the environment and the source narrow it, and acknowledged
+findings count in it. A daemon restart in the period is tolerated and printed on the card. The
+signed scope lists only the sources that recorded a ledger in the period, so a daemon added after
+it is left out. A collective card prints no comparison with a period that began before this
+release, since its fixes could not be counted, nor with an incomplete one, which also drops its
+volume before the fixes. Detection days are kept 1,100 days by default (`Hub:DetectionRetention`),
+so a year card can compare with the whole year before. A lower setting refuses year cards with
+`previous_uncovered_days` for most of the year.
+
 ## What a finding is attributed to
 
 The engine files an N+1 or redundant-call group that spans several services

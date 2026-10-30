@@ -381,6 +381,39 @@ de `disclosure_deliveries`. `WebhookDelivery` écrit le corps et son HMAC. Le wo
 un client HTTP nommé qui lui est propre, qui ne suit aucune redirection, ne garde aucun cookie
 et ne journalise rien, si bien qu'une URL de webhook n'atteint jamais une ligne de journal.
 
+## Les cartes à partager
+
+Une carte à partager porte les chiffres du Hub pour une période close, signés et dessinés par le
+moteur embarqué. Le Hub calcule chaque chiffre et chaque donnée des phrases, le moteur signe et
+dessine, et personne d'autre n'écrit sur la carte que les trois champs libres. Son code vit dans
+`Cards/` et dans `Api/ApiEndpoints.Cards.cs` avec `Api/CardRequest.cs`, qui lit le corps.
+
+**Les lectures.** `CardService` juge d'abord la période sur les registres de détections, par
+`ReadRecapCoverageAsync` et `RecapCoverage.Judge` du récap, en ne gardant que les sources dont le
+registre a commencé avant la fin de la période. Ces sources forment le périmètre signé. Il lit
+ensuite les actions terminées avec le finding figé à leur passage en `done`
+(`frozen_finding_json`), les sources qui ont compté chacune, et ce qui confirme une correction :
+les jours scellés d'une source joignable sans détection de la signature. Une histoire y ajoute
+les jours de carbone avant la correction et les jours de signal après
+(`below_threshold_passes` avec les seuils du jour), une courbe les totaux par jour de six
+périodes au plus. `CardRules` porte les refus et leurs phrases, `CardFigures` le calcul,
+`CardEnvelope` et `CardTypes` ce que portent un finding figé et son type.
+
+**Le moteur.** `CardRenderer` écrit `card.json` et une copie de la clé privée dans un répertoire
+temporaire privé, lance `card render`, ne lit que son code de sortie et sa ligne de résultat, et
+supprime le répertoire. La vérification du rattachement est un second lancement, sur le PNG qu'il
+vient de produire, `verify-card --online`, seul chemin des cartes qui touche le réseau : le
+service DNS sur HTTPS et le domaine de l'organisation. Chaque lancement occupe une place de
+`CardRenderGate` (`Hub:Cards:MaxConcurrentRenders`, 2 par défaut), et une requête qui n'en trouve
+aucune libre reçoit `503 Retry-After: 5`.
+
+**La clé.** `CardKeys` fait produire la clé de signature par le moteur à la première carte
+(`card keygen`). Son fichier privé est dans `card-keys/` à côté de la base, hors de SQLite et donc
+hors de la sauvegarde. Sa moitié publique et ses dates sont dans `card_keys` (schéma V20), jamais
+purgée, pour qu'une carte signée par une clé retirée reste vérifiable. Remplacer ou révoquer une
+clé supprime son fichier privé. `CardKeyLines` écrit les enregistrements DNS TXT et le fichier
+`/.well-known/perf-sentinel-key` qu'un administrateur publie.
+
 ## Un run atteint toujours un état terminal
 
 <picture>

@@ -208,6 +208,54 @@ qui offre STARTTLS et, quand des identifiants sont posés, `AUTH LOGIN`. Le Hub 
 implicite et ne fait pas d'OAuth : un compte restreint à OAuth demande le relais de l'organisation
 devant lui.
 
+## Ce qu'affirme une carte à partager
+
+Une carte prouve ses chiffres, pas qui les a produits. Au niveau 1, la page de vérification dit
+que les chiffres sont intacts depuis leur signature, par une clé dont personne n'a vérifié le
+détenteur. Seul le niveau 2, une clé que le domaine de l'organisation publie dans son
+enregistrement DNS TXT et son fichier `/.well-known`, nomme un domaine, et encore nomme-t-il le
+domaine qui a publié la clé, pas les personnes qui s'en sont servies.
+
+La date de signature d'une carte est écrite par qui détient la clé, et aucun horodatage tiers ne
+l'appuie. Révoquer une clé fait donc lire révoquée chaque carte qu'elle a signée, honnêtes
+comprises, puisque rien ne distingue une carte signée avant la fuite d'une carte antidatée après.
+Une clé seulement remplacée continue de garantir les cartes datées dans sa fenêtre, une fenêtre
+dans laquelle une clé volée pourrait aussi dater une carte.
+
+Un fichier original téléchargé depuis le Hub est vérifié octet par octet : toute retouche se lit
+modifiée. LinkedIn retire les métadonnées d'un fichier, un éditeur qui réenregistre un SVG en
+perd en général le `<metadata>`, et un convertisseur qui réenregistre un JPEG XL en perd en
+général la boîte `pscd` : une image republiée ou retouchée ne garde que son QR code. Le QR code
+prouve les chiffres, pas les pixels autour : la page de vérification affiche ces chiffres, à
+comparer avec l'image. LinkedIn n'accepte pas du tout le JPEG XL, c'est donc le PNG qu'il faut
+publier.
+
+Les chiffres sont ceux que le Hub détenait. Une histoire cite le dernier échantillon que le Hub
+détenait avant que l'action soit marquée terminée, la copie la plus récente l'emportant. Son
+fanout compte des appels, pas des systèmes, son chiffre de lenteur est le p99 des appels au-dessus
+du seuil, et son chiffre de pool est un pic d'appels simultanés. La période avant correction
+qu'imprime une carte est celle sur laquelle son volume a été sommé, ou, pour une histoire de
+seuil, celle de la trace qu'elle cite. Le volume d'avant ne couvre que les findings N+1 et
+redondants, et son CO2 est le palier bas de l'estimation, un minimum partiel.
+
+« Ne déclenche plus l'alerte, réglée à X » demande un daemon qui pousse et une date de trace
+lisible. Le daemon apprend quelles signatures surveiller dans la réponse à sa poussée : il perd
+cette liste à un redémarrage jusqu'à sa poussée suivante, un daemon seulement interrogé ne la
+reçoit jamais, et une signature de fanout ne correspond qu'à une partie de ses parents. Une
+correction est confirmée à la date de génération de la carte, et une détection ultérieure ne
+change pas une carte déjà faite. Les actions marquées terminées avant cette version n'ont pas de
+finding figé : aucune carte ne les raconte.
+
+La courbe vaut pour tout le daemon : seuls l'environnement et la source la restreignent, et les
+findings acquittés y comptent. Un redémarrage du daemon dans la période est toléré et imprimé sur
+la carte. Le périmètre signé ne liste que les sources qui ont tenu un registre dans la période : un
+daemon ajouté après elle en est exclu. Une carte collective n'imprime aucune comparaison avec une
+période commencée avant cette version, puisque ses corrections ne pouvaient pas être comptées, ni
+avec une période incomplète, ce qui retire aussi son volume d'avant les corrections. Les jours de
+détection sont gardés 1 100 jours par défaut (`Hub:DetectionRetention`), si bien qu'une carte
+annuelle peut se comparer à toute l'année précédente. Un réglage plus bas refuse les cartes
+annuelles avec `previous_uncovered_days` la plus grande partie de l'année.
+
 ## À quoi un finding est attribué
 
 Le moteur range un groupe N+1 ou d'appels redondants qui traverse plusieurs

@@ -275,6 +275,8 @@ test("card", async ({page}, info) => {
     await page.locator("#card-team").fill("Checkout team");
     await page.locator("#card-preview").click();
     await expect(page.locator("img.card-preview")).toBeVisible({timeout: 45_000});
+    // The section is shot alone, so the sticky top bar would cover its heading.
+    await page.addStyleTag({content: ".shell-topbar { position: static; }"});
     await page.locator("section.share").screenshot({
         path: nameFor("launcher-card", info.project.name),
         animations: "disabled"

@@ -352,6 +352,39 @@ once a minute.
 through a named HTTP client of its own, which follows no redirect, keeps no cookie and logs
 nothing, so a webhook URL never reaches a log line.
 
+## Share cards
+
+A share card is the Hub's figures for one closed period, signed and drawn by the embedded engine.
+The Hub computes every figure and sentence input, the engine signs and draws, and nobody else
+writes on the card but the three free fields. Its code lives in `Cards/` and in
+`Api/ApiEndpoints.Cards.cs` with `Api/CardRequest.cs`, which parses the body.
+
+**The reads.** `CardService` first judges the period on the detection ledgers, through the
+recap's `ReadRecapCoverageAsync` and `RecapCoverage.Judge`, keeping only the sources whose ledger
+began before the period ended. Those sources are the signed scope. It then reads the done
+actions with the finding frozen when they moved to done (`frozen_finding_json`), the sources
+that counted each one, and the evidence that confirms a fix: the sealed days at a reachable
+source with no detection of the signature. A story adds the carbon days before the fix and the
+signal days after it (`below_threshold_passes` with the thresholds of the day), a curve the
+day totals of up to six periods. `CardRules` holds the refusals and their sentences,
+`CardFigures` the arithmetic, `CardEnvelope` and `CardTypes` what a frozen finding and its type
+carry.
+
+**The engine.** `CardRenderer` writes `card.json` and a copy of the private key in a private
+temporary directory, runs `card render`, reads only its exit code and its one result line, and
+deletes the directory. The attachment check is a second spawn on the PNG it just rendered,
+`verify-card --online`, the only card path that reaches the network: the DNS-over-HTTPS service
+and the organisation's domain. Every spawn holds a slot of `CardRenderGate`
+(`Hub:Cards:MaxConcurrentRenders`, 2 by default), and a request that finds none free gets
+`503 Retry-After: 5`.
+
+**The key.** `CardKeys` has the engine make the signing key on the first card (`card keygen`).
+Its private file sits in `card-keys/` beside the database, outside SQLite and so outside the
+backup. Its public half and its dates sit in `card_keys` (schema V20), never purged, so a card
+signed by a retired key stays verifiable. Rotating or revoking a key deletes its private file.
+`CardKeyLines` writes the DNS TXT records and the `/.well-known/perf-sentinel-key` file an
+administrator publishes.
+
 ## A run always reaches a terminal state
 
 <picture>

@@ -48,6 +48,12 @@ All notable changes to PerfSentinelHub are recorded here.
   name. `Hub:Cards:MaxConcurrentRenders` (default 2, chart `hub.cards.maxConcurrentRenders`) bounds
   how many renders, attachment checks and key rotations run the engine at once. One more is a
   `503` with `Retry-After: 5`, which the screen waits out once before asking again.
+- A story whose service or endpoint name the card cannot print is refused with `unprintable_fix`
+  and its sentence, rather than reading as an unknown or unconfirmed fix.
+- The recap screen gains Share a result: pick a story, a curve or a collective card over a closed
+  period, add a title, a team and, for a story, an everyday name for the action, preview the card,
+  download it as PNG, SVG, JPEG XL or PDF, and verify its attachment. Administrators find the
+  signing key there, with the lines to publish, rotation and revocation.
 
 ### Changed
 
