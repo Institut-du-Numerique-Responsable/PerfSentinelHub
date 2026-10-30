@@ -29,6 +29,16 @@ public sealed class RecapApiTests(HubApplicationFactory factory) : IClassFixture
         Assert.True(period.GetProperty("in_progress").GetBoolean());
     }
 
+    [Fact]
+    public async Task A_quarter_recap_is_a_400()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/recap?period=quarter", Token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("period=year")]
     [InlineData("at=2026-13-01")]

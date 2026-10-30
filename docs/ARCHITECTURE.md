@@ -233,8 +233,9 @@ findings, the period without them, the closed days of a period in progress, and 
 window, skipped on a period's first day. Then it makes a coverage read of the sources' days and a carbon
 read of their avoidable grams, and joins the actions and the labels last. The folding is pure
 and lives in `Recaps/`: the period, the ranking, the trends, the moves, the coverage judgment,
-the carbon pricing and the sentence per type. The service is a plain class on purpose: the
-reports a subscription sends reuse it as it is. `RecapGenerator` freezes the last closed period of
+the carbon pricing and the sentence per type. Share cards add quarter, semester and year
+periods, and the recap API still takes only a day, a week or a month. The service is a plain
+class on purpose: the reports a subscription sends reuse it as it is. `RecapGenerator` freezes the last closed period of
 each subscription into `recap_reports` once its ledgers have sealed, `RecapReportRenderer` writes
 the self-contained HTML of a stored snapshot, `RecapDeliveryWorker` sends the due rows of
 `recap_deliveries` to the webhooks and, through `RecapMailer`, to the SMTP relay, and `RecapLoop`

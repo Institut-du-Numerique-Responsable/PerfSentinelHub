@@ -17,6 +17,8 @@ All notable changes to PerfSentinelHub are recorded here.
 - An action that enters `done` keeps the finding's envelope as it stood then, from the newest
   copy the caller reads, in `finding_actions.frozen_finding_json`. It is never served, outlives
   the finding's purge and is cleared when the action leaves `done`. A share card reads it.
+- Quarter, semester and year periods, for share cards only. `GET /api/recap` still takes
+  `day`, `week` or `month`.
 
 ### Changed
 

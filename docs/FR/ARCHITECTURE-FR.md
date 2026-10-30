@@ -249,8 +249,10 @@ acquittés, la période sans eux, les jours clos d'une période en cours, et la 
 sautée le premier jour d'une période. Il fait ensuite une lecture de couverture des jours des sources et une lecture
 carbone de leurs grammes évitables, et joint les actions et les libellés en dernier. Le calcul
 est pur et vit dans `Recaps/` : la période, le classement, les tendances, les mouvements, le
-jugement de couverture, la valorisation carbone et la phrase par type. Le service est une
-classe simple à dessein : les rapports qu'envoie un abonnement le réutilisent tel quel.
+jugement de couverture, la valorisation carbone et la phrase par type. Les cartes à partager
+ajoutent le trimestre, le semestre et l'année, et l'API du récap ne prend toujours qu'un jour,
+une semaine ou un mois. Le service est une classe simple à dessein : les rapports qu'envoie un
+abonnement le réutilisent tel quel.
 `RecapGenerator` fige la dernière période close de chaque abonnement dans `recap_reports` une
 fois ses ledgers scellés, `RecapReportRenderer` écrit le HTML autonome d'un instantané stocké,
 `RecapDeliveryWorker` envoie les lignes dues de `recap_deliveries` aux webhooks et, par
