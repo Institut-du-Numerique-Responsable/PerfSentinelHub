@@ -15,6 +15,10 @@ All notable changes to PerfSentinelHub are recorded here.
   the days after it and reports it `confirmed`, `contradicted` or `came_back`. Two permissions
   go with them: `actions.write` for the routes, carried by the built-in `member` role, and
   `recaps.read` for the recap reports, Hub level, carried by `admin`.
+- `Hub:Auth:DisplayNameClaim` (default `name`): the userinfo field an action's owner shows by,
+  stored as `owner_display` beside the identity. The recap shows that name, or without one a name
+  derived from the identity (`alice.martin@acme.com` reads `Alice Martin`), with the identity on
+  hover. The claim is never used for access.
 - Endpoint labels: `PUT /api/labels` names an endpoint in business words, which titles its row
   in the recap, with the `labels.write` permission. `PUT /api/labels/services` names a whole
   service once, so every unnamed step of it reads in business words (`in Payment`,
