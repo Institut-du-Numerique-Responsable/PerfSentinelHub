@@ -54,6 +54,16 @@ public sealed class CardFiguresTests
     }
 
     [Fact]
+    public void A_story_with_a_service_over_200_characters_is_null_and_unprintable()
+    {
+        Assert.Null(CardFigures.Story(Slow() with { Service = new string('s', 201) }, DoneMs));
+        Assert.True(CardFigures.Unprintable(Slow() with { Service = new string('s', 201) }));
+        Assert.NotNull(CardFigures.Story(Slow() with { Service = new string('s', 200) }, DoneMs));
+        Assert.False(CardFigures.Unprintable(Slow() with { Service = new string('s', 200) }));
+        Assert.False(CardFigures.Unprintable(Slow(p99Us: null) with { Service = new string('s', 201) }));
+    }
+
+    [Fact]
     public void The_story_dates_are_utc_days()
     {
         Assert.Equal(

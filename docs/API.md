@@ -854,9 +854,10 @@ A period that has not ended before today is `400 A card covers a closed period. 
 the options carry as `refusal_text`. The reasons: `open_period`, `uncovered_days`, `open_day`,
 `overflow` (the period is not whole), `previous_uncovered_days`, `previous_open_day`,
 `previous_overflow` (a curve whose period before is not whole), `no_confirmed_fix`, `unknown_fix`,
-`no_total_io` (no total activity to draw the curve from), `curve_needs_whole_sources` (the caller
-reads only part of a source) and `unprintable_scope` (a source or environment name the card cannot
-print). The engine can still refuse what the Hub sent:
+`unprintable_fix` (a story whose service or endpoint name the card cannot print), `no_total_io`
+(no total activity to draw the curve from), `curve_needs_whole_sources` (the caller reads only
+part of a source) and `unprintable_scope` (a source or environment name the card cannot print).
+The engine can still refuse what the Hub sent:
 
 | Engine reason                                 | Answer                                                                                                                        |
 |-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|

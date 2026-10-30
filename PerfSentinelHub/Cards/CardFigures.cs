@@ -17,13 +17,17 @@ public static class CardFigures
     /// </summary>
     public static CardStory? Story(FrozenFinding frozen, long doneAtMs)
     {
-        if (Cited(frozen) is null ||
-            !CardRules.Printable(frozen.Service, MaxStoryChars) ||
-            !CardRules.Printable(frozen.Endpoint, MaxStoryChars))
+        if (Cited(frozen) is null || !Named(frozen))
             return null;
 
         var observed = frozen.ObservedAtMs is { } ms && ms / DayMs <= doneAtMs / DayMs ? Date(ms) : null;
         return new CardStory(frozen.FindingType, frozen.Service, frozen.Endpoint, observed, Date(doneAtMs));
+    }
+
+    /// <summary>A fix that holds its cited figure but whose service or endpoint the card cannot print.</summary>
+    public static bool Unprintable(FrozenFinding frozen)
+    {
+        return Cited(frozen) is not null && !Named(frozen);
     }
 
     /// <summary>
@@ -100,6 +104,12 @@ public static class CardFigures
         return grams is { } value && double.IsFinite(value) && value >= 0
             ? (long)decimal.Floor((decimal)value * 1_000_000m)
             : null;
+    }
+
+    // The engine bounds story.service and story.endpoint at 200 characters.
+    private static bool Named(FrozenFinding frozen)
+    {
+        return CardRules.Printable(frozen.Service, MaxStoryChars) && CardRules.Printable(frozen.Endpoint, MaxStoryChars);
     }
 
     private static long? Cited(FrozenFinding frozen)

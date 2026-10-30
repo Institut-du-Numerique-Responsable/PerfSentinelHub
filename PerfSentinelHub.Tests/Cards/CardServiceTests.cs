@@ -244,6 +244,21 @@ public sealed class CardServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_story_of_a_fix_whose_service_the_card_cannot_print_says_so()
+    {
+        await _seed.LedgerAsync("a", Sealed(October));
+        await _seed.FixAsync("a", N1, Done, service: new string('s', 201));
+
+        Assert.Empty((await _service.OptionsAsync(Scope(), Token)).Fixes);
+        Assert.Equal("unprintable_fix", await RefusedAsync(Ask("story")));
+        Assert.Equal("unprintable_fix", await RefusedAsync(Ask("story", signature: N1)));
+        Assert.Equal("no_confirmed_fix", await RefusedAsync(Ask("story", signature: N2)));
+        await _seed.FixAsync("a", S1, Done, "slow_sql", "pay-svc", p99Us: P99Us);
+        Assert.Equal("unprintable_fix", await RefusedAsync(Ask("story", signature: N1)));
+        Assert.Equal("pay-svc", (await ReadyAsync(Ask("story"))).Story!.Service);
+    }
+
+    [Fact]
     public async Task The_volume_before_is_the_last_whole_period_before_done()
     {
         // 19 days of 100 extra I/O, each priced at 3.0 g per 1,000 avoidable I/O: 5.7 g.

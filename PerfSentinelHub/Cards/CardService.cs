@@ -256,6 +256,15 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
         return [.. told.Where(item => item.Story is not null)];
     }
 
+    // A fix the card cannot name says so, rather than reading as unconfirmed or unknown.
+    private static string Missing(IReadOnlyList<Told> all, string? signature, string otherwise)
+    {
+        return all.Any(item => (signature is null || item.Fix.Signature == signature) &&
+                               CardFigures.Unprintable(item.Fix.Frozen))
+            ? "unprintable_fix"
+            : otherwise;
+    }
+
     // The largest volume before, then the latest done, then the signature.
     private static Told Default(List<Told> stories)
     {
@@ -286,15 +295,16 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
     private async Task<CardOutcome> StoryAsync(Frame frame, CardAsk ask, CancellationToken cancellationToken)
     {
         var (previousWhole, _) = await PreviousAsync(frame, cancellationToken);
-        var stories = Stories(await TellAsync(frame, previousWhole, cancellationToken));
+        var all = await TellAsync(frame, previousWhole, cancellationToken);
+        var stories = Stories(all);
         if (stories.Count == 0)
-            return new CardOutcome.Refused("no_confirmed_fix");
+            return new CardOutcome.Refused(Missing(all, ask.Signature, "no_confirmed_fix"));
 
         var told = ask.Signature is null
             ? Default(stories)
             : stories.FirstOrDefault(item => item.Fix.Signature == ask.Signature);
         if (told is null)
-            return new CardOutcome.Refused("unknown_fix");
+            return new CardOutcome.Refused(Missing(all, ask.Signature, "unknown_fix"));
 
         var (figures, beforeFixPeriod) =
             CardFigures.StoryFigures(told.Fix.Frozen, frame.Period.Kind, told.Before, told.Threshold);

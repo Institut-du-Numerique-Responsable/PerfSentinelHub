@@ -69,6 +69,8 @@ public sealed class CardRulesTests
                 previous + "on some of its days there were too many different problems to count each one." + still,
             ["no_confirmed_fix"] = "No fix of this period is confirmed by the measure yet.",
             ["unknown_fix"] = "This fix is not among the confirmed fixes of the period. Pick one from the list.",
+            ["unprintable_fix"] =
+                "This fix's service or endpoint name is too long or holds a hidden character, so it cannot be printed on a card.",
             ["no_total_io"] =
                 "The curve needs the total activity of each day, which this period or the one before does not hold yet.",
             ["curve_needs_whole_sources"] = "The curve covers whole sources, and you read only part of one.",

@@ -16,8 +16,8 @@ public static class CardRules
     public static readonly IReadOnlyList<string> Reasons =
     [
         "open_period", "uncovered_days", "open_day", "overflow", "previous_uncovered_days", "previous_open_day",
-        "previous_overflow", "no_confirmed_fix", "unknown_fix", "no_total_io", "curve_needs_whole_sources",
-        "unprintable_scope"
+        "previous_overflow", "no_confirmed_fix", "unknown_fix", "unprintable_fix", "no_total_io",
+        "curve_needs_whole_sources", "unprintable_scope"
     ];
 
     /// <summary>The first incomplete reason but restart, which only shows on the card as a day count.</summary>
@@ -77,6 +77,8 @@ public static class CardRules
                 "On some days of this period there were too many different problems to count each one, so its figures are not whole.",
             "no_confirmed_fix" => "No fix of this period is confirmed by the measure yet.",
             "unknown_fix" => "This fix is not among the confirmed fixes of the period. Pick one from the list.",
+            "unprintable_fix" =>
+                "This fix's service or endpoint name is too long or holds a hidden character, so it cannot be printed on a card.",
             "no_total_io" =>
                 "The curve needs the total activity of each day, which this period or the one before does not hold yet.",
             "curve_needs_whole_sources" => "The curve covers whole sources, and you read only part of one.",
