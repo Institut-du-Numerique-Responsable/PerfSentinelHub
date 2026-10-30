@@ -111,8 +111,8 @@ public sealed class CardRulesTests
     [InlineData("", 120, false)]
     [InlineData(null, 120, false)]
     [InlineData(" prod", 120, false)]
-    [InlineData("eu‮", 120, false)]
-    [InlineData("a​b", 120, false)]
+    [InlineData("eu\u202E", 120, false)]
+    [InlineData("a\u200Bb", 120, false)]
     [InlineData("a\nb", 120, false)]
     public void Printable_follows_the_engine_text_rule(string? text, int maxChars, bool expected)
     {

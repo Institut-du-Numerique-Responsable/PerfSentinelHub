@@ -50,7 +50,7 @@ public sealed class CardFiguresTests
     {
         Assert.Null(CardFigures.Story(Slow(endpoint: new string('a', 201)), DoneMs));
         Assert.NotNull(CardFigures.Story(Slow(endpoint: new string('a', 200)), DoneMs));
-        Assert.Null(CardFigures.Story(Slow() with { Service = "orders‮" }, DoneMs));
+        Assert.Null(CardFigures.Story(Slow() with { Service = "orders\u202E" }, DoneMs));
     }
 
     [Fact]

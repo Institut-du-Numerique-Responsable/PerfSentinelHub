@@ -918,8 +918,8 @@ public sealed class ConfigurationTests
 
     [Theory]
     [InlineData("Acme\u0001")]
-    [InlineData("Acme‮")]
-    [InlineData("Acme​")]
+    [InlineData("Acme\u202E")]
+    [InlineData("Acme\u200B")]
     [InlineData("")]
     public void An_organisation_with_a_control_character_a_bidi_control_or_61_characters_is_refused(string organisation)
     {

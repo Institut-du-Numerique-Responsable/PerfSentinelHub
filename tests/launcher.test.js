@@ -2070,8 +2070,8 @@ test("a free field names the first character the card cannot draw", () => {
     assert.equal(PSL.cardFieldProblem("Lighter cart \u{1F331}"),
         "The card's font cannot draw \"\u{1F331}\". Remove it, or write it another way.");
     assert.equal(PSL.cardFieldProblem("Paniers plus légers"), null);
-    assert.equal(PSL.cardFieldProblem("a​b"),
-        "The card's font cannot draw \"​\". Remove it, or write it another way.");
+    assert.equal(PSL.cardFieldProblem("a\u200Bb"),
+        "The card's font cannot draw \"\u200B\". Remove it, or write it another way.");
     assert.equal(PSL.cardFieldProblem("Acme® checkout™"), null);
     assert.equal(PSL.cardFieldProblem(""), null);
 });

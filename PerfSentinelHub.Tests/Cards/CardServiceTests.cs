@@ -167,7 +167,7 @@ public sealed class CardServiceTests : IAsyncLifetime
     {
         await _seed.LedgerAsync("a", Sealed(October));
         await _seed.FixAsync("a", N1, Done);
-        SourceOptions[] renamed = [Sources[0] with { Name = "prod‮eu" }, Sources[1]];
+        SourceOptions[] renamed = [Sources[0] with { Name = "prod\u202Eeu" }, Sources[1]];
 
         Assert.Equal("unprintable_scope", await RefusedAsync(Ask("collective", Scope(sources: renamed))));
         Assert.Equal("unprintable_scope",
