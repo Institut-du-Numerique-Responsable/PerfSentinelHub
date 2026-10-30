@@ -384,8 +384,9 @@ les jours (80) s'impriment tels que saisis, dans les deux langues de carte. Un c
 de la carte ne sait pas dessiner, un emoji par exemple, est signalé sous son champ pendant la saisie,
 et le refus du moteur arrive au même endroit.
 
-Preview rend la carte : l'image dans un cadre clair, quel que soit le thème du Hub, le carrousel dans
-la visionneuse PDF du navigateur. Un choix modifié après un aperçu le grise et le dit ; Download fait
+La carte se télécharge en image (PNG), en image à imprimer ou agrandir (SVG), nette à toute taille,
+ou en carrousel (PDF). Preview rend la carte : l'une ou l'autre image dans un cadre clair, quel que
+soit le thème du Hub, le carrousel dans la visionneuse PDF du navigateur. Un choix modifié après un aperçu le grise et le dit ; Download fait
 toujours la carte à partir du formulaire tel qu'il est. Sous l'aperçu, la ligne que la page de
 vérification imprimera, et Verify attachment, qui rend la carte une fois de plus et fait vérifier par
 le moteur sa clé sous le domaine de l'organisation, par `cloudflare-dns.com` et le domaine lui-même,

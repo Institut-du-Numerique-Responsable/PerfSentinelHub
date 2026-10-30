@@ -5982,6 +5982,24 @@ a.chip {
     color: var(--text-2);
 }
 
+.card-opt-format .segmented button {
+    white-space: nowrap;
+}
+
+/* The three formats need about 450px in a row; narrower, they stack inside the same frame. */
+@media (max-width: 520px) {
+    .card-opt-format .segmented {
+        flex-direction: column;
+        height: auto;
+        border-radius: 16px;
+    }
+
+    .card-opt-format .segmented button {
+        height: 30px;
+        text-align: left;
+    }
+}
+
 .share-actions {
     display: flex;
     flex-wrap: wrap;

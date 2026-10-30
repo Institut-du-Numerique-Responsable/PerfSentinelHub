@@ -7488,11 +7488,12 @@
                             store('localStorage', CARD_LANG_KEY, lang);
                             cardPick({lang: lang});
                         })]),
-                el('div', {class: 'card-opt'}, [el('span', {class: 'card-opt-label', text: 'Format'}),
-                    cardSegmented('Format', 'format', [['png', 'Image'], ['pdf', 'Carousel (PDF)']], card.format,
-                        function (format) {
-                            cardPick({format: format});
-                        })])
+                el('div', {class: 'card-opt card-opt-format'}, [el('span', {class: 'card-opt-label', text: 'Format'}),
+                    cardSegmented('Format', 'format', PSL.CARD_FORMATS.map(function (format) {
+                        return [format, PSL.CARD_FORMAT_LABELS[format]];
+                    }), card.format, function (format) {
+                        cardPick({format: format});
+                    })])
             ]),
             card.format === 'pdf' ? el('p', {class: 'free-note', text: PSL.CARD_COPY.carouselNote}) : null
         ]);
@@ -7528,7 +7529,8 @@
 
     function cardPreviewAside(card, route, management, admin) {
         const blocked = cardBlocked(card);
-        const pdf = (card.preview ? card.preview.format : card.format) === 'pdf';
+        const format = card.preview ? card.preview.format : card.format;
+        const pdf = format === 'pdf';
         const shown = cardPreviewShown(card, blocked);
         const aside = el('aside', {class: 'share-preview', 'aria-label': 'Preview', tabindex: '-1'}, [
             el('div', {class: 'preview-head'}, [document.createTextNode('Preview'),
@@ -7541,7 +7543,7 @@
         aside.appendChild(cardPreviewFrame(card, blocked, pdf));
         const options = cardOptionsReady(card);
         const domain = options && options.org.domain;
-        if (shown) cardPreviewProof(card, pdf, domain).forEach(function (line) {
+        if (shown) cardPreviewProof(card, format, domain).forEach(function (line) {
             aside.appendChild(line);
         });
         if (options) aside.appendChild(cardAttachBlock(card, route, domain, management, admin));
@@ -7581,13 +7583,13 @@
     }
 
     /** What the shown card carries: the note on the file, and the level its proof reaches. */
-    function cardPreviewProof(card, pdf, domain) {
+    function cardPreviewProof(card, format, domain) {
         const attached = !!(card.attach && card.attach.result && card.attach.result.integrity === 'ok'
             && card.attach.result.level === 2);
         const level = PSL.levelLine(attached, domain);
         const at = level.indexOf(': ') + 2;
         return [
-            el('p', {class: 'preview-note', text: pdf ? PSL.CARD_COPY.pdfNote : PSL.CARD_COPY.pngNote}),
+            el('p', {class: 'preview-note', text: PSL.CARD_COPY[format + 'Note']}),
             el('p', {class: 'proof-line'}, [document.createTextNode(level.slice(0, at)), el('b', {text: level.slice(at)})])
         ];
     }
@@ -7628,7 +7630,7 @@
     function cardPost(path, body, read) {
         return fetch(path, {
             method: 'POST',
-            headers: {'content-type': 'application/json', accept: 'application/json, image/png, application/pdf'},
+            headers: {'content-type': 'application/json', accept: 'application/json, image/png, image/svg+xml, application/pdf'},
             body: JSON.stringify(body)
         }).then(signInOn401).then(function (response) {
             if (response.ok) {

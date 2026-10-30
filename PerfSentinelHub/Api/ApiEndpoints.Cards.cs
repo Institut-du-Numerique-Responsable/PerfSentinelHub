@@ -47,7 +47,7 @@ public static partial class ApiEndpoints
             HubJsonContext.Default.CardOptions);
     }
 
-    /// <summary>The card as a file to download: the PNG, or the PDF carousel.</summary>
+    /// <summary>The card as a file to download: the PNG, the SVG, or the PDF carousel.</summary>
     // Every parameter is a collaborator the router injects.
 #pragma warning disable S107
     private static async Task<IResult> RenderCardAsync(
@@ -70,8 +70,17 @@ public static partial class ApiEndpoints
         var headers = request.HttpContext.Response.Headers;
         headers.XContentTypeOptions = "nosniff";
         headers.CacheControl = "no-store";
-        var period = RecapPeriod.Of(ask!.Kind, ask.At);
-        return TypedResults.File(bytes!, ask.Format == "pdf" ? "application/pdf" : "image/png",
+        // Set first, so the access policy's TryAdd keeps it: an SVG opened from its URL runs and fetches nothing.
+        if (ask!.Format == "svg")
+            headers.ContentSecurityPolicy = "default-src 'none'; sandbox";
+        var period = RecapPeriod.Of(ask.Kind, ask.At);
+        var type = ask.Format switch
+        {
+            "pdf" => "application/pdf",
+            "svg" => "image/svg+xml",
+            _ => "image/png"
+        };
+        return TypedResults.File(bytes!, type,
             $"perf-sentinel-card-{period.KindName}-{period.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.{ask.Format}");
     }
 

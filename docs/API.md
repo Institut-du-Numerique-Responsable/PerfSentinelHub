@@ -760,7 +760,7 @@ hex, an unknown id and a view the report does not hold are all `404`. Reports ar
 
 ## Share cards
 
-A share card is an image or a PDF of a closed period's results that the engine draws and signs,
+A share card is an image (PNG or SVG) or a PDF of a closed period's results that the engine draws and signs,
 for a reader outside the Hub to check. This section starts with the signing key; see
 [OPERATIONS.md](OPERATIONS.md#share-card-keys) for where it lives and how to publish it. The routes
 exist only while `Hub:Cards:Organisation` is set: otherwise every one answers `404`.
@@ -841,7 +841,7 @@ the JSON content type of the other writes:
 | `title`, `team`             | Free text, 1 to 48 characters                                                          |
 | `label`                     | Story only, free text, 1 to 80 characters                                              |
 | `lang`                      | `en` (default) or `fr`                                                                 |
-| `format`                    | `png` (default) or `pdf` (the carousel); the attachment check always renders a PNG    |
+| `format`                    | `png` (default), `svg` or `pdf` (the carousel); the attachment check always renders a PNG |
 
 Free fields are trimmed, and a blank one is left out. One longer than its bound, or holding a
 control or format character (a direction override, a zero-width space), is `400`. Any other key,
@@ -866,9 +866,11 @@ print). The engine can still refuse what the Hub sent:
 | `unsupported_language`                        | `422 This Hub's engine cannot print cards in this language yet.`                                                              |
 | anything else, a line out of contract, 45 s   | `502 The engine could not render this card.`                                                                                  |
 
-**The file.** `200` with `Content-Type: image/png` or `application/pdf`,
+**The file.** `200` with `Content-Type: image/png`, `image/svg+xml` or `application/pdf`,
 `Content-Disposition: attachment; filename=perf-sentinel-card-<kind>-<from>.<format>`,
-`Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. The first card makes the signing
+`Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. An SVG also carries
+`Content-Security-Policy: default-src 'none'; sandbox`, so opened straight from its URL it runs no
+script and fetches nothing. The first card makes the signing
 key. The Hub writes `card.json` and a copy of the private key in a private temporary directory,
 deleted afterwards, and the key never appears on a command line.
 

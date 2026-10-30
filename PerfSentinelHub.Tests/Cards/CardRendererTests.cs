@@ -121,6 +121,19 @@ public sealed partial class CardRendererTests : IDisposable
     }
 
     [Fact]
+    public async Task An_svg_render_passes_the_format_and_reads_card_svg()
+    {
+        var renderer = await RendererAsync(new FakeEngine { Card = true });
+
+        var rendered = Assert.IsType<CardRender.Rendered>(
+            await renderer.RenderAsync(Collective(), Key, KeyFile(), "svg", Token));
+
+        Assert.Contains("--format svg", await File.ReadAllTextAsync(Path.Combine(Reports, "card-args.txt"), Token),
+            StringComparison.Ordinal);
+        Assert.Equal(FakeEngine.CardSvg, Encoding.UTF8.GetString(rendered.Bytes));
+    }
+
+    [Fact]
     public async Task A_fingerprint_other_than_the_key_is_out_of_contract()
     {
         var renderer = await RendererAsync(new FakeEngine

@@ -817,7 +817,7 @@ id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rappor
 
 ## Cartes à partager
 
-Une carte à partager est une image ou un PDF des résultats d'une période close, que le moteur
+Une carte à partager est une image (PNG ou SVG) ou un PDF des résultats d'une période close, que le moteur
 dessine et signe, pour qu'un lecteur hors du Hub puisse la vérifier. Cette section commence par
 la clé de signature ; voir [OPERATIONS-FR.md](OPERATIONS-FR.md#clés-des-cartes-à-partager) pour
 l'endroit où elle vit et la façon de la publier. Les routes n'existent que lorsque
@@ -903,7 +903,7 @@ origine et le type de contenu JSON des autres écritures :
 | `title`, `team`             | Texte libre, 1 à 48 caractères                                                         |
 | `label`                     | Histoire seulement, texte libre, 1 à 80 caractères                                     |
 | `lang`                      | `en` (par défaut) ou `fr`                                                              |
-| `format`                    | `png` (par défaut) ou `pdf` (le carrousel) ; la vérification du rattachement dessine toujours un PNG |
+| `format`                    | `png` (par défaut), `svg` ou `pdf` (le carrousel) ; la vérification du rattachement dessine toujours un PNG |
 
 Les champs libres sont rognés, et un champ vide est laissé de côté. Un champ plus long que sa
 borne, ou qui porte un caractère de contrôle ou de format (un forçage de direction, une espace de
@@ -931,9 +931,11 @@ refuser ce que le Hub a envoyé :
 | `unsupported_language`                        | `422 This Hub's engine cannot print cards in this language yet.`                                                              |
 | tout le reste, une ligne hors contrat, 45 s   | `502 The engine could not render this card.`                                                                                  |
 
-**Le fichier.** `200` avec `Content-Type: image/png` ou `application/pdf`,
+**Le fichier.** `200` avec `Content-Type: image/png`, `image/svg+xml` ou `application/pdf`,
 `Content-Disposition: attachment; filename=perf-sentinel-card-<kind>-<from>.<format>`,
-`Cache-Control: no-store` et `X-Content-Type-Options: nosniff`. La première carte fabrique la clé
+`Cache-Control: no-store` et `X-Content-Type-Options: nosniff`. Un SVG porte aussi
+`Content-Security-Policy: default-src 'none'; sandbox` : ouvert directement depuis son URL, il
+n'exécute aucun script et ne charge rien. La première carte fabrique la clé
 de signature. Le Hub écrit `card.json` et une copie de la clé privée dans un répertoire temporaire
 privé, supprimé ensuite, et la clé n'apparaît jamais sur une ligne de commande.
 

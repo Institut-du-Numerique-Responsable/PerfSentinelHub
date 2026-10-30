@@ -2043,6 +2043,8 @@ test("a card body carries only the values set, the story's only on a story", () 
         angle: "story", period: "month", at: "2026-10-01", environment: "prod", signature: "n_plus_one_sql:x",
         label: "Showing a cart", title: "Lighter", lang: "fr", format: "pdf"
     });
+    assert.deepEqual(PSL.cardBody({angle: "collective", period: "month", format: "svg"}),
+        {angle: "collective", period: "month", format: "svg"});
     assert.equal(PSL.cardOptionsPath({period: "month", at: "2026-10-01", environment: "a b&c"}),
         "/api/cards/options?period=month&at=2026-10-01&environment=a%20b%26c");
     assert.equal(PSL.cardOptionsPath({period: "year", at: "", environment: null, source_id: "s"}),
@@ -2124,12 +2126,22 @@ test("a fix row says what the card shows when its problem has no volume", () => 
         {figure: null, text: "the card shows how many calls one action made"});
 });
 
+test("a card downloads as a PNG, an SVG or a PDF, each with its label", () => {
+    assert.deepEqual(PSL.CARD_FORMATS, ["png", "svg", "pdf"]);
+    for (const format of PSL.CARD_FORMATS) assert.ok(PSL.CARD_FORMAT_LABELS[format], format);
+    assert.deepEqual(Object.keys(PSL.CARD_FORMAT_LABELS), PSL.CARD_FORMATS);
+    // The preview's note: an SVG has no fixed pixel size.
+    for (const format of PSL.CARD_FORMATS) assert.ok(PSL.CARD_COPY[format + "Note"], format);
+    assert.ok(!PSL.CARD_COPY.svgNote.includes("pixels"));
+});
+
 test("Card_copy_carries_no_technical_word", () => {
     const words = ["I/O", "finding", "query", "endpoint", "signature", "DNS"];
     const types = Object.keys(PSL.FINDING_TYPE_LABEL);
     const texts = [
         ...Object.values(PSL.CARD_ANGLE_LINES),
         ...Object.values(PSL.CARD_PERIOD_LABELS),
+        ...Object.values(PSL.CARD_FORMAT_LABELS),
         PSL.cardEnvironmentLine("prod", "pilotage"),
         PSL.cardEnvironmentLine(null, "pilotage"),
         PSL.cardContactText("acme.example", "pilotage"),

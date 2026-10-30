@@ -4,9 +4,11 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Cards;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -180,6 +182,44 @@ public sealed class CardsApiTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/pdf", response.Content.Headers.ContentType!.MediaType);
         Assert.Equal("perf-sentinel-card-month-2026-10-01.pdf", response.Content.Headers.ContentDisposition!.FileName);
+    }
+
+    // Access on is where the Hub adds its own policy to every response, which the SVG's must win against.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_svg_card_downloads_as_an_attachment_with_its_headers(bool access)
+    {
+        await using var provider = await FakeProvider.StartAsync(Users);
+        var hub = access ? AccessHub(provider, true) : Hub();
+        await OneFixAsync(hub);
+
+        using var response = await RenderAsync(hub,
+            """{"angle":"collective","period":"month","at":"2026-10-01","source_id":"a","format":"svg"}""");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/svg+xml", response.Content.Headers.ContentType!.MediaType);
+        Assert.StartsWith("attachment; filename=perf-sentinel-card-month-2026-10-01.svg",
+            Assert.Single(response.Content.Headers.GetValues("Content-Disposition")), StringComparison.Ordinal);
+        Assert.Equal("nosniff", Assert.Single(response.Headers.GetValues("X-Content-Type-Options")));
+        Assert.True(response.Headers.CacheControl!.NoStore);
+        Assert.Equal("default-src 'none'; sandbox", Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal(FakeEngine.CardSvg, await response.Content.ReadAsStringAsync(Token));
+    }
+
+    [Fact]
+    public async Task A_png_card_keeps_the_global_policy()
+    {
+        await using var provider = await FakeProvider.StartAsync(Users);
+        var hub = AccessHub(provider, true);
+        await OneFixAsync(hub);
+
+        using var response = await RenderAsync(hub,
+            """{"angle":"collective","period":"month","at":"2026-10-01","source_id":"a"}""");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/png", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("frame-ancestors 'self'", Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
     }
 
     [Fact]
@@ -363,6 +403,22 @@ public sealed class CardsApiTests : IDisposable
     }
 
     [Fact]
+    public async Task The_attachment_check_renders_a_png_whatever_the_format()
+    {
+        var hub = Hub();
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+
+        using var response = await client.SendAsync(Send("POST", AttachmentPath,
+            """{"angle":"collective","period":"month","at":"2026-10-01","format":"svg"}"""), Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var arguments = await File.ReadAllTextAsync(Path.Combine(_workspace, "reports", "card-args.txt"), Token);
+        Assert.Contains("--format png", arguments, StringComparison.Ordinal);
+        Assert.DoesNotContain("--format svg", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Attachment_without_a_verdict_is_a_502()
     {
         var hub = Hub(new FakeEngine { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = "{}" });
@@ -427,7 +483,8 @@ public sealed class CardsApiTests : IDisposable
         return hub;
     }
 
-    private WebApplicationFactory<Program> AccessHub(FakeProvider provider)
+    // seededClock keeps the seeded clock for a render, the session signed in by SessionOnSeededClockAsync.
+    private WebApplicationFactory<Program> AccessHub(FakeProvider provider, bool seededClock = false)
     {
         return Hub(configure: builder =>
         {
@@ -436,9 +493,13 @@ public sealed class CardsApiTests : IDisposable
             builder.UseSetting("Hub:MetricsPort", "9464");
             builder.ConfigureServices(services =>
             {
-                // A session cookie needs today's clock; the guard refuses before any figure is read.
-                services.RemoveAll<TimeProvider>();
-                services.AddSingleton(TimeProvider.System);
+                // The client's cookie jar reads today's clock; the guard refuses before any figure is read.
+                if (!seededClock)
+                {
+                    services.RemoveAll<TimeProvider>();
+                    services.AddSingleton(TimeProvider.System);
+                }
+
                 services.PostConfigure<HubOptions>(options =>
                 {
                     // Access on names every caller itself, so the proxy header is off.
@@ -473,6 +534,39 @@ public sealed class CardsApiTests : IDisposable
         if (site is not null)
             request.Headers.Add("Sec-Fetch-Site", site);
         return request;
+    }
+
+    // A render from the Hub's page: split's session when access is on, the proxy's alice when it is off.
+    private static async Task<HttpResponseMessage> RenderAsync(WebApplicationFactory<Program> hub, string body)
+    {
+        using var client = FakeProvider.Client(hub);
+        using var request = Send("POST", RenderPath, body, "same-origin");
+        if (hub.Services.GetRequiredService<AccessPolicy>().Enabled)
+        {
+            request.Headers.Remove("X-Forwarded-User");
+            request.Headers.Add("Cookie", await SessionOnSeededClockAsync(hub, "split"));
+        }
+
+        return await client.SendAsync(request, Token);
+    }
+
+    // The sign-in's cookies go by hand: the client's own jar would judge their expiry against today.
+    private static async Task<string> SessionOnSeededClockAsync(WebApplicationFactory<Program> hub, string user)
+    {
+        using var client = hub.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            BaseAddress = new Uri("https://localhost"),
+            HandleCookies = false
+        });
+        using var challenge = await client.GetAsync("/", Token);
+        var state = QueryHelpers.ParseQuery(challenge.Headers.Location!.Query)["state"];
+        using var callback = new HttpRequestMessage(HttpMethod.Get,
+            $"/auth/callback?code={user}&state={Uri.EscapeDataString(state!)}");
+        callback.Headers.Add("Cookie",
+            string.Join("; ", challenge.Headers.GetValues("Set-Cookie").Select(cookie => cookie.Split(';')[0])));
+        using var signedIn = await client.SendAsync(callback, Token);
+        return FakeProvider.SessionCookie(signedIn);
     }
 
     private static async Task<string?> DetailAsync(HttpResponseMessage response)

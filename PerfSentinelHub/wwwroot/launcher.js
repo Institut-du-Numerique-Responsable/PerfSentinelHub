@@ -2697,6 +2697,9 @@
     const CARD_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
         'October', 'November', 'December'];
     const CARD_KIND_MONTHS = {month: 1, quarter: 3, semester: 6, year: 12};
+    /** The files a card downloads as; the bracketed type is the one the saved file carries. */
+    const CARD_FORMATS = ['png', 'svg', 'pdf'];
+    const CARD_FORMAT_LABELS = {png: 'Image (PNG)', svg: 'Image to print or scale (SVG)', pdf: 'Carousel (PDF)'};
 
     /** Every other sentence of the card section, in one place for the copy review. */
     const CARD_COPY = {
@@ -2730,6 +2733,8 @@
         previewBlocked: 'No card can be made with these choices.',
         rendering: 'Rendering the card\u2026',
         pngNote: '1080 by 1350 pixels. Its code links to perf-sentinel.dev/verifier, which shows the signed figures.',
+        svgNote: 'Sharp at any size, to print or to enlarge. Its code links to perf-sentinel.dev/verifier, which '
+            + 'shows the signed figures.',
         pdfNote: 'Four pages of 1080 by 1350 points. Their code links to perf-sentinel.dev/verifier, which shows '
             + 'the signed figures.',
         noDomain: 'Without a domain, the check page shows this Hub\'s cards as "Signer not verified". An '
@@ -3141,6 +3146,8 @@
         CARD_ANGLES,
         CARD_ANGLE_NAMES,
         CARD_ANGLE_LINES,
+        CARD_FORMATS,
+        CARD_FORMAT_LABELS,
         CARD_COPY,
         ATTACH_REASONS,
         cardPeriodStart,

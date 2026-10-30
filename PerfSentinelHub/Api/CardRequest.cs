@@ -115,8 +115,8 @@ public sealed record CardRequest(
             return Refuse("signature and label belong to a story card.", out error);
         if (Choice(root, "lang", "en", "en", "fr") is not { } lang)
             return Refuse("lang must be en or fr.", out error);
-        if (Choice(root, "format", "png", "png", "pdf") is not { } format)
-            return Refuse("format must be png or pdf.", out error);
+        if (Choice(root, "format", "png", "png", "svg", "pdf") is not { } format)
+            return Refuse("format must be png, svg or pdf.", out error);
 
         error = null;
         return new CardRequest(angle, kind, at, environment, sourceId, signature, free, lang, format);
