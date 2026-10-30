@@ -351,6 +351,53 @@ pas finie est refusé avec la phrase du Hub dans la section. Il refuse aussi qua
 demande, ce qui est le cas d'un navigateur derrière aucune connexion ni proxy d'identité, et quand votre
 accès ne porte aucun `findings.read`. Un succès ajoute la ligne aussitôt.
 
+## Cartes à partager
+
+Sous les rapports, quand le Hub signe des cartes (`Hub:Cards:Organisation` est réglé et vous pouvez en
+créer), Share a result fait d'un résultat mesuré une image ou un carrousel à publier. La section lit et
+écrit `/api/cards/*` ([l'API](API-FR.md#cartes-à-partager)). Elle reste fermée derrière Create a card.
+Quand le moteur du Hub n'a pas la sous-commande `card`, un bandeau le dit à la place de la section.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-card-dark.png">
+  <img alt="La section carte : quoi raconter, la période close et ce qu'elle contient, vos mots, la langue et le format de la carte, puis l'aperçu avec la vérification du rattachement" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-card.png">
+</picture>
+
+Le formulaire suit l'ordre dans lequel on décide. Quoi raconter : une histoire (une correction
+confirmée, en mots de tous les jours), une courbe (la part du travail évitable, période après période)
+ou un collectif (combien de corrections la mesure a confirmées, et où). La période est une semaine, un
+mois, un trimestre, un semestre ou une année, choisie avec des flèches qui s'arrêtent à la dernière
+période close : une période en cours ne peut pas être choisie. Elle part de la période du filtre du
+récapitulatif quand celle-ci est close. Dessous, l'écran dit ce que contient la période avant toute
+signature : les jours enregistrés et les sources, les jours avec redémarrage, la part du trafic que
+couvrent les chiffres, et l'environnement, repris du filtre du récapitulatif. Une carte couvre tous les
+services de cet environnement : les filtres de service et de namespace ne s'appliquent pas. Une période
+que la carte ne peut pas couvrir affiche la raison du Hub et désactive Preview et Download ; une courbe
+dont la période précédente n'est pas entière propose à la place une carte histoire ou collectif.
+
+Une histoire liste les corrections que la mesure a confirmées dans la période, celle au plus fort
+volume avant la correction cochée d'abord, au-delà de cinq derrière Show all. Son nom de tous les
+jours est pré-rempli avec le nom retenu pour l'endpoint, et une case retient un nouveau nom pour tout
+le monde, quand votre accès porte `labels.write` ; sinon la case est grisée, une phrase dit pourquoi,
+et la carte imprime quand même le nom. Le titre et l'équipe (48 caractères chacun) et le nom de tous
+les jours (80) s'impriment tels que saisis, dans les deux langues de carte. Un caractère que la police
+de la carte ne sait pas dessiner, un emoji par exemple, est signalé sous son champ pendant la saisie,
+et le refus du moteur arrive au même endroit.
+
+Preview rend la carte : l'image dans un cadre clair, quel que soit le thème du Hub, le carrousel dans
+la visionneuse PDF du navigateur. Un choix modifié après un aperçu le grise et le dit ; Download fait
+toujours la carte à partir du formulaire tel qu'il est. Sous l'aperçu, la ligne que la page de
+vérification imprimera, et Verify attachment, qui rend la carte une fois de plus et fait vérifier par
+le moteur sa clé sous le domaine de l'organisation, par `cloudflare-dns.com` et le domaine lui-même,
+le seul appel de la section qui sort du Hub. Sans `Hub:Cards:Domain`, une phrase dit que la page de
+vérification montre les cartes du Hub comme « Signer not verified ». La langue de la carte, anglais ou
+français, est retenue dans ce navigateur.
+
+Les administrateurs ont aussi Signing key and organisation, replié et accessible même section fermée :
+le nom de l'enregistrement et la ligne DNS de chaque clé, le fichier `.well-known` indenté pour la
+lecture et copié tel que servi, Rotate key, et par clé un Revoke qui demande sur place le premier jour
+où elle a pu fuiter, sans date par défaut, et dit ce que la révocation change avant qu'on la confirme.
+
 ## L'écran des divulgations
 
 Les divulgations périodiques qu'une tâche planifiée a publiées, voir

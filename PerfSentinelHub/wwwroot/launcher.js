@@ -2681,6 +2681,302 @@
             + parts.timeZoneName;
     }
 
+    // ------------------------------------------------------------ share cards
+
+    /** The kinds a card covers, in the order the toggle shows them. */
+    const CARD_PERIODS = ['week', 'month', 'quarter', 'semester', 'year'];
+    /** "Semester" reads as a school term: the screen says Half-year, the value sent stays semester. */
+    const CARD_PERIOD_LABELS = {week: 'Week', month: 'Month', quarter: 'Quarter', semester: 'Half-year', year: 'Year'};
+    const CARD_ANGLES = ['story', 'curve', 'collective'];
+    const CARD_ANGLE_NAMES = {story: 'Story', curve: 'Curve', collective: 'Collective'};
+    const CARD_ANGLE_LINES = {
+        story: 'One fix, told in everyday words.',
+        curve: 'How much of the work was avoidable, period after period.',
+        collective: 'How many fixes the measure confirmed, and where.'
+    };
+    const CARD_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
+        'October', 'November', 'December'];
+    const CARD_KIND_MONTHS = {month: 1, quarter: 3, semester: 6, year: 12};
+
+    /** Every other sentence of the card section, in one place for the copy review. */
+    const CARD_COPY = {
+        title: 'Share a result',
+        hint: 'a signed card for a post or a slide',
+        help: 'The card prints figures this Hub measured over a closed period, with their scope. It is signed: '
+            + 'anyone who scans its code sees whether its figures changed since it was made.',
+        closed: 'Turn a measured result into an image or a carousel to post. The Hub writes every figure, you add '
+            + 'a title and a team name.',
+        create: 'Create a card',
+        intro: 'Pick what to tell and a closed period. The Hub writes every figure and sentence; you add a title, '
+            + 'a team name and, for a story, an everyday name for the action. The card is signed, so anyone can '
+            + 'check that its figures have not changed.',
+        engineOff: 'This Hub\'s engine cannot make cards yet. An administrator updates the engine to turn them on.',
+        optionsFailed: 'The Hub did not say what this period holds. Try again in a moment.',
+        noFix: 'No fix of this period is confirmed by the measure yet. A fix counts once its problem stays away '
+            + 'on the days after it is marked done.',
+        fixesWait: 'The list appears once the period can make a card.',
+        defaultPill: 'Largest volume before the fix',
+        labelHint: 'What a person was doing: "Showing a cart", "Paying an order". Without one, the card says '
+            + '"For one action in the application".',
+        rememberDenied: 'Only people allowed to name actions can remember a name. The card still prints it.',
+        freeNote: 'Printed as written, and shown on the check page as chosen by your organisation. The figures, '
+            + 'the sentences and the scope cannot be changed.',
+        carouselNote: 'Four pages for a LinkedIn document: the hook, why it matters, the figures, the proof. '
+            + 'Preview opens the PDF in your browser\'s viewer.',
+        fieldWhy: 'Fix the field marked above to make the card.',
+        stale: 'Your choices changed since this preview. Preview again to see them. Download makes the card from '
+            + 'your current choices.',
+        previewEmpty: 'Choose, then Preview. The card appears here as people will see it.',
+        previewBlocked: 'No card can be made with these choices.',
+        rendering: 'Rendering the card\u2026',
+        pngNote: '1080 by 1350 pixels. Its code links to perf-sentinel.dev/verifier, which shows the signed figures.',
+        pdfNote: 'Four pages of 1080 by 1350 points. Their code links to perf-sentinel.dev/verifier, which shows '
+            + 'the signed figures.',
+        noDomain: 'Without a domain, the check page shows this Hub\'s cards as "Signer not verified". An '
+            + 'administrator can set one in Hub:Cards:Domain.',
+        keysTitle: 'Signing key and organisation',
+        keysOrigin: 'Both come from the Hub configuration, Hub:Cards:Organisation and Hub:Cards:Domain. Every '
+            + 'card signs them, and nobody changes them from this screen.',
+        keysNone: 'No key yet. The first card makes one, and the lines to publish appear here.',
+        keysPublish: 'Publish either form below, then use Verify attachment. The DNS: one TXT record per key, all '
+            + 'under the same name. Keep old keys published, so the cards they signed keep verifying.',
+        keysFile: 'Only the command line check reads it; the check page reads the DNS.',
+        rotate: 'Makes a new key for the next cards. The current one stays published with its end date, so the '
+            + 'cards it signed keep verifying. Publish the new line too.',
+        leaked: 'First day it may have leaked'
+    };
+
+    /** One plain sentence per verify-card reason the engine answers at level 1. */
+    const ATTACH_REASONS = {
+        binding_check_failed: 'no DNS service answered',
+        key_not_published: 'the key is not published under {domain} yet',
+        public_key_mismatch: 'the key published under {domain} is not the one that signed this card',
+        signed_after_revocation: 'its key was revoked before it signed this card',
+        signed_outside_validity: 'its key was not valid on the day it signed this card',
+        no_domain: 'the card names no domain',
+        no_http_client: 'this Hub\'s engine cannot reach the network'
+    };
+
+    /** @param {string} day yyyy-MM-dd @returns {Date} midnight UTC */
+    function cardDate(day) {
+        return new Date(day + 'T00:00:00Z');
+    }
+
+    /** @param {Date} date @returns {string} yyyy-MM-dd */
+    function cardIso(date) {
+        return date.toISOString().slice(0, 10);
+    }
+
+    /**
+     * The first day of the period of `kind` that holds `day`; a week starts on Monday, UTC.
+     * @param {string} kind @param {string} day @returns {string}
+     */
+    function cardPeriodStart(kind, day) {
+        const date = cardDate(day);
+        if (kind === 'week') {
+            date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+            return cardIso(date);
+        }
+        const months = CARD_KIND_MONTHS[kind];
+        const month = Math.floor(date.getUTCMonth() / months) * months;
+        return cardIso(new Date(Date.UTC(date.getUTCFullYear(), month, 1)));
+    }
+
+    /**
+     * The first day of the period `delta` steps away from the one starting on `from`.
+     * @param {string} kind @param {string} from @param {number} delta @returns {string}
+     */
+    function stepPeriod(kind, from, delta) {
+        const date = cardDate(from);
+        if (kind === 'week') date.setUTCDate(date.getUTCDate() + 7 * delta);
+        else date.setUTCMonth(date.getUTCMonth() + CARD_KIND_MONTHS[kind] * delta);
+        return cardIso(date);
+    }
+
+    /**
+     * The first day of the last period of `kind` that ended before `today` (UTC).
+     * @param {string} kind @param {string} today @returns {string}
+     */
+    function lastClosedPeriod(kind, today) {
+        return stepPeriod(kind, cardPeriodStart(kind, today), -1);
+    }
+
+    /** False at the last closed period, so an open one can never be picked. */
+    function canStepForward(kind, from, today) {
+        return stepPeriod(kind, from, 1) <= lastClosedPeriod(kind, today);
+    }
+
+    function cardDayText(day, withYear) {
+        const date = cardDate(day);
+        return date.getUTCDate() + ' ' + CARD_MONTHS[date.getUTCMonth()] + (withYear ? ' ' + date.getUTCFullYear() : '');
+    }
+
+    /**
+     * A period in words, as CardRules.PeriodName writes it.
+     * @param {string} kind @param {string} from @returns {string}
+     */
+    function cardPeriodName(kind, from) {
+        const date = cardDate(from);
+        const year = String(date.getUTCFullYear());
+        if (kind === 'week') return 'the week of ' + cardDayText(from, true);
+        if (kind === 'month') return CARD_MONTHS[date.getUTCMonth()] + ' ' + year;
+        if (kind === 'quarter') return 'Q' + (Math.floor(date.getUTCMonth() / 3) + 1) + ' ' + year;
+        if (kind === 'semester') return (date.getUTCMonth() === 0 ? 'the first half of ' : 'the second half of ') + year;
+        return year;
+    }
+
+    /**
+     * The days a period covers: `1 to 31 October 2026, UTC`, the shared month or year written once.
+     * @param {string} from @param {string} to @returns {string}
+     */
+    function cardRangeText(from, to) {
+        let start = cardDayText(from, true);
+        if (from.slice(0, 7) === to.slice(0, 7)) start = String(cardDate(from).getUTCDate());
+        else if (from.slice(0, 4) === to.slice(0, 4)) start = cardDayText(from, false);
+        return start + ' to ' + cardDayText(to, true) + ', UTC';
+    }
+
+    function cardText(value) {
+        return typeof value === 'string' ? value.trim() : '';
+    }
+
+    /**
+     * The body of a render, with only the values set: the fix and its label on a story only.
+     * @param {Object<string, string|null|undefined>} form
+     * @returns {Object<string, string>}
+     */
+    function cardBody(form) {
+        const body = {};
+        ['angle', 'period', 'at', 'environment', 'source_id', 'signature', 'label', 'title', 'team', 'lang', 'format']
+            .forEach(function (key) {
+                const value = cardText(form[key]);
+                if (value && ((key !== 'signature' && key !== 'label') || form.angle === 'story')) body[key] = value;
+            });
+        return body;
+    }
+
+    /** The options read of a form: the period always, the day and the scope when set. */
+    function cardOptionsPath(form) {
+        let path = '/api/cards/options?period=' + encodeURIComponent(form.period);
+        ['at', 'environment', 'source_id'].forEach(function (key) {
+            const value = cardText(form[key]);
+            if (value) path += '&' + key + '=' + encodeURIComponent(value);
+        });
+        return path;
+    }
+
+    /** Whether the caller may name an action anywhere, which remembering a card's label does. */
+    function canRememberLabel(sources) {
+        return Array.isArray(sources) && sources.some(function (source) {
+            return permits(source, 'labels.write');
+        });
+    }
+
+    /**
+     * The remember box: it waits for a new name, or for one that differs from the remembered one.
+     * @param {string} typed @param {string|null} remembered @param {string} place
+     * @returns {{text: string, enabled: boolean}}
+     */
+    function rememberState(typed, remembered, place) {
+        const text = cardText(typed);
+        return remembered
+            ? {text: 'Update the remembered name with this one', enabled: text !== '' && text !== remembered}
+            : {text: 'Remember this name for ' + place, enabled: text !== ''};
+    }
+
+    // A heuristic for typing only, the engine's 422 stays the authority. (C) (R) and TM are pictographic
+    // to Unicode but drawn by the card's fonts.
+    const CARD_UNDRAWABLE = /[\p{Cc}\p{Cf}]|(?![\u00A9\u00AE\u2122])\p{Extended_Pictographic}/u;
+
+    /** The first character a free field holds that the card cannot draw, as a sentence, or null. */
+    function cardFieldProblem(text) {
+        const found = String(text || '').match(CARD_UNDRAWABLE);
+        return found ? 'The card\'s font cannot draw "' + found[0] + '". Remove it, or write it another way.' : null;
+    }
+
+    /**
+     * Whether a curve's 422 is the refusal of the period before, which a story or a collective card
+     * escapes: CardRules.Explain writes only that one as "No curve for ...", the 422 carries no code.
+     */
+    function isPreviousRefusal(detail) {
+        return String(detail || '').indexOf('No curve for ') === 0;
+    }
+
+    /** The two hosts the attachment check reaches. */
+    function cardContactText(domain, view) {
+        return 'Checking contacts cloudflare-dns.com' + (view === 'pilotage' ? '' : ' (DNS over HTTPS)')
+            + ' and ' + domain + '.';
+    }
+
+    /**
+     * verify-card's verdict as one sentence; the engine's raw reason goes in a title only.
+     * @param {{integrity: string, level: number, domain: string|null, reason: string|null}} result
+     * @param {boolean} isAdmin
+     * @returns {{text: string, title: string|null}}
+     */
+    function attachmentText(result, isAdmin) {
+        if (result.integrity !== 'ok') {
+            return {text: 'This card does not verify: its figures changed after signing.', title: null};
+        }
+        if (result.level === 2) return {text: 'Attached: cards read "Signed by ' + result.domain + '".', title: null};
+        if (result.reason && result.reason !== 'key_not_published') {
+            const reason = ATTACH_REASONS[result.reason];
+            return {
+                text: 'Could not check: ' + (reason ? reason.replace('{domain}', result.domain) : 'an unexpected answer')
+                    + '.',
+                title: result.reason
+            };
+        }
+        return {
+            text: isAdmin
+                ? 'Not attached yet. Publish one of the lines below, then check again.'
+                : 'Not attached yet. An administrator publishes one line under ' + result.domain
+                + ', then you can check again.',
+            title: null
+        };
+    }
+
+    /** What the check page prints for the card: the signer only once a check found the key. */
+    function levelLine(attached, domain) {
+        return 'On the check page, this card reads: '
+            + (attached ? 'Signed by ' + domain + '.' : 'Figures intact since their signature. Signer not verified.');
+    }
+
+    /** Where the card's environment comes from, and what it covers. */
+    function cardEnvironmentLine(environment, view) {
+        const lead = environment
+            ? 'Environment ' + environment + ', taken from the recap filter above. A card covers every service in it'
+            : 'Every environment, as the recap filter above reads. A card covers every service in them';
+        return lead + (view === 'pilotage' ? '.' : ': the service and namespace filters do not apply.');
+    }
+
+    // Rounded down, so the screen never shows more than the card will sign.
+    function cardVolume(value) {
+        if (value < 10000) return value.toLocaleString('en-US');
+        if (value < 1000000) return Math.floor(value / 1000) + ' thousand';
+        return (Math.floor(value / 100000) / 10) + ' million';
+    }
+
+    /**
+     * What a fix row says the card prints: the volume before the fix, or the figure a problem with
+     * no volume cites instead.
+     * @returns {{figure: string|null, text: string}}
+     */
+    function cardFixLine(fix) {
+        if (fix.before_fix_ops !== null && fix.before_fix_ops !== undefined) {
+            return {
+                figure: cardVolume(fix.before_fix_ops),
+                text: ' unnecessary operations in ' + fix.before_period_name + ', before the fix'
+            };
+        }
+        const type = String(fix.finding_type);
+        let text = 'the card shows how many calls one action made';
+        if (type.indexOf('slow_') === 0) text = 'the card shows how long its slowest runs took';
+        else if (type === 'pool_saturation') text = 'the card shows how many calls ran at the same time';
+        else if (type === 'serialized_calls') text = 'the card shows how many calls ran one after the other';
+        return {figure: null, text: text};
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -2838,6 +3134,32 @@
         notesText,
         httpUrl,
         localTime,
-        isoUtc
+        isoUtc,
+        saveBlob,
+        CARD_PERIODS,
+        CARD_PERIOD_LABELS,
+        CARD_ANGLES,
+        CARD_ANGLE_NAMES,
+        CARD_ANGLE_LINES,
+        CARD_COPY,
+        ATTACH_REASONS,
+        cardPeriodStart,
+        stepPeriod,
+        lastClosedPeriod,
+        canStepForward,
+        cardPeriodName,
+        cardDayText,
+        cardRangeText,
+        cardBody,
+        cardOptionsPath,
+        canRememberLabel,
+        rememberState,
+        cardFieldProblem,
+        isPreviousRefusal,
+        cardContactText,
+        attachmentText,
+        levelLine,
+        cardEnvironmentLine,
+        cardFixLine
     };
 })(globalThis);

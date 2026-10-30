@@ -323,6 +323,51 @@ has not ended is refused with the Hub's sentence in the section. It also refuses
 know who is asking, which is the case of a browser behind no sign-in or identity proxy, and when your
 access holds no `findings.read`. A success adds the row at once.
 
+## Share cards
+
+Under the reports, when the Hub signs cards (`Hub:Cards:Organisation` is set and you may create cards),
+Share a result turns a measured result into an image or a carousel to post. It reads and writes
+`/api/cards/*` ([the API](API.md#share-cards)). The section stays closed behind Create a card. When
+the Hub's engine has no `card` subcommand, a banner says so in place of the section.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-card-dark.png">
+  <img alt="The card section: what to tell, the closed period and what it holds, your words, the card's language and format, then the preview with the attachment check" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-card.png">
+</picture>
+
+The form reads in the order one decides. What to tell is a story (one confirmed fix, in everyday
+words), a curve (how much of the work was avoidable, period after period) or a collective (how many
+fixes the measure confirmed, and where). The period is a week, month, quarter, half-year or year,
+picked with arrows that stop at the last closed one, so a period still running cannot be chosen. It
+starts on the recap filter's period when that one is closed. Under it the screen says what the period
+holds before anything is signed: the days recorded and the sources, the days with a restart, the share
+of traffic the figures cover, and the environment, taken from the recap filter. A card covers every
+service of that environment: the service and namespace filters do not apply. A period the card cannot
+cover shows the Hub's reason and disables Preview and Download; a curve whose previous period is not
+whole offers a story or a collective card instead.
+
+A story lists the fixes the measure confirmed in the period, the one with the largest volume before
+the fix picked first, beyond five behind Show all. Its everyday name is pre-filled from the name
+remembered for the endpoint, and a box remembers a new one for everybody, when your access holds
+`labels.write`; otherwise the box is disabled and a sentence says why, and the card still prints the
+name. The title and the team (48 characters each) and the everyday name (80) print as typed, in either
+card language. A character the card's font cannot draw, an emoji for one, is flagged under its field
+as you type, and the engine's own refusal lands there too.
+
+Preview renders the card: the image in a light frame, whatever the Hub's theme, the carousel in the
+browser's own PDF viewer. A choice changed after a preview dims it and says so; Download always makes
+the card from the form as it stands. Under the preview, the line the check page will print, and
+Verify attachment, which renders the card once more and has the engine check its key under the
+organisation's domain, through `cloudflare-dns.com` and the domain itself, the only call of the
+section that leaves the Hub. Without `Hub:Cards:Domain`, a sentence says the check page shows the
+Hub's cards as "Signer not verified". The card language, English or French, is remembered in this
+browser.
+
+Administrators also get Signing key and organisation, folded and reachable while the section is
+closed: the record name and each key's DNS line, the `.well-known` file indented for reading and
+copied as served, Rotate key, and per key a Revoke that asks inline for the first day it may have
+leaked, with no default date, and says what the revocation changes before it is confirmed.
+
 ## The disclosures screen
 
 The periodic disclosures a scheduled job published, see [API.md](API.md#disclosures). A rail of

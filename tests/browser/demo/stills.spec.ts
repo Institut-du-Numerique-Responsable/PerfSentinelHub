@@ -258,6 +258,29 @@ test("recap", async ({page}, info) => {
     await expect(page.locator(".recap-where", {hasText: "in order-svc"})).toHaveCount(0);
 });
 
+test("card", async ({page}, info) => {
+    // The section exists only on an engine that renders cards, which HUB_ENGINE_BINARY names.
+    const status = await (await page.request.get("/api/status")).json() as { cards?: boolean };
+    test.skip(status.cards !== true, "the engine has no `card` subcommand, so the recap shows no card section");
+    // A card is made in somebody's name, as the reverse proxy would say.
+    await page.setExtraHTTPHeaders({"x-forwarded-user": state.manager});
+    await page.goto("/#/recap");
+    await settled(page, "What wastes the most");
+    await page.getByRole("button", {name: "Create a card"}).click();
+    await page.locator("#card-angle-curve").check();
+    await page.locator("#card-kind-month").click();
+    // global-setup sealed the last two closed months, so the curve of the last one previews.
+    await expect(page.locator(".period-facts")).toBeVisible({timeout: 15_000});
+    await page.locator("#card-title").fill("Checkout, lighter every month");
+    await page.locator("#card-team").fill("Checkout team");
+    await page.locator("#card-preview").click();
+    await expect(page.locator("img.card-preview")).toBeVisible({timeout: 45_000});
+    await page.locator("section.share").screenshot({
+        path: nameFor("launcher-card", info.project.name),
+        animations: "disabled"
+    });
+});
+
 test("disclosures", async ({page}, info) => {
     await page.goto("/#/disclosures");
     await settled(page, "Energy and carbon, period by period");
