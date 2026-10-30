@@ -115,7 +115,8 @@ entirely, because its own `/api/export/report` already returns exactly that JSON
 </picture>
 
 None of the three is derivable from the others, and they are enforced by three
-different mechanisms.
+different mechanisms. The daily worker, the first of them, keeps several durations, one
+per kind of row.
 
 Findings expire on a worker that runs once a day and purges in chunks, so a long purge
 cannot reject imports for its whole duration. Incidents copied from a daemon ride that
@@ -133,9 +134,15 @@ source saw a finding in ride the same clock on their own `last_seen_ms`, without
 key for the same reason, and an orphan is as invisible: a read reaches one only through a
 finding. The grouping attributes each source captured on a finding ride it the same way, on
 their own `last_seen_ms`. The pairs an incident's frozen findings share leave with their
-incident. Detection counts and days ride it by whole UTC day, like observation days, and a
-ledger's own row on the last time the Hub read it. A replay of a purged day is harmless,
-since every value is absolute, and a daemon keeps 31 days at most anyway.
+incident.
+
+Detection counts and days ride the daily worker on a clock of their own,
+`Hub:DetectionRetention`, 1,100 days by default, by whole UTC day like observation days, and a
+ledger's own row with them, on the last time the Hub read it. A year card compares a year with
+the whole year before it, which the 180 days of a finding cannot hold, and the validator keeps
+this clock at least `Hub:Retention`, since the recap reads the detection days of every finding
+it holds. A replay of a purged day is harmless, since every value is absolute, and a daemon
+keeps 31 days at most anyway.
 
 The ack mirror rides that clock as well, on `read_at_ms`, the time of the read that wrote
 the row. It does not age an ack: every read that succeeds rewrites its source's rows, so

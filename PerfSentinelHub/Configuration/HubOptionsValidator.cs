@@ -34,10 +34,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:PollInterval must be positive.");
         if (options.HttpTimeout <= TimeSpan.Zero)
             errors.Add("Hub:HttpTimeout must be positive.");
-        if (options.Retention <= TimeSpan.Zero)
-            errors.Add("Hub:Retention must be positive.");
-        if (options.ResolutionGrace <= TimeSpan.Zero || options.ResolutionGrace >= options.Retention)
-            errors.Add("Hub:ResolutionGrace must be positive and below Hub:Retention.");
+        ValidateRetentionSettings(options, errors);
         if (options.MaxConcurrentPolls is < 1 or > 32)
             errors.Add("Hub:MaxConcurrentPolls must be between 1 and 32.");
         if (options.MaxReadLimit is < 1 or > 10_000)
@@ -56,6 +53,17 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         ValidateAnalysisSettings(options.Analysis, errors);
         ValidateUpdateCheckSettings(options.UpdateCheck, errors);
         ValidateAuthSettings(options.Auth, errors);
+    }
+
+    private static void ValidateRetentionSettings(HubOptions options, List<string> errors)
+    {
+        if (options.Retention <= TimeSpan.Zero)
+            errors.Add("Hub:Retention must be positive.");
+        if (options.DetectionRetention < options.Retention)
+            errors.Add("Hub:DetectionRetention must be at least Hub:Retention: the recap reads the detection days of "
+                       + "every finding it holds.");
+        if (options.ResolutionGrace <= TimeSpan.Zero || options.ResolutionGrace >= options.Retention)
+            errors.Add("Hub:ResolutionGrace must be positive and below Hub:Retention.");
     }
 
     private static void ValidateAuthSettings(AuthOptions auth, List<string> errors)

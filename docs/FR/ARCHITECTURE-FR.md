@@ -123,7 +123,8 @@ déjà exactement ce JSON.
 </picture>
 
 Aucune des trois ne se déduit des autres, et elles sont appliquées par trois mécanismes
-différents.
+différents. Le worker quotidien, le premier d'entre eux, tient plusieurs durées, une par
+sorte de ligne.
 
 Les findings expirent sur un worker qui tourne une fois par jour et purge par tranches,
 de sorte qu'une purge longue ne puisse pas rejeter les imports pendant toute sa durée. Les
@@ -144,10 +145,16 @@ leur propre `last_seen_ms`, sans clé étrangère pour la même raison, et une o
 tout aussi invisible : une lecture n'en atteint une qu'à travers un finding. Les attributs
 de regroupement que chaque source a captés sur un finding la suivent de la même façon, sur
 leur propre `last_seen_ms`. Les paires que partagent les findings gelés d'un incident partent
-avec leur incident. Les comptes et les jours de détections la suivent par jour UTC entier,
-comme les jours d'observation, et la ligne d'un registre sur la dernière fois que le Hub l'a
-lu. Le renvoi d'un jour purgé est sans effet néfaste, puisque chaque valeur est absolue, et un
-daemon ne garde de toute façon que 31 jours au plus.
+avec leur incident.
+
+Les comptes et les jours de détections suivent le worker quotidien sur une horloge à eux,
+`Hub:DetectionRetention`, 1 100 jours par défaut, par jour UTC entier comme les jours
+d'observation, et la ligne d'un registre part avec eux, sur la dernière fois que le Hub l'a lu.
+Une carte annuelle compare une année avec toute l'année d'avant, ce que les 180 jours d'un
+finding ne peuvent pas tenir, et le validateur garde cette horloge au moins égale à
+`Hub:Retention`, puisque le récap lit les jours de détections de chaque finding qu'il tient. Le
+renvoi d'un jour purgé est sans effet néfaste, puisque chaque valeur est absolue, et un daemon
+ne garde de toute façon que 31 jours au plus.
 
 Le miroir des acquittements suit aussi cette horloge, sur `read_at_ms`, l'heure de la
 lecture qui a écrit la ligne. Elle ne fait pas vieillir un acquittement : chaque lecture

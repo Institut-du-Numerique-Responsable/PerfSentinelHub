@@ -362,18 +362,19 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         }
     }
 
-    public async Task PurgeAsync(long cutoffMs, long runCutoffMs, long nowMs, CancellationToken cancellationToken)
+    public async Task PurgeAsync(
+        long cutoffMs, long detectionCutoffMs, long runCutoffMs, long nowMs, CancellationToken cancellationToken)
     {
         // Chunked: holding the write gate for one whole multi-GB delete would 503 every daemon
         // import for the duration of the purge.
-        while (await PurgeChunkAsync(cutoffMs, runCutoffMs, nowMs, cancellationToken) > 0)
+        while (await PurgeChunkAsync(cutoffMs, detectionCutoffMs, runCutoffMs, nowMs, cancellationToken) > 0)
         {
             // Every chunk is deleted by the call in the condition itself.
         }
     }
 
     private async Task<int> PurgeChunkAsync(
-        long cutoffMs, long runCutoffMs, long nowMs, CancellationToken cancellationToken)
+        long cutoffMs, long detectionCutoffMs, long runCutoffMs, long nowMs, CancellationToken cancellationToken)
     {
         await _writeGate.WaitAsync(cancellationToken);
         try
@@ -407,11 +408,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                    DELETE FROM finding_observations WHERE rowid IN (
                                      SELECT rowid FROM finding_observations WHERE day < $cutoff_day LIMIT $chunk);
                                    DELETE FROM detection_counts WHERE rowid IN (
-                                     SELECT rowid FROM detection_counts WHERE day < $cutoff_day LIMIT $chunk);
+                                     SELECT rowid FROM detection_counts WHERE day < $detection_cutoff_day LIMIT $chunk);
                                    DELETE FROM detection_days WHERE rowid IN (
-                                     SELECT rowid FROM detection_days WHERE day < $cutoff_day LIMIT $chunk);
+                                     SELECT rowid FROM detection_days WHERE day < $detection_cutoff_day LIMIT $chunk);
                                    DELETE FROM detection_ledgers WHERE rowid IN (
-                                     SELECT rowid FROM detection_ledgers WHERE last_read_ms < $cutoff LIMIT $chunk);
+                                     SELECT rowid FROM detection_ledgers WHERE last_read_ms < $detection_cutoff LIMIT $chunk);
                                    DELETE FROM finding_groupings WHERE rowid IN (
                                      SELECT rowid FROM finding_groupings WHERE last_seen_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM finding_attributes WHERE rowid IN (
@@ -428,6 +429,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             command.Parameters.AddWithValue("$cutoff", cutoffMs);
             // Floored, so the day the cutoff falls in is kept whole.
             command.Parameters.AddWithValue("$cutoff_day", cutoffMs / DayMs);
+            command.Parameters.AddWithValue("$detection_cutoff", detectionCutoffMs);
+            command.Parameters.AddWithValue("$detection_cutoff_day", detectionCutoffMs / DayMs);
             command.Parameters.AddWithValue("$run_cutoff", runCutoffMs);
             command.Parameters.AddWithValue("$now_ms", nowMs);
             command.Parameters.AddWithValue("$chunk", PurgeChunkSize);

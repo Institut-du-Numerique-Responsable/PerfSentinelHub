@@ -34,9 +34,11 @@ public sealed partial class RetentionWorker(
             // Finished runs age out on their own clock. Reusing Retention would
             // keep six months of run history for a table nothing reads back.
             var runCutoff = (now - options.Value.Analysis.RunRetention).ToUnixTimeMilliseconds();
+            var detectionCutoff = (now - options.Value.DetectionRetention).ToUnixTimeMilliseconds();
             try
             {
-                await database.PurgeAsync(cutoff, runCutoff, now.ToUnixTimeMilliseconds(), stoppingToken);
+                await database.PurgeAsync(
+                    cutoff, detectionCutoff, runCutoff, now.ToUnixTimeMilliseconds(), stoppingToken);
                 await database.PurgeRecapReportsAsync(
                     (now - options.Value.Recaps.Retention).ToUnixTimeMilliseconds(), stoppingToken);
             }

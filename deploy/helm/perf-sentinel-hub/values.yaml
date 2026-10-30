@@ -7,6 +7,9 @@ hub:
   httpTimeout: "00:00:10"
   maxConcurrentPolls: 4
   retention: "180.00:00:00"
+  # Daily detection counts, days and ledgers: a year card compares with the
+  # whole year before it. At least retention.
+  detectionRetention: "1100.00:00:00"
   resolutionGrace: "7.00:00:00"
   defaultReadLimit: 1000
   maxReadLimit: 10000
@@ -220,7 +223,9 @@ ingress:
 # 1Gi assumes a small fleet. The database keeps one row per finding, daemon and
 # observed day for hub.retention, about 300 bytes each: 2,000 signatures seen
 # daily on three daemons at the 180-day default come to roughly 300 MB, and the
-# backup command needs the database's size free again on this same volume. Fast
+# backup command needs the database's size free again on this same volume.
+# Detection days and counts stay for hub.detectionRetention, 1,100 days by
+# default, one count row per signature, daemon and day. Fast
 # growth points first at a producer minting a new signature per trace, which
 # /api/sources flags (Hub:NewSignaturesPerHourWarning), before at this size.
 persistence:

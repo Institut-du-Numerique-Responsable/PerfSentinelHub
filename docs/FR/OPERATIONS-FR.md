@@ -432,9 +432,10 @@ est de 1 Gio au total. Cette taille croît avec les jours d'observation que le H
 une ligne d'environ 300 octets par finding, par daemon et par jour observé pendant la durée
 de `Hub:Retention` : 2 000 signatures vues chaque jour sur trois daemons, au défaut de
 180 jours, font environ 300 Mo, donc dimensionnez le volume pour la flotte plutôt que pour
-le défaut. Les divulgations ajoutent leurs fichiers : le rapport, l'attestation, le bundle et
-le PDF sont gardés dans la base, jamais purgés, si bien que la sauvegarde les emporte et
-grossit à chaque publication.
+le défaut. Les lignes de détections restent plus longtemps, 1 100 jours par défaut
+(`Hub:DetectionRetention`), une ligne par signature, par daemon et par jour. Les divulgations
+ajoutent leurs fichiers : le rapport, l'attestation, le bundle et le PDF sont gardés dans la
+base, jamais purgés, si bien que la sauvegarde les emporte et grossit à chaque publication.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

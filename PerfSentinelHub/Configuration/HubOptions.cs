@@ -11,6 +11,9 @@ public sealed record HubOptions
 
     public TimeSpan Retention { get; set; } = TimeSpan.FromDays(180);
 
+    // Detection days, counts and ledgers: long enough for a year card and the whole year before it.
+    public TimeSpan DetectionRetention { get; set; } = TimeSpan.FromDays(1100);
+
     // Window behind the per-finding status: seen within it = active; older,
     // with the endpoint still heartbeating from a reachable source =
     // likely_resolved; anything else = not_observed.

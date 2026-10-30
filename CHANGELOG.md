@@ -2,6 +2,16 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- Detection counts, days and ledgers leave on a clock of their own, `Hub:DetectionRetention`
+  (default `1100.00:00:00`, at least `Hub:Retention`), instead of the 180 days of a finding: a
+  year card compares a year with the whole year before it. The chart sets it from
+  `hub.detectionRetention`. A database upgraded from 0.9.0 keeps only the detection days its
+  former 180-day purge left.
+
 ## [0.9.0] - 2026-10-29
 
 ### Added

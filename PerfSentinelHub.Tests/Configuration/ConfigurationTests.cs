@@ -482,6 +482,28 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void Detection_retention_defaults_to_1100_days()
+    {
+        Assert.Equal(TimeSpan.FromDays(1100), new HubOptions().DetectionRetention);
+        Assert.Empty(AccessFailures(ValidOptions()));
+    }
+
+    [Fact]
+    public void A_detection_retention_below_the_finding_retention_is_refused()
+    {
+        var options = ValidOptions() with
+        {
+            Retention = TimeSpan.FromDays(180),
+            DetectionRetention = TimeSpan.FromDays(90)
+        };
+
+        Assert.Equal(
+            "Hub:DetectionRetention must be at least Hub:Retention: the recap reads the detection days of every "
+            + "finding it holds.",
+            Assert.Single(AccessFailures(options)));
+    }
+
+    [Fact]
     public void Recap_settings_default_to_a_year_and_six_hours()
     {
         var recaps = new HubOptions().Recaps;

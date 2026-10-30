@@ -398,9 +398,10 @@ own size free on the PVC before starting one. The chart default is 1Gi total. Th
 grows with the observation days the Hub keeps, one row of about 300 bytes per finding,
 daemon and observed day for the length of `Hub:Retention`: 2,000 signatures seen daily on
 three daemons at the 180-day default come to roughly 300 MB, so size the volume for the
-fleet rather than for the default. Disclosures add their files: the report, the attestation,
-the bundle and the PDF are kept in the database, never purged, so the backup carries them
-and grows with each one published.
+fleet rather than for the default. Detection rows stay longer, 1,100 days by default
+(`Hub:DetectionRetention`), one row per signature, daemon and day. Disclosures add their
+files: the report, the attestation, the bundle and the PDF are kept in the database, never
+purged, so the backup carries them and grows with each one published.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

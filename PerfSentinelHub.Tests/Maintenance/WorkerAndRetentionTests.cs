@@ -73,7 +73,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, 0, cancellationToken);
+        await database.PurgeAsync(1000, 1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         Assert.Equal(2L, await CountAsync(reopened, "findings", cancellationToken));
@@ -110,7 +110,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
         }
 
         // The cutoff falls inside day 3, which is kept whole.
-        await database.PurgeAsync(3 * dayMs + dayMs / 2, 0, 0, cancellationToken);
+        await database.PurgeAsync(3 * dayMs + dayMs / 2, 3 * dayMs + dayMs / 2, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -142,7 +142,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
                 ledger, 0, 4, 4, null, [], [new DetectionDayRow(4, false, false, 0, null, 0, 0, 1.0)], null),
             false, 4 * dayMs, cancellationToken);
 
-        await database.PurgeAsync(3 * dayMs + dayMs / 2, 0, 0, cancellationToken);
+        await database.PurgeAsync(3 * dayMs + dayMs / 2, 3 * dayMs + dayMs / 2, 0, 0, cancellationToken);
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         await using var read = connection.CreateCommand();
@@ -152,6 +152,87 @@ public sealed class WorkerAndRetentionTests : IDisposable
                                   (SELECT group_concat(source_id, ',') FROM detection_ledgers);
                            """;
         Assert.Equal("3 | 3,4 | b", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
+    public async Task Detection_aggregates_outlive_the_finding_retention()
+    {
+        const long dayMs = 86_400_000;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _databasePath }),
+            TimeProvider.System);
+        await database.InitializeAsync(cancellationToken);
+        await using (var connection = await database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $$"""
+                                    INSERT INTO findings VALUES
+                                      ('sig','{}','svc','type','warning','/old','h',NULL,{{50 * dayMs}},{{50 * dayMs}},'local_batch',1);
+                                    """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await database.MergeDetectionPageAsync("a", new DetectionLedgerPage(
+                "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b", 0, 50, 5, null,
+                [new DetectionCountRow(5, "sig", 1, null), new DetectionCountRow(50, "sig", 1, null)],
+                [
+                    new DetectionDayRow(5, false, false, 0, null, 0, 0, 1.0),
+                    new DetectionDayRow(50, false, false, 0, null, 0, 0, 1.0)
+                ],
+                null),
+            false, 50 * dayMs, cancellationToken);
+
+        await database.PurgeAsync(100 * dayMs, 10 * dayMs, 0, 0, cancellationToken);
+
+        await using var reopened = await database.OpenConnectionAsync(cancellationToken);
+        Assert.Equal(0L, await CountAsync(reopened, "findings", cancellationToken));
+        Assert.Equal(1L, await CountAsync(reopened, "detection_ledgers", cancellationToken));
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(day, ',') FROM detection_counts) || ' | ' ||
+                                  (SELECT group_concat(day, ',') FROM detection_days);
+                           """;
+        Assert.Equal("50 | 50", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
+    public async Task The_worker_purges_detections_on_their_own_clock()
+    {
+        const long dayMs = 86_400_000;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = Options.Create(new HubOptions
+        {
+            DatabasePath = _databasePath,
+            Retention = TimeSpan.FromDays(10),
+            DetectionRetention = TimeSpan.FromDays(30)
+        });
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(1_800_000_000_000));
+        var database = new HubDatabase(options, clock);
+        await database.InitializeAsync(cancellationToken);
+        var today = (int)(clock.GetUtcNow().ToUnixTimeMilliseconds() / dayMs);
+        // The 40-day-old row is the proof the pass ran; the 20-day-old one sits between the two clocks.
+        await database.MergeDetectionPageAsync("a", new DetectionLedgerPage(
+                "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b", 0, today, today - 40, null, [],
+                [
+                    new DetectionDayRow(today - 40, false, false, 0, null, 0, 0, 1.0),
+                    new DetectionDayRow(today - 20, false, false, 0, null, 0, 0, 1.0)
+                ],
+                null),
+            false, clock.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken);
+        using var worker = new RetentionWorker(database, options, clock, new ListLogger<RetentionWorker>());
+
+        await worker.StartAsync(cancellationToken);
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        for (var attempt = 0;
+             attempt < 500 && await CountAsync(connection, "detection_days", cancellationToken) > 1;
+             attempt++)
+            await Task.Delay(10, cancellationToken);
+
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT group_concat(day, ',') FROM detection_days;";
+        Assert.Equal($"{today - 20}", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+        await StopQuietlyAsync(worker, cancellationToken);
     }
 
     [Fact]
@@ -172,7 +253,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, 0, cancellationToken);
+        await database.PurgeAsync(1000, 1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -193,7 +274,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
                 EpisodeJson.Episode(EpisodeJson.Id(2), lastSeenMs: 1_800_000_960_000)),
             1_800_001_000_000, cancellationToken);
 
-        await database.PurgeAsync(1_800_000_500_000, 0, 0, cancellationToken);
+        await database.PurgeAsync(1_800_000_500_000, 1_800_000_500_000, 0, 0, cancellationToken);
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         await using var read = connection.CreateCommand();
@@ -227,7 +308,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, 0, cancellationToken);
+        await database.PurgeAsync(1000, 1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -260,7 +341,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(1000, 0, 0, cancellationToken);
+        await database.PurgeAsync(1000, 1000, 0, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         await using var read = reopened.CreateCommand();
@@ -454,7 +535,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await database.PurgeAsync(0, 1000, 0, cancellationToken);
+        await database.PurgeAsync(0, 0, 1000, 0, cancellationToken);
 
         await using var reopened = await database.OpenConnectionAsync(cancellationToken);
         var surviving = await IdsAsync(reopened, cancellationToken);
