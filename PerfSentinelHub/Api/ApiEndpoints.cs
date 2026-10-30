@@ -64,6 +64,10 @@ public static partial class ApiEndpoints
                 hubOptions.Value.Disclosures.Enabled &&
                 !access.Scope(request.HttpContext, AccessPermissions.DisclosuresRead).IsNothing
                     ? true
+                    : null,
+                hubOptions.Value.Cards.Enabled &&
+                !access.Scope(request.HttpContext, AccessPermissions.CardsWrite).IsNothing
+                    ? engine.SupportsCard
                     : null));
         });
         app.MapGet("/api/sources", GetSourcesAsync);

@@ -16,6 +16,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         ValidateAccessSettings(options, _timeProvider.GetUtcNow(), errors);
         ValidateDisclosures(options, errors);
         ValidateRecaps(options, errors);
+        ValidateCards(options, errors);
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in options.Sources)

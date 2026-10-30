@@ -117,6 +117,7 @@ scope, and the answer is built from in-scope copies only.
 | `acks.write`    | Acknowledging a finding, or revoking an ack                                     |
 | `actions.write` | Declaring and changing an action on a finding                                   |
 | `labels.write`  | Naming an endpoint or a service in business words                               |
+| `cards.write`   | Creating a share card from the sources it covers                                |
 | `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
 | `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
 | `recaps.read`   | Reading every recap report: the list, a report and its page (Hub level)         |
@@ -124,7 +125,7 @@ scope, and the answer is built from in-scope copies only.
 | Built-in role | Permissions                                                     |
 |---------------|-----------------------------------------------------------------|
 | `reader`      | `findings.read`, `traces.read`, `analyses.run`                  |
-| `member`      | `reader` plus `acks.write`, `actions.write` and `labels.write`  |
+| `member`      | `reader` plus `acks.write`, `actions.write`, `labels.write` and `cards.write` |
 | `admin`       | Everything, on `*` only, plus the access configuration          |
 
 `reader` is not read-only: it starts analyses. A read-only role is configured, for

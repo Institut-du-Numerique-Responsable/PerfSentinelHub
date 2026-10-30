@@ -127,6 +127,7 @@ seules copies dans le périmètre.
 | `acks.write`    | Acquitter un finding, ou révoquer un ack                                               |
 | `actions.write` | Déclarer et modifier une action sur un finding                                         |
 | `labels.write`  | Nommer un endpoint ou un service en mots du métier                                     |
+| `cards.write`   | Créer une carte à partager à partir des sources qu'elle couvre                         |
 | `disclosures.read` | L'onglet Disclosures, le détail de chaque divulgation et ses fichiers               |
 | `disclosures.manage` | Les liens de partage, les retraits, les relances de livraison et les rendus d'une divulgation |
 | `recaps.read`   | Lire tous les rapports de récap : la liste, un rapport et sa page (niveau Hub)         |
@@ -134,7 +135,7 @@ seules copies dans le périmètre.
 | Rôle intégré | Permissions                                                  |
 |--------------|--------------------------------------------------------------|
 | `reader`     | `findings.read`, `traces.read`, `analyses.run`               |
-| `member`     | `reader` plus `acks.write`, `actions.write` et `labels.write` |
+| `member`     | `reader` plus `acks.write`, `actions.write`, `labels.write` et `cards.write` |
 | `admin`      | Tout, sur `*` seulement, plus la configuration de l'accès    |
 
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture seule se

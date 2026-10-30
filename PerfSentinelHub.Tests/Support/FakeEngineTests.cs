@@ -44,4 +44,26 @@ public sealed class FakeEngineTests : IDisposable
 
         Assert.Empty(failures);
     }
+
+    [Theory]
+    [InlineData(true, "keygen", 0)]
+    [InlineData(true, "render", 0)]
+    [InlineData(false, "keygen", 2)]
+    [InlineData(false, "render", 2)]
+    public async Task Card_help_exits_as_clap_does_for_a_known_or_unknown_subcommand(
+        bool card,
+        string subcommand,
+        int expected)
+    {
+        var path = new FakeEngine { Card = card }.WriteTo(Path.Combine(_workspace, "perf-sentinel"));
+        using var process = Process.Start(new ProcessStartInfo(path)
+        {
+            ArgumentList = { "card", subcommand, "--help" },
+            RedirectStandardOutput = true,
+            WorkingDirectory = _workspace
+        })!;
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, process.ExitCode);
+    }
 }

@@ -57,6 +57,12 @@ public sealed partial class EngineProbe(
     /// </summary>
     public bool SupportsDisclosePdf { get; private set; }
 
+    /// <summary>
+    ///     Whether the binary has `card`: its `card render --help` exits 0. Without it the Hub
+    ///     renders no share card. False until probed, and whenever the probe could not answer.
+    /// </summary>
+    public bool SupportsCard { get; private set; }
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (_analysis.EngineBinaryPath is not { } path)
@@ -78,7 +84,9 @@ public sealed partial class EngineProbe(
             var help = ReadReportHelpAsync(path, _analysis.ReportDirectory, timeout.Token);
             var disclosePdf = EngineProcess.RunAsync(
                 path, ["disclose-pdf", "--help"], MaxHelpBytes, _analysis.ReportDirectory, timeout.Token);
-            await Task.WhenAll(version, help, disclosePdf);
+            var card = EngineProcess.RunAsync(
+                path, ["card", "render", "--help"], MaxHelpBytes, _analysis.ReportDirectory, timeout.Token);
+            await Task.WhenAll(version, help, disclosePdf, card);
 
             Version = ParseVersion(version.Result);
             if (Version is null)
@@ -89,6 +97,7 @@ public sealed partial class EngineProbe(
             SupportsDaemonUrl = help.Result?.Contains(DaemonUrlFlag, StringComparison.Ordinal) == true;
             SupportsHubRelay = help.Result?.Contains(HubRelayFlag, StringComparison.Ordinal) == true;
             SupportsDisclosePdf = disclosePdf.Result.Succeeded;
+            SupportsCard = card.Result.Succeeded;
             if (!SupportsDaemonUrl)
                 LogNoDaemonUrl(logger, path);
         }

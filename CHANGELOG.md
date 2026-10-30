@@ -19,6 +19,11 @@ All notable changes to PerfSentinelHub are recorded here.
   the finding's purge and is cleared when the action leaves `done`. A share card reads it.
 - Quarter, semester and year periods, for share cards only. `GET /api/recap` still takes
   `day`, `week` or `month`.
+- `Hub:Cards:Organisation` names the organisation that signs share cards and turns them on, and
+  `Hub:Cards:Domain`, optional, is the domain a card's DNS line attaches. The chart sets them from
+  `hub.cards`. A new permission, `cards.write`, held by `member` and `admin`, lets a caller create
+  a card from the sources it covers. `GET /api/status` answers `cards: true` to such a caller when
+  the engine has `card`, `cards: false` when it does not, and leaves `cards` out otherwise.
 
 ### Changed
 

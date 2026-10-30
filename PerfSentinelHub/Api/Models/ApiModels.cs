@@ -26,7 +26,11 @@ public sealed record StatusResponse(
     // True when disclosures are on and the caller may read them, which is when the launcher
     // shows the tab. Omitted otherwise, so a Hub without disclosures answers as it did.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    bool? Disclosures = null);
+    bool? Disclosures = null,
+    // Null when cards are off or the caller holds cards.write nowhere; false when the engine has no `card`,
+    // so the screen can say why it makes none; true otherwise.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? Cards = null);
 
 /// <summary>
 ///     What a run costs, reported rather than assumed: the launcher shows these

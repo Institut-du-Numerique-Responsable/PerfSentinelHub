@@ -172,12 +172,12 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, see below                                                                                                                           |
 
 **Permissions and roles.** The permissions are `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `disclosures.read`,
-`disclosures.manage` and `recaps.read`, plus `access.admin`, which only the built-in
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `cards.write`,
+`disclosures.read`, `disclosures.manage` and `recaps.read`, plus `access.admin`, which only the built-in
 `admin` role carries. The two disclosure permissions and `recaps.read` apply to the whole
 Hub, so a role carrying any of them is granted on `*` only. The built-in roles are
 `reader` (`findings.read`, `traces.read`, `analyses.run`), `member` (`reader`, `acks.write`,
-`actions.write` and `labels.write`) and `admin` (all eleven, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
+`actions.write`, `labels.write` and `cards.write`) and `admin` (all twelve, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
 is a configured one, such as `auditor` with `findings.read` and `traces.read`.
 
 **Patterns.** A record is in a project when one of its patterns matches. A part is exact,
@@ -332,6 +332,26 @@ Secret holding the password, which reaches the pod as `Hub__Recaps__Smtp__Passwo
 refuses a duplicate subscription or webhook name and a subscription naming an undeclared webhook.
 The schema refuses `emails` without `smtp.host`, port 465, and a `userName` without `startTls` on
 a relay off loopback. A wrong `environment` or `sourceId` is left to the Hub's startup check.
+
+## Share cards
+
+A share card is an image of what a fix saved, signed in the name of one organisation. Cards are
+off by default. `Hub:Cards:Organisation` turns them on for the callers holding `cards.write`, once
+the engine the Hub runs has `card`. Each rule below is checked at startup and its message names the
+key.
+
+| Setting                  | Default | Validation                                                                                                                     |
+|--------------------------|---------|--------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Cards:Organisation` | none    | 1 to 60 characters with no control or hidden character. The name that signs every card                                        |
+| `Hub:Cards:Domain`       | none    | Needs `Organisation`. A lower-case DNS name such as `example.com`, with no scheme, port or trailing dot. What a card's DNS line attaches |
+
+A card is verified without the domain. With it, the card's DNS line names a record under that
+domain, which the organisation publishes to attach its cards to it. Both values are trimmed on
+binding.
+
+Under Helm the block is `hub.cards`, with `organisation` and `domain`. The chart writes the
+section only once `organisation` is set, and its schema refuses a `domain` that is not a lower-case
+DNS name.
 
 ## What a source is, and what is measured
 

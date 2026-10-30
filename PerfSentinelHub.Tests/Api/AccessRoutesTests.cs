@@ -910,6 +910,21 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("lab", "false")]
+    [InlineData("viewer", null)]
+    public async Task Status_says_cards_only_to_a_caller_holding_cards_write_somewhere(string user, string? expected)
+    {
+        using var client = await SignedInAsync(user);
+
+        using var status =
+            JsonDocument.Parse(await client.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
+
+        // false, not true: this suite's engine is /usr/bin/false, which has no `card`.
+        Assert.Equal(expected,
+            status.RootElement.TryGetProperty("cards", out var cards) ? cards.GetRawText() : null);
+    }
+
+    [Theory]
     [InlineData("lab", HttpStatusCode.NoContent)]
     [InlineData("attr", HttpStatusCode.NotFound)]
     public async Task An_orphan_revoke_needs_the_source_as_a_whole(string user, HttpStatusCode expected)
@@ -1293,6 +1308,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                     ];
                     options.Access = Access(_clock.GetUtcNow());
                     options.Disclosures = new DisclosuresOptions { ImportKey = DisclosureKey };
+                    options.Cards = new CardsOptions { Organisation = "Acme" };
                 });
             });
         });

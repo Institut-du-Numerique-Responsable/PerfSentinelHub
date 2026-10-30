@@ -141,6 +141,12 @@ hub:
       passwordSecretKey: ""
       from: ""
     subscriptions: []
+  # Share cards. organisation turns them on: the name that signs every card,
+  # 1 to 60 characters. domain is optional, a lower-case DNS name such as
+  # example.com: what a card's DNS line attaches. See docs/CONFIGURATION.md.
+  cards:
+    organisation: ""
+    domain: ""
   access:
     # Who reaches which findings, sources and runs: projects, roles, grants,
     # internal groups, admins and machine tokens, passed to the Hub as is. On,

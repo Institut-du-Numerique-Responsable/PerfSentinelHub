@@ -79,4 +79,11 @@ data:
     {{- end }}
     {{- $_ := set $hub "Recaps" $recapSection }}
     {{- end }}
+    {{- /* Nil-safe for --reuse-values: a release that predates hub.cards keeps cards off. */}}
+    {{- $cards := .Values.hub.cards | default dict }}
+    {{- if $cards.organisation }}
+    {{- $cardSection := dict "Organisation" $cards.organisation }}
+    {{- if $cards.domain }}{{- $_ := set $cardSection "Domain" $cards.domain }}{{- end }}
+    {{- $_ := set $hub "Cards" $cardSection }}
+    {{- end }}
     {{ dict "Hub" $hub | toJson }}

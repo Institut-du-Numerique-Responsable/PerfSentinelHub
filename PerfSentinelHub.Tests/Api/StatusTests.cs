@@ -1,14 +1,26 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Api;
 
-public sealed class StatusTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
+public sealed class StatusTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>, IDisposable
 {
     private readonly HttpClient _client = factory.CreateClient();
+    private readonly List<WebApplicationFactory<Program>> _hubs = [];
+    private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-status-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        foreach (var hub in _hubs)
+            hub.Dispose();
+        if (Directory.Exists(_workspace))
+            Directory.Delete(_workspace, true);
+    }
 
     [Fact]
     public async Task Status_is_stable_and_health_endpoints_are_distinct()
@@ -51,5 +63,42 @@ public sealed class StatusTests(HubApplicationFactory factory) : IClassFixture<H
         // non-hermetic and spends the caller's GitHub rate limit.
         var options = factory.Services.GetRequiredService<IOptions<HubOptions>>().Value;
         Assert.False(options.UpdateCheck.Enabled);
+    }
+
+    [Theory]
+    [InlineData("Acme", true, "true")]
+    [InlineData("Acme", false, "false")]
+    [InlineData(null, true, null)]
+    public async Task Status_says_cards_when_on_and_the_caller_may_write_them(
+        string? organisation,
+        bool engineHasCard,
+        string? expected)
+    {
+        using var client = Hub(organisation, engineHasCard).CreateClient();
+
+        using var status =
+            JsonDocument.Parse(await client.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
+
+        // false keeps the screen's "cannot make cards yet" banner reachable; absent hides the screen.
+        Assert.Equal(expected,
+            status.RootElement.TryGetProperty("cards", out var cards) ? cards.GetRawText() : null);
+    }
+
+    private WebApplicationFactory<Program> Hub(string? organisation, bool engineHasCard)
+    {
+        var enginePath = new FakeEngine { Version = "perf-sentinel 0.38.0", Card = engineHasCard }
+            .WriteTo(Path.Combine(_workspace, $"engine-{Guid.NewGuid():N}"));
+        var hub = new HubApplicationFactory().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
+            {
+                options.Analysis = new AnalysisOptions
+                {
+                    EngineBinaryPath = enginePath,
+                    ReportDirectory = Path.Combine(_workspace, "reports")
+                };
+                options.Cards = new CardsOptions { Organisation = organisation };
+            })));
+        _hubs.Add(hub);
+        return hub;
     }
 }

@@ -184,12 +184,12 @@ service.
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, voir plus bas                                                                                                                                         |
 
 **Permissions et rôles.** Les permissions sont `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `disclosures.read`,
-`disclosures.manage` et `recaps.read`, plus `access.admin`, que seul le rôle intégré
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `cards.write`,
+`disclosures.read`, `disclosures.manage` et `recaps.read`, plus `access.admin`, que seul le rôle intégré
 `admin` porte. Les deux permissions de divulgation et `recaps.read` valent pour le Hub
 entier, donc un rôle qui porte l'une d'elles s'attribue sur `*` seulement. Les rôles
 intégrés sont `reader` (`findings.read`, `traces.read`, `analyses.run`), `member`
-(`reader`, `acks.write`, `actions.write` et `labels.write`) et `admin` (les onze, sur `*` seulement).
+(`reader`, `acks.write`, `actions.write`, `labels.write` et `cards.write`) et `admin` (les douze, sur `*` seulement).
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture
 seule est un rôle configuré, comme `auditor` avec `findings.read` et `traces.read`.
 
@@ -356,6 +356,26 @@ secret viennent tous deux de ce Secret. `smtp` prend `host`, `port`, `startTls`,
 abonnement qui nomme un webhook non déclaré. Le schéma refuse `emails` sans `smtp.host`, le port
 465, et un `userName` sans `startTls` vers un relais hors boucle locale. Un `environment` ou un
 `sourceId` faux reste au contrôle de démarrage du Hub.
+
+## Cartes à partager
+
+Une carte à partager est une image de ce qu'une correction a économisé, signée au nom d'une
+organisation. Les cartes sont désactivées par défaut. `Hub:Cards:Organisation` les active pour les
+appelants qui détiennent `cards.write`, dès que le moteur qu'exécute le Hub a `card`. Chaque règle
+ci-dessous est contrôlée au démarrage et son message nomme la clé.
+
+| Réglage                  | Défaut | Validation                                                                                                                         |
+|--------------------------|--------|------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Cards:Organisation` | aucun  | 1 à 60 caractères sans caractère de contrôle ni caractère caché. Le nom qui signe chaque carte                                     |
+| `Hub:Cards:Domain`       | aucun  | Exige `Organisation`. Un nom DNS en minuscules comme `example.com`, sans schéma, port ni point final. Ce que rattache la ligne DNS d'une carte |
+
+Une carte se vérifie sans le domaine. Avec lui, la ligne DNS de la carte nomme un enregistrement
+sous ce domaine, que l'organisation publie pour y rattacher ses cartes. Les deux valeurs sont
+rognées à la liaison.
+
+Sous Helm le bloc est `hub.cards`, avec `organisation` et `domain`. Le chart n'écrit la section
+qu'une fois `organisation` posé, et son schéma refuse un `domain` qui n'est pas un nom DNS en
+minuscules.
 
 ## Ce qu'est une source, et ce qui est mesuré
 

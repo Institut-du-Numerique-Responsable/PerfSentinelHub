@@ -35,7 +35,7 @@ public sealed class ConfigurationTests
 
     private const string RolePermissions =
         "Hub:Access:Roles:0:Permissions must list one or more of findings.read, traces.read, sources.read, "
-        + "analyses.run, acks.write, actions.write, labels.write, disclosures.read, disclosures.manage and recaps.read, each once.";
+        + "analyses.run, acks.write, actions.write, labels.write, cards.write, disclosures.read, disclosures.manage and recaps.read, each once.";
 
     private const string TokenName =
         "Hub:Access:MachineTokens:0:Name must match ^[a-z0-9][a-z0-9._-]{0,63}$ and be unique.";
@@ -859,6 +859,92 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void A_role_may_carry_cards_write()
+    {
+        Assert.Empty(AccessFailures(AccessOn(access => access with
+        {
+            Roles = [.. access.Roles, new RoleOptions { Name = "storyteller", Permissions = ["cards.write"] }],
+            Grants =
+            [
+                .. access.Grants, new GrantOptions { Group = "/teams/shop", Project = "shop", Role = "storyteller" }
+            ]
+        })));
+        Assert.Contains(AccessPermissions.CardsWrite, AccessPermissions.BuiltInRoles["member"]);
+        Assert.DoesNotContain(AccessPermissions.CardsWrite, AccessPermissions.BuiltInRoles["reader"]);
+        Assert.DoesNotContain(AccessPermissions.CardsWrite, AccessPermissions.MachineTokenPermissions);
+    }
+
+    [Fact]
+    public void Cards_are_off_by_default()
+    {
+        var cards = new HubOptions().Cards;
+
+        Assert.Null(cards.Organisation);
+        Assert.Null(cards.Domain);
+        Assert.False(cards.Enabled);
+        Assert.True(new CardsOptions { Organisation = "  Acme\n" } is { Organisation: "Acme", Enabled: true });
+        Assert.Equal("acme.example", new CardsOptions { Domain = " acme.example\n" }.Domain);
+    }
+
+    [Fact]
+    public void A_domain_without_an_organisation_is_refused()
+    {
+        Assert.Equal("Hub:Cards:Domain needs Hub:Cards:Organisation.",
+            Assert.Single(AccessFailures(WithCards(null, "acme.example"))));
+        Assert.Empty(AccessFailures(WithCards("Acme", "acme.example")));
+        Assert.Empty(AccessFailures(WithCards("Acme", null)));
+    }
+
+    [Theory]
+    [InlineData("https://example.com")]
+    [InlineData("Example.com")]
+    [InlineData("example.com.")]
+    [InlineData("localhost")]
+    [InlineData("10.0.0.1")]
+    [InlineData("example.com:443")]
+    [InlineData("-example.com")]
+    [InlineData("example-.com")]
+    [InlineData("example..com")]
+    [InlineData("")]
+    public void A_bad_domain_is_refused(string domain)
+    {
+        Assert.Equal(
+            "Hub:Cards:Domain must be a lower-case DNS name such as example.com, without scheme, port or trailing dot.",
+            Assert.Single(AccessFailures(WithCards("Acme", domain))));
+    }
+
+    [Theory]
+    [InlineData("Acme\u0001")]
+    [InlineData("Acme‮")]
+    [InlineData("Acme​")]
+    [InlineData("")]
+    public void An_organisation_with_a_control_character_a_bidi_control_or_61_characters_is_refused(string organisation)
+    {
+        const string message =
+            "Hub:Cards:Organisation must be 1 to 60 characters with no control or hidden character.";
+
+        Assert.Equal(message, Assert.Single(AccessFailures(WithCards(organisation, null))));
+        Assert.Equal(message, Assert.Single(AccessFailures(WithCards(new string('a', 61), null))));
+        Assert.Empty(AccessFailures(WithCards(new string('a', 60), null)));
+    }
+
+    [Fact]
+    public void A_domain_with_a_63_character_label_is_accepted_and_64_refused()
+    {
+        Assert.Empty(AccessFailures(WithCards("Acme", $"{new string('a', 63)}.example")));
+        Assert.Single(AccessFailures(WithCards("Acme", $"{new string('a', 64)}.example")));
+        // 253 characters at most, as DNS allows.
+        var label = new string('a', 62);
+        Assert.Empty(AccessFailures(WithCards("Acme", $"{label}.{label}.{label}.{label}.a")));
+        Assert.Single(AccessFailures(WithCards("Acme", $"{label}.{label}.{label}.{label}.ab")));
+    }
+
+    private static HubOptions WithCards(string? organisation, string? domain)
+    {
+        return ValidOptions() with { Cards = new CardsOptions { Organisation = organisation, Domain = domain } };
+    }
+
+    [Fact]
     public void An_unknown_role_permission_lists_the_nine()
     {
         var failures = AccessFailures(AccessOn(access => access with
@@ -868,8 +954,8 @@ public sealed class ConfigurationTests
 
         Assert.Equal(
             $"Hub:Access:Roles:{AccessOn().Access.Roles.Count}:Permissions must list one or more of findings.read, "
-            + "traces.read, sources.read, analyses.run, acks.write, actions.write, labels.write, disclosures.read, "
-            + "disclosures.manage and recaps.read, each once.",
+            + "traces.read, sources.read, analyses.run, acks.write, actions.write, labels.write, cards.write, "
+            + "disclosures.read, disclosures.manage and recaps.read, each once.",
             Assert.Single(failures));
     }
 

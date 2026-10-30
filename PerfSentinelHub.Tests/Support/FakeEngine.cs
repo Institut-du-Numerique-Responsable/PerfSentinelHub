@@ -42,6 +42,9 @@ internal sealed record FakeEngine
     /// <summary>Exits 0 without writing the PDF, which breaks the contract.</summary>
     public bool DisclosePdfWritesNoPdf { get; init; }
 
+    /// <summary>Whether <c>card</c> exists: <c>card &lt;sub&gt; --help</c> exits 0, or 2 as clap does for an unknown one.</summary>
+    public bool Card { get; init; }
+
     /// <summary>
     ///     Writes the engine at <paramref name="path" /> and returns what to launch, which on
     ///     Windows carries a <c>.cmd</c> extension. <c>report</c> appends its arguments, one
@@ -92,6 +95,7 @@ internal sealed record FakeEngine
                 P={Quote(path)}
                 {version}
                 if [ "$1" = "report" ] && [ "$2" = "--help" ]; then cat "$P.help"; exit {HelpExitCode}; fi
+                if [ "$1" = "card" ] && [ "$3" = "--help" ]; then exit {(Card ? 0 : 2)}; fi
                 if [ "$1" = "disclose-pdf" ]; then
                   if [ "$2" = "--help" ]; then exit {(DisclosePdf ? 0 : 2)}; fi
                   echo "$@" > disclose-args.txt
@@ -135,6 +139,7 @@ internal sealed record FakeEngine
                 set "P={path}"
                 {version}
                 if "%~1"=="report" if "%~2"=="--help" (type "%P%.help" & exit /b {HelpExitCode})
+                if "%~1"=="card" if "%~3"=="--help" exit /b {(Card ? 0 : 2)}
                 if "%~1"=="disclose-pdf" goto disclose
                 if not "%~1"=="report" goto query
                 >>render-args.txt echo %*
