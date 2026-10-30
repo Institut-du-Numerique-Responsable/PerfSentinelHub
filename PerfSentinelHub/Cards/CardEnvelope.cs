@@ -4,15 +4,6 @@ using PerfSentinelHub.Api;
 
 namespace PerfSentinelHub.Cards;
 
-/// <summary>What a share card cites of a finding as it stood when its action moved to done.</summary>
-public sealed record FrozenFinding(
-    string FindingType,
-    string Service,
-    string Endpoint,
-    long? Occurrences,
-    long? P99Us,
-    long? ObservedAtMs);
-
 public static class CardEnvelope
 {
     private static readonly FrozenFinding Empty = new("", "", "", null, null, null);

@@ -9,6 +9,7 @@ public static class CardFigures
 {
     private const long DayMs = 86_400_000;
     private const int MaxStoryChars = 200;
+    private const long MaxEngineInteger = (1L << 53) - 1;
 
     /// <summary>
     ///     The story of a fix, or null when its cited figure is missing or its service or endpoint
@@ -99,11 +100,13 @@ public static class CardFigures
     }
 
     // Through decimal, which keeps 15 significant digits, so a sum like 19 x 0.3 floors to 5.7 g, not one microgram less.
+    // Past the engine's integers, 2^53 - 1, the figure reads as none rather than a refused card.
     public static long? Micrograms(double? grams)
     {
-        return grams is { } value && double.IsFinite(value) && value >= 0
-            ? (long)decimal.Floor((decimal)value * 1_000_000m)
-            : null;
+        if (grams is not { } value || !double.IsFinite(value) || value < 0 || value > MaxEngineInteger / 1_000_000d)
+            return null;
+        var micrograms = (long)decimal.Floor((decimal)value * 1_000_000m);
+        return micrograms <= MaxEngineInteger ? micrograms : null;
     }
 
     // The engine bounds story.service and story.endpoint at 200 characters.
@@ -124,7 +127,7 @@ public static class CardFigures
 
     private static string Date(long ms)
     {
-        return DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return CardKeyLines.Day(ms);
     }
 
     private static string Date(DateOnly day)

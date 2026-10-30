@@ -132,6 +132,24 @@ public sealed class CardKeysTests : IDisposable
         Assert.False(File.Exists(keys.KeyFile(key)));
     }
 
+    // A database restored on a fresh volume keeps its key rows, never the card-keys/ directory.
+    [Fact]
+    public async Task Revoking_and_rotating_need_no_card_keys_directory()
+    {
+        var (keys, database) = await KeysAsync();
+        var key = await keys.CurrentAsync(Token);
+        Directory.Delete(Path.GetDirectoryName(keys.KeyFile(key))!, true);
+
+        var made = await keys.RotateAsync(Token);
+        Directory.Delete(Path.GetDirectoryName(keys.KeyFile(made))!, true);
+        var outcome = await keys.RevokeAsync(made.Fingerprint, new DateOnly(2026, 10, 30), Token);
+
+        Assert.Equal(CardRevokeOutcome.Revoked, outcome);
+        Assert.Equal(
+            [key with { RetiredAtMs = NowMs }, made with { RetiredAtMs = NowMs, RevokedOn = "2026-10-30" }],
+            await database.ReadCardKeysAsync(Token));
+    }
+
     [Fact]
     public async Task A_retired_key_can_be_revoked()
     {

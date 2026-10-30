@@ -173,6 +173,16 @@ public sealed class CardFiguresTests
         Assert.Equal(5_700_000, CardFigures.Micrograms(Enumerable.Repeat(0.3, 19).Sum()));
     }
 
+    // The engine's integers stop at 2^53 - 1: past it the figure is left out, never thrown or refused.
+    [Fact]
+    public void Micrograms_past_the_engine_bound_read_as_none()
+    {
+        Assert.Equal(9_000_000_000_000_000, CardFigures.Micrograms(9_000_000_000));
+        Assert.Null(CardFigures.Micrograms(10_000_000_000));
+        Assert.Null(CardFigures.Micrograms(1e30));
+        Assert.Null(CardFigures.Micrograms(double.MaxValue));
+    }
+
     [Fact]
     public void The_range_reads_utc_days()
     {

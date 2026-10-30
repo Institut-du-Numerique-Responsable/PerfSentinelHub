@@ -58,6 +58,15 @@ public sealed record CardScope(
 
 public sealed record CardStory(string FindingType, string Service, string Endpoint, string? ObservedAt, string DoneAt);
 
+/// <summary>What a share card cites of a finding as it stood when its action moved to done.</summary>
+public sealed record FrozenFinding(
+    string FindingType,
+    string Service,
+    string Endpoint,
+    long? Occurrences,
+    long? P99Us,
+    long? ObservedAtMs);
+
 public sealed record CardFree(string? Title, string? Team, string? Label);
 
 public sealed record CardOrg(string Name, string? Domain);

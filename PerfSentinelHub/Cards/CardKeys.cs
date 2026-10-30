@@ -68,7 +68,7 @@ public sealed partial class CardKeys(
             if (await CurrentRowAsync(cancellationToken) is { } current)
             {
                 await database.RetireCardKeyAsync(current.Fingerprint, NowMs, cancellationToken);
-                File.Delete(KeyFile(current));
+                DeleteKeyFile(current);
             }
 
             return await MakeAsync(cancellationToken);
@@ -98,13 +98,21 @@ public sealed partial class CardKeys(
             // Known under the gate, and a key row is never deleted, so the update finds it.
             await database.RevokeCardKeyAsync(fingerprint,
                 on.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), nowMs, cancellationToken);
-            File.Delete(KeyFile(known));
+            DeleteKeyFile(known);
             return CardRevokeOutcome.Revoked;
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    // File.Delete throws when the directory is gone, as on a database restored to a fresh volume.
+    private void DeleteKeyFile(StoredCardKey key)
+    {
+        var file = KeyFile(key);
+        if (File.Exists(file))
+            File.Delete(file);
     }
 
     private async Task<StoredCardKey?> CurrentRowAsync(CancellationToken cancellationToken)
