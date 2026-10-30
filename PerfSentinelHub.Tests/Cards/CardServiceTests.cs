@@ -146,6 +146,23 @@ public sealed class CardServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_source_whose_ledger_began_after_the_period_is_left_out_of_the_signed_scope()
+    {
+        await _seed.LedgerAsync("a", Sealed(October));
+        await _seed.FixAsync("a", N1, Done);
+        // A daemon added in November: its ledger is read today and holds no October day.
+        await _database.MergeDetectionPageAsync("b",
+            new DetectionLedgerPage("00000000-0000-4000-8000-0000000000c2", (Today - 1) * DayMs, Today, Today - 1,
+                null, [], [new DetectionDayRow(Today - 1, true, false, 0, null, 0, 0, 1.0)], null),
+            true, NowMs, Token);
+
+        var input = await ReadyAsync(Ask("collective"));
+
+        Assert.Equal(["prod-eu"], input.Scope.Sources);
+        Assert.Null((await _service.OptionsAsync(Scope(), Token)).Refusal);
+    }
+
+    [Fact]
     public async Task A_source_name_the_card_cannot_print_refuses_it()
     {
         await _seed.LedgerAsync("a", Sealed(October));

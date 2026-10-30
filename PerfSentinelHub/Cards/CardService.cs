@@ -68,9 +68,13 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var today = (int)(nowMs / DayMs);
         var period = RecapPeriod.Of(ask.Kind, ask.At);
-        // Only the sources with a ledger in the period are judged, and only they are signed.
-        var judged = await database.ReadRecapCoverageAsync(ask.SourceIds, period.FromDay, period.ToDay,
-            cancellationToken);
+        // Only the sources with a ledger in the period are judged, and only they are signed: a ledger read
+        // since the period began but started after it ended (a daemon added later) recorded nothing there.
+        var endMs = (period.ToDay + 1L) * DayMs;
+        var judged = (await database.ReadRecapCoverageAsync(ask.SourceIds, period.FromDay, period.ToDay,
+                cancellationToken))
+            .Where(source => source.Ledgers.Any(ledger => ledger.StartedMs < endMs))
+            .ToList();
         var info = RecapCoverage.Judge(period, today, judged, null);
         var scope = ScopeOf(ask, period, info, judged);
         return new Frame(ask, nowMs, period, judged, scope, RefusalOf(period, today, judged, info, scope));
