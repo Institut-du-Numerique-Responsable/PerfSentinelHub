@@ -426,6 +426,11 @@ Recap reports add two more destinations, both declared by you and both off until
 them: each `Hub:Recaps:Webhooks[].Url` receives the signed report event, and `Hub:Recaps:Smtp:Host`
 receives each e-mail. The Hub reaches no other mail server.
 
+Share cards reach the network only when someone presses "Verify attachment" (`POST /api/cards/attachment`):
+the engine asks `https://cloudflare-dns.com/dns-query` for the TXT record under `_perf-sentinel.<domain>`, then
+reads `https://<domain>/.well-known/perf-sentinel-key`, with `<domain>` the `Hub:Cards:Domain` you set, never
+a value from the request. Rendering, downloading and managing the key reach nothing.
+
 ## An https source with a private CA
 
 The Hub validates a source's certificate against the container's trust store. An

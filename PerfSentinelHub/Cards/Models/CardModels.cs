@@ -142,3 +142,30 @@ public sealed record CardFix(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(CardInput))]
 public sealed partial class CardJsonContext : JsonSerializerContext;
+
+/// <summary>What card render made of a card.json: the file and its compact URL, or why not.</summary>
+public abstract record CardRender
+{
+    public sealed record Rendered(byte[] Bytes, string CompactUrl) : CardRender;
+
+    /// <summary>The engine's reason, and the card.json path of the text it could not draw when it names one.</summary>
+    public sealed record Refused(string Reason, string? Field) : CardRender;
+
+    public sealed record Malformed : CardRender;
+
+    public sealed record Timeout : CardRender;
+
+    public sealed record Unsupported : CardRender;
+}
+
+/// <summary>verify-card's verdict on a fresh card, and the hosts the check reached.</summary>
+public sealed record CardAttachmentResponse(
+    string Integrity,
+    int Level,
+    string? Domain,
+    string Key,
+    string? Reason,
+    IReadOnlyList<string> Contacted);
+
+/// <summary>A refusal the screen shows under one free field: title, team or label.</summary>
+public sealed record CardFieldProblem(string Detail, string Field);

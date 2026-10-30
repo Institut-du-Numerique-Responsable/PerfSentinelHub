@@ -454,6 +454,12 @@ tant que vous ne les déclarez pas : chaque `Hub:Recaps:Webhooks[].Url` reçoit 
 rapport, et `Hub:Recaps:Smtp:Host` reçoit chaque e-mail. Le Hub n'atteint aucun autre serveur de
 messagerie.
 
+Les cartes à partager n'atteignent le réseau que quand quelqu'un appuie sur « Vérifier le rattachement »
+(`POST /api/cards/attachment`) : le moteur demande à `https://cloudflare-dns.com/dns-query` l'enregistrement TXT
+sous `_perf-sentinel.<domain>`, puis lit `https://<domain>/.well-known/perf-sentinel-key`, où `<domain>` est le
+`Hub:Cards:Domain` que vous avez posé, jamais une valeur de la requête. Dessiner, télécharger et gérer la clé
+n'atteignent rien.
+
 ## Une source https avec une CA privée
 
 Le Hub valide le certificat d'une source contre le magasin de confiance du conteneur. Un

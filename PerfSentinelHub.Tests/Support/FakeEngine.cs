@@ -9,6 +9,15 @@ namespace PerfSentinelHub.Tests.Support;
 /// </summary>
 internal sealed record FakeEngine
 {
+    private const string Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    // What the engine prints when its --out-dir does not exist: it never creates it.
+    private const string Unwritable = """{"result":"input_error","reason":"output_unwritable"}""";
+
+    // The default key less its last character, which is the call's letter.
+    internal static readonly string Fingerprint = new('A', 21);
+    internal static readonly string PublicKey = new('A', 42);
+
     /// <summary>Printed for <c>--version</c>. Null runs <c>--version</c> as a query.</summary>
     public string? Version { get; init; }
 
@@ -53,6 +62,19 @@ internal sealed record FakeEngine
 
     public int CardKeygenExitCode { get; init; }
 
+    /// <summary>The line <c>card render</c> prints; the default is a rendered card signed by the first key.</summary>
+    public string CardRenderOutput { get; init; } =
+        """{"result":"rendered","files":["card.png"],"fingerprint":"ps1:AAAAAAAAAAAAAAAAAAAAAA","compact_url":"https://perf-sentinel.dev/verifier#c=e30.AA"}""";
+
+    /// <summary>Exit 0 writes <c>card.png</c> or <c>card.pdf</c> in <c>--out-dir</c>; any other writes nothing.</summary>
+    public int CardRenderExitCode { get; init; }
+
+    /// <summary>The verdict line <c>verify-card</c> prints, whatever its exit code.</summary>
+    public string VerifyCardOutput { get; init; } =
+        """{"integrity":"ok","level":2,"domain":"example.com","key":"current","reason":null}""";
+
+    public int VerifyCardExitCode { get; init; }
+
     /// <summary>
     ///     Writes the engine at <paramref name="path" /> and returns what to launch, which on
     ///     Windows carries a <c>.cmd</c> extension. <c>report</c> appends its arguments, one
@@ -60,14 +82,11 @@ internal sealed record FakeEngine
     ///     <c>pg_stat</c> auth header it was handed to <c>render-env.txt</c>, and writes an
     ///     HTML file wherever <c>--output</c> points, the two-step shape the real binary imposes.
     ///     <c>card keygen</c> appends its arguments to <c>card-keygen-args.txt</c> there and writes
-    ///     <c>key.pk8</c> in its <c>--out-dir</c>.
+    ///     <c>key.pk8</c> in its <c>--out-dir</c>. <c>card render</c> appends its arguments to
+    ///     <c>card-args.txt</c>, copies its <c>--input</c> to <c>card-input.json</c> and its
+    ///     <c>--signing-key</c> to <c>card-key-seen.pk8</c> there, and refuses a missing <c>--out-dir</c>
+    ///     as the engine does. <c>verify-card</c> appends its arguments to <c>verify-args.txt</c>.
     /// </summary>
-    private const string Letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-    // The default key less its last character, which is the call's letter.
-    internal static readonly string Fingerprint = new('A', 21);
-    internal static readonly string PublicKey = new('A', 42);
-
     public string WriteTo(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -80,6 +99,9 @@ internal sealed record FakeEngine
         File.WriteAllText($"{path}.pdf", "%PDF-1.7 fake");
         File.WriteAllText($"{path}.pk8", "fake pkcs8");
         File.WriteAllText($"{path}.keygen", CardKeygenOutput ?? "");
+        File.WriteAllBytes($"{path}.png", [0x89, .. "PNG fake"u8]);
+        File.WriteAllText($"{path}.cardrender", CardRenderOutput);
+        File.WriteAllText($"{path}.verify", VerifyCardOutput);
 
         if (OperatingSystem.IsWindows())
         {
@@ -126,6 +148,30 @@ internal sealed record FakeEngine
                   done
                   {keygen}
                   exit {CardKeygenExitCode}
+                fi
+                if [ "$1" = "card" ] && [ "$2" = "render" ]; then
+                  echo "$@" >> card-args.txt
+                  sleep {SleepSeconds}
+                  F=png
+                  O=
+                  while [ $# -gt 0 ]; do
+                    case "$1" in
+                      --input) shift; cat "$1" > card-input.json ;;
+                      --signing-key) shift; cat "$1" > card-key-seen.pk8 ;;
+                      --out-dir) shift; O="$1" ;;
+                      --format) shift; F="$1" ;;
+                    esac
+                    shift
+                  done
+                  if [ ! -d "$O" ]; then echo '{Unwritable}'; exit 3; fi
+                  if [ {CardRenderExitCode} = 0 ]; then cat "$P.$F" > "$O/card.$F"; fi
+                  cat "$P.cardrender"
+                  exit {CardRenderExitCode}
+                fi
+                if [ "$1" = "verify-card" ]; then
+                  echo "$@" >> verify-args.txt
+                  cat "$P.verify"
+                  exit {VerifyCardExitCode}
                 fi
                 if [ "$1" = "disclose-pdf" ]; then
                   if [ "$2" = "--help" ]; then exit {(DisclosePdf ? 0 : 2)}; fi
@@ -175,6 +221,8 @@ internal sealed record FakeEngine
                 if "%~1"=="report" if "%~2"=="--help" (type "%P%.help" & exit /b {HelpExitCode})
                 if "%~1"=="card" if "%~3"=="--help" exit /b {(Card ? 0 : 2)}
                 if "%~1"=="card" if "%~2"=="keygen" goto keygen
+                if "%~1"=="card" if "%~2"=="render" goto render
+                if "%~1"=="verify-card" goto verify
                 if "%~1"=="disclose-pdf" goto disclose
                 if not "%~1"=="report" goto query
                 >>render-args.txt echo %*
@@ -209,6 +257,28 @@ internal sealed record FakeEngine
                 :kprint
                 {keygen}
                 exit /b {CardKeygenExitCode}
+                :render
+                >>card-args.txt echo %*
+                {sleep}
+                set "F=png"
+                set "O="
+                :rnext
+                if "%~1"=="" goto rdone
+                if "%~1"=="--input" copy /y "%~2" card-input.json >nul
+                if "%~1"=="--signing-key" copy /y "%~2" card-key-seen.pk8 >nul
+                if "%~1"=="--out-dir" set "O=%~2"
+                if "%~1"=="--format" set "F=%~2"
+                shift
+                goto rnext
+                :rdone
+                if not exist "%O%\" (echo {Unwritable}& exit /b 3)
+                if "{CardRenderExitCode}"=="0" copy /y "%P%.%F%" "%O%\card.%F%" >nul
+                type "%P%.cardrender"
+                exit /b {CardRenderExitCode}
+                :verify
+                >>verify-args.txt echo %*
+                type "%P%.verify"
+                exit /b {VerifyCardExitCode}
                 :query
                 {sleep}
                 type "%P%.err" 1>&2

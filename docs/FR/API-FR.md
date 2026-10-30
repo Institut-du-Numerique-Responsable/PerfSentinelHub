@@ -96,7 +96,7 @@ joignabilité est un fait sur la route du Hub vers le daemon, qu'un push n'exerc
 
 | Endpoint                             | Renvoie                                                                                                                                                                                                            |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport. `disclosures: true` seulement tant que les divulgations sont actives et que l'appelant les lit |
+| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport. `disclosures: true` seulement tant que les divulgations sont actives et que l'appelant les lit. `cards` : `true` quand l'appelant peut faire des cartes, `false` quand le moteur n'a pas de sous-commande `card`, absent tant que les cartes sont désactivées ou que l'appelant n'a `cards.write` nulle part |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
 | `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                   |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
@@ -859,6 +859,107 @@ autres écritures (`403`, `415`) ; un appelant sans `access.admin`
 `403 You may not manage the card signing key.`. Une rotation avec un moteur sans sous-commande
 `card` donne `503 This Hub's engine cannot make cards yet.`, et une dont le moteur répond hors
 contrat ou au-delà de 30 secondes donne `502`.
+
+### Faire une carte
+
+| Route                            | Fait                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/options`         | Ce que l'écran montre avant toute signature : le refus de la période, le périmètre signé, les corrections |
+| `POST /api/cards/render`         | Calcule les chiffres, fait signer et dessiner la carte par le moteur, répond le fichier |
+| `POST /api/cards/attachment`     | Dessine la carte en PNG et vérifie son rattachement DNS              |
+
+**Options.** La requête prend `period` (obligatoire : `week`, `month`, `quarter`, `semester` ou
+`year`), `at` (un jour quelconque de la période, `yyyy-MM-dd`, par défaut la dernière période
+close), `environment` et `source_id`. Une période encore en cours est lue, pas refusée : la réponse
+porte son refus, pour que l'écran dise pourquoi avant qu'on demande une carte. Une requête invalide
+donne `400`. La réponse :
+
+```json
+{"period": {"kind": "month", "from": "2026-10-01", "to": "2026-10-31"}, "period_name": "October 2026",
+ "refusal": null, "refusal_text": null, "restart_days": 0, "sampled_permille": 1000,
+ "environment": "prod", "sources": ["prod-eu"], "previous_complete": true,
+ "fixes": [{"signature": "…", "finding_type": "n_plus_one_sql", "service": "order-svc",
+            "endpoint": "GET /orders", "plain": "…", "done_at_ms": 1792058400000,
+            "before_fix_ops": 1900, "before_period_name": "September 2026", "label": "Order list"}],
+ "default_signature": "…", "org": {"name": "Acme", "domain": "acme.example"}}
+```
+
+`refusal` est la raison propre à la période (ci-dessous) et `refusal_text` sa phrase, celle que
+répondrait un rendu. `sources` est le périmètre signé : les sources demandées qui ont enregistré
+quelque chose sur la période. `previous_complete` vaut `false` quand une carte collective laisse
+de côté sa comparaison avec la période d'avant. `fixes` sont les corrections confirmées qu'une
+histoire peut raconter, avec le libellé de l'endpoint quand il en a un.
+
+**Rendu et rattachement.** Le corps est un objet JSON, 4 Kio au plus, avec la règle de même
+origine et le type de contenu JSON des autres écritures :
+
+| Champ                       | Fait                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| `angle`                     | Obligatoire : `story`, `curve` ou `collective`                                         |
+| `period`                    | Obligatoire : `week`, `month`, `quarter`, `semester` ou `year`                         |
+| `at`                        | Un jour quelconque de la période, `yyyy-MM-dd`, depuis 1900 ; par défaut la dernière période close |
+| `environment`, `source_id`  | Le périmètre ; un inconnu donne `400 Unknown environment or source_id.`                |
+| `signature`                 | Histoire seulement : la correction à raconter ; par défaut celle au plus gros volume d'avant |
+| `title`, `team`             | Texte libre, 1 à 48 caractères                                                         |
+| `label`                     | Histoire seulement, texte libre, 1 à 80 caractères                                     |
+| `lang`                      | `en` (par défaut) ou `fr`                                                              |
+| `format`                    | `png` (par défaut) ou `pdf` (le carrousel) ; la vérification du rattachement dessine toujours un PNG |
+
+Les champs libres sont rognés, et un champ vide est laissé de côté. Un champ plus long que sa
+borne, ou qui porte un caractère de contrôle ou de format (un forçage de direction, une espace de
+largeur nulle), donne `400`. Toute autre clé, `figures`, `org`, `scope` ou `generated_at_ms` par
+exemple, donne
+`400 Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may be sent: the figures come from the Hub.`
+Une période qui ne s'est pas terminée avant aujourd'hui donne
+`400 A card covers a closed period. Pick an earlier one.`, `signature` ou `label` sur un autre
+angle `400 signature and label belong to a story card.`
+
+**Refus.** Une carte que les chiffres ne permettent pas donne `422` avec une phrase en `detail`, la
+même que les options portent en `refusal_text`. Les raisons : `open_period`, `uncovered_days`,
+`open_day`, `overflow` (la période n'est pas entière), `previous_uncovered_days`,
+`previous_open_day`, `previous_overflow` (une courbe dont la période d'avant n'est pas entière),
+`no_confirmed_fix`, `unknown_fix`, `no_total_io` (pas d'activité totale pour tracer la courbe),
+`curve_needs_whole_sources` (l'appelant ne lit qu'une partie d'une source) et `unprintable_scope`
+(un nom de source ou d'environnement que la carte ne peut pas imprimer). Le moteur peut encore
+refuser ce que le Hub a envoyé :
+
+| Raison du moteur                              | Réponse                                                                                                                       |
+|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `unsupported_characters` sur un champ libre   | `422 The card's font cannot draw a character of this field. Remove it, or write it another way.` avec `"field": "title"`, `"team"` ou `"label"` |
+| `unsupported_characters` sur l'organisation   | `422 The card's font cannot draw a character of the organisation's name. Ask an administrator to change Hub:Cards:Organisation.` |
+| `compact_too_large`                           | `422 The card's QR code cannot hold this organisation's domain. Ask an administrator for a shorter Hub:Cards:Domain.`        |
+| `unsupported_language`                        | `422 This Hub's engine cannot print cards in this language yet.`                                                              |
+| tout le reste, une ligne hors contrat, 45 s   | `502 The engine could not render this card.`                                                                                  |
+
+**Le fichier.** `200` avec `Content-Type: image/png` ou `application/pdf`,
+`Content-Disposition: attachment; filename=perf-sentinel-card-<kind>-<from>.<format>`,
+`Cache-Control: no-store` et `X-Content-Type-Options: nosniff`. La première carte fabrique la clé
+de signature. Le Hub écrit `card.json` et une copie de la clé privée dans un répertoire temporaire
+privé, supprimé ensuite, et la clé n'apparaît jamais sur une ligne de commande.
+
+**Rattachement.** `409 Set Hub:Cards:Domain to check an attachment.` sans domaine. Sinon le Hub
+dessine la carte en PNG et lance `verify-card --online`, qui lit l'enregistrement TXT via
+`cloudflare-dns.com` et `https://<domain>/.well-known/perf-sentinel-key`. La réponse est le verdict
+du moteur et ce que la vérification a joint :
+
+```json
+{"integrity": "ok", "level": 2, "domain": "acme.example", "key": "current", "reason": null,
+ "contacted": ["cloudflare-dns.com", "acme.example"]}
+```
+
+Une ligne de verdict sans ses cinq clés, ou aucune en 20 secondes, donne `502`.
+
+**Qui peut.** Le Hub juge ces trois routes dans cet ordre : cartes désactivées `404` ; un appelant
+que le Hub ne sait pas nommer
+`403 The Hub does not know who is asking, and a card is made in somebody's name.` ; sur les deux
+`POST`, la règle de même origine et le type de contenu JSON (`403`, `415`) ; aucun `cards.write`
+nulle part `403 You may not create cards.` ; aucun `findings.read` nulle part `403` ; un moteur
+sans la sous-commande `card`
+`503 This Hub's engine cannot render cards: it needs a perf-sentinel release with the card subcommand.`
+Puis le périmètre : les sources demandées que les deux permissions atteignent, ou
+`403 You may not create cards for these sources.` quand il n'en reste aucune. Une correction sur un
+service que l'appelant ne lit pas est laissée de côté, et la courbe, tracée sur des totaux de tout
+le démon, ne garde que les sources que les deux permissions tiennent entières.
 
 ## Actions
 

@@ -94,6 +94,10 @@ public static partial class ApiEndpoints
         app.MapGet("/api/cards/keys", GetCardKeysAsync);
         app.MapPost("/api/cards/keys/rotate", RotateCardKeyAsync);
         app.MapPost("/api/cards/keys/revoke", RevokeCardKeyAsync);
+        // Never anonymous: a card is made in somebody's name. Only the attachment check reaches the network.
+        app.MapGet("/api/cards/options", GetCardOptionsAsync);
+        app.MapPost("/api/cards/render", RenderCardAsync);
+        app.MapPost("/api/cards/attachment", CheckCardAttachmentAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
         // correlations, a daemon pushes with its key. With Hub:Access the reads need a

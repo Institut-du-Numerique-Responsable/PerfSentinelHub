@@ -86,7 +86,7 @@ reachability is a fact about the Hub's route to the daemon, which a push does no
 
 | Endpoint                             | Returns                                                                                                                                                                                    |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention. `disclosures: true` only while disclosures are on and the caller reads them |
+| `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention. `disclosures: true` only while disclosures are on and the caller reads them. `cards`: `true` when the caller may make cards, `false` when the engine has no `card` subcommand, absent while cards are off or the caller holds `cards.write` nowhere |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`               |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
@@ -798,6 +798,102 @@ the two `POST`s, the same-origin rule and the JSON content type of the other wri
 `415`); a caller without `access.admin` `403 You may not manage the card signing key.`. A rotation
 with an engine that has no `card` subcommand is `503 This Hub's engine cannot make cards yet.`, and
 one whose engine answers out of contract or past 30 seconds is `502`.
+
+### Making a card
+
+| Route                            | Does                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/options`         | What the screen shows before anyone signs: the period's refusal, the signed scope, the fixes |
+| `POST /api/cards/render`         | Computes the figures, has the engine sign and draw the card, answers the file |
+| `POST /api/cards/attachment`     | Renders the card as a PNG and checks its DNS attachment              |
+
+**Options.** The query takes `period` (required: `week`, `month`, `quarter`, `semester` or `year`),
+`at` (any day of the period, `yyyy-MM-dd`, default the last closed period), `environment` and
+`source_id`. A period still running is read, not refused: the answer carries its refusal so the
+screen says why before anyone asks for a card. An invalid query is `400`. The answer:
+
+```json
+{"period": {"kind": "month", "from": "2026-10-01", "to": "2026-10-31"}, "period_name": "October 2026",
+ "refusal": null, "refusal_text": null, "restart_days": 0, "sampled_permille": 1000,
+ "environment": "prod", "sources": ["prod-eu"], "previous_complete": true,
+ "fixes": [{"signature": "…", "finding_type": "n_plus_one_sql", "service": "order-svc",
+            "endpoint": "GET /orders", "plain": "…", "done_at_ms": 1792058400000,
+            "before_fix_ops": 1900, "before_period_name": "September 2026", "label": "Order list"}],
+ "default_signature": "…", "org": {"name": "Acme", "domain": "acme.example"}}
+```
+
+`refusal` is the period's own reason (below) and `refusal_text` its sentence, the one a render
+would answer. `sources` is the signed scope: the sources asked for that recorded something in the
+period. `previous_complete` is `false` when a collective card leaves out its comparison with the
+period before. `fixes` are the confirmed fixes a story can tell, with the endpoint's label when one
+is set.
+
+**Render and attachment.** The body is a JSON object, at most 4 KiB, with the same-origin rule and
+the JSON content type of the other writes:
+
+| Field                       | Does                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| `angle`                     | Required: `story`, `curve` or `collective`                                             |
+| `period`                    | Required: `week`, `month`, `quarter`, `semester` or `year`                             |
+| `at`                        | Any day of the period, `yyyy-MM-dd`, from 1900; default: the last closed period        |
+| `environment`, `source_id`  | The scope; an unknown one is `400 Unknown environment or source_id.`                   |
+| `signature`                 | Story only: the fix to tell; default the fix with the largest volume before            |
+| `title`, `team`             | Free text, 1 to 48 characters                                                          |
+| `label`                     | Story only, free text, 1 to 80 characters                                              |
+| `lang`                      | `en` (default) or `fr`                                                                 |
+| `format`                    | `png` (default) or `pdf` (the carousel); the attachment check always renders a PNG    |
+
+Free fields are trimmed, and a blank one is left out. One longer than its bound, or holding a
+control or format character (a direction override, a zero-width space), is `400`. Any other key,
+`figures`, `org`, `scope` or `generated_at_ms` for instance, is
+`400 Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may be sent: the figures come from the Hub.`
+A period that has not ended before today is `400 A card covers a closed period. Pick an earlier one.`,
+`signature` or `label` on another angle `400 signature and label belong to a story card.`
+
+**Refusals.** A card the figures cannot support is `422` with a sentence as `detail`, the same one
+the options carry as `refusal_text`. The reasons: `open_period`, `uncovered_days`, `open_day`,
+`overflow` (the period is not whole), `previous_uncovered_days`, `previous_open_day`,
+`previous_overflow` (a curve whose period before is not whole), `no_confirmed_fix`, `unknown_fix`,
+`no_total_io` (no total activity to draw the curve from), `curve_needs_whole_sources` (the caller
+reads only part of a source) and `unprintable_scope` (a source or environment name the card cannot
+print). The engine can still refuse what the Hub sent:
+
+| Engine reason                                 | Answer                                                                                                                        |
+|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `unsupported_characters` on a free field      | `422 The card's font cannot draw a character of this field. Remove it, or write it another way.` with `"field": "title"`, `"team"` or `"label"` |
+| `unsupported_characters` on the organisation  | `422 The card's font cannot draw a character of the organisation's name. Ask an administrator to change Hub:Cards:Organisation.` |
+| `compact_too_large`                           | `422 The card's QR code cannot hold this organisation's domain. Ask an administrator for a shorter Hub:Cards:Domain.`        |
+| `unsupported_language`                        | `422 This Hub's engine cannot print cards in this language yet.`                                                              |
+| anything else, a line out of contract, 45 s   | `502 The engine could not render this card.`                                                                                  |
+
+**The file.** `200` with `Content-Type: image/png` or `application/pdf`,
+`Content-Disposition: attachment; filename=perf-sentinel-card-<kind>-<from>.<format>`,
+`Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. The first card makes the signing
+key. The Hub writes `card.json` and a copy of the private key in a private temporary directory,
+deleted afterwards, and the key never appears on a command line.
+
+**Attachment.** `409 Set Hub:Cards:Domain to check an attachment.` without a domain. Otherwise the
+Hub renders the card as a PNG and runs `verify-card --online`, which reads the TXT record through
+`cloudflare-dns.com` and `https://<domain>/.well-known/perf-sentinel-key`. The answer is the
+engine's verdict and what the check reached:
+
+```json
+{"integrity": "ok", "level": 2, "domain": "acme.example", "key": "current", "reason": null,
+ "contacted": ["cloudflare-dns.com", "acme.example"]}
+```
+
+A verdict line without its five keys, or none within 20 seconds, is `502`.
+
+**Who may.** The Hub judges these three routes in this order: cards off `404`; a caller the Hub
+cannot name `403 The Hub does not know who is asking, and a card is made in somebody's name.`; on
+the two `POST`s, the same-origin rule and the JSON content type (`403`, `415`); no `cards.write`
+anywhere `403 You may not create cards.`; no `findings.read` anywhere `403`; an engine without the
+`card` subcommand
+`503 This Hub's engine cannot render cards: it needs a perf-sentinel release with the card subcommand.`
+Then the scope: the sources asked for that both permissions reach, or
+`403 You may not create cards for these sources.` when none is left. A fix on a service the caller
+cannot read is left out, and the curve, drawn from daemon-wide totals, keeps only the sources both
+permissions hold whole.
 
 ## Actions
 

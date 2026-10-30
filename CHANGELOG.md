@@ -31,6 +31,14 @@ All notable changes to PerfSentinelHub are recorded here.
   one made. `GET /api/cards/keys`, `POST /api/cards/keys/rotate` and `POST /api/cards/keys/revoke`,
   for `access.admin` only, list the keys with their DNS lines and `.well-known` file, rotate the
   key and revoke one from the first day it may have leaked.
+- Share cards. `GET /api/cards/options` lists what a card of a closed period can show: the
+  period's refusal and its sentence, the signed scope, the confirmed fixes with their labels.
+  `POST /api/cards/render` computes the figures, has the engine sign and draw the card
+  (`perf-sentinel card render`) and answers the PNG or the PDF carousel; only the title, the
+  team and a story's label are free, any other key is a `400`. `POST /api/cards/attachment`
+  checks a fresh card's DNS attachment with `perf-sentinel verify-card --online`, the one card
+  route that reaches the network (`cloudflare-dns.com` and the configured domain). The three
+  need `cards.write` and `findings.read` and somebody to name.
 
 ### Changed
 
