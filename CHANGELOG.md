@@ -21,6 +21,12 @@ All notable changes to PerfSentinelHub are recorded here.
 - The sign-in page and the terminal approval page follow `?lang=`, then the language picked with
   the launcher's button (a `perf-sentinel-lang` cookie), then the browser's `Accept-Language`, and
   carry the FR/EN button as a link.
+- Share cards choose the country of their equivalences: France, the United Kingdom or the United
+  States. `Hub:Cards:Country` (`fr`, `gb` or `us`, France when unset, Helm `hub.cards.country`)
+  sets the default, the card screen gains a Country of the equivalences choice, and
+  `POST /api/cards/render` and `/api/cards/attachment` take `equivalence_country`, which the Hub
+  always passes to the engine in `card.json`. Another country sends France and says so. The options
+  response carries the Hub's country. Cards need engine `0.40.0` or later, the one the image ships.
 
 ### Changed
 

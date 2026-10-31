@@ -2785,6 +2785,23 @@
         });
     }
 
+    /** The equivalence countries the screen offers; another country has no table of its own and sends fr. */
+    const CARD_COUNTRIES = ['fr', 'gb', 'us', 'other'];
+
+    /**
+     * The country choice shown: the one a person picked, else the Hub's, else France.
+     * @param {string|null} picked @param {string|undefined} hubCountry @returns {string}
+     */
+    function cardCountry(picked, hubCountry) {
+        if (picked !== null && CARD_COUNTRIES.indexOf(picked) >= 0) return picked;
+        return hubCountry !== undefined && CARD_COUNTRIES.indexOf(hubCountry) >= 0 ? hubCountry : 'fr';
+    }
+
+    /** The equivalence_country a choice sends. @param {string} choice @returns {string} */
+    function cardCountryWire(choice) {
+        return choice === 'other' ? 'fr' : choice;
+    }
+
     /** The card's language: the one a person picked, else the Hub's. @param {string|null} picked */
     function cardLang(picked) {
         return LANGS.indexOf(picked) >= 0 ? /** @type {'en' | 'fr'} */ (picked) : LANG;
@@ -2813,7 +2830,8 @@
     function cardBody(form) {
         /** @type {Object<string, string>} */
         const body = {};
-        ['angle', 'period', 'at', 'environment', 'source_id', 'signature', 'label', 'title', 'team', 'lang', 'format']
+        ['angle', 'period', 'at', 'environment', 'source_id', 'signature', 'label', 'title', 'team', 'lang',
+            'equivalence_country', 'format']
             .forEach(function (key) {
                 const value = cardText(form[key]);
                 if (value && ((key !== 'signature' && key !== 'label') || form.angle === 'story')) body[key] = value;
@@ -3558,6 +3576,9 @@
         cardPeriodName,
         cardRefusalText,
         cardLang,
+        CARD_COUNTRIES,
+        cardCountry,
+        cardCountryWire,
         cardDayText,
         cardRangeText,
         cardBody,

@@ -948,6 +948,20 @@ test("the card language follows the Hub until picked", () => {
     assert.doesNotMatch(app, /getItem\(CARD_LANG_KEY\) === 'fr'/);
 });
 
+test("the card's equivalence country starts from the Hub's and another country sends fr", () => {
+    assert.equal(PSL.cardCountry(null, "gb"), "gb");
+    assert.equal(PSL.cardCountry(null, undefined), "fr");
+    assert.equal(PSL.cardCountry("us", "gb"), "us");
+    assert.equal(PSL.cardCountry("other", "gb"), "other");
+    assert.equal(PSL.cardCountry("de", "gb"), "gb");
+    assert.deepEqual(["fr", "gb", "us", "other"].map(PSL.cardCountryWire), ["fr", "gb", "us", "fr"]);
+    assert.deepEqual(PSL.CARD_COUNTRIES, ["fr", "gb", "us", "other"]);
+    assert.equal(PSL.cardBody({angle: "curve", period: "month", equivalence_country: "gb"}).equivalence_country, "gb");
+    const app = wwwrootFile("app.js");
+    assert.match(app, /equivalence_country: PSL\.cardCountryWire\(PSL\.cardCountry\(card\.country, /);
+    assert.doesNotMatch(app, /CARD_COUNTRY_KEY/);
+});
+
 // ---- the terminal sign-in page
 
 test("the terminal approval page reads in French", () => {

@@ -395,7 +395,10 @@ verdict, not as a failed check. The check also says whether the card file is the
 compare with the preview, which rounds them down. Without
 `Hub:Cards:Domain`, a sentence says the check page shows the
 Hub's cards as "Signer not verified". The card language, English or French, is remembered in this
-browser.
+browser. Country of the equivalences picks the table the card's everyday equivalent comes from:
+France, United Kingdom or United States, starting from `Hub:Cards:Country`, France when it is unset.
+Another country sends France and says so under the choice, since Perf Sentinel has no table for other
+countries yet. The country is not remembered: a reload starts again from the Hub's.
 
 Administrators also get Signing key and organisation, folded and reachable while the section is
 closed: the record name and each key's DNS line, the `.well-known` file indented for reading and
