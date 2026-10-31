@@ -1,5 +1,5 @@
 {
-  "version": "0.39.0",
+  "version": "0.40.0",
   "uptime_seconds": 511500,
   "active_traces": 344,
   "max_active_traces": 1000,
@@ -9,8 +9,8 @@
   "max_retained_findings": 10000,
   "findings_stored_total": 11,
   "detection_ledger": {
-    "ledger_id": "c46ac1c4-c4b9-4967-99e2-707c91675f18",
-    "started_ms": 1793439680346,
+    "ledger_id": "55792a54-bfcb-4f53-b18c-9c7ba14a5026",
+    "started_ms": 1793486480595,
     "retained_days": 8,
     "oldest_day": 20757,
     "current_day": 20757,
