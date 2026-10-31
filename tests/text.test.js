@@ -155,6 +155,14 @@ test("adopting the page's language does not store it, only a choice does", () =>
     }
 });
 
+test("French says grant where English does, and no link dies", () => {
+    const keys = Object.keys(TEXT.en);
+    assert.deepEqual(keys.filter(key => /\bgrants?\b/i.test(TEXT.en[key]) && /\bdroits?\b/i.test(TEXT.fr[key])
+        && !/\brights?\b/i.test(TEXT.en[key])), []);
+    // A crashed process may die, a link is disabled or expires.
+    assert.deepEqual(keys.filter(key => /\blien/i.test(TEXT.fr[key]) && /\b(mort|morts|meurt)\b/i.test(TEXT.fr[key])), []);
+});
+
 test("a choice also goes to the cookie the sign-in and device pages read", () => {
     const cookies = [];
     globalThis.document = {
@@ -866,7 +874,7 @@ test("a card refusal reads from its code and its period", () => {
 test("an attachment verdict, the level line and the revoke confirmation read in the shown language", () => inLang("fr", () => {
     const base = {integrity: "ok", content: "intact", level: 1, domain: "acme.example", key: "unknown"};
     assert.deepEqual(PSL.attachmentText({...base, level: 2, key: "current", reason: "key_published"}, false),
-        {text: "Rattachée : les cartes affichent « Signée par acme.example ».", title: null});
+        {text: "Rattachée : les cartes affichent « Signé par acme.example ».", title: null});
     assert.deepEqual(PSL.attachmentText({...base, key: "revoked", reason: "key_revoked"}, true),
         {text: "Cette carte a été signée avec une clé désormais révoquée.", title: "key_revoked"});
     assert.deepEqual(PSL.attachmentText({...base, reason: "binding_partial"}, true), {
@@ -876,7 +884,7 @@ test("an attachment verdict, the level line and the revoke confirmation read in 
     });
     assert.equal(PSL.contentLine({content: "intact"}), "Fichier intact : c'est bien le fichier qui a été signé.");
     assert.equal(PSL.levelLine(true, "acme.example"),
-        "Sur la page de vérification, cette carte affiche : Signée par acme.example.");
+        "Sur la page de vérification, cette carte affiche : Signé par acme.example.");
     const said = PSL.revokeText("2026-10-01", false, "acme.example");
     assert.equal(said.alert, "Toutes les cartes signées par cette clé apparaîtront révoquées sur la page de "
         + "vérification, quelle que soit leur date. La page de vérification indiquera que la clé a pu être exposée "
