@@ -2,7 +2,7 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.11.0] - 2026-10-31
 
 ### Added
 
@@ -38,6 +38,8 @@ All notable changes to PerfSentinelHub are recorded here.
   schema stays `perf-sentinel-report/v1.8`. Engine `0.40.0` reads an equivalence country in a
   share card's `card.json`, with UK rows from the DESNZ and a US row from the US EPA. A backend
   analysis gives the same findings, signatures and energy figures as on `0.39.0`.
+- The card section quotes the check page's level 1 line as perf-sentinel.dev/verifier prints it:
+  "Figures intact since they were signed. Signer not verified."
 
 ## [0.10.0] - 2026-10-31
 
