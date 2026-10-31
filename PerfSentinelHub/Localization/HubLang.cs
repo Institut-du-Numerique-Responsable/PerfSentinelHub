@@ -54,13 +54,14 @@ public static class HubLang
     /// <summary>The plural form of <paramref name="count" />: English says one for 1 alone, French for 0 and 1.</summary>
     public static string Plural(string lang, long count)
     {
-        return (lang == Fr ? count <= 1 : count == 1) ? "one" : "other";
+        var one = lang == Fr ? count <= 1 : count == 1;
+        return one ? "one" : "other";
     }
 
     private static CultureInfo FrenchCulture()
     {
         var culture = (CultureInfo)CultureInfo.GetCultureInfo("fr-FR").Clone();
-        culture.NumberFormat.NumberGroupSeparator = " ";
+        culture.NumberFormat.NumberGroupSeparator = "\u202F";
         culture.NumberFormat.NumberDecimalSeparator = ",";
         return CultureInfo.ReadOnly(culture);
     }

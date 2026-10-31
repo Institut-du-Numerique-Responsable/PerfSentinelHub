@@ -38,8 +38,8 @@
             if (lang !== 'en' && lang !== 'fr') {
                 lang = 'en';
                 const tags = navigator.languages || [];
-                for (let i = 0; i < tags.length; i++) {
-                    const base = String(tags[i]).toLowerCase().split('-')[0];
+                for (const tag of tags) {
+                    const base = String(tag).toLowerCase().split('-')[0];
                     if (base === 'en' || base === 'fr') {
                         lang = base;
                         break;

@@ -189,16 +189,13 @@ button {
         gap: 4px;
     }
 
+    /* Version, identity, theme and language on one 390px row: tighter gaps, the language as
+       a circle beside the theme's, and a long name cut short (the access page shows it whole). */
     .shell-topbar .shell-cluster {
         flex: 1 1 auto;
         flex-wrap: wrap;
         justify-content: flex-end;
         min-width: 0;
-    }
-
-    /* Version, identity, theme and language on one 390px row: tighter gaps, the language as
-       a circle beside the theme's, and a long name cut short (the access page shows it whole). */
-    .shell-topbar .shell-cluster {
         gap: 6px;
     }
 

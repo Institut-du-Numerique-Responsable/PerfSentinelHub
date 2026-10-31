@@ -16,7 +16,7 @@ namespace PerfSentinelHub.Tests.Recaps;
 ///     relay does not answer (once per pass, not once per address), failed at once on a 5xx, and failed
 ///     without a connection when no relay is configured.
 /// </summary>
-public sealed class RecapMailDeliveryTests : IAsyncLifetime
+public sealed partial class RecapMailDeliveryTests : IAsyncLifetime
 {
     private static readonly JsonSerializerOptions Wire = new()
     {
@@ -195,11 +195,20 @@ public sealed class RecapMailDeliveryTests : IAsyncLifetime
     // The Subject header, unfolded and with its RFC 2047 words decoded.
     private static string Subject(string data)
     {
-        var header = Regex.Match(data, @"^Subject: (.*(?:\r?\n[ \t].*)*)", RegexOptions.Multiline).Groups[1].Value;
-        var words = Regex.Replace(header, @"\?=\r?\n[ \t]+=\?", "?==?");
-        return Regex.Replace(words, @"=\?utf-8\?B\?([^?]*)\?=", match =>
-            Encoding.UTF8.GetString(Convert.FromBase64String(match.Groups[1].Value)), RegexOptions.IgnoreCase);
+        var header = SubjectHeader().Match(data).Groups[1].Value;
+        var words = FoldedWords().Replace(header, "?==?");
+        return EncodedWord().Replace(words, match =>
+            Encoding.UTF8.GetString(Convert.FromBase64String(match.Groups[1].Value)));
     }
+
+    [GeneratedRegex(@"^Subject: (.*(?:\r?\n[ \t].*)*)", RegexOptions.Multiline)]
+    private static partial Regex SubjectHeader();
+
+    [GeneratedRegex(@"\?=\r?\n[ \t]+=\?")]
+    private static partial Regex FoldedWords();
+
+    [GeneratedRegex(@"=\?utf-8\?B\?([^?]*)\?=", RegexOptions.IgnoreCase)]
+    private static partial Regex EncodedWord();
 
     private static RecapSmtpOptions Relay(int port)
     {

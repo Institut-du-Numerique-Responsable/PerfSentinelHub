@@ -40,6 +40,8 @@ public static class RecapReportRenderer
     private const string DivEnd = "</div>";
     private const string DivEndLine = "</div>\n";
     private const string ParagraphEndLine = "</p>\n";
+    private const string CountName = "count";
+    private const string InProgress = "in_progress";
 
     private static readonly Lazy<string> Style = new(() =>
         Resource("recap-tokens.css") + "\n" + Resource("recap-report.css"));
@@ -97,7 +99,7 @@ public static class RecapReportRenderer
             return HubText.Get(Lang, key, values);
         }
 
-        public string Count(long value)
+        public string Number(long value)
         {
             return RecapText.Number(value, Lang);
         }
@@ -199,14 +201,14 @@ public static class RecapReportRenderer
         [
             PreviousText(page, N(tiles.PreviousActiveFindings)),
             page.T("recap.tile.acked." + (page.Management ? "pilotage." : "tech.") + page.Plural(tiles.AckedFindings),
-                ("count", N(tiles.AckedFindings)))
+                (CountName, N(tiles.AckedFindings)))
         ]);
         Tile(html, page, page.T("recap.tile.actions"), false,
             E(N(actions.Done)) + Unit(page.T("recap.tile.done." + page.Plural(actions.Done))),
         [
             page.T("recap.tile.actions.checked", ("confirmed", N(actions.Confirmed)),
                 ("contradicted", N(actions.Contradicted)), ("came_back", N(actions.CameBack))),
-            page.T("recap.tile.actions.open", ("in_progress", N(actions.InProgress)), ("todo", N(actions.Todo)))
+            page.T("recap.tile.actions.open", (InProgress, N(actions.InProgress)), ("todo", N(actions.Todo)))
         ], true);
         html.Append(DivEndLine);
     }
@@ -231,9 +233,12 @@ public static class RecapReportRenderer
         ], true, RecapText.Co2(tiles.Co2Grams, without, tiles.Co2MissingReason, snapshot.View, lang));
     }
 
+    // A tile's label, value and lines, each written where the tile shows it.
+#pragma warning disable S107
     private static void Tile(
         StringBuilder html, Page page, string label, bool inProgress, string value, string[] subs,
         bool valueIsHtml = false, string? title = null)
+#pragma warning restore S107
     {
         html.Append("<div class=\"tile\"><span class=\"tile-label\">").Append(E(label));
         if (inProgress)
@@ -268,12 +273,12 @@ public static class RecapReportRenderer
         if (days is not > 0)
             return "";
         return page.T("recap.previous.cut." + page.Plural(days.Value),
-            ("count", days.Value.ToString(CultureInfo.InvariantCulture)));
+            (CountName, days.Value.ToString(CultureInfo.InvariantCulture)));
     }
 
     private static string? Count(Page page, long? value)
     {
-        return value is { } count ? page.Count(count) : null;
+        return value is { } count ? page.Number(count) : null;
     }
 
     // ---- the priorities
@@ -301,7 +306,7 @@ public static class RecapReportRenderer
         if (first < all.Count)
         {
             html.Append(FoldedAt).Append("<summary>")
-                .Append(E(page.T("recap.prio.show_all", ("count", all.Count.ToString(CultureInfo.InvariantCulture)))))
+                .Append(E(page.T("recap.prio.show_all", (CountName, all.Count.ToString(CultureInfo.InvariantCulture)))))
                 .Append("</summary>\n");
             PriorityList(html, page, first, all.Count, max);
             html.Append("</details>\n");
@@ -310,7 +315,7 @@ public static class RecapReportRenderer
         if (management && snapshot.MorePriorities > 0)
             html.Append("<p class=\"more-note\">")
                 .Append(E(page.T("recap.more.report." + page.Plural(snapshot.MorePriorities),
-                    ("count", snapshot.MorePriorities.ToString(CultureInfo.InvariantCulture)))))
+                    (CountName, snapshot.MorePriorities.ToString(CultureInfo.InvariantCulture)))))
                 .Append(ParagraphEndLine);
         if (snapshot.Truncated)
             html.Append("<p class=\"sources-note\">").Append(E(RecapText.Truncated(snapshot.View, page.Lang)))
@@ -521,7 +526,7 @@ public static class RecapReportRenderer
 
     private static string Todo(Page page, string status)
     {
-        return status is "todo" or "in_progress" or "done" ? page.T("recap.status." + status) : status;
+        return status is "todo" or InProgress or "done" ? page.T("recap.status." + status) : status;
     }
 
     // An action, read only: a report cannot change it.
@@ -533,7 +538,7 @@ public static class RecapReportRenderer
         var chip = action.Status switch
         {
             "todo" => State("none", page.T("recap.state.todo")),
-            "in_progress" => State("in_progress", page.T("recap.state.in_progress")),
+            InProgress => State(InProgress, page.T("recap.state.in_progress")),
             _ => DoneState(page, action.Confirmation)
         };
         var done = action.Status == "done" && action.DoneAtMs is not null;
@@ -590,7 +595,7 @@ public static class RecapReportRenderer
             (page.T("recap.moves.gone.report"), moves.Gone,
                 confirmed > 0
                     ? page.T("recap.moves.confirmed." + page.Plural(confirmed),
-                        ("count", confirmed.ToString(CultureInfo.InvariantCulture)))
+                        (CountName, confirmed.ToString(CultureInfo.InvariantCulture)))
                     : "", ""),
             (page.T("recap.moves.up"), moves.Up, "", "crit"),
             (page.T("recap.moves.down"), moves.Down, "", ""),
