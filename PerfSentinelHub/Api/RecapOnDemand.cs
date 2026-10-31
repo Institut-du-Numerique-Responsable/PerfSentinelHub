@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 
 namespace PerfSentinelHub.Api;
@@ -14,7 +15,8 @@ public sealed record RecapOnDemand(
     string? Environment,
     string? SourceId,
     string? Service,
-    string? Grouping)
+    string? Grouping,
+    string Lang = HubLang.En)
 {
     private const int MaxChars = 256;
 
@@ -56,8 +58,11 @@ public sealed record RecapOnDemand(
             if (!TryReadText(root, Filters[i], out filters[i]))
                 return Refuse($"{Filters[i]} must be 1 to {MaxChars} characters with no control character.", out error);
 
+        if (!TryReadLang(root, out var lang))
+            return Refuse("lang must be en or fr.", out error);
+
         error = null;
-        return new RecapOnDemand(kind, at, filters[0], filters[1], filters[2], filters[3]);
+        return new RecapOnDemand(kind, at, filters[0], filters[1], filters[2], filters[3], lang);
     }
 
     private static bool TryReadDate(JsonElement root, RecapPeriodKind kind, DateOnly today, out DateOnly at)
@@ -69,6 +74,19 @@ public sealed record RecapOnDemand(
                DateOnly.TryParseExact(value.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
                    DateTimeStyles.None, out at) &&
                at >= Earliest;
+    }
+
+    // Absent or null is English, the default of every page the Hub writes.
+    private static bool TryReadLang(JsonElement root, out string lang)
+    {
+        lang = HubLang.En;
+        if (!root.TryGetProperty("lang", out var value) || value.ValueKind == JsonValueKind.Null)
+            return true;
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        if (!HubLang.IsKnown(text))
+            return false;
+        lang = text!;
+        return true;
     }
 
     // Absent or null is no filter; anything else must be a bounded string.

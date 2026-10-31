@@ -5898,14 +5898,19 @@
     // -------------------------------------------------------- screen: recap
 
     const RECAP_FIRST_PAGE = 10;
-    const RECAP_PERIOD_CHOICES = [['day', 'day'], ['week', 'week'], ['month', 'month']];
+    const RECAP_PERIOD_CHOICES = ['day', 'week', 'month'];
     const RECAP_STATE_GLYPH = {
         confirmed: [['path', {d: 'M5 12.5l4.5 4.5L19 7.5'}]],
         contradicted: [['path', {d: 'M12 5v9M12 18.5v.01'}]],
         came_back: [['path', {d: 'M9 7L4 12l5 5'}], ['path', {d: 'M4 12h11a5 5 0 010 10h-2'}]],
         awaiting: [['circle', {cx: '12', cy: '12', r: '8.5'}], ['path', {d: 'M12 7.5V12l3 2'}]]
     };
-    const RECAP_TODO_LABEL = {todo: 'to do', in_progress: 'in progress', done: 'done'};
+    const RECAP_TODO_LABEL = ['todo', 'in_progress', 'done'];
+
+    /** An action status as a row reads it, a status a newer Hub adds as it was sent. */
+    function recapTodo(status) {
+        return RECAP_TODO_LABEL.indexOf(status) >= 0 ? t('recap.status.' + status) : status;
+    }
 
     function recapRoute() {
         return PSL.readRecapRoute(location.hash);
@@ -5957,13 +5962,9 @@
     function renderRecapScreen() {
         const route = recapRoute();
         const section = el('section', {}, [
-            ruledOverline('// recap'),
-            el('h1', {class: 'page-title', text: 'What wastes the most, and what moved'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'Support for the team review: what to fix first, and what changed since the previous '
-                    + 'period of the same length.'
-            }),
+            ruledOverline(t('recap.overline')),
+            el('h1', {class: 'page-title', text: t('recap.title')}),
+            el('p', {class: 'page-sub', text: t('recap.sub')}),
             recapFilterLine(route)
         ]);
         if (state.recapError !== null) {
@@ -5976,7 +5977,7 @@
         }
         const snapshot = state.recap;
         const labels = PSL.RECAP_LABELS[snapshot.view === 'pilotage' ? 'pilotage' : 'tech'];
-        [recapPeriodBlock(snapshot), recapTiles(snapshot, labels), recapPriorities(snapshot, labels, route),
+        [recapPeriodBlock(snapshot), recapTiles(snapshot, labels), recapPriorities(snapshot, route),
             recapMoved(snapshot, labels), recapReportsPanel(route), recapCardPanel(route)].forEach(function (part) {
             if (part) section.appendChild(part);
         });
@@ -5993,17 +5994,17 @@
     }
 
     function recapFilterLine(route) {
-        const period = el('select', {class: 'refresh-select', 'aria-label': 'period'},
-            RECAP_PERIOD_CHOICES.map(function (entry) {
-                const option = el('option', {value: entry[0], text: entry[1]});
-                if (entry[0] === route.period) option.selected = true;
+        const period = el('select', {class: 'refresh-select', 'aria-label': t('recap.filter.period')},
+            RECAP_PERIOD_CHOICES.map(function (kind) {
+                const option = el('option', {value: kind, text: t('recap.filter.period.' + kind)});
+                if (kind === route.period) option.selected = true;
                 return option;
             }));
         period.addEventListener('change', function () {
             goRecap({period: period.value});
         });
         const day = el('input', {
-            class: 'recap-input', type: 'date', value: route.at || '', 'aria-label': 'a day in the period',
+            class: 'recap-input', type: 'date', value: route.at || '', 'aria-label': t('recap.filter.day'),
             max: new Date().toISOString().slice(0, 10)
         });
         day.addEventListener('change', function () {
@@ -6013,7 +6014,7 @@
             return source.environment;
         }).filter(Boolean))).sort();
         return el('div', {class: 'refresh recap-filter'}, [
-            el('span', {class: 'refresh-label', text: 'period'}),
+            el('span', {class: 'refresh-label', text: t('recap.filter.period')}),
             period,
             day,
             filterSelect('environment', route.environment || '', environments.map(function (name) {
@@ -6021,8 +6022,8 @@
             }), function (value) {
                 goRecap({environment: value || null});
             }),
-            recapTextFilter('service', route.service, 'service'),
-            recapTextFilter('namespace', route.grouping, 'grouping'),
+            recapTextFilter(t('recap.filter.service'), route.service, 'service'),
+            recapTextFilter(t('recap.filter.namespace'), route.grouping, 'grouping'),
             recapViewSwitch(route)
         ]);
     }
@@ -6040,14 +6041,14 @@
     }
 
     function recapViewSwitch(route) {
-        const group = el('div', {class: 'segmented', role: 'radiogroup', 'aria-label': 'Audience'});
-        [['tech', 'Engineering'], ['pilotage', 'Management']].forEach(function (entry) {
+        const group = el('div', {class: 'segmented', role: 'radiogroup', 'aria-label': t('recap.view.label')});
+        ['tech', 'pilotage'].forEach(function (view) {
             const button = el('button', {
-                type: 'button', role: 'radio', 'aria-checked': route.view === entry[0] ? 'true' : 'false',
-                text: entry[1]
+                type: 'button', role: 'radio', 'aria-checked': route.view === view ? 'true' : 'false',
+                text: t('recap.view.' + view)
             });
             button.addEventListener('click', function () {
-                goRecap({view: entry[0]});
+                goRecap({view: view});
             });
             group.appendChild(button);
         });
@@ -6081,24 +6082,35 @@
         const previousNotes = PSL.notesText(previous.notes, previous.sampling_rate, view);
         const reasons = [PSL.incompleteText(period.incomplete, view)];
         const previousReasons = PSL.incompleteText(previous.incomplete, view);
-        if (previousReasons) reasons.push('previous period ' + previousReasons.charAt(0).toLowerCase() + previousReasons.slice(1));
+        if (previousReasons) {
+            reasons.push(t('recap.incomplete.previous', {
+                reasons: previous.incomplete.map(function (reason) {
+                    return PSL.gapLabel(reason, view);
+                }).join(', ')
+            }));
+        }
         const block = el('div', {class: 'recap-period-block'}, [
             el('div', {class: 'recap-period'}, [
                 el('span', {class: 'recap-period-main', text: PSL.periodText(period)}),
                 el('span', {class: 'recap-period-tz', text: 'UTC'}),
-                el('span', {class: 'recap-period-prev', text: 'compared with ' + PSL.periodText(previous)}),
-                helpDot(recapHelp(snapshot, 'period'), 'the period')
+                el('span', {class: 'recap-period-prev', text: recapAgainst('recap.period.compared.', previous)}),
+                helpDot(recapHelp(snapshot, 'period'), t('recap.topic.period'))
             ]),
             recapNotes(PSL.notesText(period.notes, period.sampling_rate, view)),
-            recapNotes(previousNotes ? 'Previous period. ' + previousNotes : '')
+            recapNotes(previousNotes ? t('recap.notes.previous', {notes: previousNotes}) : '')
         ]);
         if (reasons.some(Boolean)) {
             block.appendChild(el('div', {class: 'banner', 'data-tone': 'warn', role: 'note'}, [
                 warningGlyph(16),
-                el('div', {text: reasons.filter(Boolean).join('; ') + '. The comparison with the previous period is not exact.'})
+                el('div', {text: t('recap.banner', {reasons: reasons.filter(Boolean).join(t('recap.banner.join'))})})
             ]));
         }
         return block;
+    }
+
+    /** "compared with" or "since" the previous period, worded for a day or for a range of days. */
+    function recapAgainst(prefix, previous) {
+        return t(prefix + (previous.kind === 'day' ? 'day' : 'range'), {period: PSL.periodText(previous)});
     }
 
     function recapTile(label, chip, value, subs, help, topic) {
@@ -6112,7 +6124,7 @@
 
     function recapProgressChip(snapshot) {
         return snapshot.period.in_progress
-            ? el('span', {class: 'chip', 'data-tone': 'progress', text: 'in progress'})
+            ? el('span', {class: 'chip', 'data-tone': 'progress', text: t('recap.chip.in_progress')})
             : null;
     }
 
@@ -6120,13 +6132,15 @@
     function recapPreviousText(snapshot, value) {
         if (value === null || value === undefined) return '';
         const days = snapshot.previous.truncated_to_days;
-        return 'previous ' + snapshot.previous.kind + (days ? ' (first ' + days + ' day' + (days === 1 ? '' : 's') + ')' : '')
-            + ' ' + value;
+        return t('recap.previous.' + snapshot.previous.kind, {
+            cut: days ? t('recap.previous.cut.' + PSL.plural(days), {count: days}) : '',
+            value: value
+        });
     }
 
     /** A count with thousands separators, or null when the Hub has none. */
     function recapCount(value) {
-        return value === null || value === undefined ? null : value.toLocaleString('en-US');
+        return value === null || value === undefined ? null : PSL.num(value);
     }
 
     function recapCo2Tile(snapshot) {
@@ -6145,10 +6159,10 @@
             document.createTextNode(co2.figure),
             el('span', {class: 'disc-figure-unit', text: co2.unit})
         ]);
-        return recapTile('CO2 estimate', recapProgressChip(snapshot), value, [
-            known ? 'order of magnitude' + PSL.co2Tail(without, snapshot.view) : '',
+        return recapTile(t('recap.tile.co2'), recapProgressChip(snapshot), value, [
+            known ? t('recap.tile.magnitude', {tail: PSL.co2Tail(without, snapshot.view)}) : '',
             previous ? recapPreviousText(snapshot, previous) : ''
-        ], recapHelp(snapshot, 'co2'), 'the CO2 estimate');
+        ], recapHelp(snapshot, 'co2'), t('recap.topic.co2'));
     }
 
     function recapTiles(snapshot, labels) {
@@ -6164,48 +6178,48 @@
             recapTile(labels.findings, null,
                 el('span', {class: 'disc-figure-value', text: String(tiles.active_findings)}), [
                     recapPreviousText(snapshot, tiles.previous_active_findings),
-                    tiles.acked_findings + (management ? ' set aside' : ' acknowledged') + ', left out'
+                    t('recap.tile.acked.' + (management ? 'pilotage.' : 'tech.') + PSL.plural(tiles.acked_findings),
+                        {count: tiles.acked_findings})
                 ], recapHelp(snapshot, 'findings'), labels.findings),
-            recapTile('Actions', null, el('span', {class: 'disc-figure-value'}, [
-                document.createTextNode(String(actions.done)), el('span', {class: 'disc-figure-unit', text: 'done'})
+            recapTile(t('recap.tile.actions'), null, el('span', {class: 'disc-figure-value'}, [
+                document.createTextNode(String(actions.done)),
+                el('span', {class: 'disc-figure-unit', text: t('recap.tile.done.' + PSL.plural(actions.done))})
             ]), [
-                actions.confirmed + ' confirmed, ' + actions.contradicted + ' still detected, ' + actions.came_back
-                + ' came back',
-                actions.in_progress + ' in progress, ' + actions.todo + ' to do'
-            ], recapHelp(snapshot, 'actions'), 'the actions')
+                t('recap.tile.actions.checked', {
+                    confirmed: actions.confirmed, contradicted: actions.contradicted, came_back: actions.came_back
+                }),
+                t('recap.tile.actions.open', {in_progress: actions.in_progress, todo: actions.todo})
+            ], recapHelp(snapshot, 'actions'), t('recap.topic.actions'))
         ]);
     }
 
     // ---- the priorities
 
-    function recapPriorities(snapshot, labels, route) {
+    function recapPriorities(snapshot, route) {
         const management = snapshot.view === 'pilotage';
         const all = snapshot.priorities;
         const shown = management || state.recapShowAll ? all : all.slice(0, RECAP_FIRST_PAGE);
-        const lower = labels.io.charAt(0).toLowerCase() + labels.io.slice(1);
-        const hint = 'ranked by ' + lower + ' over the period'
-            + (management ? '' : ', CO2 never ranks')
-            + (snapshot.period.in_progress ? ', trends on closed days' : '');
+        const hint = t('recap.prio.hint', {io: recapIoLower(snapshot)})
+            + (management ? '' : t('recap.prio.hint.co2'))
+            + (snapshot.period.in_progress ? t('recap.prio.hint.closed') : '');
         const max = all.length && all[0].avoidable_io_ops ? all[0].avoidable_io_ops : 0;
         const list = el('ol', {class: 'recap-list'});
         shown.forEach(function (priority, index) {
             if (PSL.dividesBefore(all, index)) {
                 list.appendChild(el('li', {
                     class: 'recap-divider',
-                    text: management
-                        ? 'Below, slowness rather than extra work: ranked by severity'
-                        : 'Below, no avoidable I/O to count: ranked by severity'
+                    text: t('recap.prio.divider.' + (management ? 'pilotage' : 'tech'))
                 }));
             }
-            list.appendChild(recapRow(priority, max, snapshot, labels, route, PSL.namesService(shown, index)));
+            list.appendChild(recapRow(priority, max, snapshot, route, PSL.namesService(shown, index)));
         });
         const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-prio'}, [
-            ruledOverline('// priorities'),
-            recapHeading('recap-h-prio', 'What to fix first', hint, recapHelp(snapshot, 'prio'), 'the ranking')
+            ruledOverline(t('recap.prio.overline')),
+            recapHeading('recap-h-prio', t('recap.prio.title'), hint, recapHelp(snapshot, 'prio'), t('recap.topic.ranking'))
         ]);
         if (all.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'Nothing ranks in this period.'})
+                el('p', {class: 'empty-title', text: t('recap.prio.empty')})
             ]));
             return section;
         }
@@ -6219,7 +6233,7 @@
             const more = el('button', {
                 class: 'pill-button recap-showall',
                 type: 'button',
-                text: 'Show all ' + all.length
+                text: t('recap.prio.show_all', {count: all.length})
             });
             more.addEventListener('click', function () {
                 state.recapShowAll = true;
@@ -6230,7 +6244,7 @@
         if (snapshot.view === 'pilotage' && snapshot.more_priorities > 0) {
             section.appendChild(el('p', {
                 class: 'recap-more',
-                text: snapshot.more_priorities + ' more priorities, lower down, in the Engineering view.'
+                text: t('recap.prio.more.' + PSL.plural(snapshot.more_priorities), {count: snapshot.more_priorities})
             }));
         }
         if (snapshot.truncated) {
@@ -6238,12 +6252,17 @@
         }
     }
 
-    function recapRow(priority, max, snapshot, labels, route, namesService) {
+    /** The volume's label inside a sentence: "avoidable I/O", never a capital mid-line. */
+    function recapIoLower(snapshot) {
+        return t('recap.label.' + (snapshot.view === 'pilotage' ? 'pilotage' : 'tech') + '.io_lower');
+    }
+
+    function recapRow(priority, max, snapshot, route, namesService) {
         const management = snapshot.view === 'pilotage';
         const kids = [
             el('span', {class: 'recap-rank', text: String(priority.rank)}),
             management ? recapPlainWhat(priority) : recapTechWhat(priority),
-            recapFigure(priority, max, labels, management)
+            recapFigure(priority, max, recapIoLower(snapshot), management)
         ];
         if (!management) kids.push(recapDetail(priority));
         kids.push(recapFoot(priority, management, route, namesService));
@@ -6265,7 +6284,7 @@
                 recapServiceHead(priority),
                 el('span', {class: 'recap-endpoint', text: priority.endpoint})
             ]),
-            priority.suggestion ? proseInto(el('p', {class: 'recap-suggest'}), priority.suggestion) : null
+            priority.suggestion ? engineText(proseInto(el('p', {class: 'recap-suggest'}), priority.suggestion)) : null
         ]);
     }
 
@@ -6274,10 +6293,10 @@
         const service = PSL.serviceParts(item.service, item.service_label).name;
         return el('div', {class: 'recap-what'}, [
             item.label ? el('p', {class: 'recap-label', text: item.label}) : null,
-            el('p', {class: 'recap-plain', text: item.plain}),
+            el('p', {class: 'recap-plain', text: PSL.recapPlain(item)}),
             el('div', {class: 'recap-where'}, item.label || !item.endpoint
-                ? [document.createTextNode('in ' + service)]
-                : [document.createTextNode('in ' + service + ' · '),
+                ? [document.createTextNode(t('recap.where', {service: service}))]
+                : [document.createTextNode(t('recap.where', {service: service}) + ' · '),
                     el('code', {class: 'code-inline', text: item.endpoint})])
         ]);
     }
@@ -6297,18 +6316,17 @@
             ? el('span', {
                 class: 'recap-trend',
                 'data-trend': item.trend,
-                title: 'against the previous period, on closed days',
+                title: t('recap.trend.title'),
                 text: text
             })
             : null;
     }
 
-    function recapFigure(priority, max, labels, management) {
-        const lower = labels.io.charAt(0).toLowerCase() + labels.io.slice(1);
+    function recapFigure(priority, max, lower, management) {
         if (!PSL.hasAvoidableVolume(priority)) {
             return el('div', {class: 'recap-figure'}, [
                 el('span', {class: 'recap-figure-n', text: '—'}),
-                el('span', {class: 'recap-figure-u', text: management ? 'nothing to count' : 'no avoidable I/O'}),
+                el('span', {class: 'recap-figure-u', text: t(management ? 'recap.figure.none' : 'recap.co2.no_avoidable_io')}),
                 recapTrend(priority)
             ]);
         }
@@ -6327,7 +6345,7 @@
         const key = 'recap:' + priority.signature;
         const open = state.panelOpen[key] === undefined ? priority.rank === 1 : state.panelOpen[key] === true;
         const details = el('details', {class: 'recap-detail'}, [
-            el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12), document.createTextNode('How to fix')]),
+            el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12), document.createTextNode(t('recap.fix.summary'))]),
             el('div', {class: 'recap-detail-body'}, [
                 priority.template ? el('pre', {class: 'recap-code', text: priority.template}) : null,
                 recapFix(priority.suggested_fix),
@@ -6349,15 +6367,15 @@
         let reference = null;
         if (fix.reference_url) {
             reference = el('div', {class: 'recap-fix-ref'}, [url
-                ? el('a', {href: url, rel: 'noopener noreferrer', target: '_blank', text: 'Reference'})
-                : el('span', {text: 'Reference: ' + fix.reference_url})]);
+                ? el('a', {href: url, rel: 'noopener noreferrer', target: '_blank', text: t('recap.fix.reference')})
+                : el('span', {text: t('recap.fix.reference_at', {url: fix.reference_url})})]);
         }
         return el('div', {class: 'recap-fix'}, [
             el('div', {class: 'recap-fix-head'}, [
-                document.createTextNode('Suggested fix'),
+                document.createTextNode(t('recap.fix.suggested')),
                 fix.framework ? el('span', {class: 'chip', text: fix.framework}) : null
             ]),
-            proseInto(el('div'), fix.recommendation),
+            engineText(proseInto(el('div'), fix.recommendation)),
             reference
         ]);
     }
@@ -6372,22 +6390,22 @@
         if (!lines) return null;
         return el('div', {}, [el('div', {
             class: 'recap-fix-head',
-            text: 'Where in the code'
+            text: t('recap.fix.where')
         }), el('pre', {class: 'recap-code', text: lines})]);
     }
 
     function recapFacts(priority) {
         const rows = [
-            ['detections', priority.detections === null || priority.detections === undefined
-                ? '—' : priority.detections.toLocaleString('en-US')],
-            ['confidence', priority.confidence || '—']
+            [t('recap.fact.detections'), priority.detections === null || priority.detections === undefined
+                ? '—' : PSL.num(priority.detections)],
+            [t('recap.fact.confidence'), priority.confidence || '—']
         ];
         const list = el('dl', {class: 'recap-kv'});
         rows.forEach(function (row) {
             list.appendChild(el('dt', {text: row[0]}));
             list.appendChild(el('dd', {text: row[1]}));
         });
-        list.appendChild(el('dt', {text: 'signature'}));
+        list.appendChild(el('dt', {text: t('recap.fact.signature')}));
         list.appendChild(el('dd', {}, [el('code', {class: 'code-inline', text: priority.signature})]));
         return list;
     }
@@ -6396,7 +6414,7 @@
     function recapEvents(action) {
         if (!action || !action.events || !action.events.length) return null;
         return el('div', {}, [
-            el('div', {class: 'recap-fix-head', text: 'Action history'}),
+            el('div', {class: 'recap-fix-head', text: t('recap.events.title')}),
             el('ul', {class: 'recap-events'}, action.events.map(function (event) {
                 const owner = PSL.ownerLabel(event.owner, event.owner_display);
                 return el('li', {}, [
@@ -6405,9 +6423,9 @@
                         title: PSL.isoUtc(event.at_ms),
                         text: PSL.localTime(event.at_ms)
                     }),
-                    document.createTextNode((event.from ? RECAP_TODO_LABEL[event.from] + ' → ' : '')
-                        + (RECAP_TODO_LABEL[event.to] || event.to) + (owner.text ? ', ' + owner.text : '')
-                        + ', by ' + event.by)
+                    document.createTextNode((event.from ? recapTodo(event.from) + ' → ' : '')
+                        + recapTodo(event.to) + (owner.text ? ', ' + owner.text : '')
+                        + t('recap.event.by', {who: event.by}))
                 ]);
             }))
         ]);
@@ -6427,7 +6445,7 @@
         const at = done ? action.done_at_ms : action.updated_at_ms;
         return el('time', {
             class: 'recap-when', datetime: PSL.isoUtc(at), title: PSL.isoUtc(at),
-            text: (done ? 'done ' : 'updated ') + PSL.localTime(at)
+            text: t(done ? 'recap.when.done' : 'recap.when.updated', {time: PSL.localTime(at)})
         });
     }
 
@@ -6438,21 +6456,24 @@
 
     /** Management reads an action and cannot change it. */
     function recapActionReadOnly(action) {
-        if (!action) return [recapStateChip('none', 'Not taken yet')];
+        if (!action) return [recapStateChip('none', t('recap.state.not_taken'))];
         if (action.status !== 'done') {
             return [recapStateChip(action.status === 'todo' ? 'none' : 'in_progress',
-                action.status === 'todo' ? 'To do' : 'In progress'), recapOwner(action), recapWhen(action)];
+                t(action.status === 'todo' ? 'recap.state.todo' : 'recap.state.in_progress')), recapOwner(action),
+                recapWhen(action)];
         }
         const confirmation = PSL.confirmationLabel(action.confirmation, 'pilotage');
         return [recapStateChip(confirmation ? action.confirmation : 'none',
-            confirmation ? 'Done, ' + confirmation.toLowerCase() : 'Done'), recapOwner(action), recapWhen(action)];
+            confirmation ? t('recap.state.done_with', {label: confirmation.toLowerCase()}) : t('recap.state.done')),
+            recapOwner(action), recapWhen(action)];
     }
 
     function recapActionControls(priority, route) {
         const action = priority.action;
         const busy = state.recapBusy[priority.signature] === true;
         const ack = el('a', {
-            class: 'ack-link', href: PSL.ackRouteHash(priority.signature, null, route.environment), text: 'Acknowledge'
+            class: 'ack-link', href: PSL.ackRouteHash(priority.signature, null, route.environment),
+            text: t('recap.action.ack')
         });
         ack.addEventListener('click', function () {
             state.ackReturn = location.hash;
@@ -6461,7 +6482,7 @@
             const take = el('button', {
                 class: 'pill-button pill-sm',
                 type: 'button',
-                text: 'Take',
+                text: t('recap.action.take'),
                 disabled: busy ? 'disabled' : null
             });
             take.addEventListener('click', function () {
@@ -6471,11 +6492,11 @@
         }
         const select = el('select', {
                 class: 'refresh-select',
-                'aria-label': 'action status',
+                'aria-label': t('recap.action.status'),
                 disabled: busy ? 'disabled' : null
             },
-            ['todo', 'in_progress', 'done'].map(function (status) {
-                const option = el('option', {value: status, text: RECAP_TODO_LABEL[status]});
+            RECAP_TODO_LABEL.map(function (status) {
+                const option = el('option', {value: status, text: recapTodo(status)});
                 if (status === action.status) option.selected = true;
                 return option;
             }));
@@ -6498,9 +6519,9 @@
                 el('span', {}, [
                     el('b', {
                         text: priority.detections === null || priority.detections === undefined
-                            ? '—' : priority.detections.toLocaleString('en-US')
+                            ? '—' : PSL.num(priority.detections)
                     }),
-                    document.createTextNode(' detections')
+                    document.createTextNode(t('recap.foot.detections'))
                 ]),
                 recapNameButton(recapNameTarget(priority, 'endpoint')),
                 namesService ? recapNameButton(recapNameTarget(priority, 'service')) : null
@@ -6528,7 +6549,7 @@
                 return PSL.problemText(payload, response.status);
             });
         }).catch(function () {
-            return 'The Hub did not answer.';
+            return t('recap.send.failed');
         });
     }
 
@@ -6554,10 +6575,10 @@
                 key: 'service ' + priority.signature,
                 row: priority.signature,
                 label: priority.service_label,
-                subject: 'service ' + priority.service,
-                name: 'Name service',
-                rename: 'Rename service',
-                placeholder: 'Payment',
+                subject: t('recap.name.service.subject', {service: priority.service}),
+                name: t('recap.name.service'),
+                rename: t('recap.name.service.rename'),
+                placeholder: t('recap.name.service.placeholder'),
                 path: '/api/labels/services',
                 body: {service: priority.service}
             };
@@ -6567,9 +6588,9 @@
             row: priority.signature,
             label: priority.label,
             subject: priority.service + ' ' + priority.endpoint,
-            name: 'Name this',
-            rename: 'Rename',
-            placeholder: 'Showing a cart',
+            name: t('recap.name.endpoint'),
+            rename: t('recap.name.endpoint.rename'),
+            placeholder: t('recap.name.endpoint.placeholder'),
             path: '/api/labels',
             body: {service: priority.service, endpoint: priority.endpoint}
         };
@@ -6587,7 +6608,7 @@
     function recapNameButton(target) {
         const button = el('button', {
             class: 'recap-link', type: 'button', text: target.label ? target.rename : target.name,
-            'aria-label': (target.label ? 'Rename ' : 'Name ') + target.subject
+            'aria-label': t(target.label ? 'recap.name.aria.rename' : 'recap.name.aria', {subject: target.subject})
         });
         button.addEventListener('click', function () {
             state.recapNaming = state.recapNaming === target.key ? null : target.key;
@@ -6605,11 +6626,11 @@
             maxlength: '80',
             value: state.recapNameDraft !== null ? state.recapNameDraft : target.label || '',
             placeholder: target.placeholder,
-            'aria-label': 'Business name for ' + target.subject,
+            'aria-label': t('recap.name.input', {subject: target.subject}),
             spellcheck: 'false'
         });
-        const save = el('button', {class: 'pill-button pill-sm', type: 'submit', text: 'Save'});
-        const cancel = el('button', {class: 'recap-link', type: 'button', text: 'Cancel'});
+        const save = el('button', {class: 'pill-button pill-sm', type: 'submit', text: t('recap.name.save')});
+        const cancel = el('button', {class: 'recap-link', type: 'button', text: t('recap.name.cancel')});
         cancel.addEventListener('click', function () {
             state.recapNaming = null;
             state.recapNameDraft = null;
@@ -6645,8 +6666,8 @@
     function recapMoveWho(item) {
         const service = PSL.serviceParts(item.service, item.service_label).name;
         const where = item.label || !item.endpoint
-            ? [document.createTextNode('In ' + service + '.')]
-            : [document.createTextNode('In ' + service + ', '), el('code', {
+            ? [document.createTextNode(t('recap.where.move', {service: service}))]
+            : [document.createTextNode(t('recap.where.move.at', {service: service})), el('code', {
                 class: 'code-inline',
                 text: item.endpoint
             }),
@@ -6654,7 +6675,7 @@
         return el('span', {class: 'who'}, [
             el('span', {class: 'plain'}, [
                 item.label ? el('b', {class: 'recap-label', text: item.label + '. '}) : null,
-                document.createTextNode(item.plain)
+                document.createTextNode(PSL.recapPlain(item))
             ]),
             el('span', {class: 'recap-where'}, where)
         ]);
@@ -6679,18 +6700,19 @@
         const moves = snapshot.movements;
         const confirmed = moves.gone_with_confirmed_action;
         const groups = [
-            ['New', moves.new, '', ''],
-            ['Gone', moves.gone, confirmed > 0 ? confirmed + ' with a confirmed fix' : '', ''],
-            ['Up', moves.up, '', 'crit'],
-            ['Down', moves.down, '', ''],
-            ['Came back', moves.came_back, '', 'warn'],
-            ['Done but still detected', moves.done_still_detected, '', 'crit']
+            [t('recap.moves.new'), moves.new, '', ''],
+            [t('recap.moves.gone'), moves.gone,
+                confirmed > 0 ? t('recap.moves.confirmed.' + PSL.plural(confirmed), {count: confirmed}) : '', ''],
+            [t('recap.moves.up'), moves.up, '', 'crit'],
+            [t('recap.moves.down'), moves.down, '', ''],
+            [t('recap.moves.came_back'), moves.came_back, '', 'warn'],
+            [t('recap.moves.done_still'), moves.done_still_detected, '', 'crit']
         ].filter(function (group) {
             return group[1].length > 0;
         });
         const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-moved'}, [
             ruledOverline('// ' + labels.moved.toLowerCase()),
-            recapHeading('recap-h-moved', labels.moved, 'since ' + PSL.periodText(snapshot.previous),
+            recapHeading('recap-h-moved', labels.moved, recapAgainst('recap.moves.since.', snapshot.previous),
                 recapHelp(snapshot, 'moved'), labels.moved)
         ]);
         const note = recapMovedNote(snapshot);
@@ -6725,15 +6747,13 @@
      * having moved: the server's `nothing_moved` is true there only because every list is empty.
      */
     function recapMovedNote(snapshot) {
-        if (snapshot.previous.truncated_to_days === 0) {
-            return 'No day of this period has closed yet, so nothing is compared with the previous one.';
-        }
-        return snapshot.nothing_moved ? 'Nothing moved since the previous period.' : '';
+        if (snapshot.previous.truncated_to_days === 0) return t('recap.moves.none_closed');
+        return snapshot.nothing_moved ? t('recap.moves.nothing') : '';
     }
 
     // ---- the frozen reports
 
-    const RECAP_REPORT_VIEWS = [['pilotage', 'Management'], ['tech', 'Engineering']];
+    const RECAP_REPORT_VIEWS = ['pilotage', 'tech'];
     const RECAP_DELIVERY_STATUS = {delivered: 'succeeded', failed: 'failed'};
 
     /** The list under What moved; null (no right to read it) leaves the section out. */
@@ -6741,9 +6761,9 @@
         const reports = state.recapReports;
         if (reports === null) return null;
         const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-reports'}, [
-            ruledOverline('// reports'),
+            ruledOverline(t('recap.reports.overline')),
             recapHeading('recap-h-reports', PSL.RECAP_REPORTS_COPY.title, PSL.RECAP_REPORTS_COPY.hint,
-                PSL.RECAP_REPORTS_COPY.help, 'reports'),
+                PSL.RECAP_REPORTS_COPY.help, t('recap.topic.reports')),
             recapGenerateBar(route)
         ]);
         if (state.recapGenerateError) {
@@ -6785,7 +6805,9 @@
         state.recapGenerating = true;
         state.recapGenerateError = null;
         render();
-        recapSend('POST', '/api/recap/reports', PSL.recapOnDemandBody(route)).then(function (failure) {
+        // An on-demand report takes the language its reader is shown.
+        const body = Object.assign(PSL.recapOnDemandBody(route), {lang: PSL.lang()});
+        recapSend('POST', '/api/recap/reports', body).then(function (failure) {
             state.recapGenerating = false;
             // Management reads no permission name nor filter key: the Hub's own detail is for engineers.
             state.recapGenerateError = failure && route.view === 'pilotage' ? PSL.RECAP_REPORTS_COPY.refused : failure;
@@ -6801,11 +6823,12 @@
     function recapReportRow(report) {
         const status = PSL.recapReportStatus(report);
         const links = RECAP_REPORT_VIEWS.filter(function (view) {
-            return report.views.indexOf(view[0]) >= 0;
+            return report.views.indexOf(view) >= 0;
         }).map(function (view) {
+            const name = t('recap.view.' + view);
             return el('a', {
-                class: 'recap-link', href: '/recaps/' + report.id + '/' + view[0] + '.html', download: '',
-                text: view[1], 'aria-label': view[1] + ' view of the ' + PSL.recapReportLabel(report)
+                class: 'recap-link', href: '/recaps/' + report.id + '/' + view + '.html', download: '',
+                text: name, 'aria-label': t('recap.report.view_aria', {view: name, report: PSL.recapReportLabel(report)})
             });
         });
         return el('li', {class: 'run-card recap-report'}, [
@@ -6816,7 +6839,7 @@
                     class: 'recap-when',
                     datetime: PSL.isoUtc(report.generated_at_ms),
                     title: PSL.isoUtc(report.generated_at_ms),
-                    text: 'generated ' + PSL.localTime(report.generated_at_ms)
+                    text: t('recap.report.generated', {time: PSL.localTime(report.generated_at_ms)})
                 }),
                 status ? el('span', {class: 'recap-report-status', text: status}) : null
             ].concat(report.deliveries.map(function (delivery) {

@@ -2194,8 +2194,8 @@
      * carbon and action tiles keep one label.
      */
     const RECAP_LABELS = {
-        tech: {io: 'Avoidable I/O', findings: 'Active findings', moved: 'What moved'},
-        pilotage: {io: 'Unnecessary operations', findings: 'Open problems', moved: 'What changed'}
+        tech: textTable('recap.label.tech.', ['io', 'findings', 'moved']),
+        pilotage: textTable('recap.label.pilotage.', ['io', 'findings', 'moved'])
     };
 
     /**
@@ -2203,38 +2203,10 @@
      * test: the Management set may not use the engine's words, and the frozen report (no
      * script, so no "?") prints the same sentences in its closing section.
      */
+    const RECAP_HELP_KEYS = ['period', 'io', 'co2', 'findings', 'actions', 'prio', 'moved'];
     const RECAP_HELP = {
-        tech: {
-            period: 'A week runs Monday to Sunday and a month is a calendar month, both counted in UTC '
-                + 'days. While the period is in progress, trends compare its closed days with the same days of '
-                + 'the previous period; today counts in the tiles only. Times elsewhere on the page are in '
-                + 'your local time, with the zone.',
-            io: 'Extra database, HTTP and messaging calls the engine counted as avoidable on this period, '
-                + 'summed over the detections. Measured, not estimated.',
-            co2: 'An order of magnitude, never a ranking key: each finding\'s avoidable calls times the day\'s '
-                + 'grams per avoidable call the daemon reports. "At least" when some sources send no coefficient.',
-            findings: 'Findings seen on this period and not acknowledged. Acknowledged ones are counted apart '
-                + 'and left out of the priorities.',
-            actions: 'Declared by the team, checked by the engine: confirmed after a sealed day with no '
-                + 'detection, still detected when it shows up after the done day.',
-            prio: 'Findings with avoidable calls first, by volume; then the others by severity. Trends compare '
-                + 'closed days only.',
-            moved: 'Gone means not detected this period: a presumption, not proof that the fix shipped.'
-        },
-        pilotage: {
-            period: 'A week runs Monday to Sunday, counted in UTC days. While it is not over, comparisons only '
-                + 'use the days already finished. Times elsewhere on the page are in your local time, with '
-                + 'the zone.',
-            io: 'Work the application did for nothing on this period, counted by Perf Sentinel. Measured, not '
-                + 'estimated.',
-            co2: 'A rough estimate of the carbon this unnecessary work cost. It gives a scale, not an exact '
-                + 'figure.',
-            findings: 'Problems seen on this period that the team has not set aside.',
-            actions: 'What the team said it would fix, and whether the measurements confirm it.',
-            prio: 'The problems that cost the most come first. A team can name its services and steps in the '
-                + 'Hub, so this report speaks its language.',
-            moved: '"Gone" means it was not seen this period: probably fixed, but not proven.'
-        }
+        tech: textTable('recap.help.tech.', RECAP_HELP_KEYS),
+        pilotage: textTable('recap.help.pilotage.', RECAP_HELP_KEYS)
     };
 
     const RECAP_PERIODS = ['day', 'week', 'month'];
@@ -2327,24 +2299,19 @@
      * @returns {string}
      */
     function recapReportLabel(report) {
-        const kind = report.period.kind.charAt(0).toUpperCase() + report.period.kind.slice(1);
-        const origin = report.subscription || 'on demand by ' + (report.created_by || 'someone');
-        return kind + ' ' + periodText(report.period) + ' · ' + origin + (report.complete ? '' : ' · incomplete');
+        const kind = report.period.kind;
+        const period = periodText(report.period);
+        const head = hasText('recap.report.kind.' + kind)
+            ? t('recap.report.kind.' + kind, {period: period})
+            : kind.charAt(0).toUpperCase() + kind.slice(1) + ' ' + period;
+        const origin = report.subscription
+            || t('recap.report.on_demand', {who: report.created_by || t('recap.report.someone')});
+        return head + ' · ' + origin + (report.complete ? '' : t('recap.report.incomplete'));
     }
 
     /** The fixed copy of the Reports section, pinned with the Management words test. */
-    const RECAP_REPORTS_COPY = {
-        title: 'Reports',
-        hint: 'frozen when written',
-        help: 'A report is a copy of a closed period that no later read changes. A subscription writes one when '
-            + 'its period ends; Generate a report freezes the period and filters above, in your name, '
-            + 'and sends it nowhere.',
-        generate: 'Generate a report',
-        generating: 'Generating\u2026',
-        none: 'No report yet.',
-        failed: 'The Hub did not return the reports.',
-        refused: 'The Hub did not make the report. Check the period and filters, or ask whoever runs the Hub for access.'
-    };
+    const RECAP_REPORTS_COPY = textTable('recap.reports.', ['title', 'hint', 'help', 'generate', 'generating', 'none',
+        'failed', 'refused']);
 
     /**
      * What Generate a report would freeze for a route.
@@ -2352,8 +2319,10 @@
      * @returns {string}
      */
     function recapFreezeText(route) {
-        return 'Freezes ' + (route.at ? 'the ' + route.period + ' that holds ' + route.at : 'the last closed ' + route.period)
-            + (route.environment || route.service || route.grouping ? ', with the filters above' : '') + '.';
+        const filters = route.environment || route.service || route.grouping ? t('recap.freeze.filters') : '';
+        return route.at
+            ? t('recap.freeze.at.' + route.period, {at: recapDay(route.at), filters: filters})
+            : t('recap.freeze.last.' + route.period, {filters: filters});
     }
 
     /**
@@ -2363,16 +2332,10 @@
      * @returns {string}
      */
     function recapErrorText(status, view) {
-        const management = view === 'pilotage';
-        if (status === 403) {
-            return management
-                ? 'The Hub did not let you read the recap: your access does not include it.'
-                : 'The Hub did not let you read the recap: your access holds no findings.read.';
-        }
-        if (status === 400) return 'The Hub could not read a recap for this period or these filters.';
-        return management
-            ? 'The Hub did not return the recap.'
-            : 'The Hub did not return the recap. This is the Hub itself, not any daemon.';
+        const audience = view === 'pilotage' ? 'pilotage' : 'tech';
+        if (status === 403) return t('recap.error.forbidden.' + audience);
+        if (status === 400) return t('recap.error.invalid');
+        return t('recap.error.other.' + audience);
     }
 
     /**
@@ -2381,8 +2344,7 @@
      * @returns {string}
      */
     function recapTruncatedText(view) {
-        return 'The Hub read the first 5,000 ' + (view === 'pilotage' ? 'problems' : 'findings')
-            + ' and stopped there. Narrow the filters to see the others.';
+        return t('recap.truncated.' + (view === 'pilotage' ? 'pilotage' : 'tech'));
     }
 
     /**
@@ -2392,8 +2354,7 @@
      * @returns {string}
      */
     function recapSourcesNote(sources, view) {
-        return (view === 'pilotage' ? 'No figures came from: ' : 'Sources without a detection volume: ')
-            + sources.join(', ') + '.';
+        return t('recap.sources_note.' + (view === 'pilotage' ? 'pilotage' : 'tech'), {sources: sources.join(', ')});
     }
 
     /**
@@ -2402,7 +2363,7 @@
      * @returns {string}
      */
     function recapLateNote(sources) {
-        return 'Left out, as they recorded nothing until after this period: ' + sources.join(', ') + '.';
+        return t('recap.late_note', {sources: sources.join(', ')});
     }
 
     /**
@@ -2411,9 +2372,9 @@
      * @returns {string}
      */
     function recapReportStatus(report) {
-        if (!report.subscription) return 'On demand, not sent';
-        if (report.nothing_moved) return 'Archived, not sent: nothing moved';
-        return report.deliveries.length === 0 ? 'Archived, no destination' : '';
+        if (!report.subscription) return t('recap.report.status.on_demand');
+        if (report.nothing_moved) return t('recap.report.status.nothing_moved');
+        return report.deliveries.length === 0 ? t('recap.report.status.no_destination') : '';
     }
 
     /**
@@ -2425,9 +2386,11 @@
      */
     function recapDeliveryText(delivery) {
         const attempts = delivery.attempts || 0;
-        return delivery.channel + ' ' + delivery.target + ': ' + delivery.state
+        const state = hasText('recap.delivery.state.' + delivery.state)
+            ? t('recap.delivery.state.' + delivery.state) : delivery.state;
+        return t('recap.delivery.line', {channel: delivery.channel, target: delivery.target, state: state})
             + (delivery.last_status === null || delivery.last_status === undefined ? '' : ' (' + delivery.last_status + ')')
-            + (attempts > 0 ? ', ' + attempts + (attempts === 1 ? ' try' : ' tries') : '');
+            + (attempts > 0 ? t('recap.delivery.attempts.' + plural(attempts), {count: attempts}) : '');
     }
 
     /**
@@ -2458,10 +2421,10 @@
      */
     function co2Parts(grams, sourcesWithoutCoefficient, missingReason, view) {
         if (grams === null || grams === undefined) {
-            if (view === 'pilotage') return {lead: '', figure: '—', unit: 'not available'};
+            if (view === 'pilotage') return {lead: '', figure: '—', unit: t('recap.co2.na')};
             return {
                 lead: '', figure: '—',
-                unit: missingReason === 'no_avoidable_io' ? 'no avoidable I/O' : 'no coefficient from the engine'
+                unit: t(missingReason === 'no_avoidable_io' ? 'recap.co2.no_avoidable_io' : 'recap.co2.no_coefficient')
             };
         }
         // A nonzero estimate never rounds to zero; "at least" would contradict "< 1 g".
@@ -2469,8 +2432,8 @@
         const kilos = grams >= 1000;
         const value = kilos ? Number((grams / 1000).toPrecision(3)) : Math.round(grams);
         return {
-            lead: sourcesWithoutCoefficient > 0 ? 'at least' : '',
-            figure: '~' + value.toLocaleString('en-US') + (kilos ? ' kg' : ' g'),
+            lead: sourcesWithoutCoefficient > 0 ? t('recap.co2.lead') : '',
+            figure: '~' + num(value) + (kilos ? ' kg' : ' g'),
             unit: 'CO2e'
         };
     }
@@ -2487,8 +2450,10 @@
     function co2Text(grams, sourcesWithoutCoefficient, missingReason, view) {
         const parts = co2Parts(grams, sourcesWithoutCoefficient, missingReason, view);
         if (grams === null || grams === undefined) return parts.figure + ' ' + parts.unit;
-        return (parts.lead ? parts.lead + ' ' : '') + parts.figure + ' ' + parts.unit + ', estimate'
-            + co2Tail(sourcesWithoutCoefficient, view);
+        return t('recap.co2.text', {
+            value: (parts.lead ? parts.lead + ' ' : '') + parts.figure + ' ' + parts.unit,
+            tail: co2Tail(sourcesWithoutCoefficient, view)
+        });
     }
 
     /**
@@ -2500,9 +2465,8 @@
     function co2Tail(sourcesWithoutCoefficient, view) {
         if (!(sourcesWithoutCoefficient > 0)) return '';
         return view === 'pilotage'
-            ? ', part of the activity has no CO2 estimate'
-            : ', ' + sourcesWithoutCoefficient + (sourcesWithoutCoefficient === 1 ? ' source' : ' sources')
-            + ' without a coefficient';
+            ? t('recap.co2.tail.pilotage')
+            : t('recap.co2.tail.tech.' + plural(sourcesWithoutCoefficient), {count: sourcesWithoutCoefficient});
     }
 
     /**
@@ -2533,12 +2497,10 @@
      * @returns {string}
      */
     function trendText(trend, change) {
-        if (trend === 'new') return 'new';
-        if (trend === 'gone') return 'gone';
-        if (trend === 'flat') return 'stable';
-        if (trend !== 'up' && trend !== 'down') return '';
-        if (change === null || change === undefined) return trend;
-        return (change > 0 ? '+' : '') + Math.round(change * 100) + '%';
+        if (['new', 'gone', 'flat', 'up', 'down'].indexOf(trend) < 0) return '';
+        if (trend !== 'up' && trend !== 'down' || change === null || change === undefined) return t('recap.trend.' + trend);
+        // The narrow space by hand, as pct writes it.
+        return (change > 0 ? '+' : '') + Math.round(change * 100) + (LANG === 'fr' ? '\u202f%' : '%');
     }
 
     /**
@@ -2549,16 +2511,13 @@
      * @returns {string}
      */
     function confirmationLabel(state, view) {
-        const management = view === 'pilotage';
         switch (state) {
             case 'confirmed':
-                return management ? 'Confirmed by the measurements' : 'Confirmed by the engine';
-            case 'contradicted':
-                return 'Still detected';
-            case 'came_back':
-                return 'Came back';
             case 'awaiting':
-                return management ? 'Waiting for a full day of measurements' : 'Waiting for a sealed day';
+                return t('recap.confirm.' + state + (view === 'pilotage' ? '.pilotage' : ''));
+            case 'contradicted':
+            case 'came_back':
+                return t('recap.confirm.' + state);
             default:
                 return '';
         }
@@ -2570,8 +2529,29 @@
      * @returns {string}
      */
     function periodText(period) {
-        const days = period.kind === 'day' ? period.from : period.from + ' to ' + period.to;
-        return days + (period.in_progress ? ', in progress' : '');
+        const days = period.kind === 'day'
+            ? recapDay(period.from) : t('recap.period.range', {from: recapDay(period.from), to: recapDay(period.to)});
+        return period.in_progress ? t('recap.period.in_progress', {days: days}) : days;
+    }
+
+    /**
+     * A recap day: `yyyy-MM-dd` as the server counts it in English, `29 oct. 2026` in French,
+     * as RecapText.Day.
+     * @param {string} iso
+     * @returns {string}
+     */
+    function recapDay(iso) {
+        return LANG === 'fr' ? day(iso, {withYear: true, short: true}) : iso;
+    }
+
+    /**
+     * A Management row's plain sentence, read now in the shown language: a frozen snapshot holds it in
+     * English, and a type this launcher does not know keeps the sentence it came with.
+     * @param {{finding_type: string, plain: string}} item
+     * @returns {string}
+     */
+    function recapPlain(item) {
+        return hasText('recap.plain.' + item.finding_type) ? t('recap.plain.' + item.finding_type) : item.plain;
     }
 
     /**
@@ -2580,9 +2560,11 @@
      * @returns {string}
      */
     function incompleteText(reasons, view) {
-        return reasons && reasons.length ? 'Incomplete: ' + reasons.map(function (reason) {
-            return gapLabel(reason, view);
-        }).join(', ') : '';
+        return reasons && reasons.length ? t('recap.incomplete', {
+            reasons: reasons.map(function (reason) {
+                return gapLabel(reason, view);
+            }).join(', ')
+        }) : '';
     }
 
     /**
@@ -2594,9 +2576,12 @@
     function notesText(notes, samplingRate, view) {
         if (!notes || !notes.length) return '';
         const hasRate = samplingRate !== null && samplingRate !== undefined;
-        return 'Note: ' + notes.map(function (note) {
-            return gapLabel(note, view) + (note === 'sampling' && hasRate ? ' (rate ' + samplingRate + ')' : '');
-        }).join(', ');
+        return t('recap.notes', {
+            notes: notes.map(function (note) {
+                return gapLabel(note, view)
+                    + (note === 'sampling' && hasRate ? t('recap.notes.rate', {rate: decimal(samplingRate)}) : '');
+            }).join(', ')
+        });
     }
 
     /**
@@ -2630,8 +2615,9 @@
         });
         // Some engines write midnight as 24.
         const hour = parts.hour === '24' ? '00' : parts.hour;
-        return parts.year + '-' + parts.month + '-' + parts.day + ' ' + hour + ':' + parts.minute + ' '
-            + parts.timeZoneName;
+        const date = LANG === 'fr'
+            ? parts.day + '/' + parts.month + '/' + parts.year : parts.year + '-' + parts.month + '-' + parts.day;
+        return date + ' ' + hour + ':' + parts.minute + ' ' + parts.timeZoneName;
     }
 
     // ------------------------------------------------------------ share cards
@@ -3552,6 +3538,7 @@
         recapPath,
         recapReportLabel,
         RECAP_REPORTS_COPY,
+        recapPlain,
         recapFreezeText,
         recapErrorText,
         recapTruncatedText,

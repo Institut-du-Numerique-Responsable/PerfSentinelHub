@@ -1,3 +1,4 @@
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 
 namespace PerfSentinelHub.Tests.Recaps;
@@ -204,5 +205,85 @@ public sealed class RecapTextTests
         Assert.DoesNotContain(RecapText.NamingHelp, tech[5].Text, StringComparison.Ordinal);
         Assert.Equal("Avoidable I/O", tech[1].Term);
         Assert.Equal("Unnecessary operations", pilotage[1].Term);
+    }
+
+    // The French twins of the facts above: each expected string is what launcher.js returns with the shown
+    // language fr, pinned in tests/text.test.js too.
+    public static TheoryData<double?, int, string?, string, string> FrenchCo2Cases()
+    {
+        return new TheoryData<double?, int, string?, string, string>
+        {
+            { 2000, 1, null, "tech", "au moins ~2 kg CO2e, estimation, 1 source sans coefficient" },
+            { 2500, 2, null, "tech", "au moins ~2,5 kg CO2e, estimation, 2 sources sans coefficient" },
+            { 1234567, 0, null, "tech", "~1\u202f230 kg CO2e, estimation" },
+            { 999.5, 0, null, "tech", "~1\u202f000 g CO2e, estimation" },
+            { null, 0, "no_coefficient", "tech", "— aucun coefficient du moteur" },
+            { null, 0, "no_avoidable_io", "tech", "— aucune I/O évitable" },
+            { null, 0, "no_coefficient", "pilotage", "— non disponible" },
+            { 0.4, 2, null, "pilotage", "< 1 g CO2e, estimation, une partie de l'activité n'a pas d'estimation CO2" }
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(FrenchCo2Cases))]
+    public void Co2_matches_the_launcher_in_french(double? grams, int without, string? reason, string view,
+        string expected)
+    {
+        Assert.Equal(expected, RecapText.Co2(grams, without, reason, view, HubLang.Fr));
+    }
+
+    [Theory]
+    [InlineData("up", 0.35, "+35\u202f%")]
+    [InlineData("down", -0.2, "-20\u202f%")]
+    [InlineData("down", -0.004, "0\u202f%")]
+    [InlineData("up", null, "en hausse")]
+    [InlineData("flat", 0.0, "stable")]
+    [InlineData("new", null, "nouveau")]
+    [InlineData("gone", null, "disparu")]
+    [InlineData("unknown", null, "")]
+    public void Trend_matches_the_launcher_in_french(string trend, double? change, string expected)
+    {
+        Assert.Equal(expected, RecapText.Trend(trend, change, HubLang.Fr));
+    }
+
+    [Fact]
+    public void Periods_notes_and_labels_match_the_launcher_in_french()
+    {
+        const string fr = HubLang.Fr;
+        Assert.Equal("du 26 oct. 2026 au 1er nov. 2026, en cours",
+            RecapText.Period(new RecapPeriodInfo("week", "2026-10-26", "2026-11-01", true, [], [], null, null), fr));
+        Assert.Equal("29 oct. 2026",
+            RecapText.Period(new RecapPeriodInfo("day", "2026-10-29", "2026-10-29", false, [], [], null, null), fr));
+        Assert.Equal("Période incomplète\u00a0: une journée pas encore terminée, un autre manque de mesure",
+            RecapText.Incomplete(["open_day", "x"], "pilotage", fr));
+        Assert.Equal("Période incomplète\u00a0: un jour encore ouvert, x", RecapText.Incomplete(["open_day", "x"], "tech", fr));
+        Assert.Equal(
+            "Note\u00a0: seule une partie du trafic a été examinée (taux 0,5), une partie de l'activité a été écartée sous la charge",
+            RecapText.Notes(["sampling", "shed"], 0.5, "pilotage", fr));
+        Assert.Equal("Confirmée par le moteur", RecapText.Confirmation("confirmed", "tech", fr));
+        Assert.Equal("En attente d'une journée complète de mesures", RecapText.Confirmation("awaiting", "pilotage", fr));
+        Assert.Equal(
+            "Le Hub a lu les 5\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
+            RecapText.Truncated("pilotage", fr));
+        Assert.Equal("Sources sans volume de détection\u00a0: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "tech", fr));
+        Assert.Equal(("Opérations inutiles", "Problèmes ouverts", "Ce qui a changé"), RecapText.Labels("pilotage", fr));
+        Assert.Equal(("I/O évitables", "Findings actifs", "Ce qui a bougé"), RecapText.Labels("tech", fr));
+        Assert.Equal("SQL redondant", RecapText.Type("redundant_sql", fr));
+        Assert.Equal("blocking_wait", RecapText.Type("blocking_wait", fr));
+        Assert.Equal("brand_new", RecapText.Gap("brand_new", "tech", fr));
+    }
+
+    [Fact]
+    public void Help_gives_the_launchers_seven_french_sentences_for_each_view()
+    {
+        var pilotage = RecapText.Help("pilotage", HubLang.Fr);
+
+        Assert.Equal(7, RecapText.Help("tech", HubLang.Fr).Count);
+        Assert.Equal(7, pilotage.Count);
+        Assert.Equal("Opérations inutiles", pilotage[1].Term);
+        Assert.EndsWith(" " + RecapText.NamingHelpIn(HubLang.Fr), pilotage[5].Text, StringComparison.Ordinal);
+        Assert.Equal("Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue.",
+            RecapText.NamingHelpIn(HubLang.Fr));
+        Assert.Equal(RecapText.NamingHelp, RecapText.NamingHelpIn(HubLang.En));
     }
 }

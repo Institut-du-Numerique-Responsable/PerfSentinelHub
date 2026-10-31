@@ -535,3 +535,181 @@ test("the publish command's comment reads in the shown language, its commands do
         assert.deepEqual(fr.filter((line, i) => i !== 5), en.filter((line, i) => i !== 5));
     });
 });
+
+// ---- the recap
+
+const RECAP_FUNCTIONS = ["recapRoute", "goRecap", "loadRecap", "readRecapReports", "renderRecapScreen",
+    "recapErrorBanner", "recapFilterLine", "recapTextFilter", "recapViewSwitch", "recapHeading", "recapHelp",
+    "recapNotes", "recapPeriodBlock", "recapTile", "recapProgressChip", "recapPreviousText", "recapCount",
+    "recapCo2Tile", "recapTiles", "recapPriorities", "recapPriorityNotes", "recapRow", "recapTechWhat",
+    "recapPlainWhat", "recapServiceHead", "recapTrend", "recapFigure", "recapDetail", "recapFix", "recapCodeLocation",
+    "recapFacts", "recapEvents", "recapStateChip", "recapWhen", "recapOwner", "recapActionReadOnly",
+    "recapActionControls", "recapFoot", "recapSend", "recapWrite", "recapNameTarget", "recapNamingTarget",
+    "recapNameButton", "recapNameEditor", "recapNameSave", "recapMoveWho", "recapMoveItem", "recapMoved",
+    "recapMovedNote", "recapReportsPanel", "recapGenerateBar", "recapGenerate", "recapReportRow"];
+
+const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapHash", "recapPath", "recapReportLabel",
+    "recapFreezeText", "recapErrorText", "recapTruncatedText", "recapSourcesNote", "recapLateNote", "recapReportStatus",
+    "recapDeliveryText", "recapOnDemandBody", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore",
+    "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain"];
+
+test("the recap screen holds no prose literal", () => {
+    const app = wwwrootFile("app.js");
+    const launcher = wwwrootFile("launcher.js");
+    for (const name of RECAP_FUNCTIONS) assert.ok(app.includes("function " + name + "("), "app.js has no " + name);
+    for (const name of RECAP_HELPERS) assert.ok(launcher.includes("function " + name + "("), "launcher.js has no " + name);
+    assert.deepEqual(PSL.literalsIn(app, RECAP_FUNCTIONS), []);
+    assert.deepEqual(PSL.literalsIn(launcher, RECAP_HELPERS), []);
+    for (const table of ["RECAP_TODO_LABEL", "RECAP_REPORT_VIEWS", "RECAP_PERIOD_CHOICES"]) {
+        const start = app.indexOf("const " + table + " = ");
+        assert.ok(start >= 0, "app.js has no " + table);
+        assert.deepEqual(PSL.literalsIn("function x() {" + app.slice(start, app.indexOf(";", start)) + "}", ["x"]), [],
+            table);
+    }
+    for (const table of ["RECAP_LABELS", "RECAP_HELP", "RECAP_REPORTS_COPY"]) {
+        const start = launcher.indexOf("const " + table + " = ");
+        assert.ok(start >= 0, "launcher.js has no " + table);
+        assert.deepEqual(PSL.literalsIn("function x() {" + launcher.slice(start, launcher.indexOf(";", start)) + "}",
+            ["x"]), [], table);
+    }
+});
+
+// The French twin of launcher.test.js TECHNICAL, as RecapSentencesTests.FrenchTechnicalWords.
+const TECHNICAL_FR = /requête|base de données|endpoint|broker|pool|connexion|sql|http|i\/o|e\/s|finding|signature|moteur|daemon|démon|registre|coefficient|trace|ingestion|échantillon|source|service/i;
+const RECAP_GAP_REASONS = ["uncovered_days", "open_day", "restart", "sampling", "shed", "ingest_rejected", "overflow",
+    "multi_instance"];
+
+test("Management_copy_carries_no_technical_word, in French", () => inLang("fr", () => {
+    const route = PSL.readRecapRoute("#/recap?period=month&at=2026-10-02&service=checkout&view=pilotage");
+    const report = {
+        subscription: null, created_by: "alice", nothing_moved: false, complete: false,
+        period: {kind: "week", from: "2026-10-19", to: "2026-10-25"}, deliveries: []
+    };
+    const texts = [
+        ...RECAP_GAP_REASONS.concat("brand_new").map((reason) => PSL.gapLabel(reason, "pilotage")),
+        PSL.incompleteText(RECAP_GAP_REASONS, "pilotage"),
+        PSL.notesText(RECAP_GAP_REASONS, 0.5, "pilotage"),
+        PSL.co2Text(2000, 3, null, "pilotage"),
+        PSL.co2Text(null, 0, "no_coefficient", "pilotage"),
+        PSL.co2Text(null, 0, "no_avoidable_io", "pilotage"),
+        ...["confirmed", "contradicted", "came_back", "awaiting"].map((state) => PSL.confirmationLabel(state, "pilotage")),
+        PSL.recapTruncatedText("pilotage"),
+        PSL.recapSourcesNote(["svc-quiet"], "pilotage"),
+        PSL.recapLateNote(["svc-quiet"]),
+        ...[403, 400, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
+        ...Object.values(PSL.RECAP_LABELS.pilotage),
+        ...Object.values(PSL.RECAP_HELP.pilotage),
+        ...Object.values(PSL.RECAP_REPORTS_COPY),
+        PSL.recapFreezeText(route),
+        PSL.recapFreezeText(PSL.readRecapRoute("#/recap")),
+        PSL.recapReportLabel(report),
+        PSL.recapReportLabel({...report, subscription: "weekly-shop"}),
+        PSL.recapReportStatus(report),
+        PSL.recapReportStatus({...report, subscription: "weekly-shop", nothing_moved: true}),
+        PSL.recapReportStatus({...report, subscription: "weekly-shop"}),
+        PSL.recapDeliveryText({channel: "webhook", target: "ops-chat", state: "delivered", attempts: 1, last_status: 204}),
+        PSL.recapDeliveryText({channel: "email", target: "pm@acme.test", state: "failed", attempts: 8, last_status: null}),
+        ...Object.keys(TEXT.fr).filter(key => key.startsWith("recap.plain.")).map(key => PSL.t(key)),
+        // app.js: the Management screen's own words.
+        ...["recap.prio.more.one", "recap.prio.more.other", "recap.view.pilotage", "recap.view.tech",
+            "recap.prio.divider.pilotage", "recap.figure.none", "recap.tile.acked.pilotage.one",
+            "recap.tile.acked.pilotage.other", "recap.label.pilotage.io_lower", "recap.prio.hint", "recap.title",
+            "recap.sub", "recap.moves.nothing", "recap.moves.none_closed", "recap.where", "recap.where.move",
+            "recap.where.move.at", "recap.tile.co2", "recap.tile.actions.checked", "recap.tile.actions.open",
+            "recap.state.not_taken", "recap.state.done_with", "recap.when.done", "recap.when.updated"]
+            // A placeholder names a value, not a word the reader meets.
+            .map(key => PSL.t(key).replace(/\{\w+\}/g, "x"))
+    ];
+    assert.equal(texts.filter(text => PSL.t("recap.plain.n_plus_one_sql") === text).length, 1);
+    for (const text of texts) {
+        assert.ok(text, "every text is set");
+        assert.doesNotMatch(text, TECHNICAL_FR);
+    }
+}));
+
+test("Management_help_carries_no_technical_word, in French", () => inLang("fr", () => {
+    const keys = ["period", "io", "co2", "findings", "actions", "prio", "moved"];
+    assert.deepEqual(Object.keys(PSL.RECAP_HELP.pilotage), keys);
+    for (const text of Object.values(PSL.RECAP_HELP.pilotage)) assert.doesNotMatch(text, TECHNICAL_FR);
+    assert.ok(PSL.RECAP_HELP.pilotage.prio.endsWith(
+        " Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue."));
+}));
+
+// Every French string below is pinned in RecapTextTests too, so a frozen report and the #/recap screen read alike.
+test("the recap's figures and words read in the shown language", () => inLang("fr", () => {
+    assert.equal(PSL.co2Text(2000, 1, null), "au moins ~2 kg CO2e, estimation, 1 source sans coefficient");
+    assert.equal(PSL.co2Text(2500, 2, null), "au moins ~2,5 kg CO2e, estimation, 2 sources sans coefficient");
+    assert.equal(PSL.co2Text(1234567, 0, null), "~1 230 kg CO2e, estimation");
+    assert.equal(PSL.co2Text(999.5, 0, null), "~1 000 g CO2e, estimation");
+    assert.equal(PSL.co2Text(null, 0, "no_coefficient"), "— aucun coefficient du moteur");
+    assert.equal(PSL.co2Text(null, 0, "no_avoidable_io"), "— aucune I/O évitable");
+    assert.equal(PSL.co2Text(null, 0, "no_coefficient", "pilotage"), "— non disponible");
+    assert.equal(PSL.co2Text(0.4, 2, null, "pilotage"),
+        "< 1 g CO2e, estimation, une partie de l'activité n'a pas d'estimation CO2");
+    assert.deepEqual(PSL.co2Parts(2000, 1, null), {lead: "au moins", figure: "~2 kg", unit: "CO2e"});
+    assert.equal(PSL.trendText("up", 0.35), "+35 %");
+    assert.equal(PSL.trendText("down", -0.2), "-20 %");
+    assert.equal(PSL.trendText("down", -0.004), "0 %");
+    assert.equal(PSL.trendText("up", null), "en hausse");
+    assert.equal(PSL.trendText("flat", 0), "stable");
+    assert.equal(PSL.trendText("new", null), "nouveau");
+    assert.equal(PSL.trendText("gone", null), "disparu");
+    assert.equal(PSL.trendText("unknown", null), "");
+    assert.equal(PSL.confirmationLabel("confirmed"), "Confirmée par le moteur");
+    assert.equal(PSL.confirmationLabel("awaiting", "pilotage"), "En attente d'une journée complète de mesures");
+    assert.equal(PSL.periodText({kind: "week", from: "2026-10-26", to: "2026-11-01", in_progress: true}),
+        "du 26 oct. 2026 au 1er nov. 2026, en cours");
+    assert.equal(PSL.periodText({kind: "day", from: "2026-10-29", to: "2026-10-29", in_progress: false}),
+        "29 oct. 2026");
+    assert.equal(PSL.incompleteText(["open_day", "x"], "pilotage"),
+        "Période incomplète : une journée pas encore terminée, un autre manque de mesure");
+    assert.equal(PSL.incompleteText(["open_day", "x"]), "Période incomplète : un jour encore ouvert, x");
+    assert.equal(PSL.notesText(["sampling", "shed"], 0.5, "pilotage"),
+        "Note : seule une partie du trafic a été examinée (taux 0,5), une partie de l'activité a été écartée sous la charge");
+    assert.equal(PSL.recapTruncatedText("pilotage"),
+        "Le Hub a lu les 5 000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.");
+    assert.equal(PSL.recapSourcesNote(["a", "b"], "tech"), "Sources sans volume de détection : a, b.");
+    assert.deepEqual(PSL.RECAP_LABELS.pilotage, {io: "Opérations inutiles", findings: "Problèmes ouverts",
+        moved: "Ce qui a changé"});
+    assert.match(PSL.recapErrorText(403, "tech"), /findings\.read/);
+}));
+
+test("a recap report and its freeze line read in the shown language", () => inLang("fr", () => {
+    const week = {subscription: "weekly-shop", period: {kind: "week", from: "2026-10-19", to: "2026-10-25"}, complete: false};
+    assert.equal(PSL.recapReportLabel(week), "Semaine du 19 oct. 2026 au 25 oct. 2026 · weekly-shop · incomplet");
+    assert.equal(PSL.recapReportLabel({subscription: null, created_by: "alice", complete: true,
+        period: {kind: "day", from: "2026-10-28", to: "2026-10-28"}}), "Journée du 28 oct. 2026 · demandé par alice");
+    assert.equal(PSL.recapReportStatus({subscription: null, nothing_moved: false, deliveries: []}),
+        "À la demande, non envoyé");
+    assert.equal(PSL.recapDeliveryText({channel: "email", target: "pm@example.test", state: "failed", attempts: 1,
+        last_status: 550}), "email pm@example.test : échec (550), 1 essai");
+    assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops", state: "pending", attempts: 3}),
+        "webhook ops : en attente, 3 essais");
+    assert.equal(PSL.recapFreezeText(PSL.readRecapRoute("#/recap?period=month&at=2026-10-02&service=x")),
+        "Fige le mois qui contient le 2 oct. 2026, avec les filtres ci-dessus.");
+    assert.equal(PSL.recapFreezeText(PSL.readRecapRoute("#/recap")), "Fige la dernière semaine close.");
+}));
+
+test("a recap time reads in the shown language, in the browser's zone", () => {
+    const kept = process.env.TZ;
+    try {
+        process.env.TZ = "Europe/Paris";
+        inLang("fr", () => {
+            assert.equal(PSL.localTime(Date.UTC(2026, 9, 29, 13, 32, 59)), "29/10/2026 14:32 CET");
+            assert.equal(PSL.localTime(Date.UTC(2026, 9, 28, 23, 5)), "29/10/2026 00:05 CET");
+        });
+    } finally {
+        if (kept === undefined) delete process.env.TZ; else process.env.TZ = kept;
+    }
+});
+
+test("a Management row's plain sentence follows the shown language, an unknown type keeps its own", () => {
+    const known = {finding_type: "n_plus_one_sql", plain: "stored"};
+    const unknown = {finding_type: "blocking_wait", plain: "The stored sentence."};
+    assert.equal(PSL.recapPlain(known), "For each item on a page, the application fetches the same kind of information again, instead of fetching it all at once.");
+    assert.equal(PSL.recapPlain(unknown), "The stored sentence.");
+    inLang("fr", () => {
+        assert.equal(PSL.recapPlain(known), "Pour chaque élément d'une page, l'application va de nouveau chercher le même type d'information, au lieu de tout récupérer en une fois.");
+        assert.equal(PSL.recapPlain(unknown), "The stored sentence.");
+    });
+});

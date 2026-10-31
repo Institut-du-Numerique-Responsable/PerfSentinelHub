@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -80,7 +81,8 @@ public static partial class ApiEndpoints
                 snapshot.Period.Incomplete.Count == 0,
                 snapshot.NothingMoved,
                 identity,
-                now.ToUnixTimeMilliseconds()),
+                now.ToUnixTimeMilliseconds(),
+                ask.Lang),
             JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot),
             AccessCaller.Of(request.HttpContext)?.Subject);
         // No subscription, so the unique period index does not apply: only an id collision could refuse.
@@ -125,14 +127,17 @@ public static partial class ApiEndpoints
             return TypedResults.NotFound();
 
         var snapshot = JsonSerializer.Deserialize(report.SnapshotJson, HubJsonContext.Default.RecapSnapshot)!;
+        // The text renders at read time, so a link may ask for the other language than the stored one.
+        var asked = context.Request.Query["lang"].ToString();
+        var lang = HubLang.IsKnown(asked) ? asked : HubLang.Normalize(report.Summary.Language);
         var headers = context.Response.Headers;
-        headers.ContentSecurityPolicy = RecapReportRenderer.ContentSecurityPolicy;
+        headers.ContentSecurityPolicy = RecapReportRenderer.ContentSecurityPolicyFor(lang);
         headers.XContentTypeOptions = "nosniff";
         headers.CacheControl = "no-store";
         headers.ContentDisposition =
             $"inline; filename=\"perf-sentinel-recap-{report.Summary.PeriodFrom}-{view}.html\"";
         return TypedResults.Bytes(
-            RecapReportRenderer.Render(view == RecapViewNames.Pilotage ? RecapViews.Frozen(snapshot) : snapshot),
+            RecapReportRenderer.Render(view == RecapViewNames.Pilotage ? RecapViews.Frozen(snapshot) : snapshot, lang),
             "text/html; charset=utf-8");
     }
 
@@ -208,6 +213,7 @@ public static partial class ApiEndpoints
                 .. deliveries.Select(delivery => new RecapDeliveryView(
                     delivery.Channel, delivery.Target, delivery.State, delivery.Attempts, delivery.LastAttemptMs,
                     delivery.NextAttemptMs, delivery.LastStatus))
-            ]);
+            ],
+            report.Language);
     }
 }

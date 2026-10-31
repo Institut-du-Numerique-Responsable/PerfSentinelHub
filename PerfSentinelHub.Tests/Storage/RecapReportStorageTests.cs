@@ -46,6 +46,32 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_report_keeps_its_language_and_one_from_before_reads_english()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var french = Report("fr1", "weekly-fr");
+        french = french with { Summary = french.Summary with { Language = "fr" } };
+        Assert.True(await _database.InsertRecapReportAsync(french, [], cancellationToken));
+        await using (var connection = await _database.OpenConnectionAsync(cancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            // A row an older Hub wrote names no language.
+            command.CommandText = """
+                                  INSERT INTO recap_reports(id, subscription, period_kind, period_from, period_to, views,
+                                    complete, nothing_moved, created_by, generated_at_ms, snapshot_json)
+                                  VALUES ('old1', 'weekly-old', 'week', '2026-10-19', '2026-10-25', 'pilotage', 1, 0,
+                                          NULL, 1, '{}');
+                                  """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        Assert.Equal("fr", (await _database.GetRecapReportAsync("fr1", cancellationToken))!.Summary.Language);
+        Assert.Equal("en", (await _database.GetRecapReportAsync("old1", cancellationToken))!.Summary.Language);
+        var listed = await _database.ListRecapReportsAsync(null, 10, cancellationToken);
+        Assert.Equal("fr", listed.Single(report => report.Id == "fr1").Language);
+    }
+
+    [Fact]
     public async Task A_second_report_for_the_same_subscription_and_period_is_refused()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -76,5 +77,49 @@ public sealed class RecapSentencesTests
         AssertPlain(RecapText.LateSources(["svc-quiet"]));
         foreach (var (term, text) in RecapText.Help("pilotage"))
             AssertPlain(term + " " + text);
+    }
+
+    /// <summary>The Management ban list in French, beside the English one. "service" is in it: no French sentence names one.</summary>
+    internal static readonly string[] FrenchTechnicalWords =
+    [
+        "requête", "base de données", "endpoint", "broker", "pool", "connexion", "sql", "http", "i/o", "e/s", "finding",
+        "signature", "moteur", "daemon", "démon", "registre", "coefficient", "trace", "ingestion", "échantillon",
+        "source", "service"
+    ];
+
+    internal static void AssertPlainFrench(string text)
+    {
+        foreach (var word in FrenchTechnicalWords)
+            Assert.DoesNotContain(word, text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllTypes))]
+    public void No_french_sentence_uses_technical_words(string type)
+    {
+        var sentence = RecapSentences.For(type, HubLang.Fr);
+
+        AssertPlainFrench(sentence);
+        Assert.NotEqual(RecapSentences.For(type), sentence);
+    }
+
+    [Fact]
+    public void No_french_management_text_uses_technical_words()
+    {
+        const string fr = HubLang.Fr;
+        foreach (var reason in Reasons.Append("brand_new"))
+            AssertPlainFrench(RecapText.Gap(reason, "pilotage", fr));
+        AssertPlainFrench(RecapText.Incomplete([.. Reasons], "pilotage", fr));
+        AssertPlainFrench(RecapText.Notes([.. Reasons], 0.5, "pilotage", fr));
+        AssertPlainFrench(RecapText.Co2(2000, 3, null, "pilotage", fr));
+        AssertPlainFrench(RecapText.Co2(null, 0, "no_coefficient", "pilotage", fr));
+        AssertPlainFrench(RecapText.Co2(null, 0, "no_avoidable_io", "pilotage", fr));
+        foreach (var state in new[] { "confirmed", "contradicted", "came_back", "awaiting" })
+            AssertPlainFrench(RecapText.Confirmation(state, "pilotage", fr));
+        AssertPlainFrench(RecapText.Truncated("pilotage", fr));
+        AssertPlainFrench(RecapText.SourcesWithoutVolume(["svc-quiet"], "pilotage", fr));
+        AssertPlainFrench(RecapText.LateSources(["svc-quiet"], fr));
+        foreach (var (term, text) in RecapText.Help("pilotage", fr))
+            AssertPlainFrench(term + " " + text);
     }
 }

@@ -287,7 +287,8 @@ public sealed record RecapReportItem(
     bool NothingMoved,
     string? CreatedBy,
     long GeneratedAtMs,
-    IReadOnlyList<RecapDeliveryView> Deliveries);
+    IReadOnlyList<RecapDeliveryView> Deliveries,
+    string Language);
 
 /// <summary>A report and its snapshot, the stored text served as it was frozen.</summary>
 public sealed record RecapReportDetail(RecapReportItem Report, JsonElement Snapshot);
