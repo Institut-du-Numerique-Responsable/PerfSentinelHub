@@ -134,3 +134,23 @@ test("the literal guard finds prose", () => {
     ].join("\n");
     assert.deepEqual(PSL.literalsIn(source, ["b"]), ["Close the dialog", "Ran ${count} times today"]);
 });
+
+test("adopting the page's language does not store it, only a choice does", () => {
+    const store = new Map();
+    const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: {setItem: (k, v) => store.set(k, v), getItem: k => store.get(k) ?? null},
+    });
+    try {
+        PSL.setLang("fr", false);
+        assert.equal(PSL.lang(), "fr");
+        assert.equal(store.size, 0);
+        PSL.setLang("en");
+        assert.equal(store.get("perf-sentinel:lang"), "en");
+    } finally {
+        if (storage) Object.defineProperty(globalThis, "localStorage", storage);
+        else delete globalThis.localStorage;
+        PSL.setLang("en");
+    }
+});

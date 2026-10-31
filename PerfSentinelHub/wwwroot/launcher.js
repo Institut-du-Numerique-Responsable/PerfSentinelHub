@@ -3107,17 +3107,21 @@
 
     /**
      * Shows `next`, keeps the choice when storage allows it and tells every listener. An unknown
-     * language changes nothing.
+     * language changes nothing. `persist` false adopts a language nobody chose (the browser's
+     * default at boot), so a later change of browser language is still followed.
      * @param {string} next
+     * @param {boolean} [persist]
      * @returns {void}
      */
-    function setLang(next) {
+    function setLang(next, persist = true) {
         if (LANGS.indexOf(next) < 0) return;
         LANG = /** @type {'en' | 'fr'} */ (next);
-        try {
-            global.localStorage.setItem(LANG_KEY, LANG);
-        } catch (error) {
-            // Storage off or absent: the choice lasts as long as the page.
+        if (persist) {
+            try {
+                global.localStorage.setItem(LANG_KEY, LANG);
+            } catch (error) {
+                // Storage off or absent: the choice lasts as long as the page.
+            }
         }
         if (typeof document !== 'undefined') document.documentElement.lang = LANG;
         LANG_LISTENERS.forEach(listener => listener(LANG));

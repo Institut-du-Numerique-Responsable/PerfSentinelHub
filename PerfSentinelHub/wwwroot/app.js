@@ -304,7 +304,8 @@
      * A switch redraws in place: the route, the state and the form stay as they are.
      */
     function initLang() {
-        PSL.setLang(document.documentElement.lang);
+        // The pre-paint script already picked it: adopt it, do not store it as a choice.
+        PSL.setLang(document.documentElement.lang, false);
         applyStaticText(document);
         document.getElementById('lang-toggle').addEventListener('click', function () {
             PSL.setLang(PSL.lang() === 'fr' ? 'en' : 'fr');

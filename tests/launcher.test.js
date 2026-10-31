@@ -2322,3 +2322,8 @@ test("every data-i18n key of index.html exists", () => {
     const missing = keys.filter(key => !Object.prototype.hasOwnProperty.call(globalThis.PSL_TEXT.en, key));
     assert.deepEqual(missing, []);
 });
+
+test("boot adopts the page's language without storing it", () => {
+    // Only the button's click may call setLang with storage on.
+    assert.match(wwwroot("app.js"), /PSL\.setLang\(document\.documentElement\.lang, false\)/);
+});
