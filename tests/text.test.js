@@ -965,3 +965,17 @@ test("the terminal approval page holds no prose literal and takes the page's lan
     assert.ok(setLang >= 0 && setLang < device.indexOf("addEventListener('DOMContentLoaded'"));
     assert.match(device, /PSL\.problemText\(answer\.payload, answer\.status, PSL\.t\('device\.answered'/);
 });
+
+test("no screen holds a prose literal", () => {
+    // Each file whole, so every function and every table at the top of the module is read.
+    const allowlist = JSON.parse(require("node:fs").readFileSync(
+        require("node:path").join(__dirname, "text-allowlist.json"), "utf8"));
+    for (const entry of allowlist) assert.ok(entry.why && entry.why.length > 10, "no reason for " + entry.texts);
+    for (const file of ["app.js", "launcher.js", "device.js"]) {
+        const found = PSL.literalsIn("function x() {" + wwwrootFile(file) + "}", ["x"]);
+        const allowed = allowlist.filter(entry => entry.file === file).flatMap(entry => entry.texts);
+        assert.deepEqual(found.filter(text => !allowed.includes(text)), [], file);
+        // An entry no literal matches any more is dropped, not kept as a blank cheque.
+        assert.deepEqual(allowed.filter(text => !found.includes(text)), [], file + " allowlist");
+    }
+});
