@@ -1707,7 +1707,8 @@
      * One line per source a submit wrote to, in the order it wrote. `action` is
      * the button pressed, never `either`: on a row of unknown ack state the
      * relay's `detail` carries the daemon's refusal of the button that did not apply.
-     * @param {Array<{name: string, action: 'ack' | 'revoke', status: number, detail?: string | null}>} results
+     * @param {Array<{name: string, action: 'ack' | 'revoke', status: number, detail?: string | null,
+     *     code?: string | null}>} results
      * @returns {Array<{ok: boolean, text: string}>}
      */
     function ackSummary(results) {
@@ -1715,7 +1716,7 @@
             const ok = result.status >= 200 && result.status < 300;
             const said = ok
                 ? (result.action === 'revoke' ? 'ack revoked.' : 'acknowledged.')
-                : result.detail || ACK_REFUSALS[result.status]
+                : (result.detail ? problemText(result, result.status) : null) || ACK_REFUSALS[result.status]
                 || 'The Hub refused the request with status ' + result.status + '.';
             return {ok: ok, text: result.name + ': ' + said};
         });
@@ -2956,9 +2957,12 @@
 
     /**
      * Whether a curve's 422 is the refusal of the period before, which a story or a collective card
-     * escapes: CardRules.Explain writes only that one as "No curve for ...", the 422 carries no code.
+     * escapes. Its code starts with previous_; without a code, CardRules.Explain's "No curve for ...".
+     * @param {string | null | undefined} detail
+     * @param {string | null} [code]
      */
-    function isPreviousRefusal(detail) {
+    function isPreviousRefusal(detail, code) {
+        if (code) return code.indexOf('previous_') === 0;
         return String(detail || '').indexOf('No curve for ') === 0;
     }
 
@@ -3186,6 +3190,25 @@
         }
         if (!vars) return value;
         return value.replace(/\{(\w+)\}/g, (whole, name) => name in vars ? String(vars[name]) : whole);
+    }
+
+    /**
+     * What a refusal says in the shown language: the sentence of its code when the shown table has
+     * one, else the Hub's English detail, else `fallback` or the generic sentence. English keeps
+     * the detail first, which can name more than the table's general sentence.
+     * @param {{code?: string | null, detail?: string | null} | null | undefined} payload
+     * @param {number} [status]
+     * @param {string} [fallback]
+     * @returns {string}
+     */
+    function problemText(payload, status, fallback) {
+        const problem = payload || {};
+        const key = 'problem.' + problem.code;
+        if (problem.code && textIn(LANG, key) !== undefined && (LANG !== 'en' || !problem.detail)) {
+            return t(key, /** @type {Record<string, string | number>} */ (/** @type {unknown} */ (problem)));
+        }
+        if (problem.detail) return String(problem.detail);
+        return fallback ?? t('problem.generic', {status: status ?? 0});
     }
 
     /**
@@ -3615,6 +3638,7 @@
         pickLang,
         hasText,
         t,
+        problemText,
         num,
         pct,
         day,

@@ -1543,3 +1543,25 @@ same `403` page, byte for byte. A client address and name past five consecutive 
 or an address past 5 attempts in its minute, get `429` and `Retry-After` in seconds; a
 request that waits more than 10 seconds for the hashing slot, or finds 8 already waiting,
 gets `503` and `Retry-After: 1`.
+
+## Problem codes
+
+A refusal the Hub words itself carries `code` beside `detail`, as in
+`{"detail":"This source relays no acknowledgments.","code":"acks_not_relayed"}`. The `detail`
+stays the English sentence it always was, and `code` is a stable `snake_case` name for the
+refusal, never renamed, that the launcher translates. A code names the refusal, not the route,
+so one code serves every route that refuses for the same reason. A client that does not know a
+code shows `detail`. A card field refusal also carries `field`, and a disclosure refusal keeps
+its `{"reason":"…"}` with no `detail`. A response with no body (`413`, `415`, a full gate's
+`503`) has no code either. The codes:
+
+- The request itself: `invalid_json`, `invalid_request`, `unknown_source`, `unknown_scope`.
+- Who asks, and from where: `unknown_caller`, `foreign_origin`, `machine_token_read_only`, `no_grant`, `no_findings_read`.
+- Analyses: `analysis_engine_missing`, `detection_knob_unsupported`, `analysis_forbidden`.
+- Terminal sign-in and tokens: `browser_session_required`, `browser_not_allowed`, `unknown_token`, `session_ending`, `invalid_user_code`, `no_pending_sign_in`, `too_many_user_codes`.
+- Findings, actions and labels: `actions_forbidden`, `action_read_only`, `unknown_finding`, `action_exists`, `no_action`, `endpoint_labels_forbidden`, `service_labels_forbidden`, `unknown_endpoint`, `unknown_service`, `endpoint_label_read_only`, `service_label_read_only`.
+- Acknowledgments and their relay to a daemon: `acks_not_relayed`, `acks_forbidden`, `ack_read_only`, `unknown_finding_at_source`, `unknown_ack_at_source`, `daemon_unreachable`, `daemon_timeout`, `daemon_refused_signature`, `daemon_refused_credential`, `daemon_ack_not_found`, `daemon_already_acked`, `daemon_acks_disabled`, `daemon_ack_store_full`, `daemon_unexpected_answer`, `not_a_daemon`.
+- Recaps: `invalid_recap_query`, `recap_reports_forbidden`.
+- Cards: `invalid_card_query`, `cards_forbidden`, `card_sources_forbidden`, `card_engine_missing`, `cards_busy`, `card_not_rendered`, `card_field_undrawable`, `card_organisation_undrawable`, `card_domain_too_long`, `card_language_unsupported`, `card_domain_missing`, `card_attachment_unchecked`, `card_key_forbidden`, `card_key_failed`, `unknown_card_key`, `invalid_revocation_date`.
+- Disclosures: `disclosures_read_forbidden`, `disclosures_manage_forbidden`, `withdrawn_not_shared`, `invalid_share_days`, `invalid_withdraw_reason`, `already_withdrawn`, `delivery_done`, `disclosure_busy`.
+- Card refusals (`422`), the reason from `CardRules.Reasons`: `open_period`, `uncovered_days`, `open_day`, `overflow`, `previous_uncovered_days`, `previous_open_day`, `previous_overflow`, `no_confirmed_fix`, `unknown_fix`, `unprintable_fix`, `no_total_io`, `curve_needs_whole_sources`, `unprintable_scope`, `scope_too_long`, `unkept_fixes`.

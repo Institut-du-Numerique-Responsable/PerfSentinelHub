@@ -37,6 +37,7 @@ public static partial class ApiEndpoints
         var hubOptions = options.Value;
         if (hubOptions.Analysis.EngineBinaryPath is null)
             return Problem(StatusCodes.Status503ServiceUnavailable,
+                ProblemCodes.AnalysisEngineMissing,
                 "No analysis engine is configured on this Hub.");
 
         var payload = await ReadBodyAsync(request, cancellationToken);
@@ -50,7 +51,7 @@ public static partial class ApiEndpoints
         }
         catch (JsonException)
         {
-            return Problem(StatusCodes.Status400BadRequest, "The body is not valid JSON.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidJson, "The body is not valid JSON.");
         }
 
         using (document)
@@ -58,7 +59,7 @@ public static partial class ApiEndpoints
             var root = document.RootElement;
             // A source missing from the caller's /api/sources reads as unknown.
             if (ReadSource(root, access.Sources(request.HttpContext, hubOptions.Sources)) is not { } source)
-                return Problem(StatusCodes.Status400BadRequest, "Unknown source_id.");
+                return Problem(StatusCodes.Status400BadRequest, ProblemCodes.UnknownSource, "Unknown source_id.");
 
             var requestElement = root.TryGetProperty("request", out var submitted)
                 ? submitted
@@ -66,18 +67,20 @@ public static partial class ApiEndpoints
             var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
             if (AnalysisRequest.TryParse(requestElement, source, hubOptions.Analysis, nowMs, out var error) is not
                 { } parsed)
-                return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
+                return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                    error ?? "The request is invalid.");
             // A knob the embedded engine's `[detection]` does not read is refused
             // here, with both versions named, not by the engine at run time.
             if (parsed.Detection.RefusedBy(engine.Version) is { } refused)
-                return Problem(StatusCodes.Status400BadRequest, refused);
+                return Problem(StatusCodes.Status400BadRequest, ProblemCodes.DetectionKnobUnsupported, refused);
             // Starting needs R and analyses.run, so a requester reads their own run while
             // their grant stands, with no requester clause.
             var rule = new RunRule(request.HttpContext, access, database);
             var subject = RunRule.Service(source.Kind, requestElement);
             if (!await rule.HoldsAsync(source.Kind, source.Id, source.Environment, subject,
                     [AccessPermissions.AnalysesRun, .. RunRule.Permissions(source.Kind)], cancellationToken))
-                return Problem(StatusCodes.Status403Forbidden, "You may not start this analysis.");
+                return Problem(StatusCodes.Status403Forbidden, ProblemCodes.AnalysisForbidden,
+                    "You may not start this analysis.");
 
             var run = NewRun(source, requestElement, Identity(request, hubOptions.Analysis), nowMs);
             if (await database.TryInsertRunAsync(run, cancellationToken))
@@ -248,10 +251,10 @@ public static partial class ApiEndpoints
 
     // The typed overload keeps NativeAOT trimming safe: the reflection-based
     // one is flagged by IL2026 and IL3050 at build time.
-    internal static JsonHttpResult<AnalysisProblem> Problem(int statusCode, string detail)
+    internal static JsonHttpResult<AnalysisProblem> Problem(int statusCode, string code, string detail)
     {
         return TypedResults.Json(
-            new AnalysisProblem(detail),
+            new AnalysisProblem(detail, code),
             HubJsonContext.Default.AnalysisProblem,
             statusCode: statusCode);
     }

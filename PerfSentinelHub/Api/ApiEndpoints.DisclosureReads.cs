@@ -120,10 +120,12 @@ public static partial class ApiEndpoints
             return TypedResults.Json(new DisclosureRefusal("internal_not_shareable"),
                 HubJsonContext.Default.DisclosureRefusal, statusCode: StatusCodes.Status422UnprocessableEntity);
         if (summary.Withdrawn)
-            return Problem(StatusCodes.Status409Conflict, "A withdrawn disclosure is not shared.");
+            return Problem(StatusCodes.Status409Conflict, ProblemCodes.WithdrawnNotShared,
+                "A withdrawn disclosure is not shared.");
         var body = await ReadBodyAsync(request, cancellationToken, 1024);
         if (ShareDays(body, options.Value.Disclosures.ShareLinkDays) is not { } days)
-            return Problem(StatusCodes.Status400BadRequest, "days must be a whole number of days from 1 to 30.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidShareDays,
+                "days must be a whole number of days from 1 to 30.");
 
         var created = await IssueShareLinkAsync(
             database, id, RelayIdentity(request, options.Value)!, days, timeProvider, cancellationToken);
@@ -190,6 +192,7 @@ public static partial class ApiEndpoints
             return refused;
         if (WithdrawReason(await ReadBodyAsync(request, cancellationToken, 8 * 1024)) is not { } reason)
             return Problem(StatusCodes.Status400BadRequest,
+                ProblemCodes.InvalidWithdrawReason,
                 $"reason is required, {MaxWithdrawReasonChars} characters at most and no control character.");
         if (await database.GetDisclosureAsync(id, cancellationToken) is null)
             return TypedResults.NotFound();
@@ -202,7 +205,8 @@ public static partial class ApiEndpoints
             [.. options.Value.Disclosures.Webhooks.Select(webhook => webhook.Name).Where(told.Contains)],
             cancellationToken)
             ? TypedResults.NoContent()
-            : Problem(StatusCodes.Status409Conflict, "This disclosure is already withdrawn.");
+            : Problem(StatusCodes.Status409Conflict, ProblemCodes.AlreadyWithdrawn,
+                "This disclosure is already withdrawn.");
     }
 
     // Every parameter is the route's own or a collaborator the router injects.
@@ -225,7 +229,8 @@ public static partial class ApiEndpoints
         if (delivery is null)
             return TypedResults.NotFound();
         if (delivery.State == DeliveryStates.Delivered)
-            return Problem(StatusCodes.Status409Conflict, "This delivery already went through.");
+            return Problem(StatusCodes.Status409Conflict, ProblemCodes.DeliveryDone,
+                "This delivery already went through.");
         await database.RetryDeliveryAsync(deliveryId, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
             cancellationToken);
         return TypedResults.NoContent();
@@ -256,6 +261,7 @@ public static partial class ApiEndpoints
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
             return Problem(StatusCodes.Status503ServiceUnavailable,
+                ProblemCodes.DisclosureBusy,
                 "A disclosure is being published; try again in a moment.");
         }
 
@@ -299,10 +305,11 @@ public static partial class ApiEndpoints
             return TypedResults.NotFound();
         if (!access.Scope(context, permission).IsNothing)
             return null;
-        return Problem(StatusCodes.Status403Forbidden,
-            permission == AccessPermissions.DisclosuresRead
-                ? "You may not read disclosures."
-                : "You may not manage disclosures.");
+        return permission == AccessPermissions.DisclosuresRead
+            ? Problem(StatusCodes.Status403Forbidden, ProblemCodes.DisclosuresReadForbidden,
+                "You may not read disclosures.")
+            : Problem(StatusCodes.Status403Forbidden, ProblemCodes.DisclosuresManageForbidden,
+                "You may not manage disclosures.");
     }
 
     // A write names its author, and is held to the same-origin rule the ack relay follows.
@@ -312,6 +319,7 @@ public static partial class ApiEndpoints
             return refused;
         if (RelayIdentity(request, options) is null)
             return Problem(StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and a disclosure action is taken in somebody's name.");
         return RefuseForeignRequest(request);
     }

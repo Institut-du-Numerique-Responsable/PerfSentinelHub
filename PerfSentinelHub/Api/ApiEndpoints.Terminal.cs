@@ -242,10 +242,10 @@ public static partial class ApiEndpoints
         if (refusal is not null) return refusal;
         using var body = await ReadDecisionAsync(context.Request, cancellationToken);
         if (UserCodeOf(body) is not { } userCode)
-            return Failed(devices, caller!, StatusCodes.Status400BadRequest,
+            return Failed(devices, caller!, StatusCodes.Status400BadRequest, ProblemCodes.InvalidUserCode,
                 "Enter the eight letters your terminal shows.");
         if (devices.Find(userCode) is not { } pending)
-            return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
+            return Failed(devices, caller!, StatusCodes.Status404NotFound, ProblemCodes.NoPendingSignIn, NoPendingCode);
         return TypedResults.Json(
             new DeviceVerifyResponse(
                 DeviceAuthorizations.Display(pending.UserCode),
@@ -270,12 +270,14 @@ public static partial class ApiEndpoints
         if (UserCodeOf(body) is not { } userCode ||
             !body!.RootElement.TryGetProperty("approve", out var approveField) ||
             approveField.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-            return Failed(devices, caller!, StatusCodes.Status400BadRequest, "The request is invalid.");
+            return Failed(devices, caller!, StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                "The request is invalid.");
         if (EndsWithinTheHour(session!, timeProvider))
             return Problem(StatusCodes.Status409Conflict,
+                ProblemCodes.SessionEnding,
                 "Your session ends within the hour. Reload the page to sign in again.");
         if (devices.Find(userCode) is not { } pending)
-            return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
+            return Failed(devices, caller!, StatusCodes.Status404NotFound, ProblemCodes.NoPendingSignIn, NoPendingCode);
 
         var principal = session!.Principal!;
         // Sanitized as on the ack and run paths: a provider name may carry a line break.
@@ -291,7 +293,7 @@ public static partial class ApiEndpoints
                 pending.ClientAddress != ClientAddress.Normalize(context.Connection.RemoteIpAddress))
             : null;
         if (!devices.Decide(userCode, approval))
-            return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
+            return Failed(devices, caller!, StatusCodes.Status404NotFound, ProblemCodes.NoPendingSignIn, NoPendingCode);
         // Logged when given, so an approval nobody collects still leaves a line; the token's
         // id follows in event 2015 when the terminal collects it.
         if (approval is null) LogDeviceDenied(logger, identity, caller!.Subject, pending.ClientAddress);
@@ -310,7 +312,7 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         if (await BrowserCallerAsync(context) is not { } caller)
-            return Problem(StatusCodes.Status401Unauthorized, NoBrowserSession);
+            return Problem(StatusCodes.Status401Unauthorized, ProblemCodes.BrowserSessionRequired, NoBrowserSession);
         var tokens = await database.ListTerminalTokensAsync(
             access.IsAdmin(caller) ? null : caller.Subject,
             timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
@@ -334,12 +336,12 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         if (await BrowserCallerAsync(context) is not { } caller)
-            return Problem(StatusCodes.Status401Unauthorized, NoBrowserSession);
+            return Problem(StatusCodes.Status401Unauthorized, ProblemCodes.BrowserSessionRequired, NoBrowserSession);
         if (RefuseForeignRequest(context.Request) is { } refusal)
             return refusal;
         // Another user's token reads as a missing one.
         if (id.Length != TokenIdHexChars || !id.All(char.IsAsciiHexDigitLower))
-            return Problem(StatusCodes.Status404NotFound, NoSuchToken);
+            return Problem(StatusCodes.Status404NotFound, ProblemCodes.UnknownToken, NoSuchToken);
         var (stored, owner) = await database.TryDeleteTerminalTokenAsync(
             id, access.IsAdmin(caller) ? null : caller.Subject, cancellationToken);
         if (!stored)
@@ -348,7 +350,7 @@ public static partial class ApiEndpoints
             return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (owner is null) return Problem(StatusCodes.Status404NotFound, NoSuchToken);
+        if (owner is null) return Problem(StatusCodes.Status404NotFound, ProblemCodes.UnknownToken, NoSuchToken);
         LogTokenRevoked(loggerFactory.CreateLogger(TerminalLog), caller.Subject, owner, id);
         return TypedResults.NoContent();
     }
@@ -366,7 +368,8 @@ public static partial class ApiEndpoints
     {
         request.HttpContext.Response.Headers.CacheControl = "no-store";
         if (request.Headers.ContainsKey("Sec-Fetch-Site"))
-            return (null, Problem(StatusCodes.Status403Forbidden, "A browser never calls this route."));
+            return (null, Problem(StatusCodes.Status403Forbidden, ProblemCodes.BrowserNotAllowed,
+                "A browser never calls this route."));
         if (await ReadBodyAsync(request, cancellationToken, MaxOAuthBodyBytes) is not { } body)
             return (null, TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
         if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType) ||
@@ -401,7 +404,8 @@ public static partial class ApiEndpoints
     {
         var session = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!session.Succeeded || AccessCaller.Of(session.Principal) is not { } caller)
-            return (null, null, Problem(StatusCodes.Status401Unauthorized, NoBrowserSession));
+            return (null, null, Problem(StatusCodes.Status401Unauthorized, ProblemCodes.BrowserSessionRequired,
+                NoBrowserSession));
         if (RefuseForeignRequest(context.Request) is { } refusal)
             return (null, null, refusal);
         // The refusal stays the guard, and the answer comes last.
@@ -411,6 +415,7 @@ public static partial class ApiEndpoints
             context.Response.Headers.RetryAfter =
                 ((long)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
             return (null, null, Problem(StatusCodes.Status429TooManyRequests,
+                ProblemCodes.TooManyUserCodes,
                 "Too many codes that match no sign-in. Wait, then try again."));
         }
 
@@ -446,9 +451,9 @@ public static partial class ApiEndpoints
     }
 
     private static JsonHttpResult<AnalysisProblem> Failed(DeviceAuthorizations devices, AccessCaller caller,
-        int statusCode, string detail)
+        int statusCode, string code, string detail)
     {
         devices.Fail(caller.Subject);
-        return Problem(statusCode, detail);
+        return Problem(statusCode, code, detail);
     }
 }

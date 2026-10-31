@@ -215,24 +215,24 @@ public static partial class HubAuthentication
     /// </summary>
     private static async Task RefuseWritesAsync(HttpContext context, RequestDelegate next)
     {
-        var detail = WriteRefusal(context);
-        if (detail is null)
+        if (WriteRefusal(context) is not { } refusal)
             await next(context);
         else
-            await ApiEndpoints.Problem(StatusCodes.Status403Forbidden, detail).ExecuteAsync(context);
+            await ApiEndpoints.Problem(StatusCodes.Status403Forbidden, refusal.Code, refusal.Detail)
+                .ExecuteAsync(context);
     }
 
-    private static string? WriteRefusal(HttpContext context)
+    private static (string Code, string Detail)? WriteRefusal(HttpContext context)
     {
         var method = context.Request.Method;
         if (context.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is not null ||
             HttpMethods.IsGet(method) || HttpMethods.IsHead(method))
             return null;
         if (AccessCaller.Of(context)?.Kind == AccessCaller.MachineToken)
-            return "A machine token only reads.";
+            return (ProblemCodes.MachineTokenReadOnly, "A machine token only reads.");
         return !HttpMethods.IsOptions(method) && !HubTokenHandler.HasBearer(context.Request) &&
                context.Request.Headers["Sec-Fetch-Site"] != "same-origin"
-            ? "A request from another site is refused."
+            ? (ProblemCodes.ForeignOrigin, "A request from another site is refused.")
             : null;
     }
 

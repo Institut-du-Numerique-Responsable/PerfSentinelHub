@@ -144,14 +144,15 @@ public static partial class ApiEndpoints
     // Who the caller is, rather than any record, is refused: no permission anywhere.
     private static JsonHttpResult<AnalysisProblem> NoGrant()
     {
-        return Problem(StatusCodes.Status403Forbidden, "No grant on this Hub reaches you.");
+        return Problem(StatusCodes.Status403Forbidden, ProblemCodes.NoGrant, "No grant on this Hub reaches you.");
     }
 
     // A listing answers 403 rather than [] when its permission is held nowhere: a CI gate
     // whose token has no grant must fail loudly, not pass on an empty page.
     private static JsonHttpResult<AnalysisProblem> NoFindingsRead()
     {
-        return Problem(StatusCodes.Status403Forbidden, "No grant gives you findings.read on this Hub.");
+        return Problem(StatusCodes.Status403Forbidden, ProblemCodes.NoFindingsRead,
+            "No grant gives you findings.read on this Hub.");
     }
 
     private static async Task<IResult> GetSourcesAsync(

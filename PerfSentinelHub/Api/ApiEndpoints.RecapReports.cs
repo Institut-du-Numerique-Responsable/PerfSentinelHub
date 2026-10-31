@@ -24,7 +24,8 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         if (!TryRecapReader(request, access, out var creator))
-            return Problem(StatusCodes.Status403Forbidden, "You may not read recap reports.");
+            return Problem(StatusCodes.Status403Forbidden, ProblemCodes.RecapReportsForbidden,
+                "You may not read recap reports.");
 
         var reports = await database.ListRecapReportsAsync(creator, RecapReportListLimit, cancellationToken);
         var deliveries = (await database.ListRecapDeliveriesAsync([.. reports.Select(report => report.Id)],
@@ -54,11 +55,13 @@ public static partial class ApiEndpoints
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
         var now = timeProvider.GetUtcNow();
         if (RecapOnDemand.TryParse(payload, DateOnly.FromDateTime(now.UtcDateTime), out var error) is not { } ask)
-            return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                error ?? "The request is invalid.");
 
         var sources = access.Sources(request.HttpContext, settings.Sources);
         if (!RecapSchedule.TryScope(ask.Environment, ask.SourceId, sources, out var sourceIds))
-            return Problem(StatusCodes.Status400BadRequest, "Unknown environment or source_id.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.UnknownScope,
+                "Unknown environment or source_id.");
 
         var snapshot = await recaps.ComputeAsync(
             new RecapRequest(
@@ -146,6 +149,7 @@ public static partial class ApiEndpoints
         if (RelayIdentity(request, options) is not { } caller)
             return Problem(
                 StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and a report is generated in somebody's name.");
         if (RefuseForeignRequest(request) is { } refusal)
             return refusal;

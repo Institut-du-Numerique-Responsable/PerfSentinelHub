@@ -335,9 +335,15 @@
             headers: {accept: 'application/json'}
         }).then(signInOn401).then(function (response) {
             if (!response.ok) {
-                const error = new Error(path + ' answered ' + response.status);
-                error.status = response.status;
-                throw error;
+                // The parsed problem rides on the error, so a screen can say it in the shown language.
+                return response.json().catch(function () {
+                    return null;
+                }).then(function (problem) {
+                    const error = new Error(path + ' answered ' + response.status);
+                    error.status = response.status;
+                    error.problem = problem;
+                    throw error;
+                });
             }
             return response.json();
         });
@@ -3877,7 +3883,7 @@
                 return {ok: response.ok, payload: payload};
             });
         }).then(function (result) {
-            if (!result.ok) throw new Error(result.payload.detail || 'The Hub refused the request.');
+            if (!result.ok) throw new Error(PSL.problemText(result.payload, undefined, 'The Hub refused the request.'));
             location.hash = '#/run/' + result.payload.id;
         }).catch(function (error) {
             const sentence = document.getElementById('submit-sentence');
@@ -4372,7 +4378,7 @@
             });
         }).then(function (result) {
             if (!result.ok || !result.payload.id) {
-                throw new Error(result.payload.detail || 'The Hub refused the resubmission.');
+                throw new Error(PSL.problemText(result.payload, undefined, 'The Hub refused the resubmission.'));
             }
             location.hash = '#/run/' + result.payload.id;
         }).catch(function (error) {
@@ -6071,7 +6077,10 @@
             return response.json().catch(function () {
                 return null;
             }).then(function (payload) {
-                return {name: row.name, action: action, status: response.status, detail: payload && payload.detail};
+                return {
+                    name: row.name, action: action, status: response.status, detail: payload && payload.detail,
+                    code: payload && payload.code
+                };
             });
         }).catch(function () {
             return {name: row.name, action: action, status: 0};
@@ -6731,7 +6740,7 @@
             return response.json().catch(function () {
                 return null;
             }).then(function (payload) {
-                return payload && payload.detail ? String(payload.detail) : 'The Hub refused the request (' + response.status + ').';
+                return PSL.problemText(payload, response.status);
             });
         }).catch(function () {
             return 'The Hub did not answer.';
@@ -7783,8 +7792,8 @@
                 return {
                     status: response.status,
                     field: payload && typeof payload.field === 'string' ? payload.field : null,
-                    detail: payload && payload.detail ? String(payload.detail)
-                        : 'The Hub refused the card (' + response.status + ').'
+                    code: payload && typeof payload.code === 'string' ? payload.code : null,
+                    detail: PSL.problemText(payload, response.status, 'The Hub refused the card (' + response.status + ').')
                 };
             });
         }).catch(function () {
@@ -7795,7 +7804,7 @@
     /** A refusal lands where it belongs: under its field, on the curve's period, or under the buttons. */
     function cardFailure(card, failure) {
         if (failure.field) card.fieldErrors[failure.field] = failure.detail;
-        else if (failure.status === 422 && card.angle === 'curve' && PSL.isPreviousRefusal(failure.detail)) {
+        else if (failure.status === 422 && card.angle === 'curve' && PSL.isPreviousRefusal(failure.detail, failure.code)) {
             card.curveRefusal = {path: card.optionsPath, text: failure.detail};
         } else card.renderError = failure.detail;
     }
@@ -8747,7 +8756,8 @@
             run().then(function (outcome) {
                 state.disclosureBusy = false;
                 state.disclosureNote = outcome && outcome.ok ? done
-                    : (outcome && outcome.payload && (outcome.payload.detail || outcome.payload.reason))
+                    : (outcome && outcome.payload && (outcome.payload.detail
+                        ? PSL.problemText(outcome.payload, outcome.status) : outcome.payload.reason))
                     || 'The Hub refused this (' + (outcome ? outcome.status : 0) + ').';
                 loadDisclosure(PSL.readDisclosureId(location.hash));
             });

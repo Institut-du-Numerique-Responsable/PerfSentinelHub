@@ -154,3 +154,54 @@ test("adopting the page's language does not store it, only a choice does", () =>
         PSL.setLang("en");
     }
 });
+
+/** Every code a problem can carry: the constants of ProblemCodes.cs and the card refusals of CardRules.Reasons. */
+function problemCodes() {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const hub = path.join(__dirname, "..", "PerfSentinelHub");
+    const constants = fs.readFileSync(path.join(hub, "Api", "ProblemCodes.cs"), "utf8");
+    const rules = fs.readFileSync(path.join(hub, "Cards", "CardRules.cs"), "utf8");
+    const reasons = rules.match(/Reasons =\s*\[([^\]]*)\]/)[1];
+    return [
+        ...[...constants.matchAll(/const string \w+ = "(\w+)";/g)].map(match => match[1]),
+        ...[...reasons.matchAll(/"(\w+)"/g)].map(match => match[1])
+    ];
+}
+
+test("every problem code has its sentence", () => {
+    const codes = problemCodes();
+    assert.ok(codes.length > 60, "read " + codes.length + " codes");
+    const missing = codes.flatMap(code =>
+        ["en", "fr"].filter(lang => !(("problem." + code) in TEXT[lang])).map(lang => lang + " lacks problem." + code));
+    assert.deepEqual(missing, []);
+});
+
+test("an unknown code falls back to the detail", () => {
+    assert.equal(PSL.problemText({code: "nope", detail: "X"}), "X");
+    assert.equal(PSL.problemText({detail: "X"}), "X");
+    assert.equal(PSL.problemText(null, 502), "The Hub refused the request (502).");
+    assert.equal(PSL.problemText(null, 502, "The Hub refused the card (502)."), "The Hub refused the card (502).");
+    // English keeps the Hub's own detail, which can say more than the table's general sentence.
+    assert.equal(PSL.problemText({code: "invalid_request", detail: "label must be 80 characters at most."}),
+        "label must be 80 characters at most.");
+    inLang("fr", () => {
+        assert.equal(PSL.problemText({code: "nope", detail: "X"}), "X");
+        assert.equal(PSL.problemText({detail: "X"}), "X");
+        assert.equal(PSL.problemText(null, 502), "Le Hub a refusé la requête (502).");
+        assert.equal(PSL.problemText({code: "acks_not_relayed", detail: "This source relays no acknowledgments."}),
+            "Cette source ne relaie aucun acquittement.");
+    });
+});
+
+test("the card's previous-period refusal is read from its code", () => {
+    assert.equal(PSL.isPreviousRefusal("Pas de courbe pour octobre 2026.", "previous_open_day"), true);
+    assert.equal(PSL.isPreviousRefusal("No curve for October 2026.", "open_period"), false);
+});
+
+test("an ack refusal with a code reads in the shown language", () => {
+    const results = [{name: "shop", action: "ack", status: 404, detail: "This source relays no acknowledgments.",
+        code: "acks_not_relayed"}];
+    assert.deepEqual(PSL.ackSummary(results), [{ok: false, text: "shop: This source relays no acknowledgments."}]);
+    inLang("fr", () => assert.match(PSL.ackSummary(results)[0].text, /Cette source ne relaie aucun acquittement\.$/));
+});

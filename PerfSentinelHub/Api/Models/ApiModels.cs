@@ -166,7 +166,11 @@ public sealed record CorrelationQuery(
 
 public sealed record SubmittedAnalysis(string Id, string Status);
 
-public sealed record AnalysisProblem(string Detail);
+/// <summary>A refusal: the English detail, and the stable code the launcher translates.</summary>
+public sealed record AnalysisProblem(
+    string Detail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Code = null);
 
 /// <summary>A publication the Hub refused, with the reason from the closed set.</summary>
 public sealed record DisclosureRefusal(string Reason);

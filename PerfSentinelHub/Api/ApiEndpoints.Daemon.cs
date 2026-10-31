@@ -52,6 +52,7 @@ public static partial class ApiEndpoints
         {
             await Problem(
                     StatusCodes.Status400BadRequest,
+                    ProblemCodes.NotADaemon,
                     "Only a daemon publishes its settings; this source is a trace backend.")
                 .ExecuteAsync(context);
             return;
