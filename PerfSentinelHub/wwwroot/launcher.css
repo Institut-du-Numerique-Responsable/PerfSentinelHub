@@ -450,9 +450,9 @@ a.shell-identity[aria-current="page"] {
     }
 }
 
-/* The site's language pill: a globe and a 19px window on a two-code track. It names the
-   language a click shows, so the track sits on FR for an English page and slides to EN
-   when <html lang> turns French. The pre-paint script sets lang first, so a load never slides. */
+/* The site's language pill: a globe and a 19px window on a two-code track (FR then EN). It rests
+   on the active language and slides to the other one on hover, the one a click shows. The
+   pre-paint script sets lang first, so a load never slides. */
 .shell-lang {
     display: inline-flex;
     align-items: center;
@@ -495,6 +495,7 @@ a.shell-identity[aria-current="page"] {
 .shell-lang-track {
     display: flex;
     width: 38px;
+    transform: translateX(-19px);
     transition: transform .32s cubic-bezier(.22, 1, .36, 1);
 }
 
@@ -504,6 +505,14 @@ a.shell-identity[aria-current="page"] {
 }
 
 :root[lang="fr"] .shell-lang-track {
+    transform: none;
+}
+
+.shell-lang:hover .shell-lang-track {
+    transform: none;
+}
+
+:root[lang="fr"] .shell-lang:hover .shell-lang-track {
     transform: translateX(-19px);
 }
 

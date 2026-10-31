@@ -2327,3 +2327,17 @@ test("boot adopts the page's language without storing it", () => {
     // Only the button's click may call setLang with storage on.
     assert.match(wwwroot("app.js"), /PSL\.setLang\(document\.documentElement\.lang, false\)/);
 });
+
+test("the language button rests on the active language and slides to the other on hover", () => {
+    // Same behaviour as perf-sentinel.dev. Track order stays FR then EN: an English page rests
+    // on EN (-19px) and slides to FR on hover, a French page rests on FR and slides to EN.
+    const css = wwwroot("launcher.css");
+    const rule = selector => {
+        const m = css.match(new RegExp(selector.replace(/[.[\]"]/g, "\\$&") + "\\s*\\{([^}]*)\\}"));
+        return m ? m[1].replace(/\s+/g, " ").trim() : null;
+    };
+    assert.match(rule(".shell-lang-track") || "", /transform: translateX\(-19px\)/);
+    assert.match(rule(':root[lang="fr"] .shell-lang-track') || "", /transform: none/);
+    assert.match(rule(".shell-lang:hover .shell-lang-track") || "", /transform: none/);
+    assert.match(rule(':root[lang="fr"] .shell-lang:hover .shell-lang-track') || "", /translateX\(-19px\)/);
+});
