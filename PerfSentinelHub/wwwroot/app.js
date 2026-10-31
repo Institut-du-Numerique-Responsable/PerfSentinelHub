@@ -1380,13 +1380,9 @@
 
     function renderSourcesScreen() {
         const section = el('section', {}, [
-            ruledOverline('// sources'),
-            el('h1', {class: 'page-title', text: 'Fleet health'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'Every column is observed except the environment, which each source declares about itself. '
-                    + 'Sources are configured at deploy time, not from here.'
-            })
+            ruledOverline(t('sources.overline')),
+            el('h1', {class: 'page-title', text: t('sources.title')}),
+            el('p', {class: 'page-sub', text: t('sources.sub')})
         ]);
 
         if (state.loading) {
@@ -1398,10 +1394,7 @@
             // a stale health table is the one thing this page must never be.
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'crit'}, [
                 critGlyph(16),
-                el('div', {
-                    text: 'The Hub is not answering, so fleet health is unknown. This is the Hub itself, '
-                        + 'not any one source. Nothing below is shown rather than showing values that may be stale.'
-                })
+                el('div', {text: t('sources.hub_down')})
             ]));
             return section;
         }
@@ -1410,17 +1403,15 @@
         return section;
     }
 
-    const SOURCE_COLUMNS = [
-        'Source', 'Type', 'Env (declared)', 'Health', 'Last success', 'Unreachable for', 'Producer', 'Last error'
-    ];
+    const SOURCE_COLUMNS = ['source', 'type', 'env', 'health', 'last_success', 'down_for', 'producer', 'last_error'];
     // The columns whose cells are right-aligned. The headings have to follow, or
     // a value sits under the gap beside its own label.
-    const SOURCE_COLUMNS_RIGHT = ['Last success', 'Unreachable for', 'Producer'];
+    const SOURCE_COLUMNS_RIGHT = ['last_success', 'down_for', 'producer'];
 
     function sourcesTable(sources) {
         const head = el('tr', {}, SOURCE_COLUMNS.map(function (name) {
             return el('th', {
-                text: name,
+                text: t('sources.col.' + name),
                 scope: 'col',
                 'data-align': SOURCE_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
@@ -1434,8 +1425,8 @@
             });
         };
         const body = kinds.split
-            ? [tableGroupRow('daemons')].concat(rows(kinds.daemons),
-                [tableGroupRow('trace backends')],
+            ? [tableGroupRow(t('sources.group.daemons'))].concat(rows(kinds.daemons),
+                [tableGroupRow(t('sources.group.backends'))],
                 rows(kinds.backends))
             : sources.flatMap(sourceRow);
         return el('table', {class: 'table'}, [
@@ -1461,7 +1452,7 @@
             // Said, not left as a row that simply stops opening.
             row.appendChild(el('td', {class: 'table-strong'}, [
                 el('span', {text: source.name}),
-                el('span', {class: 'source-locked', text: 'details need sources.read'})
+                el('span', {class: 'source-locked', text: t('sources.locked')})
             ]));
         } else row.appendChild(el('td', {class: 'table-strong', text: source.name}));
         row.appendChild(el('td', {}, [el('span', {class: 'chip', text: PSL.KIND_LABEL[source.kind] || source.kind})]));
@@ -1469,7 +1460,9 @@
         row.appendChild(el('td', {}, [healthCell(source, now)]));
         // Ages, so they tick with the panel beside them instead of freezing at the render.
         const lastSuccess = function () {
-            return source.last_success_ms ? PSL.dur(Date.now() - source.last_success_ms) + ' ago' : 'never';
+            return source.last_success_ms
+                ? t('sources.ago', {duration: PSL.dur(Date.now() - source.last_success_ms)})
+                : t('sources.never');
         };
         const downFor = function () {
             return source.unreachable_since_ms ? PSL.dur(Date.now() - source.unreachable_since_ms) : '—';
@@ -1518,15 +1511,14 @@
                 ? el('td', {
                     class: 'table-muted',
                     'data-align': 'right',
-                    text: 'unknown',
-                    title: 'This daemon reports a producer version, but the Hub has not had a successful '
-                        + 'response from it yet.'
+                    text: t('sources.producer.unknown'),
+                    title: t('sources.producer.unknown_title')
                 })
                 : el('td', {
                     class: 'table-muted',
                     'data-align': 'right',
-                    text: 'n/a',
-                    title: 'A trace backend stores traces and detects nothing, so it reports no producer version.'
+                    text: t('unit.na'),
+                    title: t('sources.producer.none_title')
                 });
         }
 
@@ -1540,8 +1532,7 @@
                 class: 'skew-pill',
                 'data-dir': gap.dir,
                 text: gap.label,
-                title: 'perf-sentinel is pre-1.0, so detectors change between minors. The Hub compares two '
-                    + 'version strings and cannot know whether this minor changed detection.'
+                title: t('sources.skew_title')
             }));
         }
         return cell;
@@ -1563,107 +1554,59 @@
      * about the process.
      */
     const DAEMON_GROUPS = [
-        ['// declared', 'Not measured. This is what the daemon says it is.', ['environment']],
-        ['// ingestion and memory', 'What it takes in, and what it drops when it cannot keep up.',
-            ['sampling_rate', 'max_active_traces', 'trace_ttl_ms', 'max_events_per_trace',
-                'max_payload_size', 'ingest_queue_capacity', 'analysis_queue_capacity',
-                'memory_high_water_pct']],
-        ['// what it keeps for readers',
-            'Ring buffers behind the query API and the export. Past each one, the oldest goes.',
-            ['max_retained_findings', 'max_export_findings', 'max_retained_traces']],
-        ['// metrics labels',
-            'How /metrics splits its series. Emptying one folds its label away, which is breaking '
-            + 'for whatever already reads it.',
-            ['per_service_labels', 'per_grouping_labels']],
-        ['// listeners', 'Where it accepts spans, and whether it answers questions at all.',
-            ['api_enabled', 'listen_addr', 'listen_port', 'listen_port_grpc', 'json_socket']],
-        ['// sub-systems', 'Off unless somebody turned them on.',
-            ['tls_configured', 'ack_enabled', 'ack_api_key_set', 'cors_allowed_origins',
-                'archive_configured']],
-        ['// correlation',
-            'Off by default. Every field under the first one applies only while it is on.',
-            ['correlation_enabled', 'correlation_window_ms', 'correlation_lag_threshold_ms',
-                'correlation_min_co_occurrences', 'correlation_min_confidence',
-                'correlation_max_tracked_pairs']]
+        ['declared', ['environment']],
+        ['ingestion', ['sampling_rate', 'max_active_traces', 'trace_ttl_ms', 'max_events_per_trace',
+            'max_payload_size', 'ingest_queue_capacity', 'analysis_queue_capacity', 'memory_high_water_pct']],
+        ['readers', ['max_retained_findings', 'max_export_findings', 'max_retained_traces']],
+        ['labels', ['per_service_labels', 'per_grouping_labels']],
+        ['listeners', ['api_enabled', 'listen_addr', 'listen_port', 'listen_port_grpc', 'json_socket']],
+        ['subsystems', ['tls_configured', 'ack_enabled', 'ack_api_key_set', 'cors_allowed_origins',
+            'archive_configured']],
+        ['correlation', ['correlation_enabled', 'correlation_window_ms', 'correlation_lag_threshold_ms',
+            'correlation_min_co_occurrences', 'correlation_min_confidence', 'correlation_max_tracked_pairs']]
     ];
 
-    /** What each setting costs when it is wrong. Two say enough by their name. */
+    /** The text key of what each setting costs when it is wrong. Two say enough by their name. */
     const DAEMON_COPY = {
-        environment: 'The label this daemon stamps on every finding, which sets their confidence: '
-            + 'staging reads as medium, production as high. Declared, like the column on the row above.',
-        sampling_rate: 'The share of arriving traces it analyses. Below 100 % every aggregate in a '
-            + 'snapshot is a sample of the traffic, not the traffic.',
-        max_active_traces: 'How many traces it correlates in memory at once. The oldest is evicted '
-            + 'past this, and a trace evicted while spans are still arriving is analysed incomplete.',
-        trace_ttl_ms: 'How long a trace waits for more spans before it is closed and analysed.',
-        max_events_per_trace: 'The ring buffer inside one trace. Its oldest spans drop once it fills, '
-            + 'and the finding says nothing about what left.',
-        max_payload_size: 'The largest single request body it will deserialize. Anything larger is '
-            + 'refused whole, never truncated.',
-        ingest_queue_capacity: 'Span batches buffered between the listeners and the event loop. A '
-            + 'full queue pushes back on the sender as an OTLP 503.',
-        analysis_queue_capacity: 'Batches waiting for detection. A full queue sheds whole batches, '
-            + 'and a shed batch is silent to whoever sent it.',
-        memory_high_water_pct: 'The share of memory above which it refuses new spans rather than meet '
-            + 'the OOM killer. Zero disables the guard entirely.',
-        max_retained_findings: 'Findings held for the query API. The oldest are evicted past this, so '
-            + 'an old problem can leave a snapshot without anyone fixing it.',
-        max_export_findings: 'Findings one export snapshot carries. The quality gate inside that '
-            + 'snapshot counts those and no others.',
-        max_retained_traces: 'Span trees kept so an export can draw them. Zero keeps none, and every '
-            + 'finding in that export opens without a tree.',
-        per_service_labels: 'Whether the finding, slow-duration and I/O series carry the service '
-            + 'they came from. Off empties the label, and every service folds into one series.',
-        per_grouping_labels: 'The same for the grouping beside it, the namespace by default. Off '
-            + 'empties that label, and past the daemon\'s own cap on (service, grouping) pairs a '
-            + 'grouping folds into `_other` on its own.',
-        api_enabled: 'Whether the query API is served at all. The Hub reads this daemon through it, '
-            + 'so a run from here needs it on.',
-        listen_addr: 'Where the OTLP receivers and /metrics bind. An address outside loopback exposes '
-            + 'both without authentication.',
-        json_socket: 'Unix socket for native NDJSON ingestion, alongside OTLP.',
-        tls_configured: 'TLS on the OTLP listeners. The Hub is told whether a certificate and key are '
-            + 'set, never where they are.',
-        ack_enabled: 'The daemon\'s own acknowledgement store. An acknowledged finding stays in the '
-            + 'data and stops counting against the gate.',
-        ack_api_key_set: 'Whether the acknowledgement routes require a key. The Hub is told that one '
-            + 'exists, never what it is.',
-        cors_allowed_origins: 'Browser origins the query API answers. Empty sends no CORS headers at all.',
-        archive_configured: 'Whether it writes a report archive per window, for a later disclosure to '
-            + 'read back.',
-        correlation_enabled: 'Whether the cross-trace correlator runs.',
-        correlation_window_ms: 'The rolling window over which two findings count as having happened '
-            + 'together.',
-        correlation_lag_threshold_ms: 'The largest gap between two findings that still counts as together.',
-        correlation_min_co_occurrences: 'How many times a pair has to happen before it is reported at all.',
-        correlation_min_confidence: 'How often the second finding follows the first, as a share of the '
-            + 'first\'s own occurrences, before the pair is worth reporting.',
-        correlation_max_tracked_pairs: 'Cap on tracked pairs. The least frequent are evicted past it, '
-            + 'and the daemon says so above when that happens.',
-        energy_source: 'Where the energy figure comes from: the power backends that measured each '
-            + 'covered service, and how many services were modeled from I/O counts instead. Calibrated '
-            + 'means calibration factors rescaled that model. Database or broker hosts the daemon counts '
-            + 'inside its totals follow, each with its own source.',
-        api_version: 'The Electricity Maps API version these figures were scored against.',
-        emission_factor_type: 'Lifecycle counts the whole chain behind the electricity, direct counts '
-            + 'only what the generation itself emits.',
-        temporal_granularity: 'How finely grid intensity is resolved in time.',
-        electricity_maps: 'Whether Electricity Maps is configured for live grid intensity. Off means each '
-            + 'region took its grid operator\'s feed when one is configured, or the embedded table, which '
-            + 'is a vintage rather than a reading.',
-        grid_feeds: 'The grid operator feeds configured, each giving its regions a live intensity drawn '
-            + 'from its operator\'s data. They count direct emissions only, so they read lower than a '
-            + 'lifecycle figure, and Electricity Maps wins for a region both cover.',
-        fingrid_dataset: 'The Fingrid dataset scored. 266 counts Finnish production, 265 consumption with '
-            + 'imports included, and the two bases give different figures.',
-        per_operation_coefficients: 'Whether each operation kind carries its own energy coefficient '
-            + 'instead of one average across all I/O.',
-        use_hourly_profiles: 'Whether the hour-by-hour shape of the grid is applied rather than a '
-            + 'flat average.',
-        embodied_per_request_gco2: 'Embodied carbon charged per request, the manufacture share of '
-            + 'the figures rather than the electricity.',
-        network_energy_per_byte_kwh: 'A coefficient the engine deprecated and no longer applies, '
-            + 'published for configurations that still set it.'
+        environment: 'daemon.setting.environment',
+        sampling_rate: 'daemon.setting.sampling_rate',
+        max_active_traces: 'daemon.setting.max_active_traces',
+        trace_ttl_ms: 'daemon.setting.trace_ttl_ms',
+        max_events_per_trace: 'daemon.setting.max_events_per_trace',
+        max_payload_size: 'daemon.setting.max_payload_size',
+        ingest_queue_capacity: 'daemon.setting.ingest_queue_capacity',
+        analysis_queue_capacity: 'daemon.setting.analysis_queue_capacity',
+        memory_high_water_pct: 'daemon.setting.memory_high_water_pct',
+        max_retained_findings: 'daemon.setting.max_retained_findings',
+        max_export_findings: 'daemon.setting.max_export_findings',
+        max_retained_traces: 'daemon.setting.max_retained_traces',
+        per_service_labels: 'daemon.setting.per_service_labels',
+        per_grouping_labels: 'daemon.setting.per_grouping_labels',
+        api_enabled: 'daemon.setting.api_enabled',
+        listen_addr: 'daemon.setting.listen_addr',
+        json_socket: 'daemon.setting.json_socket',
+        tls_configured: 'daemon.setting.tls_configured',
+        ack_enabled: 'daemon.setting.ack_enabled',
+        ack_api_key_set: 'daemon.setting.ack_api_key_set',
+        cors_allowed_origins: 'daemon.setting.cors_allowed_origins',
+        archive_configured: 'daemon.setting.archive_configured',
+        correlation_enabled: 'daemon.setting.correlation_enabled',
+        correlation_window_ms: 'daemon.setting.correlation_window_ms',
+        correlation_lag_threshold_ms: 'daemon.setting.correlation_lag_threshold_ms',
+        correlation_min_co_occurrences: 'daemon.setting.correlation_min_co_occurrences',
+        correlation_min_confidence: 'daemon.setting.correlation_min_confidence',
+        correlation_max_tracked_pairs: 'daemon.setting.correlation_max_tracked_pairs',
+        energy_source: 'daemon.setting.energy_source',
+        api_version: 'daemon.setting.api_version',
+        emission_factor_type: 'daemon.setting.emission_factor_type',
+        temporal_granularity: 'daemon.setting.temporal_granularity',
+        electricity_maps: 'daemon.setting.electricity_maps',
+        grid_feeds: 'daemon.setting.grid_feeds',
+        fingrid_dataset: 'daemon.setting.fingrid_dataset',
+        per_operation_coefficients: 'daemon.setting.per_operation_coefficients',
+        use_hourly_profiles: 'daemon.setting.use_hourly_profiles',
+        embodied_per_request_gco2: 'daemon.setting.embodied_per_request_gco2',
+        network_energy_per_byte_kwh: 'daemon.setting.network_energy_per_byte_kwh'
     };
 
     /**
@@ -1680,7 +1623,8 @@
 
     /** The sentence for one setting, or none. */
     function settingCopy(name) {
-        return DAEMON_COPY[name] || DETECTION_COPY[DETECT_ALIAS[name] || name] || null;
+        const key = DAEMON_COPY[name] || DETECTION_COPY[DETECT_ALIAS[name] || name];
+        return key ? t(key) : null;
     }
 
     /**
@@ -1777,24 +1721,19 @@
         const view = state.daemonViews[source.id];
         if (view === 'loading' || view === undefined) {
             return el('div', {class: 'daemon-panel'}, [
-                el('p', {class: 'daemon-loading', role: 'status', text: 'Reading ' + source.name + '.'}),
+                el('p', {class: 'daemon-loading', role: 'status', text: t('daemon.reading', {name: source.name})}),
                 el('div', {class: 'skeleton', style: 'height:150px'})
             ]);
         }
         if (view.error_code) return daemonError(source, index, view.error_code);
 
         return el('div', {class: 'daemon-panel'}, [
-            el('p', {class: 'overline daemon-audience', text: '// intended for devops'}),
-            el('p', {
-                class: 'daemon-source-note',
-                text: 'Reported by this daemon over its query API. The Hub relays it and verifies none of '
-                    + 'it. Everything here is read-only, and every setting below is changed where the daemon '
-                    + 'is deployed, in its Helm values or its own configuration file, never from this Hub.'
-            }),
+            el('p', {class: 'overline daemon-audience', text: t('daemon.audience')}),
+            el('p', {class: 'daemon-source-note', text: t('daemon.source_note')}),
             el('div', {id: 'daemon-top-' + index}, [daemonTopRow(source, view, index)]),
             terminalBlock({
-                head: '// the same view in your terminal',
-                sub: 'The same figures, plus the tabs this screen leaves out.',
+                head: t('daemon.terminal.head'),
+                sub: t('daemon.terminal.sub'),
                 id: 'monitor-command-' + index,
                 spell: function (shellId) {
                     return PSL.monitorCommand(source, refreshSeconds(source.id), shellId);
@@ -1808,13 +1747,9 @@
                         saveFolds();
                     }
                 },
-                copyLabel: 'Copy the monitor command for ' + source.name,
+                copyLabel: t('daemon.terminal.copy', {name: source.name}),
                 notes: [
-                    '`query monitor` carries the energy and carbon breakdown this screen only summarises. '
-                    + 'It re-reads on the interval chosen above, and this line changes with it, so the '
-                    + 'terminal and this row never disagree about how often the daemon is asked. Set that '
-                    + 'to off and the command drops `--refresh`, leaving the engine its own default of '
-                    + 'five seconds.',
+                    t('daemon.terminal.note'),
                     engineNote(),
                     PSL.monitorKeyHint(source)
                 ]
@@ -1833,31 +1768,26 @@
                 critGlyph(16),
                 el('div', {}, [
                     el('p', {}, [
-                        el('span', {text: 'Reading this daemon\'s settings returned '}),
+                        el('span', {text: t('daemon.error.returned')}),
                         el('span', {class: 'code-inline', text: code}),
-                        proseInto(el('span'),
-                            ': ' + (PSL.READ_ERRORS[code] || PSL.ERRORS[code] || 'the Hub could not reach it.'))
+                        proseInto(el('span'), t('daemon.error.meaning', {
+                            meaning: PSL.READ_ERRORS[code] || PSL.ERRORS[code] || t('daemon.error.unreached')
+                        }))
                     ]),
-                    el('p', {
-                        class: 'notice-sub',
-                        text: 'The row above still shows the last collection state, which is a different '
-                            + 'observation made at a different time.'
-                    })
+                    el('p', {class: 'notice-sub', text: t('daemon.error.sub')})
                 ])
             ]),
-            el('p', {
-                class: 'daemon-lead',
-                text: 'This row asks again on its own, and shows the daemon as soon as it answers.'
-            }),
+            el('p', {class: 'daemon-lead', text: t('daemon.error.retry')}),
             refreshControl(source, index)
         ]);
     }
 
+    /** The tone of each verdict, its words under `daemon.verdict.<state>`. */
     const DAEMON_VERDICT = {
-        ok: ['nominal', 'ok'],
-        near_capacity: ['near capacity', 'warn'],
-        advised: ['advised', 'warn'],
-        unknown: ['not measurable', 'muted']
+        ok: 'ok',
+        near_capacity: 'warn',
+        advised: 'warn',
+        unknown: 'muted'
     };
 
     /**
@@ -1870,61 +1800,46 @@
     }
 
     function daemonTopRow(source, view, index) {
-        const verdict = DAEMON_VERDICT[view.state] || DAEMON_VERDICT.unknown;
+        const verdict = DAEMON_VERDICT[view.state] ? view.state : 'unknown';
         // Read once and cleared: the badges belong to the read that produced them,
         // not to every rebuild that happens to come after it.
         const moves = state.daemonMoves[source.id] || {};
         delete state.daemonMoves[source.id];
         const main = el('div', {class: 'daemon-top-main'}, [
             el('div', {class: 'sink-head'}, [
-                titledOverline('// right now', 'Read from the daemon on the interval below. A tick asks '
-                    + 'the daemon for its status alone, and once a minute the full export runs to refresh '
-                    + 'the hints, so the interval prices a small read, not the heavy one.'),
+                titledOverline(t('daemon.now.head'), t('daemon.now.help')),
                 el('span', {class: 'sink-sub refresh-read', id: 'refresh-read-' + index})
             ]),
             refreshControl(source, index),
             countStrip([
-                [gaugeText(view.traces), 'active traces', PSL.gaugeTone(pct(view.traces)), moves.traces],
-                [gaugeText(view.analysis_queue), 'analysis queue',
+                [gaugeText(view.traces), t('daemon.gauge.traces'), PSL.gaugeTone(pct(view.traces)), moves.traces],
+                [gaugeText(view.analysis_queue), t('daemon.gauge.queue'),
                     PSL.gaugeTone(pct(view.analysis_queue)), moves.analysis_queue],
                 // No tone: the ring fills on any daemon that runs long enough, and
                 // the Hub keeps what it evicts. A poll that missed some says so in the hints.
-                [gaugeText(view.findings), 'findings stored', null, moves.findings],
+                [gaugeText(view.findings), t('daemon.gauge.findings'), null, moves.findings],
                 // No cap and only one direction: an uptime that grows every read is
                 // not news, and a tone would say it is running out of something. Down to
                 // the minute, because two units hide a whole day: a daemon up for 10 d
                 // 23 h reads the same as one up for 10 d flat.
-                [view.uptime_seconds == null ? 'unknown' : PSL.durMinutes(view.uptime_seconds * 1000), 'uptime']
+                [view.uptime_seconds == null ? t('daemon.unknown') : PSL.durMinutes(view.uptime_seconds * 1000),
+                    t('daemon.gauge.uptime')]
             ]),
-            el('p', {
-                class: 'daemon-lead',
-                text: 'Each figure is shown against the cap it runs into. Being near one is not a problem '
-                    + 'by itself, and this screen does not decide that it is: the daemon does, from counters '
-                    + 'the Hub cannot see.'
-            })
+            el('p', {class: 'daemon-lead', text: t('daemon.now.lead')})
         ]);
 
         const side = el('div', {class: 'daemon-top-side'}, [
             el('div', {class: 'sink-head'}, [
-                titledOverline('// what the daemon recommends', 'These come from counters inside the '
-                    + 'daemon that no report and no dashboard carries. The Hub relays the sentences and '
-                    + 'writes none of its own.'),
-                el('span', {class: 'sink-sub', text: 'Written by the daemon, not by the Hub.'})
+                titledOverline(t('daemon.hints.head'), t('daemon.hints.help')),
+                el('span', {class: 'sink-sub', text: t('daemon.hints.sub')})
             ])
         ]);
         if (view.hints_unavailable_reason) {
             // An unread export is not a clean bill: silence has to be earned.
             side.appendChild(proseInto(el('p', {class: 'daemon-lead'}),
-                'The export this screen reads hints from could not be read: `'
-                + view.hints_unavailable_reason + '`. Whatever the daemon recommends right now is '
-                + 'unknown, which is not the same thing as nothing.'));
+                t('daemon.hints.unread', {reason: view.hints_unavailable_reason})));
         } else if (view.warnings.length === 0) {
-            side.appendChild(el('p', {
-                class: 'daemon-lead',
-                text: 'Nothing. The daemon emits a hint when its own counters show a setting is undersized '
-                    + 'for the load it is taking. Silence here means those counters were clean at the '
-                    + 'instant it was read, not that the settings are right.'
-            }));
+            side.appendChild(el('p', {class: 'daemon-lead', text: t('daemon.hints.none')}));
         } else {
             view.warnings.forEach(function (hint) {
                 side.appendChild(el('div', {class: 'outcome-warning'}, [
@@ -1933,20 +1848,26 @@
                         'data-tone': DAEMON_HINT_TONE[hint.kind] || 'muted',
                         text: hint.kind
                     }),
-                    proseInto(el('span', {class: 'outcome-warning-message'}), hint.message)
+                    // Written by the daemon, so it stays in the daemon's English.
+                    engineText(proseInto(el('span', {class: 'outcome-warning-message'}), hint.message))
                 ]));
             });
             if (view.warnings_dropped > 0) {
                 side.appendChild(el('p', {
                     class: 'daemon-lead',
-                    text: view.warnings_dropped + ' more arrived than the Hub relays in one view.'
+                    text: t(view.warnings_dropped === 1 ? 'daemon.hints.dropped.one' : 'daemon.hints.dropped.many',
+                        {count: view.warnings_dropped})
                 }));
             }
         }
 
         return el('div', {}, [
             el('div', {class: 'daemon-verdict-row'}, [
-                el('span', {class: 'daemon-verdict', 'data-tone': verdict[1], text: verdict[0]})
+                el('span', {
+                    class: 'daemon-verdict',
+                    'data-tone': DAEMON_VERDICT[verdict],
+                    text: t('daemon.verdict.' + verdict)
+                })
             ]),
             el('div', {class: 'daemon-top'}, [main, side])
         ]);
@@ -1964,9 +1885,6 @@
         // one would drop the flag while the row kept re-reading. Deriving the
         // milliseconds from the seconds makes that impossible rather than unlikely.
     const REFRESH_SECONDS = [0, 5, 10, 30, 60];
-    const REFRESH_CHOICES = REFRESH_SECONDS.map(function (seconds) {
-        return [seconds * 1000, seconds ? seconds + ' s' : 'off'];
-    });
     const DEFAULT_REFRESH_MS = 5000;
 
     function refreshMs(sourceId) {
@@ -1980,10 +1898,13 @@
 
     function refreshControl(source, index) {
         const ms = refreshMs(source.id);
-        const select = el('select', {class: 'refresh-select', 'aria-label': 'Re-read interval'});
-        REFRESH_CHOICES.forEach(function (choice) {
-            const option = el('option', {value: String(choice[0]), text: choice[1]});
-            if (choice[0] === ms) option.selected = true;
+        const select = el('select', {class: 'refresh-select', 'aria-label': t('daemon.refresh.label')});
+        REFRESH_SECONDS.forEach(function (seconds) {
+            const option = el('option', {
+                value: String(seconds * 1000),
+                text: seconds ? seconds + ' ' + t('unit.s') : t('daemon.refresh.off')
+            });
+            if (seconds * 1000 === ms) option.selected = true;
             select.appendChild(option);
         });
         // Which device put the focus there, for the ring rule in the stylesheet.
@@ -2015,7 +1936,7 @@
         return el('div', {class: 'refresh'}, [
             ring,
             el('span', {class: 'refresh-next', id: 'refresh-next-' + index, role: 'status'}),
-            el('span', {class: 'refresh-label', text: 'every'}),
+            el('span', {class: 'refresh-label', text: t('daemon.refresh.every')}),
             select
         ]);
     }
@@ -2131,7 +2052,7 @@
 
         if (read) {
             const readAt = state.daemonReadAt[source.id] || Date.now();
-            read.textContent = 'Read ' + PSL.dur(Date.now() - readAt) + ' ago.';
+            read.textContent = t('daemon.refresh.read', {duration: PSL.dur(Date.now() - readAt)});
         }
 
         const ms = refreshMs(source.id);
@@ -2142,13 +2063,13 @@
         const ring = next.parentNode.querySelector('.refresh-ring');
         const fill = ring && ring.querySelector('.refresh-ring-fill');
         if (!ms) {
-            next.textContent = 'Not re-reading.';
+            next.textContent = t('daemon.refresh.stopped');
             if (ring) ring.hidden = true;
             return;
         }
         if (ring) ring.hidden = false;
         const left = Math.max(0, cycleAt + ms - Date.now());
-        next.textContent = 'Next in ' + Math.ceil(left / 1000) + ' s.';
+        next.textContent = t('daemon.refresh.next', {seconds: Math.ceil(left / 1000)});
     }
 
     /**
@@ -2255,7 +2176,7 @@
     }
 
     function gaugeText(gauge) {
-        if (!gauge || gauge.value == null) return 'unknown';
+        if (!gauge || gauge.value == null) return t('daemon.unknown');
         if (gauge.capacity == null) return group(gauge.value);
         return group(gauge.value) + ' / ' + group(gauge.capacity);
     }
@@ -2280,11 +2201,7 @@
             type: 'button',
             class: 'settings-more',
             'aria-expanded': open ? 'true' : 'false'
-        }, [el('span', {
-            text: count > 0
-                ? 'The ' + count + ' applied settings, and what this daemon changed'
-                : 'What this daemon detects with'
-        })]);
+        }, [el('span', {text: count > 0 ? t('daemon.settings.more', {count: count}) : t('daemon.settings.detects')})]);
         button.addEventListener('click', function () {
             const next = button.getAttribute('aria-expanded') !== 'true';
             button.setAttribute('aria-expanded', next ? 'true' : 'false');
@@ -2328,35 +2245,26 @@
     function configAbsenceNote(view) {
         const reason = view.config_unavailable_reason;
         return proseInto(el('p', {class: 'daemon-lead'}),
-            reason === 'api_disabled'
-                ? 'This daemon does not serve its configuration: `api_enabled` is off in its own '
-                + '`[daemon]` section. Everything above came from the export instead.'
-                : reason === 'unreadable'
-                    ? 'This daemon answered for its configuration with something the Hub could not '
-                    + 'relay, an error status or a body that is not the `[daemon]` object. The gauges '
-                    + 'above are the same daemon answering fine.'
-                    : 'This daemon did not answer for its configuration, so none is shown rather than a '
-                    + 'copy from some earlier moment.');
+            t(reason === 'api_disabled' ? 'daemon.config.api_disabled'
+                : reason === 'unreadable' ? 'daemon.config.unreadable' : 'daemon.config.unanswered'));
     }
 
     function settingsCards(sourceId, view) {
         const cards = [];
         if (view.config) {
             DAEMON_GROUPS.forEach(function (spec) {
-                const present = spec[2].filter(function (name) {
+                const present = spec[1].filter(function (name) {
                     return view.config[name] !== undefined;
                 });
                 if (present.length > 0) {
-                    cards.push(settingsCard(
-                        sourceId, spec[0], spec[1], present, view.config, view.daemon_defaults));
+                    cards.push(settingsCard(sourceId, spec[0], present, view.config, view.daemon_defaults));
                 }
             });
         }
         if (view.detection_config) {
             cards.push(settingsCard(
                 sourceId,
-                '// detection thresholds',
-                'What counts as a problem. The same knobs the launcher lets a run override on a backend.',
+                'detection',
                 Object.keys(view.detection_config),
                 view.detection_config,
                 view.detection_defaults));
@@ -2366,8 +2274,7 @@
             if (view.energy_source) scoring.energy_source = view.energy_source;
             cards.push(settingsCard(
                 sourceId,
-                '// carbon scoring',
-                'Where the energy figures come from, not what they are.',
+                'scoring',
                 Object.keys(scoring),
                 scoring,
                 null));
@@ -2383,16 +2290,11 @@
      */
     function settingsPreamble(view) {
         const note = proseInto(el('p', {class: 'settings-preamble'}),
-            'A value this daemon changed is marked, with the engine\'s default beside it. Compared '
-            + 'against perf-sentinel `' + view.defaults_engine_version + '`, the binary this Hub '
-            + 'embeds. It covers the `[daemon]` and `[detection]` sections and the scoring half of '
-            + '`[green]`. The gate thresholds under `[thresholds]` are not published as a section, so '
-            + 'a value set there is real and simply not visible here.');
+            t('daemon.settings.preamble', {version: view.defaults_engine_version}));
         if (view.version && view.version !== view.defaults_engine_version) {
             proseInto(
                 note.appendChild(el('span', {class: 'settings-preamble-skew'})),
-                ' This daemon runs `' + view.version + '`, so a default could have moved between the two '
-                + 'and a value marked as changed may only be a different default.');
+                t('daemon.settings.preamble_skew', {version: view.version}));
         }
         return note;
     }
@@ -2403,14 +2305,14 @@
      * gloss lives in the body rather than the heading, or the folded list would
      * be as long as the open one.
      */
-    function settingsCard(sourceId, head, sub, names, config, defaults) {
-        const key = sourceId + '|' + head;
+    function settingsCard(sourceId, group, names, config, defaults) {
+        const key = sourceId + '|' + group;
         const open = state.daemonGroupOpen[key] === true;
         const changed = names.filter(function (name) {
             return isChanged(name, config[name], defaults);
         }).length;
 
-        const heading = el('span', {class: 'overline', text: head});
+        const heading = el('span', {class: 'overline', text: t('daemon.group.' + group)});
         const button = el('button', {
             type: 'button',
             class: 'settings-card-head',
@@ -2419,12 +2321,15 @@
             heading,
             el('span', {class: 'settings-card-n', text: String(names.length)}),
             changed > 0
-                ? el('span', {class: 'settings-card-changed', text: changed + ' changed'})
+                ? el('span', {
+                    class: 'settings-card-changed',
+                    text: t(changed === 1 ? 'daemon.settings.changed.one' : 'daemon.settings.changed.many', {count: changed})
+                })
                 : null
         ]);
 
         const body = el('div', {class: 'settings-card-body'}, [
-            el('p', {class: 'sink-sub settings-card-sub', text: sub})
+            el('p', {class: 'sink-sub settings-card-sub', text: t('daemon.group.' + group + '.sub')})
         ]);
         body.hidden = !open;
         const rows = el('dl', {class: 'settings-rows'});
@@ -2460,7 +2365,7 @@
         if (changed) {
             row.appendChild(el('dd', {
                 class: 'setting-default',
-                text: 'default ' + daemonValue(name, fallback)
+                text: t('daemon.settings.default', {value: daemonValue(name, fallback)})
             }));
         }
         const copy = settingCopy(name);
@@ -2482,23 +2387,23 @@
     }
 
     function daemonValue(name, value) {
-        if (value === null) return '(not set)';
+        if (value === null) return t('daemon.value.not_set');
         if (name === 'sampling_rate' || name === 'correlation_min_confidence') return share(value);
         // Zero is not a percentage here, it switches the guard off entirely.
-        if (name === 'memory_high_water_pct') return value === 0 ? 'off' : value + ' %';
+        if (name === 'memory_high_water_pct') return value === 0 ? t('daemon.value.off') : PSL.decimal(value) + ' %';
         if (name === 'max_payload_size') return PSL.bytes(value);
-        if (Array.isArray(value)) return value.length === 0 ? '(none)' : value.join(', ');
+        if (Array.isArray(value)) return value.length === 0 ? t('daemon.value.none') : value.join(', ');
         if (name === 'tls_configured' || name === 'archive_configured') {
-            return value ? 'configured' : 'not configured';
+            return value ? t('daemon.value.configured') : t('daemon.value.unconfigured');
         }
-        if (name === 'ack_api_key_set') return value ? 'set' : 'unset';
+        if (name === 'ack_api_key_set') return value ? t('daemon.value.set') : t('daemon.value.unset');
         // The name says _ms, so the millisecond figure stays primary: it is the one
         // that goes back into the file. PSL.dur rounds to the second, so the
         // readable form only appears once there is a second to read.
         if (/_ms$/.test(name) && typeof value === 'number') {
             return group(value) + ' ms' + (value >= 1000 ? ' (' + PSL.dur(value) + ')' : '');
         }
-        if (typeof value === 'boolean') return value ? 'yes' : 'no';
+        if (typeof value === 'boolean') return value ? t('daemon.value.yes') : t('daemon.value.no');
         if (typeof value === 'number') return group(value);
         return String(value);
     }
@@ -2511,8 +2416,8 @@
     function share(value) {
         if (typeof value !== 'number') return String(value);
         const pct = value * 100;
-        if (value > 0 && pct < 0.1) return String(value);
-        return (Math.round(pct * 10) / 10) + ' %';
+        if (value > 0 && pct < 0.1) return PSL.decimal(value);
+        return PSL.decimal(Math.round(pct * 10) / 10) + ' %';
     }
 
 
@@ -2622,8 +2527,8 @@
 
     function renderNewScreen() {
         const section = el('section', {}, [
-            ruledOverline('// new analysis'),
-            el('h1', {class: 'page-title', text: 'Run an analysis'})
+            ruledOverline(t('new.overline')),
+            el('h1', {class: 'page-title', text: t('new.title')})
         ]);
 
         if (state.loading) {
@@ -2638,15 +2543,11 @@
             return section;
         }
         if (!state.sources || state.sources.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state', text: 'This Hub has no configured source.'}));
+            section.appendChild(el('div', {class: 'empty-state', text: t('new.no_source')}));
             return section;
         }
         if (runSources().length === 0) {
-            section.appendChild(el('div', {
-                class: 'empty-state',
-                text: 'No grant lets you start an analysis on this Hub. An administrator grants access in the '
-                    + 'Hub\'s configuration.'
-            }));
+            section.appendChild(el('div', {class: 'empty-state', text: t('new.no_grant')}));
             return section;
         }
 
@@ -2711,15 +2612,13 @@
         const changed = Object.keys(state.form.detection).length;
         const trace = state.form.mode === 'trace';
         const panels = [terminalBlock({
-            head: '// prefer your terminal?',
-            sub: 'The same run, spelled out.',
-            help: 'The Hub runs this same binary. What is missing here is the JSON output and the '
-                + 'second command that renders it, which exist so the Hub can build a dashboard. '
-                + 'A terminal does not need either.',
+            head: t('new.terminal.head'),
+            sub: t('new.terminal.sub'),
+            help: t('new.terminal.help'),
             spell: function (shellId) {
                 return PSL.analysisCommand(source, request, shellId);
             },
-            copyLabel: 'Copy the analysis command',
+            copyLabel: t('new.terminal.copy'),
             // Folded by default: the button above it is the way this Hub is meant to
             // be used, and this is the alternative for whoever wants it.
             fold: {
@@ -2732,29 +2631,14 @@
             notes: [
                 // What this is, then what it takes to run it. Nobody goes and installs
                 // a binary before knowing what the line above them does.
-                'This is the same request the button above sends, written as the engine\'s own '
-                + 'arguments. It runs wherever perf-sentinel is installed and does not pass through '
-                + 'this Hub: no worker slot, no queue, and no report kept here for '
-                + state.status.limits.report_retention_hours + ' hours.',
-                'It prints its findings to the terminal. There is no dashboard at the end of it and no '
-                + 'link to share, which is the trade for not spending a worker.',
-                trace
-                    ? 'An ID resolves to exactly one trace, so the engine takes neither a window nor a '
-                    + 'trace cap here, exactly as the form above stops offering them.'
-                    : null,
+                t('new.terminal.same', {hours: state.status.limits.report_retention_hours}),
+                t('new.terminal.prints'),
+                trace ? t('new.terminal.trace') : null,
                 stepsBlock([
                     engineNeed(el('span', {})),
-                    !trace && !state.form.service.trim()
-                        ? 'Fill in the service name above. The command carries an empty one as it stands, '
-                        + 'and the engine refuses it as it stands.'
-                        : null,
+                    !trace && !state.form.service.trim() ? t('new.terminal.fill_service') : null,
                     source.auth_header_name ? tokenStep(source) : null,
-                    changed > 0
-                        ? 'Put the `perf-sentinel.toml` below next to where you run the command. '
-                        + (changed === 1 ? 'The threshold you moved has' : 'The thresholds you moved have')
-                        + ' no command-line flag, so the engine reads '
-                        + (changed === 1 ? 'it' : 'them') + ' from that file.'
-                        : null
+                    changed > 0 ? t(changed === 1 ? 'new.terminal.toml.one' : 'new.terminal.toml.many') : null
                 ])
                 // The note that used to say which shell this was quoted for: the tabs
                 // above the line say it, and they let the reader take the other one.
@@ -2763,19 +2647,12 @@
 
         if (changed > 0) {
             panels.push(terminalBlock({
-                head: '// perf-sentinel.toml',
-                sub: 'Only the thresholds you changed.',
+                head: t('new.toml.head'),
+                sub: t('new.toml.sub'),
                 text: PSL.detectionToml(state.form.detection),
-                copyLabel: 'Copy the perf-sentinel.toml fragment',
+                copyLabel: t('new.toml.copy'),
                 download: 'perf-sentinel.toml',
-                notes: [
-                    'Every threshold this file leaves out keeps the engine\'s own default, and the Hub only '
-                    + 'records a value that actually departs from one. A run launched from the button '
-                    + 'above carries the same numbers, so the two are comparable with each other.',
-                    'Put it in the directory you run the command from. The `-c` above makes it required, '
-                    + 'so a run that cannot find it stops instead of quietly falling back to the '
-                    + 'engine\'s own defaults, which are the numbers you just moved away from.'
-                ]
+                notes: [t('new.toml.defaults'), t('new.toml.where')]
             }));
         }
 
@@ -2790,10 +2667,7 @@
     function hubUnreachableBanner() {
         return el('div', {class: 'banner', 'data-tone': 'crit'}, [
             critGlyph(16),
-            el('div', {
-                text: 'The Hub is not answering. This is the Hub itself and not any one source, so nothing '
-                    + 'can be launched from here until it is back. Reload once it responds again.'
-            })
+            el('div', {text: t('new.hub_down')})
         ]);
     }
 
@@ -2808,9 +2682,11 @@
         if (!handoff) return null;
         const daemon = Boolean(source && source.kind === 'daemon');
         const span = handoff.atMs == null
-            ? PSL.dur(handoff.toMs - handoff.fromMs) + ' long.'
-            : PSL.dur(handoff.atMs - handoff.fromMs) + ' before it to '
-            + PSL.dur(handoff.toMs - handoff.atMs) + ' after.';
+            ? t('new.handoff.long', {duration: PSL.dur(handoff.toMs - handoff.fromMs)})
+            : t('new.handoff.around', {
+                before: PSL.dur(handoff.atMs - handoff.fromMs),
+                after: PSL.dur(handoff.toMs - handoff.atMs)
+            });
         // Named the way the incidents screen names it, then the reach of the run
         // said plainly: an analysis takes a service and no namespace, so one
         // taken from a namespaced incident is wider than the row it came from.
@@ -2820,17 +2696,14 @@
         const kind = handoff.kind === 'other' ? null : PSL.INCIDENT_KIND_LABEL[handoff.kind];
         // An episode's window names no incident: it is said as the episode it came from.
         const origin = handoff.pairKey
-            ? 'a correlation episode of ' + name + ' from the correlations screen, '
-            : 'the ' + (kind || 'incident') + ' of ' + name + ' from the incidents screen, ';
+            ? t('new.handoff.episode', {name: name})
+            : t('new.handoff.incident', {kind: kind || t('new.handoff.incident_kind'), name: name});
         return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info'}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el('div', {
-                text: 'Window of ' + origin + span
-                    + (handoff.namespace
-                        ? ' An analysis takes a service and no namespace, so this one covers '
-                        + handoff.service + ' in every namespace.'
-                        : '')
-                    + (daemon ? ' A daemon takes no window. Pick a trace backend on the left to run it.' : '')
+                text: t('new.handoff.window', {origin: origin, span: span})
+                    + (handoff.namespace ? t('new.handoff.namespace', {service: handoff.service}) : '')
+                    + (daemon ? t('new.handoff.daemon') : '')
             })
         ]);
     }
@@ -2841,7 +2714,7 @@
         if (!handoff) return null;
         const daemon = Boolean(source && source.kind === 'daemon');
         const other = state.form.traceId === handoff.traceId ? handoff.otherTraceId : handoff.traceId;
-        const swap = other ? el('button', {type: 'button', class: 'pill-button pill-sm', text: 'Use the other trace'})
+        const swap = other ? el('button', {type: 'button', class: 'pill-button pill-sm', text: t('new.trace_handoff.swap')})
             : null;
         if (swap) {
             swap.addEventListener('click', function () {
@@ -2853,9 +2726,9 @@
             daemon ? warningGlyph(16) : infoGlyph(16),
             el('div', {}, [
                 el('p', {
-                    text: 'A trace of the last co-occurrence of a correlated pair, from the correlations screen.'
-                        + (other ? ' The pair\'s other trace is ' + other + '.' : '')
-                        + (daemon ? ' A daemon takes no trace ID. Pick a trace backend on the left to run it.' : '')
+                    text: t('new.trace_handoff.lead')
+                        + (other ? t('new.trace_handoff.other', {trace: other}) : '')
+                        + (daemon ? t('new.trace_handoff.daemon') : '')
                 }),
                 swap
             ])
@@ -2865,20 +2738,17 @@
     function sourcePanel() {
         return el('div', {class: 'card source-panel'}, [
             el('div', {class: 'panel-head'}, [
-                el('h2', {class: 'overline', text: '// source'}),
+                el('h2', {class: 'overline', text: t('new.source.head')}),
                 el('span', {
                     class: 'panel-head-source',
                     text: PSL.sourceCountLabel(runSources().length, (state.sources || []).length)
                 })
             ]),
-            radioKeys(el('div', {class: 'source-list', role: 'radiogroup', 'aria-label': 'Source'},
+            radioKeys(el('div', {class: 'source-list', role: 'radiogroup', 'aria-label': t('new.source.label')},
                 sourceRows()), 'source'),
             el('p', {class: 'panel-note'}, [
                 el('span', {class: 'panel-note-rule', 'aria-hidden': 'true'}),
-                el('span', {
-                    text: 'A dashed outline marks a value the source declares about itself. The Hub never '
-                        + 'measures it. A misconfigured deployment can label production as staging.'
-                })
+                el('span', {text: t('new.source.note')})
             ])
         ]);
     }
@@ -2895,8 +2765,8 @@
                 return sourceRadio(entry.source);
             });
         };
-        return [sourceGroupLabel('daemons')].concat(
-            radios(kinds.daemons), [sourceGroupLabel('trace backends')], radios(kinds.backends));
+        return [sourceGroupLabel(t('sources.group.daemons'))].concat(
+            radios(kinds.daemons), [sourceGroupLabel(t('sources.group.backends'))], radios(kinds.backends));
     }
 
     // aria-hidden: each row already names its own kind, so the label would only
@@ -2919,8 +2789,8 @@
                 el('span', {class: 'health-dot'}),
                 el('span', {
                     text: source.reachable
-                        ? 'reachable'
-                        : 'unreachable ' + PSL.dur(now - source.unreachable_since_ms)
+                        ? t('health.reachable')
+                        : t('health.unreachable', {duration: PSL.dur(now - source.unreachable_since_ms)})
                 })
             ])
         ]);
@@ -2940,7 +2810,8 @@
             role: 'radio',
             'aria-checked': selected ? 'true' : 'false',
             // The name and its health, then the chips as a description, rather than every chip run into the name.
-            'aria-label': source.name + ', ' + (source.reachable ? 'reachable' : 'unreachable'),
+            'aria-label': t(source.reachable ? 'new.source.aria_reachable' : 'new.source.aria_unreachable',
+                {name: source.name}),
             'aria-describedby': metaId
         }, [el('span', {class: 'source-dot'}), el('span', {}, [line1, line2])]);
         button.addEventListener('click', function () {
@@ -2950,20 +2821,20 @@
     }
 
     function producerLabel(source) {
-        if (source.producer_version) return 'producer ' + source.producer_version;
-        return source.kind === 'daemon' ? 'producer unknown' : 'no producer version';
+        if (source.producer_version) return t('new.source.producer', {version: source.producer_version});
+        return source.kind === 'daemon' ? t('new.source.producer_unknown') : t('new.source.no_producer');
     }
 
     function parametersPanel() {
         const source = selectedSource();
         if (!source) {
             return el('div', {class: 'card params-panel'}, [
-                el('div', {class: 'empty-state', text: 'Pick a source to see what it takes.'})
+                el('div', {class: 'empty-state', text: t('new.params.pick')})
             ]);
         }
 
         const head = el('div', {class: 'panel-head'}, [
-            el('h2', {class: 'overline', text: source.kind === 'daemon' ? '// parameters' : '// query'}),
+            el('h2', {class: 'overline', text: source.kind === 'daemon' ? t('new.params.head') : t('new.query.head')}),
             el('span', {class: 'panel-head-source', text: source.name})
         ]);
 
@@ -2979,12 +2850,8 @@
         return el('div', {class: 'notice'}, [
             svg([['circle', {cx: '12', cy: '12', r: '9'}], ['path', {d: 'M12 11v5M12 8.2v.2'}]], 16),
             el('div', {}, [
-                el('p', {text: 'No parameters. A daemon snapshot is whatever it holds in memory right now.'}),
-                el('p', {
-                    class: 'notice-sub',
-                    text: 'The window is its ring buffer, so there is nothing to widen. What it holds and how '
-                        + 'it is configured are on its row in Sources.'
-                }),
+                el('p', {text: t('new.daemon.none')}),
+                el('p', {class: 'notice-sub', text: t('new.daemon.sub')}),
                 selectedSource() && PSL.permits(selectedSource(), 'sources.read') ? sourcesRowLink() : null
             ])
         ]);
@@ -2993,7 +2860,7 @@
     /** The label promises an open row, so the row arrives open: the sources
      screen reads the flag and runs the first read itself. */
     function sourcesRowLink() {
-        const link = el('a', {class: 'pill-button pill-sm', href: '#/sources', text: 'Open its row on Sources'});
+        const link = el('a', {class: 'pill-button pill-sm', href: '#/sources', text: t('new.daemon.open_row')});
         link.addEventListener('click', function () {
             const chosen = selectedSource();
             if (chosen) {
@@ -3007,25 +2874,22 @@
     function backendControls(source) {
         const nodes = [modeSwitch()];
         if (state.form.mode === 'trace') {
-            nodes.push(field('Trace ID', traceInput()));
-            nodes.push(el('p', {
-                class: 'field-note',
-                text: 'An ID resolves to exactly one trace, so neither the window nor the trace cap applies.'
-            }));
+            nodes.push(field(t('new.field.trace'), traceInput()));
+            nodes.push(el('p', {class: 'field-note', text: t('new.field.trace_note')}));
             return nodes;
         }
 
-        nodes.push(field('Service name', serviceInput()));
-        nodes.push(field('Time range', rangeControl(source), state.form.rangeMode === 'absolute'
-            ? 'absolute, fixed at submission'
-            : 'relative to the moment the run starts'));
+        nodes.push(field(t('new.field.service'), serviceInput()));
+        nodes.push(field(t('new.field.range'), rangeControl(source), state.form.rangeMode === 'absolute'
+            ? t('new.field.range_absolute')
+            : t('new.field.range_relative')));
         nodes.push(maxTracesBlock());
         return nodes;
     }
 
     function modeSwitch() {
-        const group = el('div', {class: 'segmented', role: 'radiogroup', 'aria-label': 'Selection mode'});
-        [['service', 'Service'], ['trace', 'Trace ID']].forEach(function (entry) {
+        const group = el('div', {class: 'segmented', role: 'radiogroup', 'aria-label': t('new.mode.label')});
+        [['service', t('new.mode.service')], ['trace', t('new.field.trace')]].forEach(function (entry) {
             const button = el('button', {
                 type: 'button',
                 role: 'radio',
@@ -3037,7 +2901,7 @@
             });
             group.appendChild(button);
         });
-        return field('Select traces by', radioKeys(group, 'mode'), 'one or the other, never both');
+        return field(t('new.mode.field'), radioKeys(group, 'mode'), t('new.mode.gloss'));
     }
 
     function serviceInput() {
@@ -3124,17 +2988,16 @@
 
     function windowLabel() {
         if (state.form.rangeMode === 'absolute') {
-            return PSL.dtHuman(state.form.fromMs) + ' → ' + PSL.dtHuman(state.form.toMs);
+            return PSL.dateTime(state.form.fromMs) + ' → ' + PSL.dateTime(state.form.toMs);
         }
-        return 'Last ' + PSL.humanDur(state.form.lookback);
+        return t('new.range.last', {span: PSL.humanDur(state.form.lookback)});
     }
 
     /** The span, and the argument the run will actually carry. */
     function rangeWire() {
-        const span = PSL.dur(windowSpanMs());
-        return state.form.rangeMode === 'absolute'
-            ? span + ' · from_ms/to_ms'
-            : span + ' · lookback = ' + state.form.lookback;
+        // The argument names are the engine's, so they stay as they are sent.
+        const wire = state.form.rangeMode === 'absolute' ? 'from_ms/to_ms' : ['lookback', state.form.lookback].join(' = ');
+        return PSL.dur(windowSpanMs()) + ' · ' + wire;
     }
 
     function windowSpanMs() {
@@ -3148,7 +3011,7 @@
             type: 'button',
             class: 'range-pill',
             id: 'range-pill',
-            'aria-label': 'Time range, ' + windowLabel(),
+            'aria-label': t('new.range.aria', {window: windowLabel()}),
             'aria-expanded': String(state.form.pickerOpen)
         }, [
             svg([['circle', {cx: '12', cy: '12', r: '9'}], ['path', {d: 'M12 7v5l3.2 2'}]], 14),
@@ -3184,21 +3047,16 @@
         const notes = [];
         const spanMs = windowSpanMs();
         if (spanMs > 86400000) {
-            notes.push(consequence('A wider window returns no more data. The run still stops at the trace '
-                + 'cap, so the result is a sample spread over the period rather than the period itself.'));
+            notes.push(consequence(t('new.range.wide')));
         }
         if (spanMs > 7 * 86400000) {
-            notes.push(consequence('The whole scan has to finish inside the '
-                + (state.status.limits.analysis_timeout_seconds) + '-second ceiling, which is usually the '
-                + 'limit met first. Expect a timeout rather than a result.'));
+            notes.push(consequence(t('new.range.timeout', {seconds: state.status.limits.analysis_timeout_seconds})));
         }
         if (source.retention_hours != null && spanMs > source.retention_hours * 3600000) {
-            notes.push(consequence('This source declares it keeps ' + PSL.dur(source.retention_hours * 3600000)
-                + ' of traces. A window beyond that comes back short, or is refused as '
-                + 'source_rejected_request.', 'warn'));
+            notes.push(consequence(t('new.range.retention', {duration: PSL.dur(source.retention_hours * 3600000)}),
+                'warn'));
         } else if (source.retention_hours == null && spanMs > 86400000) {
-            notes.push(consequence('Nobody declared how far back this source keeps traces, so the Hub '
-                + 'cannot tell whether it can answer this window at all.'));
+            notes.push(consequence(t('new.range.undeclared')));
         }
         return notes;
     }
@@ -3217,7 +3075,7 @@
         const from = el('input', {type: 'datetime-local', class: 'input-date', value: PSL.dtLocal(state.form.fromMs)});
         const to = el('input', {type: 'datetime-local', class: 'input-date', value: PSL.dtLocal(state.form.toMs)});
         const note = el('span', {class: 'picker-note'});
-        const apply = el('button', {type: 'button', class: 'picker-apply', text: 'Apply range'});
+        const apply = el('button', {type: 'button', class: 'picker-apply', text: t('new.picker.apply_range')});
 
         function readAbsolute() {
             const start = Date.parse(from.value);
@@ -3226,10 +3084,10 @@
             const past = Number.isFinite(end) && end <= Date.now();
             const valid = ordered && past;
             note.textContent = !ordered
-                ? 'The start must come before the end.'
+                ? t('new.picker.order')
                 : !past
-                    ? 'The end cannot be in the future.'
-                    : PSL.dur(end - start) + ' selected';
+                    ? t('new.picker.future')
+                    : t('new.picker.selected', {duration: PSL.dur(end - start)});
             note.setAttribute('data-invalid', valid ? 'false' : 'true');
             apply.disabled = !valid;
             return {start: start, end: end, valid: valid};
@@ -3244,23 +3102,23 @@
         });
 
         const left = el('div', {class: 'picker-pane'}, [
-            dateField('From', from),
-            dateField('To', to),
+            dateField(t('new.picker.from'), from),
+            dateField(t('new.picker.to'), to),
             el('div', {class: 'picker-apply-row'}, [apply, note]),
             el('div', {class: 'picker-rule'}),
-            el('p', {class: 'overline', text: 'Custom relative'}),
+            el('p', {class: 'overline', text: t('new.picker.custom')}),
             customRelativeRow()
         ]);
 
         const right = el('div', {class: 'picker-pane picker-right'}, [
-            el('p', {class: 'overline picker-quick-head', text: 'Quick ranges'}),
+            el('p', {class: 'overline picker-quick-head', text: t('new.picker.quick')}),
             el('div', {class: 'picker-quick'}, QUICK_RANGES.map(function (value) {
                 const active = state.form.rangeMode === 'relative' && state.form.lookback === value;
                 const button = el('button', {
                     type: 'button',
                     class: 'picker-quick-item',
                     'aria-current': active ? 'true' : null,
-                    text: 'Last ' + PSL.humanDur(value)
+                    text: t('new.range.last', {span: PSL.humanDur(value)})
                 });
                 button.addEventListener('click', function () {
                     applyRange('relative', {lookback: value});
@@ -3307,13 +3165,15 @@
             min: '1',
             value: String(state.form.customQty)
         });
-        const units = el('div', {class: 'segmented segmented-sm', role: 'radiogroup', 'aria-label': 'Unit'});
-        ['m', 'h', 'd'].forEach(function (unit) {
+        const units = el('div', {class: 'segmented segmented-sm', role: 'radiogroup', 'aria-label': t('new.picker.unit')});
+        // The value stays the engine's own unit, only its label follows the language.
+        [['m', 'unit.min'], ['h', 'unit.h'], ['d', 'unit.d']].forEach(function (entry) {
+            const unit = entry[0];
             const button = el('button', {
                 type: 'button',
                 role: 'radio',
                 'aria-checked': state.form.customUnit === unit ? 'true' : 'false',
-                text: unit
+                text: t(entry[1])
             });
             // Picking a unit selects it. Applying is a separate, deliberate click,
             // so a half-typed quantity is never submitted by choosing a unit.
@@ -3326,7 +3186,7 @@
         });
         radioKeys(units, 'unit');
 
-        const apply = el('button', {type: 'button', class: 'pill-button pill-sm', text: 'Apply'});
+        const apply = el('button', {type: 'button', class: 'pill-button pill-sm', text: t('new.picker.apply')});
         apply.addEventListener('click', function () {
             const quantity = Math.max(1, Number(qty.value) || 1);
             state.form.customQty = quantity;
@@ -3334,7 +3194,7 @@
         });
 
         return el('div', {class: 'picker-custom'}, [
-            el('span', {class: 'picker-custom-lead', text: 'Last'}),
+            el('span', {class: 'picker-custom-lead', text: t('new.picker.last')}),
             qty,
             units,
             apply
@@ -3378,7 +3238,7 @@
             max: String(cap),
             step: '1',
             value: String(Math.min(Math.max(state.form.maxTraces, 1), cap)),
-            'aria-label': 'Max traces'
+            'aria-label': t('new.traces.label')
         });
         slider.addEventListener('input', function () {
             setMaxTraces(Number(slider.value));
@@ -3397,14 +3257,9 @@
             // A div and not a label: the "?" is a button, which a label may not
             // contain, and the real binding is the `for` on the name beside it.
             el('div', {class: 'field-label'}, [
-                el('label', {for: 'traces-number', text: 'Max traces'}),
-                helpDot('This and the window travel to the backend in one search, the window as its '
-                    + 'time bounds, this as its limit. It is a ceiling and not a target, so a window '
-                    + 'holding fewer traces returns fewer. When it holds more, the backend picks which '
-                    + 'ones and they are not an even spread, so narrow the window when you need a given '
-                    + 'stretch covered. Traces come back whole rather than sampled, so this number bounds '
-                    + 'what the run costs.', 'max traces'),
-                el('span', {class: 'field-gloss', text: 'how much comes back, not how far back'})
+                el('label', {for: 'traces-number', text: t('new.traces.label')}),
+                helpDot(t('new.traces.help'), t('new.traces.topic')),
+                el('span', {class: 'field-gloss', text: t('new.traces.gloss')})
             ]),
             head,
             el('div', {class: 'band-track'}, [segments, slider]),
@@ -3487,19 +3342,21 @@
         }).slice(0, 3);
         if (past.length === 0) return null;
 
-        return sinkBlock('// what your own runs weighed', 'Measured on this source, not predicted.',
+        return sinkBlock(t('new.weighed.head'), t('new.weighed.sub'),
             past.map(function (run) {
                 const traces = typeof run.request.max_traces === 'number' ? run.request.max_traces : 100;
-                return [PSL.bytes(run.result.report_bytes),
-                    traces + ' traces, ' + run.result.findings + ' findings, '
-                    + PSL.dur(Date.now() - (run.finished_at_ms || run.created_at_ms)) + ' ago'];
+                return [PSL.bytes(run.result.report_bytes), t('new.weighed.row', {
+                    traces: traces,
+                    findings: run.result.findings,
+                    duration: PSL.dur(Date.now() - (run.finished_at_ms || run.created_at_ms))
+                })];
             }));
     }
 
     function capNote(band, cap) {
-        if (band.key === 'invalid') return 'at least 1';
-        if (band.key === 'over') return 'above the hard cap of ' + cap + ', the service will reject this';
-        return 'hard cap ' + cap;
+        if (band.key === 'invalid') return t('new.traces.at_least');
+        if (band.key === 'over') return t('new.traces.over', {cap: cap});
+        return t('new.traces.cap', {cap: cap});
     }
 
     /**
@@ -3509,7 +3366,7 @@
      * repeating the cap.
      */
     function bands(cap) {
-        const inner = [['ok', 500, 'safe'], ['warn', 1200, 'heavy']]
+        const inner = [['ok', 500, 'new.band.safe'], ['warn', 1200, 'new.band.heavy']]
             .filter(function (band) {
                 return band[1] < cap;
             });
@@ -3518,7 +3375,7 @@
         // Always painting it crit would turn a Hub capped at 500 into an entirely
         // red rule over a range that is all comfortable.
         const TONES = ['ok', 'warn', 'crit'];
-        const kept = inner.concat([[TONES[inner.length], cap, 'cap']]);
+        const kept = inner.concat([[TONES[inner.length], cap, 'new.band.cap']]);
 
         let previous = 0;
         return kept.map(function (band) {
@@ -3526,7 +3383,7 @@
             previous = band[1];
             return {
                 tone: band[0],
-                label: group(band[1]) + ' ' + band[2],
+                label: group(band[1]) + ' ' + t(band[2]),
                 width: (share * 100).toFixed(2) + '%'
             };
         });
@@ -3553,7 +3410,7 @@
         const text = String(value);
         const point = text.indexOf('.');
         const whole = point < 0 ? text : text.slice(0, point);
-        return whole.replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f') + (point < 0 ? '' : text.slice(point));
+        return whole.replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f') + (point < 0 ? '' : PSL.decimal(text.slice(point)));
     }
 
     // render() returns early when the status is missing, so every caller runs
@@ -3574,23 +3431,15 @@
      */
     function sinkPanel() {
         const rows = [
-            ['550 KB', 'The floor. Fonts, styles and the dashboard itself, present in every report '
-            + 'whether it found one problem or none.'],
-            ['every finding', 'Every run this Hub executes renders every finding it found, at any '
-            + 'size. The count on the dashboard is the count that was found.'],
-            [String(embeddedCap()) + ' trees', 'Span trees embedded, for the findings with the highest '
-            + 'aggregate impact. The rest open without a tree and say so, with the trace id to read '
-            + 'that one on its own, which the Trace ID mode above runs directly. Set by whoever '
-            + 'operates this Hub.'],
-            ['25', 'Hard cap on the top offenders embedded for the Carbon tab, whatever the run size. '
-            + 'The full ranking is still computed, only the embed is capped.'],
-            ['no ceiling', 'The file has no size target of its own once every finding is kept. A run '
-            + 'that finds a great deal produces a report that takes a moment to open.']
+            ['550 ' + t('unit.kb'), t('new.sink.floor')],
+            [t('new.sink.every'), t('new.sink.every_body')],
+            [t('new.sink.trees', {count: embeddedCap()}), t('new.sink.trees_body')],
+            ['25', t('new.sink.offenders')],
+            [t('new.sink.no_ceiling'), t('new.sink.no_ceiling_body')]
         ];
         // Folded until the reader opens it, like every other fold in the product,
         // and remembered from then on.
-        return sinkBlock('// what comes back, and what it caps',
-            'From the sink and this Hub\'s settings, not predictions.', rows, {
+        return sinkBlock(t('new.sink.head'), t('new.sink.sub'), rows, {
                 open: state.panelOpen.caps === true,
                 onToggle: function (open) {
                     state.panelOpen.caps = open;
@@ -3606,7 +3455,7 @@
     function heavyAck() {
         const node = checkbox(
             state.form.ackHeavy,
-            'I accept a long run and a heavy report.',
+            t('new.traces.ack'),
             function (checked) {
                 state.form.ackHeavy = checked;
                 updateSubmit();
@@ -3628,18 +3477,13 @@
             el('div', {class: 'notice-block-text'}, [
                 el('p', {
                     class: 'notice-block-title',
-                    text: source.name + ' runs ' + source.producer_version + ', ' + skew.label + ' the '
-                        + engine + ' binary embedded in the Hub.'
+                    text: t('new.skew.title', {
+                        name: source.name, version: source.producer_version, gap: skew.label, engine: engine
+                    })
                 }),
                 el('p', {
                     class: 'notice-block-body',
-                    text: behind
-                        ? 'perf-sentinel is pre-1.0, so detectors change between minors. A detector added in '
-                        + engine + ' does not run on this producer at all, and its absence looks exactly like '
-                        + 'a clean service. Read a low finding count from this source as unmeasured, not as healthy.'
-                        : 'Envelopes are additive, so nothing breaks. Findings from a detector this Hub does not '
-                        + 'know about arrive unnamed. The Hub compares two version strings and cannot know '
-                        + 'whether this minor changed detection at all.'
+                    text: behind ? t('new.skew.behind', {engine: engine}) : t('new.skew.ahead')
                 }),
                 behind ? upgradeLine(source, engine) : null
             ])
@@ -3653,28 +3497,28 @@
      */
     function upgradeLine(source, engine) {
         const line = el('p', {class: 'notice-block-body'}, [
-            el('span', {text: 'Get ' + engine + ': '}),
+            el('span', {text: t('new.upgrade.get', {engine: engine})}),
             el('a', {
                 class: 'notice-block-link',
                 href: PSL.releaseUrl(engine),
                 target: '_blank',
                 rel: 'noopener noreferrer',
-                text: 'release notes and binaries'
+                text: t('new.upgrade.release')
             })
         ]);
         if (source.kind !== 'daemon') return line;
-        line.appendChild(el('span', {text: ', or the chart this daemon is deployed from, '}));
+        line.appendChild(el('span', {text: t('new.upgrade.or_chart')}));
         line.appendChild(el('a', {
             class: 'notice-block-link',
             href: PSL.CHART_PAGE,
             target: '_blank',
             rel: 'noopener noreferrer',
-            text: 'every chart version and the engine it ships'
+            text: t('new.upgrade.charts')
         }));
-        line.appendChild(el('span', {text: '. The chart itself is '}));
+        line.appendChild(el('span', {text: t('new.upgrade.chart_is')}));
         // A coordinate for helm, not a link: the scheme is not one a browser opens.
         line.appendChild(el('code', {class: 'code-inline', text: PSL.CHART_COORDINATE}));
-        line.appendChild(el('span', {text: '.'}));
+        line.appendChild(el('span', {text: t('new.upgrade.end')}));
         return line;
     }
 
@@ -3682,30 +3526,31 @@
         const text = el('div', {class: 'notice-block-text'}, [
             el('p', {
                 class: 'notice-block-title',
-                text: source.name + ' has been unreachable for ' + PSL.dur(Date.now() - source.unreachable_since_ms) + '.'
+                text: t('new.unreachable.title', {
+                    name: source.name, duration: PSL.dur(Date.now() - source.unreachable_since_ms)
+                })
             })
         ]);
         if (source.last_success_ms) {
             text.appendChild(el('p', {
                 class: 'notice-block-body',
-                text: 'Last successful contact ' + PSL.dur(Date.now() - source.last_success_ms) + ' ago.'
+                text: t('new.unreachable.last_success', {duration: PSL.dur(Date.now() - source.last_success_ms)})
             }));
         }
         if (source.last_error_code) {
             text.appendChild(el('p', {class: 'notice-block-body'}, [
-                el('span', {text: 'The last attempt returned '}),
+                el('span', {text: t('new.unreachable.returned')}),
                 el('span', {class: 'code-inline', text: source.last_error_code}),
-                proseInto(el('span'), ': ' + (PSL.READ_ERRORS[source.last_error_code]
-                    || PSL.ERRORS[source.last_error_code] || 'the Hub could not reach it.'))
+                proseInto(el('span'), t('daemon.error.meaning', {
+                    meaning: PSL.READ_ERRORS[source.last_error_code] || PSL.ERRORS[source.last_error_code]
+                        || t('daemon.error.unreached')
+                }))
             ]));
         }
-        text.appendChild(el('p', {
-            class: 'notice-block-body',
-            text: 'Running now will consume a worker slot and will almost certainly end with the same code.'
-        }));
+        text.appendChild(el('p', {class: 'notice-block-body', text: t('new.unreachable.cost')}));
         text.appendChild(checkbox(
             state.form.ackUnreachable,
-            'Run it anyway',
+            t('new.unreachable.anyway'),
             function (checked) {
                 state.form.ackUnreachable = checked;
                 updateSubmit();
@@ -3743,17 +3588,18 @@
         const limits = state.status.limits;
         const queue = state.status.queue_depth;
         const cells = [
-            [String(limits.max_traces_cap), 'traces', 'Hard cap per run', 'The service rejects anything above it.'],
-            [String(limits.analysis_timeout_seconds), 's', 'Timeout', 'Then the run is killed, marked timeout.'],
-            [String(state.status.workers), 'workers',
-                queue === 1 ? '1 job queued now' : queue + ' jobs queued now',
-                'That many runs at a time across the whole Hub.'],
-            [String(limits.report_retention_hours), 'h', 'Report retention', 'Then the file is deleted. Links die.']
+            [String(limits.max_traces_cap), t('new.cost.traces'), t('new.cost.cap'), t('new.cost.cap_note')],
+            [String(limits.analysis_timeout_seconds), t('unit.s'), t('new.cost.timeout'), t('new.cost.timeout_note')],
+            [String(state.status.workers), t('new.cost.workers'),
+                t(queue === 0 ? 'new.cost.queued.none' : queue === 1 ? 'new.cost.queued.one' : 'new.cost.queued.many',
+                    {count: queue}),
+                t('new.cost.workers_note')],
+            [String(limits.report_retention_hours), t('unit.h'), t('new.cost.retention'), t('new.cost.retention_note')]
         ];
         return el('section', {class: 'card cost'}, [
             el('div', {class: 'cost-head'}, [
-                el('h2', {class: 'overline', text: '// what this run costs'}),
-                el('span', {class: 'cost-sub', text: 'Reported by the service, not assumed.'})
+                el('h2', {class: 'overline', text: t('new.cost.head')}),
+                el('span', {class: 'cost-sub', text: t('new.cost.sub')})
             ]),
             el('div', {class: 'cost-grid'}, cells.map(function (cell) {
                 return el('div', {class: 'cost-cell'}, [
@@ -3774,18 +3620,18 @@
      */
     function submitBlocker() {
         const source = selectedSource();
-        if (!source) return 'Pick a source.';
-        if (!state.status.engine_version) return 'This Hub has no analysis engine configured.';
-        if (!source.reachable && !state.form.ackUnreachable) return 'Confirm you want to run against an unreachable source.';
+        if (!source) return t('new.block.source');
+        if (!state.status.engine_version) return t('new.block.engine');
+        if (!source.reachable && !state.form.ackUnreachable) return t('new.block.unreachable');
         if (source.kind === 'daemon') return null;
         if (state.form.mode === 'trace') {
-            return state.form.traceId.trim() ? null : 'Enter a trace ID.';
+            return state.form.traceId.trim() ? null : t('new.block.trace');
         }
-        if (!state.form.service.trim()) return 'Enter a service name.';
+        if (!state.form.service.trim()) return t('new.block.service');
         const band = PSL.weightBand(state.form.maxTraces, tracesCap());
-        if (band.key === 'over') return 'The trace cap is above what the service accepts.';
-        if (band.key === 'invalid') return 'A run needs at least one trace.';
-        return band.needsAck && !state.form.ackHeavy ? 'Confirm the long run and heavy report.' : null;
+        if (band.key === 'over') return t('new.block.over');
+        if (band.key === 'invalid') return t('new.block.invalid');
+        return band.needsAck && !state.form.ackHeavy ? t('new.block.heavy') : null;
     }
 
     /** Restates the request in a sentence, so the button is not a leap of faith. */
@@ -3793,28 +3639,32 @@
         const source = selectedSource();
         if (!source) return '';
         if (source.kind === 'daemon') {
-            return 'Takes a snapshot of what ' + source.name + ' holds in memory. No query is sent to a '
-                + 'trace backend. ' + queuePhrase();
+            return t('new.submit.daemon', {name: source.name, queue: queuePhrase()});
         }
         if (state.form.mode === 'trace') {
-            return 'Fetches one trace by ID from ' + source.name + '. ' + queuePhrase();
+            return t('new.submit.trace', {name: source.name, queue: queuePhrase()});
         }
-        return 'Reads up to ' + state.form.maxTraces + ' traces for '
-            + (state.form.service.trim() || 'a service') + ' across '
-            + (state.form.rangeMode === 'absolute' ? 'the selected window' : 'the last ' + PSL.humanDur(state.form.lookback))
-            + ' of ' + source.name + '. ' + queuePhrase();
+        return t('new.submit.service', {
+            count: state.form.maxTraces,
+            service: state.form.service.trim() || t('new.submit.a_service'),
+            window: state.form.rangeMode === 'absolute'
+                ? t('new.submit.selected_window')
+                : t('new.submit.last', {span: PSL.humanDur(state.form.lookback)}),
+            name: source.name,
+            queue: queuePhrase()
+        });
     }
 
     function queuePhrase() {
         const queue = state.status.queue_depth;
-        if (queue === 0) return 'Nothing is queued ahead of it.';
-        return queue === 1 ? 'Queued behind 1 job.' : 'Queued behind ' + queue + ' jobs.';
+        if (queue === 0) return t('new.queue.none');
+        return queue === 1 ? t('new.queue.one') : t('new.queue.many', {count: queue});
     }
 
     function submitRow() {
         const button = el('button', {type: 'button', class: 'submit', id: 'submit'}, [
             playGlyph(),
-            el('span', {text: 'Run analysis'})
+            el('span', {text: t('new.submit.button')})
         ]);
         button.addEventListener('click', submit);
         const row = el('div', {class: 'submit-row'}, [
@@ -3883,7 +3733,7 @@
                 return {ok: response.ok, payload: payload};
             });
         }).then(function (result) {
-            if (!result.ok) throw new Error(PSL.problemText(result.payload, undefined, 'The Hub refused the request.'));
+            if (!result.ok) throw new Error(PSL.problemText(result.payload, undefined, t('new.submit.refused')));
             location.hash = '#/run/' + result.payload.id;
         }).catch(function (error) {
             const sentence = document.getElementById('submit-sentence');
@@ -3914,7 +3764,7 @@
         const key = PSL.statusKey(run);
         const view = runView(run, key);
         section.appendChild(el('div', {class: 'run-head'}, [
-            el('span', {class: 'status-pill', 'data-status': key, text: key}),
+            el('span', {class: 'status-pill', 'data-status': key, text: t('status.' + key)}),
             el('span', {class: 'run-id', text: run.id})
         ]));
         section.appendChild(el('h1', {class: 'page-title', text: view.headline}));
@@ -3931,14 +3781,11 @@
     /** A run ID the Hub does not hold, from the run screen or a report link. */
     function unknownRun() {
         return el('div', {class: 'gone'}, [
-            el('h1', {class: 'page-title', text: 'No analysis with that ID.'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'This Hub holds no analysis under it. The link may be mistyped, or come from another Hub.'
-            }),
+            el('h1', {class: 'page-title', text: t('run.unknown.title')}),
+            el('p', {class: 'page-sub', text: t('run.unknown.sub')}),
             el('div', {class: 'outcome-actions'}, [
-                el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'}),
-                el('a', {class: 'action action-secondary', href: '#/recent', text: 'All analyses'})
+                el('a', {class: 'action action-filled', href: '#/new', text: t('new.title')}),
+                el('a', {class: 'action action-secondary', href: '#/recent', text: t('run.all')})
             ])
         ]);
     }
@@ -3963,7 +3810,7 @@
     function backLink() {
         return el('a', {class: 'back-pill', href: '#/recent'}, [
             svg([['path', {d: 'M15 18l-6-6 6-6'}]], 13),
-            el('span', {text: 'All analyses'})
+            el('span', {text: t('run.all')})
         ]);
     }
 
@@ -3971,23 +3818,20 @@
     function runView(run, key) {
         if (key === 'queued') {
             return {
-                headline: 'Waiting for a worker.',
-                sub: 'Every worker is busy. Nothing has been read from ' + run.source_name
-                    + ' yet, so nothing has been spent.'
+                headline: t('run.queued.headline'),
+                sub: t('run.queued.sub', {name: run.source_name})
             };
         }
         if (key === 'running') {
             return {
-                headline: 'Reading ' + run.source_name + '.',
-                sub: 'A worker holds this job. The next thing that happens is a result or a failure, with '
-                    + 'nothing in between.'
+                headline: t('run.running.headline', {name: run.source_name}),
+                sub: t('run.running.sub')
             };
         }
         if (key === 'empty') {
             return {
-                headline: 'It succeeded, and there is nothing in it.',
-                sub: 'This is not a failure and not an error. The source answered correctly, and the answer '
-                    + 'was zero traces.'
+                headline: t('run.empty.headline'),
+                sub: t('run.empty.sub')
             };
         }
         if (key === 'succeeded') {
@@ -3995,35 +3839,39 @@
             const caveats = (result.warnings || []).length;
             return {
                 headline: caveats > 0
-                    ? result.findings + ' findings, and ' + (caveats === 1 ? 'a caveat' : caveats + ' caveats')
-                    + ' you should read first.'
-                    : result.findings + ' findings.',
+                    ? t(caveats === 1 ? 'run.succeeded.headline_caveat.one' : 'run.succeeded.headline_caveat.many',
+                        {findings: result.findings, caveats: caveats})
+                    : t('run.succeeded.headline', {findings: result.findings}),
                 sub: function () {
-                    return 'The report is ready and will be deleted in '
-                        + PSL.durPrecise(run.expires_at_ms - Date.now()) + '.';
+                    return t('run.succeeded.sub', {duration: PSL.durPrecise(run.expires_at_ms - Date.now())});
                 }
             };
         }
         if (key === 'interrupted') {
             return {
-                headline: 'The service restarted while this was running.',
-                sub: 'It stopped after ' + PSL.dur((run.finished_at_ms || 0) - (run.started_at_ms || run.created_at_ms))
-                    + ' of work. This is a resumption, not an error to investigate.'
+                headline: t('run.interrupted.headline'),
+                sub: t('run.interrupted.sub', {
+                    duration: PSL.dur((run.finished_at_ms || 0) - (run.started_at_ms || run.created_at_ms))
+                })
             };
         }
         if (key === 'expired') {
             return {
-                headline: 'This report was deleted.',
+                headline: t('run.expired.headline'),
                 sub: function () {
-                    return 'Reports live ' + state.status.limits.report_retention_hours + ' hours. This one expired '
-                        + PSL.durPrecise(Date.now() - run.expires_at_ms) + ' ago and the file is gone.';
+                    return t('run.expired.sub', {
+                        hours: state.status.limits.report_retention_hours,
+                        duration: PSL.durPrecise(Date.now() - run.expires_at_ms)
+                    });
                 }
             };
         }
+        const code = run.error_code || 'internal';
         return {
-            headline: 'Failed: ' + String(run.error_code || 'internal').replace(/_/g, ' ') + '.',
-            sub: 'The Hub does not expose the process\'s error output by design. It gives one code out of '
-                + 'eight, and this is what that code means.'
+            headline: PSL.hasText('error.title.' + code) && PSL.lang() !== 'en'
+                ? t('error.title.' + code)
+                : t('run.failed.headline', {code: String(code).replace(/_/g, ' ')}),
+            sub: t('run.failed.sub')
         };
     }
 
@@ -4033,33 +3881,33 @@
      * dequeue and start, and inventing a second would be interpolation.
      */
     function eventLog(run, key) {
-        const rows = [logRow(run.created_at_ms, 'accepted', 'the request was validated and queued', 'muted')];
+        const rows = [logRow(run.created_at_ms, t('run.log.accepted'), t('run.log.accepted_detail'), 'muted')];
         if (run.started_at_ms) {
-            rows.push(logRow(run.started_at_ms, 'started',
-                run.kind === 'daemon' ? 'reading the daemon\'s in-memory store' : 'reading ' + PSL.KIND_LABEL[run.kind],
+            rows.push(logRow(run.started_at_ms, t('run.log.started'),
+                run.kind === 'daemon'
+                    ? t('run.log.started_daemon')
+                    : t('run.log.started_backend', {kind: PSL.KIND_LABEL[run.kind]}),
                 'brand'));
         }
-        if (key === 'running') rows.push(logRow(null, 'running', 'no further event until the engine returns', 'brand'));
-        if (key === 'queued') rows.push(logRow(null, 'waiting', 'every worker is busy, nothing has been read yet', 'muted'));
+        if (key === 'running') rows.push(logRow(null, t('run.log.running'), t('run.log.running_detail'), 'brand'));
+        if (key === 'queued') rows.push(logRow(null, t('run.log.waiting'), t('run.log.waiting_detail'), 'muted'));
         if (key === 'succeeded' || key === 'empty') {
-            rows.push(logRow(run.finished_at_ms, 'succeeded',
-                'report written, retained ' + state.status.limits.report_retention_hours + ' h', 'ok'));
+            rows.push(logRow(run.finished_at_ms, t('run.log.succeeded'),
+                t('run.log.written_retained', {hours: state.status.limits.report_retention_hours}), 'ok'));
         }
-        if (key === 'failed') rows.push(logRow(run.finished_at_ms, 'failed', run.error_code, 'crit'));
+        if (key === 'failed') rows.push(logRow(run.finished_at_ms, t('run.log.failed'), run.error_code, 'crit'));
         if (key === 'interrupted') {
-            rows.push(logRow(run.finished_at_ms, 'interrupted',
-                'the Hub restarted, the run was abandoned and not replayed', 'info'));
+            rows.push(logRow(run.finished_at_ms, t('run.log.interrupted'), t('run.log.interrupted_detail'), 'info'));
         }
         if (key === 'expired') {
-            rows.push(logRow(run.finished_at_ms, 'succeeded', 'report written', 'muted'));
-            rows.push(logRow(run.expires_at_ms, 'deleted',
-                'retention reached, the report no longer exists', 'muted'));
+            rows.push(logRow(run.finished_at_ms, t('run.log.succeeded'), t('run.log.written'), 'muted'));
+            rows.push(logRow(run.expires_at_ms, t('run.log.deleted'), t('run.log.deleted_detail'), 'muted'));
         }
 
-        return el('section', {class: 'card log-card', 'aria-label': 'Service events'}, [
+        return el('section', {class: 'card log-card', 'aria-label': t('run.log.label')}, [
             el('div', {class: 'log-head'}, [
-                el('h2', {class: 'overline', text: '// service events'}),
-                el('span', {class: 'log-head-note', text: 'Only what the Hub actually recorded.'})
+                el('h2', {class: 'overline', text: t('run.log.head')}),
+                el('span', {class: 'log-head-note', text: t('run.log.note')})
             ]),
             el('div', {class: 'log'}, rows),
             el('div', {class: 'log-foot'}, [el('p', {text: logClosing(run, key)})])
@@ -4078,16 +3926,9 @@
     }
 
     function logClosing(run, key) {
-        if (key === 'running' || key === 'queued') {
-            return 'The engine reports nothing between start and finish. There is no percentage to show '
-                + 'and no arrival time to predict, so this screen shows neither. Only the events above, the '
-                + 'time spent, and the ceiling at which the service gives up. Expect one more line, not a stream.';
-        }
+        if (key === 'running' || key === 'queued') return t('run.log.closing_live');
         const instant = run.finished_at_ms && (run.finished_at_ms - run.created_at_ms) < 10000;
-        return instant
-            ? 'This run was read and finished in one step, so every line above was written at once. It is '
-            + 'a receipt of what happened, not a feed.'
-            : 'Every line above is a timestamp the Hub wrote. Nothing here is interpolated.';
+        return instant ? t('run.log.closing_instant') : t('run.log.closing');
     }
 
     function factsRail(run, key) {
@@ -4103,7 +3944,7 @@
         });
 
         const elapsed = el('section', {class: 'card rail-card'}, [
-            el('h2', {class: 'overline overline-p', text: '// elapsed'}),
+            el('h2', {class: 'overline overline-p', text: t('run.elapsed')}),
             figure
         ]);
         // The only bar in the product, and only while running: it measures a known
@@ -4124,40 +3965,43 @@
 
     function ceilingNote(key, elapsedMs) {
         const seconds = state.status.limits.analysis_timeout_seconds;
-        if (key === 'queued') {
-            return 'The ' + seconds + '-second ceiling starts when a worker picks the job up, not now.';
-        }
-        if (key !== 'running') return 'Total time the run occupied a worker.';
+        if (key === 'queued') return t('run.ceiling.queued', {seconds: seconds});
+        if (key !== 'running') return t('run.ceiling.total');
         const left = seconds * 1000 - elapsedMs;
         return left <= 0
-            ? 'Past the ' + seconds + ' s ceiling. The run should already have been killed and marked timeout.'
-            : 'Hard stop at ' + seconds + ' s, then the run is killed and marked timeout. '
-            + PSL.dur(left) + ' of ceiling left.';
+            ? t('run.ceiling.past', {seconds: seconds})
+            : t('run.ceiling.left', {seconds: seconds, duration: PSL.dur(left)});
     }
 
     function requestCard(run) {
         const request = run.request || {};
-        const facts = [['source', run.source_name, 'ui'], ['type', PSL.KIND_LABEL[run.kind] || run.kind, 'mono']];
+        const facts = [
+            [t('run.fact.source'), run.source_name, 'ui'],
+            [t('run.fact.type'), PSL.KIND_LABEL[run.kind] || run.kind, 'mono']
+        ];
+        // The engine's own argument names, kept as they are sent.
         ['service', 'trace_id', 'lookback', 'max_traces'].forEach(function (name) {
             if (request[name] != null) facts.push([name, String(request[name]), 'mono']);
         });
-        if (request.from_ms) facts.push(['window', PSL.dtHuman(request.from_ms) + ' → ' + PSL.dtHuman(request.to_ms), 'mono']);
+        if (request.from_ms) {
+            facts.push([t('run.fact.window'), PSL.dateTime(request.from_ms) + ' → ' + PSL.dateTime(request.to_ms), 'mono']);
+        }
         Object.keys(request.detection || {}).forEach(function (name) {
             facts.push([name, String(request.detection[name]), 'warn']);
         });
-        if (!request.service && !request.trace_id) facts.push(['parameters', 'none', 'muted']);
-        facts.push(['requested by', run.requested_by, 'mono']);
-        facts.push(['detected by', run.producer_version
-            ? PSL.detector(run.kind) + ' ' + run.producer_version
-            : 'not yet known', PSL.skew(run.producer_version) ? 'warn' : 'mono']);
-        facts.push(['expires', expiryText(run),
+        if (!request.service && !request.trace_id) facts.push([t('run.fact.parameters'), t('run.fact.none'), 'muted']);
+        facts.push([t('run.fact.requested_by'), run.requested_by, 'mono']);
+        facts.push([t('run.fact.detected_by'), run.producer_version
+            ? t('run.fact.' + PSL.detector(run.kind)) + ' ' + run.producer_version
+            : t('run.fact.unknown'), PSL.skew(run.producer_version) ? 'warn' : 'mono']);
+        facts.push([t('run.fact.expires'), expiryText(run),
             run.expires_at_ms && run.expires_at_ms < Date.now() ? 'crit' : 'mono',
             function () {
                 return expiryText(run);
             }]);
 
         return el('section', {class: 'request'}, [
-            el('h2', {class: 'overline overline-p', text: '// request'}),
+            el('h2', {class: 'overline overline-p', text: t('run.request')}),
             el('div', {class: 'request-grid'}, facts.map(function (fact) {
                 return el('div', {class: 'fact-card'}, [
                     el('span', {class: 'fact-card-k', text: fact[0]}),
@@ -4173,9 +4017,11 @@
     }
 
     function expiryText(run) {
-        if (!run.expires_at_ms) return 'not until it succeeds';
+        if (!run.expires_at_ms) return t('run.expiry.pending');
         const delta = run.expires_at_ms - Date.now();
-        return delta > 0 ? 'in ' + PSL.durPrecise(delta) : PSL.durPrecise(-delta) + ' ago';
+        return delta > 0
+            ? t('run.expiry.in', {duration: PSL.durPrecise(delta)})
+            : t('sources.ago', {duration: PSL.durPrecise(-delta)});
     }
 
     function outcomePanel(run, key, _) {
@@ -4189,9 +4035,10 @@
         const trimmed = trimNotice(run);
         if (trimmed) panel.appendChild(trimmed);
         (spec.warnings || []).forEach(function (warning) {
+            // A caveat the engine wrote, which stays in the engine's English.
             panel.appendChild(el('div', {class: 'outcome-warning'}, [
                 el('span', {class: 'outcome-warning-kind', text: warning.kind}),
-                el('span', {class: 'outcome-warning-message', text: warning.message})
+                engineText(el('span', {class: 'outcome-warning-message', text: warning.message}))
             ]));
         });
         panel.appendChild(actionRow(run, spec));
@@ -4204,63 +4051,59 @@
             return {
                 // The run succeeding and the gate passing are two different verdicts.
                 // A green panel announcing a failed gate contradicts its own sentence.
-                tone: result.quality_gate_passed ? 'ok' : 'crit', title: 'result',
-                body: result.quality_gate_passed
-                    ? 'The quality gate passed. The dashboard holds the full detail.'
-                    : 'The quality gate did not pass. The dashboard holds the full detail.',
+                tone: result.quality_gate_passed ? 'ok' : 'crit', title: t('run.outcome.result'),
+                body: result.quality_gate_passed ? t('run.outcome.gate_passed') : t('run.outcome.gate_failed'),
                 counts: [
-                    [result.quality_gate_passed ? 'PASS' : 'FAIL', 'quality gate',
+                    [result.quality_gate_passed ? 'PASS' : 'FAIL', t('run.count.gate'),
                         result.quality_gate_passed ? 'ok' : 'crit'],
-                    [String(result.findings), result.kept_findings == null ? 'findings' : 'found',
+                    [String(result.findings), result.kept_findings == null ? t('run.count.findings') : t('run.count.found'),
                         result.critical > 0 ? 'crit' : result.warning > 0 ? 'warn'
                             : result.info > 0 ? 'info' : 'ok'],
-                    [String(result.critical), 'critical', 'crit'],
-                    [String(result.warning), 'warning', 'warn'],
-                    [String(result.info), 'info', 'info'],
-                    [String(result.traces_analyzed), 'traces read', 'text']
+                    [String(result.critical), t('run.count.critical'), 'crit'],
+                    [String(result.warning), t('run.count.warning'), 'warn'],
+                    [String(result.info), t('run.count.info'), 'info'],
+                    [String(result.traces_analyzed), t('run.count.traces'), 'text']
                 ],
                 warnings: result.warnings,
-                primary: {label: 'Open the dashboard', href: '#/report/' + run.id, filled: true},
+                primary: {label: t('run.outcome.open'), href: '#/report/' + run.id, filled: true},
                 note: function () {
-                    return 'Opens on this origin. The link dies in '
-                        + PSL.durPrecise(run.expires_at_ms - Date.now()) + '.';
+                    return t('run.outcome.open_note', {duration: PSL.durPrecise(run.expires_at_ms - Date.now())});
                 }
             };
         }
         if (key === 'empty') {
             return {
-                tone: 'warn', title: 'empty result',
-                body: run.source_name + ' had nothing for the engine to analyse. The report exists, and it is '
-                    + 'blank. Opening it will show an empty dashboard. That is the expected outcome, not a '
-                    + 'rendering fault.',
+                tone: 'warn', title: t('run.outcome.empty'),
+                body: t('run.outcome.empty_body', {name: run.source_name}),
                 counts: [
-                    [result.quality_gate_passed ? 'PASS' : 'FAIL', 'quality gate', 'muted'],
-                    [String(result.findings), 'findings', 'warn'],
-                    [String(result.traces_analyzed), 'traces read', 'warn']
+                    [result.quality_gate_passed ? 'PASS' : 'FAIL', t('run.count.gate'), 'muted'],
+                    [String(result.findings), t('run.count.findings'), 'warn'],
+                    [String(result.traces_analyzed), t('run.count.traces'), 'warn']
                 ],
                 warnings: result.warnings,
-                primary: rerunAction('Wait and run it again', false),
-                secondary: {label: 'Open the blank dashboard anyway', href: '#/report/' + run.id},
-                note: 'A quality gate that passes on zero traces has not measured anything.'
+                primary: rerunAction(t('run.outcome.wait_rerun'), false),
+                secondary: {label: t('run.outcome.open_blank'), href: '#/report/' + run.id},
+                note: t('run.outcome.empty_note')
             };
         }
         if (key === 'failed') {
             return {
                 tone: 'crit', title: run.error_code || 'internal',
-                body: run.source_name + ': ' + (PSL.ERRORS[run.error_code] || 'it failed for an unnamed reason.'),
-                primary: rerunAction('Run it again', false),
-                secondary: {label: 'Check the source', href: '#/sources'},
-                note: 'Nothing was stored, so nothing expires.'
+                body: t('run.outcome.failed_body', {
+                    name: run.source_name,
+                    meaning: PSL.ERRORS[run.error_code] || t('run.outcome.unnamed')
+                }),
+                primary: rerunAction(t('run.outcome.rerun'), false),
+                secondary: {label: t('run.outcome.check_source'), href: '#/sources'},
+                note: t('run.outcome.failed_note')
             };
         }
         if (key === 'interrupted') {
             return {
-                tone: 'info', title: 'resume',
-                body: 'The Hub never replays an interrupted run on its own. A silent retry could fire a second '
-                    + 'heavy query at ' + run.source_name + ' without anyone asking for it, so the decision stays '
-                    + 'yours. The parameters are unchanged and ready to send again.',
+                tone: 'info', title: t('run.outcome.resume'),
+                body: t('run.outcome.resume_body', {name: run.source_name}),
                 primary: {
-                    label: 'Resume with the same parameters',
+                    label: t('run.outcome.resume_button'),
                     action: function (button) {
                         resubmit(run, button);
                     },
@@ -4270,11 +4113,9 @@
             };
         }
         return {
-            tone: 'muted', title: 'expired',
-            body: 'Retention is not configurable from here. Running the same analysis again produces a new '
-                + 'report with a new clock. It will not reproduce the old one, because the source has moved '
-                + 'on since then.',
-            primary: rerunAction('Run it again', false),
+            tone: 'muted', title: t('run.outcome.expired'),
+            body: t('run.outcome.expired_body'),
+            primary: rerunAction(t('run.outcome.rerun'), false),
             note: PSL.argsLine(run)
         };
     }
@@ -4288,12 +4129,10 @@
         const result = run.result || {};
         if (result.kept_findings == null || result.kept_findings >= result.findings) return null;
         return el('div', {class: 'outcome-warning'}, [
-            el('span', {class: 'outcome-warning-kind', text: 'trimmed'}),
+            el('span', {class: 'outcome-warning-kind', text: t('run.trimmed')}),
             el('span', {
                 class: 'outcome-warning-message',
-                text: result.findings + ' findings were found and ' + result.kept_findings
-                    + ' are in the report. The sink dropped the rest to fit, critical last, so what '
-                    + 'survived is what mattered most.'
+                text: t('run.trimmed_body', {found: result.findings, kept: result.kept_findings})
             })
         ]);
     }
@@ -4378,7 +4217,7 @@
             });
         }).then(function (result) {
             if (!result.ok || !result.payload.id) {
-                throw new Error(PSL.problemText(result.payload, undefined, 'The Hub refused the resubmission.'));
+                throw new Error(PSL.problemText(result.payload, undefined, t('run.resubmit_refused')));
             }
             location.hash = '#/run/' + result.payload.id;
         }).catch(function (error) {
@@ -4435,7 +4274,7 @@
     function runUnreachableBanner() {
         return el('div', {class: 'banner', 'data-tone': 'warn', role: 'status'}, [
             warningGlyph(16),
-            el('p', {text: 'The Hub is not answering. This page keeps what it last read and asks again.'})
+            el('p', {text: t('run.hub_down')})
         ]);
     }
 
@@ -4449,29 +4288,16 @@
      * that a smaller pattern is no longer a problem.
      */
     const DETECTION_COPY = {
-        n_plus_one_min_occurrences: 'How many near-identical queries in one trace count as an N+1. '
-            + 'Raise it and smaller loops stop being reported at all.',
-        window_duration_ms: 'How close together those queries have to be. A shorter window splits one '
-            + 'slow loop into several groups that each fall under the count.',
-        slow_query_threshold_ms: 'Above this, one operation is called slow.',
-        slow_query_min_occurrences: 'How many times a slow template has to appear before it is worth '
-            + 'reporting. One slow query stays invisible below this.',
-        max_fanout: 'Child spans under one parent before it counts as excessive fanout. The engine '
-            + 'warns outside 5 to 1 000: too low floods the list, too high hides real fan-outs.',
-        chatty_service_min_calls: 'Outbound HTTP calls in one trace before a service is called chatty. '
-            + 'Critical fires at three times this.',
-        pool_saturation_concurrent_threshold: 'Peak concurrent SQL spans on one service before the '
-            + 'connection pool is called at risk. Set it to the pool size you actually run.',
-        serialized_min_sequential: 'Sequential independent calls under one parent before they are '
-            + 'worth parallelising.',
-        sanitizer_aware_classification: 'How a run of identical parameterised queries is read once the '
-            + 'agent has hidden their literals. `auto` calls it an N+1 on the ORM scope alone, `strict` '
-            + 'also wants the timings to spread, `never` leaves it a redundant query, `always` reports '
-            + 'an N+1.',
-        sanitizer_aware_min_cv: 'How much those timings have to spread (standard deviation over '
-            + 'mean) before `strict` or `auto` call the run an N+1 rather than a cached repeat. The same '
-            + 'bar reads a repeated HTTP call. Raise it on a jittery runtime such as PHP-FPM, where '
-            + 'repeats of one cached query spread past 0.5.'
+        n_plus_one_min_occurrences: 'detect.n_plus_one_min_occurrences',
+        window_duration_ms: 'detect.window_duration_ms',
+        slow_query_threshold_ms: 'detect.slow_query_threshold_ms',
+        slow_query_min_occurrences: 'detect.slow_query_min_occurrences',
+        max_fanout: 'detect.max_fanout',
+        chatty_service_min_calls: 'detect.chatty_service_min_calls',
+        pool_saturation_concurrent_threshold: 'detect.pool_saturation_concurrent_threshold',
+        serialized_min_sequential: 'detect.serialized_min_sequential',
+        sanitizer_aware_classification: 'detect.sanitizer_aware_classification',
+        sanitizer_aware_min_cv: 'detect.sanitizer_aware_min_cv'
     };
 
     function detectionKnobs() {
@@ -4499,7 +4325,7 @@
         if (!badge) return;
         const count = detectionCount();
         badge.hidden = count === 0;
-        badge.textContent = count === 1 ? '1 changed' : count + ' changed';
+        badge.textContent = t(count === 1 ? 'daemon.settings.changed.one' : 'daemon.settings.changed.many', {count: count});
         const resetAll = document.getElementById('advanced-reset');
         // Nothing to put back when nothing was moved, and a button that does
         // nothing is a button that has to be tried to be understood.
@@ -4520,10 +4346,10 @@
             warningGlyph(14),
             // The glyph is aria-hidden, so the caution it carries needs words a
             // screen reader receives while the panel is still collapsed.
-            el('span', {class: 'visually-hidden', text: 'Warning, expert settings.'}),
+            el('span', {class: 'visually-hidden', text: t('new.advanced.warning')}),
             el('span', {class: 'overline'}, [
-                el('span', {class: 'over-warn', text: '// advanced users only'}),
-                document.createTextNode(' \u00b7 what the analysis looks for')
+                el('span', {class: 'over-warn', text: t('new.advanced.head')}),
+                document.createTextNode(t('new.advanced.what'))
             ]),
             el('span', {id: 'advanced-count', class: 'advanced-count', hidden: 'hidden'})
         ]);
@@ -4532,25 +4358,11 @@
             el('section', {class: 'notice-block', 'data-tone': 'warn'}, [
                 warningGlyph(17),
                 el('div', {class: 'notice-block-text'}, [
-                    el('p', {
-                        class: 'notice-block-title',
-                        text: 'For operators who know what these thresholds do.'
-                    }),
-                    el('p', {
-                        class: 'notice-block-body',
-                        text: 'Moved carelessly, they hide real problems or flood the report with noise, and '
-                            + 'which direction does which differs per threshold. If you are not sure, leave them.'
-                    })
+                    el('p', {class: 'notice-block-title', text: t('new.advanced.title')}),
+                    el('p', {class: 'notice-block-body', text: t('new.advanced.body')})
                 ])
             ]),
-            el('p', {
-                class: 'advanced-lead',
-                text: 'These are the engine\'s detection thresholds. They decide what counts as a problem, '
-                    + 'not how the report is written: raising one does not make the run lighter, it makes the '
-                    + 'engine stop reporting the smaller cases. A run records the ones you changed, and the '
-                    + 'recent list flags counts that came from different thresholds, because they are not '
-                    + 'comparable.'
-            })
+            el('p', {class: 'advanced-lead', text: t('new.advanced.lead')})
         ]);
 
         // One button for the lot, beside the count so the two agree at a glance.
@@ -4558,7 +4370,7 @@
             type: 'button',
             id: 'advanced-reset',
             class: 'pill-button pill-sm advanced-reset',
-            text: 'Reset every threshold'
+            text: t('new.advanced.reset')
         });
         resetAll.addEventListener('click', function () {
             state.form.detection = {};
@@ -4610,7 +4422,7 @@
             });
         // A select takes its value once its options exist, not as an attribute.
         if (knob.kind === 'choice') input.value = shown;
-        const label = 'Put ' + knob.name + ' back to ' + knob.default;
+        const label = t('new.knob.reset', {name: knob.name, value: knob.default});
         const reset = el('button', {
             type: 'button',
             class: 'knob-reset',
@@ -4641,9 +4453,9 @@
         return el('div', {class: 'knob'}, [
             el('label', {class: 'knob-head', for: identifier}, [
                 el('span', {class: 'knob-name', text: knob.name}),
-                el('span', {class: 'knob-default', text: 'default ' + knob.default})
+                el('span', {class: 'knob-default', text: t('daemon.settings.default', {value: knob.default})})
             ]),
-            proseInto(el('span', {class: 'knob-body'}), DETECTION_COPY[knob.name] || ''),
+            proseInto(el('span', {class: 'knob-body'}), DETECTION_COPY[knob.name] ? t(DETECTION_COPY[knob.name]) : ''),
             el('div', {class: 'knob-controls'}, [input, reset])
         ]);
     }

@@ -205,3 +205,130 @@ test("an ack refusal with a code reads in the shown language", () => {
     assert.deepEqual(PSL.ackSummary(results), [{ok: false, text: "shop: This source relays no acknowledgments."}]);
     inLang("fr", () => assert.match(PSL.ackSummary(results)[0].text, /Cette source ne relaie aucun acquittement\.$/));
 });
+
+// ---- the sources, new analysis and run screens
+
+const SCREEN_FUNCTIONS = ["renderSourcesScreen", "sourcesTable", "tableGroupRow", "sourceRow", "healthCell",
+    "producerCell", "skeletonTable", "settingCopy", "daemonNameCell", "toggleDaemon", "loadDaemon", "daemonPanel",
+    "daemonError", "daemonTopRow", "refreshMs", "refreshSeconds", "refreshControl", "refreshRing", "startTicker",
+    "restartSweep", "restartCycle", "stopTicker", "stopAllTickers", "tickRefresh", "replaceIfIdle", "refreshDaemon",
+    "gaugeText", "settingsDisclosure", "settingsColumns", "configAbsenceNote", "settingsCards", "settingsPreamble",
+    "settingsCard", "isChanged", "settingRow", "settingValue", "daemonValue", "share", "selectedSource", "runSources",
+    "selectSource", "setMode", "setMaxTraces", "refreshTraces", "renderNewScreen", "terminalSlot", "refreshTerminal",
+    "terminalPanels", "noGrantBanner", "hubUnreachableBanner", "handoffBanner", "traceHandoffBanner", "sourcePanel",
+    "sourceRows", "sourceGroupLabel", "sourceRadio", "producerLabel", "parametersPanel", "daemonNotice",
+    "sourcesRowLink", "backendControls", "modeSwitch", "serviceInput", "traceInput", "radioKeys", "field",
+    "windowLabel", "rangeWire", "windowSpanMs", "rangeControl", "rangeConsequences", "consequence", "rangePicker",
+    "closePicker", "applyRange", "dateField", "customRelativeRow", "maxTracesBlock", "sinkBlock", "weightHistory",
+    "capNote", "bands", "bandScale", "group", "tracesCap", "embeddedCap", "sinkPanel", "bandStyle", "heavyAck",
+    "skewNotice", "upgradeLine", "unreachableNotice", "checkbox", "costBand", "submitBlocker", "submitSentence",
+    "queuePhrase", "submitRow", "updateSubmit", "buildRequest", "submit", "renderRunScreen", "unknownRun", "rerun",
+    "rerunAction", "backLink", "runView", "eventLog", "logRow", "logClosing", "factsRail", "ceilingRule",
+    "ceilingNote", "requestCard", "expiryText", "outcomePanel", "outcomeSpec", "trimNotice", "countStrip",
+    "moveBadge", "actionRow", "actionButton", "resubmit", "loadRun", "scheduleRunPoll", "runUnreachableBanner",
+    "detectionKnobs", "detectionCount", "setDetection", "refreshDetectionCount", "advancedPanel", "detectionRow"];
+
+const SCREEN_HELPERS = ["sourceHealth", "dur", "durDown", "durParts", "humanDur", "versionGap", "skew", "argsLine",
+    "weightBand", "bytes", "hostKwh", "sourceCountLabel", "monitorKeyHint"];
+
+function wwwrootFile(file) {
+    return require("node:fs").readFileSync(
+        require("node:path").join(__dirname, "..", "PerfSentinelHub", "wwwroot", file), "utf8");
+}
+
+test("the sources, new analysis and run screens hold no prose literal", () => {
+    const app = wwwrootFile("app.js");
+    const launcher = wwwrootFile("launcher.js");
+    for (const name of SCREEN_FUNCTIONS) assert.ok(app.includes("function " + name + "("), "app.js has no " + name);
+    for (const name of SCREEN_HELPERS) assert.ok(launcher.includes("function " + name + "("), "launcher.js has no " + name);
+    assert.deepEqual(PSL.literalsIn(app, SCREEN_FUNCTIONS), []);
+    assert.deepEqual(PSL.literalsIn(launcher, SCREEN_HELPERS), []);
+});
+
+test("the copy tables of these screens hold text keys, not text", () => {
+    const app = wwwrootFile("app.js");
+    for (const table of ["DAEMON_COPY", "DETECTION_COPY"]) {
+        const start = app.indexOf("const " + table + " = {");
+        assert.ok(start >= 0, "app.js has no " + table);
+        const body = app.slice(start, app.indexOf("};", start));
+        const values = [...body.matchAll(/^\s+[a-z0-9_]+: '([^']*)'/gm)].map(match => match[1]);
+        assert.ok(values.length >= 10, table + " holds " + values.length + " entries");
+        assert.deepEqual(values.filter(key => !(key in TEXT.en) || !(key in TEXT.fr)), [], table);
+    }
+});
+
+test("a run's failure vocabulary reads in the shown language", () => {
+    assert.match(PSL.ERRORS.timeout, /^the run passed this Hub's time ceiling/);
+    assert.equal(PSL.ERROR_TITLES.internal, "The Hub failed on its own side.");
+    inLang("fr", () => {
+        for (const table of [PSL.ERRORS, PSL.READ_ERRORS, PSL.ERROR_TITLES]) {
+            for (const code of Object.keys(table)) assert.doesNotMatch(table[code], /\bthe\b/i, code);
+        }
+        assert.match(PSL.READ_ERRORS.database_full, /base de données du Hub/);
+    });
+});
+
+test("durations write their units in the shown language", () => {
+    assert.equal(PSL.dur(3_900_000), "1 h 5 m");
+    assert.equal(PSL.humanDur("15m"), "15 minutes");
+    assert.equal(PSL.humanDur("1h"), "1 hour");
+    inLang("fr", () => {
+        assert.equal(PSL.dur(3_900_000), "1 h 5 min");
+        assert.equal(PSL.dur(90_000_000), "1 j 1 h");
+        assert.equal(PSL.dur(45_000), "45 s");
+        assert.equal(PSL.durPrecise(90_061_000), "1 j 1 h 1 min 1 s");
+        assert.equal(PSL.durMinutes(888_120_000), "10 j 6 h 42 min");
+        assert.equal(PSL.humanDur("15m"), "15 minutes");
+        assert.equal(PSL.humanDur("1h"), "1 heure");
+        assert.equal(PSL.humanDur("7d"), "7 jours");
+    });
+});
+
+test("durParts reads back what dur writes in either language", () => {
+    for (const lang of ["en", "fr"]) {
+        inLang(lang, () => {
+            for (const ms of [45_000, 3_600_000, 3_900_000, 90_000_000]) {
+                const parts = PSL.durParts(ms);
+                assert.equal(parts.map(part => part.n + " " + part.u).join(" "), PSL.dur(ms), lang + " " + ms);
+            }
+            assert.deepEqual(PSL.durParts(null), [{n: PSL.dur(null), u: ""}]);
+        });
+    }
+    inLang("fr", () => assert.deepEqual(PSL.durParts(3_900_000), [{n: "1", u: "h"}, {n: "5", u: "min"}]));
+});
+
+test("a source's health, a weight band and a size read in the shown language", () => {
+    const down = {reachable: false, unreachable_since_ms: 0, last_error_code: "timeout"};
+    assert.deepEqual(PSL.sourceHealth(down, 300_000), {tone: "crit", text: "unreachable 5 m"});
+    assert.equal(PSL.weightBand(100).label, "comfortable");
+    assert.equal(PSL.bytes(1536), "2 KB");
+    inLang("fr", () => {
+        assert.deepEqual(PSL.sourceHealth(down, 300_000), {tone: "crit", text: "injoignable depuis 5 min"});
+        assert.equal(PSL.sourceHealth({reachable: true, last_attempt_ms: 1}, 1).text, "joignable");
+        const band = PSL.weightBand(100);
+        assert.equal(band.label, "confortable");
+        assert.equal(band.key, "safe");
+        assert.match(PSL.weightBand(0, 2000).body, /entre 1 et 2000\./);
+        assert.equal(PSL.bytes(512), "512 o");
+        assert.equal(PSL.bytes(1536), "2 Ko");
+        assert.equal(PSL.bytes(1024 * 1024 * 1.5), "1,5 Mo");
+        assert.equal(PSL.hostKwh(0.2), "0,20");
+        assert.equal(PSL.hostKwh(0.003), "3,0e-3");
+        assert.equal(PSL.skew(null), null);
+    });
+});
+
+test("a version gap reads in the shown language", () => {
+    PSL.setVersions("0.10.0", "0.20.1");
+    try {
+        assert.equal(PSL.skew("0.19.0").label, "1 minor behind");
+        inLang("fr", () => {
+            assert.equal(PSL.skew("0.19.0").label, "1 mineure de retard");
+            assert.equal(PSL.skew("0.18.0").label, "2 mineures de retard");
+            assert.equal(PSL.skew("0.20.2").label, "1 correctif d'avance");
+            assert.equal(PSL.skew("1.0.0").label, "1 majeure d'avance");
+        });
+    } finally {
+        PSL.setVersions(null, null);
+    }
+});

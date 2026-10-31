@@ -33,38 +33,36 @@
     }
 
     /**
+     * A code-to-sentence table read from the text tables on each access, so it follows the
+     * shown language without being rebuilt.
+     * @param {string} prefix
+     * @param {string[]} codes
+     * @returns {Record<string, string>}
+     */
+    function textTable(prefix, codes) {
+        /** @type {Record<string, string>} */
+        const table = {};
+        codes.forEach(function (code) {
+            Object.defineProperty(table, code, {enumerable: true, get: () => t(prefix + code)});
+        });
+        return table;
+    }
+
+    /**
      * One actionable sentence per code, naming the next action. The service refuses to
      * expose raw stderr, so this table is the entire failure vocabulary the operator gets.
      * @type {Record<import('../types').ErrorCode, string>}
      */
-    const ERRORS = {
-        source_unreachable: 'nothing answered at its address. Check the daemon or backend is up and that the Hub still has a route to it, then run this again.',
-        source_auth_failed: 'it answered and refused the Hub\'s credentials. Rotate the configured auth header or API key in the source\'s Secret. Nothing here will work until that is done.',
-        source_rejected_request: 'it answered and refused these arguments, usually an unknown service name or a window it does not keep. Check the service against the backend and try a shorter lookback.',
-        timeout: 'the run passed this Hub\'s time ceiling, or the backend took too long to answer. A wide window is the usual cause, halve the trace cap or shorten it. If it repeats instantly whatever the window, the address is probably not answering at all, check the endpoint.',
-        output_too_large: 'the source returned more than one run is allowed to hold. Narrow the window or lower the trace cap so less comes back, then run it again.',
-        binary_failed: 'the analysis binary failed for a reason none of the other codes covers, and nothing was stored. Run it once more. If it repeats, send this analysis ID to whoever operates the Hub.',
-        invalid_request: 'the arguments were rejected before the run started, so nothing was read and nothing was spent. Fix the trace ID or the lookback value and submit again.',
-        hub_memory_low: 'the Hub refused to start the analysis binary: its container had too little memory left for it, and running it anyway would have got the whole Hub killed. Retry when the Hub is quieter, or have whoever operates it raise its memory limit.',
-        internal: 'the Hub itself failed and never touched the source. Retry now. If it fails the same way, the Hub needs attention rather than your request.'
-    };
+    const ERRORS = textTable('error.run.', ['source_unreachable', 'source_auth_failed', 'source_rejected_request',
+        'timeout', 'output_too_large', 'binary_failed', 'invalid_request', 'hub_memory_low', 'internal']);
 
     /**
      * What a failed read of a source means. A different vocabulary from ERRORS,
      * which describes a failed analysis run: these are the codes the collector
      * records, from a settings read or from a poll, the last three from a poll only.
      */
-    const READ_ERRORS = {
-        network_error: 'nothing answered at its address. Check the daemon is up and that the Hub still has a route to it.',
-        http_error: 'it answered with an error status, so it is running and reachable. This is the daemon refusing or failing the request rather than a network problem.',
-        timeout: 'it did not answer inside this Hub\'s HTTP timeout. Busy is as likely as down.',
-        invalid_status: 'it answered, but not with a status this Hub can read. Its /api/status has to carry a version string.',
-        response_too_large: 'it answered with more than this Hub reads in one go. A `[daemon]` section past that cap is worth reporting.',
-        hub_busy: 'the Hub capped how many daemon reads run at once and this one hit the cap. It clears in about a second.',
-        invalid_findings: 'it answered, but not with a findings list this Hub can read. A daemon this Hub does not support yet is the usual cause.',
-        database_full: 'the daemon answered, but the Hub\'s own database is full and could not store it. Grow the Hub\'s volume or shorten Hub:Retention, then look for a source creating abnormally many signatures.',
-        storage_error: 'the daemon answered, but the Hub\'s own database refused to store it. Check the Hub\'s logs and volume, not the daemon.'
-    };
+    const READ_ERRORS = textTable('error.read.', ['network_error', 'http_error', 'timeout', 'invalid_status',
+        'response_too_large', 'hub_busy', 'invalid_findings', 'database_full', 'storage_error']);
 
     /**
      * The health a source's row shows. A full database is the Hub's, so it is named
@@ -97,32 +95,23 @@
 
     function sourceHealth(source, now) {
         if (source.last_error_code === 'database_full' && !source.reachable)
-            return {tone: 'crit', text: 'Hub database full'};
+            return {tone: 'crit', text: t('health.database_full')};
         if (!source.reachable)
-            return {tone: 'crit', text: 'unreachable ' + dur(now - source.unreachable_since_ms)};
+            return {tone: 'crit', text: t('health.unreachable', {duration: dur(now - source.unreachable_since_ms)})};
         if (source.signature_rate_warning)
-            return {tone: 'warn', text: source.new_signatures_last_hour + ' new signatures in the last hour'};
-        return {tone: 'ok', text: source.last_attempt_ms == null ? 'not yet observed' : 'reachable'};
+            return {tone: 'warn', text: t('health.signature_rate', {count: source.new_signatures_last_hour})};
+        return {tone: 'ok', text: source.last_attempt_ms == null ? t('health.unobserved') : t('health.reachable')};
     }
 
     /** @type {Record<import('../types').ErrorCode, string>} */
-    const ERROR_TITLES = {
-        source_unreachable: 'No connection could be opened.',
-        source_auth_failed: 'The source rejected the Hub\'s credentials.',
-        source_rejected_request: 'The source refused the request.',
-        timeout: 'The run exceeded the execution ceiling.',
-        output_too_large: 'The source returned too much data.',
-        binary_failed: 'The analysis binary failed.',
-        invalid_request: 'The arguments were rejected before the run started.',
-        hub_memory_low: 'The Hub had too little memory left to run it.',
-        internal: 'The Hub failed on its own side.'
-    };
+    const ERROR_TITLES = textTable('error.title.', ['source_unreachable', 'source_auth_failed',
+        'source_rejected_request', 'timeout', 'output_too_large', 'binary_failed', 'invalid_request', 'hub_memory_low',
+        'internal']);
 
     /** @type {Record<import('../types').SourceKind, string>} */
     const KIND_LABEL = {daemon: 'daemon', tempo: 'tempo', jaeger_query: 'victoria traces'};
 
     const UNIT_MS = {m: 60000, h: 3600000, d: 86400000};
-    const UNIT_WORD = {m: 'minute', h: 'hour', d: 'day'};
 
     /**
      * Coarse duration. Drops a zero remainder so an exact hour reads "1 h", not "1 h 0 m".
@@ -130,15 +119,15 @@
      * @returns {string}
      */
     function dur(ms) {
-        if (ms == null) return 'n/a';
+        if (ms == null) return t('unit.na');
         const s = Math.max(0, Math.round(ms / 1000));
-        if (s < 60) return s + ' s';
+        if (s < 60) return s + ' ' + t('unit.s');
         const m = Math.floor(s / 60);
-        if (m < 60) return s % 60 ? m + ' m ' + (s % 60) + ' s' : m + ' m';
+        if (m < 60) return s % 60 ? m + ' ' + t('unit.min') + ' ' + (s % 60) + ' ' + t('unit.s') : m + ' ' + t('unit.min');
         const h = Math.floor(m / 60);
-        if (h < 24) return m % 60 ? h + ' h ' + (m % 60) + ' m' : h + ' h';
+        if (h < 24) return m % 60 ? h + ' ' + t('unit.h') + ' ' + (m % 60) + ' ' + t('unit.min') : h + ' ' + t('unit.h');
         const d = Math.floor(h / 24);
-        return h % 24 ? d + ' d ' + (h % 24) + ' h' : d + ' d';
+        return h % 24 ? d + ' ' + t('unit.d') + ' ' + (h % 24) + ' ' + t('unit.h') : d + ' ' + t('unit.d');
     }
 
     /**
@@ -151,16 +140,16 @@
      * @returns {string}
      */
     function durDown(ms, floor) {
-        if (ms == null) return 'n/a';
+        if (ms == null) return t('unit.na');
         const s = Math.max(0, Math.round(ms / 1000));
         const d = Math.floor(s / 86400);
         const h = Math.floor(s / 3600) % 24;
         const m = Math.floor(s / 60) % 60;
         const parts = [];
-        if (d) parts.push(d + ' d');
-        if (d || h) parts.push(h + ' h');
-        if (d || h || m || floor === 'm') parts.push(m + ' m');
-        if (floor === 's') parts.push((s % 60) + ' s');
+        if (d) parts.push(d + ' ' + t('unit.d'));
+        if (d || h) parts.push(h + ' ' + t('unit.h'));
+        if (d || h || m || floor === 'm') parts.push(m + ' ' + t('unit.min'));
+        if (floor === 's') parts.push((s % 60) + ' ' + t('unit.s'));
         return parts.join(' ');
     }
 
@@ -200,7 +189,7 @@
      */
     function durParts(ms) {
         const s = dur(ms);
-        if (s === 'n/a') return [{n: s, u: ''}];
+        if (ms == null) return [{n: s, u: ''}];
         /** @type {{n: string, u: string}[]} */
         const out = [];
         const re = /(\d+)\s*([a-z]+)/g;
@@ -239,7 +228,7 @@
         const m = /^(\d+)([mhd])$/.exec(s || '');
         if (!m) return s;
         const n = Number(m[1]);
-        return n + ' ' + UNIT_WORD[/** @type {'m'|'h'|'d'} */ (m[2])] + (n > 1 ? 's' : '');
+        return t('unit.word.' + m[2] + (n > 1 ? '.many' : '.one'), {count: n});
     }
 
     /**
@@ -332,18 +321,27 @@
         return c < 0
             ? {
                 dir: 'behind',
-                label: g.count + ' ' + g.unit + ' behind',
+                label: t('skew.behind', {count: g.count, unit: skewUnit(g)}),
                 fg: 'var(--warn-fg)',
                 bg: 'var(--warn-bg)',
                 bd: 'var(--warn-bd)'
             }
             : {
                 dir: 'ahead',
-                label: g.count + ' ' + g.unit + ' ahead',
+                label: t('skew.ahead', {count: g.count, unit: skewUnit(g)}),
                 fg: 'var(--info-fg)',
                 bg: 'var(--info-bg)',
                 bd: 'var(--info-bd)'
             };
+    }
+
+    /**
+     * The segment a gap is counted in, singular or plural with its count.
+     * @param {{count: number, unit: string}} gap
+     * @returns {string}
+     */
+    function skewUnit(gap) {
+        return t('skew.unit.' + gap.unit + (gap.count > 1 ? '.many' : '.one'));
     }
 
     /**
@@ -383,17 +381,16 @@
         const r = /** @type {Record<string, unknown>} */ (a.request || {});
         /** @type {string[]} */
         const parts = [];
-        if (r['service']) parts.push('service = ' + r['service']);
-        if (r['trace_id']) parts.push('trace_id = ' + r['trace_id']);
-        if (r['lookback']) parts.push('lookback = ' + r['lookback']);
-        if (r['from_ms']) parts.push('from_ms = ' + r['from_ms']);
-        if (r['to_ms']) parts.push('to_ms = ' + r['to_ms']);
-        if (r['max_traces'] != null) parts.push('max_traces = ' + r['max_traces']);
+        // The engine's own argument names, never translated: this line restates what was sent.
+        ['service', 'trace_id', 'lookback', 'from_ms', 'to_ms'].forEach(function (name) {
+            if (r[name]) parts.push(name + ' = ' + r[name]);
+        });
+        if (r['max_traces'] != null) parts.push(['max_traces', r['max_traces']].join(' = '));
         const detection = /** @type {Record<string, number|string>} */ (r['detection'] || {});
         Object.keys(detection).forEach(function (name) {
             parts.push(name + ' = ' + detection[name]);
         });
-        return parts.length ? parts.join('   ·   ') : 'no parameters  ·  daemon in-memory snapshot';
+        return parts.length ? parts.join('   ·   ') : t('run.args.none');
     }
 
     /**
@@ -417,40 +414,19 @@
      */
     function weightBand(n, cap) {
         const hardCap = typeof cap === 'number' && cap > 0 ? cap : 2000;
-        if (!Number.isFinite(n) || n < 1) {
-            return {
-                key: 'invalid', label: 'not a count',
-                fg: 'var(--crit-fg)', bg: 'var(--crit-bg)', bd: 'var(--crit-bd)', needsAck: false,
-                body: 'A run needs at least one trace. Drag the handle or type a number between 1 and '
-                    + hardCap + '.'
-            };
-        }
-        if (n <= Math.min(500, hardCap)) {
-            return {
-                key: 'safe', label: 'comfortable',
-                fg: 'var(--ok-fg)', bg: 'var(--ok-bg)', bd: 'var(--ok-bd)', needsAck: false,
-                body: 'Well inside what the sink returns whole. At this count the report is bounded by how much your traffic is doing wrong, not by the sink.'
-            };
-        }
-        if (n <= Math.min(1200, hardCap)) {
-            return {
-                key: 'heavy', label: 'heavy',
-                fg: 'var(--warn-fg)', bg: 'var(--warn-bg)', bd: 'var(--warn-bd)', needsAck: false,
-                body: 'More traces means more findings, and every one of them reaches the report. The span trees stop at the embed cap, so the extra weight here is the list itself, not the trees.'
-            };
-        }
-        if (n <= hardCap) {
-            return {
-                key: 'ceiling', label: 'at the ceiling',
-                fg: 'var(--crit-fg)', bg: 'var(--crit-bg)', bd: 'var(--crit-bd)', needsAck: true,
-                body: 'At this count the report still keeps every finding, and that is what makes it heavy: the file has no fixed ceiling and takes a moment to open. The run is also long enough to be worth watching against this Hub\'s time limit.'
-            };
-        }
-        return {
-            key: 'over', label: 'above the hard cap',
-            fg: 'var(--crit-fg)', bg: 'var(--crit-bg)', bd: 'var(--crit-bd)', needsAck: false,
-            body: 'The service rejects this before the run starts. Nothing is read and nothing is spent.'
-        };
+        /**
+         * @param {import('../types').WeightBand} key @param {string} tone @param {boolean} needsAck
+         */
+        const band = (key, tone, needsAck) => ({
+            key: key, label: t('weight.' + key + '.label'),
+            fg: 'var(--' + tone + '-fg)', bg: 'var(--' + tone + '-bg)', bd: 'var(--' + tone + '-bd)', needsAck: needsAck,
+            body: t('weight.' + key + '.body', {cap: hardCap})
+        });
+        if (!Number.isFinite(n) || n < 1) return band('invalid', 'crit', false);
+        if (n <= Math.min(500, hardCap)) return band('safe', 'ok', false);
+        if (n <= Math.min(1200, hardCap)) return band('heavy', 'warn', false);
+        if (n <= hardCap) return band('ceiling', 'crit', true);
+        return band('over', 'crit', false);
     }
 
     /**
@@ -461,12 +437,12 @@
      */
     function bytes(n) {
         if (!Number.isFinite(n) || n < 0) return '';
-        if (n < 1024) return n + ' B';
+        if (n < 1024) return n + ' ' + t('unit.byte');
         const kb = Math.round(n / 1024);
         // Rounding can carry into the next unit: 1023.5 KiB must read
         // "1.0 MB", never "1024 KB".
-        if (kb < 1024) return kb + ' KB';
-        return (n / (1024 * 1024)).toFixed(1) + ' MB';
+        if (kb < 1024) return kb + ' ' + t('unit.kb');
+        return decimal((n / (1024 * 1024)).toFixed(1)) + ' ' + t('unit.mb');
     }
 
     /**
@@ -665,9 +641,8 @@
         const header = source.auth_header_name;
         if (!header) return null;
         return header.toLowerCase() === 'x-api-key'
-            ? 'Set `PERF_SENTINEL_DAEMON_API_KEY` to this daemon\'s read key first.'
-            : 'This daemon is behind an `' + header + '` header. `query monitor` takes no such flag, '
-            + 'so this command works only from somewhere that reaches the daemon without it.';
+            ? t('daemon.monitor.api_key')
+            : t('daemon.monitor.header', {header: header});
     }
 
     /**
@@ -1897,7 +1872,7 @@
 
     /** Host kWh with two decimals, scientific below 0.005 so a small in-total host never reads as zero. */
     function hostKwh(value) {
-        return value === 0 || value >= 0.005 ? value.toFixed(2) : value.toExponential(1);
+        return decimal(value === 0 || value >= 0.005 ? value.toFixed(2) : value.toExponential(1));
     }
 
     /** verify-hash on the downloaded PDF, with this Hub's expected signer when it has one. */
@@ -2114,10 +2089,10 @@
      * @returns {string}
      */
     function sourceCountLabel(runnable, total) {
-        if (runnable === total) return total + ' configured';
+        if (runnable === total) return t('new.sources.count', {total: total});
         const missing = total - runnable;
-        return runnable + ' of ' + total + ' configured · ' + missing
-            + (missing === 1 ? ' needs' : ' need') + ' analyses.run';
+        return t(missing === 1 ? 'new.sources.count_missing.one' : 'new.sources.count_missing.many',
+            {runnable: runnable, total: total, missing: missing});
     }
 
     /**
@@ -3221,6 +3196,15 @@
     }
 
     /**
+     * A number already written with a point, with the decimal comma in French.
+     * @param {string | number} text
+     * @returns {string}
+     */
+    function decimal(text) {
+        return LANG === 'fr' ? String(text).replace('.', ',') : String(text);
+    }
+
+    /**
      * A ratio as a percentage with `digits` decimals: `3.1%` in English, `3,1 %` in French.
      * @param {number} ratio
      * @param {number} [digits]
@@ -3640,6 +3624,7 @@
         t,
         problemText,
         num,
+        decimal,
         pct,
         day,
         dateTime,
