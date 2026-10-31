@@ -92,6 +92,18 @@ public sealed class EngineProbeTests : IDisposable
         Assert.Equal(supported, probe.SupportsDisclosePdf);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_probe_reads_card_support(bool supported)
+    {
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "perf-sentinel 0.38.0", Card = supported }));
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(supported, probe.SupportsCard);
+    }
+
     [Fact]
     public async Task A_binary_whose_help_cannot_be_read_renders_static_rather_than_failing()
     {

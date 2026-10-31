@@ -37,7 +37,7 @@ public sealed class StorageTests
             names.Add(reader.GetString(0));
         Assert.Equal(
             [
-                "ack_reads", "analysis_runs", "correlation_episodes", "detection_counts", "detection_days",
+                "ack_reads", "analysis_runs", "card_keys", "correlation_episodes", "detection_counts", "detection_days",
                 "detection_ledgers", "disclosure_deliveries", "disclosure_share_links",
                 "disclosures", "endpoint_heartbeats", "endpoint_labels", "finding_action_events",
                 "finding_actions", "finding_attributes", "finding_groupings", "finding_lineage", "finding_observations",
@@ -60,7 +60,7 @@ public sealed class StorageTests
         await using var command = connection.CreateCommand();
         command.CommandText =
             "SELECT group_concat(version, ',') FROM (SELECT version FROM schema_migrations ORDER BY version);";
-        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",
+        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",
             (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
@@ -402,6 +402,100 @@ public sealed class StorageTests
         Assert.Equal(
             "finding_actions.owner_display TEXT,finding_action_events.owner_display TEXT | -",
             (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
+    public async Task A_v19_database_gains_the_signal_columns()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        // Dropped rather than hand-written as the old DDL, as the cases above do.
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE detection_counts DROP COLUMN below_threshold_passes;
+                               ALTER TABLE detection_days DROP COLUMN slow_query_threshold_ms;
+                               ALTER TABLE detection_days DROP COLUMN slow_http_threshold_ms;
+                               ALTER TABLE detection_days DROP COLUMN max_fanout;
+                               ALTER TABLE detection_days DROP COLUMN chatty_threshold;
+                               ALTER TABLE detection_days DROP COLUMN pool_saturation_threshold;
+                               ALTER TABLE detection_days DROP COLUMN serialized_min_calls;
+                               INSERT INTO detection_days(
+                                 source_id, ledger_id, day, sealed, gap, overflow_detections, shed_traces,
+                                 ingest_rejected, sampling_rate, last_read_ms)
+                               VALUES ('prod', 'ledger', 20400, 1, 0, 0, 0, 0, 1.0, 500);
+                               INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections)
+                               VALUES ('sig', 'prod', 'ledger', 20400, 5);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT group_concat(name || ' ' || type, ',') FROM
+                                    (SELECT name, type FROM pragma_table_info('detection_counts')
+                                     WHERE name = 'below_threshold_passes'
+                                     UNION ALL
+                                     SELECT name, type FROM pragma_table_info('detection_days')
+                                     WHERE name IN ('slow_query_threshold_ms', 'slow_http_threshold_ms', 'max_fanout',
+                                                    'chatty_threshold', 'pool_saturation_threshold',
+                                                    'serialized_min_calls')))
+                             || ' | ' || (SELECT IFNULL(below_threshold_passes, '-') FROM detection_counts)
+                             || (SELECT IFNULL(slow_query_threshold_ms, '-') || IFNULL(slow_http_threshold_ms, '-')
+                                        || IFNULL(max_fanout, '-') || IFNULL(chatty_threshold, '-')
+                                        || IFNULL(pool_saturation_threshold, '-') || IFNULL(serialized_min_calls, '-')
+                                 FROM detection_days);
+                           """;
+        Assert.Equal(
+            "below_threshold_passes INTEGER,slow_query_threshold_ms INTEGER,slow_http_threshold_ms INTEGER," +
+            "max_fanout INTEGER,chatty_threshold INTEGER,pool_saturation_threshold INTEGER," +
+            "serialized_min_calls INTEGER | -------",
+            (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
+    public async Task A_v19_database_gains_the_frozen_finding_column()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        await using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                               ALTER TABLE finding_actions DROP COLUMN frozen_finding_json;
+                               INSERT INTO finding_actions(
+                                 signature, status, created_by, created_at_ms, updated_at_ms, done_at_ms)
+                               VALUES ('sig', 'done', 'alice', 100, 100, 100);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot must not replay the ALTER.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT name || ' ' || type FROM pragma_table_info('finding_actions')
+                                   WHERE name = 'frozen_finding_json')
+                             || ' | ' || (SELECT IFNULL(frozen_finding_json, '-') FROM finding_actions);
+                           """;
+        Assert.Equal("frozen_finding_json TEXT | -", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
     private static async Task<List<string>> SourceColumnsAsync(

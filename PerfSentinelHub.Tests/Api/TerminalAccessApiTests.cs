@@ -786,9 +786,9 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.Unauthorized, expired.StatusCode);
         }
 
-        await Database.PurgeAsync(0, 0, expiresAtMs - 1, Cancel);
+        await Database.PurgeAsync(0, 0, 0, expiresAtMs - 1, Cancel);
         Assert.Single(await Database.ListTerminalTokensAsync(null, 0, 100, Cancel));
-        await Database.PurgeAsync(0, 0, expiresAtMs, Cancel);
+        await Database.PurgeAsync(0, 0, 0, expiresAtMs, Cancel);
         Assert.Empty(await Database.ListTerminalTokensAsync(null, 0, 100, Cancel));
     }
 

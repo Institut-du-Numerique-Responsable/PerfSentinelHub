@@ -73,6 +73,7 @@ public sealed class RecapSentencesTests
             AssertPlain(RecapText.Confirmation(state, "pilotage"));
         AssertPlain(RecapText.Truncated("pilotage"));
         AssertPlain(RecapText.SourcesWithoutVolume(["svc-quiet"], "pilotage"));
+        AssertPlain(RecapText.LateSources(["svc-quiet"]));
         foreach (var (term, text) in RecapText.Help("pilotage"))
             AssertPlain(term + " " + text);
     }

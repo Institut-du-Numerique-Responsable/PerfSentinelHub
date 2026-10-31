@@ -78,7 +78,7 @@ public sealed partial class HubDatabase
                 migration.CommandText =
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
                     Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12 + Schema.V13 + Schema.V14 +
-                    Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18 + Schema.V19;
+                    Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18 + Schema.V19 + Schema.V20;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -88,6 +88,8 @@ public sealed partial class HubDatabase
             await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
             await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
+            await EnsureDetectionSignalColumnsAsync(connection, transaction, cancellationToken);
+            await EnsureActionFrozenFindingColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -101,7 +103,7 @@ public sealed partial class HubDatabase
                                              (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms),
                                              (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
                                              (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
-                                             (19, $applied_at_ms);
+                                             (19, $applied_at_ms), (20, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -244,6 +246,52 @@ public sealed partial class HubDatabase
                             ALTER TABLE detection_days ADD COLUMN avoidable_gco2_low REAL;
                             ALTER TABLE detection_days ADD COLUMN total_io_ops INTEGER;
                             """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The C1 signal: the passes below the threshold of a watched signature, and the thresholds
+    ///     the daemon applied that day, named as the engine sends them. NULL on a row an older engine wrote.
+    /// </summary>
+    private static async Task EnsureDetectionSignalColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(
+                connection, transaction, "detection_counts", "below_threshold_passes", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE detection_counts ADD COLUMN below_threshold_passes INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN slow_query_threshold_ms INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN slow_http_threshold_ms INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN max_fanout INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN chatty_threshold INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN pool_saturation_threshold INTEGER;
+                            ALTER TABLE detection_days ADD COLUMN serialized_min_calls INTEGER;
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The finding's envelope as it stood when its action entered done, for the share card. NULL
+    ///     while the action is not done and for an action done before the column existed.
+    /// </summary>
+    private static async Task EnsureActionFrozenFindingColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(
+                connection, transaction, "finding_actions", "frozen_finding_json", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = "ALTER TABLE finding_actions ADD COLUMN frozen_finding_json TEXT;";
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 

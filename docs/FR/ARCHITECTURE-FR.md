@@ -50,7 +50,10 @@ pousse les lignes qui ont changé depuis son dernier push accepté, et le poll l
 nomme le statut du daemon. Les deux écrivent des valeurs absolues par jour UTC, fusionnées par leur
 maximum, donc les deux chemins, un renvoi et un chevauchement aboutissent aux mêmes lignes. Chaque
 démarrage du daemon ouvre un nouveau registre, et le Hub additionne les registres d'une source au
-lieu de laisser le suivant remplacer le précédent.
+lieu de laisser le suivant remplacer le précédent. La réponse à un push de registre est la seule
+réponse qui renvoie des données à un daemon : `watch`, les findings corrigés d'un type à seuil que
+cette source n'a pas encore confirmés corrigés, dont le daemon compte ensuite les passages sous le
+seuil. Un daemon interrogé par le poll ne la reçoit jamais.
 
 Un daemon qui pousse avec succès prouve qu'il peut joindre le Hub. Il ne prouve rien
 sur la capacité du Hub à le joindre, qui est une autre route à travers un autre jeu de
@@ -123,7 +126,8 @@ déjà exactement ce JSON.
 </picture>
 
 Aucune des trois ne se déduit des autres, et elles sont appliquées par trois mécanismes
-différents.
+différents. Le worker quotidien, le premier d'entre eux, tient plusieurs durées, une par
+sorte de ligne.
 
 Les findings expirent sur un worker qui tourne une fois par jour et purge par tranches,
 de sorte qu'une purge longue ne puisse pas rejeter les imports pendant toute sa durée. Les
@@ -144,10 +148,16 @@ leur propre `last_seen_ms`, sans clé étrangère pour la même raison, et une o
 tout aussi invisible : une lecture n'en atteint une qu'à travers un finding. Les attributs
 de regroupement que chaque source a captés sur un finding la suivent de la même façon, sur
 leur propre `last_seen_ms`. Les paires que partagent les findings gelés d'un incident partent
-avec leur incident. Les comptes et les jours de détections la suivent par jour UTC entier,
-comme les jours d'observation, et la ligne d'un registre sur la dernière fois que le Hub l'a
-lu. Le renvoi d'un jour purgé est sans effet néfaste, puisque chaque valeur est absolue, et un
-daemon ne garde de toute façon que 31 jours au plus.
+avec leur incident.
+
+Les comptes et les jours de détections suivent le worker quotidien sur une horloge à eux,
+`Hub:DetectionRetention`, 1 100 jours par défaut, par jour UTC entier comme les jours
+d'observation, et la ligne d'un registre part avec eux, sur la dernière fois que le Hub l'a lu.
+Une carte annuelle compare une année avec toute l'année d'avant, ce que les 180 jours d'un
+finding ne peuvent pas tenir, et la purge ne fait jamais tourner cette horloge plus court que
+`Hub:Retention`, puisque le récap lit les jours de détections de chaque finding qu'il tient. Le
+renvoi d'un jour purgé est sans effet néfaste, puisque chaque valeur est absolue, et un daemon
+ne garde de toute façon que 31 jours au plus.
 
 Le miroir des acquittements suit aussi cette horloge, sur `read_at_ms`, l'heure de la
 lecture qui a écrit la ligne. Elle ne fait pas vieillir un acquittement : chaque lecture
@@ -186,8 +196,8 @@ soit la source, et rien d'autre.
 | `finding_attributes`           | signature, source, identité de regroupement et paire captée          | rétention, sur `last_seen_ms`              |
 | `finding_lineage`              | signature successeur et prédécesseur                                 | avec son successeur                        |
 | `detection_ledgers`            | source et registre du daemon, avec son départ et le curseur du poll  | rétention, sur `last_read_ms`              |
-| `detection_days`               | source, registre et jour UTC, avec ce que le jour dit de lui-même    | rétention, par jour entier                 |
-| `detection_counts`             | signature, source, registre et jour UTC, avec ses détections         | rétention, par jour entier                 |
+| `detection_days`               | source, registre et jour UTC, avec ce que le jour dit de lui-même et les seuils appliqués | rétention, par jour entier                 |
+| `detection_counts`             | signature, source, registre et jour UTC, avec ses détections et passages sous le seuil | rétention, par jour entier                 |
 | `endpoint_heartbeats`          | source, service et endpoint                                          | rétention, sur `last_seen_any_ms`          |
 | `source_state`                 | source, la joignabilité vue par le poll                              | rétention, sur `last_attempt_ms`           |
 | `source_imports`               | source, son dernier push                                             | jamais                                     |
@@ -196,7 +206,7 @@ soit la source, et rien d'autre.
 | `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
 | `correlation_episodes`         | épisode et source                                                    | rétention, sur `last_seen_ms`              |
 | `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
-| `finding_actions`              | signature, avec son statut et son responsable                        | jamais                                     |
+| `finding_actions`              | signature, avec son statut, son responsable et l'enveloppe du finding une fois `done` | jamais                    |
 | `finding_action_events`        | changement de statut ou de responsable d'une action                  | jamais                                     |
 | `endpoint_labels`              | service et endpoint, avec son nom métier                             | jamais                                     |
 | `service_labels`               | service, avec son nom métier                                         | jamais                                     |
@@ -208,6 +218,11 @@ soit la source, et rien d'autre.
 | `disclosure_deliveries`        | événement de webhook d'une divulgation                               | jamais                                         |
 | `recap_reports`                | récap figé d'une période, généré ou à la demande                     | `Hub:Recaps:Retention`, sur `generated_at_ms`  |
 | `recap_deliveries`             | livraison d'un rapport par webhook ou par e-mail                     | avec son rapport                               |
+| `card_keys`                    | moitié publique et dates d'une clé de signature                      | jamais                                         |
+
+`card_keys` ne tient que des clés publiques : chaque clé privée est un fichier de `card-keys/` à
+côté de la base, hors de SQLite et donc hors de `backup` (voir
+[OPERATIONS-FR.md](OPERATIONS-FR.md#clés-des-cartes-à-partager)).
 
 `finding_attributes` garde chaque attribut de regroupement qu'un daemon a capté, jusqu'aux
 huit du moteur, chacun sous l'identité de regroupement avec laquelle il est arrivé : la
@@ -226,7 +241,9 @@ Les trois tables de détections, ajoutées par le schéma V15, tiennent les regi
 tels que lus. Une ligne de `detection_days` porte ce que ce jour dit de sa propre complétude :
 scellé ou encore ouvert, un redémarrage, son taux d'échantillonnage, des traces délestées, des
 ingestions rejetées et les détections au-delà du plafond de signatures du registre. Quand le daemon calcule le carbone, la ligne porte aussi les
-grammes évitables du jour (médian et bas), les E/S évitables et les E/S totales. Une lecture
+grammes évitables du jour (médian et bas), les E/S évitables et les E/S totales, et les seuils
+qu'il a appliqués. Une ligne de `detection_counts` peut porter les passages sous le seuil d'une
+signature surveillée avec zéro détection, qu'aucune lecture ne compte. Une lecture
 fenêtrée de `/api/findings` les replie, par source, en un compte servi et les raisons qui le
 rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Rien n'est
 rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.
@@ -237,8 +254,10 @@ acquittés, la période sans eux, les jours clos d'une période en cours, et la 
 sautée le premier jour d'une période. Il fait ensuite une lecture de couverture des jours des sources et une lecture
 carbone de leurs grammes évitables, et joint les actions et les libellés en dernier. Le calcul
 est pur et vit dans `Recaps/` : la période, le classement, les tendances, les mouvements, le
-jugement de couverture, la valorisation carbone et la phrase par type. Le service est une
-classe simple à dessein : les rapports qu'envoie un abonnement le réutilisent tel quel.
+jugement de couverture, la valorisation carbone et la phrase par type. Les cartes à partager
+ajoutent le trimestre, le semestre et l'année, et l'API du récap ne prend toujours qu'un jour,
+une semaine ou un mois. Le service est une classe simple à dessein : les rapports qu'envoie un
+abonnement le réutilisent tel quel.
 `RecapGenerator` fige la dernière période close de chaque abonnement dans `recap_reports` une
 fois ses ledgers scellés, `RecapReportRenderer` écrit le HTML autonome d'un instantané stocké,
 `RecapDeliveryWorker` envoie les lignes dues de `recap_deliveries` aux webhooks et, par
@@ -361,6 +380,39 @@ mémoire, si bien qu'une requête anonyme n'écrit jamais dans SQLite, et
 de `disclosure_deliveries`. `WebhookDelivery` écrit le corps et son HMAC. Le worker poste par
 un client HTTP nommé qui lui est propre, qui ne suit aucune redirection, ne garde aucun cookie
 et ne journalise rien, si bien qu'une URL de webhook n'atteint jamais une ligne de journal.
+
+## Les cartes à partager
+
+Une carte à partager porte les chiffres du Hub pour une période close, signés et dessinés par le
+moteur embarqué. Le Hub calcule chaque chiffre et chaque donnée des phrases, le moteur signe et
+dessine, et personne d'autre n'écrit sur la carte que les trois champs libres. Son code vit dans
+`Cards/` et dans `Api/ApiEndpoints.Cards.cs` avec `Api/CardRequest.cs`, qui lit le corps.
+
+**Les lectures.** `CardService` juge d'abord la période sur les registres de détections, par
+`ReadRecapCoverageAsync` et `RecapCoverage.Judge` du récap, en ne gardant que les sources dont le
+registre a commencé avant la fin de la période. Ces sources forment le périmètre signé. Il lit
+ensuite les actions terminées avec le finding figé à leur passage en `done`
+(`frozen_finding_json`), les sources qui ont compté chacune, et ce qui confirme une correction :
+les jours scellés d'une source joignable sans détection de la signature. Une histoire y ajoute
+les jours de carbone avant la correction et les jours de signal après
+(`below_threshold_passes` avec les seuils du jour), une courbe les totaux par jour de six
+périodes au plus. `CardRules` porte les refus et leurs phrases, `CardFigures` le calcul,
+`CardEnvelope` et `CardTypes` ce que portent un finding figé et son type.
+
+**Le moteur.** `CardRenderer` écrit `card.json` et une copie de la clé privée dans un répertoire
+temporaire privé, lance `card render`, ne lit que son code de sortie et sa ligne de résultat, et
+supprime le répertoire. La vérification du rattachement est un second lancement, sur le PNG qu'il
+vient de produire, `verify-card --online`, seul chemin des cartes qui touche le réseau : le
+service DNS sur HTTPS et le domaine de l'organisation. Chaque lancement occupe une place de
+`CardRenderGate` (`Hub:Cards:MaxConcurrentRenders`, 2 par défaut), et une requête qui n'en trouve
+aucune libre reçoit `503 Retry-After: 5`.
+
+**La clé.** `CardKeys` fait produire la clé de signature par le moteur à la première carte
+(`card keygen`). Son fichier privé est dans `card-keys/` à côté de la base, hors de SQLite et donc
+hors de la sauvegarde. Sa moitié publique et ses dates sont dans `card_keys` (schéma V20), jamais
+purgée, pour qu'une carte signée par une clé retirée reste vérifiable. Remplacer ou révoquer une
+clé supprime son fichier privé. `CardKeyLines` écrit les enregistrements DNS TXT et le fichier
+`/.well-known/perf-sentinel-key` qu'un administrateur publie.
 
 ## Un run atteint toujours un état terminal
 

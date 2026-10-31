@@ -114,6 +114,7 @@ helm-lint:
 helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) >/dev/null
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress=null >/dev/null
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/configmap.yaml | grep -q '"DetectionRetention":"1100.00:00:00"'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/service.yaml | grep -A2 '^  labels:' | grep -q 'app.kubernetes.io/name: perf-sentinel-hub'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/service.yaml | grep -q -- '- name: http'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress.enabled=true --set ingress.host=hub.example.com --set ingress.tlsSecretName=hub-tls | grep -q 'secretName: "hub-tls"'
@@ -139,6 +140,8 @@ helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.disclosures.expectedIdentity=x 2>&1 >/dev/null | grep -q '/hub/disclosures'
 	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES)) && printf '%s' "$$out" | grep -q '"Recaps":{"MaxDelay":"06:00:00","MovementThreshold":0.2,"Retention":"365.00:00:00","Subscriptions":\[\],"Webhooks":\[\]}' && ! printf '%s' "$$out" | grep -q 'Hub__Recaps__'
 	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES)) && printf '%s' "$$out" | grep -q '"Smtp":{"From":"hub@example.com","Host":"smtp.example.com","Port":587,"StartTls":true,"UserName":"hub"},"Subscriptions":\[{"cadences":\["week"\],"emails":\["lead@example.com"\],"name":"shop","views":\["pilotage"\],"webhooks":\["team"\]}\],"Webhooks":\[{"Name":"team"}\]' && printf '%s' "$$out" | grep -q 'name: Hub__Recaps__Webhooks__0__Secret' && printf '%s' "$$out" | grep -q 'name: Hub__Recaps__Smtp__Password' && ! printf '%s' "$$out" | grep -q 'smtp-password"'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.cards.organisation=Acme --set hub.cards.domain=acme.example --show-only templates/configmap.yaml | grep -q '"Cards":{"Domain":"acme.example","MaxConcurrentRenders":2,"Organisation":"Acme"}'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set hub.cards.organisation=Acme --set hub.cards.maxConcurrentRenders=4 --show-only templates/configmap.yaml | grep -q '"MaxConcurrentRenders":4'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set hub.recaps.smtp.host= 2>&1 >/dev/null | grep -q '/hub/recaps/smtp/host'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set hub.recaps.smtp.port=465 2>&1 >/dev/null | grep -q '/hub/recaps/smtp/port'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set hub.recaps.smtp.startTls=false 2>&1 >/dev/null | grep -q '/hub/recaps/smtp/host'

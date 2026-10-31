@@ -394,6 +394,42 @@ async function seedCorrelations(importKey: string): Promise<void> {
         {episodes: [episode(5, quiet, 0xa3, now - 9 * hour, now - 510 * minute, now - 510 * minute, 0.7)]});
 }
 
+// The card section previews a curve, which needs every day of the last closed month and of the one
+// before sealed with the day's avoidable and total operations. The busy daemon's ledger covers only
+// the days around now, so a ledger of its own, as a daemon restarted after those months would hold,
+// is pushed with the setup's import key: one page a month, every day sealed, a fifth of the work
+// avoidable in the earlier month and a twelfth in the later one.
+async function seedCardLedger(importKey: string): Promise<void> {
+    const dayMs = 86_400_000;
+    const today = Math.floor(Date.now() / dayMs);
+    const now = new Date();
+    const lastClosed = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1) / dayMs;
+    const before = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1) / dayMs;
+    const months: [number, number, number][] = [[before, lastClosed - 1, 5], [lastClosed, today - now.getUTCDate(), 12]];
+    // One page per month, pushed together: each carries its own ledger.
+    await Promise.all(months.map(async ([first, last, share]) => {
+        const days = [];
+        for (let day = first; day <= last; day++) {
+            const total = 40_000_000 + (day % 7) * 1_000_000;
+            days.push({
+                day, sealed: true, gap: false, overflow_detections: 0, overflow_extra_io_ops: 0, shed_traces: 0,
+                ingest_rejected: 0, sampling_rate: 1, avoidable_io_ops: Math.floor(total / share),
+                total_io_ops: total, avoidable_gco2: 0.6, avoidable_gco2_low: 0.4
+            });
+        }
+        const response = await fetch(`${BASE}/api/import/detections?source_id=checkout-prod`, {
+            method: "POST",
+            headers: {"content-type": "application/json", "x-api-key": importKey},
+            body: JSON.stringify({
+                ledger_id: `00000000-0000-4000-8000-${String(first).padStart(12, "0")}`,
+                started_ms: first * dayMs + 1_000, current_day: last + 1, oldest_day: first, sealed_through: last,
+                counts: [], days, next_after: null
+            })
+        });
+        if (!response.ok) throw new Error(`the card ledger push answered ${response.status}`);
+    }));
+}
+
 // The disclosures screens read what a scheduled job publishes, and nothing here publishes. So three
 // quarters are published through the Hub's import the way a CI does: the engine's own
 // official example report, its uuid, period and figures varied per quarter, its hash baked
@@ -660,6 +696,10 @@ async function startAll(children: ChildProcess[]): Promise<void> {
                     "https://github.com/example/infra/.github/workflows/disclose.yml@refs/heads/main",
                 Hub__Disclosures__ExpectedIssuer: "https://token.actions.githubusercontent.com",
                 Hub__AckRelay__TrustIdentityHeader: "true",
+                // Share cards on, so the recap shows its card section. The engine decides whether
+                // it can render them: without `card` the section is a banner and the still skips.
+                Hub__Cards__Organisation: "Example SAS",
+                Hub__Cards__Domain: "example.com",
                 // The ack credential is what makes a source relay, and it is deliberately
                 // not on every daemon: Billing staging has none, so the ack page has a row
                 // that says the Hub holds no write path to it.
@@ -685,6 +725,7 @@ async function startAll(children: ChildProcess[]): Promise<void> {
     children.push(hub);
     await waitFor(`${BASE}/health/ready`, 90);
     await seedCorrelations(importKey);
+    await seedCardLedger(importKey);
     const disclosures = await seedDisclosures(engine);
     await startAccessHub(engine, children);
 

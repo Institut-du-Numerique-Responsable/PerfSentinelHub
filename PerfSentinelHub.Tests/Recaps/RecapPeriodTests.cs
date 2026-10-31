@@ -1,3 +1,4 @@
+using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 
 namespace PerfSentinelHub.Tests.Recaps;
@@ -79,11 +80,89 @@ public sealed class RecapPeriodTests
     [InlineData("day", true)]
     [InlineData("week", true)]
     [InlineData("month", true)]
+    [InlineData("quarter", false)]
     [InlineData("year", false)]
     [InlineData("Week", false)]
     [InlineData("", false)]
     public void Kind_parses_three_words_only(string value, bool parsed)
     {
         Assert.Equal(parsed, RecapPeriod.TryParseKind(value, out _));
+    }
+
+    [Fact]
+    public void A_quarter_is_three_calendar_months()
+    {
+        var quarter = RecapPeriod.Of(RecapPeriodKind.Quarter, new DateOnly(2026, 10, 29));
+        var previous = quarter.Previous();
+
+        Assert.Equal(new DateOnly(2026, 10, 1), quarter.From);
+        Assert.Equal(new DateOnly(2026, 12, 31), quarter.To);
+        Assert.Equal("quarter", quarter.KindName);
+        Assert.Equal(new DateOnly(2026, 7, 1), previous.From);
+        Assert.Equal(new DateOnly(2026, 9, 30), previous.To);
+    }
+
+    [Fact]
+    public void The_quarter_before_the_first_is_the_last_of_the_year_before()
+    {
+        var previous = RecapPeriod.Of(RecapPeriodKind.Quarter, new DateOnly(2026, 2, 14)).Previous();
+
+        Assert.Equal(new DateOnly(2025, 10, 1), previous.From);
+        Assert.Equal(new DateOnly(2025, 12, 31), previous.To);
+    }
+
+    [Fact]
+    public void A_semester_is_half_a_year()
+    {
+        var semester = RecapPeriod.Of(RecapPeriodKind.Semester, new DateOnly(2026, 10, 29));
+        var previous = semester.Previous();
+
+        Assert.Equal(new DateOnly(2026, 7, 1), semester.From);
+        Assert.Equal(new DateOnly(2026, 12, 31), semester.To);
+        Assert.Equal("semester", semester.KindName);
+        Assert.Equal(new DateOnly(2026, 1, 1), previous.From);
+        Assert.Equal(new DateOnly(2026, 6, 30), previous.To);
+    }
+
+    [Fact]
+    public void A_year_is_the_calendar_year()
+    {
+        var year = RecapPeriod.Of(RecapPeriodKind.Year, new DateOnly(2026, 10, 29));
+        var previous = year.Previous();
+
+        Assert.Equal(new DateOnly(2026, 1, 1), year.From);
+        Assert.Equal(new DateOnly(2026, 12, 31), year.To);
+        Assert.Equal("year", year.KindName);
+        Assert.Equal(new DateOnly(2025, 1, 1), previous.From);
+        Assert.Equal(new DateOnly(2025, 12, 31), previous.To);
+        Assert.Equal(364, year.ToDay - year.FromDay);
+    }
+
+    [Theory]
+    [InlineData("week", true)]
+    [InlineData("month", true)]
+    [InlineData("quarter", true)]
+    [InlineData("semester", true)]
+    [InlineData("year", true)]
+    [InlineData("day", false)]
+    [InlineData("Year", false)]
+    [InlineData("", false)]
+    public void Card_kinds_parse_five_words(string value, bool parsed)
+    {
+        Assert.Equal(parsed, RecapPeriod.TryParseCardKind(value, out _));
+    }
+
+    [Fact]
+    public void The_detection_retention_covers_a_year_card_and_the_year_before()
+    {
+        var today = new DateOnly(2026, 12, 31);
+        var lastClosedYear = RecapPeriod.Of(RecapPeriodKind.Year, today).Previous();
+        var yearBefore = lastClosedYear.Previous();
+
+        Assert.Equal(new DateOnly(2025, 1, 1), lastClosedYear.From);
+        Assert.Equal(new DateOnly(2024, 1, 1), yearBefore.From);
+        var span = today.DayNumber - yearBefore.From.DayNumber;
+        Assert.Equal(1095, span);
+        Assert.True(TimeSpan.FromDays(span) <= new HubOptions().DetectionRetention);
     }
 }

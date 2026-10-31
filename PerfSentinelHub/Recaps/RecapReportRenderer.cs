@@ -32,6 +32,7 @@ public static class RecapReportRenderer
     private const string SpanEnd = "</span>";
     private const string DivEnd = "</div>";
     private const string DivEndLine = "</div>\n";
+    private const string ParagraphEndLine = "</p>\n";
 
     private static readonly Lazy<string> Style = new(() =>
         Resource("recap-tokens.css") + "\n" + Resource("recap-report.css"));
@@ -86,7 +87,7 @@ public static class RecapReportRenderer
     private static void Note(StringBuilder html, string text, string css = "notes")
     {
         if (text.Length > 0)
-            html.Append("<p class=\"").Append(css).Append("\">").Append(E(text)).Append("</p>\n");
+            html.Append("<p class=\"").Append(css).Append("\">").Append(E(text)).Append(ParagraphEndLine);
     }
 
     // The filters the report was cut with. Management reads values only, a named service by its name:
@@ -242,7 +243,7 @@ public static class RecapReportRenderer
                 .Append(snapshot.MorePriorities.ToString(CultureInfo.InvariantCulture))
                 .Append(" more in the engineering view.</p>\n");
         if (snapshot.Truncated)
-            html.Append("<p class=\"sources-note\">").Append(E(RecapText.Truncated(snapshot.View))).Append("</p>\n");
+            html.Append("<p class=\"sources-note\">").Append(E(RecapText.Truncated(snapshot.View))).Append(ParagraphEndLine);
         html.Append("</section>\n");
     }
 
@@ -511,7 +512,9 @@ public static class RecapReportRenderer
         if (snapshot.SourcesWithoutVolume.Count > 0)
             html.Append("<p class=\"sources-note\">")
                 .Append(E(RecapText.SourcesWithoutVolume(snapshot.SourcesWithoutVolume, snapshot.View)))
-                .Append("</p>\n");
+                .Append(ParagraphEndLine);
+        if (snapshot.LateSources is { Count: > 0 } late)
+            html.Append("<p class=\"sources-note\">").Append(E(RecapText.LateSources(late))).Append(ParagraphEndLine);
         html.Append("</section>\n");
     }
 

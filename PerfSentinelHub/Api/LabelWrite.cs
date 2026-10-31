@@ -76,7 +76,7 @@ public sealed record LabelWrite(string Service, string? Endpoint, string? Label)
         return true;
     }
 
-    private static bool Hidden(char c)
+    internal static bool Hidden(char c)
     {
         return char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format;
     }

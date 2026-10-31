@@ -65,15 +65,19 @@ public static partial class ApiEndpoints
             return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
 
         var reads = access.Scope(request.HttpContext, AccessPermissions.FindingsRead);
-        if (RefuseCopies(await database.ReadFindingCopiesAsync(write.Signature, cancellationToken), reads, writes)
-            is { } refused)
+        var copies = await database.ReadFindingCopiesAsync(write.Signature, cancellationToken);
+        if (RefuseCopies(copies, reads, writes) is { } refused)
             return refused;
 
+        // A done action keeps the finding as the caller sees it, never a copy they may not read.
+        IReadOnlyList<string>? freezeFrom =
+            reads.Patterns is null ? null : [.. copies.Where(reads.Reads).Select(copy => copy.Source)];
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var outcome = create
-            ? await FileActionAsync(database, write, identity, request, nowMs, cancellationToken)
+            ? await FileActionAsync(database, write, identity, request, nowMs, freezeFrom, cancellationToken)
             : await database.UpdateActionAsync(
-                write.Signature, write.Status, write.Owner, write.OwnerSet, identity, nowMs, cancellationToken);
+                write.Signature, write.Status, write.Owner, write.OwnerSet, identity, nowMs, freezeFrom,
+                cancellationToken);
         return await ActionAnswerAsync(outcome, create, write.Signature, database, request, cancellationToken);
     }
 
@@ -84,11 +88,12 @@ public static partial class ApiEndpoints
         string identity,
         HttpRequest request,
         long nowMs,
+        IReadOnlyList<string>? freezeFrom,
         CancellationToken cancellationToken)
     {
         if (!write.Take)
             return database.CreateActionAsync(
-                write.Signature, write.Status!, write.Owner, null, identity, nowMs, cancellationToken);
+                write.Signature, write.Status!, write.Owner, null, identity, nowMs, freezeFrom, cancellationToken);
         return database.CreateActionAsync(
             write.Signature,
             ActionStatuses.InProgress,
@@ -96,6 +101,7 @@ public static partial class ApiEndpoints
             request.HttpContext.User.FindFirstValue(AccessCaller.DisplayNameClaim),
             identity,
             nowMs,
+            freezeFrom,
             cancellationToken);
     }
 

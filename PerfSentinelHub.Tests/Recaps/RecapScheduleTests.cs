@@ -75,6 +75,14 @@ public sealed class RecapScheduleTests
     }
 
     [Fact]
+    public void A_source_that_started_after_the_period_does_not_hold_it_back()
+    {
+        var late = new SourceCoverage("b", [], [new LedgerLife(End, long.MaxValue, true)]);
+
+        Assert.True(RecapSchedule.IsDue(Week, [Ledger("a", true), late], End, MaxDelay));
+    }
+
+    [Fact]
     public void No_ledger_at_all_is_due_at_the_end()
     {
         Assert.True(RecapSchedule.IsDue(Week, [], End, MaxDelay));

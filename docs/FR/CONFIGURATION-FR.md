@@ -19,6 +19,7 @@ un bug du Hub plutôt que comme une faute de frappe dans votre fichier.
 | `Hub:HttpTimeout`                  | `00:00:10`                                                                     | Durée positive                                                                                          |
 | `Hub:MaxConcurrentPolls`           | `4`                                                                            | 1 à 32                                                                                                  |
 | `Hub:Retention`                    | `180.00:00:00` (180 jours)                                                     | Durée positive                                                                                          |
+| `Hub:DetectionRetention`           | `1100.00:00:00` (1 100 jours)                                                  | Positive ; plus courte que `Retention`, elle vaut `Retention`. Comptes, jours et registres de détections : une carte lit l'année d'avant |
 | `Hub:ResolutionGrace`              | `7.00:00:00` (7 jours)                                                         | Positive, inférieure à `Retention`                                                                      |
 | `Hub:NewSignaturesPerHourWarning`  | `1000`                                                                         | 0 ou plus, 0 le désactive. Un daemon au-delà est signalé sur `/api/sources` et journalisé               |
 | `Hub:DefaultReadLimit`             | `1000`                                                                         | 1 à `MaxReadLimit`                                                                                      |
@@ -183,12 +184,12 @@ service.
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, voir plus bas                                                                                                                                         |
 
 **Permissions et rôles.** Les permissions sont `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `disclosures.read`,
-`disclosures.manage` et `recaps.read`, plus `access.admin`, que seul le rôle intégré
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `cards.write`,
+`disclosures.read`, `disclosures.manage` et `recaps.read`, plus `access.admin`, que seul le rôle intégré
 `admin` porte. Les deux permissions de divulgation et `recaps.read` valent pour le Hub
 entier, donc un rôle qui porte l'une d'elles s'attribue sur `*` seulement. Les rôles
 intégrés sont `reader` (`findings.read`, `traces.read`, `analyses.run`), `member`
-(`reader`, `acks.write`, `actions.write` et `labels.write`) et `admin` (les onze, sur `*` seulement).
+(`reader`, `acks.write`, `actions.write`, `labels.write` et `cards.write`) et `admin` (les douze, sur `*` seulement).
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture
 seule est un rôle configuré, comme `auditor` avec `findings.read` et `traces.read`.
 
@@ -356,6 +357,32 @@ abonnement qui nomme un webhook non déclaré. Le schéma refuse `emails` sans `
 465, et un `userName` sans `startTls` vers un relais hors boucle locale. Un `environment` ou un
 `sourceId` faux reste au contrôle de démarrage du Hub.
 
+## Cartes à partager
+
+Une carte à partager est une image de ce qu'une correction a économisé, signée au nom d'une
+organisation. Les cartes sont désactivées par défaut. `Hub:Cards:Organisation` les active pour les
+appelants qui détiennent `cards.write`, dès que le moteur qu'exécute le Hub a `card`. Chaque règle
+ci-dessous est contrôlée au démarrage et son message nomme la clé.
+
+| Réglage                  | Défaut | Validation                                                                                                                         |
+|--------------------------|--------|------------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Cards:Organisation` | aucun  | 1 à 60 caractères sans caractère de contrôle ni caractère caché. Le nom qui signe chaque carte                                     |
+| `Hub:Cards:Domain`       | aucun  | Exige `Organisation`. Un nom DNS en minuscules comme `example.com`, sans schéma, port ni point final. Ce que rattache la ligne DNS d'une carte |
+| `Hub:Cards:MaxConcurrentRenders` | `2` | 1 à 16, contrôlé même cartes désactivées. Combien de cartes le moteur dessine en même temps ; une de plus reçoit `503` avec `Retry-After: 5` |
+
+Une carte se vérifie sans le domaine. Avec lui, la ligne DNS de la carte nomme un enregistrement
+sous ce domaine, que l'organisation publie pour y rattacher ses cartes. Les deux valeurs sont
+rognées à la liaison.
+
+Un rendu occupe un processus du moteur, une image de 1080 sur 1350 et son encodeur jusqu'à 45
+secondes, et une vérification de rattachement ajoute jusqu'à 20 secondes de vérification en ligne.
+Augmentez `MaxConcurrentRenders` sur un hôte qui a du CPU et de la mémoire en réserve quand l'écran
+des cartes fait souvent attendre son tour.
+
+Sous Helm le bloc est `hub.cards`, avec `organisation`, `domain` et `maxConcurrentRenders`. Le chart n'écrit la section
+qu'une fois `organisation` posé, et son schéma refuse un `domain` qui n'est pas un nom DNS en
+minuscules.
+
 ## Ce qu'est une source, et ce qui est mesuré
 
 La liste est de la configuration, jamais une découverte. Rien n'est détecté
@@ -432,6 +459,12 @@ Les rapports de récap ajoutent deux destinations, toutes deux déclarées par v
 tant que vous ne les déclarez pas : chaque `Hub:Recaps:Webhooks[].Url` reçoit l'événement signé du
 rapport, et `Hub:Recaps:Smtp:Host` reçoit chaque e-mail. Le Hub n'atteint aucun autre serveur de
 messagerie.
+
+Les cartes à partager n'atteignent le réseau que quand quelqu'un appuie sur « Vérifier le rattachement »
+(`POST /api/cards/attachment`) : le moteur demande à `https://cloudflare-dns.com/dns-query` l'enregistrement TXT
+sous `_perf-sentinel.<domain>`, puis lit `https://<domain>/.well-known/perf-sentinel-key`, où `<domain>` est le
+`Hub:Cards:Domain` que vous avez posé, jamais une valeur de la requête. Dessiner, télécharger et gérer la clé
+n'atteignent rien.
 
 ## Une source https avec une CA privée
 

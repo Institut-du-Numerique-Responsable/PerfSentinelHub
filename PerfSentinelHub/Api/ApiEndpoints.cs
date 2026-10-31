@@ -26,6 +26,9 @@ public static partial class ApiEndpoints
     // Twice the daemon's own 4 MiB bound on a ledger page.
     private const int DetectionImportMaxBytes = 8 * 1024 * 1024;
 
+    // The engine's default max_signatures_per_day; the daemon caps again at its own value.
+    private const int MaxWatchSignatures = 10_000;
+
     public static void MapHubApi(this WebApplication app)
     {
         var version = HubVersion.Current;
@@ -61,6 +64,10 @@ public static partial class ApiEndpoints
                 hubOptions.Value.Disclosures.Enabled &&
                 !access.Scope(request.HttpContext, AccessPermissions.DisclosuresRead).IsNothing
                     ? true
+                    : null,
+                hubOptions.Value.Cards.Enabled &&
+                !access.Scope(request.HttpContext, AccessPermissions.CardsWrite).IsNothing
+                    ? engine.SupportsCard
                     : null));
         });
         app.MapGet("/api/sources", GetSourcesAsync);
@@ -83,6 +90,14 @@ public static partial class ApiEndpoints
         app.MapPost("/api/recap/reports", CreateRecapReportAsync);
         app.MapGet("/api/recap/reports/{id}", GetRecapReportAsync);
         app.MapGet("/recaps/{id}/{view}.html", GetRecapReportHtmlAsync);
+        // Never anonymous: a key is managed in somebody's name.
+        app.MapGet("/api/cards/keys", GetCardKeysAsync);
+        app.MapPost("/api/cards/keys/rotate", RotateCardKeyAsync);
+        app.MapPost("/api/cards/keys/revoke", RevokeCardKeyAsync);
+        // Never anonymous: a card is made in somebody's name. Only the attachment check reaches the network.
+        app.MapGet("/api/cards/options", GetCardOptionsAsync);
+        app.MapPost("/api/cards/render", RenderCardAsync);
+        app.MapPost("/api/cards/attachment", CheckCardAttachmentAsync);
         // AllowAnonymous is inert without Hub:Auth. With it, these are the routes a
         // machine calls: IDE plugins and CI read findings, a dashboard reads incidents and
         // correlations, a daemon pushes with its key. With Hub:Access the reads need a
@@ -415,9 +430,14 @@ public static partial class ApiEndpoints
         // No refusal for an empty page: the midnight seal often arrives as a day with no rows.
         return PushImportAsync(request, options, admission, DetectionImportMaxBytes,
             payload => DetectionLedgerParser.ParsePage(payload, nowMs),
-            async (source, page) => await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken)
-                ? TypedResults.Ok(new ImportResponse(page.Counts.Count, 0))
-                : null,
+            async (source, page) =>
+            {
+                if (!await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken))
+                    return null;
+                // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
+                var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
+                return TypedResults.Ok(new DetectionImportResponse(page.Counts.Count, 0, watch));
+            },
             cancellationToken);
     }
 

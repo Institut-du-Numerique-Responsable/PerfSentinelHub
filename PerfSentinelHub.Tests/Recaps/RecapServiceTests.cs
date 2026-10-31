@@ -244,6 +244,47 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Contains("uncovered_days", snapshot.Period.Incomplete);
     }
 
+    // Last week, read on its own: b's daemon started this Monday, after it ended. It recorded nothing
+    // there, so it is out of both weeks of the comparison, named rather than read as uncovered.
+    [Fact]
+    public async Task A_source_that_started_after_the_period_is_left_out_and_named()
+    {
+        await _database.MergeDetectionPageAsync("a", new DetectionLedgerPage(
+            Ledger, (LastMon - 20L) * DayMs, Thu, LastMon - 7, null, [], [.. Days(LastMon - 7, 14)], null),
+            true, NowMs, Token);
+        await _database.MergeDetectionPageAsync("b", new DetectionLedgerPage(
+            "00000000-0000-4000-8000-000000000002", Mon * DayMs, Thu, Mon, null, [], [Sealed(Mon)], null),
+            true, NowMs, Token);
+
+        var snapshot = await _service.ComputeAsync(new RecapRequest(
+            RecapPeriodKind.Week, new DateOnly(2026, 10, 22), null, null, null, null, Sources,
+            new RecapFilters(null, null, null, null)), Token);
+
+        Assert.Empty(snapshot.Period.Incomplete);
+        Assert.Empty(snapshot.Previous.Incomplete);
+        Assert.Equal(["Lab"], snapshot.LateSources);
+    }
+
+    // b started during the week shown: the week before, which it never saw, stays uncovered.
+    [Fact]
+    public async Task A_source_that_started_during_the_period_still_leaves_the_week_before_uncovered()
+    {
+        await _database.MergeDetectionPageAsync("a", new DetectionLedgerPage(
+            Ledger, (LastMon - 20L) * DayMs, Thu, LastMon - 7, null, [], [.. Days(LastMon - 7, 14)], null),
+            true, NowMs, Token);
+        await _database.MergeDetectionPageAsync("b", new DetectionLedgerPage(
+            "00000000-0000-4000-8000-000000000002", LastMon * DayMs, Thu, LastMon, null, [],
+            [.. Days(LastMon, 7)], null), true, NowMs, Token);
+
+        var snapshot = await _service.ComputeAsync(new RecapRequest(
+            RecapPeriodKind.Week, new DateOnly(2026, 10, 22), null, null, null, null, Sources,
+            new RecapFilters(null, null, null, null)), Token);
+
+        Assert.Empty(snapshot.Period.Incomplete);
+        Assert.Contains("uncovered_days", snapshot.Previous.Incomplete);
+        Assert.Empty(snapshot.LateSources!);
+    }
+
     [Fact]
     public async Task A_retired_ledger_is_not_judged()
     {
@@ -532,7 +573,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
         string? ownerDisplay = null)
     {
         await _database.CreateActionAsync(signature, status, owner, ownerDisplay, "alice",
-            atMs ?? Mon * DayMs + 43_200_000, Token);
+            atMs ?? Mon * DayMs + 43_200_000, null, Token);
     }
 
     private static DetectionDayRow Sealed(

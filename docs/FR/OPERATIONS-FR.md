@@ -415,6 +415,46 @@ abonnement est déclaré.
 | `2505`    | Warning     | Un passage de récap a échoué en entier. Le suivant réessaie                                               |
 | `2506`    | Warning     | Le rapport d'un abonnement n'a pu être généré. Les autres ont continué                                    |
 
+## Clés des cartes à partager
+
+Une carte à partager est signée avec une clé que le moteur fabrique la première fois que
+quelqu'un crée une carte (`perf-sentinel card keygen`) ; voir
+[CONFIGURATION-FR.md](CONFIGURATION-FR.md#cartes-à-partager) pour les clés qui activent les cartes
+et [API-FR.md](API-FR.md#cartes-à-partager) pour les routes.
+
+**Où vit la clé.** La clé privée est un fichier, `card-keys/<empreinte>.pk8`, dans le répertoire
+qui contient `Hub:DatabasePath` (`/data/card-keys/` avec le chart). Le répertoire n'est lisible
+que par l'utilisateur du Hub (mode 0700), chaque fichier aussi (mode 0600). La clé publique et
+ses dates sont dans la base, table `card_keys`.
+
+**La sauvegarde ne l'emporte pas.** `backup` copie la base : elle emporte les clés publiques et
+leurs dates, jamais une clé privée. Pour continuer à signer avec la même clé après une
+restauration, copiez `card-keys/` à côté de la sauvegarde et remettez-le à côté de la base
+restaurée. Sans lui, rien ne casse : la carte suivante retire l'ancienne clé, en fabrique une
+nouvelle et signe avec. L'ancienne clé publique reste publiée avec sa date de fin, donc chaque
+carte signée avant se vérifie toujours.
+
+**Rotation et révocation.** Un administrateur (`access.admin`) fait tourner la clé : la clé
+courante est retirée, son fichier privé supprimé, et une nouvelle est fabriquée. Révoquer une clé
+la retire aussi et supprime son fichier. Sur la page de vérification, chaque carte qu'elle a
+signée se lit alors révoquée, quelle que soit sa date, car la date d'une carte est écrite par
+celui qui détient la clé. La révocation demande le premier jour où la clé a pu fuiter. Ce jour est
+publié avec la clé comme `revoked`, et dit aux lecteurs depuis quand la clé a pu être exposée, pas
+quand elle a été retirée. Révoquez une clé qui a pu fuiter, faites tourner celle qui n'a pas fui,
+car la rotation garde rattachées les cartes qu'elle a signées. Une clé déjà retirée peut aussi
+être révoquée. Après une révocation, remplacez la ligne TXT DNS de la clé par la nouvelle, qui
+porte `revoked=`, pas seulement le fichier well-known : la page de vérification de
+perf-sentinel.dev ne lit que la ligne DNS et continue d'afficher la carte comme signée tant que
+cette ligne ne change pas, alors que `verify-card --online` lit les deux.
+
+**Publier les lignes.** Une carte nomme le domaine de son signataire (`Hub:Cards:Domain`) ; un
+lecteur la vérifie contre ce que ce domaine publie. `GET /api/cards/keys` répond les deux formes,
+prêtes à copier : un enregistrement TXT par clé sous `_perf-sentinel.<domaine>`, et le fichier
+`/.well-known/perf-sentinel-key` à servir sur `https://<domaine>/`. Republiez-les après chaque
+rotation ou révocation, et gardez les lignes des clés retirées : en retirer une rend invérifiables
+les cartes qu'elle a signées. Sans domaine, les cartes se font quand même, et `record_name` est
+null puisqu'il n'y a nulle part où publier.
+
 ## Sauvegarde
 
 L'historique `first_seen` est la seule chose que le Hub stocke qu'aucun amont ne peut
@@ -432,9 +472,10 @@ est de 1 Gio au total. Cette taille croît avec les jours d'observation que le H
 une ligne d'environ 300 octets par finding, par daemon et par jour observé pendant la durée
 de `Hub:Retention` : 2 000 signatures vues chaque jour sur trois daemons, au défaut de
 180 jours, font environ 300 Mo, donc dimensionnez le volume pour la flotte plutôt que pour
-le défaut. Les divulgations ajoutent leurs fichiers : le rapport, l'attestation, le bundle et
-le PDF sont gardés dans la base, jamais purgés, si bien que la sauvegarde les emporte et
-grossit à chaque publication.
+le défaut. Les lignes de détections restent plus longtemps, 1 100 jours par défaut
+(`Hub:DetectionRetention`), une ligne par signature, par daemon et par jour. Les divulgations
+ajoutent leurs fichiers : le rapport, l'attestation, le bundle et le PDF sont gardés dans la
+base, jamais purgés, si bien que la sauvegarde les emporte et grossit à chaque publication.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

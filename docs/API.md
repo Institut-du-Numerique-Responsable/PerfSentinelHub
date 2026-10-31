@@ -51,8 +51,25 @@ and a replay land on the same rows in any order. The push writes neither reachab
 time of the source's last findings push. Each day object may also carry `avoidable_gco2` and
 `avoidable_gco2_low` (grams of CO2eq, from 0 to 2^53), `avoidable_io_ops` and `total_io_ops`
 (integers), which a daemon that scores carbon sends together. They merge by maximum, an absent
-value never lowering a stored one, and are absent on engines before the recap release. Refusals
-count on `perf_sentinel_hub_detection_import_rejected_total`.
+value never lowering a stored one, and are absent on engines before the recap release. From the
+card release, a count row may carry `below_threshold_passes` (an integer), the passes below the
+threshold of a signature the Hub asks the daemon to watch, and such a row may carry `detections: 0`,
+which no read counts as a detection. A day object may carry `thresholds`, an object with the
+integer keys `slow_query_threshold_ms`, `slow_http_threshold_ms`, `max_fanout`, `chatty_threshold`,
+`pool_saturation_threshold` and `serialized_min_calls`, the thresholds the daemon applied that
+day; a key the Hub does not know is ignored. Both are optional and merge by maximum, an absent
+value never lowering a stored one. Refusals count on
+`perf_sentinel_hub_detection_import_rejected_total`.
+
+A stored page answers `{"accepted":…,"rejected":0,"watch":[…]}`, `accepted` the number of count
+rows. `watch` lists the signatures the Hub asks that daemon to count passes below the threshold
+for: those whose action is `done`, whose type (the signature's prefix before the first `:`) is
+`slow_sql`, `slow_http`, `slow_messaging`, `excessive_fanout`, `chatty_service`, `pool_saturation`
+or `serialized_calls`, that this source detected at least once, and that this source has not yet
+confirmed fixed. A day confirms once it is sealed after the day the action was done, with passes
+below the threshold and no detection of the signature at this source, whatever its ledger. The
+newest done come first, at most 10,000. The list is always sent, `[]` when empty, so the daemon
+replaces its own on every answer. Only a push gets it: a polled daemon never does.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are. Writes are serialized against the poll and retention paths. An import that
@@ -69,7 +86,7 @@ reachability is a fact about the Hub's route to the daemon, which a push does no
 
 | Endpoint                             | Returns                                                                                                                                                                                    |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention. `disclosures: true` only while disclosures are on and the caller reads them |
+| `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention. `disclosures: true` only while disclosures are on and the caller reads them. `cards`: `true` when the caller may make cards, `false` when the engine has no `card` subcommand, absent while cards are off or the caller holds `cards.write` nowhere |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`               |
 | `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
@@ -576,8 +593,8 @@ A repeated parameter, a value the list does not know or invalid UTF-8 is a `400`
 The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, `period` and
 `previous` (each `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
 `sampling_rate`, `truncated_to_days`), `filters` (as asked), `comparison_exact`, `tiles`,
-`priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`
-and `truncated`.
+`priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`,
+`truncated` and `late_sources[]`.
 
 - **Comparing.** A period in progress is compared on its closed days: `FromDay` to
   yesterday against the same number of first days of the previous period, reported in
@@ -613,6 +630,10 @@ and `truncated`.
 - **Sources without volume.** `sources_without_volume` names the sources holding a finding of
   either period and no detection ledger (a daemon that predates the ledger, or one that
   sends no day). Their findings are ranked by severity and carry `volume_known: false`.
+- **Late sources.** `late_sources` names the sources whose daemon recorded nothing until after
+  the period ended: a daemon added later, or one stopped for the whole period. They are left out
+  of both periods rather than read as uncovered. A source that started during the period stays,
+  and leaves the period before uncovered. Absent from a report frozen before the field existed.
 - **Tiles.** `avoidable_io_ops` is the sum over the ranked findings, `null` when none has a
   known volume, next to `previous_avoidable_io_ops`, `null` when the previous period was
   not read. `active_findings` counts the ranked findings, `acked_findings` the
@@ -741,6 +762,174 @@ gone shows no owner. The `tech` page keeps that identity on hover. An id that is
 hex, an unknown id and a view the report does not hold are all `404`. Reports are purged after
 `Hub:Recaps:Retention`.
 
+## Share cards
+
+A share card is an image (PNG, SVG or JPEG XL) or a PDF of a closed period's results that the
+engine draws and signs, for a reader outside the Hub to check. This section starts with the signing key; see
+[OPERATIONS.md](OPERATIONS.md#share-card-keys) for where it lives and how to publish it. The routes
+exist only while `Hub:Cards:Organisation` is set: otherwise every one answers `404`.
+
+| Route                            | Does                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/keys`            | Every signing key, oldest first, and the lines to publish            |
+| `POST /api/cards/keys/rotate`    | Retires the current key and has the engine make a new one            |
+| `POST /api/cards/keys/revoke`    | Revokes a key from the first day it may have leaked                  |
+
+The three routes answer the same object:
+
+```json
+{"record_name": "_perf-sentinel.example.com",
+ "keys": [{"fingerprint": "ps1:…", "public_key": "…", "from": "2026-10-30", "to": null,
+           "revoked": null, "current": true, "dns": "v=ps1; k=ps1:…; from=2026-10-30"}],
+ "well_known": "{\n  \"keys\": [\n …"}
+```
+
+`from` is the UTC day the key was made, `to` the day it was retired (`null` while current),
+`revoked` the day given at revocation. `dns` is the TXT record of that key under `record_name`,
+which is `null` when `Hub:Cards:Domain` is not set. `well_known` is the whole
+`/.well-known/perf-sentinel-key` file, indented with `\n` line ends, to serve as it is. Reading the
+keys never makes one: an empty `keys` says the first card makes it.
+
+`POST /api/cards/keys/revoke` takes `{"fingerprint": "ps1:…", "revoked": "yyyy-MM-dd"}`, at most
+1 KiB. `revoked` has no default: give the first day the key may have leaked, published with the
+key as `revoked`. Every card the key signed then reads as revoked, whatever its day. Missing or
+not a `yyyy-MM-dd` day, it is
+`400 Give the first day the key may have leaked.`; a day before the key was made or after today
+(UTC) is `400 The revocation date must lie between the key's creation and today.`; an unknown
+fingerprint is `404`. A retired key can be revoked, and keeps its `to`.
+
+The Hub judges a request in this order: cards off `404`; a caller the Hub cannot name `403`; on
+the two `POST`s, the same-origin rule and the JSON content type of the other writes (`403`,
+`415`); a caller without `access.admin` `403 You may not manage the card signing key.`. A rotation
+with an engine that has no `card` subcommand is `503 This Hub's engine cannot make cards yet.`, and
+one whose engine answers out of contract or past 30 seconds is `502`. A rotation shares the card
+renders' limit and may answer the busy `503` described under [Making a card](#making-a-card).
+
+### Making a card
+
+| Route                            | Does                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/options`         | What the screen shows before anyone signs: the period's refusal, the signed scope, the fixes |
+| `POST /api/cards/render`         | Computes the figures, has the engine sign and draw the card, answers the file |
+| `POST /api/cards/attachment`     | Renders the card as a PNG and checks its DNS attachment              |
+
+**Options.** The query takes `period` (required: `week`, `month`, `quarter`, `semester` or `year`),
+`at` (any day of the period, `yyyy-MM-dd`, default the last closed period), `environment` and
+`source_id`. A period still running is read, not refused: the answer carries its refusal so the
+screen says why before anyone asks for a card. An invalid query is `400`. The answer:
+
+```json
+{"period": {"kind": "month", "from": "2026-10-01", "to": "2026-10-31"}, "period_name": "October 2026",
+ "refusal": null, "refusal_text": null, "restart_days": 0, "sampled_permille": 1000,
+ "environment": "prod", "sources": ["prod-eu"], "previous_complete": true,
+ "previous_whole": true, "confirmed_fixes_count": 1,
+ "fixes": [{"signature": "…", "finding_type": "n_plus_one_sql", "service": "order-svc",
+            "endpoint": "GET /orders", "plain": "…", "done_at_ms": 1792058400000,
+            "before_fix_ops": 1900, "before_period_name": "September 2026", "label": "Order list"}],
+ "default_signature": "…", "org": {"name": "Acme", "domain": "acme.example"}}
+```
+
+`refusal` is the period's own reason (below) and `refusal_text` its sentence, the one a render
+would answer. `sources` is the signed scope: the sources asked for that recorded something in the
+period. `previous_complete` is `false` when a collective card leaves out its comparison with the
+period before, and `previous_whole` says why: `false` when that period is not whole, `true` when one
+of its fixes was marked done before the Hub kept fix details. `confirmed_fixes_count` is the
+number a collective card counts. `fixes` are the confirmed fixes a story can tell, those whose names
+the card can print, with the endpoint's label when one is set.
+
+**Render and attachment.** The body is a JSON object, at most 4 KiB, with the same-origin rule and
+the JSON content type of the other writes:
+
+| Field                       | Does                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| `angle`                     | Required: `story`, `curve` or `collective`                                             |
+| `period`                    | Required: `week`, `month`, `quarter`, `semester` or `year`                             |
+| `at`                        | Any day of the period, `yyyy-MM-dd`, from 1900; default: the last closed period        |
+| `environment`, `source_id`  | The scope; an unknown one is `400 Unknown environment or source_id.`                   |
+| `signature`                 | Story only: the fix to tell; default the fix with the largest volume before            |
+| `title`, `team`             | Free text, 1 to 48 characters                                                          |
+| `label`                     | Story only, free text, 1 to 80 characters                                              |
+| `lang`                      | `en` (default) or `fr`                                                                 |
+| `format`                    | `png` (default), `svg`, `jxl` or `pdf` (the carousel); the attachment check always renders a PNG |
+
+Free fields are trimmed, and a blank one is left out. One longer than its bound, or holding a
+control or format character (a direction override, a zero-width space), is `400`. One holding
+`{"content_sig":"`, the text the card file keeps for its signature, is
+`400 <name> cannot contain {"content_sig":", the text the card file keeps for its signature.`, the
+same rule the service, endpoint, environment and source names follow. Any other key,
+`figures`, `org`, `scope` or `generated_at_ms` for instance, is
+`400 Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may be sent: the figures come from the Hub.`
+A period that has not ended before today is `400 A card covers a closed period. Pick an earlier one.`,
+`signature` or `label` on another angle `400 signature and label belong to a story card.`
+
+**Refusals.** A card the figures cannot support is `422` with a sentence as `detail`, the same one
+the options carry as `refusal_text`. The reasons: `open_period`, `uncovered_days`, `open_day`,
+`overflow` (the period is not whole), `previous_uncovered_days`, `previous_open_day`,
+`previous_overflow` (a curve whose period before is not whole), `no_confirmed_fix`, `unknown_fix`,
+`unprintable_fix` (a story whose service or endpoint name the card cannot print), `no_total_io`
+(no total activity to draw the curve from), `curve_needs_whole_sources` (the caller reads only
+part of a source), `unprintable_scope` (a source or environment name the card cannot print),
+`scope_too_long` (the environment and source names, joined with `", "`, take more than 120
+characters, the engine's bound on the scope line) and `unkept_fixes` (a collective whose period
+holds a fix marked done before the Hub kept fix details, which its count would leave out).
+The engine can still refuse what the Hub sent:
+
+| Engine reason                                 | Answer                                                                                                                        |
+|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `unsupported_characters` on a free field      | `422 The card's font cannot draw a character of this field. Remove it, or write it another way.` with `"field": "title"`, `"team"` or `"label"` |
+| `unsupported_characters` on the organisation  | `422 The card's font cannot draw a character of the organisation's name. Ask an administrator to change Hub:Cards:Organisation.` |
+| `compact_too_large`                           | `422 The card's QR code cannot hold this organisation's domain. Ask an administrator for a shorter Hub:Cards:Domain.`        |
+| `unsupported_language`                        | `422 This Hub's engine cannot print cards in this language yet.`                                                              |
+| anything else, a line out of contract, 45 s   | `502 The engine could not render this card.`                                                                                  |
+
+**The file.** `200` with `Content-Type: image/png`, `image/svg+xml`, `image/jxl` or `application/pdf`,
+`Content-Disposition: attachment; filename=perf-sentinel-card-<kind>-<from>.<format>`,
+`Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. An SVG also carries
+`Content-Security-Policy: default-src 'none'; sandbox`, so opened straight from its URL it runs no
+script and fetches nothing. The first card makes the signing
+key. The Hub writes `card.json` and a copy of the private key in a private temporary directory,
+deleted afterwards, and the key never appears on a command line.
+
+**Attachment.** `409 Set Hub:Cards:Domain to check an attachment.` without a domain. Otherwise the
+Hub renders the card as a PNG and runs `verify-card --online`, which reads the TXT record through
+`cloudflare-dns.com` and `https://<domain>/.well-known/perf-sentinel-key`. The answer is the
+engine's verdict, the card's big figures as signed and what the check reached:
+
+```json
+{"integrity": "ok", "content": "intact", "level": 2, "domain": "acme.example", "key": "current",
+ "reason": null,
+ "figures": {"angle": "curve", "period": {"kind": "month", "from": "2026-09-01", "to": "2026-09-30"},
+             "before_fix_period": null, "cited_ops": null, "cited_ms": null, "before_fix_ops": null,
+             "threshold_ops": null, "threshold_ms": null, "last_waste_permille": 83,
+             "previous_waste_permille": 200, "confirmed_fixes_count": null, "services_count": null},
+ "contacted": ["cloudflare-dns.com", "acme.example"]}
+```
+
+`content` says whether the file is the one signed: `intact`, or `modified` with the reason
+`content_modified` and `figures` null. `figures` carries the engine's names, exact, `null` where the
+angle has none: `period`, `before_fix_period`, `cited_ops` or `cited_ms`, `before_fix_ops`,
+`threshold_ops` or `threshold_ms`, `last_waste_permille`, `previous_waste_permille`,
+`confirmed_fixes_count`, `services_count`. A verdict line out of contract (one of its keys missing,
+a `content` other than `intact`, `modified` or `not_checked`, figures without their angle or
+period), or none within 20 seconds, is `502`.
+
+**Who may.** The Hub judges these three routes in this order: cards off `404`; a caller the Hub
+cannot name `403 The Hub does not know who is asking, and a card is made in somebody's name.`; on
+the two `POST`s, the same-origin rule and the JSON content type (`403`, `415`); no `cards.write`
+anywhere `403 You may not create cards.`; no `findings.read` anywhere `403`; an engine without the
+`card` subcommand
+`503 This Hub's engine cannot render cards: it needs a perf-sentinel release with the card subcommand.`
+Then the scope: the sources asked for that both permissions reach, or
+`403 You may not create cards for these sources.` when none is left. A fix on a service the caller
+cannot read is left out, and the curve, drawn from daemon-wide totals, keeps only the sources both
+permissions hold whole.
+
+**Busy.** At most `Hub:Cards:MaxConcurrentRenders` cards run the engine at once (default 2). Once
+every check above has passed, a render, an attachment check or a key rotation that finds them all
+running is
+`503 Another card is being made. Try again in a few seconds.` with `Retry-After: 5`, never queued.
+The engine-off `503` carries no `Retry-After`, which is how a client tells the two apart.
+
 ## Actions
 
 An action says who works on a finding and where it stands. The Hub keeps it itself: nothing
@@ -795,7 +984,10 @@ shown, never judged. `done_at_ms` is stamped when the action enters `done` and c
 change of the status or the owner appends an event, with the status it left, the one it
 reached, the owner, the caller and the time. The events are never rewritten, and neither the
 action nor its events are purged with the finding: an action outlives the retention of the
-finding it was declared on, so a recap can still tell whether the fix held. A `PATCH` that
+finding it was declared on, so a recap can still tell whether the fix held. An action that
+enters `done` also keeps the finding as it stood then, from the newest copy the caller reads,
+for the share card. It is never served, survives the finding's purge and is dropped when the
+action leaves `done`. A `PATCH` that
 changes nothing appends nothing. Every refusal the Hub words itself carries
 `{"detail":"…"}`.
 

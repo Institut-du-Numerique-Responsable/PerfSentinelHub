@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json.Nodes;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Storage;
@@ -13,10 +14,12 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "appended";
 
-        await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 100, cancellationToken);
-        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, "bob", true, "alice", 200,
+        await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 100, null,
             cancellationToken);
-        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "bob", 300, cancellationToken);
+        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, "bob", true, "alice", 200, null,
+            cancellationToken);
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "bob", 300, null,
+            cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
         Assert.Equal(
@@ -41,7 +44,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         const string signature = "display-take";
 
         await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice@acme.com", "Alice Martin",
-            "alice@acme.com", 100, cancellationToken);
+            "alice@acme.com", 100, null, cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
         Assert.Equal("alice@acme.com", action.Owner);
@@ -58,9 +61,9 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "display-typed";
         await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice@acme.com", "Alice Martin",
-            "alice@acme.com", 100, cancellationToken);
+            "alice@acme.com", 100, null, cancellationToken);
 
-        await Database.UpdateActionAsync(signature, null, "Payments team", true, "alice@acme.com", 200,
+        await Database.UpdateActionAsync(signature, null, "Payments team", true, "alice@acme.com", 200, null,
             cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
@@ -75,10 +78,11 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "display-kept";
         await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice@acme.com", "Alice Martin",
-            "alice@acme.com", 100, cancellationToken);
+            "alice@acme.com", 100, null, cancellationToken);
 
-        await Database.UpdateActionAsync(signature, null, "alice@acme.com", true, "bob", 150, cancellationToken);
-        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "bob", 200, cancellationToken);
+        await Database.UpdateActionAsync(signature, null, "alice@acme.com", true, "bob", 150, null, cancellationToken);
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "bob", 200, null,
+            cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
         Assert.Equal("Alice Martin", action.OwnerDisplay);
@@ -91,11 +95,11 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "unchanged";
-        await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice", null, "alice", 100,
+        await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice", null, "alice", 100, null,
             cancellationToken);
 
         var outcome = await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, "alice", true, "bob",
-            200, cancellationToken);
+            200, null, cancellationToken);
 
         Assert.Equal(ActionWriteOutcome.Written, outcome);
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
@@ -108,13 +112,14 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "twice";
-        await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 100, cancellationToken);
+        await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 100, null,
+            cancellationToken);
 
         Assert.Equal(ActionWriteOutcome.Exists,
-            await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "bob", 200,
+            await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "bob", 200, null,
                 cancellationToken));
         Assert.Equal(ActionWriteOutcome.Missing,
-            await Database.UpdateActionAsync("never", ActionStatuses.Done, null, false, "bob", 200,
+            await Database.UpdateActionAsync("never", ActionStatuses.Done, null, false, "bob", 200, null,
                 cancellationToken));
         Assert.Single(Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken)).Events);
     }
@@ -124,10 +129,10 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         const string signature = "leaving";
-        await Database.CreateActionAsync(signature, ActionStatuses.Done, "alice", null, "alice", 100,
+        await Database.CreateActionAsync(signature, ActionStatuses.Done, "alice", null, "alice", 100, null,
             cancellationToken);
 
-        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, true, "bob", 200,
+        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, true, "bob", 200, null,
             cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
@@ -140,8 +145,10 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
     public async Task Reading_several_signatures_returns_only_those_with_an_action()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await Database.CreateActionAsync("read-a", ActionStatuses.Todo, null, null, "alice", 100, cancellationToken);
-        await Database.CreateActionAsync("read-b", ActionStatuses.Todo, null, null, "alice", 100, cancellationToken);
+        await Database.CreateActionAsync("read-a", ActionStatuses.Todo, null, null, "alice", 100, null,
+            cancellationToken);
+        await Database.CreateActionAsync("read-b", ActionStatuses.Todo, null, null, "alice", 100, null,
+            cancellationToken);
 
         var actions = await Database.ReadActionsAsync(["read-a", "read-b", "read-none"], cancellationToken);
 
@@ -161,10 +168,10 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         try
         {
             Assert.Equal(ActionWriteOutcome.Busy,
-                await Database.CreateActionAsync("busy", ActionStatuses.Todo, null, null, "alice", 100,
+                await Database.CreateActionAsync("busy", ActionStatuses.Todo, null, null, "alice", 100, null,
                     cancellationToken));
             Assert.Equal(ActionWriteOutcome.Busy,
-                await Database.UpdateActionAsync("busy", ActionStatuses.Done, null, false, "alice", 100,
+                await Database.UpdateActionAsync("busy", ActionStatuses.Done, null, false, "alice", 100, null,
                     cancellationToken));
         }
         finally
@@ -195,5 +202,123 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         // A copy with no grouping carries the empty marker row, which matches no key.
         Assert.Equal("", Assert.Single(copies[1].Rows).Key);
         Assert.Empty(await Database.ReadFindingCopiesAsync("copies:none", cancellationToken));
+    }
+
+    [Fact]
+    public async Task Create_with_done_freezes_the_envelope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string signature = "freeze:create";
+        await SeedCopyAsync(Database, signature, "a", 41, 100);
+
+        await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", 300, null,
+            cancellationToken);
+
+        Assert.Equal(41, OccurrencesOf(await FrozenAsync(Database, signature)));
+    }
+
+    [Fact]
+    public async Task Done_freezes_the_newest_copy_envelope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string signature = "freeze:newest";
+        await SeedCopyAsync(Database, signature, "a", 41, 100);
+        await SeedCopyAsync(Database, signature, "b", 12, 200);
+        await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 300, null,
+            cancellationToken);
+        Assert.Null(await FrozenAsync(Database, signature));
+
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "alice", 400, null,
+            cancellationToken);
+
+        Assert.Equal(12, OccurrencesOf(await FrozenAsync(Database, signature)));
+    }
+
+    [Fact]
+    public async Task Freeze_reads_only_the_listed_sources()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string signature = "freeze:listed";
+        await SeedCopyAsync(Database, signature, "a", 41, 100);
+        await SeedCopyAsync(Database, signature, "b", 12, 200);
+        await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 300, null,
+            cancellationToken);
+
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "alice", 400, ["a"],
+            cancellationToken);
+
+        Assert.Equal(41, OccurrencesOf(await FrozenAsync(Database, signature)));
+    }
+
+    [Fact]
+    public async Task Leaving_done_clears_the_frozen_envelope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string signature = "freeze:leave";
+        await SeedCopyAsync(Database, signature, "a", 41, 100);
+        await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", 300, null,
+            cancellationToken);
+
+        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, false, "alice", 400, null,
+            cancellationToken);
+
+        Assert.Null(await FrozenAsync(Database, signature));
+    }
+
+    [Fact]
+    public async Task An_owner_change_while_done_keeps_the_frozen_envelope()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string signature = "freeze:owner";
+        await SeedCopyAsync(Database, signature, "a", 41, 100);
+        await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", 300, null,
+            cancellationToken);
+        await SeedCopyAsync(Database, signature, "a", 7, 350);
+
+        await Database.UpdateActionAsync(signature, null, "bob", true, "alice", 400, null, cancellationToken);
+
+        Assert.Equal(41, OccurrencesOf(await FrozenAsync(Database, signature)));
+    }
+
+    [Fact]
+    public async Task The_frozen_envelope_outlives_the_finding_purge()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string signature = "freeze:purge";
+        await SeedCopyAsync(Database, signature, "a", 41, 100);
+        await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", 300, null,
+            cancellationToken);
+
+        // Tests of a class run one at a time, and every other one seeds what it reads.
+        await Database.PurgeAsync(1000, 1000, 0, 0, cancellationToken);
+
+        Assert.Empty(await Database.ReadFindingCopiesAsync(signature, cancellationToken));
+        Assert.Equal(41, OccurrencesOf(await FrozenAsync(Database, signature)));
+    }
+
+    // One copy of the finding at this source, its envelope carrying this occurrence count.
+    private static Task SeedCopyAsync(HubDatabase database, string signature, string source, int occurrences,
+        long seenAtMs)
+    {
+        var envelope = FindingJson.Envelope(signature);
+        envelope["finding"]!["pattern"]!["occurrences"] = occurrences;
+        return database.UpsertBatchAsync(new SourceSnapshot(source, source, "prod", "0.37.1"),
+            FindingJson.Batch(envelope), seenAtMs, TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<string?> FrozenAsync(HubDatabase database, string signature)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT frozen_finding_json FROM finding_actions WHERE signature = $signature;";
+        read.Parameters.AddWithValue("$signature", signature);
+        return await read.ExecuteScalarAsync(cancellationToken) as string;
+    }
+
+    private static int OccurrencesOf(string? envelope)
+    {
+        Assert.NotNull(envelope);
+        return JsonNode.Parse(envelope)!["finding"]!["pattern"]!["occurrences"]!.GetValue<int>();
     }
 }

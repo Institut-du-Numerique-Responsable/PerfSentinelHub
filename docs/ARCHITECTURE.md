@@ -47,7 +47,10 @@ Detection ledgers take both paths from perf-sentinel 0.37.0: the daemon pushes t
 changed since its last accepted push, and the poll reads the ledger the daemon's status
 names. Both write absolute values per UTC day, merged by their maximum, so the two paths, a replay
 and an overlap all land on the same rows. Each daemon start opens a new ledger, and the Hub adds a
-source's ledgers up rather than letting the next one replace the last.
+source's ledgers up rather than letting the next one replace the last. The answer to a ledger push
+is the one answer that carries data back to a daemon: `watch`, the fixed findings of a threshold
+type this source has not yet confirmed fixed, whose passes below the threshold the daemon then
+counts. A polled daemon never gets it.
 
 A daemon pushing successfully proves that the daemon can reach the Hub. It proves
 nothing about whether the Hub can reach the daemon, which is a different route through
@@ -115,7 +118,8 @@ entirely, because its own `/api/export/report` already returns exactly that JSON
 </picture>
 
 None of the three is derivable from the others, and they are enforced by three
-different mechanisms.
+different mechanisms. The daily worker, the first of them, keeps several durations, one
+per kind of row.
 
 Findings expire on a worker that runs once a day and purges in chunks, so a long purge
 cannot reject imports for its whole duration. Incidents copied from a daemon ride that
@@ -133,9 +137,15 @@ source saw a finding in ride the same clock on their own `last_seen_ms`, without
 key for the same reason, and an orphan is as invisible: a read reaches one only through a
 finding. The grouping attributes each source captured on a finding ride it the same way, on
 their own `last_seen_ms`. The pairs an incident's frozen findings share leave with their
-incident. Detection counts and days ride it by whole UTC day, like observation days, and a
-ledger's own row on the last time the Hub read it. A replay of a purged day is harmless,
-since every value is absolute, and a daemon keeps 31 days at most anyway.
+incident.
+
+Detection counts and days ride the daily worker on a clock of their own,
+`Hub:DetectionRetention`, 1,100 days by default, by whole UTC day like observation days, and a
+ledger's own row with them, on the last time the Hub read it. A year card compares a year with
+the whole year before it, which the 180 days of a finding cannot hold, and the purge never runs
+this clock shorter than `Hub:Retention`, since the recap reads the detection days of every
+finding it holds. A replay of a purged day is harmless, since every value is absolute, and a daemon
+keeps 31 days at most anyway.
 
 The ack mirror rides that clock as well, on `read_at_ms`, the time of the read that wrote
 the row. It does not age an ack: every read that succeeds rewrites its source's rows, so
@@ -171,8 +181,8 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `finding_attributes`           | signature, source, grouping identity and captured pair         | retention, on `last_seen_ms`               |
 | `finding_lineage`              | successor and predecessor signature                            | with its successor                         |
 | `detection_ledgers`            | source and daemon ledger, with its start and the poll's cursor | retention, on `last_read_ms`               |
-| `detection_days`               | source, ledger and UTC day, with what the day says of itself   | retention, by whole day                    |
-| `detection_counts`             | signature, source, ledger and UTC day, with its detections     | retention, by whole day                    |
+| `detection_days`               | source, ledger and UTC day, with what the day says of itself and the thresholds it applied | retention, by whole day                    |
+| `detection_counts`             | signature, source, ledger and UTC day, with its detections and passes below the threshold | retention, by whole day                    |
 | `endpoint_heartbeats`          | source, service and endpoint                                   | retention, on `last_seen_any_ms`           |
 | `source_state`                 | source, the poll's reachability                                | retention, on `last_attempt_ms`            |
 | `source_imports`               | source, its last push                                          | never                                      |
@@ -181,7 +191,7 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
 | `correlation_episodes`         | episode and source                                             | retention, on `last_seen_ms`               |
 | `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
-| `finding_actions`              | signature, with its status and owner                           | never                                      |
+| `finding_actions`              | signature, with its status and owner, and the finding's envelope once done | never                          |
 | `finding_action_events`        | status or owner change of an action                            | never                                      |
 | `endpoint_labels`              | service and endpoint, with its business name                   | never                                      |
 | `service_labels`               | service, with its business name                                | never                                      |
@@ -193,6 +203,10 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 | `disclosure_deliveries`        | webhook event of a disclosure                                  | never                                      |
 | `recap_reports`                | frozen recap of one period, generated or on demand             | `Hub:Recaps:Retention`, on `generated_at_ms` |
 | `recap_deliveries`             | webhook or e-mail delivery of a report                         | with its report                            |
+| `card_keys`                    | one signing key's public half and dates                        | never                                      |
+
+`card_keys` holds public keys only: each private key is a file in `card-keys/` beside the
+database, outside SQLite and so outside `backup` (see [OPERATIONS.md](OPERATIONS.md#share-card-keys)).
 
 `finding_attributes` keeps every grouping attribute a daemon captured, up to the engine's
 eight, each under the grouping identity it came with: the first pair of that observation,
@@ -210,7 +224,9 @@ The three detection tables, added by schema V15, hold the daemons' ledgers as re
 `detection_days` carries what that day says of its own completeness: sealed or still open, a
 restart, its sampling rate, shed traces, rejected ingest and the detections past the ledger's
 signature cap. When the daemon scores carbon, the row also carries the day's avoidable grams
-(mid and low), avoidable I/O and total I/O. A windowed read of `/api/findings` folds them, per source, into the count it
+(mid and low), avoidable I/O and total I/O, and the thresholds it applied. A row of
+`detection_counts` may carry the passes below the threshold of a watched signature with zero
+detections, which no read counts. A windowed read of `/api/findings` folds them, per source, into the count it
 serves and the reasons it falls short, see
 [API.md](API.md#what-the-hub-adds-to-a-finding). Nothing is backfilled: a day before the
 upgrade has no row and reads as unknown.
@@ -221,8 +237,9 @@ findings, the period without them, the closed days of a period in progress, and 
 window, skipped on a period's first day. Then it makes a coverage read of the sources' days and a carbon
 read of their avoidable grams, and joins the actions and the labels last. The folding is pure
 and lives in `Recaps/`: the period, the ranking, the trends, the moves, the coverage judgment,
-the carbon pricing and the sentence per type. The service is a plain class on purpose: the
-reports a subscription sends reuse it as it is. `RecapGenerator` freezes the last closed period of
+the carbon pricing and the sentence per type. Share cards add quarter, semester and year
+periods, and the recap API still takes only a day, a week or a month. The service is a plain
+class on purpose: the reports a subscription sends reuse it as it is. `RecapGenerator` freezes the last closed period of
 each subscription into `recap_reports` once its ledgers have sealed, `RecapReportRenderer` writes
 the self-contained HTML of a stored snapshot, `RecapDeliveryWorker` sends the due rows of
 `recap_deliveries` to the webhooks and, through `RecapMailer`, to the SMTP relay, and `RecapLoop`
@@ -334,6 +351,39 @@ once a minute.
 `disclosure_deliveries`. `WebhookDelivery` writes the body and its HMAC. The worker posts
 through a named HTTP client of its own, which follows no redirect, keeps no cookie and logs
 nothing, so a webhook URL never reaches a log line.
+
+## Share cards
+
+A share card is the Hub's figures for one closed period, signed and drawn by the embedded engine.
+The Hub computes every figure and sentence input, the engine signs and draws, and nobody else
+writes on the card but the three free fields. Its code lives in `Cards/` and in
+`Api/ApiEndpoints.Cards.cs` with `Api/CardRequest.cs`, which parses the body.
+
+**The reads.** `CardService` first judges the period on the detection ledgers, through the
+recap's `ReadRecapCoverageAsync` and `RecapCoverage.Judge`, keeping only the sources whose ledger
+began before the period ended. Those sources are the signed scope. It then reads the done
+actions with the finding frozen when they moved to done (`frozen_finding_json`), the sources
+that counted each one, and the evidence that confirms a fix: the sealed days at a reachable
+source with no detection of the signature. A story adds the carbon days before the fix and the
+signal days after it (`below_threshold_passes` with the thresholds of the day), a curve the
+day totals of up to six periods. `CardRules` holds the refusals and their sentences,
+`CardFigures` the arithmetic, `CardEnvelope` and `CardTypes` what a frozen finding and its type
+carry.
+
+**The engine.** `CardRenderer` writes `card.json` and a copy of the private key in a private
+temporary directory, runs `card render`, reads only its exit code and its one result line, and
+deletes the directory. The attachment check is a second spawn on the PNG it just rendered,
+`verify-card --online`, the only card path that reaches the network: the DNS-over-HTTPS service
+and the organisation's domain. Every spawn holds a slot of `CardRenderGate`
+(`Hub:Cards:MaxConcurrentRenders`, 2 by default), and a request that finds none free gets
+`503 Retry-After: 5`.
+
+**The key.** `CardKeys` has the engine make the signing key on the first card (`card keygen`).
+Its private file sits in `card-keys/` beside the database, outside SQLite and so outside the
+backup. Its public half and its dates sit in `card_keys` (schema V20), never purged, so a card
+signed by a retired key stays verifiable. Rotating or revoking a key deletes its private file.
+`CardKeyLines` writes the DNS TXT records and the `/.well-known/perf-sentinel-key` file an
+administrator publishes.
 
 ## A run always reaches a terminal state
 

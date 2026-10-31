@@ -435,7 +435,7 @@ public sealed class FindingIngestionTests : IDisposable
 
         // Purge v1 and v2 (last_seen 1000 and 2000), keep v3.
         // A run cutoff of 0 purges no runs: this case is about findings.
-        await database.PurgeAsync(2500, 0, 0, cancellationToken);
+        await database.PurgeAsync(2500, 2500, 0, 0, cancellationToken);
 
         var rows = await database.QueryFindingsAsync(
             new FindingQuery(null, null, null, 100), cancellationToken);
@@ -855,7 +855,7 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Empty(await database.QueryFindingsAsync(Days(11, 13), cancellationToken));
 
         // Drops day 10 and keeps the pair, last seen on day 14.
-        await database.PurgeAsync(12 * DayMs, 0, 0, cancellationToken);
+        await database.PurgeAsync(12 * DayMs, 12 * DayMs, 0, 0, cancellationToken);
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
         Assert.Equal("14 critical 3", await ObservationsAsync(connection, cancellationToken));
@@ -877,7 +877,7 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.Single(await database.QueryFindingsAsync(Days(11, 11), cancellationToken));
 
         // Drops days 10 and 11. The first recorded day stays 10, so day 11 is not assumed either.
-        await database.PurgeAsync(12 * DayMs, 0, 0, cancellationToken);
+        await database.PurgeAsync(12 * DayMs, 12 * DayMs, 0, 0, cancellationToken);
 
         Assert.Empty(await database.QueryFindingsAsync(Days(11, 11), cancellationToken));
         Assert.Single(await database.QueryFindingsAsync(Days(14, 14), cancellationToken));

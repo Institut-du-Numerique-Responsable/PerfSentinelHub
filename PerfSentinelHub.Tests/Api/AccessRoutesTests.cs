@@ -147,6 +147,12 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("POST", "/api/recap/reports")]
     [InlineData("GET", "/api/recap/reports/0123456789abcdef0123456789abcdef")]
     [InlineData("GET", "/recaps/0123456789abcdef0123456789abcdef/tech.html")]
+    [InlineData("GET", "/api/cards/keys")]
+    [InlineData("POST", "/api/cards/keys/rotate")]
+    [InlineData("POST", "/api/cards/keys/revoke")]
+    [InlineData("GET", "/api/cards/options")]
+    [InlineData("POST", "/api/cards/render")]
+    [InlineData("POST", "/api/cards/attachment")]
     [InlineData("GET", "/api/disclosures")]
     [InlineData("GET", "/api/analyses")]
     [InlineData("POST", "/api/analyses")]
@@ -799,6 +805,26 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_done_action_freezes_only_a_copy_the_caller_reads()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = await SignedInAsync("attr");
+
+        // lab-d's copy of F1 is the newest, under team=billing, which attr does not read.
+        using var response = await client.SendAsync(
+            Post("/api/actions", $$"""{"signature":"{{F1}}","status":"done"}"""), cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await using var connection = await Database.OpenConnectionAsync(cancellationToken);
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT frozen_finding_json FROM finding_actions WHERE signature = $signature;";
+        read.Parameters.AddWithValue("$signature", F1);
+        using var frozen = JsonDocument.Parse(Assert.IsType<string>(await read.ExecuteScalarAsync(cancellationToken)));
+        Assert.Equal("shop",
+            frozen.RootElement.GetProperty("finding").GetProperty("grouping")[0].GetProperty("value").GetString());
+    }
+
+    [Fact]
     public async Task A_readable_finding_its_grant_cannot_write_is_a_403()
     {
         using var client = await SignedInAsync("attr");
@@ -907,6 +933,21 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             JsonDocument.Parse(await client.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
 
         Assert.Equal(expected, status.RootElement.TryGetProperty("disclosures", out _));
+    }
+
+    [Theory]
+    [InlineData("lab", "false")]
+    [InlineData("viewer", null)]
+    public async Task Status_says_cards_only_to_a_caller_holding_cards_write_somewhere(string user, string? expected)
+    {
+        using var client = await SignedInAsync(user);
+
+        using var status =
+            JsonDocument.Parse(await client.GetStringAsync("/api/status", TestContext.Current.CancellationToken));
+
+        // false, not true: this suite's engine is /usr/bin/false, which has no `card`.
+        Assert.Equal(expected,
+            status.RootElement.TryGetProperty("cards", out var cards) ? cards.GetRawText() : null);
     }
 
     [Theory]
@@ -1293,6 +1334,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                     ];
                     options.Access = Access(_clock.GetUtcNow());
                     options.Disclosures = new DisclosuresOptions { ImportKey = DisclosureKey };
+                    options.Cards = new CardsOptions { Organisation = "Acme" };
                 });
             });
         });

@@ -117,6 +117,7 @@ scope, and the answer is built from in-scope copies only.
 | `acks.write`    | Acknowledging a finding, or revoking an ack                                     |
 | `actions.write` | Declaring and changing an action on a finding                                   |
 | `labels.write`  | Naming an endpoint or a service in business words                               |
+| `cards.write`   | Creating a share card from the sources it covers                                |
 | `disclosures.read` | The Disclosures tab, each disclosure's detail and files                     |
 | `disclosures.manage` | Share links, withdrawals, delivery retries and renders of a disclosure    |
 | `recaps.read`   | Reading every recap report: the list, a report and its page (Hub level)         |
@@ -124,7 +125,7 @@ scope, and the answer is built from in-scope copies only.
 | Built-in role | Permissions                                                     |
 |---------------|-----------------------------------------------------------------|
 | `reader`      | `findings.read`, `traces.read`, `analyses.run`                  |
-| `member`      | `reader` plus `acks.write`, `actions.write` and `labels.write`  |
+| `member`      | `reader` plus `acks.write`, `actions.write`, `labels.write` and `cards.write` |
 | `admin`       | Everything, on `*` only, plus the access configuration          |
 
 `reader` is not read-only: it starts analyses. A read-only role is configured, for
@@ -156,6 +157,8 @@ does not depend on the provider at all.
 | `GET /api/recap`                                                       | `findings.read`, filtered                                       | `403` when held nowhere |
 | `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` on `*`, or the creator of an on-demand report with `findings.read` | `403` (list), `404` (one report) |
 | `POST /api/recap/reports`                                              | `findings.read`, filtered, and somebody to name                 | `403`                   |
+| `GET /api/cards/keys`, `POST /api/cards/keys/rotate` and `/revoke`    | `access.admin`, and somebody to name                            | `403`                   |
+| `GET /api/cards/options`, `POST /api/cards/render` and `/attachment`  | `cards.write` and `findings.read` on the sources asked for, and somebody to name | `403`                   |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtered; the richest copy in scope            | `403`; `404`            |
 | `POST /api/incidents/refresh`                                          | `findings.read`; reads only the daemons in scope                | `403`                   |
 | `GET /api/correlations`                                                | `findings.read`, filtered to the episodes whose two services the caller reads at that source | `403` when held nowhere |

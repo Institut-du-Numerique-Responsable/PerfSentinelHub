@@ -383,6 +383,42 @@ pending until retention purges them: the delivery pass only runs while a subscri
 | `2505` | Warning     | A recap pass failed as a whole. The next one retries                                                |
 | `2506` | Warning     | One subscription's report could not be generated. The others went on                                |
 
+## Share card keys
+
+A share card is signed with a key the engine makes the first time someone creates a card
+(`perf-sentinel card keygen`); see [CONFIGURATION.md](CONFIGURATION.md#share-cards) for the keys
+that turn cards on and [API.md](API.md#share-cards) for the routes.
+
+**Where the key lives.** The private key is a file, `card-keys/<fingerprint>.pk8`, in the
+directory that holds `Hub:DatabasePath` (`/data/card-keys/` with the chart). The directory is
+readable by the Hub's user only (mode 0700) and so is each file (mode 0600). The public key and
+its dates sit in the database, table `card_keys`.
+
+**Backup does not carry it.** `backup` copies the database, so it carries the public keys and
+their dates, never a private key. To keep signing with the same key after a restore, copy
+`card-keys/` beside the backup and put it back beside the restored database. Without it nothing
+breaks: the next card retires the old key, makes a new one and signs with it. The old public key
+stays published with its end date, so every card signed before still verifies.
+
+**Rotation and revocation.** An administrator (`access.admin`) rotates the key, which retires the
+current one, deletes its private file and makes a new one. Revoking a key also retires it and
+deletes its file. On the check page, every card the key signed then reads as revoked, whatever its
+date, because the date on a card is written by whoever holds the key. Revoking asks for the first
+day the key may have leaked. That day is published with the key as `revoked`, and tells readers
+since when the key may have been exposed, not when it was withdrawn. Revoke a key that may have
+leaked, and rotate one that did not, since rotation keeps the cards it signed attached. A retired
+key can be revoked as well. After revoking, replace the key's DNS TXT line with the new one that
+carries `revoked=`, not only the well-known file: the check page on perf-sentinel.dev reads the
+DNS line only and keeps printing the card as signed until that line changes, while
+`verify-card --online` reads both.
+
+**Publishing the lines.** A card names its signer's domain (`Hub:Cards:Domain`); a reader checks
+it against what the domain publishes. `GET /api/cards/keys` answers both forms, ready to copy:
+one TXT record per key under `_perf-sentinel.<domain>`, and the `/.well-known/perf-sentinel-key`
+file to serve at `https://<domain>/`. Publish them again after each rotation or revocation, and
+keep the lines of retired keys: removing one makes the cards it signed unverifiable. Without a
+domain, cards are made all the same, and `record_name` is null since there is nowhere to publish.
+
 ## Backup
 
 `first_seen` history is the one thing the Hub stores that nothing upstream can
@@ -398,9 +434,10 @@ own size free on the PVC before starting one. The chart default is 1Gi total. Th
 grows with the observation days the Hub keeps, one row of about 300 bytes per finding,
 daemon and observed day for the length of `Hub:Retention`: 2,000 signatures seen daily on
 three daemons at the 180-day default come to roughly 300 MB, so size the volume for the
-fleet rather than for the default. Disclosures add their files: the report, the attestation,
-the bundle and the PDF are kept in the database, never purged, so the backup carries them
-and grows with each one published.
+fleet rather than for the default. Detection rows stay longer, 1,100 days by default
+(`Hub:DetectionRetention`), one row per signature, daemon and day. Disclosures add their
+files: the report, the attestation, the bundle and the PDF are kept in the database, never
+purged, so the backup carries them and grows with each one published.
 
 ```bash
 kubectl exec deploy/perf-sentinel-hub -- /app/PerfSentinelHub backup /data/hub-backup-20260826.db

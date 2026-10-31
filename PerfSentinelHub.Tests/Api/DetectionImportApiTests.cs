@@ -4,7 +4,10 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Storage;
 
@@ -14,6 +17,10 @@ namespace PerfSentinelHub.Tests.Api;
 public sealed class DetectionImportApiTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
     private const string ApiKey = "0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test credential
+
+    // 2026-10-15, the day the watch tests push on.
+    private const int Today = 20741;
+    private const string Slow = "slow_sql:order-svc:GET_/orders:ab";
     private readonly HttpClient _client = factory.CreateClient();
 
     private static HttpRequestMessage Request(string? apiKey, JsonObject page, string query = "source_id=test")
@@ -94,6 +101,24 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
                                                                || ' ' || total_io_ops
                                                              FROM detection_days WHERE source_id = 'test' AND day = 2;
                                                              """));
+    }
+
+    [Fact]
+    public async Task A_pushed_page_keeps_the_signal_fields()
+    {
+        var page = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(2, "signal-pushed", 0, null, 12)],
+            [DetectionLedgerJson.Day(2, thresholds: new JsonObject { ["slow_query_threshold_ms"] = 500 })]);
+        using var request = Request(ApiKey, page);
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("0 12", await ScalarAsync("""
+                                               SELECT detections || ' ' || below_threshold_passes FROM detection_counts
+                                               WHERE source_id = 'test' AND signature = 'signal-pushed';
+                                               """));
+        Assert.Equal("500", await ScalarAsync(
+            "SELECT slow_query_threshold_ms FROM detection_days WHERE source_id = 'test' AND day = 2;"));
     }
 
     [Fact]
@@ -212,5 +237,130 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(before + 1, Refusals("bad_request"));
+    }
+
+    // ------------------------------------------------------------ watch list
+
+    // A Hub of its own on 2026-10-15 10:00 UTC, so a watch list holds only what its test wrote.
+    private static WebApplicationFactory<Program> OnToday(HubApplicationFactory hub)
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds(
+            DetectionLedgerJson.Midnight(Today) + 36_000_000));
+        return hub.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(clock);
+        }));
+    }
+
+    private static long NowMs(WebApplicationFactory<Program> host)
+    {
+        return host.Services.GetRequiredService<TimeProvider>().GetUtcNow().ToUnixTimeMilliseconds();
+    }
+
+    private static JsonObject TodayPage(params JsonObject[] counts)
+    {
+        return DetectionLedgerJson.Page(counts, [DetectionLedgerJson.Day(Today)], Today);
+    }
+
+    // Pushes the page as source test and answers the watch list the Hub sent back.
+    private static async Task<string?[]> PushAsync(HttpClient client, JsonObject page)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var request = Request(ApiKey, page);
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
+        return [.. body.RootElement.GetProperty("watch").EnumerateArray().Select(entry => entry.GetString())];
+    }
+
+    // Counts the signature at source test on the day before, then marks its action.
+    private static async Task<HttpClient> SeenThenMarkedAsync(
+        WebApplicationFactory<Program> host, string signature, string status)
+    {
+        var client = host.CreateClient();
+        Assert.Empty(await PushAsync(client, TodayPage(DetectionLedgerJson.Count(Today - 1, signature, 3))));
+        await host.Services.GetRequiredService<HubDatabase>().CreateActionAsync(
+            signature, status, null, null, "alice", NowMs(host), null, TestContext.Current.CancellationToken);
+        return client;
+    }
+
+    [Fact]
+    public async Task A_push_answers_an_empty_watch_list_without_done_actions()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var hub = new HubApplicationFactory();
+        using var client = OnToday(hub).CreateClient();
+        using var request = Request(ApiKey, TodayPage(DetectionLedgerJson.Count(Today - 1, Slow, 3)));
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
+        Assert.Equal(1, body.RootElement.GetProperty("accepted").GetInt32());
+        Assert.Equal(0, body.RootElement.GetProperty("rejected").GetInt32());
+        Assert.Equal(JsonValueKind.Array, body.RootElement.GetProperty("watch").ValueKind);
+        Assert.Empty(body.RootElement.GetProperty("watch").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task A_done_slow_finding_seen_at_the_source_is_watched()
+    {
+        await using var hub = new HubApplicationFactory();
+        using var client = await SeenThenMarkedAsync(OnToday(hub), Slow, ActionStatuses.Done);
+
+        Assert.Equal([Slow], await PushAsync(client, TodayPage()));
+    }
+
+    [Fact]
+    public async Task An_n_plus_one_done_action_is_not_watched()
+    {
+        await using var hub = new HubApplicationFactory();
+        using var client = await SeenThenMarkedAsync(
+            OnToday(hub), "n_plus_one_sql:order-svc:SELECT_orders:ab", ActionStatuses.Done);
+
+        Assert.Empty(await PushAsync(client, TodayPage()));
+    }
+
+    [Fact]
+    public async Task A_not_done_action_is_not_watched()
+    {
+        await using var hub = new HubApplicationFactory();
+        using var client = await SeenThenMarkedAsync(OnToday(hub), Slow, ActionStatuses.InProgress);
+
+        Assert.Empty(await PushAsync(client, TodayPage()));
+    }
+
+    [Fact]
+    public async Task A_signature_seen_only_at_another_source_is_not_watched()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var hub = new HubApplicationFactory();
+        var host = OnToday(hub);
+        var database = host.Services.GetRequiredService<HubDatabase>();
+        var nowMs = NowMs(host);
+        await database.MergeDetectionPageAsync(
+            "elsewhere", DetectionLedgerJson.Parse(TodayPage(DetectionLedgerJson.Count(Today - 1, Slow, 3)), nowMs),
+            true, nowMs, cancellationToken);
+        await database.CreateActionAsync(Slow, ActionStatuses.Done, null, null, "alice", nowMs, null,
+            cancellationToken);
+        using var client = host.CreateClient();
+
+        Assert.Empty(await PushAsync(client, TodayPage()));
+    }
+
+    [Fact]
+    public async Task A_confirmed_signature_leaves_the_watch_list()
+    {
+        await using var hub = new HubApplicationFactory();
+        using var client = await SeenThenMarkedAsync(OnToday(hub), Slow, ActionStatuses.Done);
+        Assert.Equal([Slow], await PushAsync(client, TodayPage()));
+
+        var confirming = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(Today + 1, Slow, 0, null, 4)],
+            [DetectionLedgerJson.Day(Today + 1, true)],
+            Today + 2);
+
+        Assert.Empty(await PushAsync(client, confirming));
     }
 }

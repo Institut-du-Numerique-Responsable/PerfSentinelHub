@@ -11,6 +11,9 @@ public sealed record HubOptions
 
     public TimeSpan Retention { get; set; } = TimeSpan.FromDays(180);
 
+    // Detection days, counts and ledgers: long enough for a year card and the whole year before it.
+    public TimeSpan DetectionRetention { get; set; } = TimeSpan.FromDays(1100);
+
     // Window behind the per-finding status: seen within it = active; older,
     // with the endpoint still heartbeating from a reachable source =
     // likely_resolved; anything else = not_observed.
@@ -28,6 +31,7 @@ public sealed record HubOptions
     public AccessOptions Access { get; set; } = new();
     public DisclosuresOptions Disclosures { get; set; } = new();
     public RecapsOptions Recaps { get; set; } = new();
+    public CardsOptions Cards { get; set; } = new();
 
     // The one port /metrics answers on, and nothing else answers there. Unset, /metrics
     // answers on every port as it always has; access control needs one (A14).
@@ -127,7 +131,7 @@ public sealed record LocalAccountOptions
     }
 }
 
-/// <summary>The eleven permissions, the three built-in roles and what a machine token may hold.</summary>
+/// <summary>The twelve permissions, the three built-in roles and what a machine token may hold.</summary>
 public static class AccessPermissions
 {
     public const string FindingsRead = "findings.read";
@@ -137,6 +141,7 @@ public static class AccessPermissions
     public const string AcksWrite = "acks.write";
     public const string ActionsWrite = "actions.write";
     public const string LabelsWrite = "labels.write";
+    public const string CardsWrite = "cards.write";
     public const string AccessAdmin = "access.admin";
 
     // Hub-level, granted on '*' only: a disclosure belongs to no source.
@@ -150,8 +155,8 @@ public static class AccessPermissions
 
     public static readonly IReadOnlyList<string> All =
     [
-        FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, ActionsWrite, LabelsWrite, AccessAdmin,
-        DisclosuresRead, DisclosuresManage, RecapsRead
+        FindingsRead, TracesRead, SourcesRead, AnalysesRun, AcksWrite, ActionsWrite, LabelsWrite, CardsWrite,
+        AccessAdmin, DisclosuresRead, DisclosuresManage, RecapsRead
     ];
 
     // reader is not read-only: it starts analyses.
@@ -159,11 +164,36 @@ public static class AccessPermissions
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
             [ReaderRole] = [FindingsRead, TracesRead, AnalysesRun],
-            [MemberRole] = [FindingsRead, TracesRead, AnalysesRun, AcksWrite, ActionsWrite, LabelsWrite],
+            [MemberRole] = [FindingsRead, TracesRead, AnalysesRun, AcksWrite, ActionsWrite, LabelsWrite, CardsWrite],
             [AdminRole] = All
         };
 
     public static readonly IReadOnlyList<string> MachineTokenPermissions = [FindingsRead];
+}
+
+/// <summary>
+///     Who signs the share cards: one organisation per Hub, and its domain, which only the DNS line of a
+///     level 2 card attaches; a level 1 card needs none. Organisation set turns cards on.
+/// </summary>
+public sealed record CardsOptions
+{
+    // Trimmed on binding, as MachineTokenOptions.Token is.
+    public string? Organisation
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    public string? Domain
+    {
+        get;
+        set => field = value?.Trim();
+    }
+
+    /// <summary>How many card renders run the engine at once; one more is refused with a 503, never queued.</summary>
+    public int MaxConcurrentRenders { get; set; } = 2;
+
+    public bool Enabled => Organisation is not null;
 }
 
 /// <summary>

@@ -18,6 +18,7 @@ produces no error and reads like a bug in the Hub rather than a typo in your fil
 | `Hub:HttpTimeout`                  | `00:00:10`                                                                  | Positive duration                                                                               |
 | `Hub:MaxConcurrentPolls`           | `4`                                                                         | 1 to 32                                                                                         |
 | `Hub:Retention`                    | `180.00:00:00` (180 days)                                                   | Positive duration                                                                               |
+| `Hub:DetectionRetention`           | `1100.00:00:00` (1,100 days)                                                | Positive; shorter than `Retention` reads as `Retention`. Detection counts, days and ledgers: a year card reads the year before |
 | `Hub:ResolutionGrace`              | `7.00:00:00` (7 days)                                                       | Positive, below `Retention`                                                                     |
 | `Hub:NewSignaturesPerHourWarning`  | `1000`                                                                      | 0 or more, 0 turning it off. A daemon past it is flagged on `/api/sources` and logged           |
 | `Hub:DefaultReadLimit`             | `1000`                                                                      | 1 to `MaxReadLimit`                                                                             |
@@ -171,12 +172,12 @@ schema checks the cross-key rules at `helm upgrade`, before `Recreate` stops the
 | `Hub:Access:LocalAccounts[]` | `{ Name, PasswordHash }`, see below                                                                                                                           |
 
 **Permissions and roles.** The permissions are `findings.read`, `traces.read`,
-`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `disclosures.read`,
-`disclosures.manage` and `recaps.read`, plus `access.admin`, which only the built-in
+`sources.read`, `analyses.run`, `acks.write`, `actions.write`, `labels.write`, `cards.write`,
+`disclosures.read`, `disclosures.manage` and `recaps.read`, plus `access.admin`, which only the built-in
 `admin` role carries. The two disclosure permissions and `recaps.read` apply to the whole
 Hub, so a role carrying any of them is granted on `*` only. The built-in roles are
 `reader` (`findings.read`, `traces.read`, `analyses.run`), `member` (`reader`, `acks.write`,
-`actions.write` and `labels.write`) and `admin` (all eleven, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
+`actions.write`, `labels.write` and `cards.write`) and `admin` (all twelve, on `*` only). `reader` is not read-only: it starts analyses. A read-only role
 is a configured one, such as `auditor` with `findings.read` and `traces.read`.
 
 **Patterns.** A record is in a project when one of its patterns matches. A part is exact,
@@ -332,6 +333,31 @@ refuses a duplicate subscription or webhook name and a subscription naming an un
 The schema refuses `emails` without `smtp.host`, port 465, and a `userName` without `startTls` on
 a relay off loopback. A wrong `environment` or `sourceId` is left to the Hub's startup check.
 
+## Share cards
+
+A share card is an image of what a fix saved, signed in the name of one organisation. Cards are
+off by default. `Hub:Cards:Organisation` turns them on for the callers holding `cards.write`, once
+the engine the Hub runs has `card`. Each rule below is checked at startup and its message names the
+key.
+
+| Setting                  | Default | Validation                                                                                                                     |
+|--------------------------|---------|--------------------------------------------------------------------------------------------------------------------------------|
+| `Hub:Cards:Organisation` | none    | 1 to 60 characters with no control or hidden character. The name that signs every card                                        |
+| `Hub:Cards:Domain`       | none    | Needs `Organisation`. A lower-case DNS name such as `example.com`, with no scheme, port or trailing dot. What a card's DNS line attaches |
+| `Hub:Cards:MaxConcurrentRenders` | `2` | 1 to 16, checked with cards off too. How many cards the engine renders at once; one more gets `503` with `Retry-After: 5` |
+
+A card is verified without the domain. With it, the card's DNS line names a record under that
+domain, which the organisation publishes to attach its cards to it. Both values are trimmed on
+binding.
+
+One render holds an engine process, a 1080 by 1350 image and its encoder for up to 45 seconds, and
+an attachment check adds up to 20 seconds of online check. Raise `MaxConcurrentRenders` on a host
+with spare CPU and memory when people often see the card screen wait its turn.
+
+Under Helm the block is `hub.cards`, with `organisation`, `domain` and `maxConcurrentRenders`. The chart writes the
+section only once `organisation` is set, and its schema refuses a `domain` that is not a lower-case
+DNS name.
+
 ## What a source is, and what is measured
 
 The list is configuration, never discovery. Nothing is auto-detected, the launcher cannot
@@ -404,6 +430,11 @@ request fails.
 Recap reports add two more destinations, both declared by you and both off until you declare
 them: each `Hub:Recaps:Webhooks[].Url` receives the signed report event, and `Hub:Recaps:Smtp:Host`
 receives each e-mail. The Hub reaches no other mail server.
+
+Share cards reach the network only when someone presses "Verify attachment" (`POST /api/cards/attachment`):
+the engine asks `https://cloudflare-dns.com/dns-query` for the TXT record under `_perf-sentinel.<domain>`, then
+reads `https://<domain>/.well-known/perf-sentinel-key`, with `<domain>` the `Hub:Cards:Domain` you set, never
+a value from the request. Rendering, downloading and managing the key reach nothing.
 
 ## An https source with a private CA
 

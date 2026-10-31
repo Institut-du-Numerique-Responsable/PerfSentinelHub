@@ -539,4 +539,16 @@ internal static class Schema
                                   set_at_ms INTEGER NOT NULL
                                 );
                                 """;
+
+    // A share card signing key's public half and dates. Public keys only, and never purged, so a card
+    // signed by a retired key stays verifiable; the private keys live in files beside the database.
+    internal const string V20 = """
+                                CREATE TABLE IF NOT EXISTS card_keys (
+                                  fingerprint TEXT PRIMARY KEY,
+                                  public_key TEXT NOT NULL,
+                                  created_at_ms INTEGER NOT NULL,
+                                  retired_at_ms INTEGER,
+                                  revoked_on TEXT
+                                );
+                                """;
 }

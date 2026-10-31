@@ -2,6 +2,87 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.10.0] - 2026-10-31
+
+### Added
+
+- A recap names the sources whose daemon recorded nothing until after its period, `late_sources`,
+  and leaves them out of both periods instead of reading the period as uncovered. A source that
+  started during the period still leaves the period before uncovered. A report waits no longer
+  for such a source to seal the period's last day.
+- The card options carry `previous_whole` and `confirmed_fixes_count`, so the screen says why a
+  collective card drops its comparison and no longer blocks one whose fixes it cannot name. A
+  collective card for a period holding a fix marked done before the Hub kept fix details is
+  refused with `unkept_fixes` rather than signing a short count.
+- The detection import and poll store the card signal a daemon sends from the card release:
+  `below_threshold_passes` on a count row, the passes below the threshold of a watched
+  signature, and `thresholds` on a day, the six detection thresholds the daemon applied. Both
+  merge by maximum. A count row with zero detections is accepted and no read counts it.
+- The answer to a detection push carries `watch`, the fixed findings of a threshold type
+  (`slow_*`, `excessive_fanout`, `chatty_service`, `pool_saturation`, `serialized_calls`) that
+  source detected and has not yet confirmed fixed, newest first, at most 10,000, `[]` when none.
+  The daemon counts their passes below the threshold, the signal a share card stands on.
+- An action that enters `done` keeps the finding's envelope as it stood then, from the newest
+  copy the caller reads, in `finding_actions.frozen_finding_json`. It is never served, outlives
+  the finding's purge and is cleared when the action leaves `done`. A share card reads it.
+- Quarter, semester and year periods, for share cards only. `GET /api/recap` still takes
+  `day`, `week` or `month`.
+- `Hub:Cards:Organisation` names the organisation that signs share cards and turns them on, and
+  `Hub:Cards:Domain`, optional, is the domain a card's DNS line attaches. The chart sets them from
+  `hub.cards`. A new permission, `cards.write`, held by `member` and `admin`, lets a caller create
+  a card from the sources it covers. `GET /api/status` answers `cards: true` to such a caller when
+  the engine has `card`, `cards: false` when it does not, and leaves `cards` out otherwise.
+- A share card signing key, made by the engine (`perf-sentinel card keygen`) the first time it is
+  needed. The private key is a file in `card-keys/` beside the database (mode 0600 in a 0700
+  directory), which `backup` does not carry; its public half and dates go in a new table,
+  `card_keys` (schema 20), never purged. A key whose file is gone is retired at next use and a new
+  one made. `GET /api/cards/keys`, `POST /api/cards/keys/rotate` and `POST /api/cards/keys/revoke`,
+  for `access.admin` only, list the keys with their DNS lines and `.well-known` file, rotate the
+  key and revoke one from the first day it may have leaked. Every card a revoked key signed reads
+  as revoked, whatever its date.
+- Share cards. `GET /api/cards/options` lists what a card of a closed period can show: the
+  period's refusal and its sentence, the signed scope, the confirmed fixes with their labels.
+  `POST /api/cards/render` computes the figures, has the engine sign and draw the card
+  (`perf-sentinel card render`) and answers the PNG, the SVG, the JPEG XL (`image/jxl`, to archive
+  or send, LinkedIn does not accept it) or the PDF carousel; only the title, the team and a story's
+  label are free, any other key is a `400`. An SVG comes with
+  `Content-Security-Policy: default-src 'none'; sandbox`, so opened from its URL it runs nothing.
+  `POST /api/cards/attachment` checks a fresh card's DNS attachment with
+  `perf-sentinel verify-card --online`, the one card route that reaches the network
+  (`cloudflare-dns.com` and the configured domain), and answers whether the file is the one
+  signed (`content`) and its figures as signed (`figures`), which Verify attachment lists to
+  compare with the preview. A free field holding `{"content_sig":"`, the text the card file keeps
+  for its signature, is a `400`. The three need `cards.write` and `findings.read` and somebody to
+  name. `Hub:Cards:MaxConcurrentRenders` (default 2, chart `hub.cards.maxConcurrentRenders`) bounds
+  how many renders, attachment checks and key rotations run the engine at once. One more is a
+  `503` with `Retry-After: 5`, which the screen waits out once before asking again.
+- A story whose service or endpoint name the card cannot print is refused with `unprintable_fix`
+  and its sentence, rather than reading as an unknown or unconfirmed fix.
+- A card whose environment and source names, joined with `", "`, take more than 120 characters is
+  refused with `scope_too_long` and its sentence, which asks for an environment or a source,
+  rather than the engine's `502`.
+- The recap screen gains Share a result: pick a story, a curve or a collective card over a closed
+  period, add a title, a team and, for a story, an everyday name for the action, preview the card,
+  download it as PNG, SVG, JPEG XL or PDF, and verify its attachment. Administrators find the
+  signing key there, with the lines to publish, rotation and revocation.
+
+### Changed
+
+- The image ships perf-sentinel `0.39.0` as its analysis engine, repinned by digest from
+  `0.38.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.38.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.39.0` brings the `card keygen`,
+  `card render` and `verify-card` commands the share cards run, and counts the passes below
+  the threshold of the signatures the Hub asks a daemon to watch. A backend analysis gives
+  the same findings, signatures and energy figures as on `0.38.0`.
+- Detection counts, days and ledgers leave on a clock of their own, `Hub:DetectionRetention`
+  (default `1100.00:00:00`, read as `Hub:Retention` when shorter, so a Hub keeping findings
+  longer still starts), instead of the 180 days of a finding: a
+  year card compares a year with the whole year before it. The chart sets it from
+  `hub.detectionRetention`. A database upgraded from 0.9.0 keeps only the detection days its
+  former 180-day purge left.
+
 ## [0.9.0] - 2026-10-29
 
 ### Added

@@ -15,7 +15,12 @@ Output lands in `docs/img/hub/`: eight screens as `<name>.png` (light) and
 `<name>-dark.png` (dark), plus `launcher-handoff.png`, New analysis as an incident
 link fills it, and `launcher_light.gif` and `launcher_dark.gif`. The seventh is
 `launcher-ack.png`, the ack page opened the way a Grafana link opens it, and the eighth
-`launcher-recap.png`, the recap of the week in progress. The GIFs
+`launcher-recap.png`, the recap of the week in progress. `launcher-card.png` is the recap's
+card section with a curve card previewed. It needs an engine with the `card` subcommand,
+named by `HUB_ENGINE_BINARY`: on an engine without it the recap shows no card section and
+the still is skipped. `global-setup.ts` turns cards on (`Hub__Cards__Organisation` and
+`Hub__Cards__Domain`) and pushes a ledger for the last two closed months, every day sealed
+with its avoidable and total operations, which is what a curve compares. The GIFs
 walk the four screens with a tab, plus the run and the report opened from them,
 and end on the handoff. The ack page is left out of the tour: it is reached by a
 link from outside the launcher, and the incidents table's own Ack link has no

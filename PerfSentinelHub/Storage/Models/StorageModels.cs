@@ -428,12 +428,22 @@ public sealed record DetectionLedgerPage(
     IReadOnlyList<DetectionDayRow> Days,
     string? NextAfter);
 
-/// <summary>How many times one signature was detected on one UTC epoch day, null I/O when green was off.</summary>
-public sealed record DetectionCountRow(int Day, string Signature, long Detections, long? ExtraIoOps);
+/// <summary>
+///     How many times one signature was detected on one UTC epoch day, null I/O when green was off.
+///     BelowThresholdPasses counts the passes under the threshold of a watched signature (C1), null
+///     on an engine that does not send it; such a row may carry zero detections.
+/// </summary>
+public sealed record DetectionCountRow(
+    int Day,
+    string Signature,
+    long Detections,
+    long? ExtraIoOps,
+    long? BelowThresholdPasses = null);
 
 /// <summary>
 ///     What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.
-///     The trailing four are the day's carbon inputs, null on an engine that does not send them.
+///     The four after the sampling rate are the day's carbon inputs, null on an engine that does not
+///     send them, and Thresholds the detection thresholds the daemon applied (C1).
 /// </summary>
 public sealed record DetectionDayRow(
     int Day,
@@ -447,7 +457,26 @@ public sealed record DetectionDayRow(
     double? AvoidableGco2 = null,
     long? AvoidableIoOps = null,
     double? AvoidableGco2Low = null,
-    long? TotalIoOps = null);
+    long? TotalIoOps = null,
+    DetectionThresholds? Thresholds = null);
+
+/// <summary>The thresholds the daemon applied that day (C1), each null when the engine did not send it.</summary>
+public sealed record DetectionThresholds(
+    long? SlowQueryThresholdMs,
+    long? SlowHttpThresholdMs,
+    long? MaxFanout,
+    long? ChattyThreshold,
+    long? PoolSaturationThreshold,
+    long? SerializedMinCalls);
+
+/// <summary>One source's day of the scope's activity, as a share card's curve sums it.</summary>
+public sealed record DayTotals(string SourceId, int Day, long? AvoidableIoOps, long? TotalIoOps, double? AvoidableGco2Low);
+
+/// <summary>A sealed day a fixed signature was not detected at one source while the daemon still saw it pass below its threshold (C1).</summary>
+public sealed record SignalDay(string Signature, string SourceId, int Day, DetectionThresholds Thresholds);
+
+/// <summary>A done action with the finding as it stood when it moved to done, as a share card reads it.</summary>
+public sealed record DoneAction(string Signature, long DoneAtMs, string FrozenFindingJson);
 
 public static class ActionStatuses
 {
@@ -484,3 +513,11 @@ public enum ActionWriteOutcome
     Missing,
     Busy
 }
+
+/// <summary>One share card signing key's public half and dates; its private file lives beside the database.</summary>
+public sealed record StoredCardKey(
+    string Fingerprint,
+    string PublicKey,
+    long CreatedAtMs,
+    long? RetiredAtMs,
+    string? RevokedOn);

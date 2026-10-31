@@ -1800,6 +1800,7 @@ test("Management_text_matches_the_launcher_helpers", () => {
         "The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.");
     assert.equal(PSL.recapSourcesNote(["a", "b"], "pilotage"), "No figures came from: a, b.");
     assert.equal(PSL.recapSourcesNote(["a", "b"], "tech"), "Sources without a detection volume: a, b.");
+    assert.equal(PSL.recapLateNote(["a", "b"]), "Left out, as they recorded nothing until after this period: a, b.");
 });
 
 test("Management_copy_carries_no_technical_word", () => {
@@ -1994,4 +1995,297 @@ test("app.js declares each of its top-level functions once", () => {
     assert.ok(names.length > 100, "the top-level pattern no longer matches app.js");
     const twice = names.filter((name, i) => names.indexOf(name) !== i);
     assert.deepEqual(twice, []);
+});
+
+// ---- share cards
+
+test("a card period reads in words, as the Hub's CardRules.PeriodName", () => {
+    assert.equal(PSL.cardPeriodName("month", "2026-10-01"), "October 2026");
+    assert.equal(PSL.cardPeriodName("quarter", "2026-07-01"), "Q3 2026");
+    assert.equal(PSL.cardPeriodName("semester", "2026-01-01"), "the first half of 2026");
+    assert.equal(PSL.cardPeriodName("semester", "2026-07-01"), "the second half of 2026");
+    assert.equal(PSL.cardPeriodName("year", "2026-01-01"), "2026");
+    assert.equal(PSL.cardPeriodName("week", "2026-10-05"), "the week of 5 October 2026");
+    assert.deepEqual(PSL.CARD_PERIODS, ["week", "month", "quarter", "semester", "year"]);
+    assert.equal(PSL.CARD_PERIOD_LABELS.semester, "Half-year");
+    assert.deepEqual(PSL.CARD_ANGLES, ["story", "curve", "collective"]);
+});
+
+test("only a closed card period can be picked", () => {
+    assert.equal(PSL.lastClosedPeriod("month", "2026-11-07"), "2026-10-01");
+    assert.equal(PSL.lastClosedPeriod("quarter", "2026-11-07"), "2026-07-01");
+    assert.equal(PSL.lastClosedPeriod("semester", "2026-11-07"), "2026-01-01");
+    assert.equal(PSL.lastClosedPeriod("year", "2026-11-07"), "2025-01-01");
+    // 2026-11-07 is a Saturday: the last closed week ran from Monday 26 October.
+    assert.equal(PSL.lastClosedPeriod("week", "2026-11-07"), "2026-10-26");
+    assert.equal(PSL.lastClosedPeriod("month", "2026-11-01"), "2026-10-01");
+    assert.equal(PSL.canStepForward("month", "2026-10-01", "2026-11-07"), false);
+    assert.equal(PSL.canStepForward("month", "2026-09-01", "2026-11-07"), true);
+    assert.equal(PSL.stepPeriod("semester", "2026-07-01", -1), "2026-01-01");
+    assert.equal(PSL.stepPeriod("month", "2026-01-01", -1), "2025-12-01");
+    assert.equal(PSL.stepPeriod("quarter", "2025-10-01", 1), "2026-01-01");
+    assert.equal(PSL.stepPeriod("week", "2026-10-26", -1), "2026-10-19");
+    assert.equal(PSL.cardPeriodStart("quarter", "2026-08-14"), "2026-07-01");
+});
+
+test("a card period names its days", () => {
+    assert.equal(PSL.cardRangeText("2026-10-01", "2026-10-31"), "1 to 31 October 2026, UTC");
+    assert.equal(PSL.cardRangeText("2026-07-01", "2026-09-30"), "1 July to 30 September 2026, UTC");
+    assert.equal(PSL.cardRangeText("2025-12-29", "2026-01-04"), "29 December 2025 to 4 January 2026, UTC");
+});
+
+test("a card body carries only the values set, the story's only on a story", () => {
+    assert.deepEqual(PSL.cardBody({angle: "curve", period: "month", at: "", label: "x", title: " ", format: "png"}),
+        {angle: "curve", period: "month", format: "png"});
+    assert.deepEqual(PSL.cardBody({
+        angle: "story", period: "month", at: "2026-10-01", environment: "prod", source_id: "",
+        signature: "n_plus_one_sql:x", label: " Showing a cart ", title: "Lighter", team: "", lang: "fr", format: "pdf"
+    }), {
+        angle: "story", period: "month", at: "2026-10-01", environment: "prod", signature: "n_plus_one_sql:x",
+        label: "Showing a cart", title: "Lighter", lang: "fr", format: "pdf"
+    });
+    assert.deepEqual(PSL.cardBody({angle: "collective", period: "month", format: "svg"}),
+        {angle: "collective", period: "month", format: "svg"});
+    assert.equal(PSL.cardOptionsPath({period: "month", at: "2026-10-01", environment: "a b&c"}),
+        "/api/cards/options?period=month&at=2026-10-01&environment=a%20b%26c");
+    assert.equal(PSL.cardOptionsPath({period: "year", at: "", environment: null, source_id: "s"}),
+        "/api/cards/options?period=year&source_id=s");
+});
+
+test("a name is remembered only by someone allowed to name actions, once typed or changed", () => {
+    assert.equal(PSL.canRememberLabel([{permissions: ["findings.read"]}, {permissions: ["labels.write"]}]), true);
+    assert.equal(PSL.canRememberLabel([{permissions: ["findings.read"]}]), false);
+    assert.equal(PSL.canRememberLabel([{permissions: null}]), true);
+    assert.equal(PSL.canRememberLabel(null), false);
+    assert.deepEqual(PSL.rememberState("", null, "this action"),
+        {text: "Remember this name for this action", enabled: false});
+    assert.deepEqual(PSL.rememberState("Showing a cart", null, "this action"),
+        {text: "Remember this name for this action", enabled: true});
+    assert.deepEqual(PSL.rememberState(" Showing a cart ", "Showing a cart", "GET /cart"),
+        {text: "Update the remembered name with this one", enabled: false});
+    assert.deepEqual(PSL.rememberState("Opening a cart", "Showing a cart", "GET /cart"),
+        {text: "Update the remembered name with this one", enabled: true});
+});
+
+test("a free field names the first character the card cannot draw", () => {
+    assert.equal(PSL.cardFieldProblem("Lighter cart \u{1F331}"),
+        "The card's font cannot draw \"\u{1F331}\". Remove it, or write it another way.");
+    assert.equal(PSL.cardFieldProblem("Paniers plus légers"), null);
+    assert.equal(PSL.cardFieldProblem("a\u200Bb"),
+        "The card's font cannot draw \"\u200B\". Remove it, or write it another way.");
+    assert.equal(PSL.cardFieldProblem("Acme® checkout™"), null);
+    assert.equal(PSL.cardFieldProblem(""), null);
+});
+
+test("the attachment check names the hosts it reaches, plainly for management", () => {
+    assert.equal(PSL.cardContactText("acme.example", "tech"),
+        "Checking contacts cloudflare-dns.com (DNS over HTTPS) and acme.example.");
+    assert.equal(PSL.cardContactText("acme.example", "pilotage"),
+        "Checking contacts cloudflare-dns.com and acme.example.");
+});
+
+test("an attachment verdict reads as one sentence, the raw reason in the title only", () => {
+    const base = {integrity: "ok", level: 1, domain: "acme.example", key: "unknown", reason: "key_not_published"};
+    assert.deepEqual(PSL.attachmentText({...base, integrity: "tampered", reason: "signature_invalid"}, true),
+        {text: "This card does not verify: its figures changed after signing.", title: null});
+    assert.deepEqual(PSL.attachmentText({...base, level: 2, key: "current", reason: "key_published"}, false),
+        {text: "Attached: cards read \"Signed by acme.example\".", title: null});
+    assert.deepEqual(PSL.attachmentText({...base, reason: "binding_check_failed"}, true), {
+        text: "Could not check: the places that publish the key under acme.example did not answer.",
+        title: "binding_check_failed"
+    });
+    assert.deepEqual(PSL.attachmentText({...base, reason: "something_new"}, true),
+        {text: "Could not check: an unexpected answer.", title: "something_new"});
+    assert.deepEqual(PSL.attachmentText(base, true),
+        {text: "Not attached yet. Publish one of the lines below, then check again.", title: null});
+    assert.deepEqual(PSL.attachmentText(base, false), {
+        text: "Not attached yet. An administrator publishes one line under acme.example, then you can check again.",
+        title: null
+    });
+    for (const reason of ["binding_check_failed", "key_not_published", "binding_partial", "no_domain"]) {
+        assert.ok(PSL.ATTACH_REASONS[reason], reason);
+    }
+    assert.equal(PSL.ATTACH_REASONS.signed_after_revocation, undefined);
+    assert.equal(PSL.attachmentText({...base, reason: "key_not_published", level: 1, integrity: "ok"}, true).title, null);
+});
+
+test("a revoked key reads as a verdict, not as a check that failed", () => {
+    assert.deepEqual(PSL.attachmentText(
+        {integrity: "ok", level: 1, domain: "acme.example", key: "revoked", reason: "key_revoked"}, true),
+    {text: "This card was signed with a key that is now revoked.", title: "key_revoked"});
+});
+
+test("a mismatched key and a date outside the key's window read as verdicts", () => {
+    const base = {integrity: "ok", content: "intact", level: 1, domain: "acme.example", key: "unknown"};
+    assert.deepEqual(PSL.attachmentText({...base, reason: "public_key_mismatch"}, true), {
+        text: "This card was signed with a key other than the one published under acme.example.",
+        title: "public_key_mismatch"
+    });
+    assert.deepEqual(PSL.attachmentText({...base, reason: "signed_outside_validity"}, false), {
+        text: "This card is dated outside the period its key was published for.",
+        title: "signed_outside_validity"
+    });
+    assert.equal(PSL.ATTACH_REASONS.public_key_mismatch, undefined);
+    assert.equal(PSL.ATTACH_REASONS.signed_outside_validity, undefined);
+});
+
+test("a modified file never reads attached", () => {
+    const result = PSL.attachmentText({
+        integrity: "ok", content: "modified", level: 2, domain: "acme.example", key: "current",
+        reason: "content_modified"
+    }, true);
+    assert.deepEqual(result, {
+        text: "This card file was changed after it was signed. Make the card again before sharing it.",
+        title: "content_modified"
+    });
+    assert.ok(!result.text.includes("Attached"));
+});
+
+test("the content line says the file is the one signed, and only then", () => {
+    assert.equal(PSL.contentLine({content: "intact"}), "File intact: this is the file that was signed.");
+    assert.equal(PSL.contentLine({content: "modified"}), null);
+    assert.equal(PSL.contentLine({content: "not_checked"}), null);
+});
+
+test("the signed figures read in the label order, exact", () => {
+    assert.deepEqual(PSL.signedFigureLines({
+        angle: "story",
+        period: {kind: "month", from: "2026-09-01", to: "2026-09-30"},
+        before_fix_period: {from: "2026-07-01", to: "2026-07-31"},
+        cited_ops: 41,
+        before_fix_ops: 1937000
+    }), [
+        {label: "Period", value: "September 2026"},
+        {label: "Period before the fix", value: "July 2026"},
+        {label: "Headline figure on the card", value: "41"},
+        {label: "Unnecessary operations before the fix", value: "1,937,000"}
+    ]);
+    const month = {kind: "month", from: "2026-09-01", to: "2026-09-30"};
+    assert.deepEqual(PSL.signedFigureLines(
+        {angle: "curve", period: month, last_waste_permille: 31, previous_waste_permille: 48}).slice(1), [
+        {label: "Share of the work that was avoidable, period of the card", value: "3.1%"},
+        {label: "Share of the work that was avoidable, period before", value: "4.8%"}
+    ]);
+    assert.deepEqual(PSL.signedFigureLines(
+        {angle: "story", period: month, cited_ms: 2349, threshold_ms: 500}).slice(1), [
+        {label: "Headline figure on the card", value: "2,349 milliseconds"},
+        {label: "Alert threshold the card cites", value: "500 milliseconds"}
+    ]);
+    assert.deepEqual(PSL.signedFigureLines(
+        {angle: "collective", period: month, confirmed_fixes_count: 1200, services_count: 3}).slice(1), [
+        {label: "Fixes confirmed by measurement", value: "1,200"},
+        {label: "Services concerned", value: "3"}
+    ]);
+    assert.deepEqual(PSL.signedFigureLines(null), []);
+});
+
+test("a partial lookup reads as could not check", () => {
+    const result = PSL.attachmentText(
+        {integrity: "ok", level: 1, domain: "acme.example", key: "unknown", reason: "binding_partial"}, true);
+    assert.deepEqual(result, {
+        text: "Could not check: one of the two places that publish the key under acme.example did not answer.",
+        title: "binding_partial"
+    });
+    assert.ok(!result.text.includes("Attached"));
+});
+
+test("the revoke confirmation says every card reads revoked", () => {
+    // The consequence is the alert; the DNS steps read apart from it, in plain text.
+    const said = PSL.revokeText("2026-10-01", false, "acme.example");
+    assert.equal(said.alert, "Every card this key signed will read as revoked on the check page, whatever its "
+        + "date. The check page will say the key may have been exposed since 2026-10-01. This cannot be undone.");
+    assert.equal(said.step, "Republish this key's DNS line under acme.example: the check page reads the DNS line "
+        + "only, and keeps showing these cards as signed until the line says revoked.");
+    assert.ok(PSL.revokeText("2026-10-01", false, null).step.startsWith("Republish this key's DNS line:"));
+    assert.ok(PSL.revokeText("2026-10-01", true, "acme.example").step.endsWith("publish its line too, under acme.example."));
+    assert.ok(PSL.revokeText("2026-10-01", true, null).step.endsWith("makes a new key."));
+});
+
+test("the level line says what the check page shows", () => {
+    assert.equal(PSL.levelLine(false, "acme.example"),
+        "On the check page, this card reads: Figures intact since their signature. Signer not verified.");
+    assert.equal(PSL.levelLine(true, "acme.example"), "On the check page, this card reads: Signed by acme.example.");
+});
+
+test("a fix row says what the card shows when its problem has no volume", () => {
+    assert.deepEqual(PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 1_940_000,
+        before_period_name: "September 2026"}),
+    {figure: "1.9 million", text: " unnecessary operations in September 2026, before the fix"});
+    assert.equal(PSL.cardFixLine({finding_type: "redundant_http", before_fix_ops: 410_500,
+        before_period_name: "September 2026"}).figure, "410 thousand");
+    assert.equal(PSL.cardFixLine({finding_type: "redundant_http", before_fix_ops: 9_999,
+        before_period_name: "September 2026"}).figure, "9,999");
+    assert.deepEqual(PSL.cardFixLine({finding_type: "slow_sql", before_fix_ops: null}),
+        {figure: null, text: "the card shows how long its slowest runs took"});
+    assert.deepEqual(PSL.cardFixLine({finding_type: "chatty_service", before_fix_ops: null}),
+        {figure: null, text: "the card shows how many calls one action made"});
+});
+
+test("a card downloads as a PNG, an SVG, a JPEG XL or a PDF, each with its label", () => {
+    assert.deepEqual(PSL.CARD_FORMATS, ["png", "svg", "jxl", "pdf"]);
+    for (const format of PSL.CARD_FORMATS) assert.ok(PSL.CARD_FORMAT_LABELS[format], format);
+    assert.deepEqual(Object.keys(PSL.CARD_FORMAT_LABELS), PSL.CARD_FORMATS);
+    // The preview's note: an SVG has no fixed pixel size.
+    for (const format of PSL.CARD_FORMATS) assert.ok(PSL.CARD_COPY[PSL.previewFormat(format) + "Note"], format);
+    assert.ok(!PSL.CARD_COPY.svgNote.includes("pixels"));
+    // Only the JPEG XL carries a note under the choice: where it does not go.
+    assert.deepEqual(Object.keys(PSL.CARD_FORMAT_NOTES), ["jxl"]);
+    assert.ok(PSL.CARD_FORMAT_NOTES.jxl.includes("LinkedIn"));
+});
+
+test("the preview of a JPEG XL choice renders a PNG", () => {
+    assert.equal(PSL.previewFormat("jxl"), "png");
+    assert.equal(PSL.previewFormat("png"), "png");
+    assert.equal(PSL.previewFormat("svg"), "svg");
+    assert.equal(PSL.previewFormat("pdf"), "pdf");
+    assert.deepEqual(PSL.cardBody({angle: "collective", period: "month", format: "jxl"}),
+        {angle: "collective", period: "month", format: "jxl"});
+});
+
+test("a busy render gate says so and when to try again", () => {
+    assert.deepEqual(PSL.cardBusy(503, "5"),
+        {text: "Another card is being made. Trying again in a few seconds.", delayMs: 5000});
+    // The engine-off 503 carries no Retry-After.
+    assert.equal(PSL.cardBusy(503, null), null);
+    assert.equal(PSL.cardBusy(422, "5"), null);
+    assert.equal(PSL.cardBusy(503, "600").delayMs, 10000);
+    assert.equal(PSL.cardBusy(503, "0").delayMs, 1000);
+    assert.equal(PSL.cardBusy(503, "Wed, 21 Oct 2026 07:28:00 GMT").delayMs, 1000);
+});
+
+test("Card_copy_carries_no_technical_word", () => {
+    const words = ["I/O", "finding", "query", "endpoint", "signature", "DNS"];
+    const types = Object.keys(PSL.FINDING_TYPE_LABEL);
+    const texts = [
+        ...Object.values(PSL.CARD_ANGLE_LINES),
+        ...Object.values(PSL.CARD_PERIOD_LABELS),
+        ...Object.values(PSL.CARD_FORMAT_LABELS),
+        ...Object.values(PSL.CARD_FORMAT_NOTES),
+        PSL.cardEnvironmentLine("prod", "pilotage"),
+        PSL.cardEnvironmentLine(null, "pilotage"),
+        PSL.cardContactText("acme.example", "pilotage"),
+        ...types.map((type) => PSL.cardFixLine({finding_type: type, before_fix_ops: null}).text),
+        PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 5, before_period_name: "May 2026"}).text,
+        ...Object.values(PSL.SIGNED_FIGURE_LABELS),
+        PSL.contentLine({content: "intact"}),
+        PSL.attachmentText({integrity: "ok", content: "modified", level: 1, domain: null, reason: "content_modified"},
+            false).text,
+        PSL.CARD_COPY.busy
+    ];
+    for (const text of texts) {
+        for (const word of words) assert.ok(!text.includes(word), `"${text}" holds "${word}"`);
+    }
+    assert.equal(PSL.cardEnvironmentLine("prod", "tech"),
+        "Environment prod, taken from the recap filter above. A card covers every service in it: "
+        + "the service and namespace filters do not apply.");
+    assert.equal(PSL.cardEnvironmentLine("prod", "pilotage"),
+        "Environment prod, taken from the recap filter above. A card covers every service in it.");
+});
+
+test("only the refusal of the period before offers the other two angles", () => {
+    // CardRules.Explain's previous_ sentence, as a curve render's 422 carries it.
+    assert.equal(PSL.isPreviousRefusal("No curve for October 2026. The curve compares with September 2026, and "
+        + "some of its days were not recorded. A story or a collective card still works for October 2026."), true);
+    assert.equal(PSL.isPreviousRefusal("The curve covers whole sources, and you read only part of one."), false);
+    assert.equal(PSL.isPreviousRefusal(null), false);
 });

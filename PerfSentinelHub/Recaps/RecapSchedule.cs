@@ -20,7 +20,7 @@ public static class RecapSchedule
             return false;
         if (nowMs >= period.ToMs + 1 + (long)maxDelay.TotalMilliseconds)
             return true;
-        return coverage
+        return RecapCoverage.SplitLate(coverage, period).Started
             .Where(source => source.Ledgers.Any(ledger => ledger.LastReadMs >= period.FromMs))
             .All(source => source.Days.Any(day => day.Sealed && day.Day == period.ToDay));
     }

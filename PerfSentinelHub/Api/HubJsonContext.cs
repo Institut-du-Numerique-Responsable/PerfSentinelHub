@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using PerfSentinelHub.Cards;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -10,6 +11,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(StatusResponse))]
 [JsonSerializable(typeof(DetectionKnob))]
 [JsonSerializable(typeof(ImportResponse))]
+[JsonSerializable(typeof(DetectionImportResponse))]
 [JsonSerializable(typeof(IReadOnlyList<SourceResponse>))]
 [JsonSerializable(typeof(IReadOnlyList<StoredEpisode>))]
 [JsonSerializable(typeof(SubmittedAnalysis))]
@@ -26,6 +28,11 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(IReadOnlyList<RecapReportItem>))]
 [JsonSerializable(typeof(RecapReportItem))]
 [JsonSerializable(typeof(RecapReportDetail))]
+[JsonSerializable(typeof(CardKeysResponse))]
+[JsonSerializable(typeof(CardOptions))]
+[JsonSerializable(typeof(CardAttachmentResponse))]
+[JsonSerializable(typeof(CardSignedFigures))]
+[JsonSerializable(typeof(CardFieldProblem))]
 [JsonSerializable(typeof(OAuthError))]
 [JsonSerializable(typeof(DeviceAuthorizationResponse))]
 [JsonSerializable(typeof(DeviceTokenResponse))]

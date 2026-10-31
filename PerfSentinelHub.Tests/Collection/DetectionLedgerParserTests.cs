@@ -309,4 +309,102 @@ public sealed class DetectionLedgerParserTests
         Assert.Null(read.AvoidableGco2);
         Assert.Null(read.AvoidableGco2Low);
     }
+
+    private static JsonObject AllThresholds()
+    {
+        return new JsonObject
+        {
+            ["slow_query_threshold_ms"] = 500,
+            ["slow_http_threshold_ms"] = 1000,
+            ["max_fanout"] = 20,
+            ["chatty_threshold"] = 15,
+            ["pool_saturation_threshold"] = 10,
+            ["serialized_min_calls"] = 3
+        };
+    }
+
+    private static JsonObject WithThresholds(JsonNode? thresholds)
+    {
+        var day = DetectionLedgerJson.Day(Today);
+        day["thresholds"] = thresholds;
+        var json = Valid();
+        json["days"] = new JsonArray(day);
+        return json;
+    }
+
+    [Fact]
+    public void Below_threshold_passes_is_read()
+    {
+        var row = Assert.Single(Parse(Valid(DetectionLedgerJson.Count(Today, belowThresholdPasses: 12))).Counts);
+
+        Assert.Equal(12, row.BelowThresholdPasses);
+    }
+
+    [Fact]
+    public void Absent_below_threshold_passes_reads_as_null()
+    {
+        Assert.Null(Assert.Single(Parse(Valid()).Counts).BelowThresholdPasses);
+    }
+
+    [Fact]
+    public void A_negative_below_threshold_passes_is_refused()
+    {
+        var error = Assert.Throws<InvalidDataException>(() =>
+            Parse(Valid(DetectionLedgerJson.Count(Today, belowThresholdPasses: -1))));
+
+        Assert.Contains("below_threshold_passes", error.Message);
+    }
+
+    [Fact]
+    public void Thresholds_are_read()
+    {
+        var day = Assert.Single(Parse(WithThresholds(AllThresholds())).Days);
+
+        Assert.Equal(new DetectionThresholds(500, 1000, 20, 15, 10, 3), day.Thresholds);
+    }
+
+    [Fact]
+    public void Absent_or_null_thresholds_read_as_null()
+    {
+        Assert.Null(Assert.Single(Parse(Valid()).Days).Thresholds);
+        Assert.Null(Assert.Single(Parse(WithThresholds(null)).Days).Thresholds);
+    }
+
+    [Fact]
+    public void A_thresholds_value_that_is_not_an_object_is_refused()
+    {
+        var error = Assert.Throws<InvalidDataException>(() => Parse(WithThresholds(5)));
+
+        Assert.Equal("thresholds is not an object.", error.Message);
+    }
+
+    [Fact]
+    public void A_string_threshold_is_refused()
+    {
+        var thresholds = AllThresholds();
+        thresholds["max_fanout"] = "20";
+
+        var error = Assert.Throws<InvalidDataException>(() => Parse(WithThresholds(thresholds)));
+
+        Assert.Equal("max_fanout is not an integer in [0, 2^53].", error.Message);
+    }
+
+    [Fact]
+    public void An_unknown_threshold_key_is_ignored()
+    {
+        var thresholds = new JsonObject { ["max_fanout"] = 20, ["a_later_threshold"] = "anything" };
+
+        var day = Assert.Single(Parse(WithThresholds(thresholds)).Days);
+
+        Assert.Equal(new DetectionThresholds(null, null, 20, null, null, null), day.Thresholds);
+    }
+
+    [Fact]
+    public void A_count_of_zero_detections_is_accepted()
+    {
+        // A watched signature seen only below its threshold that day.
+        var row = Assert.Single(Parse(Valid(DetectionLedgerJson.Count(Today, detections: 0))).Counts);
+
+        Assert.Equal(0, row.Detections);
+    }
 }

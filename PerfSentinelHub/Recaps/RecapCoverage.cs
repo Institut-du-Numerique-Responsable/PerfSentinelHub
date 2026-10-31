@@ -24,6 +24,20 @@ public static class RecapCoverage
     };
 
     /// <summary>
+    ///     Splits off the sources whose every ledger started after the period ended: they recorded
+    ///     nothing there, so they are out of its scope rather than uncovered. A daemon down for the whole
+    ///     period reads the same, which is why a recap names them.
+    /// </summary>
+    public static (IReadOnlyList<SourceCoverage> Started, IReadOnlyList<string> Late) SplitLate(
+        IReadOnlyList<SourceCoverage> sources,
+        RecapPeriod period)
+    {
+        var late = sources.Where(source => source.Ledgers.All(ledger => ledger.StartedMs > period.ToMs))
+            .Select(source => source.SourceId).ToHashSet(StringComparer.Ordinal);
+        return ([.. sources.Where(source => !late.Contains(source.SourceId))], [.. late.Order(StringComparer.Ordinal)]);
+    }
+
+    /// <summary>
     ///     Judges how well the ledgers cover the period. truncatedToDays null folds the closed
     ///     days of the period (today is left to InProgress); n >= 1 folds its first n days;
     ///     0, like the first day of a period, has nothing closed to fold and judges nothing.

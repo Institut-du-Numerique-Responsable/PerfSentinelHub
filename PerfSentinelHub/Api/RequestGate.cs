@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Options;
+using PerfSentinelHub.Configuration;
+
 namespace PerfSentinelHub.Api;
 
 /// <summary>
@@ -76,6 +79,13 @@ public sealed class IncidentRefreshGate() : RequestGate(MaxReads)
     // DaemonViewGate.MaxReads is: the cap is a contract, not a detail.
     public const int MaxReads = 2;
 }
+
+/// <summary>
+///     Each card render holds an engine process and a full-size image for seconds, so a burst is
+///     refused rather than queued. Sized by configuration, unlike the gates above: the cost of a
+///     render depends on the host, its CPU count and the memory limit of its pod.
+/// </summary>
+public sealed class CardRenderGate(IOptions<HubOptions> options) : RequestGate(options.Value.Cards.MaxConcurrentRenders);
 
 /// <summary>One publication at a time: each runs the engine, and two would race on the same uuid.</summary>
 public sealed class DisclosureImportGate() : RequestGate(1);

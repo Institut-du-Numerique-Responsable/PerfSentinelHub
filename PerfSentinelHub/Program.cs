@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
+using PerfSentinelHub.Cards;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
@@ -105,6 +106,9 @@ builder.Services.AddSingleton<RecapGenerator>();
 builder.Services.AddSingleton<RecapMailer>();
 builder.Services.AddSingleton<RecapDeliveryWorker>();
 builder.Services.AddHostedService<RecapLoop>();
+builder.Services.AddSingleton<CardKeys>();
+builder.Services.AddSingleton<CardService>();
+builder.Services.AddSingleton<CardRenderer>();
 // Its own client: a webhook is a destination of its own, never followed elsewhere. No
 // request logging: the factory would log each URL, and a chat webhook URL is a secret.
 builder.Services.AddHttpClient(DeliveryWorker.ClientName)
@@ -113,6 +117,7 @@ builder.Services.AddHttpClient(DeliveryWorker.ClientName)
 builder.Services.AddSingleton<DaemonViewGate>();
 builder.Services.AddSingleton<IncidentRefreshGate>();
 builder.Services.AddSingleton<AckRelayGate>();
+builder.Services.AddSingleton<CardRenderGate>();
 builder.Services.AddSingleton<AnalysisRunner>();
 builder.Services.AddHostedService<AnalysisWorker>();
 builder.Services.AddHttpClient<DaemonClient>().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler

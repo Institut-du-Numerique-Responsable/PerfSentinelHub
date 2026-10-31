@@ -57,7 +57,27 @@ findings de la source. Chaque objet jour peut aussi porter `avoidable_gco2` et `
 (grammes de CO2eq, de 0 à 2^53), `avoidable_io_ops` et `total_io_ops` (entiers), qu'envoie ensemble
 un daemon qui calcule le carbone. Ils fusionnent par maximum, une valeur absente n'abaissant
 jamais une valeur stockée, et sont absents des moteurs antérieurs à la version du récapitulatif.
-Les refus se comptent sur `perf_sentinel_hub_detection_import_rejected_total`.
+Depuis la version de la carte, une ligne de compte peut porter `below_threshold_passes` (un
+entier), les passages sous le seuil d'une signature que le Hub demande au daemon de surveiller, et
+une telle ligne peut porter `detections: 0`, qu'aucune lecture ne compte comme une détection. Un
+objet jour peut porter `thresholds`, un objet aux clés entières `slow_query_threshold_ms`,
+`slow_http_threshold_ms`, `max_fanout`, `chatty_threshold`, `pool_saturation_threshold` et
+`serialized_min_calls`, les seuils que le daemon a appliqués ce jour-là ; une clé que le Hub ne
+connaît pas est ignorée. Les deux sont facultatifs et fusionnent par maximum, une valeur absente
+n'abaissant jamais une valeur stockée. Les refus se comptent sur
+`perf_sentinel_hub_detection_import_rejected_total`.
+
+Une page enregistrée répond `{"accepted":…,"rejected":0,"watch":[…]}`, `accepted` étant le nombre
+de lignes de comptes. `watch` liste les signatures dont le Hub demande à ce daemon de compter les
+passages sous le seuil : celles dont l'action est `done`, dont le type (le préfixe de la signature
+avant le premier `:`) est `slow_sql`, `slow_http`, `slow_messaging`, `excessive_fanout`,
+`chatty_service`, `pool_saturation` ou `serialized_calls`, que cette source a détectées au moins
+une fois, et que cette source n'a pas encore confirmées corrigées. Un jour confirme une fois scellé
+après le jour où l'action est passée à done, avec des passages sous le seuil et aucune détection de
+la signature à cette source, quel que soit son registre. Les plus récemment passées à done viennent
+en premier, 10 000 au plus. La liste est toujours envoyée, `[]` quand elle est vide, donc le daemon
+remplace la sienne à chaque réponse. Seul un push la reçoit : un daemon interrogé par le poll ne la
+reçoit jamais.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
@@ -76,7 +96,7 @@ joignabilité est un fait sur la route du Hub vers le daemon, qu'un push n'exerc
 
 | Endpoint                             | Renvoie                                                                                                                                                                                                            |
 |--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport. `disclosures: true` seulement tant que les divulgations sont actives et que l'appelant les lit |
+| `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport. `disclosures: true` seulement tant que les divulgations sont actives et que l'appelant les lit. `cards` : `true` quand l'appelant peut faire des cartes, `false` quand le moteur n'a pas de sous-commande `card`, absent tant que les cartes sont désactivées ou que l'appelant n'a `cards.write` nulle part |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
 | `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                   |
 | `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
@@ -623,7 +643,7 @@ La réponse est un instantané, `schema_version` `1`, avec `view`, `generated_at
 et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
 `sampling_rate`, `truncated_to_days`), `filters` (tels que demandés), `comparison_exact`,
 `tiles`, `priorities[]`, `more_priorities`, `movements`, `nothing_moved`,
-`sources_without_volume[]` et `truncated`.
+`sources_without_volume[]`, `truncated` et `late_sources[]`.
 
 - **Comparer.** Une période en cours se compare sur ses jours clos : du premier jour à hier
   contre le même nombre de premiers jours de la période précédente, indiqué dans
@@ -661,6 +681,10 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   l'une des périodes et n'ont aucun registre de détections (un daemon d'avant le registre,
   ou un daemon qui n'envoie aucun jour). Leurs findings sont classés par sévérité et portent
   `volume_known: false`.
+- **Sources arrivées après.** `late_sources` nomme les sources dont le daemon n'a rien enregistré
+  avant la fin de la période : un daemon ajouté plus tard, ou arrêté toute la période. Elles sont
+  écartées des deux périodes plutôt que lues comme non couvertes. Une source arrivée pendant la
+  période reste, et laisse la période d'avant non couverte. Absent d'un rapport figé avant ce champ.
 - **Tuiles.** `avoidable_io_ops` est la somme des findings classés, `null` quand aucun n'a de
   volume connu, à côté de `previous_avoidable_io_ops`, `null` quand la période précédente n'a
   pas été lue. `active_findings` compte les findings classés, `acked_findings` les acquittés de
@@ -795,6 +819,187 @@ données. Un responsable dont il ne reste aucun nom une fois l'e-mail retiré n'
 id inconnu et une vue que le rapport ne contient pas sont tous `404`. Les rapports sont purgés après
 `Hub:Recaps:Retention`.
 
+## Cartes à partager
+
+Une carte à partager est une image (PNG, SVG ou JPEG XL) ou un PDF des résultats d'une période
+close, que le moteur dessine et signe, pour qu'un lecteur hors du Hub puisse la vérifier. Cette section commence par
+la clé de signature ; voir [OPERATIONS-FR.md](OPERATIONS-FR.md#clés-des-cartes-à-partager) pour
+l'endroit où elle vit et la façon de la publier. Les routes n'existent que lorsque
+`Hub:Cards:Organisation` est posé : sinon chacune répond `404`.
+
+| Route                            | Fait                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/keys`            | Toutes les clés, la plus ancienne d'abord, et les lignes à publier   |
+| `POST /api/cards/keys/rotate`    | Retire la clé courante et fait fabriquer une nouvelle par le moteur  |
+| `POST /api/cards/keys/revoke`    | Révoque une clé à partir du premier jour où elle a pu fuiter         |
+
+Les trois routes répondent le même objet :
+
+```json
+{"record_name": "_perf-sentinel.example.com",
+ "keys": [{"fingerprint": "ps1:…", "public_key": "…", "from": "2026-10-30", "to": null,
+           "revoked": null, "current": true, "dns": "v=ps1; k=ps1:…; from=2026-10-30"}],
+ "well_known": "{\n  \"keys\": [\n …"}
+```
+
+`from` est le jour UTC où la clé a été fabriquée, `to` celui où elle a été retirée (`null` tant
+qu'elle est courante), `revoked` le jour donné à la révocation. `dns` est l'enregistrement TXT de
+cette clé sous `record_name`, qui vaut `null` quand `Hub:Cards:Domain` n'est pas posé.
+`well_known` est le fichier `/.well-known/perf-sentinel-key` entier, indenté avec des fins de
+ligne `\n`, à servir tel quel. Lire les clés n'en fabrique jamais : une liste `keys` vide dit que
+la première carte la fabrique.
+
+`POST /api/cards/keys/revoke` prend `{"fingerprint": "ps1:…", "revoked": "yyyy-MM-dd"}`, 1 Kio au
+plus. `revoked` n'a pas de valeur par défaut : donnez le premier jour où la clé a pu fuiter,
+publié avec la clé comme `revoked`. Chaque carte que la clé a signée se lit alors révoquée, quel
+que soit son jour. Absent ou pas un jour `yyyy-MM-dd`,
+c'est `400 Give the first day the key may have leaked.` ; un jour antérieur à la fabrication de la
+clé ou postérieur à aujourd'hui (UTC) donne
+`400 The revocation date must lie between the key's creation and today.` ; une empreinte inconnue
+donne `404`. Une clé retirée peut être révoquée, et garde son `to`.
+
+Le Hub juge une requête dans cet ordre : cartes désactivées `404` ; un appelant que le Hub ne sait
+pas nommer `403` ; sur les deux `POST`, la règle de même origine et le type de contenu JSON des
+autres écritures (`403`, `415`) ; un appelant sans `access.admin`
+`403 You may not manage the card signing key.`. Une rotation avec un moteur sans sous-commande
+`card` donne `503 This Hub's engine cannot make cards yet.`, et une dont le moteur répond hors
+contrat ou au-delà de 30 secondes donne `502`. Une rotation partage la limite des rendus de cartes
+et peut répondre le `503` d'occupation décrit sous [Faire une carte](#faire-une-carte).
+
+### Faire une carte
+
+| Route                            | Fait                                                                 |
+|----------------------------------|----------------------------------------------------------------------|
+| `GET /api/cards/options`         | Ce que l'écran montre avant toute signature : le refus de la période, le périmètre signé, les corrections |
+| `POST /api/cards/render`         | Calcule les chiffres, fait signer et dessiner la carte par le moteur, répond le fichier |
+| `POST /api/cards/attachment`     | Dessine la carte en PNG et vérifie son rattachement DNS              |
+
+**Options.** La requête prend `period` (obligatoire : `week`, `month`, `quarter`, `semester` ou
+`year`), `at` (un jour quelconque de la période, `yyyy-MM-dd`, par défaut la dernière période
+close), `environment` et `source_id`. Une période encore en cours est lue, pas refusée : la réponse
+porte son refus, pour que l'écran dise pourquoi avant qu'on demande une carte. Une requête invalide
+donne `400`. La réponse :
+
+```json
+{"period": {"kind": "month", "from": "2026-10-01", "to": "2026-10-31"}, "period_name": "October 2026",
+ "refusal": null, "refusal_text": null, "restart_days": 0, "sampled_permille": 1000,
+ "environment": "prod", "sources": ["prod-eu"], "previous_complete": true,
+ "previous_whole": true, "confirmed_fixes_count": 1,
+ "fixes": [{"signature": "…", "finding_type": "n_plus_one_sql", "service": "order-svc",
+            "endpoint": "GET /orders", "plain": "…", "done_at_ms": 1792058400000,
+            "before_fix_ops": 1900, "before_period_name": "September 2026", "label": "Order list"}],
+ "default_signature": "…", "org": {"name": "Acme", "domain": "acme.example"}}
+```
+
+`refusal` est la raison propre à la période (ci-dessous) et `refusal_text` sa phrase, celle que
+répondrait un rendu. `sources` est le périmètre signé : les sources demandées qui ont enregistré
+quelque chose sur la période. `previous_complete` vaut `false` quand une carte collective laisse
+de côté sa comparaison avec la période d'avant, et `previous_whole` dit pourquoi : `false` quand
+cette période n'est pas entière, `true` quand l'une de ses corrections est passée à done avant que
+le Hub garde le détail des corrections. `confirmed_fixes_count` est le nombre que compte une carte
+collective. `fixes` sont les corrections confirmées qu'une histoire peut raconter, celles dont la
+carte peut imprimer les noms, avec le libellé de l'endpoint quand il en a un.
+
+**Rendu et rattachement.** Le corps est un objet JSON, 4 Kio au plus, avec la règle de même
+origine et le type de contenu JSON des autres écritures :
+
+| Champ                       | Fait                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| `angle`                     | Obligatoire : `story`, `curve` ou `collective`                                         |
+| `period`                    | Obligatoire : `week`, `month`, `quarter`, `semester` ou `year`                         |
+| `at`                        | Un jour quelconque de la période, `yyyy-MM-dd`, depuis 1900 ; par défaut la dernière période close |
+| `environment`, `source_id`  | Le périmètre ; un inconnu donne `400 Unknown environment or source_id.`                |
+| `signature`                 | Histoire seulement : la correction à raconter ; par défaut celle au plus gros volume d'avant |
+| `title`, `team`             | Texte libre, 1 à 48 caractères                                                         |
+| `label`                     | Histoire seulement, texte libre, 1 à 80 caractères                                     |
+| `lang`                      | `en` (par défaut) ou `fr`                                                              |
+| `format`                    | `png` (par défaut), `svg`, `jxl` ou `pdf` (le carrousel) ; la vérification du rattachement dessine toujours un PNG |
+
+Les champs libres sont rognés, et un champ vide est laissé de côté. Un champ plus long que sa
+borne, ou qui porte un caractère de contrôle ou de format (un forçage de direction, une espace de
+largeur nulle), donne `400`. Un champ qui contient `{"content_sig":"`, le texte que le fichier de la
+carte garde pour sa signature, donne
+`400 <name> cannot contain {"content_sig":", the text the card file keeps for its signature.`, la
+règle que suivent aussi les noms de service, d'endpoint, d'environnement et de source. Toute autre
+clé, `figures`, `org`, `scope` ou `generated_at_ms` par
+exemple, donne
+`400 Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may be sent: the figures come from the Hub.`
+Une période qui ne s'est pas terminée avant aujourd'hui donne
+`400 A card covers a closed period. Pick an earlier one.`, `signature` ou `label` sur un autre
+angle `400 signature and label belong to a story card.`
+
+**Refus.** Une carte que les chiffres ne permettent pas donne `422` avec une phrase en `detail`, la
+même que les options portent en `refusal_text`. Les raisons : `open_period`, `uncovered_days`,
+`open_day`, `overflow` (la période n'est pas entière), `previous_uncovered_days`,
+`previous_open_day`, `previous_overflow` (une courbe dont la période d'avant n'est pas entière),
+`no_confirmed_fix`, `unknown_fix`, `unprintable_fix` (une histoire dont le nom de service ou
+d'endpoint ne peut pas s'imprimer sur la carte), `no_total_io` (pas d'activité totale pour tracer
+la courbe), `curve_needs_whole_sources` (l'appelant ne lit qu'une partie d'une source),
+`unprintable_scope` (un nom de source ou d'environnement que la carte ne peut pas imprimer),
+`scope_too_long` (les noms d'environnement et de sources, joints par `", "`, dépassent 120
+caractères, la borne du moteur sur la ligne de périmètre) et `unkept_fixes` (une collective dont
+la période compte une correction passée à done avant que le Hub garde le détail des corrections,
+que son total laisserait de côté). Le moteur peut encore refuser ce que le
+Hub a envoyé :
+
+| Raison du moteur                              | Réponse                                                                                                                       |
+|-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `unsupported_characters` sur un champ libre   | `422 The card's font cannot draw a character of this field. Remove it, or write it another way.` avec `"field": "title"`, `"team"` ou `"label"` |
+| `unsupported_characters` sur l'organisation   | `422 The card's font cannot draw a character of the organisation's name. Ask an administrator to change Hub:Cards:Organisation.` |
+| `compact_too_large`                           | `422 The card's QR code cannot hold this organisation's domain. Ask an administrator for a shorter Hub:Cards:Domain.`        |
+| `unsupported_language`                        | `422 This Hub's engine cannot print cards in this language yet.`                                                              |
+| tout le reste, une ligne hors contrat, 45 s   | `502 The engine could not render this card.`                                                                                  |
+
+**Le fichier.** `200` avec `Content-Type: image/png`, `image/svg+xml`, `image/jxl` ou `application/pdf`,
+`Content-Disposition: attachment; filename=perf-sentinel-card-<kind>-<from>.<format>`,
+`Cache-Control: no-store` et `X-Content-Type-Options: nosniff`. Un SVG porte aussi
+`Content-Security-Policy: default-src 'none'; sandbox` : ouvert directement depuis son URL, il
+n'exécute aucun script et ne charge rien. La première carte fabrique la clé
+de signature. Le Hub écrit `card.json` et une copie de la clé privée dans un répertoire temporaire
+privé, supprimé ensuite, et la clé n'apparaît jamais sur une ligne de commande.
+
+**Rattachement.** `409 Set Hub:Cards:Domain to check an attachment.` sans domaine. Sinon le Hub
+dessine la carte en PNG et lance `verify-card --online`, qui lit l'enregistrement TXT via
+`cloudflare-dns.com` et `https://<domain>/.well-known/perf-sentinel-key`. La réponse est le verdict
+du moteur, les grands chiffres de la carte tels que signés et ce que la vérification a joint :
+
+```json
+{"integrity": "ok", "content": "intact", "level": 2, "domain": "acme.example", "key": "current",
+ "reason": null,
+ "figures": {"angle": "curve", "period": {"kind": "month", "from": "2026-09-01", "to": "2026-09-30"},
+             "before_fix_period": null, "cited_ops": null, "cited_ms": null, "before_fix_ops": null,
+             "threshold_ops": null, "threshold_ms": null, "last_waste_permille": 83,
+             "previous_waste_permille": 200, "confirmed_fixes_count": null, "services_count": null},
+ "contacted": ["cloudflare-dns.com", "acme.example"]}
+```
+
+`content` dit si le fichier est celui qui a été signé : `intact`, ou `modified` avec la raison
+`content_modified` et `figures` à null. `figures` porte les noms du moteur, valeurs exactes, `null`
+quand l'angle n'en a pas : `period`, `before_fix_period`, `cited_ops` ou `cited_ms`,
+`before_fix_ops`, `threshold_ops` ou `threshold_ms`, `last_waste_permille`,
+`previous_waste_permille`, `confirmed_fixes_count`, `services_count`. Une ligne de verdict hors
+contrat (une de ses clés absente, un `content` autre que `intact`, `modified` ou `not_checked`, des
+chiffres sans leur angle ou leur période), ou aucune en 20 secondes, donne `502`.
+
+**Qui peut.** Le Hub juge ces trois routes dans cet ordre : cartes désactivées `404` ; un appelant
+que le Hub ne sait pas nommer
+`403 The Hub does not know who is asking, and a card is made in somebody's name.` ; sur les deux
+`POST`, la règle de même origine et le type de contenu JSON (`403`, `415`) ; aucun `cards.write`
+nulle part `403 You may not create cards.` ; aucun `findings.read` nulle part `403` ; un moteur
+sans la sous-commande `card`
+`503 This Hub's engine cannot render cards: it needs a perf-sentinel release with the card subcommand.`
+Puis le périmètre : les sources demandées que les deux permissions atteignent, ou
+`403 You may not create cards for these sources.` quand il n'en reste aucune. Une correction sur un
+service que l'appelant ne lit pas est laissée de côté, et la courbe, tracée sur des totaux de tout
+le démon, ne garde que les sources que les deux permissions tiennent entières.
+
+**Occupé.** Au plus `Hub:Cards:MaxConcurrentRenders` cartes font tourner le moteur en même temps
+(2 par défaut). Une fois tous les contrôles ci-dessus passés, un rendu, une vérification de
+rattachement ou une rotation de clé qui les trouve toutes en cours donne
+`503 Another card is being made. Try again in a few seconds.` avec `Retry-After: 5`, sans file
+d'attente. Le `503` du moteur sans `card` ne porte pas de `Retry-After`, c'est ainsi qu'un client
+distingue les deux.
+
 ## Actions
 
 Une action dit qui travaille sur un finding et où il en est. Le Hub la tient lui-même :
@@ -851,7 +1056,10 @@ changement de statut ou de responsable ajoute un événement, avec le statut qui
 atteint, le responsable, l'appelant et l'heure. Les événements ne sont jamais réécrits, et ni
 l'action ni ses événements ne sont purgés avec le finding : une action survit à la rétention
 du finding sur lequel elle a été déclarée, pour qu'un récapitulatif puisse encore dire si le
-correctif a tenu. Un `PATCH` qui ne change rien n'ajoute rien. Chaque refus que le Hub
+correctif a tenu. Une action qui entre dans `done` garde aussi le finding tel qu'il était à ce
+moment, depuis la copie la plus récente que l'appelant lit, pour la carte à partager. Il n'est
+jamais servi, survit à la purge du finding et disparaît quand l'action sort de `done`. Un
+`PATCH` qui ne change rien n'ajoute rien. Chaque refus que le Hub
 formule lui-même porte `{"detail":"…"}`.
 
 ## Libellés d'endpoint

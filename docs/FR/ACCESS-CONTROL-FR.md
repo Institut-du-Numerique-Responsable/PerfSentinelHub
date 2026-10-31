@@ -127,6 +127,7 @@ seules copies dans le périmètre.
 | `acks.write`    | Acquitter un finding, ou révoquer un ack                                               |
 | `actions.write` | Déclarer et modifier une action sur un finding                                         |
 | `labels.write`  | Nommer un endpoint ou un service en mots du métier                                     |
+| `cards.write`   | Créer une carte à partager à partir des sources qu'elle couvre                         |
 | `disclosures.read` | L'onglet Disclosures, le détail de chaque divulgation et ses fichiers               |
 | `disclosures.manage` | Les liens de partage, les retraits, les relances de livraison et les rendus d'une divulgation |
 | `recaps.read`   | Lire tous les rapports de récap : la liste, un rapport et sa page (niveau Hub)         |
@@ -134,7 +135,7 @@ seules copies dans le périmètre.
 | Rôle intégré | Permissions                                                  |
 |--------------|--------------------------------------------------------------|
 | `reader`     | `findings.read`, `traces.read`, `analyses.run`               |
-| `member`     | `reader` plus `acks.write`, `actions.write` et `labels.write` |
+| `member`     | `reader` plus `acks.write`, `actions.write`, `labels.write` et `cards.write` |
 | `admin`      | Tout, sur `*` seulement, plus la configuration de l'accès    |
 
 `reader` n'est pas en lecture seule : il lance des analyses. Un rôle en lecture seule se
@@ -167,6 +168,8 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `GET /api/recap`                                                       | `findings.read`, filtré                                            | `403` si détenue nulle part |
 | `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` sur `*`, ou le créateur d'un rapport à la demande avec `findings.read` | `403` (liste), `404` (un rapport) |
 | `POST /api/recap/reports`                                              | `findings.read`, filtré, et quelqu'un à nommer                     | `403`                   |
+| `GET /api/cards/keys`, `POST /api/cards/keys/rotate` et `/revoke`     | `access.admin`, et quelqu'un à nommer                              | `403`                   |
+| `GET /api/cards/options`, `POST /api/cards/render` et `/attachment`   | `cards.write` et `findings.read` sur les sources demandées, et quelqu'un à nommer | `403`                   |
 | `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtré ; la copie la plus riche dans le périmètre | `403` ; `404`               |
 | `POST /api/incidents/refresh`                                          | `findings.read` ; ne lit que les démons dans le périmètre          | `403`                       |
 | `GET /api/correlations`                                                | `findings.read`, filtré sur les épisodes dont l'appelant lit les deux services à cette source | `403` s'il n'est détenu nulle part |
