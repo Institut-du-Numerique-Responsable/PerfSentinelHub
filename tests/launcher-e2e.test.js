@@ -17,6 +17,8 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 globalThis.window = globalThis;
+require("../PerfSentinelHub/wwwroot/text-en.js");
+require("../PerfSentinelHub/wwwroot/text-fr.js");
 require("../PerfSentinelHub/wwwroot/launcher.js");
 const PSL = globalThis.PSL;
 

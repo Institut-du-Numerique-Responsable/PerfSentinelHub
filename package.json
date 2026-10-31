@@ -4,7 +4,7 @@
   "description": "Type-checking for the launcher's JSDoc. The shipped app has no build step.",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test tests/launcher.test.js"
+    "test": "node --test tests/launcher.test.js tests/text.test.js"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

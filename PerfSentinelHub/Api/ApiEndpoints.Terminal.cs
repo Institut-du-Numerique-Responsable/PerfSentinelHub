@@ -40,6 +40,8 @@ public static partial class ApiEndpoints
             <link href="fonts.css" rel="stylesheet">
             <link href="tokens.css" rel="stylesheet">
             <link href="launcher.css" rel="stylesheet">
+            <script src="text-en.js"></script>
+            <script src="text-fr.js"></script>
             <script src="launcher.js"></script>
             <script src="device.js"></script>
         </head>

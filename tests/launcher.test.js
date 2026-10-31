@@ -8,6 +8,8 @@ const test = require("node:test");
 const assert = require("node:assert");
 
 globalThis.window = globalThis;
+require("../PerfSentinelHub/wwwroot/text-en.js");
+require("../PerfSentinelHub/wwwroot/text-fr.js");
 require("../PerfSentinelHub/wwwroot/launcher.js");
 const PSL = globalThis.PSL;
 

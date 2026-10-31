@@ -3092,6 +3092,324 @@
         return {figure: null, text: text};
     }
 
+    /** The languages the launcher is written in, English first: it is the fallback. */
+    const LANGS = ['en', 'fr'];
+    const LANG_KEY = 'perf-sentinel:lang';
+    /** @type {'en' | 'fr'} */
+    let LANG = 'en';
+    /** @type {Array<(lang: 'en' | 'fr') => void>} */
+    const LANG_LISTENERS = [];
+
+    /** @returns {'en' | 'fr'} */
+    function lang() {
+        return LANG;
+    }
+
+    /**
+     * Shows `next`, keeps the choice when storage allows it and tells every listener. An unknown
+     * language changes nothing.
+     * @param {string} next
+     * @returns {void}
+     */
+    function setLang(next) {
+        if (LANGS.indexOf(next) < 0) return;
+        LANG = /** @type {'en' | 'fr'} */ (next);
+        try {
+            global.localStorage.setItem(LANG_KEY, LANG);
+        } catch (error) {
+            // Storage off or absent: the choice lasts as long as the page.
+        }
+        if (typeof document !== 'undefined') document.documentElement.lang = LANG;
+        LANG_LISTENERS.forEach(listener => listener(LANG));
+    }
+
+    /**
+     * @param {(lang: 'en' | 'fr') => void} listener
+     * @returns {void}
+     */
+    function onLang(listener) {
+        LANG_LISTENERS.push(listener);
+    }
+
+    /**
+     * The language to show: the stored choice when it is one, else the first `fr` or `en` variant
+     * the browser lists, else English.
+     * @param {readonly string[] | undefined} languages `navigator.languages`
+     * @param {string | null} stored
+     * @returns {'en' | 'fr'}
+     */
+    function pickLang(languages, stored) {
+        if (LANGS.indexOf(stored) >= 0) return /** @type {'en' | 'fr'} */ (stored);
+        for (const tag of languages || []) {
+            const base = String(tag).toLowerCase().split('-')[0];
+            if (LANGS.indexOf(base) >= 0) return /** @type {'en' | 'fr'} */ (base);
+        }
+        return 'en';
+    }
+
+    /**
+     * @param {string} language @param {string} key
+     * @returns {string | undefined}
+     */
+    function textIn(language, key) {
+        const table = (global.PSL_TEXT || {})[language] || {};
+        return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
+    }
+
+    /**
+     * Whether `key` has a text to show, in the shown language or in English. Never throws.
+     * @param {string} key
+     * @returns {boolean}
+     */
+    function hasText(key) {
+        return textIn(LANG, key) !== undefined || textIn('en', key) !== undefined;
+    }
+
+    /**
+     * The text of `key` in the shown language, English when the shown one lacks it, with each
+     * `{name}` replaced from `vars`. The tables are read here rather than at load, so a page that
+     * loads launcher.js first still finds them.
+     * @param {string} key
+     * @param {Record<string, string | number>} [vars]
+     * @returns {string}
+     */
+    function t(key, vars) {
+        const value = textIn(LANG, key) ?? textIn('en', key);
+        if (value === undefined) {
+            // Under Node (the tests) a key nobody wrote is a defect; on a page it shows as itself.
+            if (typeof document === 'undefined') throw new Error('no text for ' + key);
+            return key;
+        }
+        if (!vars) return value;
+        return value.replace(/\{(\w+)\}/g, (whole, name) => name in vars ? String(vars[name]) : whole);
+    }
+
+    /**
+     * @param {number} n
+     * @param {Intl.NumberFormatOptions} [options]
+     * @returns {string}
+     */
+    function num(n, options) {
+        return n.toLocaleString(LANG === 'fr' ? 'fr-FR' : 'en-US', options);
+    }
+
+    /**
+     * A ratio as a percentage with `digits` decimals: `3.1%` in English, `3,1 %` in French.
+     * @param {number} ratio
+     * @param {number} [digits]
+     * @returns {string}
+     */
+    function pct(ratio, digits = 0) {
+        if (LANG !== 'fr') return (ratio * 100).toFixed(digits) + '%';
+        // The narrow space by hand: ICU builds disagree on the one before `%` (Node 24 writes U+00A0).
+        return num(ratio * 100, {minimumFractionDigits: digits, maximumFractionDigits: digits}) + ' %';
+    }
+
+    /**
+     * A `yyyy-MM-dd` day in words, UTC: `29 October 2026` in English, as cardDayText writes it.
+     * @param {string} iso
+     * @param {{withYear?: boolean, short?: boolean}} [options]
+     * @returns {string}
+     */
+    function day(iso, {withYear = false, short = false} = {}) {
+        if (LANG === 'fr') {
+            return new Intl.DateTimeFormat('fr-FR', {
+                day: 'numeric', month: short ? 'short' : 'long', year: withYear ? 'numeric' : undefined, timeZone: 'UTC'
+            }).format(cardDate(iso));
+        }
+        if (!short) return cardDayText(iso, withYear);
+        const date = cardDate(iso);
+        return date.getUTCDate() + ' ' + CARD_MONTHS[date.getUTCMonth()].slice(0, 3) + (withYear ? ' ' + date.getUTCFullYear() : '');
+    }
+
+    /**
+     * A moment in local time to the minute: `2026-10-29 14:05` in English, as dtHuman writes it.
+     * @param {number} ms
+     * @returns {string}
+     */
+    function dateTime(ms) {
+        if (LANG !== 'fr') return dtHuman(ms);
+        return new Intl.DateTimeFormat('fr-FR', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        }).format(new Date(ms));
+    }
+
+    /**
+     * The string literals of `source`, each with where it starts in a copy of the source that has
+     * no comments and every literal masked, so the code before a literal can be read as context.
+     * A literal that is a bare token stays in that copy unquoted, which keeps `'aria-label': x`
+     * and `'class': x` readable as keys. Template literals keep their `${}` and the literals inside
+     * those are listed too.
+     * @param {string} source
+     * @returns {{code: string, literals: Array<{text: string, at: number}>}}
+     */
+    function scanLiterals(source) {
+        /** @type {Array<{text: string, at: number}>} */
+        const literals = [];
+        let code = '';
+        let i = 0;
+
+        function regexAllowed() {
+            const before = code.trimEnd();
+            return before === '' || '(,=:[!&|?{};+-*%<>~^'.indexOf(before[before.length - 1]) >= 0
+                || /\b(?:return|typeof|case|in|of|void|delete|throw|new|else|do)$/.test(before);
+        }
+
+        function skipRegex() {
+            let inClass = false;
+            i++;
+            while (i < source.length && source[i] !== '\n') {
+                const c = source[i];
+                if (c === '\\') i++;
+                else if (c === '[') inClass = true;
+                else if (c === ']') inClass = false;
+                else if (c === '/' && !inClass) break;
+                i++;
+            }
+            i++;
+            while (/[a-z]/.test(source[i] || '')) i++;
+            code += 'R';
+        }
+
+        /** @param {string} quote */
+        function quoted(quote) {
+            let text = '';
+            i++;
+            while (i < source.length && source[i] !== quote && source[i] !== '\n') {
+                if (source[i] === '\\') i++;
+                text += source[i] ?? '';
+                i++;
+            }
+            i++;
+            literals.push({text: text, at: code.length});
+            code += /^[\w-]+$/.test(text) ? text : '""';
+        }
+
+        function template() {
+            const literal = {text: '', at: code.length};
+            literals.push(literal);
+            i++;
+            while (i < source.length && source[i] !== '`') {
+                if (source[i] === '\\') {
+                    literal.text += source.slice(i, i + 2);
+                    i += 2;
+                } else if (source[i] === '$' && source[i + 1] === '{') {
+                    const from = i;
+                    i += 2;
+                    scan(true);
+                    literal.text += source.slice(from, i);
+                } else {
+                    literal.text += source[i++];
+                }
+            }
+            i++;
+            code += '""';
+        }
+
+        /** @param {boolean} untilBrace stop after the `}` that closes a template's `${` */
+        function scan(untilBrace) {
+            let depth = 0;
+            while (i < source.length) {
+                const c = source[i], next = source[i + 1];
+                if (c === '/' && next === '/') {
+                    const end = source.indexOf('\n', i);
+                    i = end < 0 ? source.length : end;
+                } else if (c === '/' && next === '*') {
+                    const end = source.indexOf('*/', i + 2);
+                    i = end < 0 ? source.length : end + 2;
+                } else if (c === '\'' || c === '"') {
+                    quoted(c);
+                } else if (c === '`') {
+                    template();
+                } else if (c === '/' && regexAllowed()) {
+                    skipRegex();
+                } else {
+                    if (untilBrace && c === '{') depth++;
+                    if (untilBrace && c === '}' && depth-- === 0) {
+                        i++;
+                        return;
+                    }
+                    code += c;
+                    i++;
+                }
+            }
+        }
+
+        scan(false);
+        return {code: code, literals: literals};
+    }
+
+    /**
+     * From `open`, the index of the bracket that closes it.
+     * @param {string} code @param {number} open
+     * @returns {number}
+     */
+    function closingBracket(code, open) {
+        const pairs = /** @type {Record<string, string>} */ ({'(': ')', '{': '}'});
+        const opener = code[open], closer = pairs[opener];
+        let depth = 0;
+        for (let i = open; i < code.length; i++) {
+            if (code[i] === opener) depth++;
+            else if (code[i] === closer && --depth === 0) return i;
+        }
+        return code.length;
+    }
+
+    /** Attributes whose value is an identifier, never text a person reads. */
+    const TECHNICAL_KEY = '(?:class|className|id|href|src|type|role|name|for|rel)';
+    /** The code before a literal that makes it technical, whatever its shape. */
+    const TECHNICAL_CONTEXT = [
+        new RegExp('(?:^|[\\s{,(])' + TECHNICAL_KEY + '\\s*:\\s*(?:[^;,={}()]*?[?:]\\s*)?$'),
+        new RegExp('\\.' + TECHNICAL_KEY + '\\s*=\\s*(?:[^;,={}()]*?[?:]\\s*)?$'),
+        new RegExp('\\bsetAttribute\\(\\s*' + TECHNICAL_KEY + '\\s*,\\s*$'),
+        /\bclassList\.\w+\(\s*(?:[^;()]*,\s*)?$/,
+        /\b(?:querySelector|querySelectorAll|closest|matches|getElementById|matchMedia)\(\s*$/,
+        /\b(?:add|remove)EventListener\(\s*$/,
+        /\bt\(\s*$/
+    ];
+
+    /**
+     * Whether a literal reads as a sentence for a person: two words or more, one of them a
+     * lower-case word of three letters or more, and not a URL, a selector, a key or CSS.
+     * @param {string} text
+     * @returns {boolean}
+     */
+    function isProse(text) {
+        if (/:\/\//.test(text) || /^[.#[]/.test(text) || /^[a-z0-9_]+(\.[a-z0-9_-]+)+$/.test(text)) return false;
+        if (text.indexOf(':') >= 0 && text.indexOf(';') >= 0) return false;
+        const words = text.replace(/\$\{[^}]*\}/g, 'X').split(/\s+/).filter(Boolean);
+        return words.length >= 2 && words.some(word => /^[a-z]{3,}$/.test(word.replace(/[^A-Za-z]/g, '')));
+    }
+
+    /**
+     * The prose literals inside the functions named `functionNames` in `source`: the guard that
+     * keeps displayed text out of the code and in the text tables. A test helper, the page never
+     * calls it. A literal is skipped by its context first (a class, an id, a selector, an event, a
+     * `t(` key), then by its shape.
+     * @param {string} source
+     * @param {string[]} functionNames
+     * @returns {string[]}
+     */
+    function literalsIn(source, functionNames) {
+        const {code, literals} = scanLiterals(source);
+        /** @type {Array<[number, number]>} */
+        const bodies = [];
+        for (const name of functionNames) {
+            const header = new RegExp('\\bfunction\\s+' + name + '\\s*\\(', 'g');
+            let match;
+            while ((match = header.exec(code)) !== null) {
+                const params = closingBracket(code, match.index + match[0].length - 1);
+                const open = code.indexOf('{', params);
+                if (open >= 0) bodies.push([open, closingBracket(code, open)]);
+            }
+        }
+        return literals
+            .filter(literal => bodies.some(([open, close]) => literal.at > open && literal.at < close))
+            .filter(literal => !TECHNICAL_CONTEXT.some(pattern => pattern.test(code.slice(Math.max(0, literal.at - 120), literal.at))))
+            .filter(literal => isProse(literal.text))
+            .map(literal => literal.text);
+    }
+
     global.PSL = {
         setVersions,
         get ENGINE() {
@@ -3286,6 +3604,17 @@
         revokeText,
         levelLine,
         cardEnvironmentLine,
-        cardFixLine
+        cardFixLine,
+        lang,
+        setLang,
+        onLang,
+        pickLang,
+        hasText,
+        t,
+        num,
+        pct,
+        day,
+        dateTime,
+        literalsIn
     };
 })(globalThis);

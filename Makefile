@@ -52,12 +52,12 @@ sonar-prepare: analysis-config-check tool-restore coverage
 python-tests:
 	python3 -m unittest discover -s scripts/tests
 
-# The launcher's command builders, then the same builders against the real
-# engine. Node's own runner, no package and no build step, the way launcher.js
-# itself is authored. The second file skips itself when there is no engine
-# build to run, so this target needs nothing that the first one did not.
+# The launcher's command builders and its text tables, then the same builders
+# against the real engine. Node's own runner, no package and no build step, the
+# way launcher.js itself is authored. The last file skips itself when there is
+# no engine build to run, so this target needs nothing that the others did not.
 js-tests:
-	node --test tests/launcher.test.js tests/launcher-e2e.test.js
+	node --test tests/launcher.test.js tests/text.test.js tests/launcher-e2e.test.js
 
 test: coverage
 
