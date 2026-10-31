@@ -68,6 +68,14 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
+- The image ships perf-sentinel `0.39.0` as its analysis engine, repinned by digest from
+  `0.38.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.38.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.39.0` brings the `card keygen`,
+  `card render` and `verify-card` commands the share cards run, and counts the passes below
+  the threshold of the signatures the Hub asks a daemon to watch. A backend analysis gives
+  the same findings, signatures and energy figures as on `0.38.0`.
 - Detection counts, days and ledgers leave on a clock of their own, `Hub:DetectionRetention`
   (default `1100.00:00:00`, read as `Hub:Retention` when shorter, so a Hub keeping findings
   longer still starts), instead of the 180 days of a finding: a
