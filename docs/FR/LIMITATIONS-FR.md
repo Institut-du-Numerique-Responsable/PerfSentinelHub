@@ -243,7 +243,10 @@ lisible. Le daemon apprend quelles signatures surveiller dans la réponse à sa 
 cette liste à un redémarrage jusqu'à sa poussée suivante, un daemon seulement interrogé ne la
 reçoit jamais, et une signature de fanout ne correspond qu'à une partie de ses parents. Une
 correction est confirmée à la date de génération de la carte, et une détection ultérieure ne
-change pas une carte déjà faite. Les actions marquées terminées avant cette version n'ont pas de
+change pas une carte déjà faite. Comme dans le récap, seule une source que le Hub joint par
+interrogation confirme une correction : un daemon qui ne fait que pousser, derrière une adresse
+que le Hub ne joint pas, laisse la liste des corrections vide et une carte histoire refusée avec
+`no_confirmed_fix`. Les actions marquées terminées avant cette version n'ont pas de
 finding figé : aucune carte ne les raconte, et une carte collective d'une période qui en compte une
 est refusée (`unkept_fixes`) plutôt que de signer un total trop court.
 

@@ -222,7 +222,9 @@ findings only, and its CO2 is the low tier of the estimate, a partial minimum.
 daemon learns which signatures to watch from the answer to its push: it loses that list on a
 restart until its next push, a polled-only daemon never gets one, and a fanout signature matches
 only part of its parents. A fix is confirmed as of the card's generation, and a later detection
-does not change a card already made. Actions marked done before this release have no frozen
+does not change a card already made. As in the recap, only a source the Hub's poll reaches
+confirms a fix: a push-only daemon behind an address the Hub cannot reach leaves the fix list
+empty and a story card refused with `no_confirmed_fix`. Actions marked done before this release have no frozen
 finding, so no card tells them, and a collective card for a period holding one is refused
 (`unkept_fixes`) rather than signing a count short of it.
 
