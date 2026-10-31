@@ -124,7 +124,7 @@ public sealed record DetectionOverrides
 
     // clap prints `0.18.0`, or `0.18.0-rc.1` for a pre-release, which reads the
     // same keys as the release it precedes. System.Version knows neither suffix.
-    private static Version? ParseEngineVersion(string? engineVersion)
+    internal static Version? ParseEngineVersion(string? engineVersion)
     {
         var release = engineVersion?.Split(VersionSuffixSeparators)[0];
         return release is not null && Version.TryParse(release, out var version) ? version : null;

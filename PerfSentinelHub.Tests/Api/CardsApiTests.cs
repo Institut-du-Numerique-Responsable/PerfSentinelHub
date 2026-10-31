@@ -125,6 +125,55 @@ public sealed class CardsApiTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_workspace, "reports", engineCall)));
     }
 
+    [Theory]
+    [InlineData("gb")]
+    [InlineData("us")]
+    public async Task An_engine_before_0_40_refuses_a_uk_or_us_card(string country)
+    {
+        var hub = Hub(engineVersion: "perf-sentinel 0.39.0");
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+
+        using var response = await client.SendAsync(Send("POST", RenderPath,
+            $$"""{"angle":"collective","period":"month","at":"2026-10-01","equivalence_country":"{{country}}"}"""), Token);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal(
+            "This Hub's engine cannot print equivalences for this country: it needs perf-sentinel 0.40.0 or later.",
+            await DetailAsync(response));
+        Assert.False(File.Exists(Path.Combine(_workspace, "reports", "card-args.txt")));
+    }
+
+    [Fact]
+    public async Task An_engine_before_0_40_gets_a_french_card_without_the_country_key()
+    {
+        var hub = Hub(engineVersion: "perf-sentinel 0.39.0");
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+
+        using var response = await client.SendAsync(Send("POST", RenderPath, Collective), Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var input = JsonDocument.Parse(
+            await File.ReadAllBytesAsync(Path.Combine(_workspace, "reports", "card-input.json"), Token));
+        Assert.False(input.RootElement.TryGetProperty("equivalence_country", out _));
+    }
+
+    [Fact]
+    public async Task An_engine_from_0_40_gets_the_country_key()
+    {
+        var hub = Hub();
+        using var client = hub.CreateClient();
+        await OneFixAsync(hub);
+
+        using var response = await client.SendAsync(Send("POST", RenderPath, Collective), Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var input = JsonDocument.Parse(
+            await File.ReadAllBytesAsync(Path.Combine(_workspace, "reports", "card-input.json"), Token));
+        Assert.Equal("fr", input.RootElement.GetProperty("equivalence_country").GetString());
+    }
+
     [Fact]
     public async Task An_engine_without_card_is_a_503()
     {
@@ -666,9 +715,10 @@ public sealed class CardsApiTests : IDisposable
         FakeEngine? engine = null,
         string? organisation = "Acme",
         string? domain = "example.com",
-        Action<IWebHostBuilder>? configure = null)
+        Action<IWebHostBuilder>? configure = null,
+        string engineVersion = "perf-sentinel 0.40.0")
     {
-        var enginePath = ((engine ?? new FakeEngine { Card = true }) with { Version = "perf-sentinel 0.39.0" })
+        var enginePath = ((engine ?? new FakeEngine { Card = true }) with { Version = engineVersion })
             .WriteTo(Path.Combine(_workspace, $"engine-{Guid.NewGuid():N}"));
         var hub = new HubApplicationFactory().WithWebHostBuilder(builder =>
         {

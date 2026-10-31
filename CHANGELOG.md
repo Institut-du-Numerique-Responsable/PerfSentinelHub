@@ -26,7 +26,8 @@ All notable changes to PerfSentinelHub are recorded here.
   sets the default, the card screen gains a Country of the equivalences choice, and
   `POST /api/cards/render` and `/api/cards/attachment` take `equivalence_country`, which the Hub
   always passes to the engine in `card.json`. Another country sends France and says so. The options
-  response carries the Hub's country. Cards need engine `0.40.0` or later, the one the image ships.
+  response carries the Hub's country. On an engine before `0.40.0`, the image's being `0.40.0`, a
+  French card leaves the key out and a UK or US card is a `422 card_country_unsupported`.
 
 ### Changed
 

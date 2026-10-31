@@ -35,7 +35,7 @@ public sealed record CardKeysResponse(string? RecordName, IReadOnlyList<CardKeyI
 public sealed record CardInput(
     string Angle,
     string Lang,
-    string EquivalenceCountry,
+    string? EquivalenceCountry,
     CardPeriod Period,
     CardScope Scope,
     CardFiguresBlock Figures,
