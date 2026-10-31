@@ -64,6 +64,23 @@ the DOM, so stylesheets see two values and never three. The position is stored u
 rendered dashboard reads that exact key from this origin. That handoff is why the launcher
 and the reports must share an origin.
 
+## The language
+
+The launcher reads in English or in French. The FR/EN button in the top bar shows the language on
+screen and, on hover, slides to the other one, the one a click switches to. The switch redraws the
+screen in place: the route, the filters and a form half filled stay as they were. A first visit
+follows the browser, the first French or English variant in its language list, else English. A
+click stores the choice under `perf-sentinel:lang` in `localStorage`, and from then on the stored
+choice wins over the browser. A browser that refuses storage keeps the choice while the page is open.
+
+Numbers, dates and durations follow the language: `1,937,000`, `3.1%` and `2026-10-29 14:05` read
+`1 937 000`, `3,1 %` and `29/10/2026 14:05` in French. What the engine writes stays in English: the
+daemon's recommendations, a run's warnings, a finding's suggested fix, a disclosure's limits and the
+reason an application was left out of it. Each such text carries `lang="en"`, so a screen reader
+reads it in English, and in French a small EN tag before it. The
+analysis report is the engine's own page and stays in English too. Every printed command keeps the
+engine's syntax in both languages, so a copied command runs the same.
+
 ## Printed commands
 
 Every printed command carries a tab per shell, because the difference is not cosmetic. A
@@ -322,6 +339,10 @@ copies you can read: with no date chosen it is the last closed period, and a day
 has not ended is refused with the Hub's sentence in the section. It also refuses when the Hub does not
 know who is asking, which is the case of a browser behind no sign-in or identity proxy, and when your
 access holds no `findings.read`. A success adds the row at once.
+
+A report keeps one language: the language on screen for a report generated here, the subscription's
+`Language` for a scheduled one. Its two downloads open in that language. A mailed report reaches each
+address in that address's own language, see [the configuration](CONFIGURATION.md).
 
 ## Share cards
 
@@ -641,6 +662,11 @@ fold opens with the reason, never with what was typed. Either way the browser co
 the page it asked for. The launcher itself is unchanged: on a `401` it reloads, and the
 reload is what reaches this page. A page that renders whether or not the provider answers
 is the point: the launcher never sends a browser straight to a provider that is down.
+
+The server writes this page and the terminal approval page in English or French: `?lang=en` or
+`?lang=fr` first, else the browser's `Accept-Language`, else English. Each carries the launcher's
+FR/EN button as a link to the same page in the other language, and a refused sign-in answers in the
+language of the form it came from. A language picked on these pages is not stored.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in-dark.png">

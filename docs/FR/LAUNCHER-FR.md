@@ -73,6 +73,25 @@ position est stockée sous `perf-sentinel:theme` dans `localStorage` et dans
 origine. C'est ce passage de relais qui impose que le lanceur et les rapports partagent
 une origine.
 
+## La langue
+
+Le lanceur se lit en anglais ou en français. Le bouton FR/EN de la barre du haut montre la langue de
+l'écran et glisse au survol vers l'autre, celle qu'un clic affiche. Le changement redessine l'écran sur
+place : la route, les filtres et un formulaire à moitié rempli restent tels quels. Une première visite
+suit le navigateur, la première variante française ou anglaise de sa liste de langues, sinon l'anglais.
+Un clic stocke le choix sous `perf-sentinel:lang` dans `localStorage`, et dès lors le choix stocké
+l'emporte sur le navigateur. Un navigateur qui refuse le stockage garde le choix tant que la page est
+ouverte.
+
+Les nombres, les dates et les durées suivent la langue : `1,937,000`, `3.1%` et `2026-10-29 14:05`
+s'écrivent `1 937 000`, `3,1 %` et `29/10/2026 14:05` en français. Ce que le moteur écrit reste en
+anglais : les recommandations du daemon, les avertissements d'un run, le correctif suggéré d'un
+finding, les limites d'une divulgation et la raison pour laquelle une application en a été écartée.
+Chacun de ces textes porte `lang="en"`, pour qu'un lecteur d'écran le lise en anglais, et en français
+une petite étiquette EN le précède. Le rapport d'analyse est la page du moteur et reste en anglais lui
+aussi. Chaque commande imprimée garde la syntaxe du moteur dans les deux langues, pour qu'une commande
+copiée s'exécute de la même façon.
+
 ## Les commandes imprimées
 
 Chaque commande imprimée porte un onglet par shell, parce que la différence n'est pas
@@ -325,9 +344,9 @@ phrase fixe par type, le nom de l'endpoint quand quelqu'un l'a donné (sinon l'e
 chiffre en opérations inutiles, la tendance et l'action, en lecture seule. Elle ne porte aucun mot
 technique, ses sept textes d'aide non plus.
 
-### Reports
+### Rapports
 
-Sous What moved, Reports liste les copies figées des périodes closes, la plus récente d'abord, depuis
+Sous What moved, Reports (Rapports en français) liste les copies figées des périodes closes, la plus récente d'abord, depuis
 `GET /api/recap/reports` ([l'API](../API.md#recap-reports)). La section est absente pour un appelant que le
 Hub ne laisse pas les lire : il faut `recaps.read`, ou `findings.read` pour les rapports qu'on a générés
 soi-même. Une ligne nomme la période et l'origine du rapport, `Week 2026-10-19 to 2026-10-25 · weekly-shop`
@@ -350,6 +369,11 @@ vous pouvez lire : sans date choisie, c'est la dernière période close, et un j
 pas finie est refusé avec la phrase du Hub dans la section. Il refuse aussi quand le Hub ne sait pas qui
 demande, ce qui est le cas d'un navigateur derrière aucune connexion ni proxy d'identité, et quand votre
 accès ne porte aucun `findings.read`. Un succès ajoute la ligne aussitôt.
+
+Un rapport garde une seule langue : celle de l'écran pour un rapport généré ici, le `Language` de
+l'abonnement pour un rapport planifié. Ses deux téléchargements s'ouvrent dans cette langue. Un rapport
+envoyé par mail arrive à chaque adresse dans la langue de cette adresse, voir
+[la configuration](CONFIGURATION-FR.md).
 
 ## Cartes à partager
 
@@ -674,7 +698,7 @@ La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le
 navigateur qui approuve un `perf-sentinel login`. Le champ du code prend le focus et
 accepte le code en majuscules ou minuscules, avec ou sans son tiret. Une fois le code
 vérifié, le focus passe sur l'endroit et l'heure de la demande. Un code venu d'un autre
-réseau change **Approve** en **Approve anyway**, ce que la page annonce, et le résultat
+réseau change **Approve** (**Autoriser**) en **Approve anyway** (**Autoriser quand même**), ce que la page annonce, et le résultat
 est annoncé et prend le focus une fois les boutons disparus.
 
 <picture>
@@ -689,8 +713,9 @@ session arrive sur la page de connexion du Hub, `/auth/sign-in`, au lieu de cell
 fournisseur. Ce n'est pas non plus un écran du lanceur : une page autonome, styles en
 ligne et sans script, puisque les fichiers du lanceur sont derrière la connexion. Elle
 porte le logo du lanceur, en ligne, sa police, DM Sans écrite dans la feuille de style en
-polices `data:`, et sa palette, claire ou sombre selon le système. **Sign in with single sign-on** vient d'abord et mène au
-fournisseur ; **Sign in with a local account** est replié en dessous, avec la mention
+polices `data:`, et sa palette, claire ou sombre selon le système. **Sign in with single sign-on**
+(**Se connecter par authentification unique** en français) vient d'abord et mène au
+fournisseur ; **Sign in with a local account** (**Se connecter avec un compte local**) est replié en dessous, avec la mention
 qu'il sert quand l'authentification unique est indisponible et que chaque connexion
 locale est journalisée. Après une tentative refusée, le pli s'ouvre avec la raison,
 jamais avec ce qui a été tapé. Dans les deux cas, le navigateur revient sur la page
@@ -698,6 +723,11 @@ demandée. Le lanceur lui-même ne change pas : sur un `401` il se recharge, et 
 rechargement qui atteint cette page. Une page qui s'affiche que le fournisseur réponde
 ou non, c'est le but : le lanceur n'envoie jamais un navigateur droit vers un
 fournisseur en panne.
+
+Le serveur écrit cette page et la page d'approbation du terminal en anglais ou en français : `?lang=en`
+ou `?lang=fr` d'abord, sinon l'`Accept-Language` du navigateur, sinon l'anglais. Chacune porte le bouton
+FR/EN du lanceur, en lien vers la même page dans l'autre langue, et une connexion refusée répond dans la
+langue du formulaire d'où elle vient. Une langue choisie sur ces pages n'est pas stockée.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in-dark.png">

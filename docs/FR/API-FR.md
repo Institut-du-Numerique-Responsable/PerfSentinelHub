@@ -731,7 +731,9 @@ est le snapshot `pilotage` décrit plus haut, il ne contient donc aucune clé d'
 `endpoint` : une ligne sans libellé garde son `label` à `null` et son `service`, rien de plus. Une
 action a un `owner` à `null` et ne porte que le nom du responsable, dans `owner_display`, comme la
 page jointe le montre : aucun e-mail ni compte n'arrive chez le destinataire. La vue d'ingénierie
-arrive chez le destinataire sous forme de lien, jamais de contenu.
+arrive chez le destinataire sous forme de lien, jamais de contenu. Les phrases `plain` de `recap` sont
+dans le `Language` de l'abonnement. Toutes les clés et toutes les autres valeurs sont les mêmes dans
+les deux langues.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
@@ -771,7 +773,8 @@ reçu le jour même.
 Un élément de rapport porte `id` (32 caractères hexadécimaux minuscules), `subscription` (`null` pour
 un rapport à la demande), `period` (`kind`, `from`, `to`), `views[]`, `complete` (aucune raison
 `incomplete` dans le snapshot), `nothing_moved`, `created_by` (`null` pour un rapport d'abonnement),
-`generated_at_ms` et `deliveries[]` : `channel` (`webhook` ou `email`), `target`, `state` (`pending`,
+`generated_at_ms`, `language` (`en` ou `fr`, le `Language` de l'abonnement ou le `lang` avec lequel il a
+été généré) et `deliveries[]` : `channel` (`webhook` ou `email`), `target`, `state` (`pending`,
 `delivered` ou `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` et `last_status`. La page
 HTML est hors de `/api` : un navigateur qui suit un lien reçu par e-mail sans session est envoyé se
 connecter.
@@ -785,6 +788,7 @@ type de contenu JSON des autres écritures :
 | `at`                        | Un jour quelconque de la période, `yyyy-MM-dd`, à partir de 1900 ; par défaut la dernière période close |
 | `environment`, `source_id`  | Comme sur `/api/recap` ; un inconnu est `400 Unknown environment or source_id.`        |
 | `service`, `grouping`       | Comme sur `/api/recap`                                                                 |
+| `lang`                      | `en` (par défaut) ou `fr`, la langue des pages du rapport ; sinon `400 lang must be en or fr.` |
 
 Chaque chaîne fait de 1 à 256 caractères sans caractère de contrôle. Une période qui n'est pas
 terminée avant aujourd'hui est `400 A report covers a closed period; pick a date in an earlier one.`
@@ -805,7 +809,9 @@ détient aucune des deux permissions, et seulement ses propres rapports sinon.
 **La page.** `Content-Type: text/html; charset=utf-8`,
 `Content-Disposition: inline; filename="perf-sentinel-recap-<from>-<view>.html"`,
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` et une `Content-Security-Policy` qui
-n'autorise que les deux scripts en ligne de la page, par empreinte. `pilotage` est la projection de
+n'autorise que les deux scripts en ligne de la page, par empreinte. La page est dans la `language` du
+rapport. `?lang=en` ou `?lang=fr` la rend dans l'autre, puisque le texte s'écrit au moment de servir la
+page, et toute autre valeur est ignorée. `pilotage` est la projection de
 pilotage du snapshot stocké, faite au moment de servir la page, avec deux coupes que l'écran en
 direct ne fait pas. Une ligne sans libellé ne montre aucun endpoint : son titre se lit « An unnamed
 step in » suivi du service, avec « Name it in the Hub to see it here. » dessous. Partout où une
@@ -1551,7 +1557,7 @@ comme « pas de connexion du terminal ici ». Le flux est décrit dans
 |---|---|---|
 | `POST /auth/device` | anonyme (la CLI) | `200` ci-dessous ; `400` `invalid_request` ou `invalid_client` ; `403` avec `Sec-Fetch-Site` ; `413` au-delà de 4 Kio ; `429` `temporarily_unavailable` avec `Retry-After: 60` |
 | `POST /auth/device/token` | anonyme (la CLI) | `200` jeton ; `400` avec `authorization_pending`, `slow_down`, `access_denied`, `expired_token`, `invalid_grant`, `unsupported_grant_type`, `invalid_request` ou `invalid_client` ; `403` ; `413` |
-| `GET /device` | session du navigateur | la page d'approbation, ou la connexion sans session ou s'il reste moins d'1 h |
+| `GET /device` | session du navigateur | la page d'approbation, dans `?lang=` (`en` ou `fr`), sinon `Accept-Language`, sinon l'anglais ; ou la connexion sans session ou s'il reste moins d'1 h |
 | `POST /api/device/verify` | session du navigateur seule | `200` ci-dessous ; `400` code mal formé ; `401` ; `403` ; `404` aucun code en attente ; `415` ; `429` |
 | `POST /api/device/approve` | session du navigateur seule | `204` ; `400` ; `401` ; `403` ; `404` ; `409` la session finit dans l'heure ; `415` ; `429` |
 | `POST /auth/revoke` | anonyme, par possession | RFC 7009 : `200` que le jeton ait existé ou non ; `400 invalid_request` ; `403` ; `413` ; `503` avec `Retry-After: 1` |
@@ -1630,7 +1636,7 @@ Voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux) pour le modèle
 
 | Route | Qui | Réponses |
 |---|---|---|
-| `GET /auth/sign-in?return_url=` | anonyme | `200` et la page, connecté ou non |
+| `GET /auth/sign-in?return_url=` | anonyme | `200` et la page, connecté ou non, dans `?lang=` (`en` ou `fr`), sinon `Accept-Language`, sinon l'anglais |
 | `GET /auth/sign-in/sso?return_url=` | anonyme | `302` vers le fournisseur, retour sur `return_url` après la connexion |
 | `POST /auth/sign-in/local` | anonyme, depuis la page | `302` vers `return_url` avec le cookie de session ; `403` et la page sur un nom ou un mot de passe faux ; `403` en texte brut depuis un autre site ; `413` ; `415` ; `429` ou `503` et la page, avec `Retry-After` |
 
