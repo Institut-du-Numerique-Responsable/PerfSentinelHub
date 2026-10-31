@@ -1,72 +1,72 @@
 {
-  "ledger_id": "dbe35708-d0f9-4304-8474-6439170615da",
-  "started_ms": 1793346656857,
-  "current_day": 20756,
-  "oldest_day": 20756,
+  "ledger_id": "b1b433df-281b-4b55-8910-12ce0b1302d2",
+  "started_ms": 1793439690122,
+  "current_day": 20757,
+  "oldest_day": 20757,
   "sealed_through": null,
   "counts": [
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "chatty_service:gateway-svc:GET__api_dashboard_home:dc7922ae7d890d0820ea0258e62b0063",
       "detections": 3,
       "extra_io_ops": 0
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "excessive_fanout:checkout-svc:POST__api_checkout_confirm:66cbb3a40d4bbd150b75825ad291a654",
       "detections": 3,
       "extra_io_ops": 0
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "n_plus_one_http:order-svc:POST__api_orders_42_submit:cd80e7e97cf84255958943efe281962e",
       "detections": 3,
       "extra_io_ops": 12
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "n_plus_one_messaging:notify-svc:POST__api_orders_42_confirm:f3b67952aac8de2a1a28e878ae6d46f5",
       "detections": 3,
       "extra_io_ops": 15
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "n_plus_one_sql:order-svc:POST__api_orders_42_submit:c69d2f3ae7f5c6cdb2c6762367852ec7",
       "detections": 3,
       "extra_io_ops": 27
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "pool_saturation:orders-svc:POST__api_orders_bulk:225de5d9d670bf7f6506ce486e60029e",
       "detections": 3,
       "extra_io_ops": 0
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "redundant_http:profile-svc:GET__api_profile_me:e167b77a3ea5f1ae4be4329f9c53d628",
       "detections": 3,
       "extra_io_ops": 6
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "redundant_sql:cache-svc:GET__api_settings:fc69ff1576a432e7dbd051866296ceaa",
       "detections": 3,
       "extra_io_ops": 6
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "serialized_calls:dashboard-svc:GET__api_dashboard:93aed6727189a479070abc5dcf787e3b",
       "detections": 3,
       "extra_io_ops": 0
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "slow_http:reports-svc:GET__api_reports_quarterly:159443f16f97c995c7d4c085220f4572",
       "detections": 3,
       "extra_io_ops": 0
     },
     {
-      "day": 20756,
+      "day": 20757,
       "signature": "slow_sql:reports-svc:GET__api_reports_monthly:a4b5db4724748c9affb0e10d1321ebca",
       "detections": 3,
       "extra_io_ops": 0
@@ -74,7 +74,7 @@
   ],
   "days": [
     {
-      "day": 20756,
+      "day": 20757,
       "sealed": false,
       "gap": true,
       "overflow_detections": 0,
@@ -82,6 +82,14 @@
       "shed_traces": 0,
       "ingest_rejected": 0,
       "sampling_rate": 1.0,
+      "thresholds": {
+        "slow_query_threshold_ms": 500,
+        "slow_http_threshold_ms": 500,
+        "max_fanout": 20,
+        "chatty_threshold": 15,
+        "pool_saturation_threshold": 10,
+        "serialized_min_calls": 3
+      },
       "avoidable_gco2": 0.0001896822321428569,
       "avoidable_gco2_low": 9.484111607142845e-05,
       "avoidable_io_ops": 66,
