@@ -309,6 +309,8 @@
         applyStaticText(document);
         document.getElementById('lang-toggle').addEventListener('click', function () {
             PSL.setLang(PSL.lang() === 'fr' ? 'en' : 'fr');
+            // A card that follows the Hub's language no longer matches its preview.
+            if (state.card && !state.card.lang) cardMarkStale(state.card);
             applyStaticText(document);
             applyTheme(false);
             // The shell's own lines are drawn from the status, which a loading page does not have yet.
@@ -6855,20 +6857,17 @@
 
     const CARD_LANG_KEY = 'perf-sentinel:card-lang';
     const CARD_FIX_PAGE = 5;
-    const CARD_FREE = [
-        ['title', 'Title', 48, 'Our checkout, lighter every month'],
-        ['team', 'Team', 48, 'Checkout team']
-    ];
-    const CARD_KEY_STATES = {current: 'Signs new cards', retired: 'Retired', revoked: 'Revoked'};
+    const CARD_FREE = [['title', 48], ['team', 48]];
 
     /** The card form and its answers. It outlives a recap read: the filters above only move its scope. */
     function cardState() {
         if (!state.card) {
-            let lang = 'en';
+            // An explicit choice, or null: the card then follows the Hub's language.
+            let lang = null;
             try {
-                if (localStorage.getItem(CARD_LANG_KEY) === 'fr') lang = 'fr';
+                lang = localStorage.getItem(CARD_LANG_KEY);
             } catch (error) {
-                // A comfort only: English it is.
+                // A comfort only: the Hub's language it is.
             }
             state.card = {
                 open: false, angle: 'curve', kind: 'month', from: null, signature: null, label: null,
@@ -6919,7 +6918,7 @@
         return {
             angle: card.angle, period: card.kind, at: cardPeriodFrom(card, route), environment: route.environment,
             signature: fix ? fix.signature : null, label: cardLabel(card), title: card.title, team: card.team,
-            lang: card.lang, format: card.format
+            lang: PSL.cardLang(card.lang), format: card.format
         };
     }
 
@@ -6929,8 +6928,11 @@
 
     /** The curve's own refusal, from its last render: the period before is not whole. */
     function cardCurveRefusal(card) {
-        return card.angle === 'curve' && card.curveRefusal && card.curveRefusal.path === card.optionsPath
-            ? card.curveRefusal.text : null;
+        const refusal = card.angle === 'curve' && card.curveRefusal && card.curveRefusal.path === card.optionsPath
+            ? card.curveRefusal : null;
+        if (!refusal) return null;
+        const options = cardOptionsReady(card);
+        return refusal.code && options ? PSL.cardRefusalText(refusal.code, card.kind, options.period.from) : refusal.text;
     }
 
     /** Why no card can be made with these choices, before any field: null when one can. */
@@ -6966,7 +6968,7 @@
 
     function cardPlace(card, management) {
         const fix = cardFix(card);
-        return management || !fix ? 'this action' : fix.endpoint;
+        return management || !fix ? t('card.place.this_action') : fix.endpoint;
     }
 
     /** A render that keeps the focus, and the caret, on the control that had them. */
@@ -7035,8 +7037,8 @@
         const card = cardState();
         const management = route.view === 'pilotage';
         const section = el('section', {class: 'recap-section share', 'aria-labelledby': 'recap-h-share'}, [
-            ruledOverline('// share'),
-            recapHeading('recap-h-share', PSL.CARD_COPY.title, PSL.CARD_COPY.hint, PSL.CARD_COPY.help, 'share cards')
+            ruledOverline(t('card.overline')),
+            recapHeading('recap-h-share', PSL.CARD_COPY.title, PSL.CARD_COPY.hint, PSL.CARD_COPY.help, t('card.topic'))
         ]);
         if (cards === false) {
             section.appendChild(el('div', {class: 'banner share-off', 'data-tone': 'muted', role: 'status'},
@@ -7057,7 +7059,7 @@
         } else {
             const path = PSL.cardOptionsPath(cardForm(card, route));
             if (card.optionsPath !== path) loadCardOptions(card, path);
-            const form = el('form', {class: 'share-form', 'aria-label': 'Card', novalidate: ''}, [
+            const form = el('form', {class: 'share-form', 'aria-label': t('card.form'), novalidate: ''}, [
                 cardAngleGroup(card),
                 cardPeriodGroup(card, route, management),
                 card.angle === 'story' ? cardFixGroup(card, management) : null,
@@ -7105,7 +7107,7 @@
 
     function cardAngleGroup(card) {
         return el('fieldset', {class: 'share-group'}, [
-            cardLegend('What to tell'),
+            cardLegend(t('card.legend.angle')),
             el('div', {class: 'choice-list'}, PSL.CARD_ANGLES.map(function (angle) {
                 const input = el('input', {
                     type: 'radio', name: 'card-angle', id: 'card-angle-' + angle, value: angle,
@@ -7123,10 +7125,9 @@
     }
 
     function cardStepButton(card, from, delta, enabled) {
-        const unit = PSL.CARD_PERIOD_LABELS[card.kind].toLowerCase();
         const button = el('button', {
             type: 'button', id: delta < 0 ? 'card-period-back' : 'card-period-next',
-            'aria-label': (delta < 0 ? 'Previous ' : 'Next ') + unit,
+            'aria-label': t((delta < 0 ? 'card.step.back.' : 'card.step.next.') + card.kind),
             disabled: enabled ? null : 'disabled'
         }, [svg([['path', {d: delta < 0 ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'}]], 13)]);
         button.addEventListener('click', function () {
@@ -7140,26 +7141,24 @@
         const name = PSL.cardPeriodName(card.kind, from);
         const last = !PSL.canStepForward(card.kind, from, cardToday());
         const group = el('fieldset', {class: 'share-group'}, [
-            cardLegend('Which period', 'closed, from the list only'),
+            cardLegend(t('card.legend.period'), t('card.legend.period.small')),
             el('div', {class: 'period-row'}, [
-                cardSegmented('Length', 'kind', PSL.CARD_PERIODS.map(function (kind) {
+                cardSegmented(t('card.length'), 'kind', PSL.CARD_PERIODS.map(function (kind) {
                     return [kind, PSL.CARD_PERIOD_LABELS[kind]];
                 }), card.kind, function (kind) {
                     cardPick({kind: kind, from: null});
                 }),
-                el('div', {class: 'period-step', role: 'group', 'aria-label': 'Period'}, [
+                el('div', {class: 'period-step', role: 'group', 'aria-label': t('card.period_aria')}, [
                     cardStepButton(card, from, -1, true),
                     el('output', {'aria-live': 'polite', text: name.charAt(0).toUpperCase() + name.slice(1)}),
                     cardStepButton(card, from, 1, !last)
                 ]),
-                last ? el('span', {
-                    class: 'period-hint', text: 'the last closed ' + PSL.CARD_PERIOD_LABELS[card.kind].toLowerCase()
-                }) : null
+                last ? el('span', {class: 'period-hint', text: t('card.step.last.' + card.kind)}) : null
             ])
         ]);
         const options = card.options;
         if (options === 'loading' || options === null) {
-            group.appendChild(el('p', {class: 'period-main', role: 'status', text: 'Reading what this period holds\u2026'}));
+            group.appendChild(el('p', {class: 'period-main', role: 'status', text: t('card.period.reading')}));
             return group;
         }
         if (options.error) {
@@ -7168,24 +7167,25 @@
             return group;
         }
         const previous = PSL.cardPeriodName(card.kind, PSL.stepPeriod(card.kind, from, -1));
+        const range = PSL.cardRangeText(options.period.from, options.period.to);
         group.appendChild(el('p', {
             class: 'period-main',
-            text: PSL.cardRangeText(options.period.from, options.period.to)
-                + (card.angle === 'story' ? '' : ', compared with ' + previous)
+            text: card.angle === 'story' ? range : t('card.compared', {range: range, previous: previous})
         }));
         group.appendChild(cardEnvironmentLine(options.environment, management));
         if (options.refusal) {
-            group.appendChild(cardWarn([el('b', {text: 'No card for ' + options.period_name + '. '}),
-                document.createTextNode(options.refusal_text)]));
+            group.appendChild(cardWarn([
+                el('b', {text: t('card.refused', {period: PSL.cardPeriodName(card.kind, options.period.from)}) + ' '}),
+                document.createTextNode(PSL.cardRefusalText(options.refusal, card.kind, options.period.from))]));
             return group;
         }
         const curve = cardCurveRefusal(card);
         if (curve) {
-            const story = el('button', {class: 'pill-button pill-sm', type: 'button', text: 'Make a story card'});
+            const story = el('button', {class: 'pill-button pill-sm', type: 'button', text: t('card.make.story')});
             story.addEventListener('click', function () {
                 cardPick({angle: 'story'});
             });
-            const collective = el('button', {class: 'pill-button pill-sm', type: 'button', text: 'Make a collective card'});
+            const collective = el('button', {class: 'pill-button pill-sm', type: 'button', text: t('card.make.collective')});
             collective.addEventListener('click', function () {
                 cardPick({angle: 'collective'});
             });
@@ -7214,28 +7214,25 @@
     function cardPeriodFacts(card, options, previous) {
         const days = Math.round((Date.parse(options.period.to) - Date.parse(options.period.from)) / 86400000) + 1;
         const where = options.sources.length > 1
-            ? options.sources.slice(0, -1).join(', ') + ' and ' + options.sources[options.sources.length - 1]
+            ? t('card.list', {items: options.sources.slice(0, -1).join(', '), last: options.sources[options.sources.length - 1]})
             : options.sources[0];
-        const facts = [['ok', 'All ' + days + ' days recorded' + (where ? ', at ' + where : '') + '.']];
-        const before = previous.charAt(0).toUpperCase() + previous.slice(1) + ', the period before, ';
+        const facts = [['ok', where ? t('card.facts.recorded.at', {days: days, where: where}) : t('card.facts.recorded', {days: days})]];
+        const before = {previous: previous.charAt(0).toUpperCase() + previous.slice(1)};
         if (card.angle === 'collective' && !options.previous_whole) {
-            facts.push(['info', before + 'is not whole, so the card leaves out the comparison and the operations '
-                + 'before the fixes.']);
+            facts.push(['info', t('card.facts.previous.not_whole', before)]);
         } else if (card.angle === 'collective' && !options.previous_complete) {
-            facts.push(['info', before + 'is whole, but some of its fixes were marked done before this Hub kept '
-                + 'their details, so the card leaves out the comparison.']);
+            facts.push(['info', t('card.facts.previous.not_complete', before)]);
         } else if (card.angle !== 'story' && options.previous_complete) {
-            facts.push(['ok', before + 'is whole too.']);
+            facts.push(['ok', t('card.facts.previous.whole', before)]);
         }
         if (options.restart_days > 0) {
-            facts.push(['info', options.restart_days + (options.restart_days === 1 ? ' day' : ' days')
-                + ' with a restart. The card prints it in its scope.']);
+            facts.push(['info', t('card.facts.restart.' + PSL.plural(options.restart_days), {count: options.restart_days})]);
         }
         if (options.sampled_permille < 1000) {
-            facts.push(['info', 'Figures cover ' + options.sampled_permille / 10 + '% of traffic. The card says so in '
-                + 'its scope, under the figures.']);
+            const permille = options.sampled_permille;
+            facts.push(['info', t('card.facts.sampled', {percent: PSL.pct(permille / 1000, permille % 10 ? 1 : 0)})]);
         }
-        return el('ul', {class: 'period-facts', 'aria-label': 'What the period holds'}, facts.map(function (fact) {
+        return el('ul', {class: 'period-facts', 'aria-label': t('card.facts.aria')}, facts.map(function (fact) {
             return el('li', {'data-tone': fact[0]}, [
                 fact[0] === 'ok' ? svg(RECAP_STATE_GLYPH.confirmed, 14) : infoGlyph(14),
                 el('span', {text: fact[1]})
@@ -7245,8 +7242,8 @@
 
     function cardFixGroup(card, management) {
         const options = cardOptionsReady(card);
-        const group = el('fieldset', {class: 'share-group'}, [cardLegend('Which fix',
-            options ? 'confirmed by the measure in ' + options.period_name : null)]);
+        const group = el('fieldset', {class: 'share-group'}, [cardLegend(t('card.legend.fix'), options
+            ? t('card.legend.fix.small', {period: PSL.cardPeriodName(card.kind, options.period.from)}) : null)]);
         if (!options || options.refusal) {
             group.appendChild(el('p', {class: 'preview-note', text: PSL.CARD_COPY.fixesWait}));
             return group;
@@ -7263,7 +7260,7 @@
         })));
         if (shown.length < options.fixes.length) {
             const more = el('button', {
-                class: 'pill-button pill-sm fix-more', type: 'button', text: 'Show all ' + options.fixes.length
+                class: 'pill-button pill-sm fix-more', type: 'button', text: t('card.fix.all', {count: options.fixes.length})
             });
             more.addEventListener('click', function () {
                 card.showAllFixes = true;
@@ -7285,16 +7282,18 @@
         input.addEventListener('change', function () {
             cardPick({signature: fix.signature, label: null, remember: false, rememberError: null});
         });
-        const line = PSL.cardFixLine(fix);
+        const line = PSL.cardFixLine(fix, PSL.cardPeriodName(card.kind, PSL.stepPeriod(card.kind, options.period.from, -1)));
         const pill = fix.signature === options.default_signature && fix.before_fix_ops !== null;
         const meta = [
-            management ? el('span', {text: 'in ' + fix.service}) : null,
-            el('span', {text: 'fixed on ' + PSL.cardDayText(new Date(fix.done_at_ms).toISOString().slice(0, 10), true)}),
+            management ? el('span', {text: t('card.fix.in', {service: fix.service})}) : null,
+            el('span', {
+                text: t('card.fix.done', {day: PSL.day(new Date(fix.done_at_ms).toISOString().slice(0, 10), {withYear: true})})
+            }),
             el('span', {}, [line.figure ? el('b', {text: line.figure}) : null, document.createTextNode(line.text)])
         ];
         return el('label', {class: 'fix'}, [
             input,
-            el('span', {class: 'fix-plain'}, [document.createTextNode(fix.plain + ' '),
+            el('span', {class: 'fix-plain'}, [document.createTextNode(PSL.recapPlain(fix) + ' '),
                 pill ? el('span', {class: 'fix-badge', text: PSL.CARD_COPY.defaultPill}) : null]),
             management ? null : el('span', {class: 'fix-head'}, [
                 el('span', {
@@ -7352,10 +7351,11 @@
         const grid = el('div', {class: 'free-grid'});
         if (cardFields(card).indexOf('label') >= 0) grid.appendChild(cardLabelField(card, management));
         CARD_FREE.forEach(function (free) {
-            grid.appendChild(cardTextField(card, free[0], free[1], free[2], free[3], [], false));
+            grid.appendChild(cardTextField(card, free[0], t('card.free.' + free[0]), free[1],
+                t('card.free.' + free[0] + '.placeholder'), [], false));
         });
         return el('fieldset', {class: 'share-group'}, [
-            cardLegend('Your words', 'optional'),
+            cardLegend(t('card.legend.words'), t('card.legend.words.small')),
             grid,
             el('p', {class: 'free-note', text: PSL.CARD_COPY.freeNote})
         ]);
@@ -7364,13 +7364,13 @@
     function cardLabelField(card, management) {
         const fix = cardFix(card);
         const place = cardPlace(card, management);
+        const at = t('card.label.prefilled.at').split('{place}');
         const note = el('p', {class: 'tfield-note', id: 'card-label-note'}, fix.label
             ? (management
-                ? [document.createTextNode('Pre-filled from the name remembered for this action.')]
-                : [document.createTextNode('Pre-filled from the name remembered for '),
-                    el('code', {text: place}), document.createTextNode('.')])
+                ? [document.createTextNode(t('card.label.prefilled'))]
+                : [document.createTextNode(at[0]), el('code', {text: place}), document.createTextNode(at[1])])
             : [document.createTextNode(PSL.CARD_COPY.labelHint)]);
-        const field = cardTextField(card, 'label', 'Everyday name for this action', 80, 'Showing a cart', [note], true);
+        const field = cardTextField(card, 'label', t('card.label'), 80, t('card.label.placeholder'), [note], true);
         const allowed = PSL.canRememberLabel(state.sources);
         const remember = PSL.rememberState(cardLabel(card), fix.label, place);
         const box = el('input', {
@@ -7394,16 +7394,16 @@
 
     function cardFormatGroup(card) {
         return el('fieldset', {class: 'share-group'}, [
-            cardLegend('Card'),
+            cardLegend(t('card.legend.card')),
             el('div', {class: 'card-opts'}, [
-                el('div', {class: 'card-opt'}, [el('span', {class: 'card-opt-label', text: 'Language of the card'}),
-                    cardSegmented('Language of the card', 'lang', [['en', 'English'], ['fr', 'Fran\u00e7ais']],
-                        card.lang, function (lang) {
+                el('div', {class: 'card-opt'}, [el('span', {class: 'card-opt-label', text: t('card.lang')}),
+                    cardSegmented(t('card.lang'), 'lang', [['en', 'English'], ['fr', 'Fran\u00e7ais']],
+                        PSL.cardLang(card.lang), function (lang) {
                             store('localStorage', CARD_LANG_KEY, lang);
                             cardPick({lang: lang});
                         })]),
-                el('div', {class: 'card-opt card-opt-format'}, [el('span', {class: 'card-opt-label', text: 'Format'}),
-                    cardSegmented('Format', 'format', PSL.CARD_FORMATS.map(function (format) {
+                el('div', {class: 'card-opt card-opt-format'}, [el('span', {class: 'card-opt-label', text: t('card.format_label')}),
+                    cardSegmented(t('card.format_label'), 'format', PSL.CARD_FORMATS.map(function (format) {
                         return [format, PSL.CARD_FORMAT_LABELS[format]];
                     }), card.format, cardPickFormat)])
             ]),
@@ -7420,15 +7420,16 @@
             [svg([['path', {d: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'}],
                 ['circle', {cx: '12', cy: '12', r: '2.8'}]], 14),
             el('span', {
-                text: card.busy === 'preview' ? 'Rendering\u2026' : card.stale && !cardBlocked(card) ? 'Preview again' : 'Preview'
+                text: t(card.busy === 'preview' ? 'card.action.rendering'
+                    : card.stale && !cardBlocked(card) ? 'card.action.preview_again' : 'card.action.preview')
             })]);
         preview.addEventListener('click', function () {
             cardPreview(route);
         });
         const download = el('button', {class: 'pill-button', type: 'button', id: 'card-download', disabled: off},
             [downloadGlyph(), el('span', {
-                text: card.busy === 'download' ? 'Downloading\u2026'
-                    : card.format === 'pdf' ? 'Download PDF' : 'Download image'
+                text: t(card.busy === 'download' ? 'card.action.downloading'
+                    : card.format === 'pdf' ? 'card.action.download_pdf' : 'card.action.download_image')
             })]);
         download.addEventListener('click', function () {
             cardDownload(route);
@@ -7447,9 +7448,9 @@
         const format = card.preview ? card.preview.format : card.format;
         const pdf = format === 'pdf';
         const shown = cardPreviewShown(card, blocked);
-        const aside = el('aside', {class: 'share-preview', 'aria-label': 'Preview', tabindex: '-1'}, [
-            el('div', {class: 'preview-head'}, [document.createTextNode('Preview'),
-                el('span', {text: pdf ? 'the PDF, in your browser\'s viewer' : 'as shared, light on every theme'})])
+        const aside = el('aside', {class: 'share-preview', 'aria-label': t('card.preview'), tabindex: '-1'}, [
+            el('div', {class: 'preview-head'}, [document.createTextNode(t('card.preview')),
+                el('span', {text: t(pdf ? 'card.preview.pdf' : 'card.preview.image')})])
         ]);
         if (shown && card.stale) {
             aside.appendChild(el('div', {class: 'banner', 'data-tone': 'info', role: 'status'},
@@ -7485,8 +7486,8 @@
 
     function cardPreviewCard(card, pdf) {
         return pdf
-            ? el('iframe', {class: 'card-preview-pdf', src: card.preview.url, title: 'The card, as a PDF'})
-            : el('img', {class: 'card-preview', src: card.preview.url, alt: 'The card, as an image'});
+            ? el('iframe', {class: 'card-preview-pdf', src: card.preview.url, title: t('card.preview.pdf_title')})
+            : el('img', {class: 'card-preview', src: card.preview.url, alt: t('card.preview.image_alt')});
     }
 
     function cardPreviewEmpty(blocked) {
@@ -7514,13 +7515,13 @@
         const button = el('button', {
             class: 'pill-button pill-sm', type: 'button', id: 'card-attach',
             disabled: card.attachBusy || cardBlocked(card) || cardInvalid(card) ? 'disabled' : null,
-            text: card.attachBusy ? 'Checking\u2026' : 'Verify attachment'
+            text: t(card.attachBusy ? 'card.attach.checking' : 'card.attach.verify')
         });
         button.addEventListener('click', function () {
             cardCheckAttachment(route);
         });
         const box = el('div', {class: 'attach'}, [
-            el('div', {class: 'attach-head'}, [el('p', {class: 'attach-title', text: 'Attached to ' + domain + '?'}), button]),
+            el('div', {class: 'attach-head'}, [el('p', {class: 'attach-title', text: t('card.attach.title', {domain: domain})}), button]),
             el('p', {class: 'attach-contact', text: PSL.cardContactText(domain, management ? 'pilotage' : 'tech')}),
             cardBusyNote(card.attachNote)
         ]);
@@ -7549,9 +7550,8 @@
     /** The figures as signed, exact, for the person to hold against the preview before sharing. */
     function cardSignedFigures(figures) {
         return el('section', {class: 'card-signed', 'aria-labelledby': 'card-signed-title'}, [
-            el('p', {class: 'card-signed-title', id: 'card-signed-title', text: 'The signed figures'}),
-            el('p', {class: 'card-signed-note',
-                text: 'Exact values as signed. The card rounds them down: compare them with the preview.'}),
+            el('p', {class: 'card-signed-title', id: 'card-signed-title', text: t('card.signed.title')}),
+            el('p', {class: 'card-signed-note', text: t('card.signed.note')}),
             el('dl', {class: 'card-signed-figures'}, figures.flatMap(function (figure) {
                 return [el('dt', {text: figure.label}), el('dd', {text: figure.value})];
             }))
@@ -7601,11 +7601,11 @@
                     status: response.status,
                     field: payload && typeof payload.field === 'string' ? payload.field : null,
                     code: payload && typeof payload.code === 'string' ? payload.code : null,
-                    detail: PSL.problemText(payload, response.status, 'The Hub refused the card (' + response.status + ').')
+                    detail: PSL.problemText(payload, response.status, t('card.refused_status', {status: response.status}))
                 };
             });
         }).catch(function () {
-            return {status: 0, field: null, detail: 'The Hub did not answer.'};
+            return {status: 0, field: null, detail: t('card.no_answer')};
         });
     }
 
@@ -7613,7 +7613,7 @@
     function cardFailure(card, failure) {
         if (failure.field) card.fieldErrors[failure.field] = failure.detail;
         else if (failure.status === 422 && card.angle === 'curve' && PSL.isPreviousRefusal(failure.detail, failure.code)) {
-            card.curveRefusal = {path: card.optionsPath, text: failure.detail};
+            card.curveRefusal = {path: card.optionsPath, code: failure.code, text: failure.detail};
         } else card.renderError = failure.detail;
     }
 
@@ -7702,7 +7702,7 @@
     function cardKeysPanel(card) {
         const panel = el('details', {class: 'key-panel'}, [
             el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12),
-                document.createTextNode(PSL.CARD_COPY.keysTitle), el('small', {text: 'administrators'})])
+                document.createTextNode(PSL.CARD_COPY.keysTitle), el('small', {text: t('card.keys.small')})])
         ]);
         if (state.panelOpen['card-keys']) panel.open = true;
         panel.addEventListener('toggle', function () {
@@ -7716,21 +7716,21 @@
 
     function cardKeysFill(card, body) {
         if (card.keys === 'loading') {
-            body.appendChild(el('p', {class: 'key-p', role: 'status', text: 'Reading the keys\u2026'}));
+            body.appendChild(el('p', {class: 'key-p', role: 'status', text: t('card.keys.reading')}));
             return;
         }
         if (card.keys === 'error') {
-            body.appendChild(el('p', {class: 'recap-alert', role: 'alert', text: 'The Hub did not return the keys.'}));
+            body.appendChild(el('p', {class: 'recap-alert', role: 'alert', text: t('card.keys.failed')}));
             return;
         }
         const options = cardOptionsReady(card);
         const domain = card.keys.record_name ? card.keys.record_name.replace(/^_perf-sentinel\./, '') : null;
         body.appendChild(el('div', {}, [
             el('dl', {class: 'recap-kv'}, [
-                options ? el('dt', {text: 'Organisation'}) : null,
+                options ? el('dt', {text: t('card.keys.organisation')}) : null,
                 options ? el('dd', {class: 'ui', text: options.org.name}) : null,
-                el('dt', {text: 'Domain'}),
-                el('dd', {text: domain || 'not set'})
+                el('dt', {text: t('card.keys.domain')}),
+                el('dd', {text: domain || t('card.keys.not_set')})
             ]),
             el('p', {class: 'key-p', style: 'margin-top:8px', text: PSL.CARD_COPY.keysOrigin})
         ]));
@@ -7741,9 +7741,9 @@
         }
         if (domain) {
             body.appendChild(el('div', {}, [
-                el('p', {class: 'key-h', text: 'Attach the cards to ' + domain}),
+                el('p', {class: 'key-h', text: t('card.keys.attach', {domain: domain})}),
                 el('p', {class: 'key-p', text: PSL.CARD_COPY.keysPublish}),
-                cardCopyLine(card.keys.record_name, card.keys.record_name, 'Copy the record name')
+                cardCopyLine(card.keys.record_name, card.keys.record_name, t('card.keys.copy_record'))
             ]));
         }
         body.appendChild(el('ul', {class: 'key-list'}, card.keys.keys.map(function (key) {
@@ -7756,7 +7756,7 @@
     function cardKeyRotate(card) {
         const rotate = el('button', {
             class: 'pill-button pill-sm', type: 'button', id: 'card-rotate',
-            disabled: card.keysBusy ? 'disabled' : null, text: card.keysBusy ? 'Working\u2026' : 'Rotate key'
+            disabled: card.keysBusy ? 'disabled' : null, text: t(card.keysBusy ? 'card.keys.working' : 'card.keys.rotate')
         });
         rotate.addEventListener('click', function () {
             cardKeyWrite('/api/cards/keys/rotate', {});
@@ -7772,19 +7772,20 @@
         } catch (error) {
             // Shown as served.
         }
+        const at = t('card.keys.file.at').split('{url}');
         return el('div', {}, [
-            el('p', {class: 'key-h', text: 'Or serve this file'}),
-            el('p', {class: 'key-p'}, [document.createTextNode('At '),
+            el('p', {class: 'key-h', text: t('card.keys.file')}),
+            el('p', {class: 'key-p'}, [document.createTextNode(at[0]),
                 el('code', {text: 'https://' + domain + '/.well-known/perf-sentinel-key'}),
-                document.createTextNode('. ' + PSL.CARD_COPY.keysFile)]),
-            cardCopyLine(shown, card.keys.well_known, 'Copy the file')
+                document.createTextNode(at[1] + ' ' + PSL.CARD_COPY.keysFile)]),
+            cardCopyLine(shown, card.keys.well_known, t('card.keys.copy_file'))
         ]);
     }
 
     /** A line to paste: shown as `text`, copied as `raw`, the .well-known file indented only on screen. */
     function cardCopyLine(text, raw, label) {
         const code = el('pre', {class: 'terminal-code', tabindex: '0', text: text});
-        const word = el('span', {text: 'Copy'});
+        const word = el('span', {text: t('card.copy')});
         const button = el('button', {class: 'pill-button', type: 'button', 'aria-label': label}, [copyGlyph(), word]);
         button.addEventListener('click', function () {
             const copy = globalThis.isSecureContext && navigator.clipboard
@@ -7795,10 +7796,10 @@
                 })
                 : writeClipboard(code);
             copy.then(function (copied) {
-                word.textContent = copied ? 'Copied' : 'Select and copy';
+                word.textContent = t(copied ? 'card.copied' : 'card.copy_by_hand');
                 if (copied) button.setAttribute('data-copied', 'true');
                 setTimeout(function () {
-                    word.textContent = 'Copy';
+                    word.textContent = t('card.copy');
                     button.removeAttribute('data-copied');
                 }, 2000);
             });
@@ -7813,14 +7814,14 @@
         const row = el('li', {class: 'key-row'}, [
             el('div', {class: 'key-row-head'}, [
                 el('span', {class: 'key-fp', text: key.fingerprint}),
-                el('span', {class: 'key-state', 'data-state': stateName, text: CARD_KEY_STATES[stateName]}),
+                el('span', {class: 'key-state', 'data-state': stateName, text: t('card.key.state.' + stateName)}),
                 el('span', {
                     class: 'key-dates',
-                    text: 'from ' + key.from + (key.to ? ' to ' + key.to : '')
-                        + (key.revoked ? ', possibly exposed since ' + key.revoked : '')
+                    text: t('card.key.dates' + (key.to ? '.to' : '') + (key.revoked ? '.revoked' : ''),
+                        {from: key.from, to: key.to, revoked: key.revoked})
                 })
             ]),
-            domain ? cardCopyLine(key.dns, key.dns, 'Copy the DNS line of ' + key.fingerprint) : null
+            domain ? cardCopyLine(key.dns, key.dns, t('card.key.copy_dns', {fingerprint: key.fingerprint})) : null
         ]);
         if (!key.revoked) row.appendChild(card.revoking === key.fingerprint ? cardRevokeConfirm(card, key, domain)
             : cardRevokeOpen(card, key));
@@ -7829,14 +7830,14 @@
 
     function cardRevokeOpen(card, key) {
         const open = el('button', {
-            class: 'pill-button pill-sm pill-crit', type: 'button', id: 'card-revoke-' + key.fingerprint, text: 'Revoke'
+            class: 'pill-button pill-sm pill-crit', type: 'button', id: 'card-revoke-' + key.fingerprint, text: t('card.revoke')
         });
         open.addEventListener('click', function () {
             card.revoking = key.fingerprint;
             card.revokeDate = '';
             renderFocus('#card-leak-date');
         });
-        return el('div', {class: 'key-revoke'}, [el('span', {text: 'Leaked?'}), open]);
+        return el('div', {class: 'key-revoke'}, [el('span', {text: t('card.revoke.leaked')}), open]);
     }
 
     /** No default date: it is published as the first day the key may have leaked. */
@@ -7847,9 +7848,9 @@
         date.value = card.revokeDate;
         const revoke = el('button', {
             class: 'pill-button pill-sm pill-crit', type: 'button', id: 'card-revoke-confirm',
-            disabled: card.revokeDate && !card.keysBusy ? null : 'disabled', text: 'Revoke'
+            disabled: card.revokeDate && !card.keysBusy ? null : 'disabled', text: t('card.revoke')
         });
-        const cancel = el('button', {class: 'recap-link', type: 'button', text: 'Cancel'});
+        const cancel = el('button', {class: 'recap-link', type: 'button', text: t('card.revoke.cancel')});
         date.addEventListener('change', function () {
             card.revokeDate = date.value;
             cardRender();

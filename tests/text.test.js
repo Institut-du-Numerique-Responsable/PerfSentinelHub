@@ -713,3 +713,207 @@ test("a Management row's plain sentence follows the shown language, an unknown t
         assert.equal(PSL.recapPlain(unknown), "The stored sentence.");
     });
 });
+
+// ---- the share card section
+
+const CARD_FUNCTIONS = ["cardState", "cardToday", "cardPeriodFrom", "cardOptionsReady", "cardFix", "cardLabel",
+    "cardForm", "cardFileName", "cardCurveRefusal", "cardBlocked", "cardFields", "cardFieldValue", "cardFieldError",
+    "cardInvalid", "cardPlace", "cardRender", "cardMarkStale", "cardPick", "cardPickFormat", "loadCardOptions",
+    "loadCardKeys", "recapCardPanel", "cardImageGlyph", "cardSegmented", "cardLegend", "cardAngleGroup",
+    "cardStepButton", "cardPeriodGroup", "cardWarn", "cardEnvironmentLine", "cardPeriodFacts", "cardFixGroup",
+    "cardNoFix", "cardFixRow", "cardTyped", "cardTextField", "cardWordsGroup", "cardLabelField", "cardFormatGroup",
+    "cardActions", "cardPreviewAside", "cardPreviewShown", "cardPreviewFrame", "cardPreviewCard", "cardPreviewEmpty",
+    "cardPreviewProof", "cardAttachBlock", "cardSignedFigures", "cardBusyNote", "cardPost", "cardFailure",
+    "cardRememberLabel", "cardMake", "cardPreview", "cardDownload", "cardCheckAttachment", "cardKeysPanel",
+    "cardKeysFill", "cardKeyRotate", "cardKeysFile", "cardCopyLine", "cardKeyRow", "cardRevokeOpen",
+    "cardRevokeConfirm", "cardKeyWrite"];
+
+const CARD_HELPERS = ["previewFormat", "cardBusy", "cardDate", "cardIso", "cardPeriodStart", "stepPeriod",
+    "lastClosedPeriod", "canStepForward", "cardDayText", "cardPeriodName", "cardRangeText", "cardText", "cardBody",
+    "cardOptionsPath", "canRememberLabel", "rememberState", "cardFieldProblem", "isPreviousRefusal",
+    "cardContactText", "attachmentText", "contentLine", "signedFigureLines", "revokeText", "levelLine",
+    "cardEnvironmentLine", "cardVolume", "cardFixLine", "cardRefusalText", "cardLang"];
+
+test("the share card section holds no prose literal", () => {
+    const app = wwwrootFile("app.js");
+    const launcher = wwwrootFile("launcher.js");
+    for (const name of CARD_FUNCTIONS) assert.ok(app.includes("function " + name + "("), "app.js has no " + name);
+    for (const name of CARD_HELPERS) assert.ok(launcher.includes("function " + name + "("), "launcher.js has no " + name);
+    // An Accept header, and the prefix of the Hub's English detail a refusal without a code is read by.
+    const wire = ["application/json, image/png, image/svg+xml, image/jxl, application/pdf", "No curve for "];
+    assert.deepEqual(PSL.literalsIn(app, CARD_FUNCTIONS).filter(text => !wire.includes(text)), []);
+    assert.deepEqual(PSL.literalsIn(launcher, CARD_HELPERS).filter(text => !wire.includes(text)), []);
+    assert.doesNotMatch(app, /CARD_KEY_STATES/);
+    for (const table of ["CARD_FREE"]) {
+        const start = app.indexOf("const " + table + " = ");
+        assert.ok(start >= 0, "app.js has no " + table);
+        assert.deepEqual(PSL.literalsIn("function x() {" + app.slice(start, app.indexOf(";", start)) + "}", ["x"]), [],
+            table);
+    }
+    for (const table of ["CARD_PERIOD_LABELS", "CARD_ANGLE_NAMES", "CARD_ANGLE_LINES", "CARD_FORMAT_LABELS",
+        "CARD_FORMAT_NOTES", "CARD_COPY", "ATTACH_REASONS", "ATTACH_VERDICTS", "SIGNED_FIGURE_LABELS"]) {
+        const start = launcher.indexOf("const " + table + " = ");
+        assert.ok(start >= 0, "launcher.js has no " + table);
+        assert.deepEqual(PSL.literalsIn("function x() {" + launcher.slice(start, launcher.indexOf(";", start)) + "}",
+            ["x"]), [], table);
+    }
+});
+
+/** The texts launcher.test.js Card_copy_carries_no_technical_word reads, in the shown language. */
+function cardCopyTexts() {
+    return [
+        ...Object.values(PSL.CARD_ANGLE_LINES),
+        ...Object.values(PSL.CARD_PERIOD_LABELS),
+        ...Object.values(PSL.CARD_FORMAT_LABELS),
+        ...Object.values(PSL.CARD_FORMAT_NOTES),
+        PSL.cardEnvironmentLine("prod", "pilotage"),
+        PSL.cardEnvironmentLine(null, "pilotage"),
+        PSL.cardContactText("acme.example", "pilotage"),
+        ...Object.keys(PSL.FINDING_TYPE_LABEL).map((type) => PSL.cardFixLine({finding_type: type, before_fix_ops: null}).text),
+        PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 5, before_period_name: "May 2026"}).text,
+        ...Object.values(PSL.SIGNED_FIGURE_LABELS),
+        PSL.contentLine({content: "intact"}),
+        PSL.attachmentText({integrity: "ok", content: "modified", level: 1, domain: null, reason: "content_modified"},
+            false).text,
+        PSL.CARD_COPY.busy
+    ];
+}
+
+test("Card_copy_carries_no_technical_word, in French", () => inLang("fr", () => {
+    const words = ["I/O", "E/S", "finding", "requête", "endpoint", "signature", "DNS"];
+    for (const text of cardCopyTexts()) {
+        assert.ok(text, "every text is set");
+        assert.ok(!/[A-Z][a-z]+ [a-z]+ [a-z]+ the /.test(text), `"${text}" reads English`);
+        for (const word of words) assert.ok(!text.includes(word), `"${text}" holds "${word}"`);
+    }
+    assert.equal(PSL.cardEnvironmentLine("prod", "pilotage"),
+        "Environnement prod, repris du filtre du récap ci-dessus. Une carte couvre toutes ses applications.");
+    assert.equal(PSL.CARD_PERIOD_LABELS.semester, "Semestre");
+    assert.equal(PSL.CARD_ANGLE_NAMES.story, "Récit");
+}));
+
+test("a card period reads in words in the shown language", () => {
+    inLang("fr", () => {
+        assert.equal(PSL.cardPeriodName("month", "2026-10-01"), "octobre 2026");
+        assert.equal(PSL.cardPeriodName("quarter", "2026-07-01"), "T3 2026");
+        assert.equal(PSL.cardPeriodName("semester", "2026-01-01"), "premier semestre 2026");
+        assert.equal(PSL.cardPeriodName("semester", "2026-07-01"), "second semestre 2026");
+        assert.equal(PSL.cardPeriodName("year", "2026-01-01"), "2026");
+        assert.equal(PSL.cardPeriodName("week", "2026-10-05"), "la semaine du 5 octobre 2026");
+        assert.equal(PSL.cardPeriodName("week", "2026-06-01"), "la semaine du 1er juin 2026");
+        assert.equal(PSL.cardPeriodName("month", "2026-10-01", "en"), "October 2026");
+        assert.equal(PSL.cardRangeText("2026-10-01", "2026-10-31"), "du 1er au 31 octobre 2026, UTC");
+        assert.equal(PSL.cardRangeText("2026-07-01", "2026-09-30"), "du 1er juillet au 30 septembre 2026, UTC");
+        assert.equal(PSL.cardRangeText("2025-12-29", "2026-01-04"), "du 29 décembre 2025 au 4 janvier 2026, UTC");
+    });
+    assert.equal(PSL.cardPeriodName("month", "2026-10-01", "fr"), "octobre 2026");
+    assert.equal(PSL.cardPeriodName("week", "2026-10-05"), "the week of 5 October 2026");
+});
+
+// CardRulesTests.Every_reason_has_a_sentence, so the screen and the API's English detail read alike.
+const CARD_RULES_EN = {
+    open_period: "A card covers a closed period. Pick an earlier one.",
+    uncovered_days: "Some days of this period were not recorded, so its figures are not whole.",
+    open_day: "Some days of this period are still being counted. Try again tomorrow.",
+    overflow: "On some days of this period there were too many different problems to count each one, so its figures are not whole.",
+    previous_uncovered_days: "No curve for October 2026. The curve compares with September 2026, and some of its days were not recorded. A story or a collective card still works for October 2026.",
+    previous_open_day: "No curve for October 2026. The curve compares with September 2026, and some of its days are still being counted. A story or a collective card still works for October 2026.",
+    previous_overflow: "No curve for October 2026. The curve compares with September 2026, and on some of its days there were too many different problems to count each one. A story or a collective card still works for October 2026.",
+    no_confirmed_fix: "No fix of this period is confirmed by the measure yet.",
+    unknown_fix: "This fix is not among the confirmed fixes of the period. Pick one from the list.",
+    unprintable_fix: "This fix's service or endpoint name is too long or holds a hidden character, so it cannot be printed on a card.",
+    no_total_io: "The curve needs the total activity of each day, which this period or the one before does not hold yet.",
+    curve_needs_whole_sources: "The curve covers whole sources, and you read only part of one.",
+    unprintable_scope: "A source or environment name is too long or holds a hidden character, so it cannot be printed on a card. Ask an administrator to rename it.",
+    scope_too_long: "The environment and source names of this card are too long together to print on it. Pick an environment or a source.",
+    unkept_fixes: "Some fixes of this period were marked done before this Hub kept their details, so it cannot count them all. A story or a curve card still works."
+};
+
+test("a card refusal reads from its code and its period", () => {
+    for (const [code, text] of Object.entries(CARD_RULES_EN)) {
+        assert.equal(PSL.cardRefusalText(code, "month", "2026-10-01"), text, code);
+    }
+    inLang("fr", () => {
+        assert.equal(PSL.cardRefusalText("previous_uncovered_days", "month", "2026-10-01"),
+            "Pas de courbe pour cette période (octobre 2026). La courbe la compare à la période précédente "
+            + "(septembre 2026), dont certains jours n'ont pas été enregistrés. Une carte récit ou collective reste "
+            + "possible pour cette période.");
+        assert.equal(PSL.cardRefusalText("open_period", "month", "2026-10-01"), PSL.t("problem.open_period"));
+        assert.equal(PSL.t("card.refused", {period: "T3 2026"}), "Pas de carte pour cette période (T3 2026).");
+    });
+});
+
+test("an attachment verdict, the level line and the revoke confirmation read in the shown language", () => inLang("fr", () => {
+    const base = {integrity: "ok", content: "intact", level: 1, domain: "acme.example", key: "unknown"};
+    assert.deepEqual(PSL.attachmentText({...base, level: 2, key: "current", reason: "key_published"}, false),
+        {text: "Rattachée : les cartes affichent « Signée par acme.example ».", title: null});
+    assert.deepEqual(PSL.attachmentText({...base, key: "revoked", reason: "key_revoked"}, true),
+        {text: "Cette carte a été signée avec une clé désormais révoquée.", title: "key_revoked"});
+    assert.deepEqual(PSL.attachmentText({...base, reason: "binding_partial"}, true), {
+        text: "Vérification impossible : l'un des deux emplacements qui publient la clé sous acme.example n'a "
+            + "pas répondu.",
+        title: "binding_partial"
+    });
+    assert.equal(PSL.contentLine({content: "intact"}), "Fichier intact : c'est bien le fichier qui a été signé.");
+    assert.equal(PSL.levelLine(true, "acme.example"),
+        "Sur la page de vérification, cette carte affiche : Signée par acme.example.");
+    const said = PSL.revokeText("2026-10-01", false, "acme.example");
+    assert.equal(said.alert, "Toutes les cartes signées par cette clé apparaîtront révoquées sur la page de "
+        + "vérification, quelle que soit leur date. La page de vérification indiquera que la clé a pu être exposée "
+        + "depuis le 1er octobre 2026. Cette action est irréversible.");
+    assert.equal(said.step, "Republiez la ligne DNS de cette clé sous acme.example : la page de vérification ne "
+        + "lit que la ligne DNS, et continue d'afficher ces cartes comme signées tant que la ligne ne dit pas révoquée.");
+    assert.ok(PSL.revokeText("2026-10-01", true, "acme.example").step
+        .endsWith(" La prochaine carte crée une nouvelle clé : publiez aussi sa ligne, sous acme.example."));
+    assert.ok(PSL.revokeText("2026-10-01", true, null).step.endsWith(" La prochaine carte crée une nouvelle clé."));
+}));
+
+test("a card's figures and fixes read in the shown language", () => {
+    // pct writes the permille as the old (value / 10).toFixed(1) + '%' did, for every value.
+    for (let permille = 0; permille <= 1000; permille++) {
+        assert.equal(PSL.signedFigureLines({period: {kind: "year", from: "2026-01-01"}, last_waste_permille: permille})[1].value,
+            (permille / 10).toFixed(1) + "%");
+    }
+    inLang("fr", () => {
+        assert.deepEqual(PSL.signedFigureLines({
+            period: {kind: "month", from: "2026-09-01", to: "2026-09-30"},
+            before_fix_period: {from: "2026-07-01", to: "2026-07-31"},
+            cited_ms: 2349, before_fix_ops: 1937000, last_waste_permille: 31
+        }), [
+            {label: "Période", value: "septembre 2026"},
+            {label: "Période avant la correction", value: "juillet 2026"},
+            {label: "Chiffre principal de la carte", value: "2 349 millisecondes"},
+            {label: "Opérations inutiles avant la correction", value: "1 937 000"},
+            {label: "Part du travail qui était évitable, période de la carte", value: "3,1 %"}
+        ]);
+        assert.deepEqual(PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 1_940_000}, "septembre 2026"),
+            {figure: "1,9 million", text: " d'opérations inutiles avant la correction (septembre 2026)"});
+        assert.equal(PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 2_500_000}, "x").figure,
+            "2,5 millions");
+        assert.deepEqual(PSL.cardFixLine({finding_type: "redundant_http", before_fix_ops: 410_500}, "T3 2026"),
+            {figure: "410 mille", text: " opérations inutiles avant la correction (T3 2026)"});
+        assert.equal(PSL.cardFixLine({finding_type: "redundant_http", before_fix_ops: 9_999}, "x").figure, "9 999");
+        assert.deepEqual(PSL.cardFixLine({finding_type: "slow_sql", before_fix_ops: null}),
+            {figure: null, text: "la carte montre la durée de ses passages les plus lents"});
+        assert.equal(PSL.cardFieldProblem("a​b"),
+            "La police de la carte ne sait pas dessiner « ​ ». Retirez-le, ou écrivez-le autrement.");
+        assert.deepEqual(PSL.rememberState("Afficher un panier", null, "cette action"),
+            {text: "Retenir ce nom pour cette action", enabled: true});
+    });
+    // The period a caller names wins over the Hub's English one, which stays the default.
+    assert.equal(PSL.cardFixLine({finding_type: "n_plus_one_sql", before_fix_ops: 5, before_period_name: "May 2026"}).text,
+        " unnecessary operations in May 2026, before the fix");
+});
+
+test("the card language follows the Hub until picked", () => {
+    assert.equal(PSL.cardLang(null), "en");
+    assert.equal(PSL.cardLang("fr"), "fr");
+    inLang("fr", () => {
+        assert.equal(PSL.cardLang(null), "fr");
+        assert.equal(PSL.cardLang("en"), "en");
+        assert.equal(PSL.cardLang("de"), "fr");
+    });
+    const app = wwwrootFile("app.js");
+    assert.match(app, /lang: PSL\.cardLang\(card\.lang\)/);
+    assert.doesNotMatch(app, /getItem\(CARD_LANG_KEY\) === 'fr'/);
+});

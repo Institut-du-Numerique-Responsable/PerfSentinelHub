@@ -2625,29 +2625,18 @@
     /** The kinds a card covers, in the order the toggle shows them. */
     const CARD_PERIODS = ['week', 'month', 'quarter', 'semester', 'year'];
     /** "Semester" reads as a school term: the screen says Half-year, the value sent stays semester. */
-    const CARD_PERIOD_LABELS = {week: 'Week', month: 'Month', quarter: 'Quarter', semester: 'Half-year', year: 'Year'};
+    const CARD_PERIOD_LABELS = textTable('card.period.', CARD_PERIODS);
     const CARD_ANGLES = ['story', 'curve', 'collective'];
-    const CARD_ANGLE_NAMES = {story: 'Story', curve: 'Curve', collective: 'Collective'};
-    const CARD_ANGLE_LINES = {
-        story: 'One fix, told in everyday words.',
-        curve: 'How much of the work was avoidable, period after period.',
-        collective: 'How many fixes the measure confirmed, and where.'
-    };
+    const CARD_ANGLE_NAMES = textTable('card.angle.', CARD_ANGLES);
+    const CARD_ANGLE_LINES = textTable('card.angle_line.', CARD_ANGLES);
     const CARD_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
         'October', 'November', 'December'];
     const CARD_KIND_MONTHS = {month: 1, quarter: 3, semester: 6, year: 12};
     /** The files a card downloads as; the bracketed type is the one the saved file carries. */
     const CARD_FORMATS = ['png', 'svg', 'jxl', 'pdf'];
-    const CARD_FORMAT_LABELS = {
-        png: 'Image (PNG)',
-        svg: 'Image to print or scale (SVG)',
-        jxl: 'Smaller image to archive (JPEG XL)',
-        pdf: 'Carousel (PDF)'
-    };
+    const CARD_FORMAT_LABELS = textTable('card.format.', CARD_FORMATS);
     /** The sentence under a format while it is picked, where the choice alone does not say where the file goes. */
-    const CARD_FORMAT_NOTES = {
-        jxl: 'LinkedIn does not accept this format. Post the PNG, and keep this one to archive or send.'
-    };
+    const CARD_FORMAT_NOTES = textTable('card.format_note.', ['jxl']);
 
     /** The format a preview renders: a JPEG XL previews as the PNG of the same card, which every browser shows. */
     function previewFormat(format) {
@@ -2665,86 +2654,23 @@
     }
 
     /** Every other sentence of the card section, in one place for the copy review. */
-    const CARD_COPY = {
-        title: 'Share a result',
-        hint: 'a signed card for a post or a slide',
-        help: 'The card prints figures this Hub measured over a closed period, with their scope. It is signed: '
-            + 'anyone who scans its code sees whether its figures changed since it was made.',
-        closed: 'Turn a measured result into an image or a carousel to post. The Hub writes every figure, you add '
-            + 'a title and a team name.',
-        create: 'Create a card',
-        intro: 'Pick what to tell and a closed period. The Hub writes every figure and sentence; you add a title, '
-            + 'a team name and, for a story, an everyday name for the action. The card is signed, so anyone can '
-            + 'check that its figures have not changed.',
-        engineOff: 'This Hub\'s engine cannot make cards yet. An administrator updates the engine to turn them on.',
-        optionsFailed: 'The Hub did not say what this period holds. Try again in a moment.',
-        noFix: 'No fix of this period is confirmed by the measure yet. A fix counts once its problem stays away '
-            + 'on the days after it is marked done.',
-        fixesWait: 'The list appears once the period can make a card.',
-        defaultPill: 'Largest volume before the fix',
-        labelHint: 'What a person was doing: "Showing a cart", "Paying an order". Without one, the card says '
-            + '"For one action in the application".',
-        rememberDenied: 'Only people allowed to name actions can remember a name. The card still prints it.',
-        freeNote: 'Printed as written, and shown on the check page as chosen by your organisation. The figures, '
-            + 'the sentences and the scope cannot be changed.',
-        carouselNote: 'Four pages for a LinkedIn document: the hook, why it matters, the figures, the proof. '
-            + 'Preview opens the PDF in your browser\'s viewer.',
-        fieldWhy: 'Fix the field marked above to make the card.',
-        stale: 'Your choices changed since this preview. Preview again to see them. Download makes the card from '
-            + 'your current choices.',
-        previewEmpty: 'Choose, then Preview. The card appears here as people will see it.',
-        previewBlocked: 'No card can be made with these choices.',
-        rendering: 'Rendering the card\u2026',
-        busy: 'Another card is being made. Trying again in a few seconds.',
-        pngNote: '1080 by 1350 pixels. Its code links to perf-sentinel.dev/verifier, which shows the signed figures.',
-        svgNote: 'Sharp at any size, to print or to enlarge. Its code links to perf-sentinel.dev/verifier, which '
-            + 'shows the signed figures.',
-        pdfNote: 'Four pages of 1080 by 1350 points. Their code links to perf-sentinel.dev/verifier, which shows '
-            + 'the signed figures.',
-        noDomain: 'Without a domain, the check page shows this Hub\'s cards as "Signer not verified". An '
-            + 'administrator can set one in Hub:Cards:Domain.',
-        keysTitle: 'Signing key and organisation',
-        keysOrigin: 'Both come from the Hub configuration, Hub:Cards:Organisation and Hub:Cards:Domain. Every '
-            + 'card signs them, and nobody changes them from this screen.',
-        keysNone: 'No key yet. The first card makes one, and the lines to publish appear here.',
-        keysPublish: 'Publish either form below, then use Verify attachment. The DNS: one TXT record per key, all '
-            + 'under the same name. Keep old keys published, so the cards they signed keep verifying.',
-        keysFile: 'Only the command line check reads it; the check page reads the DNS.',
-        rotate: 'Makes a new key for the next cards. The current one stays published with its end date, so the '
-            + 'cards it signed keep verifying. Publish the new line too.',
-        leaked: 'First day it may have leaked'
-    };
+    const CARD_COPY = textTable('card.copy.', ['title', 'hint', 'help', 'closed', 'create', 'intro', 'engineOff',
+        'optionsFailed', 'noFix', 'fixesWait', 'defaultPill', 'labelHint', 'rememberDenied', 'freeNote', 'carouselNote',
+        'fieldWhy', 'stale', 'previewEmpty', 'previewBlocked', 'rendering', 'busy', 'pngNote', 'svgNote', 'pdfNote',
+        'noDomain', 'keysTitle', 'keysOrigin', 'keysNone', 'keysPublish', 'keysFile', 'rotate', 'leaked']);
 
     /** One plain sentence per verify-card reason the engine answers at level 1. */
-    const ATTACH_REASONS = {
-        binding_check_failed: 'the places that publish the key under {domain} did not answer',
-        binding_partial: 'one of the two places that publish the key under {domain} did not answer',
-        key_not_published: 'the key is not published under {domain} yet',
-        no_domain: 'the card names no domain',
-        no_http_client: 'this Hub\'s engine cannot reach the network'
-    };
+    const ATTACH_REASONS = textTable('card.attach.reason.', ['binding_check_failed', 'binding_partial',
+        'key_not_published', 'no_domain', 'no_http_client']);
 
     /** Level 1 answers where the check succeeded: they state the verdict, never "Could not check". */
-    const ATTACH_VERDICTS = {
-        key_revoked: 'This card was signed with a key that is now revoked.',
-        public_key_mismatch: 'This card was signed with a key other than the one published under {domain}.',
-        signed_outside_validity: 'This card is dated outside the period its key was published for.'
-    };
+    const ATTACH_VERDICTS = textTable('card.attach.verdict.', ['key_revoked', 'public_key_mismatch',
+        'signed_outside_validity']);
 
     /** The signed figures verify-card reads back, in the order the screen lists them. */
-    const SIGNED_FIGURE_LABELS = {
-        period: 'Period',
-        before_fix_period: 'Period before the fix',
-        cited_ops: 'Headline figure on the card',
-        cited_ms: 'Headline figure on the card',
-        before_fix_ops: 'Unnecessary operations before the fix',
-        threshold_ops: 'Alert threshold the card cites',
-        threshold_ms: 'Alert threshold the card cites',
-        last_waste_permille: 'Share of the work that was avoidable, period of the card',
-        previous_waste_permille: 'Share of the work that was avoidable, period before',
-        confirmed_fixes_count: 'Fixes confirmed by measurement',
-        services_count: 'Services concerned'
-    };
+    const SIGNED_FIGURE_LABELS = textTable('card.figure.', ['period', 'before_fix_period', 'cited_ops', 'cited_ms',
+        'before_fix_ops', 'threshold_ops', 'threshold_ms', 'last_waste_permille', 'previous_waste_permille',
+        'confirmed_fixes_count', 'services_count']);
 
     /** @param {string} day yyyy-MM-dd @returns {Date} midnight UTC */
     function cardDate(day) {
@@ -2804,14 +2730,39 @@
      * A period in words, as CardRules.PeriodName writes it.
      * @param {string} kind @param {string} from @returns {string}
      */
-    function cardPeriodName(kind, from) {
+    function cardPeriodName(kind, from, language = LANG) {
         const date = cardDate(from);
         const year = String(date.getUTCFullYear());
-        if (kind === 'week') return 'the week of ' + cardDayText(from, true);
-        if (kind === 'month') return CARD_MONTHS[date.getUTCMonth()] + ' ' + year;
-        if (kind === 'quarter') return 'Q' + (Math.floor(date.getUTCMonth() / 3) + 1) + ' ' + year;
-        if (kind === 'semester') return (date.getUTCMonth() === 0 ? 'the first half of ' : 'the second half of ') + year;
+        if (kind === 'week') return tIn(language, 'card.period_name.week', {day: day(from, {withYear: true, language})});
+        if (kind === 'month') {
+            return tIn(language, 'card.period_name.month', {month: monthName(date.getUTCMonth() + 1, language), year});
+        }
+        if (kind === 'quarter') {
+            return tIn(language, 'card.period_name.quarter', {quarter: Math.floor(date.getUTCMonth() / 3) + 1, year});
+        }
+        if (kind === 'semester') {
+            return tIn(language, date.getUTCMonth() === 0 ? 'card.period_name.first_half' : 'card.period_name.second_half',
+                {year});
+        }
         return year;
+    }
+
+    /**
+     * Why no card, from its code and its period, as CardRules.Explain writes it in English: the
+     * period before is named for a curve's refusal, every other code reads its problem sentence.
+     * @param {string} code @param {string} kind @param {string} from
+     * @returns {string}
+     */
+    function cardRefusalText(code, kind, from) {
+        if (!hasText('card.refusal.' + code)) return problemText({code: code});
+        return t('card.refusal.' + code, {
+            period: cardPeriodName(kind, from), previous: cardPeriodName(kind, stepPeriod(kind, from, -1))
+        });
+    }
+
+    /** The card's language: the one a person picked, else the Hub's. @param {string|null} picked */
+    function cardLang(picked) {
+        return LANGS.indexOf(picked) >= 0 ? /** @type {'en' | 'fr'} */ (picked) : LANG;
     }
 
     /**
@@ -2819,10 +2770,10 @@
      * @param {string} from @param {string} to @returns {string}
      */
     function cardRangeText(from, to) {
-        let start = cardDayText(from, true);
-        if (from.slice(0, 7) === to.slice(0, 7)) start = String(cardDate(from).getUTCDate());
-        else if (from.slice(0, 4) === to.slice(0, 4)) start = cardDayText(from, false);
-        return start + ' to ' + cardDayText(to, true) + ', UTC';
+        let start = day(from, {withYear: true});
+        if (from.slice(0, 7) === to.slice(0, 7)) start = day(from).split(' ')[0];
+        else if (from.slice(0, 4) === to.slice(0, 4)) start = day(from);
+        return t('card.range', {from: start, to: day(to, {withYear: true})});
     }
 
     function cardText(value) {
@@ -2870,8 +2821,8 @@
     function rememberState(typed, remembered, place) {
         const text = cardText(typed);
         return remembered
-            ? {text: 'Update the remembered name with this one', enabled: text !== '' && text !== remembered}
-            : {text: 'Remember this name for ' + place, enabled: text !== ''};
+            ? {text: t('card.remember.update'), enabled: text !== '' && text !== remembered}
+            : {text: t('card.remember.new', {place: place}), enabled: text !== ''};
     }
 
     // A heuristic for typing only, the engine's 422 stays the authority. (C) (R) and TM are pictographic
@@ -2881,7 +2832,7 @@
     /** The first character a free field holds that the card cannot draw, as a sentence, or null. */
     function cardFieldProblem(text) {
         const found = String(text || '').match(CARD_UNDRAWABLE);
-        return found ? 'The card\'s font cannot draw "' + found[0] + '". Remove it, or write it another way.' : null;
+        return found ? t('card.field_problem', {char: found[0]}) : null;
     }
 
     /**
@@ -2897,8 +2848,7 @@
 
     /** The two hosts the attachment check reaches. */
     function cardContactText(domain, view) {
-        return 'Checking contacts cloudflare-dns.com' + (view === 'pilotage' ? '' : ' (DNS over HTTPS)')
-            + ' and ' + domain + '.';
+        return t(view === 'pilotage' ? 'card.contact.pilotage' : 'card.contact.tech', {domain: domain});
     }
 
     /**
@@ -2908,34 +2858,23 @@
      * @returns {{text: string, title: string|null}}
      */
     function attachmentText(result, isAdmin) {
-        if (result.integrity !== 'ok') {
-            return {text: 'This card does not verify: its figures changed after signing.', title: null};
-        }
-        if (result.content === 'modified') {
-            return {
-                text: 'This card file was changed after it was signed. Make the card again before sharing it.',
-                title: 'content_modified'
-            };
-        }
-        if (result.level === 2) return {text: 'Attached: cards read "Signed by ' + result.domain + '".', title: null};
+        const domain = {domain: result.domain};
+        if (result.integrity !== 'ok') return {text: t('card.attach.tampered'), title: null};
+        if (result.content === 'modified') return {text: t('card.attach.modified'), title: 'content_modified'};
+        if (result.level === 2) return {text: t('card.attach.attached', domain), title: null};
         if (ATTACH_VERDICTS[result.reason]) {
             return {text: ATTACH_VERDICTS[result.reason].replace('{domain}', result.domain), title: result.reason};
         }
         if (result.reason && result.reason !== 'key_not_published') {
             const reason = ATTACH_REASONS[result.reason];
             return {
-                text: 'Could not check: ' + (reason ? reason.replace('{domain}', result.domain) : 'an unexpected answer')
-                    + '.',
+                text: t('card.attach.unchecked', {
+                    reason: reason ? reason.replace('{domain}', result.domain) : t('card.attach.unexpected')
+                }),
                 title: result.reason
             };
         }
-        return {
-            text: isAdmin
-                ? 'Not attached yet. Publish one of the lines below, then check again.'
-                : 'Not attached yet. An administrator publishes one line under ' + result.domain
-                + ', then you can check again.',
-            title: null
-        };
+        return {text: t(isAdmin ? 'card.attach.not_yet.admin' : 'card.attach.not_yet.other', domain), title: null};
     }
 
     /**
@@ -2943,7 +2882,7 @@
      * @param {{content: string}} result @returns {string|null}
      */
     function contentLine(result) {
-        return result.content === 'intact' ? 'File intact: this is the file that was signed.' : null;
+        return result.content === 'intact' ? t('card.content.intact') : null;
     }
 
     /**
@@ -2958,9 +2897,9 @@
             let text;
             if (key === 'period') text = cardPeriodName(value.kind, value.from);
             else if (key === 'before_fix_period') text = cardPeriodName(figures.period.kind, value.from);
-            else if (key.endsWith('_permille')) text = (value / 10).toFixed(1) + '%';
-            else if (key.endsWith('_ms')) text = value.toLocaleString('en-US') + ' milliseconds';
-            else text = value.toLocaleString('en-US');
+            else if (key.endsWith('_permille')) text = pct(value / 1000, 1);
+            else if (key.endsWith('_ms')) text = t('card.figure_ms', {n: num(value)});
+            else text = num(value);
             return {label: SIGNED_FIGURE_LABELS[key], value: text};
         });
     }
@@ -2973,56 +2912,55 @@
      * @returns {{alert: string, step: string}}
      */
     function revokeText(date, isCurrent, domain) {
-        const alert = 'Every card this key signed will read as revoked on the check page, whatever its date. The '
-            + 'check page will say the key may have been exposed since ' + date + '. This cannot be undone.';
-        const step = 'Republish this key\'s DNS line' + (domain ? ' under ' + domain : '') + ': the check page reads '
-            + 'the DNS line only, and keeps showing these cards as signed until the line says revoked.';
+        // English keeps the ISO day it always showed; French reads it in words, which never breaks at a hyphen.
+        const alert = t('card.revoke.alert', {date: LANG === 'fr' ? day(date, {withYear: true}) : date});
+        const step = domain ? t('card.revoke.step.domain', {domain: domain}) : t('card.revoke.step');
         if (!isCurrent) return {alert: alert, step: step};
         return {
             alert: alert,
-            step: step + ' The next card makes a new key' + (domain ? ': publish its line too, under ' + domain + '.' : '.')
+            step: step + ' ' + (domain ? t('card.revoke.next.domain', {domain: domain}) : t('card.revoke.next'))
         };
     }
 
     /** What the check page prints for the card: the signer only once a check found the key. */
     function levelLine(attached, domain) {
-        return 'On the check page, this card reads: '
-            + (attached ? 'Signed by ' + domain + '.' : 'Figures intact since their signature. Signer not verified.');
+        return t(attached ? 'card.level.attached' : 'card.level.unattached', {domain: domain});
     }
 
     /** Where the card's environment comes from, and what it covers. */
     function cardEnvironmentLine(environment, view) {
-        const lead = environment
-            ? 'Environment ' + environment + ', taken from the recap filter above. A card covers every service in it'
-            : 'Every environment, as the recap filter above reads. A card covers every service in them';
-        return lead + (view === 'pilotage' ? '.' : ': the service and namespace filters do not apply.');
+        return t('card.env.' + (environment ? 'one' : 'all') + '.' + (view === 'pilotage' ? 'pilotage' : 'tech'),
+            {environment: environment});
     }
 
     // Rounded down, so the screen never shows more than the card will sign.
     function cardVolume(value) {
-        if (value < 10000) return value.toLocaleString('en-US');
-        if (value < 1000000) return Math.floor(value / 1000) + ' thousand';
-        return (Math.floor(value / 100000) / 10) + ' million';
+        if (value < 10000) return num(value);
+        if (value < 1000000) return t('card.volume.thousand', {n: Math.floor(value / 1000)});
+        const millions = Math.floor(value / 100000) / 10;
+        return t('card.volume.million.' + plural(Math.floor(millions)), {n: decimal(millions)});
     }
 
     /**
      * What a fix row says the card prints: the volume before the fix, or the figure a problem with
-     * no volume cites instead.
+     * no volume cites instead. `period` names the period before the fix, the Hub's English name when omitted.
+     * @param {*} fix @param {string} [period]
      * @returns {{figure: string|null, text: string}}
      */
-    function cardFixLine(fix) {
+    function cardFixLine(fix, period) {
         if (fix.before_fix_ops !== null && fix.before_fix_ops !== undefined) {
             return {
                 figure: cardVolume(fix.before_fix_ops),
-                text: ' unnecessary operations in ' + fix.before_period_name + ', before the fix'
+                text: t(fix.before_fix_ops >= 1000000 ? 'card.fix.volume.million' : 'card.fix.volume',
+                    {period: period ?? fix.before_period_name})
             };
         }
         const type = String(fix.finding_type);
-        let text = 'the card shows how many calls one action made';
-        if (type.indexOf('slow_') === 0) text = 'the card shows how long its slowest runs took';
-        else if (type === 'pool_saturation') text = 'the card shows how many calls ran at the same time';
-        else if (type === 'serialized_calls') text = 'the card shows how many calls ran one after the other';
-        return {figure: null, text: text};
+        let key = 'card.fix.calls';
+        if (type.indexOf('slow_') === 0) key = 'card.fix.slow';
+        else if (type === 'pool_saturation') key = 'card.fix.pool';
+        else if (type === 'serialized_calls') key = 'card.fix.serialized';
+        return {figure: null, text: t(key)};
     }
 
     /** The languages the launcher is written in, English first: it is the fallback. */
@@ -3111,7 +3049,17 @@
      * @returns {string}
      */
     function t(key, vars) {
-        const value = textIn(LANG, key) ?? textIn('en', key);
+        return tIn(LANG, key, vars);
+    }
+
+    /**
+     * `t` in `language` rather than the shown one.
+     * @param {string} language @param {string} key
+     * @param {Record<string, string | number>} [vars]
+     * @returns {string}
+     */
+    function tIn(language, key, vars) {
+        const value = textIn(language, key) ?? textIn('en', key);
         if (value === undefined) {
             // Under Node (the tests) a key nobody wrote is a defect; on a page it shows as itself.
             if (typeof document === 'undefined') throw new Error('no text for ' + key);
@@ -3173,11 +3121,11 @@
     /**
      * A `yyyy-MM-dd` day in words, UTC: `29 October 2026` in English, as cardDayText writes it.
      * @param {string} iso
-     * @param {{withYear?: boolean, short?: boolean}} [options]
+     * @param {{withYear?: boolean, short?: boolean, language?: string}} [options]
      * @returns {string}
      */
-    function day(iso, {withYear = false, short = false} = {}) {
-        if (LANG === 'fr') {
+    function day(iso, {withYear = false, short = false, language = LANG} = {}) {
+        if (language === 'fr') {
             // French writes the first of the month as an ordinal, 1er, which Intl leaves to us.
             return new Intl.DateTimeFormat('fr-FR', {
                 day: 'numeric', month: short ? 'short' : 'long', year: withYear ? 'numeric' : undefined, timeZone: 'UTC'
@@ -3580,6 +3528,8 @@
         lastClosedPeriod,
         canStepForward,
         cardPeriodName,
+        cardRefusalText,
+        cardLang,
         cardDayText,
         cardRangeText,
         cardBody,
