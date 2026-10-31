@@ -208,7 +208,32 @@ public static class HubText
         ["mail.tech_link"] = "Engineering view, after signing in to the Hub: {link}",
         ["mail.no_link"] =
             "No link to the engineering view: the Hub has no public address set (Hub:Recaps:PublicUrl).",
-        ["mail.footer"] = "Figures are frozen at generation. CO2 is an order-of-magnitude estimate."
+        ["mail.footer"] = "Figures are frozen at generation. CO2 is an order-of-magnitude estimate.",
+        ["page.lang.switch"] = "Show this page in French",
+        ["signin.title"] = "Sign in · Perf Sentinel Hub",
+        ["signin.heading"] = "Sign in to Perf Sentinel Hub",
+        ["signin.lede"] = "With your organisation's single sign-on. A local account is for when it is down.",
+        ["signin.sso"] = "Sign in with single sign-on",
+        ["signin.local"] = "Sign in with a local account",
+        ["signin.local.note"] = "For when single sign-on is unavailable. Every local sign-in is logged.",
+        ["signin.name"] = "Name",
+        ["signin.password"] = "Password",
+        ["signin.submit"] = "Sign in",
+        ["signin.wrong"] = "The name or the password is wrong.",
+        ["signin.throttled"] = "Too many failed attempts. Try again in {seconds} seconds.",
+        ["signin.busy"] = "The Hub is busy. Try again in a moment.",
+        ["device.title"] = "Perf Sentinel Hub - terminal sign-in",
+        ["device.overline"] = "terminal sign-in",
+        ["device.heading"] = "Approve a terminal",
+        ["device.intro"] =
+            "Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started yourself, just now: approving gives that terminal your access until {until}.",
+        ["device.intro.session_end"] = "your session ends",
+        ["device.code"] = "Code",
+        ["device.code.hint"] =
+            "Eight letters, as perf-sentinel login prints them. Case and the dash do not matter.",
+        ["device.continue"] = "Continue",
+        ["device.approve"] = "Approve",
+        ["device.deny"] = "Deny"
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     public static readonly FrozenDictionary<string, string> French = new Dictionary<string, string>
@@ -411,7 +436,34 @@ public static class HubText
         ["mail.no_link"] =
             "Pas de lien vers la vue Technique : le Hub n'a pas d'adresse publique (Hub:Recaps:PublicUrl).",
         ["mail.footer"] =
-            "Les chiffres sont figés au moment où le rapport est produit. Le CO2 est une estimation, un ordre de grandeur."
+            "Les chiffres sont figés au moment où le rapport est produit. Le CO2 est une estimation, un ordre de grandeur.",
+        ["page.lang.switch"] = "Afficher cette page en anglais",
+        ["signin.title"] = "Connexion · Perf Sentinel Hub",
+        ["signin.heading"] = "Connexion à Perf Sentinel Hub",
+        ["signin.lede"] =
+            "Avec l'authentification unique de votre organisation. Le compte local sert quand elle est indisponible.",
+        ["signin.sso"] = "Se connecter par authentification unique",
+        ["signin.local"] = "Se connecter avec un compte local",
+        ["signin.local.note"] =
+            "Quand l'authentification unique est indisponible. Chaque connexion locale est journalisée.",
+        ["signin.name"] = "Nom",
+        ["signin.password"] = "Mot de passe",
+        ["signin.submit"] = "Se connecter",
+        ["signin.wrong"] = "Le nom ou le mot de passe est incorrect.",
+        ["signin.throttled"] = "Trop de tentatives échouées. Réessayez dans {seconds} secondes.",
+        ["signin.busy"] = "Le Hub est occupé. Réessayez dans un instant.",
+        ["device.title"] = "Perf Sentinel Hub - connexion d'un terminal",
+        ["device.overline"] = "connexion d'un terminal",
+        ["device.heading"] = "Autoriser un terminal",
+        ["device.intro"] =
+            "Saisissez le code affiché par votre terminal. Ne saisissez qu'un code issu d'un perf-sentinel login que vous venez de lancer vous-même\u00a0: l'autoriser donne à ce terminal votre accès jusqu'à {until}.",
+        ["device.intro.session_end"] = "la fin de votre session",
+        ["device.code"] = "Code",
+        ["device.code.hint"] =
+            "Huit lettres, telles que perf-sentinel login les affiche. La casse et le tiret n'ont pas d'importance.",
+        ["device.continue"] = "Continuer",
+        ["device.approve"] = "Autoriser",
+        ["device.deny"] = "Refuser"
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>True when either table has the key.</summary>

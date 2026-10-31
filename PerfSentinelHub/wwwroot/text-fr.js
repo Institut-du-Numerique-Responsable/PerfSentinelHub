@@ -1946,6 +1946,28 @@
         'card.revoke.step.domain': 'Republiez la ligne DNS de cette clé sous {domain}\u00A0: la page de vérification ne lit que la ligne DNS, et continue d\'afficher ces cartes comme signées tant que la ligne ne dit pas révoquée.',
         'card.revoke.step': 'Republiez la ligne DNS de cette clé\u00A0: la page de vérification ne lit que la ligne DNS, et continue d\'afficher ces cartes comme signées tant que la ligne ne dit pas révoquée.',
         'card.revoke.next.domain': 'La prochaine carte crée une nouvelle clé\u00A0: publiez aussi sa ligne, sous {domain}.',
-        'card.revoke.next': 'La prochaine carte crée une nouvelle clé.'
+        'card.revoke.next': 'La prochaine carte crée une nouvelle clé.',
+        'device.intro': 'Saisissez le code affiché par votre terminal. Ne saisissez qu\'un code issu d\'un '
+            + 'perf-sentinel login que vous venez de lancer vous-même\u00a0: l\'autoriser donne à ce terminal votre '
+            + 'accès jusqu\'à {until}.',
+        'device.intro.session_end': 'la fin de votre session',
+        'device.request': 'Demandé depuis {address} à {at} ({ago}). Votre identité\u00a0: {who}. Le jeton expire à '
+            + '{expires}.',
+        'device.ago.less': 'il y a moins d\'une minute',
+        'device.ago.one': 'il y a {count} minute',
+        'device.ago.other': 'il y a {count} minutes',
+        'device.identity.unknown': 'inconnue',
+        'device.expires.session_end': 'la fin de votre session',
+        'device.network_alert': 'Ce code a été demandé depuis un autre réseau que celui de ce navigateur ({address}). '
+            + 'N\'autorisez ce code que si vous avez lancé vous-même cette connexion sur cette machine.',
+        'device.approve': 'Autoriser',
+        'device.approve_anyway': 'Autoriser quand même',
+        'device.armed': 'Ce code vient d\'un autre réseau. N\'appuyez sur Autoriser quand même que si vous avez lancé '
+            + 'vous-même cette connexion. Sinon, appuyez sur Refuser.',
+        'device.approved': 'Autorisé. Votre terminal se connecte d\'ici quelques secondes. Vous pouvez fermer cette '
+            + 'page.',
+        'device.denied': 'Refusé. Ce terminal n\'obtient aucun accès.',
+        'device.answered': 'Le Hub a répondu {status}.',
+        'device.failed': 'La requête n\'a pas abouti\u00a0: {error}'
     };
 })(globalThis);

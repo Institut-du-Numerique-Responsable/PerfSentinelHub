@@ -1876,6 +1876,26 @@
         'card.revoke.step.domain': 'Republish this key\'s DNS line under {domain}: the check page reads the DNS line only, and keeps showing these cards as signed until the line says revoked.',
         'card.revoke.step': 'Republish this key\'s DNS line: the check page reads the DNS line only, and keeps showing these cards as signed until the line says revoked.',
         'card.revoke.next.domain': 'The next card makes a new key: publish its line too, under {domain}.',
-        'card.revoke.next': 'The next card makes a new key.'
+        'card.revoke.next': 'The next card makes a new key.',
+        'device.intro': 'Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started '
+            + 'yourself, just now: approving gives that terminal your access until {until}.',
+        'device.intro.session_end': 'your session ends',
+        'device.request': 'Requested from {address} at {at} ({ago}). You are signed in as {who}. The token expires at '
+            + '{expires}.',
+        'device.ago.less': 'less than a minute ago',
+        'device.ago.one': '{count} minute ago',
+        'device.ago.other': '{count} minutes ago',
+        'device.identity.unknown': 'unknown',
+        'device.expires.session_end': 'the end of your session',
+        'device.network_alert': 'This code was requested from another network than this browser ({address}). Approve '
+            + 'only if you started that sign-in yourself on that machine.',
+        'device.approve': 'Approve',
+        'device.approve_anyway': 'Approve anyway',
+        'device.armed': 'This code came from another network. Press Approve anyway only if you started that sign-in '
+            + 'yourself, or Deny.',
+        'device.approved': 'Approved. Your terminal signs in within a few seconds. You can close this page.',
+        'device.denied': 'Denied. That terminal gets no access.',
+        'device.answered': 'The Hub answered {status}.',
+        'device.failed': 'The request could not be completed: {error}'
     };
 })(globalThis);

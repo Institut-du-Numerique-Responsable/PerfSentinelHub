@@ -25,6 +25,23 @@ public static class HubLang
         return value is En or Fr;
     }
 
+    /// <summary>
+    ///     The language of a server page: <paramref name="lang" /> when it is en or fr, else the first en or fr
+    ///     variant of Accept-Language by quality, else English.
+    /// </summary>
+    public static string Of(HttpRequest request, string? lang)
+    {
+        if (IsKnown(lang)) return lang!;
+        foreach (var range in request.GetTypedHeaders().AcceptLanguage.Where(range => range.Quality is not 0)
+                     .OrderByDescending(range => range.Quality ?? 1))
+        {
+            var primary = range.Value.Value?.Split('-')[0].ToLowerInvariant();
+            if (primary is En or Fr) return primary;
+        }
+
+        return En;
+    }
+
     public static CultureInfo Culture(string lang)
     {
         return lang == Fr ? French : English;

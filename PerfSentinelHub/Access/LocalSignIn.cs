@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Primitives;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 
 namespace PerfSentinelHub.Access;
 
@@ -29,7 +30,6 @@ public static partial class LocalSignIn
 
     private const int MaxBodyBytes = 4096;
     private const int MaxNameChars = 64;
-    private const string Wrong = "The name or the password is wrong.";
 
     // Inline because the launcher's stylesheets sit behind the fallback policy, and allowed by its hash.
     // `.dark{display:none}` comes before the dark media query: after it, at the same specificity, it
@@ -42,7 +42,8 @@ public static partial class LocalSignIn
         @media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1c241f;--ground:#141a17;--fg:#e8ede9;--muted:#a3b5ab;--line:#2b352e;--btn-bd:#2e4d41;--btn-fg:#5ecfa6;--btn-bg:rgba(11,166,113,.13);--sso-bg:#3ecf9d;--sso-fg:#0b1410;--alert:#ffa79e;--alert-bg:#3a1f1c}.light{display:none}.dark{display:block}}
         body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--ground);color:var(--fg);font:15px/1.5 'DM Sans',system-ui,-apple-system,sans-serif}
         main{box-sizing:border-box;width:min(26rem,calc(100% - 2rem));padding:2rem;background:var(--card);border:1px solid var(--line);border-radius:14px}
-        .brand{display:flex;align-items:center;gap:9px;margin-bottom:1.75rem}
+        .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:1.75rem}
+        .brand{display:flex;align-items:center;gap:9px}
         .brand svg{display:block;height:30px;width:auto}
         .suffix{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
         h1{margin:0 0 .35rem;font-size:1.15rem;font-weight:600;letter-spacing:-.01em}
@@ -55,6 +56,16 @@ public static partial class LocalSignIn
         .alert{padding:.5rem .75rem;border-radius:8px;background:var(--alert-bg);color:var(--alert);font-weight:600}
         label{display:block;margin-top:.75rem;color:var(--fg);font-size:.875rem}
         input{box-sizing:border-box;width:100%;margin-top:.25rem;padding:.55rem .65rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+        .shell-lang{display:inline-flex;flex:none;align-items:center;gap:6px;height:34px;padding:0 12px 0 10px;border:1px solid var(--btn-bd);border-radius:999px;background:var(--btn-bg);color:var(--btn-fg);font:600 11.5px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-decoration:none}
+        .shell-lang:hover{border-color:var(--brand)}
+        .shell-lang-globe{width:15px;height:15px;color:var(--brand);transition:transform .3s cubic-bezier(.22,1,.36,1)}
+        .shell-lang:hover .shell-lang-globe{transform:rotate(18deg)}
+        .shell-lang-window{display:inline-block;width:19px;overflow:hidden}
+        .shell-lang-track{display:flex;width:38px;transform:translateX(-19px);transition:transform .32s cubic-bezier(.22,1,.36,1)}
+        .shell-lang-track>span{flex:0 0 19px;text-align:center}
+        :root[lang=fr] .shell-lang-track,.shell-lang:hover .shell-lang-track{transform:none}
+        :root[lang=fr] .shell-lang:hover .shell-lang-track{transform:translateX(-19px)}
+        @media (prefers-reduced-motion:reduce){.shell-lang-globe,.shell-lang-track{transition:none}}
         button{margin-top:1rem;padding:.5rem 1.1rem;border:1px solid var(--btn-bd);border-radius:999px;background:var(--btn-bg);color:var(--btn-fg);font:inherit;font-weight:600;cursor:pointer}
         """;
 
@@ -79,7 +90,8 @@ public static partial class LocalSignIn
         // re-challenges a session that has less than an hour left.
         app.MapGet(Path,
                 (HttpContext context) => Page(context, StatusCodes.Status200OK, null,
-                    ReturnUrl(context.Request.Query["return_url"])))
+                    ReturnUrl(context.Request.Query["return_url"]),
+                    HubLang.Of(context.Request, Single(context.Request.Query["lang"]))))
             .AllowAnonymous();
         app.MapGet(Path + "/sso", (HttpContext context) =>
         {
@@ -112,6 +124,7 @@ public static partial class LocalSignIn
 
         var form = await request.ReadFormAsync(cancellationToken);
         var returnUrl = ReturnUrl(form["return_url"]);
+        var lang = HubLang.Of(request, Single(form["lang"]));
         // Not trimmed: a name with a space is simply not a declared one.
         var name = Single(form["name"]).ToLowerInvariant();
         var password = Single(form["password"]);
@@ -124,15 +137,16 @@ public static partial class LocalSignIn
             var seconds = (long)Math.Ceiling(wait.TotalSeconds);
             context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
             return Page(context, StatusCodes.Status429TooManyRequests,
-                $"Too many failed attempts. Try again in {seconds} seconds.", returnUrl);
+                HubText.Get(lang, "signin.throttled", ("seconds", seconds.ToString(CultureInfo.InvariantCulture))),
+                returnUrl, lang);
         }
 
         if (!await gate.TryEnterAsync(GateWait, cancellationToken))
         {
             throttle.GiveBack(address, key);
             context.Response.Headers.RetryAfter = "1";
-            return Page(context, StatusCodes.Status503ServiceUnavailable, "The Hub is busy. Try again in a moment.",
-                returnUrl);
+            return Page(context, StatusCodes.Status503ServiceUnavailable, HubText.Get(lang, "signin.busy"),
+                returnUrl, lang);
         }
 
         var account = access.FindLocalAccount(name);
@@ -151,7 +165,7 @@ public static partial class LocalSignIn
         {
             // An undeclared name is never logged: it may be a password typed in the wrong field.
             LogRefused(logger, account is null ? "(unknown name)" : name, address, throttle.Failures(key));
-            return Page(context, StatusCodes.Status403Forbidden, Wrong, returnUrl);
+            return Page(context, StatusCodes.Status403Forbidden, HubText.Get(lang, "signin.wrong"), returnUrl, lang);
         }
 
         throttle.Succeeded(key);
@@ -277,39 +291,47 @@ public static partial class LocalSignIn
         return $"<span class=\"{theme}\">{reader.ReadToEnd()}</span>";
     }
 
-    // No script, and nothing submitted is echoed but the return path, which is checked and encoded.
-    private static ContentHttpResult Page(HttpContext context, int statusCode, string? alert, string returnUrl)
+    // No script, and nothing submitted is echoed but the return path, which is checked and encoded, and
+    // the language, en or fr by HubLang.Of.
+    private static ContentHttpResult Page(HttpContext context, int statusCode, string? alert, string returnUrl,
+        string lang)
     {
         Secure(context.Response);
         var encoder = HtmlEncoder.Default;
         var pathBase = encoder.Encode(context.Request.PathBase.Value ?? "");
+        var returnQuery = encoder.Encode(Uri.EscapeDataString(returnUrl));
+        var other = lang == HubLang.Fr ? HubLang.En : HubLang.Fr;
         var html =
             $"""
               <!doctype html>
-              <html lang="en">
+              <html lang="{lang}">
               <head>
               <meta charset="utf-8">
               <meta content="width=device-width, initial-scale=1" name="viewport">
-              <title>Sign in · Perf Sentinel Hub</title>
+              <title>{T("signin.title")}</title>
               <style>{_style}</style>
               </head>
               <body>
               <main>
+              <div class="top">
               <div aria-label="Perf Sentinel Hub" class="brand" role="img">{_logos}<span aria-hidden="true" class="suffix">hub</span></div>
-              <h1>Sign in to Perf Sentinel Hub</h1>
-              <p class="lede">With your organisation's single sign-on. A local account is for when it is down.</p>
-              <a class="sso" href="{pathBase}/auth/sign-in/sso?return_url={encoder.Encode(Uri.EscapeDataString(returnUrl))}">Sign in with single sign-on</a>
+              {LangLink($"{pathBase}/auth/sign-in?return_url={returnQuery}&amp;lang={other}", lang)}
+              </div>
+              <h1>{T("signin.heading")}</h1>
+              <p class="lede">{T("signin.lede")}</p>
+              <a class="sso" href="{pathBase}/auth/sign-in/sso?return_url={returnQuery}">{T("signin.sso")}</a>
               <details{(alert is null ? "" : " open")}>
-              <summary>Sign in with a local account</summary>
-              <p>For when single sign-on is unavailable. Every local sign-in is logged.</p>
-              {(alert is null ? "" : $"<p class=\"alert\" role=\"alert\">{encoder.Encode(alert)}</p>")}
+              <summary>{T("signin.local")}</summary>
+              <p>{T("signin.local.note")}</p>
+              {(alert is null ? "" : $"<p class=\"alert\" role=\"alert\">{alert}</p>")}
               <form action="{pathBase}/auth/sign-in/local" method="post">
-              <label for="name">Name</label>
+              <label for="name">{T("signin.name")}</label>
               <input autocapitalize="none" autocomplete="username"{(alert is null ? "" : " autofocus")} id="name" maxlength="64" name="name" required spellcheck="false">
-              <label for="password">Password</label>
+              <label for="password">{T("signin.password")}</label>
               <input autocomplete="current-password" id="password" maxlength="1024" name="password" required type="password">
               <input name="return_url" type="hidden" value="{encoder.Encode(returnUrl)}">
-              <button type="submit">Sign in</button>
+              <input name="lang" type="hidden" value="{lang}">
+              <button type="submit">{T("signin.submit")}</button>
               </form>
               </details>
               </main>
@@ -317,6 +339,21 @@ public static partial class LocalSignIn
               </html>
               """;
         return TypedResults.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
+
+        string T(string key)
+        {
+            return HubText.Get(lang, key);
+        }
+    }
+
+    /// <summary>
+    ///     The FR/EN pill of the launcher's header, as a link to <paramref name="href" />, the same page in the
+    ///     other language. Its classes are the launcher's: GET /device styles it with launcher.css.
+    /// </summary>
+    public static string LangLink(string href, string lang)
+    {
+        var other = lang == HubLang.Fr ? HubLang.En : HubLang.Fr;
+        return $"""<a aria-label="{HubText.Get(lang, "page.lang.switch")}" class="shell-lang" href="{href}" hreflang="{other}"><svg aria-hidden="true" class="shell-lang-globe" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9z"></path></svg><span aria-hidden="true" class="shell-lang-window"><span class="shell-lang-track"><span>FR</span><span>EN</span></span></span></a>""";
     }
 
     [LoggerMessage(2020, LogLevel.Warning, "Local account {Account} signed in from {ClientAddress}.")]

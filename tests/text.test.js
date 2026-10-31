@@ -917,3 +917,51 @@ test("the card language follows the Hub until picked", () => {
     assert.match(app, /lang: PSL\.cardLang\(card\.lang\)/);
     assert.doesNotMatch(app, /getItem\(CARD_LANG_KEY\) === 'fr'/);
 });
+
+// ---- the terminal sign-in page
+
+test("the terminal approval page reads in French", () => {
+    const now = new Date(2026, 9, 14, 14, 3, 40).getTime();
+    const verify = {
+        user_code: "BCDF-GHJK", client_address: "203.0.113.7", same_network: false,
+        requested_at_ms: new Date(2026, 9, 14, 14, 2, 31).getTime(), identity: "ada@example.com",
+        token_expires_at_ms: new Date(2026, 9, 14, 18, 42).getTime()
+    };
+    inLang("fr", () => {
+        assert.equal(PSL.deviceIntro(verify.token_expires_at_ms),
+            "Saisissez le code affiché par votre terminal. Ne saisissez qu'un code issu d'un perf-sentinel login "
+            + "que vous venez de lancer vous-même : l'autoriser donne à ce terminal votre accès jusqu'à 18:42.");
+        assert.match(PSL.deviceIntro(null), /votre accès jusqu'à la fin de votre session\.$/);
+        assert.equal(PSL.deviceRequestLine(verify, now),
+            "Demandé depuis 203.0.113.7 à 14:02:31 (il y a 1 minute). Votre identité\u00a0: ada@example.com. "
+            + "Le jeton expire à 18:42.");
+        assert.equal(PSL.deviceRequestLine(Object.assign({}, verify, {requested_at_ms: now - 5000}), now).split(". ")[0],
+            "Demandé depuis 203.0.113.7 à 14:03:35 (il y a moins d'une minute)");
+        assert.equal(PSL.deviceRequestLine(Object.assign({}, verify, {requested_at_ms: now - 180000, identity: null,
+            token_expires_at_ms: null}), now),
+            "Demandé depuis 203.0.113.7 à 14:00:40 (il y a 3 minutes). Votre identité\u00a0: inconnue. "
+            + "Le jeton expire à la fin de votre session.");
+        assert.equal(PSL.deviceNetworkAlert(verify),
+            "Ce code a été demandé depuis un autre réseau que celui de ce navigateur (203.0.113.7). N'autorisez ce code "
+            + "que si vous avez lancé vous-même cette connexion sur cette machine.");
+        assert.equal(PSL.t("device.approve_anyway"), "Autoriser quand même");
+        assert.equal(PSL.t("device.answered", {status: 502}), "Le Hub a répondu 502.");
+    });
+    // English keeps the request line's unknown identity and session end as they were.
+    assert.equal(PSL.deviceRequestLine(Object.assign({}, verify, {identity: null, token_expires_at_ms: null}), now),
+        "Requested from 203.0.113.7 at 14:02:31 (1 minute ago). You are signed in as unknown. The token expires at "
+        + "the end of your session.");
+});
+
+test("the terminal approval page holds no prose literal and takes the page's language first", () => {
+    const device = wwwrootFile("device.js");
+    const launcher = wwwrootFile("launcher.js");
+    const helpers = ["deviceIntro", "deviceRequestLine", "deviceNetworkAlert"];
+    for (const name of helpers) assert.ok(launcher.includes("function " + name + "("), "launcher.js has no " + name);
+    assert.deepEqual(PSL.literalsIn(launcher, helpers), []);
+    assert.deepEqual(PSL.literalsIn("function x() {" + device + "}", ["x"]).filter(text => text !== "use strict"), []);
+    // The server wrote <html lang>: the scripted lines follow it, without storing it as a choice.
+    const setLang = device.indexOf("PSL.setLang(document.documentElement.lang, false)");
+    assert.ok(setLang >= 0 && setLang < device.indexOf("addEventListener('DOMContentLoaded'"));
+    assert.match(device, /PSL\.problemText\(answer\.payload, answer\.status, PSL\.t\('device\.answered'/);
+});

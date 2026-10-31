@@ -220,7 +220,7 @@ button {
         padding: 0;
     }
 
-    .shell-lang .shell-lang-globe {
+    .shell-cluster .shell-lang-globe {
         display: none;
     }
 
@@ -4304,7 +4304,12 @@ section > .banner + .banner,
     outline: none;
 }
 
-.device-brand {
+/* The wordmark, and the FR/EN pill of the launcher's header as a link to this page in the other language. */
+.device-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 26px;
 }
 

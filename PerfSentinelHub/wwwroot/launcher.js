@@ -2120,9 +2120,7 @@
      * @returns {string}
      */
     function deviceIntro(expiresAtMs) {
-        return 'Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started '
-            + 'yourself, just now: approving gives that terminal your access until '
-            + (expiresAtMs == null ? 'your session ends' : dtHuman(expiresAtMs).slice(11)) + '.';
+        return t('device.intro', {until: expiresAtMs == null ? t('device.intro.session_end') : time(expiresAtMs)});
     }
 
     /**
@@ -2134,11 +2132,13 @@
      */
     function deviceRequestLine(verify, nowMs) {
         const minutes = Math.floor((nowMs - verify.requested_at_ms) / 60000);
-        const ago = minutes < 1 ? 'less than a minute ago' : minutes === 1 ? '1 minute ago' : minutes + ' minutes ago';
-        return 'Requested from ' + verify.client_address + ' at ' + clock(verify.requested_at_ms).slice(0, 8)
-            + ' (' + ago + '). You are signed in as ' + (verify.identity || 'unknown') + '. The token expires at '
-            + (verify.token_expires_at_ms == null ? 'the end of your session' : dtHuman(verify.token_expires_at_ms).slice(11))
-            + '.';
+        return t('device.request', {
+            address: verify.client_address,
+            at: clock(verify.requested_at_ms).slice(0, 8),
+            ago: minutes < 1 ? t('device.ago.less') : t('device.ago.' + plural(minutes), {count: minutes}),
+            who: verify.identity || t('device.identity.unknown'),
+            expires: verify.token_expires_at_ms == null ? t('device.expires.session_end') : time(verify.token_expires_at_ms)
+        });
     }
 
     /**
@@ -2148,10 +2148,7 @@
      * @returns {string | null}
      */
     function deviceNetworkAlert(verify) {
-        return verify.same_network
-            ? null
-            : 'This code was requested from another network than this browser (' + verify.client_address
-            + '). Approve only if you started that sign-in yourself on that machine.';
+        return verify.same_network ? null : t('device.network_alert', {address: verify.client_address});
     }
 
     /**

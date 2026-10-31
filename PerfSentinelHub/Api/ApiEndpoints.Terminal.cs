@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -28,15 +29,17 @@ public static partial class ApiEndpoints
     // Served by GET /device alone, never as a static file: only this route sends the page's
     // policy, no-store and the re-challenge of a session about to end. No inline script, and
     // the input carries no value, so no link can fill it. fonts.css embeds its faces as data:
-    // URIs, which the policy admits for fonts alone, so the page sets the launcher's type.
-    private const string DevicePage =
-        """
+    // URIs, which the policy admits for fonts alone, so the page sets the launcher's type. The server
+    // writes the page's language and static text, device.js draws the rest in that language.
+    private static string DevicePage(string lang)
+    {
+        return $"""
         <!doctype html>
-        <html lang="en">
+        <html lang="{lang}">
         <head>
             <meta charset="utf-8">
             <meta content="width=device-width, initial-scale=1" name="viewport">
-            <title>Perf Sentinel Hub - terminal sign-in</title>
+            <title>{T("device.title")}</title>
             <link href="fonts.css" rel="stylesheet">
             <link href="tokens.css" rel="stylesheet">
             <link href="launcher.css" rel="stylesheet">
@@ -47,26 +50,29 @@ public static partial class ApiEndpoints
         </head>
         <body>
         <main class="shell-main device-main">
-            <div aria-label="Perf Sentinel Hub" class="shell-wordmark device-brand" role="img">
-                <img alt="" data-logo="light" src="logo-horiz-light.svg">
-                <img alt="" data-logo="dark" src="logo-horiz-dark.svg">
-                <span aria-hidden="true" class="shell-wordmark-suffix">hub</span>
+            <div class="device-top">
+                <div aria-label="Perf Sentinel Hub" class="shell-wordmark" role="img">
+                    <img alt="" data-logo="light" src="logo-horiz-light.svg">
+                    <img alt="" data-logo="dark" src="logo-horiz-dark.svg">
+                    <span aria-hidden="true" class="shell-wordmark-suffix">hub</span>
+                </div>
+                {LocalSignIn.LangLink("?lang=" + (lang == HubLang.Fr ? HubLang.En : HubLang.Fr), lang)}
             </div>
-            <span class="overline"><span aria-hidden="true">// </span>terminal sign-in</span>
-            <h1 class="page-title">Approve a terminal</h1>
-            <p class="page-sub" id="device-intro">Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started yourself, just now: approving gives that terminal your access until your session ends.</p>
+            <span class="overline"><span aria-hidden="true">// </span>{T("device.overline")}</span>
+            <h1 class="page-title">{T("device.heading")}</h1>
+            <p class="page-sub" id="device-intro">{HubText.Get(lang, "device.intro", ("until", T("device.intro.session_end")))}</p>
             <form class="card device-card" id="device-form">
-                <label class="field-label" for="device-code">Code</label>
+                <label class="field-label" for="device-code">{T("device.code")}</label>
                 <input aria-describedby="device-code-hint" autocapitalize="characters" autocomplete="off" autofocus class="input" id="device-code" maxlength="9" name="user_code" placeholder="XXXX-XXXX" required spellcheck="false" type="text">
-                <p class="device-hint" id="device-code-hint">Eight letters, as perf-sentinel login prints them. Case and the dash do not matter.</p>
-                <button class="pill-button pill-primary" type="submit">Continue</button>
+                <p class="device-hint" id="device-code-hint">{T("device.code.hint")}</p>
+                <button class="pill-button pill-primary" type="submit">{T("device.continue")}</button>
             </form>
             <section aria-labelledby="device-request" class="card device-card" hidden id="device-details">
                 <p id="device-request" tabindex="-1"></p>
                 <div class="banner" data-tone="warn" hidden id="device-alert" role="alert"></div>
                 <div class="device-actions">
-                    <button aria-describedby="device-alert" class="pill-button pill-primary" id="device-approve" type="button">Approve</button>
-                    <button class="pill-button" id="device-deny" type="button">Deny</button>
+                    <button aria-describedby="device-alert" class="pill-button pill-primary" id="device-approve" type="button">{T("device.approve")}</button>
+                    <button class="pill-button" id="device-deny" type="button">{T("device.deny")}</button>
                 </div>
             </section>
             <div aria-live="polite" class="device-result" id="device-result" tabindex="-1"></div>
@@ -74,6 +80,12 @@ public static partial class ApiEndpoints
         </body>
         </html>
         """;
+
+        string T(string key)
+        {
+            return HubText.Get(lang, key);
+        }
+    }
 
     private const string TerminalLog = "TerminalAccess";
 
@@ -217,20 +229,21 @@ public static partial class ApiEndpoints
     /// <summary>
     ///     The approval page, for a cookie session with at least an hour left: a shorter one, or
     ///     none, is sent through the default challenge, which comes back with a fresh session.
-    ///     The query string is ignored.
+    ///     The query string is ignored but lang, which the challenge keeps.
     /// </summary>
     private static async Task<IResult> DevicePageAsync(HttpContext context, TimeProvider timeProvider)
     {
+        var asked = context.Request.Query["lang"] is [{ } value] && HubLang.IsKnown(value) ? value : null;
         var session = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!session.Succeeded || EndsWithinTheHour(session, timeProvider))
             return TypedResults.Challenge(new AuthenticationProperties
             {
-                RedirectUri = context.Request.PathBase + "/device"
+                RedirectUri = context.Request.PathBase + "/device" + (asked is null ? "" : "?lang=" + asked)
             });
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers.ContentSecurityPolicy =
             "default-src 'self'; font-src 'self' data:; frame-ancestors 'none'";
-        return TypedResults.Content(DevicePage, "text/html; charset=utf-8");
+        return TypedResults.Content(DevicePage(HubLang.Of(context.Request, asked)), "text/html; charset=utf-8");
     }
 
     private static async Task<IResult> VerifyDeviceAsync(
