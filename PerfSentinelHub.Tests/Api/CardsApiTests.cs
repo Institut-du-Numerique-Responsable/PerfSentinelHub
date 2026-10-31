@@ -372,6 +372,7 @@ public sealed class CardsApiTests : IDisposable
         Assert.Equal("October 2026", root.GetProperty("period_name").GetString());
         Assert.Equal(["prod-eu"], root.GetProperty("sources").EnumerateArray().Select(item => item.GetString()));
         Assert.Equal("Acme", root.GetProperty("org").GetProperty("name").GetString());
+        Assert.Equal("fr", root.GetProperty("equivalence_country").GetString());
         Assert.False(File.Exists(Path.Combine(_workspace, "reports", "card-args.txt")));
     }
 

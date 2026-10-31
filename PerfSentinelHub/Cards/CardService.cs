@@ -43,7 +43,8 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
             told.Count,
             [.. stories.Select(item => FixOf(item, labels))],
             stories.Count == 0 ? null : Default(stories).Fix.Signature,
-            Org);
+            Org,
+            options.Value.Cards.CountryOrDefault);
     }
 
     public async Task<CardOutcome> ComputeAsync(CardAsk ask, CancellationToken cancellationToken)
@@ -408,8 +409,8 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
         CardDayRange? beforeFixPeriod)
     {
         return new CardOutcome.Ready(new CardInput(
-            ask.Angle, ask.Lang, PeriodOf(frame.Period), scope, figures, story, beforeFixPeriod, ask.Free, Org,
-            frame.NowMs));
+            ask.Angle, ask.Lang, ask.EquivalenceCountry ?? options.Value.Cards.CountryOrDefault, PeriodOf(frame.Period),
+            scope, figures, story, beforeFixPeriod, ask.Free, Org, frame.NowMs));
     }
 
     private static CardPeriod PeriodOf(RecapPeriod period)

@@ -24,8 +24,8 @@ public sealed class CardRequestTests
         body[key] = new JsonObject();
 
         Assert.Equal(
-            "Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may " +
-            "be sent: the figures come from the Hub.",
+            "Only angle, period, at, environment, source_id, signature, title, team, label, lang, " +
+            "equivalence_country and format may be sent: the figures come from the Hub.",
             Refused(body));
     }
 
@@ -137,6 +137,41 @@ public sealed class CardRequestTests
         Assert.Equal("en", Accepted(Body(("angle", "curve"), ("period", "month"))).Lang);
         Assert.Equal("fr", Accepted(Body(("angle", "curve"), ("period", "month"), ("lang", "fr"))).Lang);
         Assert.Equal("lang must be en or fr.", Refused(Body(("angle", "curve"), ("period", "month"), ("lang", "de"))));
+    }
+
+    [Theory]
+    [InlineData("fr")]
+    [InlineData("gb")]
+    [InlineData("us")]
+    public void An_equivalence_country_is_read(string country)
+    {
+        Assert.Equal(country,
+            Accepted(Body(("angle", "curve"), ("period", "month"), ("equivalence_country", country))).EquivalenceCountry);
+    }
+
+    [Fact]
+    public void An_absent_equivalence_country_is_null()
+    {
+        Assert.Null(Accepted(Body(("angle", "curve"), ("period", "month"))).EquivalenceCountry);
+    }
+
+    [Theory]
+    [InlineData("de")]
+    [InlineData("GB")]
+    [InlineData(1)]
+    public void An_equivalence_country_outside_fr_gb_us_is_refused(object country)
+    {
+        Assert.Equal("equivalence_country must be fr, gb or us.",
+            Refused(Body(("angle", "curve"), ("period", "month"), ("equivalence_country", country))));
+    }
+
+    [Fact]
+    public void A_null_equivalence_country_is_refused()
+    {
+        var body = Body(("angle", "curve"), ("period", "month"));
+        body["equivalence_country"] = null;
+
+        Assert.Equal("equivalence_country must be fr, gb or us.", Refused(body));
     }
 
     [Fact]

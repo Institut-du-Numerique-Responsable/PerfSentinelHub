@@ -170,7 +170,7 @@ public static partial class ApiEndpoints
             return (outside, null, null);
 
         var outcome = await call.Cards.ComputeAsync(
-            new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free), cancellationToken);
+            new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free, ask.EquivalenceCountry), cancellationToken);
         return outcome is CardOutcome.Refused { Reason: var reason }
             ? (Problem(StatusCodes.Status422UnprocessableEntity, reason,
                 CardRules.Explain(reason, RecapPeriod.Of(ask.Kind, ask.At))), null, null)

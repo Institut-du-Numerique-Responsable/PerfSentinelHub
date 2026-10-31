@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using PerfSentinelHub.Cards;
 using PerfSentinelHub.Collection;
+using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 
 namespace PerfSentinelHub.Api;
@@ -20,7 +21,8 @@ public sealed record CardRequest(
     string? Signature,
     CardFree Free,
     string Lang,
-    string Format)
+    string Format,
+    string? EquivalenceCountry = null)
 {
     private const int MaxFilterChars = 256;
 
@@ -33,7 +35,8 @@ public sealed record CardRequest(
 
     private static readonly HashSet<string> Keys = new(StringComparer.Ordinal)
     {
-        "angle", "period", "at", "environment", "source_id", "signature", "title", "team", "label", "lang", "format"
+        "angle", "period", "at", "environment", "source_id", "signature", "title", "team", "label", "lang",
+        "equivalence_country", "format"
     };
 
     private static readonly string[] Angles = ["story", "curve", "collective"];
@@ -80,8 +83,8 @@ public sealed record CardRequest(
             return Refuse("The body must be a JSON object.", out error);
         if (root.EnumerateObject().Any(property => !Keys.Contains(property.Name)))
             return Refuse(
-                "Only angle, period, at, environment, source_id, signature, title, team, label, lang and format " +
-                "may be sent: the figures come from the Hub.", out error);
+                "Only angle, period, at, environment, source_id, signature, title, team, label, lang, " +
+                "equivalence_country and format may be sent: the figures come from the Hub.", out error);
         if (Choice(root, "angle", null, Angles) is not { } angle)
             return Refuse("angle must be story, curve or collective.", out error);
         if (JsonRead.ReadString(root, "period") is not { } name || !RecapPeriod.TryParseCardKind(name, out var kind))
@@ -117,9 +120,13 @@ public sealed record CardRequest(
             return Refuse("lang must be en or fr.", out error);
         if (Choice(root, "format", "png", "png", "svg", "jxl", "pdf") is not { } format)
             return Refuse("format must be png, svg, jxl or pdf.", out error);
+        // Absent is the Hub's own country; present, it must be one the engine knows.
+        var country = Choice(root, "equivalence_country", null, HubOptionsValidator.CardCountries);
+        if (country is null && root.TryGetProperty("equivalence_country", out _))
+            return Refuse("equivalence_country must be fr, gb or us.", out error);
 
         error = null;
-        return new CardRequest(angle, kind, at, environment, sourceId, signature, free, lang, format);
+        return new CardRequest(angle, kind, at, environment, sourceId, signature, free, lang, format, country);
     }
 
     private static CardFree? TryReadFree(JsonElement root, out string? error)
