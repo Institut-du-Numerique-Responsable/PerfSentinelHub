@@ -12,7 +12,7 @@
     const PSL = globalThis.PSL;
     const THEME_KEY = 'perf-sentinel:theme';
     const THEME_POSITIONS = ['auto', 'light', 'dark'];
-    const THEME_LABELS = {auto: 'System', light: 'Light', dark: 'Dark'};
+    const t = PSL.t;
 
     /** Glyph paths lifted from the dashboard's themeIcon(), not redrawn. */
     const THEME_GLYPHS = {
@@ -250,8 +250,9 @@
 
         const button = document.getElementById('theme-toggle');
         const glyph = document.getElementById('theme-glyph');
-        document.getElementById('theme-label').textContent = THEME_LABELS[state.themePosition];
-        button.setAttribute('aria-label', 'Theme: ' + THEME_LABELS[state.themePosition] + '. Click to cycle.');
+        const label = t('shell.theme.' + state.themePosition);
+        document.getElementById('theme-label').textContent = label;
+        button.setAttribute('aria-label', t('shell.theme.button', {label: label}));
         glyph.replaceChildren(svg(THEME_GLYPHS[state.themePosition], 15));
         if (!animate) return;
         // Two identical keyframes alternated, to force the animation to restart.
@@ -270,6 +271,50 @@
             if (state.themePosition === 'auto') applyTheme(false);
         });
         applyTheme(false);
+    }
+
+    // ------------------------------------------------------------- language
+
+    /**
+     * Writes the tables' text into every `[data-i18n]` under `root`, and each attribute a
+     * `data-i18n-attr="aria-label:key;title:key"` names. index.html keeps its English as the
+     * text a page shows before any script runs.
+     */
+    function applyStaticText(root) {
+        root.querySelectorAll('[data-i18n]').forEach(function (node) {
+            node.textContent = t(node.getAttribute('data-i18n'));
+        });
+        root.querySelectorAll('[data-i18n-attr]').forEach(function (node) {
+            node.getAttribute('data-i18n-attr').split(';').forEach(function (pair) {
+                const parts = pair.split(':');
+                node.setAttribute(parts[0], t(parts[1]));
+            });
+        });
+    }
+
+    /** Marks a block the engine wrote, which stays English on a French screen. */
+    function engineText(node) {
+        node.setAttribute('lang', 'en');
+        node.classList.add('engine-text');
+        return node;
+    }
+
+    /**
+     * The pre-paint script in index.html already chose the language and wrote it on <html>.
+     * A switch redraws in place: the route, the state and the form stay as they are.
+     */
+    function initLang() {
+        PSL.setLang(document.documentElement.lang);
+        applyStaticText(document);
+        document.getElementById('lang-toggle').addEventListener('click', function () {
+            PSL.setLang(PSL.lang() === 'fr' ? 'en' : 'fr');
+            applyStaticText(document);
+            applyTheme(false);
+            // The shell's own lines are drawn from the status, which a loading page does not have yet.
+            if (!state.loading) renderShell();
+            // The focus is on this button, outside #main, so the redraw cannot drop it.
+            render();
+        });
     }
 
     // ----------------------------------------------------------------- data
@@ -463,9 +508,9 @@
         // A caller no grant reaches gets no tab either: every one of them leads to a refusal.
         document.getElementById('version-chip').hidden = !status;
         document.querySelector('.shell-tabs').hidden = !status && !!PSL.shellBanner(state.statusError);
-        document.getElementById('version-hub').textContent = status ? status.version : 'unknown';
+        document.getElementById('version-hub').textContent = status ? status.version : t('shell.version.unknown');
         document.getElementById('version-engine').textContent =
-            status && status.engine_version ? status.engine_version : 'none';
+            status && status.engine_version ? status.engine_version : t('shell.version.none');
         if (status) PSL.setVersions(status.version, status.engine_version);
         renderUpdates();
 
@@ -479,7 +524,7 @@
         document.getElementById('identity-name').textContent = name;
         if (access) {
             identity.setAttribute('href', '#/access');
-            identity.title = 'Your access: who you are, your groups and what you reach.';
+            identity.title = t('shell.identity.access');
         } else {
             identity.removeAttribute('href');
         }
@@ -513,8 +558,10 @@
         if (!state.status) return;
 
         const behind = [
-            ['hub', PSL.updateState(state.status.version, state.status.latest_hub_version), PSL.hubReleaseUrl()],
-            ['engine', PSL.updateState(state.status.engine_version, state.status.latest_engine_version), null]
+            [t('shell.version.hub'), PSL.updateState(state.status.version, state.status.latest_hub_version),
+                PSL.hubReleaseUrl()],
+            [t('shell.version.engine'), PSL.updateState(state.status.engine_version, state.status.latest_engine_version),
+                null]
         ].filter(function (row) {
             return row[1];
         });
@@ -522,13 +569,12 @@
 
         const segment = el('span', {
             class: 'shell-version-update',
-            title: 'The newest release published on GitHub, read by this Hub on its update-check '
-                + 'interval. It says a newer version exists, not that this one is wrong.'
+            title: t('shell.update.title')
         }, [
             svg([['path', {d: 'M12 19V5M5 12l7-7 7 7'}]], 12),
             // Said, not left to be inferred from two numbers side by side. The Hub
             // asked and got an answer, so it can claim this much.
-            el('span', {class: 'shell-version-news', text: 'update available'})
+            el('span', {class: 'shell-version-news', text: t('shell.update.news')})
         ]);
         behind.forEach(function (row, index) {
             segment.appendChild(el('span', {text: index === 0 ? ':' : '\u00b7'}));
@@ -569,7 +615,7 @@
         chip.appendChild(el('span', {class: 'shell-version-rule', 'aria-hidden': 'true'}));
         chip.appendChild(el('span', {class: 'shell-version-skew'}, [
             svg([['path', {d: 'M12 4l9 16H3z'}], ['path', {d: 'M12 10v4M12 17.4v.2'}]], 12),
-            el('span', {text: 'fleet ' + oldest + ' → ' + state.status.engine_version})
+            el('span', {text: t('shell.skew', {oldest: oldest, engine: state.status.engine_version})})
         ]));
     }
 
@@ -804,7 +850,7 @@
         // the name it made every "?" a paragraph long.
         const dot = el('button', {
             type: 'button', class: 'help-dot', text: '?',
-            'aria-label': topic ? 'About ' + topic.replace(/^\/\/\s*/, '') : 'Help'
+            'aria-label': topic ? t('help.about', {topic: topic.replace(/^\/\/\s*/, '')}) : t('help.label')
         });
         dot.addEventListener('mouseenter', function () {
             showTip(dot, text);
@@ -889,12 +935,7 @@
      */
     function engineNeed(parent) {
         const version = PSL.ENGINE;
-        proseInto(parent, version
-            ? 'Install the `perf-sentinel` binary on the machine you will type this into. This Hub '
-            + 'runs ' + version + ' and the command is spelled for it, an older engine may refuse a '
-            + 'flag it does not have yet. Take the same build: '
-            : 'Install the `perf-sentinel` binary on the machine you will type this into. This Hub '
-            + 'reports no engine version, so there is none to match here: ');
+        proseInto(parent, version ? t('engine.need', {version: version}) : t('engine.need_unknown'));
         parent.appendChild(el('a', {
             class: 'terminal-link',
             href: PSL.releaseUrl(version),
@@ -902,7 +943,7 @@
             // reader was working on, and hands the opener nothing.
             target: '_blank',
             rel: 'noopener noreferrer',
-            text: version ? 'perf-sentinel ' + version + ' on GitHub' : 'the perf-sentinel releases'
+            text: version ? t('engine.release', {version: version}) : t('engine.releases')
         }));
         parent.appendChild(document.createTextNode('.'));
         return parent;
@@ -922,8 +963,7 @@
     function tokenStep(source) {
         const header = source.auth_header_name + ': …';
         const step = el('span', {});
-        proseInto(step, 'This source is behind an `' + source.auth_header_name + '` header. Run this '
-            + 'in the same terminal, before the command, with your own credential where the dots are:');
+        proseInto(step, t('token.before', {header: source.auth_header_name}));
         const line = el('code', {
             class: 'code-inline step-line',
             text: PSL.exportLine(state.shell, 'PERF_SENTINEL_SOURCE_TOKEN', header)
@@ -933,10 +973,7 @@
         });
         line.setAttribute('data-spell', '');
         step.appendChild(line);
-        proseInto(step, 'The whole header line goes in, name included, not the value on its own. The '
-            + 'Hub holds a header of its own for this source and never discloses it, which is why the '
-            + 'command reads yours from a variable rather than carrying a secret where `ps` would '
-            + 'show it to everyone on the machine.');
+        proseInto(step, t('token.after'));
         return step;
     }
 
@@ -966,7 +1003,7 @@
         return el('div', {class: 'steps-block'}, [
             el('div', {class: 'steps-head'}, [
                 infoGlyph(14),
-                el('h2', {class: 'overline', text: '// what you need first'})
+                el('h2', {class: 'overline', text: t('steps.head')})
             ]),
             // The content is always one node: the row is a two-column grid, and prose
             // carrying a code chip would otherwise arrive as several grid items and
@@ -1018,7 +1055,7 @@
             });
         }
 
-        const strip = el('div', {class: 'cmd-tabs', role: 'tablist', 'aria-label': 'Shell'}, tabs);
+        const strip = el('div', {class: 'cmd-tabs', role: 'tablist', 'aria-label': t('terminal.shells')}, tabs);
         // Arrow keys move between tabs, which is what a tablist promises.
         strip.addEventListener('keydown', function (event) {
             const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
@@ -1049,10 +1086,10 @@
         });
         if (spec.id) code.id = spec.id;
         const status = el('span', {class: 'terminal-status', role: 'status'});
-        // What this block holds, for the sentences below: the same scaffold renders
+        // What this block holds, for the sentence below: the same scaffold renders
         // a command and a configuration file, and neither noun fits both.
-        const subject = spec.download ? 'file' : 'command';
-        const label = el('span', {text: 'Copy'});
+        const refused = spec.download ? 'terminal.copy_refused.file' : 'terminal.copy_refused.command';
+        const label = el('span', {text: t('terminal.copy')});
         const button = el('button', {
             type: 'button',
             class: 'pill-button terminal-copy',
@@ -1066,15 +1103,12 @@
             // Read off the node, not off the spec: a command that changes under the
             // reader would otherwise copy the line it replaced.
             writeClipboard(code).then(function (copied) {
-                label.textContent = copied ? 'Copied' : 'Copy';
+                label.textContent = copied ? t('terminal.copied') : t('terminal.copy');
                 if (copied) button.setAttribute('data-copied', 'true');
-                status.textContent = copied
-                    ? 'Copied.'
-                    : 'This browser refused the copy. The ' + subject
-                    + ' is selected, use your own copy key.';
+                status.textContent = copied ? t('terminal.copied_status') : t(refused);
                 clearTimeout(timer);
                 timer = setTimeout(function () {
-                    label.textContent = 'Copy';
+                    label.textContent = t('terminal.copy');
                     button.removeAttribute('data-copied');
                     status.textContent = '';
                 }, 3200);
@@ -1139,8 +1173,8 @@
         const button = el('button', {
             type: 'button',
             class: 'pill-button terminal-download',
-            'aria-label': 'Download ' + filename
-        }, [downloadGlyph(), el('span', {text: 'Download'})]);
+            'aria-label': t('terminal.download_label', {file: filename})
+        }, [downloadGlyph(), el('span', {text: t('terminal.download')})]);
         let timer = 0;
         button.addEventListener('click', function () {
             const url = URL.createObjectURL(new Blob([code.textContent], {type: 'application/toml'}));
@@ -1155,8 +1189,7 @@
             }, 4000);
             // Said, because a blocked download is otherwise indistinguishable from a
             // click that was never received.
-            status.textContent = 'Sent ' + filename + ' to your browser. It decides where it lands, '
-                + 'and may rename a file whose name starts with a dot.';
+            status.textContent = t('terminal.sent', {file: filename});
             clearTimeout(timer);
             timer = setTimeout(function () {
                 status.textContent = '';
@@ -9442,6 +9475,8 @@
     // before anything reads the route, and the query leaves the address bar.
     const ackEntry = PSL.ackEntryHash(location.search);
     if (ackEntry) history.replaceState(null, '', location.pathname + ackEntry);
+    // Before the theme: its label is read from the tables in the shown language.
+    initLang();
     initTheme();
     // Before the first render, so a row left open comes back open and reads its
     // daemon on its own rather than waiting to be clicked again.

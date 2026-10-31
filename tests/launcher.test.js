@@ -2291,3 +2291,34 @@ test("only the refusal of the period before offers the other two angles", () => 
     assert.equal(PSL.isPreviousRefusal("The curve covers whole sources, and you read only part of one."), false);
     assert.equal(PSL.isPreviousRefusal(null), false);
 });
+
+// ---- the shell in two languages
+
+const SHELL_FUNCTIONS = ["renderShell", "renderUpdates", "renderFleetSkew", "applyTheme", "helpDot",
+    "terminalBlock", "downloadButton", "engineNeed", "tokenStep", "stepsBlock", "shellTabs", "applyStaticText", "engineText", "initLang"];
+
+function wwwroot(file) {
+    return require("node:fs").readFileSync(
+        require("node:path").join(__dirname, "..", "PerfSentinelHub", "wwwroot", file), "utf8");
+}
+
+test("the shell holds no prose literal", () => {
+    const source = wwwroot("app.js");
+    for (const name of SHELL_FUNCTIONS) {
+        assert.ok(source.includes("function " + name + "("), "app.js has no " + name);
+    }
+    assert.deepEqual(PSL.literalsIn(source, SHELL_FUNCTIONS), []);
+});
+
+test("every data-i18n key of index.html exists", () => {
+    const html = wwwroot("index.html");
+    const keys = [...html.matchAll(/data-i18n="([^"]+)"/g)].map(m => m[1]);
+    for (const m of html.matchAll(/data-i18n-attr="([^"]+)"/g)) {
+        for (const pair of m[1].split(";")) keys.push(pair.split(":")[1]);
+    }
+    // The tabs, the footer and the language button are all read from the tables.
+    assert.ok(keys.length >= 12, "index.html marks only " + keys.length + " texts");
+    assert.match(html, /id="lang-toggle"/);
+    const missing = keys.filter(key => !Object.prototype.hasOwnProperty.call(globalThis.PSL_TEXT.en, key));
+    assert.deepEqual(missing, []);
+});

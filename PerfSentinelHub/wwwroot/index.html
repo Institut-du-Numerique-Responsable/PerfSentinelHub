@@ -25,6 +25,29 @@
             document.documentElement.dataset.theme = theme;
             document.documentElement.dataset.themePosition = position;
         })();
+        /* The language too, by PSL.pickLang's rule: the stored choice, else the first fr or en
+           variant the browser lists, else English. A screen reader and the fonts read <html lang>
+           from the first paint. */
+        (function () {
+            let lang = null;
+            try {
+                lang = localStorage.getItem('perf-sentinel:lang');
+            } catch (e) {
+                lang = null;
+            }
+            if (lang !== 'en' && lang !== 'fr') {
+                lang = 'en';
+                const tags = navigator.languages || [];
+                for (let i = 0; i < tags.length; i++) {
+                    const base = String(tags[i]).toLowerCase().split('-')[0];
+                    if (base === 'en' || base === 'fr') {
+                        lang = base;
+                        break;
+                    }
+                }
+            }
+            document.documentElement.lang = lang;
+        })();
     </script>
     <link href="fonts.css" rel="stylesheet">
     <link href="tokens.css" rel="stylesheet">
@@ -32,20 +55,20 @@
 </head>
 <body>
 <header class="shell-topbar">
-    <a aria-label="Perf Sentinel Hub, new analysis" class="shell-wordmark" href="#/new">
+    <a aria-label="Perf Sentinel Hub, new analysis" class="shell-wordmark" data-i18n-attr="aria-label:shell.wordmark" href="#/new">
         <img alt="Perf Sentinel" data-logo="light" src="logo-horiz-light.svg">
         <img alt="Perf Sentinel" data-logo="dark" src="logo-horiz-dark.svg">
         <span class="shell-wordmark-suffix">hub</span>
     </a>
 
-    <nav aria-label="Screens" class="shell-tabs">
+    <nav aria-label="Screens" class="shell-tabs" data-i18n-attr="aria-label:shell.tabs">
         <a class="shell-tab" data-screen="new" href="#/new">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
                  stroke-linejoin="round" stroke-width="1.9" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="9"></circle>
                 <path d="M10 8.5l6 3.5-6 3.5z"></path>
             </svg>
-            New analysis
+            <span data-i18n="shell.tab.new">New analysis</span>
         </a>
         <a class="shell-tab" data-screen="recent" href="#/recent">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
@@ -53,7 +76,7 @@
                 <circle cx="12" cy="12" r="9"></circle>
                 <path d="M12 7v5l3.5 2"></path>
             </svg>
-            Recent
+            <span data-i18n="shell.tab.recent">Recent</span>
         </a>
         <a class="shell-tab" data-screen="sources" href="#/sources">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
@@ -62,7 +85,7 @@
                 <path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"></path>
                 <path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"></path>
             </svg>
-            Sources
+            <span data-i18n="shell.tab.sources">Sources</span>
             <span class="shell-tab-badge" hidden id="sources-badge"></span>
         </a>
         <a class="shell-tab" data-screen="incidents" href="#/incidents">
@@ -70,7 +93,7 @@
                  stroke-linejoin="round" stroke-width="1.9" viewBox="0 0 24 24">
                 <path d="M3 13.5h4l2.5-6 4 11 2.5-5H21"></path>
             </svg>
-            Incidents
+            <span data-i18n="shell.tab.incidents">Incidents</span>
         </a>
         <a class="shell-tab" data-screen="correlations" href="#/correlations">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
@@ -79,7 +102,7 @@
                 <circle cx="18" cy="17" r="2.5"></circle>
                 <path d="M8.2 8.6l7.6 6.8"></path>
             </svg>
-            Correlations
+            <span data-i18n="shell.tab.correlations">Correlations</span>
         </a>
         <a class="shell-tab" data-screen="recap" href="#/recap">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
@@ -90,7 +113,7 @@
                 <path d="M20 20v-3"></path>
                 <path d="M3 20h18"></path>
             </svg>
-            Recap
+            <span data-i18n="shell.tab.recap">Recap</span>
         </a>
         <a class="shell-tab" data-screen="disclosures" hidden href="#/disclosures">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
@@ -99,7 +122,7 @@
                 <path d="M14 3v4h4"></path>
                 <path d="M10 13h5M10 17h5"></path>
             </svg>
-            Disclosures
+            <span data-i18n="shell.tab.disclosures">Disclosures</span>
         </a>
         <a class="shell-tab" data-screen="coverage" hidden href="#/coverage">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
@@ -107,22 +130,22 @@
                 <path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"></path>
                 <path d="M9 12l2.2 2.2L15.5 10"></path>
             </svg>
-            Coverage
+            <span data-i18n="shell.tab.coverage">Coverage</span>
         </a>
     </nav>
 
     <div class="shell-cluster">
         <div class="shell-version" id="version-chip">
-            <span class="shell-version-label">hub</span>
+            <span class="shell-version-label" data-i18n="shell.version.hub">hub</span>
             <span class="shell-version-value" id="version-hub">…</span>
             <span aria-hidden="true" class="shell-version-rule"></span>
-            <span class="shell-version-label">engine</span>
+            <span class="shell-version-label" data-i18n="shell.version.engine">engine</span>
             <span class="shell-version-value" id="version-engine">…</span>
         </div>
 
         <!-- A link to #/access once the Hub answers /api/access, plain text otherwise:
              app.js sets the href, and an <a> without one is not focusable. -->
-        <a class="shell-identity" id="identity"
+        <a class="shell-identity" data-i18n-attr="title:shell.identity.title" id="identity"
            title="Established by the Hub's sign-in, or by the reverse proxy in front of it. There is no account to manage here.">
             <svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"
                  stroke-linejoin="round" stroke-width="1.9" viewBox="0 0 24 24">
@@ -136,15 +159,30 @@
             <span aria-hidden="true" class="shell-theme-glyph" id="theme-glyph"></span>
             <span id="theme-label">System</span>
         </button>
+
+        <!-- Names the other language, the one a click shows; the track slides when <html lang>
+             changes. The code pair is data, the action is in aria-label. -->
+        <button aria-label="Show the Hub in French" class="shell-lang" data-i18n-attr="aria-label:shell.lang.switch"
+                id="lang-toggle" type="button">
+            <svg aria-hidden="true" class="shell-lang-globe" fill="none" stroke="currentColor" stroke-linecap="round"
+                 stroke-linejoin="round" stroke-width="1.9" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M3 12h18"></path>
+                <path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9z"></path>
+            </svg>
+            <span aria-hidden="true" class="shell-lang-window">
+                <span class="shell-lang-track"><span>FR</span><span>EN</span></span>
+            </span>
+        </button>
     </div>
 </header>
 
 <main class="shell-main" id="main"></main>
 
 <footer class="shell-footer">
-  <span class="shell-credit">Powered by
+  <span class="shell-credit"><span data-i18n="shell.credit.tool">Powered by</span>
     <a href="https://perf-sentinel.dev/" rel="noopener noreferrer" target="_blank">Perf Sentinel</a>
-    &middot; design &amp; logo by
+    &middot; <span data-i18n="shell.credit.design">design &amp; logo by</span>
     <a href="https://www.linkedin.com/in/gwendoline-meignen-b0224873/" rel="noopener noreferrer" target="_blank">Gwendoline Meignen</a>
   </span>
 </footer>
