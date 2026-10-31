@@ -22,6 +22,16 @@ All notable changes to PerfSentinelHub are recorded here.
   the launcher's button (a `perf-sentinel-lang` cookie), then the browser's `Accept-Language`, and
   carry the FR/EN button as a link.
 
+### Changed
+
+- The image ships perf-sentinel `0.40.0` as its analysis engine, repinned by digest from
+  `0.39.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.39.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.40.0` reads an equivalence country in a
+  share card's `card.json`, with UK rows from the DESNZ and a US row from the US EPA. A backend
+  analysis gives the same findings, signatures and energy figures as on `0.39.0`.
+
 ## [0.10.0] - 2026-10-31
 
 ### Added
