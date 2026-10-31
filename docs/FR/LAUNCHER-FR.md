@@ -280,7 +280,8 @@ dans leur cadre, comme ceux des incidents, et la page ne défile pas.
 ## L'écran du récapitulatif
 
 Le récapitulatif sert d'appui à la revue d'équipe : ce qui gaspille le plus, et ce qui a bougé depuis la
-période précédente de même durée. Il lit `GET /api/recap` ([l'API](API-FR.md#recap)), donc son
+période précédente de même durée. Aucun modèle de langage ne le rédige : chaque phrase est fixée à
+l'avance et chaque chiffre vient des registres de détections des daemons. Il lit `GET /api/recap` ([l'API](API-FR.md#recap)), donc son
 périmètre, ses filtres et son volume de détections sont ceux de la liste des findings. Une période
 (jour, semaine ou mois, la semaine par défaut), un jour quelconque de cette période, un environnement, un
 service, un namespace et la bascule Engineering ou Management la resserrent, et chaque choix s'écrit dans
@@ -354,8 +355,9 @@ accès ne porte aucun `findings.read`. Un succès ajoute la ligne aussitôt.
 ## Cartes à partager
 
 Sous les rapports, quand le Hub signe des cartes (`Hub:Cards:Organisation` est réglé et vous pouvez en
-créer), Share a result fait d'un résultat mesuré une image ou un carrousel à publier. La section lit et
-écrit `/api/cards/*` ([l'API](API-FR.md#cartes-à-partager)). Elle reste fermée derrière Create a card.
+créer), Share a result fait d'un résultat mesuré une image ou un carrousel à publier. Comme pour le
+récapitulatif, aucun modèle de langage ne rédige une carte : le Hub calcule chaque chiffre et le moteur
+imprime des phrases fixées à l'avance. La section lit et écrit `/api/cards/*` ([l'API](API-FR.md#cartes-à-partager)). Elle reste fermée derrière Create a card.
 Quand le moteur du Hub n'a pas la sous-commande `card`, un bandeau le dit à la place de la section.
 
 <picture>

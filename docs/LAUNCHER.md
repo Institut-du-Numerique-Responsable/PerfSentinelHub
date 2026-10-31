@@ -255,7 +255,8 @@ the page does not.
 ## The recap screen
 
 The recap is the support for a team review: what wastes the most, and what moved since the previous
-period of the same length. It reads `GET /api/recap` ([the API](API.md#recap)), so its scope, its
+period of the same length. No language model writes it: every sentence is fixed copy and every figure
+comes from the daemons' detection ledgers. It reads `GET /api/recap` ([the API](API.md#recap)), so its scope, its
 filters and its detection volume are the ones of the findings list. A period (day, week or month, the
 week by default), any day inside it, an environment, a service, a namespace and an Engineering or
 Management switch narrow it, and each choice is written in the address, `#/recap?period=day&view=pilotage`,
@@ -326,7 +327,9 @@ access holds no `findings.read`. A success adds the row at once.
 ## Share cards
 
 Under the reports, when the Hub signs cards (`Hub:Cards:Organisation` is set and you may create cards),
-Share a result turns a measured result into an image or a carousel to post. It reads and writes
+Share a result turns a measured result into an image or a carousel to post. As in the recap, no
+language model writes a card: the Hub computes every figure and the engine prints fixed wording. It
+reads and writes
 `/api/cards/*` ([the API](API.md#share-cards)). The section stays closed behind Create a card. When
 the Hub's engine has no `card` subcommand, a banner says so in place of the section.
 
