@@ -7867,31 +7867,29 @@
 
     // ---------------------------------------------------- screen: disclosures
 
-    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
-        'October', 'November', 'December'];
     const LEVEL_LABELS = {
-        'none': 'no integrity',
-        'hash-only': 'hash only',
-        'signed': 'signed',
-        'signed-with-attestation': 'signed + attestation',
-        'audited': 'audited'
+        'none': 'disc.level.none',
+        'hash-only': 'disc.level.hash_only',
+        'signed': 'disc.level.signed',
+        'signed-with-attestation': 'disc.level.signed_attestation',
+        'audited': 'disc.level.audited'
     };
     const RENDER_REASONS = {
-        unsupported_engine: 'this Hub\'s engine cannot render disclosures yet',
-        unsupported_schema_version: 'the report is newer than this Hub\'s engine',
-        unsupported_characters: 'the report holds text the PDF fonts cannot draw',
-        pdf_export_failed: 'the engine could not write the PDF',
-        output_unwritable: 'the Hub could not write the PDF',
-        timeout: 'the render took longer than the Hub allows',
-        content_hash_mismatch: 'the engine found the report altered since its hash was baked',
-        binding_mismatch: 'the engine found the attestation is not over this report'
+        unsupported_engine: 'disc.render.unsupported_engine',
+        unsupported_schema_version: 'disc.render.unsupported_schema_version',
+        unsupported_characters: 'disc.render.unsupported_characters',
+        pdf_export_failed: 'disc.render.pdf_export_failed',
+        output_unwritable: 'disc.render.output_unwritable',
+        timeout: 'disc.render.timeout',
+        content_hash_mismatch: 'disc.render.content_hash_mismatch',
+        binding_mismatch: 'disc.render.binding_mismatch'
     };
     const DISCLOSURE_FILES = [
-        ['report.pdf', 'PDF/A-3b, carries the three files below as attachments', 'pdf'],
-        ['report.json', 'the disclosure, hashed', 'report'],
-        ['attestation.intoto.jsonl', 'in-toto v1 statement over report.json', 'attestation'],
-        ['bundle.sig', 'Sigstore bundle, with the transparency log entry', 'bundle'],
-        ['SHA256SUMS', 'one line per file, for sha256sum -c', 'report']
+        ['report.pdf', 'disc.file.pdf', 'pdf'],
+        ['report.json', 'disc.file.report', 'report'],
+        ['attestation.intoto.jsonl', 'disc.file.attestation', 'attestation'],
+        ['bundle.sig', 'disc.file.bundle', 'bundle'],
+        ['SHA256SUMS', 'disc.file.sums', 'report']
     ];
 
     function loadDisclosures() {
@@ -7952,22 +7950,8 @@
         });
     }
 
-    function longDate(iso) {
-        const parts = String(iso).split('-');
-        return Number(parts[2]) + ' ' + MONTHS[Number(parts[1]) - 1] + ' ' + parts[0];
-    }
-
     function periodDays(period) {
         return Math.round((Date.parse(period.to) - Date.parse(period.from)) / 86400000) + 1;
-    }
-
-    function periodLabel(period) {
-        const parts = String(period.to).split('-');
-        const month = Number(parts[1]);
-        if (period.type === 'calendar-quarter') return parts[0] + ' Q' + (Math.floor((month - 1) / 3) + 1);
-        if (period.type === 'calendar-year') return parts[0];
-        if (period.type === 'calendar-month') return MONTHS[month - 1] + ' ' + parts[0];
-        return longDate(period.from) + ' to ' + longDate(period.to);
     }
 
     function shortHash(hash) {
@@ -7979,9 +7963,19 @@
         return svg([['path', {d: 'M5 12.5l4.2 4.2L19 7'}]], 11);
     }
 
+    /** A code the Hub or the report sends (intent, delivery state, refusal) in the shown language, else as sent. */
+    function enumWord(kind, value) {
+        const key = 'disc.' + kind + '.' + value;
+        return PSL.hasText(key) ? t(key) : value;
+    }
+
+    function levelLabel(level) {
+        return LEVEL_LABELS[level] ? t(LEVEL_LABELS[level]) : level;
+    }
+
     /** What the report declares about itself, dashed: the Hub cannot check it. */
     function levelChip(level) {
-        return el('span', {class: 'chip chip-declared disc-level', text: LEVEL_LABELS[level] || level || 'undeclared'});
+        return el('span', {class: 'chip chip-declared disc-level', text: levelLabel(level) || t('disc.level.undeclared')});
     }
 
     /** What this Hub recomputed, solid. Anything it did not check reads as muted text, never a mark. */
@@ -7989,29 +7983,29 @@
         if (outcome === 'checked') return el('span', {class: 'chip disc-checked'}, [el('span', {text: label}), checkGlyph()]);
         if (outcome === 'declared') return el('span', {
             class: 'chip chip-declared disc-level',
-            text: label + ' declared'
+            text: t('disc.chip.declared', {label: label})
         });
         return el('span', {
             class: 'chip disc-unchecked',
-            text: outcome === 'absent' ? 'no ' + label : label + ' not checked'
+            text: outcome === 'absent' ? t('disc.chip.absent', {label: label}) : t('disc.chip.not_checked', {label: label})
         });
     }
 
     function disclosureChips(item) {
         const chips = [
-            el('span', {class: 'chip', text: item.intent}),
-            el('span', {class: 'chip', text: item.confidentiality}),
+            el('span', {class: 'chip', text: enumWord('intent', item.intent)}),
+            el('span', {class: 'chip', text: enumWord('confidentiality', item.confidentiality)}),
             levelChip(item.integrity_level)
         ];
         if (item.pdf === 'rendered') {
-            chips.push(checkChip('hash', 'checked'));
-            if (item.files.attestation) chips.push(checkChip('bound', 'checked'));
+            chips.push(checkChip(t('disc.chip.hash'), 'checked'));
+            if (item.files.attestation) chips.push(checkChip(t('disc.chip.bound'), 'checked'));
         } else {
-            chips.push(el('span', {class: 'chip disc-unchecked', text: 'not checked here'}));
+            chips.push(el('span', {class: 'chip disc-unchecked', text: t('disc.chip.unchecked')}));
         }
         if (item.confidentiality === 'internal') chips.push(el('span', {
             class: 'chip chip-declared',
-            text: 'never shared'
+            text: t('disc.chip.never_shared')
         }));
         return chips;
     }
@@ -8028,23 +8022,22 @@
     }
 
     function fixed(value, digits) {
-        return value == null ? 'n/a' : Number(value).toFixed(digits);
+        return value == null ? t('unit.na') : PSL.decimal(Number(value).toFixed(digits));
     }
 
     /** Runtime coverage on a track, with the official 75 % as a notch and the fill orange under it. */
     function coverageBar(coverage) {
         const notch = PSL.coverageNotch(coverage);
-        if (!notch) return el('span', {class: 'disc-figure-sub', text: 'not reported'});
+        if (!notch) return el('span', {class: 'disc-figure-sub', text: t('disc.coverage.not_reported')});
         const fill = el('span', {class: 'disc-track-fill'});
         fill.style.width = Math.min(100, notch.percent) + '%';
         return el('div', {
             class: 'disc-track', 'data-below': notch.below ? 'true' : null, role: 'img',
-            'aria-label': notch.percent + ' % runtime coverage, ' + (notch.below ? 'under' : 'at or over')
-                + ' the 75 % an official report needs'
+            'aria-label': t(notch.below ? 'disc.coverage.aria.below' : 'disc.coverage.aria.over', {percent: notch.percent})
         }, [
             fill,
             el('span', {class: 'disc-track-notch'}),
-            el('span', {class: 'disc-track-mark', text: '75 % official'})
+            el('span', {class: 'disc-track-mark', text: t('disc.coverage.mark')})
         ]);
     }
 
@@ -8052,16 +8045,16 @@
         const f = figures || {};
         const coverage = PSL.coverageNotch(f.coverage);
         return el('div', {class: 'disc-figures'}, [
-            figure('Energy', fixed(f.energy_kwh, 2), 'kWh', null),
-            figure('Carbon, location-based', fixed(f.carbon_kgco2eq, 2), 'kgCO₂eq',
+            figure(t('disc.figure.energy'), fixed(f.energy_kwh, 2), 'kWh', null),
+            figure(t('disc.figure.carbon'), fixed(f.carbon_kgco2eq, 2), 'kgCO₂eq',
                 f.carbon_kgco2eq == null ? null
-                    : 'bracket ' + fixed(f.carbon_kgco2eq / 2, 2) + ' to ' + fixed(f.carbon_kgco2eq * 2, 2)),
-            figure('Avoidable, canonical', f.avoidable_ratio == null ? 'n/a' : Math.round(f.avoidable_ratio * 100), '% of I/O',
-                null),
+                    : t('disc.figure.bracket', {low: fixed(f.carbon_kgco2eq / 2, 2), high: fixed(f.carbon_kgco2eq * 2, 2)})),
+            figure(t('disc.figure.avoidable'), f.avoidable_ratio == null ? t('unit.na') : Math.round(f.avoidable_ratio * 100),
+                t('disc.figure.avoidable.unit'), null),
             el('div', {class: 'disc-figure'}, [
-                el('span', {class: 'disc-figure-label', text: 'Runtime coverage'}),
+                el('span', {class: 'disc-figure-label', text: t('disc.figure.coverage')}),
                 el('span', {class: 'disc-figure-value'}, [
-                    el('span', {text: coverage ? String(coverage.percent) : 'n/a'}),
+                    el('span', {text: coverage ? String(coverage.percent) : t('unit.na')}),
                     coverage ? el('span', {class: 'disc-figure-unit', text: '%'}) : null
                 ]),
                 coverageBar(f.coverage)
@@ -8076,23 +8069,27 @@
         ]);
     }
 
+    function ago(ms) {
+        return t('disc.ago', {duration: PSL.dur(Date.now() - ms)});
+    }
+
     function disclosureFacts(item) {
         return el('div', {class: 'disc-facts'}, [
-            fact('published', PSL.dur(Date.now() - item.published_at_ms) + ' ago'),
-            item.signature_added_at_ms ? fact('signed copy', PSL.dur(Date.now() - item.signature_added_at_ms) + ' ago') : null,
-            fact('pdf', item.pdf === 'rendered' ? 'rendered here' : 'not rendered'),
+            fact(t('disc.fact.published'), ago(item.published_at_ms)),
+            item.signature_added_at_ms ? fact(t('disc.fact.signed_copy'), ago(item.signature_added_at_ms)) : null,
+            fact('pdf', item.pdf === 'rendered' ? t('disc.fact.pdf.rendered') : t('disc.fact.pdf.not_rendered')),
             el('span', {class: 'disc-fact disc-hash', title: item.content_hash, text: shortHash(item.content_hash)})
         ]);
     }
 
     function disclosureFileButton(id, name, primary, status) {
         const button = el('button', {type: 'button', class: 'pill-button pill-sm' + (primary ? ' pill-primary' : '')},
-            [primary ? downloadGlyph() : null, el('span', {text: primary ? 'Download the PDF' : name})]);
+            [primary ? downloadGlyph() : null, el('span', {text: primary ? t('disc.download_pdf') : name})]);
         button.addEventListener('click', function () {
             button.disabled = true;
             PSL.downloadAs('/api/disclosures/' + id + '/files/' + name, name).then(function (saved) {
                 button.disabled = false;
-                if (status) status.textContent = saved ? 'Sent ' + name + ' to your browser.' : 'The Hub did not return ' + name + '.';
+                if (status) status.textContent = t(saved ? 'disc.download.sent' : 'disc.download.missing', {name: name});
             });
         });
         return button;
@@ -8102,25 +8099,24 @@
         const banners = [];
         if (item.withdrawn) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'crit'}, [critGlyph(16), el('div', {
-                text: 'Withdrawn ' + PSL.dur(Date.now() - item.withdrawn.at_ms) + ' ago by ' + (item.withdrawn.by || 'someone')
+                text: t('disc.banner.withdrawn', {
+                    duration: PSL.dur(Date.now() - item.withdrawn.at_ms),
+                    by: item.withdrawn.by || t('disc.banner.withdrawn.someone'),
                     // A reason typed as a sentence brings its own full stop, and the banner adds one.
-                    + ': ' + ((item.withdrawn.reason || '').replace(/\.+\s*$/, '') || 'no reason given')
-                    + '. Its files stay, its share links are dead.'
+                    reason: (item.withdrawn.reason || '').replace(/\.+\s*$/, '') || t('disc.banner.withdrawn.no_reason')
+                })
             })]));
         } else if (item.intent === 'official' && (item.integrity_level === 'hash-only' || item.integrity_level === 'none')) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'warn'}, [warningGlyph(16), el('div', {
-                text: 'Official intent without a signature. Anyone can check this file was not altered since its hash '
-                    + 'was baked, nobody can check who baked it. Sign the attestation with cosign and publish again to raise it.'
+                text: t('disc.banner.unsigned')
             })]));
         }
         if (item.pdf !== 'rendered') {
             // A render again the engine refused: the files are suspect, not merely unchecked.
             const refused = item.render_reason === 'content_hash_mismatch' || item.render_reason === 'binding_mismatch';
-            const text = el('div', {
-                text: (refused ? 'Refused here: ' : 'Not checked here: ')
-                    + (RENDER_REASONS[item.render_reason] || item.render_reason || 'no render yet')
-                    + '. The files are kept as they arrived, and the figures are the report\'s own.'
-            });
+            const reason = RENDER_REASONS[item.render_reason] ? t(RENDER_REASONS[item.render_reason])
+                : item.render_reason || t('disc.render.none');
+            const text = el('div', {text: t(refused ? 'disc.banner.refused' : 'disc.banner.not_checked', {reason: reason})});
             banners.push(el('div', {
                 class: 'banner',
                 'data-tone': refused ? 'crit' : 'info'
@@ -8139,17 +8135,18 @@
             el('a', {
                 class: 'pill-button pill-sm disc-open',
                 href: '#/disclosures/' + item.id
-            }, [el('span', {text: 'Details'})]),
+            }, [el('span', {text: t('disc.details')})]),
             status
         ];
         return el('article', {class: 'card disc-card', 'data-withdrawn': item.withdrawn ? 'true' : null}, [
             el('header', {class: 'disc-card-head'}, [
                 el('h2', {class: 'disc-card-title'}, [
-                    el('a', {href: '#/disclosures/' + item.id, text: periodLabel(item.period)})
+                    el('a', {href: '#/disclosures/' + item.id, text: PSL.periodLabel(item.period)})
                 ]),
                 el('span', {
                     class: 'disc-dates',
-                    text: longDate(item.period.from) + ' → ' + longDate(item.period.to) + ' · ' + periodDays(item.period) + ' days'
+                    text: t('disc.card.dates', {from: PSL.day(item.period.from, {withYear: true}), to: PSL.day(item.period.to, {withYear: true}),
+                        days: periodDays(item.period)})
                 }),
                 el('span', {class: 'disc-chips'}, disclosureChips(item))
             ]),
@@ -8161,11 +8158,10 @@
     function railView(list) {
         const rail = PSL.periodRail(list, Date.now());
         if (rail.length === 0) return null;
-        return el('ol', {class: 'disc-rail', 'aria-label': 'Quarters'}, rail.map(function (cell) {
-            const caption = cell.state === 'published' ? LEVEL_LABELS[cell.level] || cell.level
-                : cell.state === 'internal' ? 'internal'
-                    : cell.state === 'withdrawn' ? 'withdrawn'
-                        : cell.state === 'current' ? 'closes in ' + cell.daysLeft + ' d' : 'not published';
+        return el('ol', {class: 'disc-rail', 'aria-label': t('disc.rail.label')}, rail.map(function (cell) {
+            const caption = cell.state === 'published' ? levelLabel(cell.level)
+                : cell.state === 'current' ? t('disc.rail.closes', {days: cell.daysLeft})
+                    : t('disc.rail.' + cell.state);
             const body = [el('span', {
                 class: 'disc-rail-label',
                 text: cell.label
@@ -8178,40 +8174,29 @@
 
     function railLegend() {
         return el('div', {class: 'disc-legend'}, [
-            el('span', {class: 'disc-legend-label', text: 'declared'}),
+            el('span', {class: 'disc-legend-label', text: t('disc.legend.declared')}),
             levelChip('hash-only'), levelChip('signed'), levelChip('signed-with-attestation'),
-            el('span', {class: 'disc-legend-label', text: 'checked here'}),
-            checkChip('hash', 'checked'), checkChip('bound', 'checked'),
-            el('p', {
-                class: 'disc-legend-note', text: 'A dashed level is what the report declares about itself. A solid '
-                    + 'mark is what this Hub recomputed when it arrived: the content hash, and an attestation that names it. '
-                    + 'The signature is checked on your machine, never here.'
-            })
+            el('span', {class: 'disc-legend-label', text: t('disc.legend.checked')}),
+            checkChip(t('disc.chip.hash'), 'checked'), checkChip(t('disc.chip.bound'), 'checked'),
+            el('p', {class: 'disc-legend-note', text: t('disc.legend.note')})
         ]);
     }
 
     function publishPanel() {
         return terminalBlock({
-            head: '// publish the next one',
-            sub: 'The last steps of the CI job that produces and signs the report.',
+            head: t('disc.publish.head'),
+            sub: t('disc.publish.sub'),
             text: PSL.publishCommand(location.origin),
-            copyLabel: 'Copy the publish command',
-            notes: ['Publishing takes the import key `Hub:Disclosures:ImportKey`, like a daemon\'s findings import. '
-            + 'Reading this page needs `disclosures.read`, sharing and withdrawing need `disclosures.manage`. '
-            + 'Neither is in the built-in reader or member role.']
+            copyLabel: t('disc.publish.copy'),
+            notes: [t('disc.publish.note')]
         });
     }
 
     function renderDisclosuresScreen() {
         const section = el('section', {class: 'disc'}, [
-            ruledOverline('// disclosures'),
-            el('h1', {class: 'page-title', text: 'Energy and carbon, period by period'}),
-            el('p', {
-                class: 'page-sub', text: 'Each report was produced and signed outside the Hub by perf-sentinel '
-                    + 'disclose, then published here by CI. The Hub recomputed its content hash on arrival and keeps the '
-                    + 'files as they were sent. Public transparency, not regulatory-grade: every carbon figure carries a '
-                    + '~2× bracket.'
-            })
+            ruledOverline(t('disc.overline')),
+            el('h1', {class: 'page-title', text: t('disc.title')}),
+            el('p', {class: 'page-sub', text: t('disc.sub')})
         ]);
         if (state.disclosures === null) {
             section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px'}));
@@ -8220,24 +8205,20 @@
         if (state.disclosuresError) {
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'crit'}, [
                 critGlyph(16),
-                el('div', {text: 'The Hub did not return its disclosures. Reload the page to ask again.'})
+                el('div', {text: t('disc.list.error')})
             ]));
             return section;
         }
         if (state.disclosures.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'No disclosure published yet.'}),
-                el('p', {
-                    text: 'A scheduled job builds one from the daemons\' archives and publishes it '
-                        + 'with the import key, as below. It shows here once the Hub '
-                        + 'has checked and kept it.'
-                })
+                el('p', {class: 'empty-title', text: t('disc.empty.title')}),
+                el('p', {text: t('disc.empty.body')})
             ]));
             section.appendChild(publishPanel());
             return section;
         }
         section.appendChild(el('div', {class: 'disc-rail-wrap'}, [
-            el('span', {class: 'disc-legend-label', text: 'periods'}),
+            el('span', {class: 'disc-legend-label', text: t('disc.rail.head')}),
             railView(state.disclosures)
         ]));
         section.appendChild(railLegend());
@@ -8276,10 +8257,10 @@
     function carbonBracket(carbon) {
         if (carbon == null || carbon <= 0) return null;
         return el('div', {class: 'disc-bracket'}, [
-            el('span', {class: 'disc-figure-label', text: 'Carbon with its ~2× bracket, log scale'}),
+            el('span', {class: 'disc-figure-label', text: t('disc.bracket.label')}),
             el('div', {
                 class: 'disc-bracket-track', role: 'img',
-                'aria-label': fixed(carbon, 2) + ' kgCO₂eq, likely between ' + fixed(carbon / 2, 2) + ' and ' + fixed(carbon * 2, 2)
+                'aria-label': t('disc.bracket.aria', {value: fixed(carbon, 2), low: fixed(carbon / 2, 2), high: fixed(carbon * 2, 2)})
             }, [
                 el('span', {class: 'disc-bracket-band'}),
                 el('span', {class: 'disc-bracket-dot'})
@@ -8311,7 +8292,7 @@
             const bar = el('span', {class: 'disc-share-fill'});
             bar.style.width = Math.round(share * 100) + '%';
             return el('td', {}, [el('span', {class: 'disc-share'}, [el('span', {class: 'disc-share-track'}, [bar]),
-                el('span', {class: 'table-mono', text: Math.round(share * 100) + ' %'})])]);
+                el('span', {class: 'table-mono', text: t('disc.apps.share', {percent: Math.round(share * 100)})})])]);
         }
 
         const rows = applications.map(function (app) {
@@ -8320,7 +8301,7 @@
                 el('td', {
                     class: 'table-mono',
                     'data-align': 'right',
-                    text: app.total_requests == null ? '' : Number(app.total_requests).toLocaleString('en')
+                    text: app.total_requests == null ? '' : PSL.num(Number(app.total_requests))
                 }),
                 shareCell(app.energy_kwh),
                 el('td', {class: 'table-mono', 'data-align': 'right', text: fixed(app.energy_kwh, 2)}),
@@ -8338,7 +8319,7 @@
                     host.partial ? document.createTextNode(' ') : null,
                     host.partial ? el('span', {
                         class: 'disc-host-note',
-                        text: 'in ' + host.partial.windows + ' of ' + host.partial.of + ' windows'
+                        text: t('disc.apps.host.partial', {windows: host.partial.windows, of: host.partial.of})
                     }) : null]),
                 el('td', {}),
                 shareCell(host.energy_kwh),
@@ -8350,40 +8331,38 @@
         const excluded = report.scope_manifest && Array.isArray(report.scope_manifest.applications_excluded)
             ? report.scope_manifest.applications_excluded : [];
         excluded.forEach(function (app) {
+            const reason = app && app.reason;
             rows.push(el('tr', {}, [
                 el('td', {}, [el('span', {
                     class: 'table-strong',
                     text: (app && (app.service_name || app.name)) || String(app)
                 }), document.createTextNode(' '),
-                    el('span', {class: 'chip chip-declared', text: 'excluded'})]),
-                el('td', {
-                    class: 'table-muted',
-                    colspan: '5',
-                    text: (app && app.reason) || 'Declared by the operator, not measured.'
-                })
+                    el('span', {class: 'chip chip-declared', text: t('disc.apps.excluded')})]),
+                // The report's own reason is engine text, and stays as the report wrote it.
+                reason ? engineText(el('td', {class: 'table-muted', colspan: '5', text: reason}))
+                    : el('td', {class: 'table-muted', colspan: '5', text: t('disc.apps.excluded.reason')})
             ]));
         });
         const declared = figures && figures.applications_declared;
         const measured = figures && figures.applications_measured;
         const coverage = declared != null && measured != null
-            ? measured + ' of ' + declared + ' declared applications were measured.' : null;
-        const hostNote = hosts.length === 0 ? null : 'The '
-            + hosts.map(function (host) {
-                return host.label.toLowerCase();
-            }).join(' and ').replace('database hosts and broker hosts', 'database and broker hosts')
-            + ' count in the total and in no application.';
-        return detailPanel('// applications', [coverage, hostNote].filter(Boolean).join(' ') || null,
-            [simpleTable(['Application', 'Requests', 'Energy share', 'kWh', 'kgCO₂eq', 'Anti-patterns'], rows,
-                ['Requests', 'kWh', 'kgCO₂eq', 'Anti-patterns'])]);
+            ? t('disc.apps.measured', {measured: measured, declared: declared}) : null;
+        const hostNote = hosts.length === 0 ? null : t(hosts.length > 1 ? 'disc.apps.hosts.both'
+            : hosts[0].label === t('disc.host.database') ? 'disc.apps.hosts.database' : 'disc.apps.hosts.broker');
+        const heads = ['application', 'requests', 'share', 'kwh', 'carbon', 'anti_patterns'].map(function (id) {
+            return t('disc.apps.col.' + id);
+        });
+        return detailPanel(t('disc.apps.head'), [coverage, hostNote].filter(Boolean).join(' ') || null,
+            [simpleTable(heads, rows, [heads[1], heads[3], heads[4], heads[5]])]);
     }
 
     function integrityPanel(detail) {
         const rows = PSL.checkRows(detail).map(function (row) {
-            const outcome = row.outcome === 'checked' ? checkChip('checked', 'checked')
-                : row.outcome === 'declared' ? el('span', {class: 'chip chip-declared disc-level', text: 'declared'})
+            const outcome = row.outcome === 'checked' ? checkChip(t('disc.outcome.checked'), 'checked')
+                : row.outcome === 'declared' ? el('span', {class: 'chip chip-declared disc-level', text: t('disc.outcome.declared')})
                     : el('span', {
                         class: 'chip disc-unchecked',
-                        text: row.outcome === 'not_checked' ? 'not checked' : row.outcome
+                        text: PSL.hasText('disc.outcome.' + row.outcome) ? t('disc.outcome.' + row.outcome) : row.outcome
                     });
             return el('tr', {}, [
                 el('td', {class: 'table-strong', text: row.claim}),
@@ -8392,27 +8371,24 @@
             ]);
         });
         const item = detail.disclosure;
-        return detailPanel('// integrity',
-            'Who checked what. The Hub recomputes a hash with its engine. It cannot check a signature, which is only '
-            + 'worth what the verifier trusts.',
+        return detailPanel(t('disc.integrity.head'), t('disc.integrity.sub'),
             [
-                simpleTable(['Claim', 'Checked by', 'Outcome'], rows),
+                simpleTable([t('disc.integrity.col.claim'), t('disc.integrity.col.by'), t('disc.integrity.col.outcome')], rows),
                 el('dl', {class: 'disc-defs'}, [
                     el('dt', {text: 'content_hash'}), el('dd', {class: 'table-mono', text: item.content_hash}),
                     el('dt', {text: 'report_uuid'}), el('dd', {class: 'table-mono', text: item.report_uuid}),
-                    el('dt', {text: 'expected signer'}), el('dd', {
+                    el('dt', {text: t('disc.integrity.signer')}), el('dd', {
                         class: 'table-mono',
                         text: detail.expected_identity ? detail.expected_identity + ' · ' + detail.expected_issuer
-                            : 'none in this Hub\'s configuration'
+                            : t('disc.integrity.signer.none')
                     })
                 ]),
                 terminalBlock({
-                    head: '// verify on your machine',
-                    sub: 'Download the PDF, then run the engine\'s own verifier on it.',
+                    head: t('disc.verify.head'),
+                    sub: t('disc.verify.sub'),
                     text: PSL.verifyCommand(detail),
-                    copyLabel: 'Copy the verify command',
-                    notes: ['TRUSTED needs a signed report and an expected signer. The expected signer comes from this '
-                    + 'Hub\'s configuration, never from the report.']
+                    copyLabel: t('disc.verify.copy'),
+                    notes: [t('disc.verify.note')]
                 })
             ]);
     }
@@ -8424,56 +8400,57 @@
         }).map(function (file) {
             return el('tr', {}, [
                 el('td', {class: 'table-strong', text: file[0]}),
-                el('td', {class: 'table-mono', text: file[1]}),
+                el('td', {class: 'table-mono', text: t(file[1])}),
                 el('td', {'data-align': 'right'}, [disclosureFileButton(item.id, file[0], false, status)])
             ]);
         });
-        return detailPanel('// files', 'Exactly what was published, kept in the Hub\'s database so its backup carries '
-            + 'them. The PDF is the one file this Hub produced, with the engine it embeds.',
-            [simpleTable(['File', 'Role', ''], rows), status]);
+        return detailPanel(t('disc.files.head'), t('disc.files.sub'),
+            [simpleTable([t('disc.files.col.file'), t('disc.files.col.role'), ''], rows), status]);
     }
 
     function linkState(link) {
-        return link.state === 'active' ? 'expires in ' + PSL.dur(link.expires_at_ms - Date.now())
-            : link.state === 'revoked' ? 'revoked by ' + link.revoked_by
-                : link.state === 'withdrawn' ? 'dead with the withdrawal' : 'expired';
+        return link.state === 'active' ? t('disc.link.active', {duration: PSL.dur(link.expires_at_ms - Date.now())})
+            : link.state === 'revoked' ? t('disc.link.revoked', {by: link.revoked_by})
+                : link.state === 'withdrawn' ? t('disc.link.withdrawn') : t('disc.link.expired');
     }
 
     function shareLinksPanel(detail, manage) {
         const item = detail.disclosure;
         const rows = detail.share_links.map(function (link) {
             const revoke = manage && link.state === 'active'
-                ? disclosureActionButton('Revoke', function () {
+                ? disclosureActionButton(t('disc.links.revoke'), function () {
                     return sendDisclosure('/api/disclosures/' + item.id + '/share-links/' + link.id, 'DELETE');
-                }, 'Link revoked.')
+                }, t('disc.links.revoked'))
                 : null;
             return el('tr', {}, [
                 el('td', {class: 'table-mono', text: link.created_by}),
-                el('td', {class: 'table-mono', text: PSL.dur(Date.now() - link.created_at_ms) + ' ago'}),
+                el('td', {class: 'table-mono', text: ago(link.created_at_ms)}),
                 el('td', {class: 'table-mono', text: linkState(link)}),
                 el('td', {class: 'table-mono', 'data-align': 'right', text: String(link.downloads)}),
                 el('td', {
                     class: 'table-mono',
-                    text: link.last_used_at_ms ? PSL.dur(Date.now() - link.last_used_at_ms) + ' ago' : 'never'
+                    text: link.last_used_at_ms ? ago(link.last_used_at_ms) : t('disc.links.never')
                 }),
                 el('td', {'data-align': 'right'}, [revoke])
             ]);
         });
         const children = [];
         if (state.disclosureLink && state.disclosureLink.id === item.id) children.push(terminalBlock({
-            head: '// new share link',
-            sub: 'Shown this once. Send the PDF\'s address. verify-hash --url works on the report.json beside it.',
+            head: t('disc.links.new.head'),
+            sub: t('disc.links.new.sub'),
             text: state.disclosureLink.pdfUrl + '\n\nperf-sentinel verify-hash --url ' + state.disclosureLink.reportUrl,
-            copyLabel: 'Copy the share link'
+            copyLabel: t('disc.links.new.copy')
         }));
+        const heads = ['created_by', 'created', 'state', 'uses', 'last_use'].map(function (id) {
+            return t('disc.links.col.' + id);
+        });
         children.push(rows.length
-            ? simpleTable(['Created by', 'Created', 'State', 'Uses', 'Last use', ''], rows, ['Uses'])
+            ? simpleTable(heads.concat(['']), rows, [heads[3]])
             : el('p', {
-                class: 'sources-note', text: item.confidentiality === 'internal'
-                    ? 'An internal report is never shared.' : 'No share link yet.'
+                class: 'sources-note',
+                text: t(item.confidentiality === 'internal' ? 'disc.links.internal' : 'disc.links.none')
             }));
-        return detailPanel('// share links', 'A share link serves this disclosure\'s PDF and its three files under their '
-            + 'fixed names to whoever holds it, with no session. It expires within 30 days and counts its uses.', children);
+        return detailPanel(t('disc.links.head'), t('disc.links.sub'), children);
     }
 
     function deliveriesPanel(detail, manage) {
@@ -8481,29 +8458,33 @@
         const item = detail.disclosure;
         const rows = detail.deliveries.map(function (delivery) {
             const retry = manage && delivery.state !== 'delivered'
-                ? disclosureActionButton('Retry', function () {
+                ? disclosureActionButton(t('disc.deliveries.retry'), function () {
                     return sendDisclosure('/api/disclosures/' + item.id + '/deliveries/' + delivery.id + '/retry', 'POST');
-                }, 'Delivery queued again.')
+                }, t('disc.deliveries.retried'))
                 : null;
             return el('tr', {}, [
                 el('td', {class: 'table-strong', text: delivery.webhook}),
                 el('td', {class: 'table-mono', text: delivery.event}),
                 el('td', {
                     class: 'table-mono',
-                    text: delivery.last_attempt_ms ? PSL.dur(Date.now() - delivery.last_attempt_ms) + ' ago' : 'not yet'
+                    text: delivery.last_attempt_ms ? ago(delivery.last_attempt_ms) : t('disc.deliveries.not_yet')
                 }),
                 el('td', {}, [el('span', {
                     class: 'status-pill', 'data-status': delivery.state === 'delivered' ? 'succeeded'
                         : delivery.state === 'failed' ? 'failed' : 'queued',
-                    text: delivery.state + (delivery.last_status ? ' · ' + delivery.last_status : '')
-                        + ' · ' + delivery.attempts + ' tries'
+                    text: t('disc.deliveries.outcome.' + PSL.plural(delivery.attempts), {
+                        state: enumWord('delivery', delivery.state),
+                        status: delivery.last_status ? ' · ' + delivery.last_status : '',
+                        attempts: delivery.attempts
+                    })
                 })]),
                 el('td', {'data-align': 'right'}, [retry])
             ]);
         });
-        return detailPanel('// deliveries', 'Webhooks declared in the Hub\'s configuration, one signed POST each at '
-            + 'publication and at withdrawal. The Hub shows their names, never their URLs.',
-            [simpleTable(['Webhook', 'Event', 'Last attempt', 'Outcome', ''], rows)]);
+        const heads = ['webhook', 'event', 'last_attempt', 'outcome'].map(function (id) {
+            return t('disc.deliveries.col.' + id);
+        });
+        return detailPanel(t('disc.deliveries.head'), t('disc.deliveries.sub'), [simpleTable(heads.concat(['']), rows)]);
     }
 
     function methodPanel(report) {
@@ -8514,17 +8495,18 @@
             ['specification', methodology.sci_specification],
             ['conformance', methodology.conformance],
             ['patterns', Array.isArray(methodology.enabled_patterns) ? methodology.enabled_patterns.join(', ') : null],
-            ['carbon intensity', methodology.calibration_inputs && methodology.calibration_inputs.carbon_intensity_source]
+            ['carbon_intensity', methodology.calibration_inputs && methodology.calibration_inputs.carbon_intensity_source]
         ].filter(function (pair) {
             return pair[1];
         });
-        return detailPanel('// method and limits', 'As the report states them. The disclaimers are copied verbatim.', [
+        return detailPanel(t('disc.method.head'), t('disc.method.sub'), [
             el('dl', {class: 'disc-defs'}, defs.flatMap(function (pair) {
-                return [el('dt', {text: pair[0]}), el('dd', {class: 'table-mono', text: String(pair[1])})];
+                return [el('dt', {text: t('disc.method.' + pair[0])}), el('dd', {class: 'table-mono', text: String(pair[1])})];
             })),
-            disclaimers.length ? el('ol', {class: 'disc-disclaimers'}, disclaimers.map(function (text) {
+            // Copied verbatim from the report: engine text, as the engine wrote it.
+            disclaimers.length ? engineText(el('ol', {class: 'disc-disclaimers'}, disclaimers.map(function (text) {
                 return el('li', {text: String(text)});
-            })) : null
+            }))) : null
         ]);
     }
 
@@ -8542,8 +8524,8 @@
                 state.disclosureBusy = false;
                 state.disclosureNote = outcome && outcome.ok ? done
                     : (outcome && outcome.payload && (outcome.payload.detail
-                        ? PSL.problemText(outcome.payload, outcome.status) : outcome.payload.reason))
-                    || 'The Hub refused this (' + (outcome ? outcome.status : 0) + ').';
+                        ? PSL.problemText(outcome.payload, outcome.status) : enumWord('refusal', outcome.payload.reason)))
+                    || t('disc.action.refused', {status: outcome ? outcome.status : 0});
                 loadDisclosure(PSL.readDisclosureId(location.hash));
             });
         });
@@ -8552,22 +8534,19 @@
 
     function withdrawForm(item) {
         const reason = el('textarea', {
-            class: 'disc-reason', rows: '2', maxlength: '500', 'aria-label': 'Reason for the withdrawal',
-            placeholder: 'Why, in a sentence: it is kept and sent with the withdrawal.'
+            class: 'disc-reason', rows: '2', maxlength: '500', 'aria-label': t('disc.withdraw.reason.label'),
+            placeholder: t('disc.withdraw.reason.placeholder')
         });
-        const submit = disclosureActionButton('Withdraw this disclosure', function () {
+        const submit = disclosureActionButton(t('disc.withdraw.submit'), function () {
             if (!reason.value.trim()) return Promise.resolve({
                 ok: false,
                 status: 400,
-                payload: {detail: 'Give a reason first.'}
+                payload: {detail: t('disc.withdraw.reason.missing')}
             });
             return sendDisclosure('/api/disclosures/' + item.id + '/withdraw', 'POST', {reason: reason.value.trim()});
-        }, 'Withdrawn. Its share links are dead, and its webhooks are told.');
+        }, t('disc.withdraw.done'));
         return el('div', {class: 'disc-withdraw'}, [
-            el('p', {
-                text: 'Withdrawing is final. The files stay, every share link dies, and each webhook told of the '
-                    + 'publication is told of the withdrawal. Publish a corrected report under a new uuid.'
-            }),
+            el('p', {text: t('disc.withdraw.body')}),
             reason,
             el('div', {class: 'disc-actions'}, [submit])
         ]);
@@ -8578,7 +8557,7 @@
         const status = el('span', {class: 'terminal-status', role: 'status'});
         const buttons = [item.files.pdf ? disclosureFileButton(item.id, 'report.pdf', true, status) : null];
         if (manage && !item.withdrawn && item.confidentiality !== 'internal') {
-            buttons.push(disclosureActionButton('New share link', function () {
+            buttons.push(disclosureActionButton(t('disc.action.new_link'), function () {
                 return sendDisclosure('/api/disclosures/' + item.id + '/share-links', 'POST', {}).then(function (outcome) {
                     if (outcome.ok) {
                         const base = location.origin + outcome.payload.path;
@@ -8590,17 +8569,17 @@
                     }
                     return outcome;
                 });
-            }, 'Share link created. Copy it below: it is not shown again.'));
+            }, t('disc.action.new_link.done')));
         }
         if (manage && item.pdf !== 'rendered') {
-            buttons.push(disclosureActionButton('Render again', function () {
+            buttons.push(disclosureActionButton(t('disc.action.render'), function () {
                 return sendDisclosure('/api/disclosures/' + item.id + '/render', 'POST', {});
-            }, 'Rendered again.'));
+            }, t('disc.action.render.done')));
         }
         if (manage && !item.withdrawn) {
             const toggle = el('button', {
                 type: 'button', class: 'pill-button pill-sm',
-                'aria-expanded': state.withdrawOpen ? 'true' : 'false', text: 'Withdraw'
+                'aria-expanded': state.withdrawOpen ? 'true' : 'false', text: t('disc.action.withdraw')
             });
             toggle.addEventListener('click', function () {
                 state.withdrawOpen = !state.withdrawOpen;
@@ -8616,11 +8595,11 @@
         const back = el('a', {
             class: 'pill-button pill-sm disc-back',
             href: '#/disclosures'
-        }, [el('span', {text: 'Back to disclosures'})]);
+        }, [el('span', {text: t('disc.back')})]);
         const section = el('section', {class: 'disc'}, [back]);
         if (state.disclosureError) {
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'crit'}, [critGlyph(16),
-                el('div', {text: 'The Hub did not return this disclosure. It may not exist, or you may not read disclosures.'})]));
+                el('div', {text: t('disc.detail.error')})]));
             return section;
         }
         const detail = state.disclosure;
@@ -8631,18 +8610,20 @@
         const item = detail.disclosure;
         // The Hub decides: an action needs disclosures.manage and a caller it can name.
         const manage = detail.can_manage === true;
+        const intent = 'disc.detail.intent.' + item.intent;
         [
-            ruledOverline('// disclosure · ' + periodLabel(item.period)),
+            ruledOverline(t('disc.detail.overline', {period: PSL.periodLabel(item.period)})),
             el('h1', {
-                class: 'page-title', text: item.organisation + ', ' + longDate(item.period.from) + ' to '
-                    + longDate(item.period.to)
+                class: 'page-title', text: t('disc.detail.title', {organisation: item.organisation,
+                    from: PSL.day(item.period.from, {withYear: true}), to: PSL.day(item.period.to, {withYear: true})})
             }),
             el('p', {
-                class: 'page-sub', text: item.intent.charAt(0).toUpperCase() + item.intent.slice(1) + ' intent, '
-                    + item.confidentiality + ' confidentiality. Published to this Hub ' + PSL.dur(Date.now() - item.published_at_ms)
-                    + ' ago' + (item.pdf === 'rendered'
-                        ? ', its content hash recomputed on arrival and its bytes kept as they came.'
-                        : ', kept as it came without a check here.')
+                class: 'page-sub', text: t(item.pdf === 'rendered' ? 'disc.detail.sub.rendered' : 'disc.detail.sub.kept', {
+                    intent: PSL.hasText(intent) ? t(intent)
+                        : t('disc.detail.intent.other', {intent: item.intent.charAt(0).toUpperCase() + item.intent.slice(1)}),
+                    confidentiality: enumWord('confidentiality', item.confidentiality),
+                    duration: PSL.dur(Date.now() - item.published_at_ms)
+                })
             }),
             el('div', {class: 'disc-chips'}, disclosureChips(item)),
             detailActions(detail, manage),
@@ -8654,7 +8635,7 @@
         disclosureBanners(item).forEach(function (banner) {
             section.appendChild(banner);
         });
-        section.appendChild(detailPanel('// at a glance', null, [
+        section.appendChild(detailPanel(t('disc.glance.head'), null, [
             disclosureFigures(item.figures),
             carbonBracket(item.figures && item.figures.carbon_kgco2eq)
         ]));

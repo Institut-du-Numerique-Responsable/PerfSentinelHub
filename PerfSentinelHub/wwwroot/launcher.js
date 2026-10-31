@@ -1710,7 +1710,7 @@
     function railCell(quarter, items, current, nowMs) {
         const year = Math.floor(quarter / 4);
         const cell = {
-            label: year + ' Q' + ((quarter % 4) + 1),
+            label: t('period.quarter', {year: year, quarter: (quarter % 4) + 1}),
             state: 'missing',
             level: null,
             id: null,
@@ -1760,6 +1760,31 @@
         return rail;
     }
 
+    /**
+     * A month's name, `October` in English and `octobre` in French.
+     * @param {number} month 1 to 12
+     * @param {string} [language] the shown language when omitted
+     * @returns {string}
+     */
+    function monthName(month, language = LANG) {
+        if (language !== 'fr') return CARD_MONTHS[month - 1];
+        return new Intl.DateTimeFormat('fr-FR', {month: 'long', timeZone: 'UTC'}).format(new Date(Date.UTC(2000, month - 1, 1)));
+    }
+
+    /**
+     * A disclosure's period in words: `2026 Q3`, `October 2026`, `2026`, or its two days.
+     * @param {{type: string, from: string, to: string}} period
+     * @returns {string}
+     */
+    function periodLabel(period) {
+        const parts = String(period.to).split('-');
+        const month = Number(parts[1]);
+        if (period.type === 'calendar-quarter') return t('period.quarter', {year: parts[0], quarter: Math.floor((month - 1) / 3) + 1});
+        if (period.type === 'calendar-year') return parts[0];
+        if (period.type === 'calendar-month') return monthName(month) + ' ' + parts[0];
+        return t('period.range', {from: day(period.from, {withYear: true}), to: day(period.to, {withYear: true})});
+    }
+
     /** Runtime coverage as a whole percent, and whether it falls under the official 75 %. */
     function coverageNotch(coverage) {
         if (coverage == null) return null;
@@ -1775,26 +1800,28 @@
         const checks = detail.checks;
         const audited = detail.disclosure.integrity_level === 'audited';
         const binding = checks.binding === 'no_attestation' ? 'absent' : checks.binding;
-        const bindingBy = {checked: 'this Hub, same run', absent: 'no attestation published'};
+        const notHere = t('disc.check.by.not_here');
+        const bindingBy = binding === 'checked' ? t('disc.check.by.same_run')
+            : binding === 'absent' ? t('disc.check.by.no_attestation') : notHere;
         return [
             {
-                claim: 'The figures match the content hash',
-                by: checks.content_hash === 'checked' ? 'this Hub, perf-sentinel ' + checks.engine_version : 'not checked here',
+                claim: t('disc.check.hash'),
+                by: checks.content_hash === 'checked' ? t('disc.check.by.hub', {version: checks.engine_version}) : notHere,
                 outcome: checks.content_hash
             },
             {
-                claim: 'The attestation names this content hash',
-                by: bindingBy[binding] || 'not checked here',
+                claim: t('disc.check.binding'),
+                by: bindingBy,
                 outcome: binding
             },
             {
-                claim: "The publisher's pipeline signed the attestation",
-                by: 'you, with verify-hash against the expected signer',
+                claim: t('disc.check.signature'),
+                by: t('disc.check.by.you'),
                 outcome: checks.signature === 'declared' ? 'declared' : 'absent'
             },
             {
-                claim: 'An auditor reviewed the figures',
-                by: audited ? 'declared by the report' : 'nobody, the audited level is reserved',
+                claim: t('disc.check.audit'),
+                by: audited ? t('disc.check.by.report') : t('disc.check.by.nobody'),
                 outcome: audited ? 'declared' : 'none'
             }
         ];
@@ -1809,8 +1836,8 @@
         const aggregate = (report && report.aggregate) || {};
         const breakdown = aggregate.carbon_breakdown || {};
         return [
-            ['Database hosts', aggregate.database_waste, breakdown.database_kgco2eq],
-            ['Broker hosts', aggregate.messaging_waste, breakdown.messaging_kgco2eq]
+            [t('disc.host.database'), aggregate.database_waste, breakdown.database_kgco2eq],
+            [t('disc.host.broker'), aggregate.messaging_waste, breakdown.messaging_kgco2eq]
         ].filter(function (row) {
             return row[1] && Number(row[1].in_totals_windows) > 0;
         }).map(function (row) {
@@ -1849,7 +1876,7 @@
             '  --input /var/lib/perf-sentinel/archive --org-config org.toml \\',
             '  --output report.json --emit-attestation attestation.intoto.jsonl',
             'cosign sign-blob --bundle bundle.sig --new-bundle-format attestation.intoto.jsonl',
-            '# patch integrity.signature and integrity_level into report.json, see REPORTING.md',
+            t('disc.publish.patch'),
             'curl --fail -H "X-API-Key: $HUB_DISCLOSURES_KEY" \\',
             '  -F report=@report.json \\',
             '  -F attestation=@attestation.intoto.jsonl \\',
@@ -3165,9 +3192,10 @@
      */
     function day(iso, {withYear = false, short = false} = {}) {
         if (LANG === 'fr') {
+            // French writes the first of the month as an ordinal, 1er, which Intl leaves to us.
             return new Intl.DateTimeFormat('fr-FR', {
                 day: 'numeric', month: short ? 'short' : 'long', year: withYear ? 'numeric' : undefined, timeZone: 'UTC'
-            }).format(cardDate(iso));
+            }).format(cardDate(iso)).replace(/^1(?= )/, '1er');
         }
         if (!short) return cardDayText(iso, withYear);
         const date = cardDate(iso);
@@ -3486,6 +3514,8 @@
         screenOf,
         readDisclosureId,
         periodRail,
+        periodLabel,
+        monthName,
         coverageNotch,
         checkRows,
         hostRows,

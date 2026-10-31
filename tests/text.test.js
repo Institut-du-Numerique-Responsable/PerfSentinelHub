@@ -446,3 +446,92 @@ test("the coverage snippet's comments read in the shown language, its patterns d
         "- { source: \"billing-stg\" }"
     ].join("\n")));
 });
+
+// ---- the disclosures screens
+
+const TASK6_FUNCTIONS = ["loadDisclosures", "loadDisclosure", "sendDisclosure", "periodDays", "shortHash",
+    "checkGlyph", "enumWord", "levelLabel", "levelChip", "checkChip", "disclosureChips", "figure", "fixed", "coverageBar",
+    "disclosureFigures", "fact", "ago", "disclosureFacts", "disclosureFileButton", "disclosureBanners", "disclosureCard",
+    "railView", "railLegend", "publishPanel", "renderDisclosuresScreen", "detailPanel", "simpleTable",
+    "carbonBracket", "applicationsPanel", "shareCell", "integrityPanel", "filesPanel", "linkState",
+    "shareLinksPanel", "deliveriesPanel", "methodPanel", "disclosureActionButton", "withdrawForm", "detailActions",
+    "renderDisclosureScreen"];
+
+// verifyCommand and publishCommand write command lines, which the guard would read as prose: the one comment
+// line of the second is pinned below instead.
+const TASK6_HELPERS = ["describePattern", "readDisclosureId", "quarterOf", "railCell", "periodRail", "coverageNotch",
+    "checkRows", "hostRows", "monthName", "periodLabel"];
+
+test("the disclosures screens hold no prose literal", () => {
+    const app = wwwrootFile("app.js");
+    const launcher = wwwrootFile("launcher.js");
+    for (const name of TASK6_FUNCTIONS) assert.ok(app.includes("function " + name + "("), "app.js has no " + name);
+    for (const name of TASK6_HELPERS) assert.ok(launcher.includes("function " + name + "("), "launcher.js has no " + name);
+    // The new share link's verify-hash line is a command, not prose.
+    assert.deepEqual(PSL.literalsIn(app, TASK6_FUNCTIONS).filter(text => !/perf-sentinel verify-hash --url $/.test(text)), []);
+    assert.deepEqual(PSL.literalsIn(launcher, TASK6_HELPERS), []);
+    for (const table of ["LEVEL_LABELS", "RENDER_REASONS", "DISCLOSURE_FILES"]) {
+        const start = app.indexOf("const " + table + " = ");
+        assert.ok(start >= 0, "app.js has no " + table);
+        assert.deepEqual(PSL.literalsIn("function x() {" + app.slice(start, app.indexOf(";", start)) + "}", ["x"]), [],
+            table);
+    }
+    assert.ok(!/\bconst MONTHS\b|function longDate\(|function periodLabel\(/.test(app), "app.js keeps its own dates");
+});
+
+test("a disclosure's period reads in the shown language", () => {
+    const quarter = {type: "calendar-quarter", from: "2026-07-01", to: "2026-09-30"};
+    const month = {type: "calendar-month", from: "2026-10-01", to: "2026-10-31"};
+    const custom = {type: "custom", from: "2026-07-01", to: "2026-08-15"};
+    assert.equal(PSL.periodLabel(quarter), "2026 Q3");
+    assert.equal(PSL.periodLabel({type: "calendar-year", from: "2026-01-01", to: "2026-12-31"}), "2026");
+    assert.equal(PSL.periodLabel(month), "October 2026");
+    assert.equal(PSL.periodLabel(custom), "1 July 2026 to 15 August 2026");
+    assert.equal(PSL.monthName(10), "October");
+    assert.equal(PSL.monthName(10, "fr"), "octobre");
+    inLang("fr", () => {
+        assert.equal(PSL.periodLabel(quarter), "T3 2026");
+        assert.equal(PSL.periodLabel(month), "octobre 2026");
+        assert.equal(PSL.periodLabel(custom), "du 1er juillet 2026 au 15 août 2026");
+        assert.equal(PSL.monthName(2), "février");
+        assert.equal(PSL.monthName(2, "en"), "February");
+        assert.equal(PSL.day("2026-10-01", {withYear: true}), "1er octobre 2026");
+        assert.equal(PSL.day("2026-10-11", {withYear: true}), "11 octobre 2026");
+        const rail = PSL.periodRail([{id: "q1", period: {type: "calendar-quarter", from: "2026-01-01", to: "2026-03-31"},
+            confidentiality: "public", integrity_level: "signed", withdrawn: null}], Date.UTC(2026, 4, 2));
+        assert.deepEqual(rail.map(cell => cell.label), ["T1 2026", "T2 2026"]);
+    });
+});
+
+test("who checked what reads in the shown language", () => {
+    const failed = {
+        disclosure: {integrity_level: "hash-only"},
+        checks: {content_hash: "not_checked", binding: "no_attestation", signature: "absent", engine_version: null}
+    };
+    assert.deepEqual(PSL.checkRows(failed).map(row => row.by), ["not checked here", "no attestation published",
+        "you, with verify-hash against the expected signer", "nobody, the audited level is reserved"]);
+    inLang("fr", () => {
+        const rows = PSL.checkRows(failed);
+        assert.deepEqual(rows.map(row => row.outcome), ["not_checked", "absent", "absent", "none"]);
+        assert.equal(rows[0].claim, "Les chiffres correspondent à l'empreinte du contenu");
+        assert.equal(rows[0].by, "non vérifié ici");
+        assert.equal(rows[1].by, "aucune attestation publiée");
+        const checked = PSL.checkRows({disclosure: {integrity_level: "audited"},
+            checks: {content_hash: "checked", binding: "checked", signature: "declared", engine_version: "0.39.0"}});
+        assert.equal(checked[0].by, "ce Hub, perf-sentinel 0.39.0");
+        assert.equal(checked[3].by, "déclaré par le rapport");
+        const hosts = PSL.hostRows({aggregate: {database_waste: {windows_with_figure: 2, in_totals_windows: 2,
+            in_totals_energy_kwh: 1}}});
+        assert.equal(hosts[0].label, "Hôtes de base de données");
+    });
+});
+
+test("the publish command's comment reads in the shown language, its commands do not move", () => {
+    const en = PSL.publishCommand("https://hub.example").split("\n");
+    assert.equal(en[5], "# patch integrity.signature and integrity_level into report.json, see REPORTING.md");
+    inLang("fr", () => {
+        const fr = PSL.publishCommand("https://hub.example").split("\n");
+        assert.match(fr[5], /^# reportez integrity\.signature et integrity_level dans report\.json/);
+        assert.deepEqual(fr.filter((line, i) => i !== 5), en.filter((line, i) => i !== 5));
+    });
+});
