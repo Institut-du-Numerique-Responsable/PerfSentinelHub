@@ -214,6 +214,9 @@ async function captureEmbedFixtures(runs: string[], disclosures: string[]): Prom
         "/api/recap/reports",
     ]);
     await readAll((routes[incidents] as { id: string }[]).map((incident) => `/api/incidents/${incident.id}`));
+    // The card section previews and downloads through POSTs a replay cannot answer, so the
+    // embed reads the status of a Hub with cards off and draws no section, not a dead one.
+    delete (routes["/api/status"] as { cards?: boolean }).cards;
     // The ack card's windowed read takes from and to off the clock, so no exact URL can
     // key it. It is read over the launcher's own seven UTC days and recorded under
     // window=7d, which the embed answers for any from and to of that read.
