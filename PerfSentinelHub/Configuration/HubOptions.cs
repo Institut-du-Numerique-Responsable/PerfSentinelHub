@@ -1,3 +1,5 @@
+using PerfSentinelHub.Localization;
+
 namespace PerfSentinelHub.Configuration;
 
 public sealed record HubOptions
@@ -252,6 +254,18 @@ public sealed record RecapSubscriptionOptions
     public string? Grouping { get; set; }
     public IReadOnlyList<string> Webhooks { get; set; } = [];
     public IReadOnlyList<string> Emails { get; set; } = [];
+
+    // The language of its reports, its webhook and the Emails addresses.
+    public string Language { get; set; } = HubLang.En;
+
+    public IReadOnlyList<RecapRecipientOptions> Recipients { get; set; } = [];
+}
+
+/// <summary>An address that reads its recap mail in a language of its own, else in its subscription's.</summary>
+public sealed record RecapRecipientOptions
+{
+    public string? Address { get; set; }
+    public string? Language { get; set; }
 }
 
 public static class RecapViewNames

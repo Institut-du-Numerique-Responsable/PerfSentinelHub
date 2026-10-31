@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using PerfSentinelHub.Configuration;
@@ -167,6 +169,38 @@ public sealed class RecapMailDeliveryTests : IAsyncLifetime
         Assert.Null(delivery.LastStatus);
     }
 
+    [Fact]
+    public async Task One_report_to_two_addresses_of_two_languages_makes_two_mails()
+    {
+        var subscription = new RecapSubscriptionOptions
+        {
+            Name = "weekly-shop",
+            Cadences = ["week"],
+            Views = [RecapViewNames.Pilotage, RecapViewNames.Tech],
+            Emails = ["pm@example.test"],
+            Recipients = [new RecapRecipientOptions { Address = "DG@example.test", Language = "fr" }]
+        };
+        var hub = await ReportedAsync(Relay(_relay.Port), [subscription], "pm@example.test", "dg@example.test");
+
+        await RunAsync(hub);
+
+        var subjects = _relay.Received.ToDictionary(
+            message => Assert.Single(message.To), message => Subject(message.Data));
+        Assert.Equal("Perf Sentinel recap: week 2026-10-19 to 2026-10-25", subjects["pm@example.test"]);
+        Assert.Equal(
+            "Récap Perf Sentinel\u00a0: semaine du 19 oct. 2026 au 25 oct. 2026", subjects["dg@example.test"]);
+        Assert.All(await DeliveriesAsync(hub), delivery => Assert.Equal(DeliveryStates.Delivered, delivery.State));
+    }
+
+    // The Subject header, unfolded and with its RFC 2047 words decoded.
+    private static string Subject(string data)
+    {
+        var header = Regex.Match(data, @"^Subject: (.*(?:\r?\n[ \t].*)*)", RegexOptions.Multiline).Groups[1].Value;
+        var words = Regex.Replace(header, @"\?=\r?\n[ \t]+=\?", "?==?");
+        return Regex.Replace(words, @"=\?utf-8\?B\?([^?]*)\?=", match =>
+            Encoding.UTF8.GetString(Convert.FromBase64String(match.Groups[1].Value)), RegexOptions.IgnoreCase);
+    }
+
     private static RecapSmtpOptions Relay(int port)
     {
         return new RecapSmtpOptions
@@ -186,11 +220,17 @@ public sealed class RecapMailDeliveryTests : IAsyncLifetime
         return stopped.Port;
     }
 
-    private async Task<WebApplicationFactory<Program>> ReportedAsync(RecapSmtpOptions smtp, params string[] addresses)
+    private Task<WebApplicationFactory<Program>> ReportedAsync(RecapSmtpOptions smtp, params string[] addresses)
+    {
+        return ReportedAsync(smtp, [], addresses);
+    }
+
+    private async Task<WebApplicationFactory<Program>> ReportedAsync(
+        RecapSmtpOptions smtp, RecapSubscriptionOptions[] subscriptions, params string[] addresses)
     {
         var hub = new HubApplicationFactory().WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
-                options.Recaps = new RecapsOptions { Smtp = smtp })));
+                options.Recaps = new RecapsOptions { Smtp = smtp, Subscriptions = subscriptions })));
         _hubs.Add(hub);
         _reportId = Guid.NewGuid().ToString("N");
         var report = new RecapReportRecord(

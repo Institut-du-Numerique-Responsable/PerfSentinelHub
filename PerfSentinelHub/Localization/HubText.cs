@@ -194,7 +194,21 @@ public static class HubText
         ["recap.help.overline"] = "// help",
         ["recap.help.title"] = "How to read this report",
         ["recap.footer"] = "Frozen on {time}. {view} view. CO2 is an order-of-magnitude estimate.",
-        ["recap.plain.other"] = "The application does work on each action that could be avoided."
+        ["recap.plain.other"] = "The application does work on each action that could be avoided.",
+        ["mail.subject.day"] = "Perf Sentinel recap: day {period}{incomplete}",
+        ["mail.subject.week"] = "Perf Sentinel recap: week {period}{incomplete}",
+        ["mail.subject.month"] = "Perf Sentinel recap: month {period}{incomplete}",
+        ["mail.subject.incomplete"] = " (incomplete)",
+        ["mail.intro.day"] = "Recap \"{subscription}\" for {period}.",
+        ["mail.intro.week"] = "Recap \"{subscription}\" for {period}.",
+        ["mail.intro.month"] = "Recap \"{subscription}\" for {period}.",
+        ["mail.incomplete"] =
+            "Some days of this period are incomplete, so the comparison with the previous period is not exact.",
+        ["mail.attached"] = "The management view is attached. Open it in a browser; it needs no network.",
+        ["mail.tech_link"] = "Engineering view, after signing in to the Hub: {link}",
+        ["mail.no_link"] =
+            "No link to the engineering view: the Hub has no public address set (Hub:Recaps:PublicUrl).",
+        ["mail.footer"] = "Figures are frozen at generation. CO2 is an order-of-magnitude estimate."
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     public static readonly FrozenDictionary<string, string> French = new Dictionary<string, string>
@@ -381,7 +395,23 @@ public static class HubText
         ["recap.help.overline"] = "// aide",
         ["recap.help.title"] = "Comment lire ce rapport",
         ["recap.footer"] = "Figé le {time}. Vue {view}. Le CO2 est une estimation, un ordre de grandeur.",
-        ["recap.plain.other"] = "L'application fait à chaque action un travail qui pourrait être évité."
+        ["recap.plain.other"] = "L'application fait à chaque action un travail qui pourrait être évité.",
+        ["mail.subject.day"] = "Récap Perf Sentinel : journée du {period}{incomplete}",
+        ["mail.subject.week"] = "Récap Perf Sentinel : semaine {period}{incomplete}",
+        ["mail.subject.month"] = "Récap Perf Sentinel : mois {period}{incomplete}",
+        ["mail.subject.incomplete"] = " (période incomplète)",
+        ["mail.intro.day"] = "Récap « {subscription} » pour la journée du {period}.",
+        ["mail.intro.week"] = "Récap « {subscription} » pour la semaine {period}.",
+        ["mail.intro.month"] = "Récap « {subscription} » pour le mois {period}.",
+        ["mail.incomplete"] =
+            "Certains jours de cette période sont incomplets : la comparaison avec la période précédente n'est donc pas exacte.",
+        ["mail.attached"] =
+            "Le rapport Pilotage est en pièce jointe. Ouvrez-le dans un navigateur, il fonctionne sans réseau.",
+        ["mail.tech_link"] = "Vue Technique, après connexion au Hub : {link}",
+        ["mail.no_link"] =
+            "Pas de lien vers la vue Technique : le Hub n'a pas d'adresse publique (Hub:Recaps:PublicUrl).",
+        ["mail.footer"] =
+            "Les chiffres sont figés au moment où le rapport est produit. Le CO2 est une estimation, un ordre de grandeur."
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>True when either table has the key.</summary>

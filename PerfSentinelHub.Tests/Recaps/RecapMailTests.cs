@@ -113,6 +113,77 @@ public sealed class RecapMailTests
             Lines(mail)[1]);
     }
 
+    [Fact]
+    public void A_french_address_gets_a_french_mail()
+    {
+        using var mail = Build(new Uri("https://hub.example/"), complete: false, language: "fr", lang: "fr");
+
+        Assert.Equal("Récap Perf Sentinel\u00a0: semaine du 19 oct. 2026 au 25 oct. 2026 (période incomplète)",
+            mail.Subject);
+        Assert.Equal(
+            [
+                "Récap «\u00a0weekly-shop\u00a0» pour la semaine du 19 oct. 2026 au 25 oct. 2026.",
+                "Certains jours de cette période sont incomplets\u00a0: la comparaison avec la période précédente "
+                + "n'est donc pas exacte.",
+                "Le rapport Pilotage est en pièce jointe. Ouvrez-le dans un navigateur, il fonctionne sans réseau.",
+                $"Vue Technique, après connexion au Hub\u00a0: https://hub.example/recaps/{Id}/tech.html",
+                "Les chiffres sont figés au moment où le rapport est produit. Le CO2 est une estimation, un ordre "
+                + "de grandeur."
+            ],
+            Lines(mail));
+        var html = new StreamReader(Assert.Single(mail.Attachments).ContentStream, Encoding.UTF8).ReadToEnd();
+        Assert.Contains("<html lang=\"fr\" ", html, StringComparison.Ordinal);
+        Assert.Equal("perf-sentinel-recap-2026-10-19-pilotage.html", Assert.Single(mail.Attachments).Name);
+    }
+
+    [Fact]
+    public void A_french_mail_without_a_public_url_says_why_there_is_no_link()
+    {
+        using var mail = Build(null, language: "fr", lang: "fr");
+
+        Assert.Contains(
+            "Pas de lien vers la vue Technique\u00a0: le Hub n'a pas d'adresse publique (Hub:Recaps:PublicUrl).",
+            Lines(mail));
+    }
+
+    [Theory]
+    [InlineData("day", "2026-10-29", "2026-10-29", "journée du 29 oct. 2026", "pour la journée du 29 oct. 2026.")]
+    [InlineData("month", "2026-10-01", "2026-10-31", "mois du 1er oct. 2026 au 31 oct. 2026",
+        "pour le mois du 1er oct. 2026 au 31 oct. 2026.")]
+    public void A_french_mail_names_its_period(string kind, string from, string to, string subject, string intro)
+    {
+        using var mail = Build(null, language: "fr", lang: "fr", kind: kind, from: from, to: to);
+
+        Assert.Equal("Récap Perf Sentinel\u00a0: " + subject, mail.Subject);
+        Assert.Equal("Récap «\u00a0weekly-shop\u00a0» " + intro, Lines(mail)[0]);
+    }
+
+    [Fact]
+    public void An_english_address_of_a_french_subscription_gets_english()
+    {
+        using var mail = Build(new Uri("https://hub.example/"), language: "fr", lang: "en");
+
+        Assert.Equal("Perf Sentinel recap: week 2026-10-19 to 2026-10-25", mail.Subject);
+        Assert.Equal(
+            [
+                "Recap \"weekly-shop\" for 2026-10-19 to 2026-10-25.",
+                "The management view is attached. Open it in a browser; it needs no network.",
+                $"Engineering view, after signing in to the Hub: https://hub.example/recaps/{Id}/tech.html?lang=en",
+                "Figures are frozen at generation. CO2 is an order-of-magnitude estimate."
+            ],
+            Lines(mail));
+        var html = new StreamReader(Assert.Single(mail.Attachments).ContentStream, Encoding.UTF8).ReadToEnd();
+        Assert.Contains("<html lang=\"en\" ", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_french_address_of_an_english_subscription_links_the_french_page()
+    {
+        using var mail = Build(new Uri("https://hub.example/"), lang: "fr");
+
+        Assert.Contains($"https://hub.example/recaps/{Id}/tech.html?lang=fr", mail.Body, StringComparison.Ordinal);
+    }
+
     private static string[] Lines(MailMessage mail)
     {
         return mail.Body.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -125,5 +196,16 @@ public sealed class RecapMailTests
             Id, "weekly-shop", "week", "2026-10-19", "2026-10-25",
             views ?? [RecapViewNames.Pilotage, RecapViewNames.Tech], complete, false, null, 10_000);
         return RecapMail.Build(summary, snapshot ?? RecapSnapshots.Distinctive(), "pm@example.test", Relay, publicUrl);
+    }
+
+    // A report frozen in the subscription's language, mailed to an address that reads lang.
+    private static MailMessage Build(
+        Uri? publicUrl, string lang, string language = "en", bool complete = true, string kind = "week",
+        string from = "2026-10-19", string to = "2026-10-25")
+    {
+        var summary = new RecapReportSummary(
+            Id, "weekly-shop", kind, from, to, [RecapViewNames.Pilotage, RecapViewNames.Tech], complete, false, null,
+            10_000, language);
+        return RecapMail.Build(summary, RecapSnapshots.Distinctive(), "pm@example.test", Relay, publicUrl, lang);
     }
 }

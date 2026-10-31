@@ -235,6 +235,30 @@ public sealed partial class RecapGeneratorTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_report_keeps_its_subscription_s_language_and_mails_its_recipients_too()
+    {
+        await StartAsync(Weekly(emails: ["lead@acme.test"]) with
+        {
+            Language = "fr",
+            Recipients =
+            [
+                new RecapRecipientOptions { Address = "cto@acme.test", Language = "en" },
+                new RecapRecipientOptions { Address = "LEAD@acme.test" }
+            ]
+        });
+        await SeedAsync("a", S, LastMon + 1);
+
+        await _generator.RunOnceAsync(Token);
+
+        var report = Assert.Single(await ReportsAsync());
+        Assert.Equal("fr", report.Language);
+        Assert.Equal(
+            [("email", "lead@acme.test"), ("email", "cto@acme.test")],
+            (await _database.ListRecapDeliveriesAsync([report.Id], Token))
+            .Select(delivery => (delivery.Channel, delivery.Target)));
+    }
+
+    [Fact]
     public async Task The_report_stores_the_tech_snapshot_and_the_subscription_views()
     {
         await SeedAsync("a", S, LastMon + 1);

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 
 namespace PerfSentinelHub.Configuration;
@@ -124,13 +125,36 @@ public sealed partial class HubOptionsValidator
     private static void ValidateSubscriptionEmails(RecapSubscriptionOptions sub, string path, RecapSmtpOptions smtp,
         List<string> errors)
     {
-        if (sub.Emails.Count == 0)
+        if (!HubLang.IsKnown(sub.Language))
+            errors.Add($"{path}:Language must be en or fr.");
+        if (sub.Emails.Count == 0 && sub.Recipients.Count == 0)
             return;
-        if (sub.Emails.Count > MaxEmails || !sub.Emails.All(IsPlainAddress) ||
-            sub.Emails.Distinct(StringComparer.Ordinal).Count() != sub.Emails.Count)
+        if (sub.Emails.Count > 0 && (sub.Emails.Count > MaxEmails || !sub.Emails.All(IsPlainAddress) ||
+                                     sub.Emails.Distinct(StringComparer.Ordinal).Count() != sub.Emails.Count))
             errors.Add($"{path}:Emails holds {MaxEmails} addresses at most, each one e-mail address without a "
                        + "display name, each once.");
+        ValidateRecipients(sub, path, errors);
         if (!smtp.Enabled)
-            errors.Add($"{path}:Emails needs Hub:Recaps:Smtp:Host.");
+            errors.Add($"{path}:{(sub.Emails.Count > 0 ? "Emails" : "Recipients")} needs Hub:Recaps:Smtp:Host.");
+    }
+
+    private static void ValidateRecipients(RecapSubscriptionOptions sub, string path, List<string> errors)
+    {
+        if (sub.Recipients.Count == 0)
+            return;
+        for (var i = 0; i < sub.Recipients.Count; i++)
+        {
+            var recipient = sub.Recipients[i];
+            if (recipient.Address is null || !IsPlainAddress(recipient.Address))
+                errors.Add($"{path}:Recipients:{i}:Address must be one e-mail address, without a display name.");
+            if (recipient.Language is not null && !HubLang.IsKnown(recipient.Language))
+                errors.Add($"{path}:Recipients:{i}:Language must be en or fr.");
+        }
+
+        // Ignoring case, as the deliveries do: one address, one language.
+        string[] all = [.. sub.Emails, .. sub.Recipients.Select(recipient => recipient.Address ?? "")];
+        if (all.Length > MaxEmails || all.Distinct(StringComparer.OrdinalIgnoreCase).Count() != all.Length)
+            errors.Add($"{path}:Emails and Recipients hold {MaxEmails} addresses at most together, each address "
+                       + "in one list, once.");
     }
 }

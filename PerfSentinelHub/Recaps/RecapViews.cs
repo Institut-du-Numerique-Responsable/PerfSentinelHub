@@ -1,3 +1,5 @@
+using PerfSentinelHub.Localization;
+
 namespace PerfSentinelHub.Recaps;
 
 public static class RecapViews
@@ -48,6 +50,45 @@ public static class RecapViews
                 DoneStillDetected = Unnamed(moves.DoneStillDetected)
             }
         };
+    }
+
+    /// <summary>
+    ///     <see cref="Frozen(RecapSnapshot)" /> with each plain sentence in <paramref name="lang" />, for the webhook:
+    ///     the snapshot stores English, and a type this Hub has no sentence for keeps its own.
+    /// </summary>
+    public static RecapSnapshot Frozen(RecapSnapshot tech, string lang)
+    {
+        var view = Frozen(tech);
+        if (lang == HubLang.En)
+            return view;
+        var moves = view.Movements;
+        return view with
+        {
+            Priorities =
+            [
+                .. view.Priorities.Select(priority =>
+                    priority with { Plain = In(lang, priority.FindingType, priority.Plain) })
+            ],
+            Movements = moves with
+            {
+                New = In(lang, moves.New),
+                Gone = In(lang, moves.Gone),
+                Up = In(lang, moves.Up),
+                Down = In(lang, moves.Down),
+                CameBack = In(lang, moves.CameBack),
+                DoneStillDetected = In(lang, moves.DoneStillDetected)
+            }
+        };
+    }
+
+    private static string In(string lang, string findingType, string stored)
+    {
+        return RecapSentences.Knows(findingType) ? RecapSentences.For(findingType, lang) : stored;
+    }
+
+    private static List<RecapMove> In(string lang, IReadOnlyList<RecapMove> moves)
+    {
+        return [.. moves.Select(move => move with { Plain = In(lang, move.FindingType, move.Plain) })];
     }
 
     // A frozen report and its webhook leave the Hub: an owner is the name a person reads, never the
