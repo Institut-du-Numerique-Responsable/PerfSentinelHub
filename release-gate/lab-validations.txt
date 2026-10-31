@@ -332,3 +332,12 @@ v0.9.0	d51eb78	2026-10-29	PASS
 # perf-sentinel 0.39.0 image pinned by digest sha256:4fc2fd60. 99 checks ok and
 # no skip. The lab ran with local, uncommitted image pins in its manifests.
 v0.10.0	7be8a1b	2026-10-31	PASS
+# v0.11.0: targeted pass at lab commit 43e4a05 on the equivalence countries and
+# the French recap. hub-card (H0-H9, H9 new: Hub:Cards:Country us in the
+# options and in the engine's card.json, a gb card verified intact with no
+# country in its signed payload, de a 400, 24 checks), hub-recap (R1-R9, R9
+# new: a report in French with lang=fr pages and "Une étape sans nom dans", read
+# back in English with ?lang=en, 17 checks) and hub-detection-volume as a
+# regression check ran a Release build of 1dd14c7 with a local perf-sentinel
+# 0.40.0 release build. Not run: the cluster scenarios.
+v0.11.0	43e4a05	2026-10-31	PASS
