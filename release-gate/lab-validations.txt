@@ -318,3 +318,17 @@ v0.8.6	8faf9a4	2026-10-29	PASS
 # scenario by d51eb78, then passed twice. The lab ran with local, uncommitted
 # image pins in its manifests.
 v0.9.0	d51eb78	2026-10-29	PASS
+# v0.10.0: targeted pass at lab commit 7be8a1b on the share cards. hub-card
+# (new, H0-H8: cards off, the frozen finding of a done action, the watch list
+# in a real daemon's push answer and its below_threshold_passes stored and not
+# counted, a closed week's confirmed fix and late_sources, a story card in png,
+# svg, jxl and pdf verified offline by perf-sentinel verify-card, key rotation
+# and revocation with their DNS lines, the 503 past MaxConcurrentRenders,
+# DetectionRetention at boot, cards.write and access.admin, 23 checks),
+# hub-recap (16 checks) and hub-detection-volume (6 checks) ran a Release build
+# of 6e27e22 with a local perf-sentinel 0.39.0 release build. hub-retention-purge
+# and hub-access-control (54 checks) ran on a cluster rebuilt from scratch, with
+# perf-sentinel-hub:0.10.0-6e27e22 built by seed-hub-local and the published
+# perf-sentinel 0.39.0 image pinned by digest sha256:4fc2fd60. 99 checks ok and
+# no skip. The lab ran with local, uncommitted image pins in its manifests.
+v0.10.0	7be8a1b	2026-10-31	PASS
