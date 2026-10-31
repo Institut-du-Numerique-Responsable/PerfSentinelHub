@@ -129,8 +129,8 @@ environment differs from the reviewed workflow run.
 Accept either the stable tag or its exact public GitHub Release URL:
 
 ```text
-python3 scripts/verify-release.py public-input v0.9.0
-python3 scripts/verify-release.py public-input https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/tag/v0.9.0
+python3 scripts/verify-release.py public-input v0.10.0
+python3 scripts/verify-release.py public-input https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/releases/tag/v0.10.0
 ```
 
 After downloading every public release asset into `release/`, validate its closed checksum and
@@ -145,14 +145,14 @@ identity above:
 
 ```text
 cosign verify-blob --bundle release/ARTIFACT.sigstore.json \
-  --certificate-identity https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v0.9.0 \
+  --certificate-identity https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v0.10.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com release/ARTIFACT
 
 gh attestation verify release/ARTIFACT --bundle release/release.provenance.sigstore.json \
   --repo Institut-du-Numerique-Responsable/PerfSentinelHub \
-  --cert-identity https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v0.9.0 \
+  --cert-identity https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub/.github/workflows/release.yml@refs/tags/v0.10.0 \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
-  --source-ref refs/tags/v0.9.0 --source-digest SOURCE_COMMIT --deny-self-hosted-runners
+  --source-ref refs/tags/v0.10.0 --source-digest SOURCE_COMMIT --deny-self-hosted-runners
 ```
 
 The daily workflow performs these checks without a configured secret, starts all four public
@@ -167,7 +167,7 @@ while the patch is prepared, make the GitHub Release a draft and delete only the
 registry manifests by their recorded digests:
 
 ```text
-gh release edit v0.9.0 --draft
+gh release edit v0.10.0 --draft
 oras manifest delete ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@sha256:IMAGE_DIGEST
 oras manifest delete ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel-hub@sha256:CHART_DIGEST
 ```
