@@ -860,13 +860,8 @@
      * them. Anything else was already folded to `other` by the Hub's parser.
      * @type {Record<string, string>}
      */
-    const INCIDENT_KIND_LABEL = {
-        oom_kill: 'OOM kill',
-        memory_saturation: 'memory saturation',
-        restart: 'restart',
-        deploy: 'deploy',
-        other: 'other'
-    };
+    const INCIDENT_KIND_LABEL = textTable('incident.kind.',
+        ['oom_kill', 'memory_saturation', 'restart', 'deploy', 'other']);
 
     /**
      * The engine's twelve finding types, worded as its own dashboard words them.
@@ -879,20 +874,9 @@
      * thirteenth type, and it belongs on screen as itself.
      * @type {Record<string, string>}
      */
-    const FINDING_TYPE_LABEL = {
-        n_plus_one_sql: 'N+1 SQL',
-        n_plus_one_http: 'N+1 HTTP',
-        n_plus_one_messaging: 'N+1 messaging',
-        redundant_sql: 'Redundant SQL',
-        redundant_http: 'Redundant HTTP',
-        slow_sql: 'Slow SQL',
-        slow_http: 'Slow HTTP',
-        slow_messaging: 'Slow messaging',
-        excessive_fanout: 'Excessive fanout',
-        chatty_service: 'Chatty service',
-        pool_saturation: 'Pool saturation',
-        serialized_calls: 'Serialized calls'
-    };
+    const FINDING_TYPE_LABEL = textTable('finding.type.', ['n_plus_one_sql', 'n_plus_one_http',
+        'n_plus_one_messaging', 'redundant_sql', 'redundant_http', 'slow_sql', 'slow_http', 'slow_messaging',
+        'excessive_fanout', 'chatty_service', 'pool_saturation', 'serialized_calls']);
 
     /**
      * The daemon's own reading of `oldest_finding_ms`: at or below the window's
@@ -919,7 +903,7 @@
         const set = ['namespace', 'environment', 'source_id'].filter(function (key) {
             return filter[key] !== '';
         }).length;
-        return set === 0 ? 'More filters' : 'More filters, ' + set + ' set';
+        return set === 0 ? t('incident.filter.more') : t('incident.filter.more_set.' + plural(set), {count: set});
     }
 
     const SEVERITY_RANK = {critical: 3, warning: 2, info: 1};
@@ -973,7 +957,7 @@
     function ackCommand(source, signature, shellId) {
         const quote = shellById(shellId).quote;
         return 'perf-sentinel ack --daemon ' + quote(source.base_url) + ' create --signature '
-            + quote(signature) + ' --reason ' + quote('why it can wait');
+            + quote(signature) + ' --reason ' + quote(t('ack.command.reason'));
     }
 
     /**
@@ -1034,9 +1018,9 @@
      * @returns {string}
      */
     function phaseLabel(phase, kind) {
-        if (phase !== 'after') return ' before the incident';
-        if (kind === 'restart' || kind === 'oom_kill') return ' after the restart';
-        return kind === 'deploy' ? ' after the deploy' : ' after the incident';
+        if (phase !== 'after') return t('incident.phase.before');
+        if (kind === 'restart' || kind === 'oom_kill') return t('incident.phase.after_restart');
+        return t(kind === 'deploy' ? 'incident.phase.after_deploy' : 'incident.phase.after');
     }
 
     /**
@@ -1057,11 +1041,7 @@
      * which is already there.
      * @type {Record<string, string>}
      */
-    const INCIDENT_READ_STATE = {
-        absent: 'it publishes no incidents route',
-        unauthorized: 'it refused the Hub\'s key',
-        error: 'the read failed'
-    };
+    const INCIDENT_READ_STATE = textTable('incident.read.', ['absent', 'unauthorized', 'error']);
 
     /**
      * How the service and namespace filters of the incidents screen show. They
@@ -1088,8 +1068,9 @@
      * @returns {string}
      */
     function incidentsCopy(source, nowMs) {
-        if (source.incidents_read_ms == null) return source.name + ': never read';
-        const age = source.name + ': read ' + dur(Math.max(0, nowMs - source.incidents_read_ms)) + ' ago';
+        if (source.incidents_read_ms == null) return t('incident.copy.never', {name: source.name});
+        const age = t('incident.copy.read',
+            {name: source.name, duration: dur(Math.max(0, nowMs - source.incidents_read_ms))});
         const state = INCIDENT_READ_STATE[source.incidents_state || ''];
         return state ? age + ', ' + state : age;
     }
@@ -1275,8 +1256,8 @@
      */
     function lagText(ms) {
         if (ms == null) return '—';
-        if (ms < 1000) return Math.round(ms) + ' ms';
-        if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+        if (ms < 1000) return Math.round(ms) + ' ' + t('unit.ms');
+        if (ms < 60000) return decimal((ms / 1000).toFixed(1)) + ' ' + t('unit.s');
         return dur(ms);
     }
 
@@ -1287,9 +1268,8 @@
      * @returns {string}
      */
     function episodeSpan(startMs, endMs) {
-        const start = dtHuman(startMs);
-        const end = dtHuman(endMs);
-        return start + ' → ' + (end.slice(0, 10) === start.slice(0, 10) ? end.slice(11) : end);
+        const sameDay = dtHuman(endMs).slice(0, 10) === dtHuman(startMs).slice(0, 10);
+        return dateTime(startMs) + ' → ' + (sameDay ? time(endMs) : dateTime(endMs));
     }
 
     /**
@@ -1312,9 +1292,10 @@
      */
     function pairLabel(episode) {
         const side = function (end) {
-            return (FINDING_TYPE_LABEL[end.finding_type] || end.finding_type) + ' in ' + end.service;
+            return t('correlation.pair.side',
+                {type: FINDING_TYPE_LABEL[end.finding_type] || end.finding_type, service: end.service});
         };
-        return side(episode.source) + ', then ' + side(episode.target);
+        return t('correlation.pair.label', {first: side(episode.source), then: side(episode.target)});
     }
 
     /**
@@ -1324,7 +1305,7 @@
      * @returns {string}
      */
     function episodeEndNote(episode) {
-        return episode.ended_by === 'stale' ? 'stale' : '';
+        return episode.ended_by === 'stale' ? t('correlation.ended_stale') : '';
     }
 
     /**
@@ -1431,15 +1412,13 @@
             const relay = Boolean(source && source.ack_relay);
             let action = 'none';
             let note = null;
-            if (!source) note = 'The Hub no longer configures this source.';
-            else if (!relay) note = 'The Hub holds no ack credential for this source.';
+            if (!source) note = t('ack.note.unconfigured');
+            else if (!relay) note = t('ack.note.no_credential');
             else if (ack && ack.source === 'daemon') action = 'revoke';
-            else if (ack) note = 'Acknowledged by the CI baseline, which is edited through a pull request.';
+            else if (ack) note = t('ack.note.ci_baseline');
             else if (ACK_STATES_KNOWN.indexOf(source.acks_state) < 0) {
                 action = 'either';
-                note = 'The ack state of this daemon is unknown, acks_state is '
-                    + (source.acks_state || 'never read') + '. Acknowledge and Revoke both apply, the daemon '
-                    + 'refuses the one that does not, and its answer shows in the result line.';
+                note = t('ack.note.unknown_state', {state: source.acks_state || t('ack.note.never_read')});
             } else action = 'ack';
             return {
                 id: carrier.id,
@@ -1472,7 +1451,7 @@
      */
     function formatDetections(detections, complete) {
         if (detections === null || detections === undefined) return '?';
-        const count = detections.toLocaleString('en');
+        const count = num(detections);
         return complete === false ? '\u2265 ' + count : count;
     }
 
@@ -1489,28 +1468,12 @@
         return {from: (Math.floor(nowMs / dayMs) - days + 1) * dayMs, to: nowMs};
     }
 
-    const GAP_LABEL = {
-        uncovered_days: 'days the ledger does not cover',
-        open_day: 'a day still open',
-        restart: 'a daemon restart',
-        sampling: 'sampled traces',
-        shed: 'traces shed under memory pressure',
-        ingest_rejected: 'rejected ingest',
-        overflow: 'a full ledger',
-        multi_instance: 'several instances behind one source'
-    };
+    const GAP_REASONS = ['uncovered_days', 'open_day', 'restart', 'sampling', 'shed', 'ingest_rejected', 'overflow',
+        'multi_instance'];
+    const GAP_LABEL = textTable('gap.tech.', GAP_REASONS);
 
     /** The same reasons in a Management reader's words, as RecapText's twin. */
-    const GAP_LABEL_PILOTAGE = {
-        uncovered_days: 'days with no data',
-        open_day: 'a day not finished yet',
-        restart: 'a restart of the measuring tool',
-        sampling: 'only part of the traffic was looked at',
-        shed: 'some activity was dropped under load',
-        ingest_rejected: 'some data was refused',
-        overflow: 'too many problems to count them all',
-        multi_instance: 'several copies of one service'
-    };
+    const GAP_LABEL_PILOTAGE = textTable('gap.pilotage.', GAP_REASONS);
 
     /**
      * Why a detection count falls short, in a few words. A reason a newer
@@ -1522,7 +1485,7 @@
     function gapLabel(reason, view) {
         const own = Object.prototype.hasOwnProperty;
         if (view === 'pilotage') {
-            return own.call(GAP_LABEL_PILOTAGE, reason) ? GAP_LABEL_PILOTAGE[reason] : 'another measurement gap';
+            return own.call(GAP_LABEL_PILOTAGE, reason) ? GAP_LABEL_PILOTAGE[reason] : t('gap.pilotage.other');
         }
         return own.call(GAP_LABEL, reason) ? GAP_LABEL[reason] : reason;
     }
@@ -1542,9 +1505,9 @@
         const endMs = Date.parse(day + 'T23:59:59Z');
         // The engine rolls the 31st of February over rather than refusing it.
         if (!Number.isFinite(endMs) || isoUtc(endMs).slice(0, 10) !== day) {
-            throw new RangeError('The expiry is not a date.');
+            throw new RangeError(t('ack.expiry.not_a_date'));
         }
-        if (endMs <= nowMs) throw new RangeError('The expiry is in the past.');
+        if (endMs <= nowMs) throw new RangeError(t('ack.expiry.past'));
         return isoUtc(endMs);
     }
 
@@ -1558,8 +1521,7 @@
     function ackExpiryLine(dateValue, nowMs) {
         try {
             const end = ackExpiry(dateValue, nowMs);
-            return end === null ? 'No date: the ack is permanent.'
-                : 'Holds until ' + end.slice(0, 10) + ' 23:59:59 UTC.';
+            return end === null ? t('ack.expiry.permanent') : t('ack.expiry.until', {day: end.slice(0, 10)});
         } catch (error) {
             return error.message;
         }
@@ -1589,7 +1551,7 @@
      * @returns {string}
      */
     function sourceCount(count) {
-        return count + (count === 1 ? ' source' : ' sources');
+        return t('ack.sources.' + plural(count), {count: count});
     }
 
     /**
@@ -1617,8 +1579,8 @@
         const revoke = checked('revoke');
         let expiresAt = null;
         let blocker = null;
-        if (ack.length === 0) blocker = 'No checked source can take an ack.';
-        else if (String(reason || '').trim() === '') blocker = 'An ack needs a reason.';
+        if (ack.length === 0) blocker = t('ack.plan.no_ack_source');
+        else if (String(reason || '').trim() === '') blocker = t('ack.plan.no_reason');
         else {
             try {
                 expiresAt = ackExpiry(expiryValue, nowMs);
@@ -1628,17 +1590,17 @@
         }
         const sentences = [];
         if (ack.length > 0) {
-            sentences.push(blocker || 'Acknowledge writes to ' + sourceCount(ack.length)
-                + (expiresAt ? ', until ' + expiresAt + '.' : ', with no expiry.'));
+            sentences.push(blocker || (expiresAt
+                ? t('ack.plan.ack_until', {sources: sourceCount(ack.length), expires: expiresAt})
+                : t('ack.plan.ack_permanent', {sources: sourceCount(ack.length)})));
         }
         // The Hub mirrors no ack from a row of unknown state, so it claims none there.
         const unsure = revoke.some(function (row) {
             return row.action === 'either';
         });
         if (revoke.length > 0) {
-            sentences.push(unsure
-                ? 'Revoke asks ' + sourceCount(revoke.length) + ' to remove the ack, if there is one.'
-                : 'Revoke removes the ack on ' + sourceCount(revoke.length) + '.');
+            sentences.push(t(unsure ? 'ack.plan.revoke_unsure' : 'ack.plan.revoke',
+                {sources: sourceCount(revoke.length)}));
         }
         return {
             ack: ack,
@@ -1646,7 +1608,7 @@
             expiresAt: expiresAt,
             blocker: blocker,
             blocked: blocker !== null && revoke.length === 0,
-            sentence: sentences.join(' ') || 'No checked source can take an ack or a revoke.'
+            sentence: sentences.join(' ') || t('ack.plan.none')
         };
     }
 
@@ -1672,11 +1634,7 @@
      * got an answer. Every other refusal carries its own `detail`.
      * @type {Record<number, string>}
      */
-    const ACK_REFUSALS = {
-        0: 'The Hub did not answer.',
-        413: 'The request is larger than the Hub accepts.',
-        503: 'The Hub is already relaying two acks. Try again in a moment.'
-    };
+    const ACK_REFUSALS = textTable('ack.refusal.', ['0', '413', '503']);
 
     /**
      * One line per source a submit wrote to, in the order it wrote. `action` is
@@ -1690,10 +1648,10 @@
         return results.map(function (result) {
             const ok = result.status >= 200 && result.status < 300;
             const said = ok
-                ? (result.action === 'revoke' ? 'ack revoked.' : 'acknowledged.')
+                ? t(result.action === 'revoke' ? 'ack.result.revoked' : 'ack.result.acknowledged')
                 : (result.detail ? problemText(result, result.status) : null) || ACK_REFUSALS[result.status]
-                || 'The Hub refused the request with status ' + result.status + '.';
-            return {ok: ok, text: result.name + ': ' + said};
+                || t('ack.result.refused', {status: result.status});
+            return {ok: ok, text: t('ack.result.line', {name: result.name, said: said})};
         });
     }
 
@@ -1706,9 +1664,7 @@
      * @returns {string | null}
      */
     function shellBanner(status) {
-        return status === 403
-            ? 'No grant on this Hub reaches you. An administrator grants access in the Hub\'s configuration.'
-            : null;
+        return status === 403 ? t('access.no_grant') : null;
     }
 
     /**
@@ -1994,15 +1950,13 @@
      * @returns {string}
      */
     function accessExpiry(expiresAtMs, nowMs) {
-        if (expiresAtMs <= nowMs) return 'expired';
+        if (expiresAtMs <= nowMs) return t('access.expiry.expired');
         const days = Math.floor((expiresAtMs - nowMs) / 86400000);
-        if (days === 0) return 'in less than a day';
-        return days === 1 ? 'in 1 day' : 'in ' + days + ' days';
+        if (days === 0) return t('access.expiry.within_day');
+        return t('access.expiry.days.' + plural(days), {count: days});
     }
 
-    const ACCESS_CALLER = {
-        session: 'a browser session', terminal_token: 'a terminal token', machine_token: 'a machine token'
-    };
+    const ACCESS_CALLER = textTable('access.caller.', ['session', 'terminal_token', 'machine_token']);
 
     /**
      * The access page's first block. A session ends within the day, so its time is
@@ -2014,22 +1968,19 @@
     function accessSignedIn(access, nowMs) {
         const expires = access.expires_at_ms;
         const until = expires == null ? ''
-            : ', until ' + (expires - nowMs < 86400000 ? dtHuman(expires).slice(11) : dtHuman(expires));
+            : t('access.until', {when: expires - nowMs < 86400000 ? time(expires) : dateTime(expires)});
         return {
-            line: 'Signed in as ' + (access.identity || access.subject) + ', through '
-                + (ACCESS_CALLER[/** @type {keyof typeof ACCESS_CALLER} */ (access.caller)] || access.caller)
-                + until + '.',
+            line: t('access.signed_in', {
+                who: access.identity || access.subject,
+                via: ACCESS_CALLER[/** @type {keyof typeof ACCESS_CALLER} */ (access.caller)] || access.caller,
+                until: until
+            }),
             // A machine token's group is configuration, read on every request.
-            note: access.caller === 'machine_token'
-                ? null
-                : 'A group change at your provider applies at your next sign-in.',
-            subjectLabel: 'Your id, for an administrator: ',
+            note: access.caller === 'machine_token' ? null : t('access.group_note'),
+            subjectLabel: t('access.subject_label'),
             subject: access.subject
         };
     }
-
-    const ACCESS_NO_REACH =
-        'No grant reaches your groups. An administrator grants access in the Hub\'s configuration.';
 
     /**
      * The "What you reach" table. A grant on `*` covers more than every project, and
@@ -2039,8 +1990,8 @@
      */
     function accessReachRows(access) {
         return access.reach.map(entry => ({
-            project: entry.project === '*' ? 'Everything, including records no project covers' : entry.project,
-            group: entry.group == null ? 'your id, in Admins' : entry.group,
+            project: entry.project === '*' ? t('access.reach.everything') : entry.project,
+            group: entry.group == null ? t('access.reach.admins') : entry.group,
             role: entry.role,
             permissions: entry.permissions.join(', ')
         }));
@@ -2062,9 +2013,7 @@
             .concat(unmatched.attributes.map(row => '- { attribute: ' + JSON.stringify(row.key + '=' + row.value) + ' }'))
             .concat(unmatched.sources.map(row => '- { source: ' + JSON.stringify(row.source_id) + ' }'));
         if (lines.length === 0) return null;
-        return ['# Add the lines a team owns to the patterns of its project in hub.access.projects,',
-            '# then restart the Hub. A finding without a service needs a source or attribute pattern.']
-            .concat(lines).join('\n');
+        return [t('coverage.snippet.line1'), t('coverage.snippet.line2')].concat(lines).join('\n');
     }
 
     /**
@@ -2075,10 +2024,9 @@
      */
     function accessRequestText(access) {
         const groups = access.groups.length === 0
-            ? 'none'
+            ? t('access.request.none')
             : access.groups.map(group => group.name + ' (' + group.origin + ')').join(', ');
-        return 'Please grant access to the Perf Sentinel Hub.\nname: ' + (access.identity || access.subject)
-            + '\nid: ' + access.subject + '\ngroups: ' + groups;
+        return t('access.request.text', {name: access.identity || access.subject, id: access.subject, groups: groups});
     }
 
     /**
@@ -2103,17 +2051,10 @@
      * @returns {{ok: boolean, text: string}}
      */
     function revokeOutcome(status, row) {
-        const which = 'the token of ' + row.owner + ' created ' + row.created;
-        if (status === 204) {
-            return {ok: true, text: 'Revoked ' + which + '. That terminal gets a 401 on its next request.'};
-        }
-        if (status === 404) return {ok: true, text: 'The ' + which.slice(4) + ' was already gone.'};
-        return {
-            ok: false,
-            text: status === 0
-                ? 'The Hub did not answer. The token is still valid. Try again in a moment.'
-                : 'The Hub could not revoke this token (status ' + status + '). It is still valid. Try again in a moment.'
-        };
+        const which = {owner: row.owner, created: row.created, status: status};
+        if (status === 204) return {ok: true, text: t('access.revoke.done', which)};
+        if (status === 404) return {ok: true, text: t('access.revoke.gone', which)};
+        return {ok: false, text: t(status === 0 ? 'access.revoke.no_answer' : 'access.revoke.failed', which)};
     }
 
     /**
@@ -2127,10 +2068,10 @@
         return tokens.map(token => ({
             id: token.id,
             owner: token.identity,
-            from: token.client_address || 'unknown',
-            created: dtHuman(token.created_at_ms),
-            expires: dtHuman(token.expires_at_ms),
-            lastUsed: token.last_used_at_ms == null ? 'never' : dtHuman(token.last_used_at_ms)
+            from: token.client_address || t('access.token.unknown'),
+            created: dateTime(token.created_at_ms),
+            expires: dateTime(token.expires_at_ms),
+            lastUsed: token.last_used_at_ms == null ? t('access.token.never') : dateTime(token.last_used_at_ms)
         }));
     }
 
@@ -3234,6 +3175,26 @@
     }
 
     /**
+     * The plural form of `n` in the shown language, the suffix of a `.one` / `.other` key pair:
+     * English writes one for 1 alone, French for 0 and 1.
+     * @param {number} n
+     * @returns {'one' | 'other'}
+     */
+    function plural(n) {
+        return (LANG === 'fr' ? n <= 1 : n === 1) ? 'one' : 'other';
+    }
+
+    /**
+     * A moment's local time to the minute, `14:05`: the time dateTime writes, without the day.
+     * @param {number} ms
+     * @returns {string}
+     */
+    function time(ms) {
+        if (LANG !== 'fr') return dtHuman(ms).slice(11);
+        return new Intl.DateTimeFormat('fr-FR', {hour: '2-digit', minute: '2-digit'}).format(new Date(ms));
+    }
+
+    /**
      * A moment in local time to the minute: `2026-10-29 14:05` in English, as dtHuman writes it.
      * @param {number} ms
      * @returns {string}
@@ -3537,7 +3498,9 @@
         describePattern,
         accessExpiry,
         accessSignedIn,
-        ACCESS_NO_REACH,
+        get ACCESS_NO_REACH() {
+            return t('access.no_reach');
+        },
         accessReachRows,
         coverageSnippet,
         accessRequestText,
@@ -3628,6 +3591,9 @@
         pct,
         day,
         dateTime,
+        time,
+        plural,
+        sourceCount,
         literalsIn
     };
 })(globalThis);

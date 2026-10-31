@@ -332,3 +332,117 @@ test("a version gap reads in the shown language", () => {
         PSL.setVersions(null, null);
     }
 });
+
+// ---- the incidents, correlations, acknowledgment and access screens
+
+const TASK5_FUNCTIONS = ["renderIncidentsScreen", "unauthorizedBanners", "filterSelect", "incidentFilterLine",
+    "incidentCopyNote", "incidentsTable", "incidentRow", "startedText", "incidentNameCell", "incidentPanel",
+    "findingsFilter", "incidentFindingsTable", "findingHead", "ackLink", "renderCorrelationsScreen",
+    "correlationFilterLine", "correlationsTable", "pairRow", "pairCell", "pairSide", "episodeSpanCell", "pairPanel",
+    "timelineStrip", "episodesTable", "episodeActions", "incidentChip", "incidentCorrelationsBlock",
+    "incidentEpisodesTable", "allEpisodesLink", "renderAckScreen", "ackResultLines", "ackDetectionFacts",
+    "ackDetectionLines", "ackFindingCard", "updateAckButtons", "ackForm", "daemonAckBlock", "ackSourcesTable",
+    "ackCell", "relayAck", "submitAck", "renderAccessScreen", "renderCoverageScreen", "accessCard", "accessTable",
+    "tokensCard", "revokeButton", "projectsTable", "configurationPart", "configurationCard", "attentionCard",
+    "conflictsCard", "renderRecentScreen", "runCard", "cardFacts", "renderMissingScreen", "renderReportScreen",
+    "reportBar", "reportGone", "reportLifetime"];
+
+// ackCommand and coverageSnippet write a command line and YAML, which the guard would read as prose: their
+// French is pinned below instead.
+const TASK5_HELPERS = ["moreFiltersLabel", "phaseLabel", "incidentsCopy", "lagText", "episodeSpan", "pairLabel",
+    "episodeEndNote", "ackRows", "formatDetections", "gapLabel", "ackExpiry", "ackExpiryLine",
+    "sourceCount", "ackPlan", "ackSummary", "shellBanner", "accessExpiry", "accessSignedIn", "accessReachRows",
+    "accessRequestText", "revokeOutcome", "tokenRows", "ownerLabel"];
+
+test("the incidents, correlations, acknowledgment and access screens hold no prose literal", () => {
+    const app = wwwrootFile("app.js");
+    const launcher = wwwrootFile("launcher.js");
+    for (const name of TASK5_FUNCTIONS) assert.ok(app.includes("function " + name + "("), "app.js has no " + name);
+    for (const name of TASK5_HELPERS) assert.ok(launcher.includes("function " + name + "("), "launcher.js has no " + name);
+    assert.deepEqual(PSL.literalsIn(app, TASK5_FUNCTIONS), []);
+    assert.deepEqual(PSL.literalsIn(launcher, TASK5_HELPERS), []);
+});
+
+test("the copy tables of these screens read in the shown language", () => {
+    const app = wwwrootFile("app.js");
+    for (const table of ["INCIDENT_CAPTURE", "INCIDENT_ERROR_TEXT"]) {
+        const start = app.indexOf("const " + table + " = ");
+        assert.ok(start >= 0, "app.js has no " + table);
+        assert.deepEqual(PSL.literalsIn("function x() {" + app.slice(start, app.indexOf(";", start)) + "}", ["x"]), [],
+            table);
+    }
+    assert.equal(PSL.FINDING_TYPE_LABEL.n_plus_one_sql, "N+1 SQL");
+    assert.equal(PSL.INCIDENT_KIND_LABEL.memory_saturation, "memory saturation");
+    assert.equal(PSL.FINDING_TYPE_LABEL.thirteenth_type, undefined, "an unknown type shows as its id");
+    inLang("fr", () => {
+        assert.equal(PSL.FINDING_TYPE_LABEL.slow_sql, "SQL lent");
+        assert.equal(PSL.INCIDENT_KIND_LABEL.memory_saturation, "saturation mémoire");
+        assert.equal(PSL.INCIDENT_READ_STATE.error, "la lecture a échoué");
+        assert.equal(PSL.gapLabel("restart"), "un redémarrage du daemon");
+        assert.equal(PSL.gapLabel("from_a_newer_engine"), "from_a_newer_engine");
+        assert.deepEqual(Object.keys(PSL.INCIDENT_KIND_LABEL), ["oom_kill", "memory_saturation", "restart", "deploy",
+            "other"]);
+    });
+});
+
+test("plural forms follow the shown language", () => {
+    assert.equal(PSL.plural(0), "other");
+    assert.equal(PSL.plural(1), "one");
+    assert.equal(PSL.plural(2), "other");
+    inLang("fr", () => {
+        assert.equal(PSL.plural(0), "one");
+        assert.equal(PSL.plural(1), "one");
+        assert.equal(PSL.plural(2), "other");
+    });
+    assert.deepEqual([0, 1, 2].map(PSL.sourceCount), ["0 sources", "1 source", "2 sources"]);
+    inLang("fr", () => assert.deepEqual([0, 1, 2].map(PSL.sourceCount), ["0 source", "1 source", "2 sources"]));
+});
+
+test("an ack's expiry reads in the shown language", () => {
+    const now = Date.parse("2026-10-20T10:00:00Z");
+    inLang("fr", () => {
+        assert.throws(() => PSL.ackExpiry("2026-10-19", now), {name: "RangeError", message: "L'échéance est déjà passée."});
+        assert.throws(() => PSL.ackExpiry("2026-02-31", now), {message: "L'échéance n'est pas une date."});
+        assert.equal(PSL.ackExpiry("2026-11-30", now), "2026-11-30T23:59:59Z");
+        assert.equal(PSL.ackExpiryLine("", now), "Sans date : l'acquittement est permanent.");
+        assert.equal(PSL.ackExpiryLine("2026-11-30", now), "Valable jusqu'au 2026-11-30 23:59:59 UTC.");
+        const plan = PSL.ackPlan([{id: "a", action: "ack", checked: true}], {}, "wait", "", now);
+        assert.equal(plan.sentence, "Acquitter écrit sur 1 source, sans échéance.");
+        assert.equal(PSL.ackPlan([], {}, "", "", now).sentence, "Aucune source cochée ne peut recevoir d'acquittement ni de révocation.");
+    });
+});
+
+test("a correlation's span and lag read in the shown language", () => {
+    const start = new Date(2026, 9, 29, 14, 5).getTime();
+    const sameDay = new Date(2026, 9, 29, 15, 30).getTime();
+    const nextDay = new Date(2026, 9, 30, 1, 0).getTime();
+    assert.equal(PSL.episodeSpan(start, sameDay), "2026-10-29 14:05 → 15:30");
+    assert.equal(PSL.time(sameDay), "15:30");
+    inLang("fr", () => {
+        assert.equal(PSL.episodeSpan(start, sameDay), "29/10/2026 14:05 → 15:30");
+        assert.equal(PSL.episodeSpan(start, nextDay), "29/10/2026 14:05 → 30/10/2026 01:00");
+        assert.equal(PSL.time(sameDay), "15:30");
+        assert.equal(PSL.lagText(850), "850 ms");
+        assert.equal(PSL.lagText(1200), "1,2 s");
+        assert.equal(PSL.lagText(90_000), "1 min 30 s");
+        assert.equal(PSL.lagText(null), "—");
+        assert.equal(PSL.pairLabel({source: {finding_type: "slow_sql", service: "a"},
+            target: {finding_type: "zzz", service: "b"}}), "SQL lent dans a, puis zzz dans b");
+    });
+});
+
+test("the ack command's reason placeholder reads in the shown language", () => {
+    const source = {base_url: "http://d:4318"};
+    assert.match(PSL.ackCommand(source, "sig", "posix"), / --reason 'why it can wait'$/);
+    inLang("fr", () => assert.match(PSL.ackCommand(source, "sig", "posix"), / --reason 'pourquoi cela peut attendre'$/));
+});
+
+test("the coverage snippet's comments read in the shown language, its patterns do not move", () => {
+    const unmatched = {services: [{service: "reports-svc"}], attributes: [], sources: [{source_id: "billing-stg"}]};
+    inLang("fr", () => assert.equal(PSL.coverageSnippet(unmatched), [
+        "# Ajoutez les lignes d'une équipe aux motifs de son projet dans hub.access.projects,",
+        "# puis redémarrez le Hub. Un finding sans service demande un motif de source ou d'attribut.",
+        "- { service: \"reports-svc\" }",
+        "- { source: \"billing-stg\" }"
+    ].join("\n")));
+});

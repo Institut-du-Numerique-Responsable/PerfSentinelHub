@@ -4466,13 +4466,13 @@
     // In the order the daemon's own monitor tab prints them, so the two
     // surfaces never disagree about what comes first. The TUI prints
     // ns/service in one cell, this table gives the namespace its own.
-    const INCIDENT_COLUMNS = ['Started', 'Namespace', 'Service', 'Kind', 'Ended', 'Findings', 'Capture', 'Source'];
-    const INCIDENT_COLUMNS_RIGHT = ['Started', 'Ended', 'Findings'];
+    const INCIDENT_COLUMNS = ['started', 'namespace', 'service', 'kind', 'ended', 'findings', 'capture', 'source'];
+    const INCIDENT_COLUMNS_RIGHT = ['started', 'ended', 'findings'];
+    /** The text key of what each capture verdict means. */
     const INCIDENT_CAPTURE = {
-        complete: 'The ring still reached the whole window when the incident was frozen: what is here is what fired.',
-        partial: 'The ring had already evicted part of the window when the incident was frozen. Findings that fired '
-            + 'earlier in the window are missing here, and the daemon\'s NDJSON archive may still hold them.',
-        empty: 'The ring held nothing when the incident was frozen.'
+        complete: 'incidents.capture.complete',
+        partial: 'incidents.capture.partial',
+        empty: 'incidents.capture.empty'
     };
 
     /** The page size, held under the operator's read limit, which the Hub rejects above rather than clamps. */
@@ -4570,16 +4570,11 @@
 
     function renderIncidentsScreen() {
         const section = el('section', {}, [
-            ruledOverline('// incidents'),
-            el('h1', {class: 'page-title', text: 'Incidents the daemons recorded'}),
+            ruledOverline(t('incidents.overline')),
+            el('h1', {class: 'page-title', text: t('incidents.title')}),
             el('p', {class: 'page-sub'}, [
-                document.createTextNode('What was already burning when your alerting posted a restart, an OOM kill '
-                    + 'or a deploy: each row carries the findings its daemon froze from the minutes before. '),
-                helpDot('The daemon is the author: the Hub copies its record, re-derives nothing, and keeps the '
-                    + 'copy after the daemon\'s own ring has let it go. Opening this screen reads every daemon, so '
-                    + 'the rows are what the fleet holds now, and under the table is when each one was last read. '
-                    + 'A deploy is posted to freeze what was already firing before the rollout, so a restart it '
-                    + 'causes is not read as a crash.', 'incidents')
+                document.createTextNode(t('incidents.sub')),
+                helpDot(t('incidents.help'), t('incidents.topic'))
             ])
         ]);
 
@@ -4593,7 +4588,7 @@
         if (state.incidentsError) {
             section.appendChild(el('div', {class: 'banner', 'data-tone': INCIDENT_ERROR_TONE[state.incidentsError]}, [
                 state.incidentsError === 'stale' ? warningGlyph(16) : critGlyph(16),
-                el('div', {text: INCIDENT_ERROR_TEXT[state.incidentsError]})
+                el('div', {text: t(INCIDENT_ERROR_TEXT[state.incidentsError])})
             ]));
             if (state.incidents.length === 0) {
                 // The read-now control belongs on screen even here: without it
@@ -4608,11 +4603,9 @@
         section.appendChild(incidentFilterLine());
         if (state.incidents.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'No incident recorded.'}),
-                proseInto(el('p'), 'An incident exists only when a daemon with `[daemon.incidents]` enabled '
-                    + 'receives one from the operator\'s alerting. Nothing here means none was posted'
-                    + (Object.values(state.incidentFilter).some(Boolean) ? ' for this filter' : '')
-                    + ', or that no daemon read just now publishes them yet.')
+                el('p', {class: 'empty-title', text: t('incidents.empty.title')}),
+                proseInto(el('p'), t(Object.values(state.incidentFilter).some(Boolean)
+                    ? 'incidents.empty.body_filtered' : 'incidents.empty.body'))
             ]));
             appendCopyNote(section);
             return section;
@@ -4621,7 +4614,7 @@
         if (!state.incidentsDone) {
             const older = el('button', {type: 'button', class: 'pill-button'}, [
                 svg([['path', {d: 'M12 5v14M5 12l7 7 7-7'}]], 14),
-                el('span', {text: 'Load older incidents'})
+                el('span', {text: t('incidents.older')})
             ]);
             older.addEventListener('click', function () {
                 loadOlderIncidents(older);
@@ -4631,9 +4624,7 @@
         appendCopyNote(section);
         section.appendChild(el('p', {
             class: 'sources-note',
-            text: 'Started and Ended are the alerting\'s own stamps, relayed by the daemon. The Hub keeps an incident '
-                + 'for its findings retention, on its own clock, and a daemon that answers 404 on this route runs a '
-                + 'release before 0.20.0.'
+            text: t('incidents.note')
         }));
         return section;
     }
@@ -4647,14 +4638,11 @@
                 warningGlyph(16),
                 el('div', {}, [
                     el('p', {}, [
-                        el('span', {
-                            text: source.name + ' refused the Hub\'s key on its incidents route, so its '
-                                + 'incidents are not here. Its findings are still collected. The daemon\'s '
-                        }),
+                        el('span', {text: t('incidents.unauthorized.lead', {name: source.name})}),
                         el('span', {class: 'code-inline', text: '[daemon] read_api_key'}),
-                        el('span', {text: ' goes in this source\'s '}),
+                        el('span', {text: t('incidents.unauthorized.goes')}),
                         el('span', {class: 'code-inline', text: 'AuthHeaderValue'}),
-                        el('span', {text: ', sent as '}),
+                        el('span', {text: t('incidents.unauthorized.sent_as')}),
                         el('span', {class: 'code-inline', text: 'X-API-Key'}),
                         el('span', {text: '.'})
                     ])
@@ -4664,14 +4652,15 @@
     }
 
     /**
-     * One labelled select for the filter line. The first option is the whole
-     * set, worded from the label, and `options` are [value, text] pairs.
+     * One labelled select for the filter line, labelled by the text of `name`. The first
+     * option is the whole set, and `options` are [value, text] pairs.
      */
-    function filterSelect(label, value, options, onChange, disabled) {
+    function filterSelect(name, value, options, onChange, disabled) {
+        const label = t('filter.' + name);
         const select = el('select', {
             class: 'refresh-select', 'aria-label': label, disabled: disabled ? 'disabled' : null
         }, [
-            el('option', {value: '', text: 'every ' + label})
+            el('option', {value: '', text: t('filter.' + name + '.every')})
         ].concat(options.map(function (entry) {
             const option = el('option', {value: entry[0], text: entry[1]});
             if (entry[0] === value) option.selected = true;
@@ -4716,7 +4705,7 @@
             disabled: state.incidentsReading ? 'disabled' : null
         }, [
             svg([['path', {d: 'M20 11a8 8 0 1 0-2.3 5.7'}], ['path', {d: 'M20 5v6h-6'}]], 14),
-            el('span', {text: state.incidentsReading ? 'Reading the daemons' : 'Read the daemons now'})
+            el('span', {text: t(state.incidentsReading ? 'incidents.reading' : 'incidents.read_now')})
         ]);
         read.addEventListener('click', function () {
             loadIncidents();
@@ -4768,12 +4757,9 @@
     // older page that did not append, the rows above it untouched.
     const INCIDENT_ERROR_TONE = {stale: 'warn', unread: 'crit', page: 'crit'};
     const INCIDENT_ERROR_TEXT = {
-        stale: 'The daemons were not read just now, so these rows are the copy the last read left. '
-            + 'The line under the table says how old each one is. Read again in a moment.',
-        unread: 'The Hub did not return the incidents, so nothing here is a reading of the fleet. '
-            + 'This is the Hub itself, not any daemon.',
-        page: 'The Hub is not answering, so the older rows are unknown. This is the Hub itself, '
-            + 'not any daemon. Rows already on screen are the last page it did answer.'
+        stale: 'incidents.error.stale',
+        unread: 'incidents.error.unread',
+        page: 'incidents.error.page'
     };
 
     /**
@@ -4787,7 +4773,7 @@
         });
         if (daemons.length === 0) return null;
         return el('p', {class: 'sources-note'}, [
-            el('span', {text: 'Every row comes from a daemon, copied here when its ring was read. '})
+            el('span', {text: t('incidents.copy_note')})
         ].concat(daemons.map(function (source) {
             const text = function () {
                 return PSL.incidentsCopy(source, Date.now());
@@ -4795,7 +4781,7 @@
             // The title on the wrapper, not on the live span: the ticker copies
             // its own text into any title it finds on the node it rewrites.
             return el('span', {
-                title: source.incidents_read_ms == null ? null : PSL.dtHuman(source.incidents_read_ms)
+                title: source.incidents_read_ms == null ? null : PSL.dateTime(source.incidents_read_ms)
             }, [
                 live(el('span', {text: text()}), text),
                 el('span', {text: '. '})
@@ -4811,7 +4797,7 @@
     function incidentsTable(incidents) {
         const head = el('tr', {}, INCIDENT_COLUMNS.map(function (name) {
             return el('th', {
-                text: name,
+                text: t('incidents.col.' + name),
                 scope: 'col',
                 'data-align': INCIDENT_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
@@ -4827,7 +4813,7 @@
         const row = el('tr', {});
         // The title on the cell, not on the live span: the ticker copies its
         // text into any title it finds on the node it rewrites.
-        row.appendChild(el('td', {'data-align': 'right', title: PSL.dtHuman(incident.at_ms)}, [
+        row.appendChild(el('td', {'data-align': 'right', title: PSL.dateTime(incident.at_ms)}, [
             live(el('span', {text: startedText(incident)}), function () {
                 return startedText(incident);
             })
@@ -4843,18 +4829,18 @@
         row.appendChild(incident.ended_at_ms
             ? el('td', {
                 'data-align': 'right',
-                text: 'after ' + PSL.dur(incident.ended_at_ms - incident.at_ms),
-                title: PSL.dtHuman(incident.ended_at_ms)
+                text: t('incidents.ended_after', {duration: PSL.dur(incident.ended_at_ms - incident.at_ms)}),
+                title: PSL.dateTime(incident.ended_at_ms)
             })
-            : el('td', {'data-align': 'right'}, [el('span', {class: 'table-muted', text: 'still open'})]));
+            : el('td', {'data-align': 'right'}, [el('span', {class: 'table-muted', text: t('incidents.still_open')})]));
         row.appendChild(el('td', {'data-align': 'right', text: String(incident.finding_count)}));
-        row.appendChild(el('td', {title: INCIDENT_CAPTURE[capture]}, [
-            el('span', {class: capture === 'empty' ? 'table-muted' : null, text: capture})
+        row.appendChild(el('td', {title: t(INCIDENT_CAPTURE[capture])}, [
+            el('span', {class: capture === 'empty' ? 'table-muted' : null, text: t('incidents.capture_word.' + capture)})
         ]));
         row.appendChild(el('td', {}, [
             el('span', {class: 'table-strong', text: incident.source_name || incident.source_id}),
             el('span', {text: ' '}),
-            el('span', {class: 'chip chip-declared', text: incident.environment || 'unknown'})
+            el('span', {class: 'chip chip-declared', text: incident.environment || t('incidents.unknown')})
         ]));
 
         const cell = el('td', {
@@ -4872,7 +4858,7 @@
     }
 
     function startedText(incident) {
-        return PSL.dur(Date.now() - incident.at_ms) + ' ago';
+        return t('sources.ago', {duration: PSL.dur(Date.now() - incident.at_ms)});
     }
 
     /** A row is one daemon's capture: two sources fed the same alert list the same id, once each. */
@@ -4892,7 +4878,7 @@
             'aria-controls': 'incident-detail-' + incidentKey(incident),
             // Several incidents share a service: the kind and the age tell their buttons apart.
             'aria-label': (PSL.INCIDENT_KIND_LABEL[incident.kind] || incident.kind) + ', ' + incident.service
-                + ', ' + PSL.dur(Date.now() - incident.at_ms) + ' ago'
+                + ', ' + startedText(incident)
         }, [el('span', {text: incident.service})]);
         button.addEventListener('click', function () {
             toggleIncident(incident, button);
@@ -4935,7 +4921,7 @@
         const detail = state.incidentDetails[incident.id];
         if (detail === 'loading' || detail === undefined) {
             return el('div', {class: 'daemon-panel'}, [
-                el('p', {class: 'daemon-loading', role: 'status', text: 'Reading the incident.'}),
+                el('p', {class: 'daemon-loading', role: 'status', text: t('incidents.panel.reading')}),
                 el('div', {class: 'skeleton', style: 'height:90px'})
             ]);
         }
@@ -4944,9 +4930,7 @@
                 el('div', {class: 'banner', 'data-tone': 'crit'}, [
                     critGlyph(16),
                     el('p', {
-                        text: detail.error_code === 'gone'
-                            ? 'The Hub no longer holds this incident. Retention removed it between the listing and this read.'
-                            : 'The Hub could not read this incident. Fold the row and open it again.'
+                        text: t(detail.error_code === 'gone' ? 'incidents.panel.gone' : 'incidents.panel.failed')
                     })
                 ])
             ]);
@@ -4956,23 +4940,23 @@
         // A link, so it opens in a new tab too. Its end is clamped to the moment it is followed.
         const analyse = el('a', {class: 'pill-button', href: PSL.incidentHandoffHash(detail, Date.now())}, [
             svg([['path', {d: 'M5 12h14M13 6l6 6-6 6'}]], 14),
-            el('span', {text: 'Analyse this window'})
+            el('span', {text: t('incidents.analyse')})
         ]);
         // The button comes after the note that describes the window, since it
         // is the action the note argues for. A bare row, so the panel's own
         // gap sets the distance and no margin adds a second one.
         return el('div', {class: 'daemon-panel'}, [
-            el('p', {class: 'overline daemon-audience', text: '// frozen by the daemon'}),
+            el('p', {class: 'overline daemon-audience', text: t('incidents.panel.overline')}),
             el('p', {
                 class: 'daemon-source-note',
-                text: INCIDENT_CAPTURE[capture] + ' The window ran from '
-                    + PSL.dur(detail.at_ms - detail.window_from_ms) + ' before the incident to '
-                    + PSL.dur(detail.window_to_ms - detail.at_ms) + ' after it, and a finding stamped after the '
-                    + 'incident belongs to the replacement, not to what died.'
+                text: t(INCIDENT_CAPTURE[capture]) + ' ' + t('incidents.panel.window', {
+                    before: PSL.dur(detail.at_ms - detail.window_from_ms),
+                    after: PSL.dur(detail.window_to_ms - detail.at_ms)
+                })
             }),
             el('div', {}, [analyse]),
             findings.length === 0
-                ? el('p', {class: 'daemon-lead', text: 'The daemon froze no finding for this incident.'})
+                ? el('p', {class: 'daemon-lead', text: t('incidents.panel.no_finding')})
                 : findingsFilter(detail),
             findings.length === 0 ? null : el('div', {class: 'sources-wrap'}, [incidentFindingsTable(findings, detail)]),
             incidentCorrelationsBlock(incident)
@@ -4983,26 +4967,31 @@
     function findingsFilter(incident) {
         const key = incidentKey(incident);
         const input = el('input', {
-            type: 'search', class: 'input findings-filter', placeholder: 'endpoint or template',
+            type: 'search', class: 'input findings-filter', placeholder: t('incidents.filter.placeholder'),
             value: state.findingQuery[key] || '', autocomplete: 'off', spellcheck: 'false'
         });
         const count = el('span', {class: 'field-gloss', 'aria-live': 'polite'});
         const apply = function () {
             state.findingQuery[key] = input.value;
-            const rows = document.querySelectorAll('[data-findings="' + CSS.escape(key) + '"] tbody tr');
+            const rows = document.querySelectorAll(`[data-findings="${CSS.escape(key)}"] tbody tr`);
             let shown = 0;
             Array.prototype.forEach.call(rows, function (row) {
                 row.hidden = !PSL.findingMatches(FINDING_ROW.get(row), input.value);
                 if (!row.hidden) shown += 1;
             });
-            count.textContent = input.value.trim() === '' ? '' : shown + ' of ' + rows.length + ' shown';
+            count.textContent = input.value.trim() === '' ? '' : t('incidents.filter.shown', {shown: shown, total: rows.length});
         };
         input.addEventListener('input', apply);
         // Once the table beside it is in the page, so a query kept across a sort applies again.
         queueMicrotask(apply);
-        const row = field('Filter the findings', input, null);
+        const row = field(t('incidents.filter.label'), input, null);
         row.appendChild(count);
         return row;
+    }
+
+    /** A severity as a chip reads it: the engine's three in the shown language, any other as sent. */
+    function severityLabel(severity) {
+        return severity && PSL.hasText('severity.' + severity) ? t('severity.' + severity) : severity || '?';
     }
 
     // Each table row's frozen finding, for the filter to test without reading it back from the cells.
@@ -5013,7 +5002,7 @@
         const canAck = (state.sources || []).some(function (source) {
             return source.ack_relay;
         });
-        const columns = ['Type', 'Severity', IMPACT_HEAD, 'Endpoint', 'Template', 'Seen', 'First seen'].concat(canAck ? ['Ack'] : []);
+        const columns = ['type', 'severity', 'impact', 'endpoint', 'template', 'seen', 'first'].concat(canAck ? ['ack'] : []);
         const head = el('tr', {}, columns.map(function (name) {
             return findingHead(name, incident);
         }));
@@ -5029,15 +5018,15 @@
                 el('td', {}, [el('span', {
                     class: 'chip',
                     'data-sev': finding.severity || null,
-                    text: finding.severity || '?'
+                    text: severityLabel(finding.severity)
                 })]),
-                el('td', {'data-align': 'right', text: impact == null ? '—' : impact.toLocaleString('en')}),
+                el('td', {'data-align': 'right', text: impact == null ? '—' : PSL.num(impact)}),
                 el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
                 // Whole, wrapped: the template is what tells two rows apart.
                 el('td', {class: 'table-mono'}, [el('span', {class: 'findings-template', text: template || '—'})]),
                 el('td', {'data-align': 'right', text: String(row.seen_count == null ? '?' : row.seen_count)}),
                 el('td', {
-                    title: PSL.dtHuman(row.first_seen_ms),
+                    title: PSL.dateTime(row.first_seen_ms),
                     text: PSL.dur(Math.abs(row.first_seen_ms - incident.at_ms)) + PSL.phaseLabel(phase, incident.kind)
                 }),
                 // The daemon that froze the finding is the only one the page checks.
@@ -5051,29 +5040,23 @@
         if (canAck) return table;
         return el('div', {}, [table, el('p', {
             class: 'field-note',
-            text: 'No source in this Hub has an ack credential, so these findings are acknowledged in each daemon, not from here.'
+            text: t('incidents.findings.no_credential')
         })]);
     }
 
-    // The findings dashboard's own name for it, so the two read the same number the same way.
-    const IMPACT_HEAD = 'Est. impact (ops)';
+    /** The columns a click sorts on, each under the sort key of its name. The ack column does not sort. */
+    const FINDING_SORT_KEY = ['type', 'severity', 'impact', 'endpoint', 'template', 'seen', 'first'];
 
-    const FINDING_SORT_KEY = {
-        Type: 'type',
-        Severity: 'severity',
-        [IMPACT_HEAD]: 'impact',
-        Endpoint: 'endpoint',
-        Template: 'template',
-        Seen: 'seen',
-        'First seen': 'first'
-    };
-
-    /** A column head that sorts on click. Counts and severity read worst first, the rest A to Z. */
+    /**
+     * A column head that sorts on click. Counts and severity read worst first, the rest A to Z.
+     * The impact head keeps the findings dashboard's own name, so the two read the same number the same way.
+     */
     function findingHead(name, incident) {
-        const key = FINDING_SORT_KEY[name];
-        const th = el('th', {scope: 'col', 'data-align': name === 'Seen' || name === IMPACT_HEAD ? 'right' : null});
+        const key = FINDING_SORT_KEY.indexOf(name) >= 0 ? name : null;
+        const label = t('incidents.finding.col.' + name);
+        const th = el('th', {scope: 'col', 'data-align': name === 'seen' || name === 'impact' ? 'right' : null});
         if (!key) {
-            th.textContent = name;
+            th.textContent = label;
             return th;
         }
         const sort = state.findingSort;
@@ -5081,7 +5064,7 @@
         if (active) th.setAttribute('aria-sort', sort.dir === 'asc' ? 'ascending' : 'descending');
         const id = incidentKey(incident) + ':' + key;
         const button = el('button', {type: 'button', class: 'sort-head', 'data-sort': id}, [
-            el('span', {text: name}),
+            el('span', {text: label}),
             // Idle heads carry both arrows, or only the sorted column would read as sortable.
             svg([['path', {d: active ? (sort.dir === 'asc' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6') : 'M8 9l4-4 4 4M8 15l4 4 4-4'}]], 11)
         ]);
@@ -5097,12 +5080,13 @@
     }
 
     function ackLink(finding, incident) {
-        const label = PSL.FINDING_TYPE_LABEL[finding.type] || finding.type || 'finding';
+        const label = PSL.FINDING_TYPE_LABEL[finding.type] || finding.type || t('incidents.ack.finding');
         const link = el('a', {
             href: PSL.ackRouteHash(finding.signature, incident.source_id),
             class: 'ack-link',
-            'aria-label': 'Ack ' + label + ' on ' + (finding.source_endpoint || 'an unknown endpoint'),
-            text: 'Ack'
+            'aria-label': t('incidents.ack.label',
+                {label: label, endpoint: finding.source_endpoint || t('incidents.ack.unknown_endpoint')}),
+            text: t('incidents.ack.link')
         });
         link.addEventListener('click', function () {
             state.ackReturn = location.hash;
@@ -5113,10 +5097,10 @@
     // ---------------------------------------------------- screen: correlations
 
     const CORRELATION_LIMIT = 1000;
-    const CORRELATION_COLUMNS = ['Pair', 'Episodes', 'Last active', 'Peak', 'Lag', 'Source'];
-    const CORRELATION_COLUMNS_RIGHT = ['Episodes', 'Peak', 'Lag'];
-    const EPISODE_COLUMNS = ['Episode', 'Lasted', 'Peak conf.', 'Peak co-occ.', 'Incidents', ''];
-    const EPISODE_COLUMNS_RIGHT = ['Lasted', 'Peak conf.', 'Peak co-occ.'];
+    const CORRELATION_COLUMNS = ['pair', 'episodes', 'last', 'peak', 'lag', 'source'];
+    const CORRELATION_COLUMNS_RIGHT = ['episodes', 'peak', 'lag'];
+    const EPISODE_COLUMNS = ['episode', 'lasted', 'peak_conf', 'peak_co', 'incidents', ''];
+    const EPISODE_COLUMNS_RIGHT = ['lasted', 'peak_conf', 'peak_co'];
     const STRIP_WIDTH = 640;
 
     function correlationsPath() {
@@ -5168,16 +5152,11 @@
 
     function renderCorrelationsScreen() {
         const section = el('section', {}, [
-            ruledOverline('// correlations'),
-            el('h1', {class: 'page-title', text: 'Findings that keep following each other'}),
+            ruledOverline(t('correlations.overline')),
+            el('h1', {class: 'page-title', text: t('correlations.title')}),
             el('p', {class: 'page-sub'}, [
-                document.createTextNode('Each pair is a finding that, again and again, fires within seconds after '
-                    + 'another one. Its periods of activity stay here after the daemon forgets them. '),
-                helpDot('A daemon with `[daemon.correlation]` on and `[daemon.hub_export]` set pushes each period a '
-                    + 'pair stays active as an episode, and closes it once the pair has not co-occurred for its '
-                    + 'gap, ten minutes by default. The Hub keeps what it is pushed and re-derives nothing. An '
-                    + 'episode whose daemon went silent past its gap and a quarter of an hour reads as ended '
-                    + 'where it was last seen.', 'correlations')
+                document.createTextNode(t('correlations.sub')),
+                helpDot(t('correlations.help'), t('correlations.topic'))
             ]),
             correlationFilterLine()
         ]);
@@ -5188,16 +5167,15 @@
         if (state.correlationsError) {
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'crit'}, [
                 critGlyph(16),
-                el('div', {text: 'The Hub did not return the correlations. This is the Hub itself, not any daemon.'})
+                el('div', {text: t('correlations.error')})
             ]));
             return section;
         }
         const pairs = PSL.correlationPairs(state.correlations);
         if (pairs.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'No correlation in this range.'}),
-                proseInto(el('p'), 'A pair shows here once a daemon with `[daemon.correlation]` and '
-                    + '`[daemon.hub_export]` on pushes an episode of it.')
+                el('p', {class: 'empty-title', text: t('correlations.empty.title')}),
+                proseInto(el('p'), t('correlations.empty.body'))
             ]));
             return section;
         }
@@ -5205,16 +5183,15 @@
         if (state.correlations.length === CORRELATION_LIMIT) {
             section.appendChild(el('p', {
                 class: 'sources-note',
-                text: 'The Hub returned the ' + CORRELATION_LIMIT + ' most recent episodes of this range and stopped '
-                    + 'there. Narrow the range or the filters to see the others.'
+                text: t('correlations.limit', {limit: CORRELATION_LIMIT})
             }));
         }
         section.appendChild(el('p', {class: 'sources-note'}, [
-            el('span', {text: 'Pushed by daemons with '}),
+            el('span', {text: t('correlations.note.lead')}),
             el('span', {class: 'code-inline', text: '[daemon.hub_export]'}),
-            el('span', {text: ' and '}),
+            el('span', {text: t('correlations.note.and')}),
             el('span', {class: 'code-inline', text: '[daemon.correlation]'}),
-            el('span', {text: ' on. A daemon that pushes none has no rows here.'})
+            el('span', {text: t('correlations.note.tail')})
         ]));
         return section;
     }
@@ -5227,9 +5204,9 @@
                 loadCorrelations();
             };
         };
-        const range = el('select', {class: 'refresh-select', 'aria-label': 'range'},
+        const range = el('select', {class: 'refresh-select', 'aria-label': t('correlations.range')},
             PSL.CORRELATION_RANGES.map(function (value) {
-                const option = el('option', {value: value, text: 'last ' + PSL.humanDur(value)});
+                const option = el('option', {value: value, text: t('correlations.range.option', {span: PSL.humanDur(value)})});
                 if (value === filter.range) option.selected = true;
                 return option;
             }));
@@ -5241,11 +5218,11 @@
         });
         // Shown only on a pair link: the way back to every pair is the plain route.
         const pairOnly = filter.pair_key
-            ? el('a', {class: 'pill-button pill-sm', href: '#/correlations'}, [el('span', {text: 'Show every pair'})])
+            ? el('a', {class: 'pill-button pill-sm', href: '#/correlations'}, [el('span', {text: t('correlations.every_pair')})])
             : null;
         return el('div', {class: 'refresh'}, [
             pairOnly,
-            el('span', {class: 'refresh-label', text: 'range'}),
+            el('span', {class: 'refresh-label', text: t('correlations.range')}),
             range,
             filterSelect('service', filter.service, state.correlationServices.map(function (service) {
                 return [service, service];
@@ -5253,14 +5230,14 @@
             filterSelect('daemon', filter.source_id, daemons.map(function (source) {
                 return [source.id, source.name];
             }), set('source_id')),
-            checkbox(filter.active, 'active now only', set('active'))
+            checkbox(filter.active, t('correlations.active_only'), set('active'))
         ]);
     }
 
     function correlationsTable(pairs) {
         const head = el('tr', {}, CORRELATION_COLUMNS.map(function (name) {
             return el('th', {
-                text: name, scope: 'col', 'data-align': CORRELATION_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
+                text: t('correlations.col.' + name), scope: 'col', 'data-align': CORRELATION_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
         return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, pairs.flatMap(pairRow))]);
@@ -5294,7 +5271,7 @@
             el('td', {}, [button]),
             el('td', {'data-align': 'right', class: 'table-mono', text: String(pair.episodes.length)}),
             episodeSpanCell(pair.last),
-            el('td', {'data-align': 'right', class: 'table-mono', text: pair.peak.toFixed(2)}),
+            el('td', {'data-align': 'right', class: 'table-mono', text: PSL.decimal(pair.peak.toFixed(2))}),
             el('td', {'data-align': 'right', class: 'table-mono', text: PSL.lagText(pair.last.median_lag_ms)}),
             el('td', {class: 'table-strong', text: sourceName(pair.source_id)})
         ]);
@@ -5307,7 +5284,7 @@
 
     /** Both sides of a pair, the one that fires first on top, each template in its tooltip. */
     function pairCell(episode) {
-        return el('span', {class: 'pair'}, [pairSide(episode.source, null), pairSide(episode.target, '↳ then')]);
+        return el('span', {class: 'pair'}, [pairSide(episode.source, null), pairSide(episode.target, t('correlations.then'))]);
     }
 
     function pairSide(side, lead) {
@@ -5325,14 +5302,11 @@
     function episodeSpanCell(episode) {
         const cell = el('td', {
             class: 'table-mono',
-            title: episode.ended_by === 'stale'
-                ? 'The daemon stopped reporting this episode before closing it, so it reads as ended where it was '
-                + 'last seen.'
-                : null
+            title: episode.ended_by === 'stale' ? t('correlations.stale_title') : null
         });
         if (episode.ended_at_ms == null) {
-            cell.appendChild(document.createTextNode(PSL.dtHuman(episode.started_at_ms) + ' → '));
-            cell.appendChild(el('span', {class: 'chip', 'data-state': 'active', text: 'active'}));
+            cell.appendChild(document.createTextNode(PSL.dateTime(episode.started_at_ms) + ' → '));
+            cell.appendChild(el('span', {class: 'chip', 'data-state': 'active', text: t('correlations.active')}));
         } else {
             cell.appendChild(document.createTextNode(PSL.episodeSpan(episode.started_at_ms, episode.ended_at_ms)));
             const note = PSL.episodeEndNote(episode);
@@ -5362,8 +5336,9 @@
         strip.setAttribute('preserveAspectRatio', 'none');
         strip.setAttribute('class', 'timeline-strip');
         strip.setAttribute('role', 'img');
-        strip.setAttribute('aria-label', episodes.length + ' episodes and ' + incidents.length
-            + ' incidents over the last ' + PSL.humanDur(state.correlationFilter.range));
+        strip.setAttribute('aria-label', t('correlations.strip_label', {
+            episodes: episodes.length, incidents: incidents.length, span: PSL.humanDur(state.correlationFilter.range)
+        }));
         const draw = function (marks, className, y, height) {
             marks.forEach(function (mark) {
                 const rect = document.createElementNS(ns, 'rect');
@@ -5385,8 +5360,8 @@
         return el('div', {class: 'timeline'}, [
             strip,
             el('div', {class: 'timeline-axis'}, [
-                el('span', {text: PSL.dtHuman(fromMs)}),
-                el('span', {text: 'now'})
+                el('span', {text: PSL.dateTime(fromMs)}),
+                el('span', {text: t('correlations.now')})
             ])
         ]);
     }
@@ -5399,7 +5374,7 @@
         const now = Date.now();
         const head = el('tr', {}, EPISODE_COLUMNS.map(function (name) {
             return el('th', {
-                text: name, scope: 'col', 'data-align': EPISODE_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
+                text: name ? t('correlations.col.' + name) : '', scope: 'col', 'data-align': EPISODE_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
         const rows = episodes.map(function (episode) {
@@ -5411,10 +5386,10 @@
             return el('tr', {}, [
                 episodeSpanCell(episode),
                 el('td', {'data-align': 'right', class: 'table-mono', text: PSL.dur(end - episode.started_at_ms)}),
-                el('td', {'data-align': 'right', class: 'table-mono', text: episode.peak_confidence.toFixed(2)}),
+                el('td', {'data-align': 'right', class: 'table-mono', text: PSL.decimal(episode.peak_confidence.toFixed(2))}),
                 el('td', {'data-align': 'right', class: 'table-mono', text: String(episode.peak_co_occurrences)}),
                 el('td', {}, overlapped.length === 0
-                    ? [el('span', {class: 'table-muted', text: 'none'})]
+                    ? [el('span', {class: 'table-muted', text: t('correlations.no_incident')})]
                     : overlapped.map(incidentChip)),
                 el('td', {}, [episodeActions(episode, traceable)])
             ]);
@@ -5426,9 +5401,9 @@
         const traces = traceable ? PSL.pairTraceHash(episode) : null;
         return el('div', {class: 'refresh'}, [
             el('a', {class: 'pill-button pill-sm', href: PSL.episodeHandoffHash(episode, Date.now())},
-                [el('span', {text: 'Analyse this window'})]),
+                [el('span', {text: t('incidents.analyse')})]),
             traces ? el('a', {class: 'pill-button pill-sm', href: traces},
-                [el('span', {text: 'Explain the last pair'})]) : null
+                [el('span', {text: t('correlations.explain')})]) : null
         ]);
     }
 
@@ -5439,7 +5414,7 @@
             'data-kind': incident.kind,
             href: '#/incidents',
             text: (PSL.INCIDENT_KIND_LABEL[incident.kind] || incident.kind) + ' · ' + incident.service + ' · '
-                + PSL.dtHuman(incident.at_ms)
+                + PSL.dateTime(incident.at_ms)
         });
         link.addEventListener('click', function () {
             state.incidentFilter = {
@@ -5493,21 +5468,18 @@
             });
         }
         const block = el('div', {class: 'incident-correlations'}, [
-            el('p', {class: 'overline daemon-audience', text: '// correlations'}),
-            el('h3', {class: 'daemon-lead', text: 'Correlations active during this incident'}),
-            el('p', {
-                class: 'daemon-source-note',
-                text: 'Episodes whose activity overlaps the incident\'s window, from the same daemon.'
-            })
+            el('p', {class: 'overline daemon-audience', text: t('correlations.overline')}),
+            el('h3', {class: 'daemon-lead', text: t('correlations.incident.title')}),
+            el('p', {class: 'daemon-source-note', text: t('correlations.incident.sub')})
         ]);
         if (held === undefined || held === 'loading') {
-            block.appendChild(el('p', {class: 'daemon-loading', role: 'status', text: 'Reading the correlations.'}));
+            block.appendChild(el('p', {class: 'daemon-loading', role: 'status', text: t('correlations.incident.reading')}));
         } else if (held === 'error') {
             // Shown once: the next render of this panel, a refold or a re-read, asks again.
             delete state.incidentCorrelations[cacheKey];
             block.appendChild(el('p', {
                 class: 'table-muted',
-                text: 'The Hub did not return the correlations of this window.'
+                text: t('correlations.incident.error')
             }));
         } else if (held.rows.length > 0) {
             block.appendChild(el('div', {class: 'sources-wrap'}, [incidentEpisodesTable(held.rows)]));
@@ -5515,22 +5487,24 @@
             block.appendChild(el('p', {
                 class: 'empty-state',
                 text: held.pushes
-                    ? 'No correlation was active in this window.'
-                    : (incident.source_name || incident.source_id) + ' pushes no correlation you can read, so none can show here.'
+                    ? t('correlations.incident.none')
+                    : t('correlations.incident.no_push', {name: incident.source_name || incident.source_id})
             }));
         }
         return block;
     }
 
     function incidentEpisodesTable(episodes) {
-        const head = el('tr', {}, ['Pair', 'Episode', 'Peak', ''].map(function (name) {
-            return el('th', {text: name, scope: 'col', 'data-align': name === 'Peak' ? 'right' : null});
+        const head = el('tr', {}, ['pair', 'episode', 'peak', ''].map(function (name) {
+            return el('th', {
+                text: name ? t('correlations.col.' + name) : '', scope: 'col', 'data-align': name === 'peak' ? 'right' : null
+            });
         }));
         const rows = episodes.map(function (episode) {
             return el('tr', {}, [
                 el('td', {}, [pairCell(episode)]),
                 episodeSpanCell(episode),
-                el('td', {'data-align': 'right', class: 'table-mono', text: episode.peak_confidence.toFixed(2)}),
+                el('td', {'data-align': 'right', class: 'table-mono', text: PSL.decimal(episode.peak_confidence.toFixed(2))}),
                 el('td', {}, [allEpisodesLink(episode)])
             ]);
         });
@@ -5542,7 +5516,7 @@
         return el('a', {
             class: 'pill-button pill-sm',
             href: '#/correlations?pair_key=' + encodeURIComponent(episode.pair_key)
-        }, [el('span', {text: 'All its episodes'})]);
+        }, [el('span', {text: t('correlations.all_episodes')})]);
     }
 
     // ------------------------------------------------- screen: ack one finding
@@ -5596,23 +5570,16 @@
         const section = el('section', {class: 'ack-stack'}, [el('div', {}, [
             el('a', {class: 'back-pill', href: state.ackReturn || '#/incidents'}, [
                 svg([['path', {d: 'M15 18l-6-6 6-6'}]], 13),
-                el('span', {text: state.ackReturn ? 'Back to the incident' : 'Incidents'})
+                el('span', {text: t(state.ackReturn ? 'ack.back' : 'shell.tab.incidents')})
             ]),
-            ruledOverline('// acknowledgment'),
-            el('h1', {class: 'page-title', text: 'Acknowledge a finding'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'An ack lives in one daemon\'s own store, so it is taken source by source, and one '
-                    + 'submit writes to every checked source, in the name this Hub knows you by.'
-            })
+            ruledOverline(t('ack.overline')),
+            el('h1', {class: 'page-title', text: t('ack.title')}),
+            el('p', {class: 'page-sub', text: t('ack.sub')})
         ])]);
         if (!route) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'This link is incomplete.'}),
-                el('p', {
-                    text: 'It names no finding signature, or one the Hub refuses: longer than 1,024 characters, '
-                        + 'or carrying a control character. Open it again from the dashboard that gave it.'
-                })
+                el('p', {class: 'empty-title', text: t('ack.incomplete.title')}),
+                el('p', {text: t('ack.incomplete.body')})
             ]));
             return section;
         }
@@ -5626,15 +5593,15 @@
         if (ack.error || !state.sources) {
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'crit'}, [
                 critGlyph(16),
-                el('p', {text: 'The Hub could not read this finding or its sources. Reload the page.'})
+                el('p', {text: t('ack.read_failed')})
             ]));
             return section;
         }
         if (!ack.finding) {
             section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {class: 'empty-title', text: 'The Hub holds no finding with this signature.'}),
+                el('p', {class: 'empty-title', text: t('ack.missing.title')}),
                 el('p', {}, [
-                    el('span', {text: 'Retention removed it, or no source this Hub reads ever reported '}),
+                    el('span', {text: t('ack.missing.body')}),
                     el('code', {class: 'code-inline', text: route.signature})
                 ])
             ]));
@@ -5659,9 +5626,9 @@
      */
     function ackDetectionFacts(volume) {
         if (!volume) return [];
-        const facts = [['Detections (7 days)', PSL.formatDetections(volume.detections, volume.detections_complete)]];
+        const facts = [[t('ack.fact.detections'), PSL.formatDetections(volume.detections, volume.detections_complete)]];
         if (volume.avoidable_io_ops != null) {
-            facts.push(['Avoidable I/O (7 days)',
+            facts.push([t('ack.fact.avoidable_io'),
                 PSL.formatDetections(volume.avoidable_io_ops, volume.detections_complete)]);
         }
         return facts;
@@ -5670,19 +5637,23 @@
     /** One line per source with its count, and what keeps it short. */
     function ackDetectionLines(volume) {
         if (volume === undefined) {
-            return [el('p', {class: 'field-note', text: 'The Hub could not read the detections of the last 7 days.'})];
+            return [el('p', {class: 'field-note', text: t('ack.detections.failed')})];
         }
         if (volume === null) {
-            return [el('p', {class: 'field-note', text: 'No detection known in the last 7 days'})];
+            return [el('p', {class: 'field-note', text: t('ack.detections.none')})];
         }
         return (volume.sources || []).map(function (source) {
             const gaps = (source.detections_gaps || []).map(PSL.gapLabel);
             const io = source.avoidable_io_ops == null ? ''
-                : ', ' + PSL.formatDetections(source.avoidable_io_ops, source.detections_complete) + ' avoidable I/O';
+                : t('ack.detections.io', {count: PSL.formatDetections(source.avoidable_io_ops, source.detections_complete)});
             return el('p', {
                 class: 'field-note',
-                text: source.name + ': ' + PSL.formatDetections(source.detections, source.detections_complete) + io
-                    + (gaps.length > 0 ? ' (' + gaps.join(', ') + ')' : '')
+                text: t('ack.detections.line', {
+                    name: source.name,
+                    count: PSL.formatDetections(source.detections, source.detections_complete),
+                    io: io,
+                    gaps: gaps.length > 0 ? ' (' + gaps.join(', ') + ')' : ''
+                })
             });
         });
     }
@@ -5691,17 +5662,18 @@
         const finding = envelope.finding || {};
         const template = (finding.pattern || {}).template;
         const facts = [
-            ['service', finding.service || '?'],
-            ['endpoint', finding.source_endpoint || '?'],
-            ['first seen', PSL.dtHuman(envelope.first_seen)],
-            ['last seen', PSL.dtHuman(envelope.last_seen)],
-            // The API's enum, worded: not_observed reads "not observed".
-            ['status', String(envelope.status || '?').replace(/_/g, ' ')]
+            [t('ack.fact.service'), finding.service || '?'],
+            [t('ack.fact.endpoint'), finding.source_endpoint || '?'],
+            [t('ack.fact.first_seen'), PSL.dateTime(envelope.first_seen)],
+            [t('ack.fact.last_seen'), PSL.dateTime(envelope.last_seen)],
+            // The API's enum, worded: not_observed reads "not observed". A newer value shows as sent.
+            [t('ack.fact.status'), PSL.hasText('ack.status.' + envelope.status) ? t('ack.status.' + envelope.status)
+                : String(envelope.status || '?').replace(/_/g, ' ')]
         ].concat(ackDetectionFacts(volume));
         return el('div', {class: 'card params-panel'}, [
             el('div', {class: 'run-card-line'}, [
                 el('span', {class: 'run-card-name', text: PSL.FINDING_TYPE_LABEL[finding.type] || finding.type || '?'}),
-                el('span', {class: 'chip', 'data-sev': finding.severity || null, text: finding.severity || '?'})
+                el('span', {class: 'chip', 'data-sev': finding.severity || null, text: severityLabel(finding.severity)})
             ]),
             template ? el('span', {class: 'run-card-args', text: template, title: template}) : null,
             el('div', {class: 'run-card-facts'}, facts.map(function (fact) {
@@ -5728,7 +5700,7 @@
         const plan = ackPlanNow(rows);
         acknowledge.disabled = busy || plan.blocker !== null;
         revoke.disabled = busy || plan.revoke.length === 0;
-        sentence.textContent = busy ? 'Writing to the daemons.' : plan.sentence;
+        sentence.textContent = busy ? t('ack.writing') : plan.sentence;
         sentence.setAttribute('data-blocked', !busy && plan.blocked ? 'true' : 'false');
     }
 
@@ -5758,13 +5730,13 @@
         });
 
         const acknowledge = el('button', {type: 'button', class: 'submit', id: 'ack-submit'}, [
-            el('span', {text: 'Acknowledge'})
+            el('span', {text: t('ack.button.ack')})
         ]);
         acknowledge.addEventListener('click', function () {
             submitAck('ack', rows);
         });
         const revoke = el('button', {type: 'button', class: 'pill-button', id: 'ack-revoke'}, [
-            el('span', {text: 'Revoke'})
+            el('span', {text: t('ack.button.revoke')})
         ]);
         revoke.addEventListener('click', function () {
             submitAck('revoke', rows);
@@ -5781,9 +5753,7 @@
                 el('div', {class: 'card params-panel'}, [
                     el('p', {
                         class: 'daemon-lead',
-                        text: rows.length === 0
-                            ? 'No source in this Hub carries this finding, so there is nothing to acknowledge from here.'
-                            : 'This Hub cannot write an ack to any source that carries this finding. Each row says why.'
+                        text: t(rows.length === 0 ? 'ack.none.no_source' : 'ack.none.no_writable')
                     }),
                     rows.length === 0 ? null : el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)])
                 ]),
@@ -5791,8 +5761,8 @@
             ]);
         }
         return el('form', {class: 'card params-panel'}, [
-            field('Reason', reason, 'required, kept by each daemon beside your name'),
-            field('Expires', expiry, 'optional, the end of that day in UTC. Empty is a permanent ack'),
+            field(t('ack.field.reason'), reason, t('ack.field.reason_gloss')),
+            field(t('ack.field.expires'), expiry, t('ack.field.expires_gloss')),
             expiryLine,
             el('div', {class: 'field sources-wrap'}, [ackSourcesTable(rows)]),
             el('div', {class: 'submit-row'}, [
@@ -5819,24 +5789,23 @@
         }) || daemons[0];
         if (!source) return null;
         return terminalBlock({
-            head: '// acknowledge it on the daemon',
-            sub: 'The daemon takes the ack itself, with its own key.',
+            head: t('ack.daemon.head'),
+            sub: t('ack.daemon.sub'),
             id: 'ack-command',
             spell: function (shellId) {
                 return PSL.ackCommand(source, state.ack.signature, shellId);
             },
-            copyLabel: 'Copy the ack command for ' + source.name,
+            copyLabel: t('ack.daemon.copy', {name: source.name}),
             notes: [
-                'Set `PERF_SENTINEL_DAEMON_API_KEY` to this daemon\'s ack key first, and write the reason '
-                + 'in place of the last value. Add `--expires 7d` for an ack that lapses.',
+                t('ack.daemon.note'),
                 engineNote()
             ]
         });
     }
 
     function ackSourcesTable(rows) {
-        const head = el('tr', {}, ['', 'Source', 'Current ack', 'What this page can do'].map(function (name) {
-            return el('th', {text: name, scope: 'col'});
+        const head = el('tr', {}, ['', 'source', 'current', 'can_do'].map(function (name) {
+            return el('th', {text: name ? t('ack.col.' + name) : '', scope: 'col'});
         }));
         return el('table', {class: 'table ack-table'}, [
             el('thead', {}, [head]),
@@ -5856,12 +5825,12 @@
                     el('td', {}, [
                         el('span', {class: 'table-strong', text: row.name}),
                         el('span', {text: ' '}),
-                        el('span', {class: 'chip chip-declared', text: row.environment || 'unknown'})
+                        el('span', {class: 'chip chip-declared', text: row.environment || t('incidents.unknown')})
                     ]),
                     ackCell(row.ack),
                     el('td', {
                         id: reasonId,
-                        text: row.note || (row.action === 'revoke' ? 'Revoke this ack.' : 'Acknowledge.')
+                        text: row.note || t(row.action === 'revoke' ? 'ack.row.revoke' : 'ack.row.ack')
                     })
                 ]);
             }))
@@ -5870,10 +5839,14 @@
 
     /** `at` and `expires_at` are the daemon's own text, shown as it came. */
     function ackCell(ack) {
-        if (!ack) return el('td', {}, [el('span', {class: 'table-muted', text: 'none known'})]);
+        if (!ack) return el('td', {}, [el('span', {class: 'table-muted', text: t('ack.cell.none')})]);
         return el('td', {}, [
             el('span', {class: 'table-strong', text: ack.by || '?'}),
-            el('span', {text: ' at ' + ack.at + (ack.expires_at ? ', until ' + ack.expires_at : ', no expiry')}),
+            el('span', {
+                text: ack.expires_at
+                    ? t('ack.cell.until', {at: ack.at, until: ack.expires_at})
+                    : t('ack.cell.no_expiry', {at: ack.at})
+            }),
             ack.reason ? el('div', {class: 'table-muted', text: ack.reason}) : null
         ]);
     }
@@ -8707,17 +8680,13 @@
         const access = state.access;
         const signedIn = PSL.accessSignedIn(access, Date.now());
         const section = el('section', {class: 'access-screen'}, [
-            ruledOverline('// access'),
-            el('h1', {class: 'page-title', text: 'Your access'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'Rights are declared in the Hub\'s configuration, not on this page. Its one action '
-                    + 'revokes a terminal token you approved.'
-            })
+            ruledOverline(t('access.overline')),
+            el('h1', {class: 'page-title', text: t('access.title')}),
+            el('p', {class: 'page-sub', text: t('access.sub')})
         ]);
         if (banner) section.appendChild(noGrantBanner(banner));
 
-        section.appendChild(accessCard('signed in as', [
+        section.appendChild(accessCard(t('access.card.signed_in'), [
             el('p', {text: signedIn.line}),
             signedIn.note ? el('p', {class: 'access-muted', text: signedIn.note}) : null,
             el('p', {}, [
@@ -8725,10 +8694,10 @@
                 el('code', {class: 'access-subject', text: signedIn.subject})
             ])
         ]));
-        section.appendChild(accessCard('your groups', [
+        section.appendChild(accessCard(t('access.card.groups'), [
             access.groups.length === 0
-                ? el('p', {class: 'access-muted', text: 'No group.'})
-                : el('ul', {class: 'access-chips', 'aria-label': 'Your groups'}, access.groups.map(function (group) {
+                ? el('p', {class: 'access-muted', text: t('access.groups.none')})
+                : el('ul', {class: 'access-chips', 'aria-label': t('access.groups.label')}, access.groups.map(function (group) {
                     return el('li', {
                         class: 'chip',
                         'data-origin': group.origin,
@@ -8739,17 +8708,18 @@
         if (banner) {
             // The banner already says nothing is reached. What helps now is the request.
             section.appendChild(terminalBlock({
-                head: '// send this to an administrator',
-                sub: 'Your name, the id an administrator lists, and the groups a grant can name.',
+                head: t('access.request.head'),
+                sub: t('access.request.sub'),
                 text: PSL.accessRequestText(access),
-                copyLabel: 'Copy the access request'
+                copyLabel: t('access.request.copy')
             }));
         } else {
             const reach = PSL.accessReachRows(access);
-            section.appendChild(accessCard('what you reach', [
+            section.appendChild(accessCard(t('access.card.reach'), [
                 reach.length === 0
                     ? el('p', {text: PSL.ACCESS_NO_REACH})
-                    : accessTable('What your grants give you', ['Project', 'Group', 'Role', 'Permissions'],
+                    : accessTable(t('access.reach.caption'),
+                        [t('access.col.project'), t('access.col.group'), t('access.col.role'), t('access.col.permissions')],
                         reach.map(function (row) {
                             return [row.project, row.group, row.role, row.permissions];
                         }))
@@ -8758,16 +8728,16 @@
         if (state.tokens || state.tokensFailed) {
             section.appendChild(tokensCard((state.tokens || []).filter(function (token) {
                 return token.subject === access.subject;
-            }), 'your terminal tokens', 'tokens-own'));
+            }), t('access.card.own_tokens'), 'tokens-own'));
         }
         if (access.admin) {
             section.appendChild(el('p', {class: 'access-pointer'}, [
-                el('span', {text: 'You administer this Hub. '}),
-                el('a', {href: '#/coverage', text: 'Coverage'}),
-                el('span', {text: ' lists what no project covers, everyone\'s terminal tokens and the whole configuration.'})
+                el('span', {text: t('access.admin.lead')}),
+                el('a', {href: '#/coverage', text: t('shell.tab.coverage')}),
+                el('span', {text: t('access.admin.tail')})
             ]));
         } else if (access.projects.length > 0) {
-            section.appendChild(accessCard('projects you reach', [projectsTable(access.projects)]));
+            section.appendChild(accessCard(t('access.card.projects'), [projectsTable(access.projects)]));
         }
         return section;
     }
@@ -8779,27 +8749,23 @@
     function renderCoverageScreen() {
         const access = state.access;
         const section = el('section', {class: 'access-screen'}, [
-            ruledOverline('// coverage'),
-            el('h1', {class: 'page-title', text: 'What access control covers'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'Findings no project covers are read only by grants on "*". Rights change in the Helm '
-                    + 'values hub.access and apply at the next restart.'
-            })
+            ruledOverline(t('coverage.overline')),
+            el('h1', {class: 'page-title', text: t('coverage.title')}),
+            el('p', {class: 'page-sub', text: t('coverage.sub')})
         ]);
         if (access.unmatched) section.appendChild(attentionCard(access.unmatched));
         const snippet = access.unmatched ? PSL.coverageSnippet(access.unmatched) : null;
         if (snippet) {
             section.appendChild(terminalBlock({
-                head: '// patterns to paste',
-                sub: 'One line per uncovered service, attribute and source.',
+                head: t('coverage.snippet.head'),
+                sub: t('coverage.snippet.sub'),
                 text: snippet,
-                copyLabel: 'Copy the patterns'
+                copyLabel: t('coverage.snippet.copy')
             }));
         }
         if (access.conflicts) section.appendChild(conflictsCard(access.conflicts));
         if (state.tokens || state.tokensFailed) {
-            section.appendChild(tokensCard(state.tokens || [], 'terminal tokens, everyone\'s', 'tokens-all'));
+            section.appendChild(tokensCard(state.tokens || [], t('coverage.card.tokens'), 'tokens-all'));
         }
         if (access.configuration) section.appendChild(configurationCard(access.configuration));
         return section;
@@ -8854,21 +8820,19 @@
         const rows = PSL.tokenRows(tokens);
         const notice = state.tokensNotice && state.tokensNotice.card === headingId ? state.tokensNotice : null;
         return accessCard(title, [
-            el('p', {
-                text: 'perf-sentinel login gets a terminal token once its code is approved. It carries the '
-                    + 'approver\'s access, never admin, until the session that approved it ends.'
-            }),
+            el('p', {text: t('access.tokens.intro')}),
             el('div', {role: 'status', class: 'access-status'}, notice ? [el('div', {
                 class: 'banner',
                 'data-tone': notice.ok ? 'ok' : 'crit'
             }, [el('div', {text: notice.text})])] : []),
             state.tokensFailed
                 ? el('div', {class: 'banner', 'data-tone': 'crit'}, [
-                    el('div', {text: 'The Hub did not list the terminal tokens. Reload the page to try again.'})
+                    el('div', {text: t('access.tokens.failed')})
                 ])
                 : rows.length === 0
-                    ? el('p', {class: 'access-muted', text: 'No terminal token.'})
-                    : accessTable('Terminal tokens', ['Owner', 'Requested from', 'Created', 'Expires', 'Last used', ''],
+                    ? el('p', {class: 'access-muted', text: t('access.tokens.none')})
+                    : accessTable(t('access.tokens.caption'), [t('access.col.owner'), t('access.col.requested_from'),
+                        t('access.col.created'), t('access.col.expires'), t('access.col.last_used'), ''],
                         rows.map(function (row) {
                             return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row, headingId)];
                         }))
@@ -8876,12 +8840,12 @@
     }
 
     function revokeButton(row, card) {
-        const label = 'Revoke the token of ' + row.owner + ' created ' + row.created;
-        const button = el('button', {type: 'button', class: 'pill-button', text: 'Revoke', 'aria-label': label});
+        const label = t('access.revoke.label', {owner: row.owner, created: row.created});
+        const button = el('button', {type: 'button', class: 'pill-button', text: t('ack.button.revoke'), 'aria-label': label});
         let armed = false;
         const disarm = function () {
             armed = false;
-            button.textContent = 'Revoke';
+            button.textContent = t('ack.button.revoke');
             button.setAttribute('aria-label', label);
             button.removeAttribute('data-armed');
         };
@@ -8893,8 +8857,8 @@
         button.addEventListener('click', function () {
             if (!armed) {
                 armed = true;
-                button.textContent = 'Confirm revoke';
-                button.setAttribute('aria-label', 'Confirm: ' + label + '. Its terminal stops working.');
+                button.textContent = t('access.revoke.confirm');
+                button.setAttribute('aria-label', t('access.revoke.confirm_label', {label: label}));
                 button.setAttribute('data-armed', 'true');
                 return;
             }
@@ -8916,9 +8880,10 @@
     }
 
     function projectsTable(projects) {
-        return accessTable('Projects and their patterns', ['Project', 'Patterns'], projects.map(function (project) {
-            return [project.name, project.patterns.map(PSL.describePattern)];
-        }));
+        return accessTable(t('access.projects.caption'), [t('access.col.project'), t('access.col.patterns')],
+            projects.map(function (project) {
+                return [project.name, project.patterns.map(PSL.describePattern)];
+            }));
     }
 
     /** One folded part of the configuration, its count in the summary so a closed fold still says something. */
@@ -8928,42 +8893,48 @@
                 el('span', {class: 'access-part-title', text: title}),
                 el('span', {class: 'access-part-count', text: count == null ? '' : String(count)})
             ]),
-            count === 0 ? el('p', {class: 'access-muted', text: 'None declared.'}) : body
+            count === 0 ? el('p', {class: 'access-muted', text: t('access.config.none')}) : body
         ]);
     }
 
     function configurationCard(configuration) {
         const now = Date.now();
-        return accessCard('configuration', [
-            el('p', {class: 'access-muted', text: 'As the Hub loaded it from hub.access at its last start.'}),
-            configurationPart('Projects', configuration.projects.length, projectsTable(configuration.projects)),
-            configurationPart('Roles', configuration.roles.length,
-                accessTable('Roles', ['Role', 'Permissions'], configuration.roles.map(function (role) {
-                    return [role.built_in ? role.name + ' (built-in)' : role.name, role.permissions.join(', ')];
-                }))),
-            configurationPart('Grants', configuration.grants.length,
-                accessTable('Grants', ['Group', 'Project', 'Role'], configuration.grants.map(function (grant) {
-                    return [grant.group, grant.project, grant.role];
-                }))),
-            configurationPart('Internal groups', configuration.internal_groups.length,
-                accessTable('Internal groups', ['Internal group', 'Members'], configuration.internal_groups.map(function (group) {
-                    return ['internal:' + group.name, group.members.length === 0 ? 'no member' : group.members];
-                }))),
-            configurationPart('Admins', configuration.admins.length + configuration.admin_groups.length,
+        const part = function (name, count, headings, rows) {
+            const title = t('access.config.' + name);
+            return configurationPart(title, count, accessTable(title, headings.map(function (heading) {
+                return t('access.col.' + heading);
+            }), rows));
+        };
+        const none = t('access.config.nobody');
+        return accessCard(t('access.config.title'), [
+            el('p', {class: 'access-muted', text: t('access.config.loaded')}),
+            configurationPart(t('access.config.projects'), configuration.projects.length,
+                projectsTable(configuration.projects)),
+            part('roles', configuration.roles.length, ['role', 'permissions'], configuration.roles.map(function (role) {
+                return [role.built_in ? role.name + ' ' + t('access.config.built_in') : role.name, role.permissions.join(', ')];
+            })),
+            part('grants', configuration.grants.length, ['group', 'project', 'role'], configuration.grants.map(function (grant) {
+                return [grant.group, grant.project, grant.role];
+            })),
+            part('internal_groups', configuration.internal_groups.length, ['internal_group', 'members'],
+                configuration.internal_groups.map(function (group) {
+                    return ['internal:' + group.name, group.members.length === 0 ? t('access.config.no_member') : group.members];
+                })),
+            configurationPart(t('access.config.admins'), configuration.admins.length + configuration.admin_groups.length,
                 el('dl', {class: 'access-pairs'}, [
-                    el('dt', {text: 'By id'}),
-                    el('dd', {text: configuration.admins.length === 0 ? 'none' : configuration.admins.join(', ')}),
-                    el('dt', {text: 'By group'}),
-                    el('dd', {text: configuration.admin_groups.length === 0 ? 'none' : configuration.admin_groups.join(', ')})
+                    el('dt', {text: t('access.config.by_id')}),
+                    el('dd', {text: configuration.admins.length === 0 ? none : configuration.admins.join(', ')}),
+                    el('dt', {text: t('access.config.by_group')}),
+                    el('dd', {text: configuration.admin_groups.length === 0 ? none : configuration.admin_groups.join(', ')})
                 ])),
-            configurationPart('Machine tokens', configuration.machine_tokens.length,
-                accessTable('Machine tokens', ['Machine token', 'Group', 'Expires'], configuration.machine_tokens.map(function (token) {
+            part('machine_tokens', configuration.machine_tokens.length, ['machine_token', 'group', 'expires'],
+                configuration.machine_tokens.map(function (token) {
                     return [token.name, token.group, PSL.accessExpiry(token.expires_at_ms, now)];
-                }))),
-            configurationPart('Local accounts', configuration.local_accounts.length,
-                accessTable('Local accounts', ['Local account', 'Signs in as'], configuration.local_accounts.map(function (name) {
+                })),
+            part('local_accounts', configuration.local_accounts.length, ['local_account', 'signs_in_as'],
+                configuration.local_accounts.map(function (name) {
                     return [name, 'local:' + name];
-                })))
+                }))
         ]);
     }
 
@@ -8971,70 +8942,58 @@
     function attentionCard(unmatched) {
         const count = unmatched.services.length + unmatched.attributes.length + unmatched.sources.length;
         if (count === 0) {
-            return accessCard('needs attention', [
-                el('p', {text: 'Every finding the Hub holds belongs to a project. Nothing to assign.'})
-            ]);
+            return accessCard(t('coverage.attention.title'), [el('p', {text: t('coverage.attention.none')})]);
         }
-        const parts = [el('p', {
-            text: count + (count === 1 ? ' entry is' : ' entries are') + ' read by no project. Add a pattern that '
-                + 'names it to the project of the team that owns it.'
-        })];
+        const parts = [el('p', {text: t('coverage.attention.count.' + PSL.plural(count), {count: count})})];
         if (unmatched.services.length > 0) {
-            parts.push(accessTable('Services no project covers', ['Service', 'Seen at', 'Findings'],
+            parts.push(accessTable(t('coverage.services.caption'),
+                [t('access.col.service'), t('access.col.seen_at'), t('access.col.findings')],
                 unmatched.services.map(function (row) {
-                    return [row.service == null ? '(no service)' : row.service,
+                    return [row.service == null ? t('coverage.no_service') : row.service,
                         row.source_ids.map(sourceName).join(', '), String(row.findings)];
                 })));
         }
         if (unmatched.attributes.length > 0) {
-            parts.push(accessTable('Attributes no project covers', ['Attribute', 'Findings'],
+            parts.push(accessTable(t('coverage.attributes.caption'), [t('access.col.attribute'), t('access.col.findings')],
                 unmatched.attributes.map(function (row) {
                     return [row.key + '=' + row.value, String(row.findings)];
                 })));
         }
         if (unmatched.sources.length > 0) {
-            parts.push(accessTable('Sources no project names', ['Source no project names', 'Findings'],
+            parts.push(accessTable(t('coverage.sources.caption'), [t('access.col.unnamed_source'), t('access.col.findings')],
                 unmatched.sources.map(function (row) {
                     // A trace backend stores no finding of its own: its runs are read live.
-                    return [sourceName(row.source_id), row.findings == null ? 'none stored, trace backend' : String(row.findings)];
+                    return [sourceName(row.source_id), row.findings == null ? t('coverage.backend') : String(row.findings)];
                 })));
         }
         if (unmatched.truncated) {
-            parts.push(el('p', {class: 'access-muted', text: 'Each list stops at its first 200 entries.'}));
+            parts.push(el('p', {class: 'access-muted', text: t('coverage.truncated')}));
         }
-        return accessCard('needs attention', parts);
+        return accessCard(t('coverage.attention.title'), parts);
     }
 
     function conflictsCard(conflicts) {
-        return accessCard('deployments that disagree on a project attribute', [
-            el('p', {
-                text: 'A project\'s attribute pattern reads these copies but cannot write them: the copy carries two '
-                    + 'values of the key, or was also seen under a grouping without it. An acknowledgment through an '
-                    + 'attribute grant is refused on them. A source or service grant for the team that owns the service '
-                    + 'can acknowledge them.'
-            }),
+        return accessCard(t('coverage.conflicts.title'), [
+            el('p', {text: t('coverage.conflicts.body')}),
             conflicts.copies.length === 0
-                ? el('p', {class: 'access-muted', text: 'None.'})
-                : accessTable('Findings whose deployments disagree',
-                    ['Source', 'Signature', 'Service', 'Key', 'Values', 'Groupings missing the key'],
+                ? el('p', {class: 'access-muted', text: t('coverage.conflicts.none')})
+                : accessTable(t('coverage.conflicts.caption'),
+                    ['source', 'signature', 'service', 'key', 'values', 'missing_key'].map(function (heading) {
+                        return t('access.col.' + heading);
+                    }),
                     conflicts.copies.map(function (row) {
-                        return [sourceName(row.source_id), row.signature, row.service || '(no service)', row.key,
+                        return [sourceName(row.source_id), row.signature, row.service || t('coverage.no_service'), row.key,
                             row.values.join(', '), String(row.identities_without_key)];
                     })),
-            conflicts.truncated ? el('p', {class: 'access-muted', text: 'Only the first 200 are listed.'}) : null
+            conflicts.truncated ? el('p', {class: 'access-muted', text: t('coverage.conflicts.truncated')}) : null
         ]);
     }
 
     function renderRecentScreen() {
         const section = el('section', {}, [
-            ruledOverline('// recent analyses'),
-            el('h1', {class: 'page-title', text: 'Analyses this Hub still holds'}),
-            el('p', {
-                class: 'page-sub',
-                text: 'The team\'s short memory, not an audit trail: reports are deleted '
-                    + state.status.limits.report_retention_hours + ' hours after they succeed, so a link shared '
-                    + 'yesterday is already dead.'
-            })
+            ruledOverline(t('recent.overline')),
+            el('h1', {class: 'page-title', text: t('recent.title')}),
+            el('p', {class: 'page-sub', text: t('recent.sub', {hours: state.status.limits.report_retention_hours})})
         ]);
 
         if (!state.runs) {
@@ -9044,15 +9003,11 @@
         if (state.runs.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
                 el('p', {
-                    class: 'empty-title', text: 'No analysis in the last '
-                        + state.status.limits.report_retention_hours + ' hours.'
+                    class: 'empty-title', text: t('recent.empty.title', {hours: state.status.limits.report_retention_hours})
                 }),
-                el('p', {
-                    text: 'Retention empties this list after '
-                        + state.status.limits.report_retention_hours + ' idle hours.'
-                }),
+                el('p', {text: t('recent.empty.body', {hours: state.status.limits.report_retention_hours})}),
                 el('div', {class: 'outcome-actions empty-actions'}, [
-                    el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'})
+                    el('a', {class: 'action action-filled', href: '#/new', text: t('recent.run_new')})
                 ])
             ]));
             return section;
@@ -9066,12 +9021,7 @@
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn'}, [
                 svg([['path', {d: 'M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'}],
                     ['path', {d: 'M12 9v4M12 17h.01'}]], 16),
-                el('p', {
-                    text: 'These analyses were produced by ' + binaries.join(' and ') + '. Counts from '
-                        + binaries.length + ' binaries are not directly comparable: a detector added between '
-                        + 'minors changes what gets found, not only how much. The label on each card names which '
-                        + 'binary did the detecting.'
-                })
+                el('p', {text: t('recent.binaries', {versions: binaries.join(t('recent.and')), count: binaries.length})})
             ]));
         }
 
@@ -9081,12 +9031,7 @@
         if (tuned.length > 0 && tuned.length < state.runs.length) {
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn'}, [
                 warningGlyph(16),
-                el('p', {
-                    text: tuned.length + (tuned.length === 1 ? ' run' : ' runs') + ' here changed the '
-                        + 'detection thresholds. Their counts are not comparable with the rest: a threshold '
-                        + 'decides what gets reported, so a lower count can mean a quieter service or simply '
-                        + 'a detector that was told to look for less. Each card names the thresholds it used.'
-                })
+                el('p', {text: t('recent.tuned.' + PSL.plural(tuned.length), {count: tuned.length})})
             ]));
         }
 
@@ -9099,13 +9044,13 @@
         const card = el('a', {class: 'run-card', 'data-status': key, href: '#/run/' + run.id});
 
         card.appendChild(el('span', {class: 'run-card-line'}, [
-            el('span', {class: 'status-pill', 'data-status': key, text: key === 'empty' ? 'succeeded · empty' : key}),
+            el('span', {class: 'status-pill', 'data-status': key, text: t(key === 'empty' ? 'recent.status.empty' : 'status.' + key)}),
             el('span', {class: 'run-card-name', text: run.source_name}),
             el('span', {class: 'chip', text: PSL.KIND_LABEL[run.kind] || run.kind}),
             el('span', {
                 class: 'chip chip-declared',
                 text: run.environment,
-                title: 'Declared by the source\'s configuration, not measured.'
+                title: t('recent.env_title')
             }),
             el('span', {class: 'run-card-spacer'}),
             el('span', {class: 'run-card-id', text: run.id})
@@ -9126,21 +9071,22 @@
         const started = run.started_at_ms || run.created_at_ms;
         const ran = run.finished_at_ms
             ? PSL.dur(run.finished_at_ms - started)
-            : key === 'queued' ? 'not started' : PSL.dur(now - started) + ' so far';
-        const facts = [['by', run.requested_by], ['ran', ran]];
-        if (run.producer_version) facts.push([PSL.detector(run.kind), run.producer_version,
+            : key === 'queued' ? t('recent.not_started') : t('recent.so_far', {duration: PSL.dur(now - started)});
+        const facts = [[t('recent.fact.by'), run.requested_by], [t('recent.fact.ran'), ran]];
+        if (run.producer_version) facts.push([t('run.fact.' + PSL.detector(run.kind)), run.producer_version,
             PSL.skew(run.producer_version) ? 'warn' : 'mono']);
-        facts.push(['started', PSL.dur(now - started) + ' ago']);
-        facts.push(['expires', run.expires_at_ms ? expiryText(run) : 'n/a',
+        facts.push([t('recent.fact.started'), t('sources.ago', {duration: PSL.dur(now - started)})]);
+        facts.push([t('recent.fact.expires'), run.expires_at_ms ? expiryText(run) : t('unit.na'),
             run.expires_at_ms && run.expires_at_ms < now ? 'crit' : 'mono',
             run.expires_at_ms ? function () {
                 return expiryText(run);
             } : null]);
         const tuned = Object.keys((run.request || {}).detection || {});
         if (tuned.length > 0) {
-            facts.push(['thresholds', tuned.length === 1 ? '1 changed' : tuned.length + ' changed', 'warn']);
+            facts.push([t('recent.fact.thresholds'), t('recent.changed.' + PSL.plural(tuned.length), {count: tuned.length}),
+                'warn']);
         }
-        if (run.error_code) facts.push(['error', run.error_code, 'crit']);
+        if (run.error_code) facts.push([t('recent.fact.error'), run.error_code, 'crit']);
         return facts;
     }
 
@@ -9183,17 +9129,15 @@
         return el('section', {class: 'gone'}, [
             el('h1', {
                 class: 'page-title',
-                text: access ? 'No access page on this Hub.' : 'Nothing lives at this address.'
+                text: t(access ? 'missing.access.title' : 'missing.title')
             }),
             el('p', {
                 class: 'page-sub',
-                text: access
-                    ? 'Access control is off here, or the Hub could not read who you are, so this page has nothing to show.'
-                    : 'The Hub has no screen called "' + route + '". The link may be mistyped, or older than this Hub.'
+                text: access ? t('missing.access.body') : t('missing.body', {route: route})
             }),
             el('div', {class: 'outcome-actions'}, [
-                el('a', {class: 'action action-filled', href: '#/new', text: 'Run an analysis'}),
-                el('a', {class: 'action action-secondary', href: '#/recent', text: 'All analyses'})
+                el('a', {class: 'action action-filled', href: '#/new', text: t('recent.run_new')}),
+                el('a', {class: 'action action-secondary', href: '#/recent', text: t('run.all')})
             ])
         ]);
     }
@@ -9217,7 +9161,7 @@
         // A report runs to megabytes: until the frame loads it would read as a blank page.
         const loading = el('div', {class: 'report-loading', role: 'status'}, [
             el('span', {class: 'report-loading-band', 'aria-hidden': 'true'}),
-            el('span', {class: 'report-loading-text', text: 'Loading the report'})
+            el('span', {class: 'report-loading-text', text: t('report.loading')})
         ]);
         if (!run) {
             stage.appendChild(loading);
@@ -9227,7 +9171,7 @@
             stage.appendChild(reportGone(run, key));
             return shell;
         }
-        const frame = el('iframe', {class: 'report-frame', src: '/reports/' + id + '.html', title: 'Analysis report'});
+        const frame = el('iframe', {class: 'report-frame', src: '/reports/' + id + '.html', title: t('report.frame_title')});
         frame.addEventListener('load', function () {
             loading.remove();
             // A report deleted under a run that still reads succeeded comes back as
@@ -9250,9 +9194,9 @@
         return el('div', {class: 'report-bar'}, [
             run ? el('a', {class: 'pill-button', href: '#/run/' + id}, [
                 svg([['path', {d: 'M14 6l-6 6 6 6'}]], 14),
-                el('span', {text: 'Back to the run'})
+                el('span', {text: t('report.back')})
             ]) : null,
-            el('span', {class: 'report-path', text: 'report / ' + id}),
+            el('span', {class: 'report-path', text: t('report.path', {id: id})}),
             el('span', {class: 'report-spacer'}),
             lifetime
         ]);
@@ -9260,21 +9204,14 @@
 
     /** Why a report link opens on nothing, and the way on from there. */
     function reportGone(run, key) {
-        const view = {
-            queued: ['The report is not ready yet.', 'The analysis is still waiting for a worker. Its page says when the report is ready.'],
-            running: ['The report is not ready yet.', 'The analysis is still reading ' + run.source_name + '. Its page says when the report is ready.'],
-            failed: ['This analysis wrote no report.', 'It failed before the engine produced one. Its page says why.'],
-            interrupted: ['This analysis wrote no report.', 'It was interrupted before the engine produced one.'],
-            expired: ['This report is gone.', 'Its retention ended and the Hub deleted it. Running the same analysis '
-            + 'again writes a new report from what ' + run.source_name + ' holds now.']
-        }[key] || ['This report is gone.', 'The Hub no longer serves it.'];
+        const view = ['queued', 'running', 'failed', 'interrupted', 'expired'].indexOf(key) >= 0 ? key : 'other';
         const finished = key !== 'queued' && key !== 'running';
         return el('div', {class: 'gone report-gone'}, [
-            el('h1', {class: 'page-title', text: view[0]}),
-            el('p', {class: 'page-sub', text: view[1]}),
+            el('h1', {class: 'page-title', text: t('report.gone.' + view + '.title')}),
+            el('p', {class: 'page-sub', text: t('report.gone.' + view + '.body', {name: run.source_name})}),
             el('div', {class: 'outcome-actions'}, [
-                finished ? actionButton(rerunAction('Run it again with the same parameters', true), true) : null,
-                el('a', {class: 'action action-secondary', href: '#/run/' + run.id, text: 'Open the run'})
+                finished ? actionButton(rerunAction(t('report.rerun'), true), true) : null,
+                el('a', {class: 'action action-secondary', href: '#/run/' + run.id, text: t('report.open_run')})
             ]),
             finished ? el('p', {class: 'outcome-note', text: PSL.argsLine(run)}) : null
         ]);
@@ -9285,10 +9222,10 @@
         const version = state.status && state.status.engine_version;
         // No run, no report: crediting an engine with it would describe a page that does not exist.
         if (!run) return '';
-        const rendered = 'Rendered by perf-sentinel ' + (version || 'unknown');
+        const rendered = t('report.rendered', {version: version || t('shell.version.unknown')});
         if (!run.expires_at_ms) return rendered;
         const left = run.expires_at_ms - Date.now();
-        return rendered + (left > 0 ? ' · expires in ' + PSL.durPrecise(left) : ' · expired');
+        return rendered + (left > 0 ? t('report.expires_in', {duration: PSL.durPrecise(left)}) : t('report.expired'));
     }
 
     // ------------------------------------------------------------------ boot
