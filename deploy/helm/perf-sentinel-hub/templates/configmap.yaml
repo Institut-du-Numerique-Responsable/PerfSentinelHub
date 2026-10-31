@@ -84,6 +84,7 @@ data:
     {{- if $cards.organisation }}
     {{- $cardSection := dict "Organisation" $cards.organisation }}
     {{- if $cards.domain }}{{- $_ := set $cardSection "Domain" $cards.domain }}{{- end }}
+    {{- if $cards.country }}{{- $_ := set $cardSection "Country" $cards.country }}{{- end }}
     {{- $_ := set $cardSection "MaxConcurrentRenders" (default 2 $cards.maxConcurrentRenders) }}
     {{- $_ := set $hub "Cards" $cardSection }}
     {{- end }}

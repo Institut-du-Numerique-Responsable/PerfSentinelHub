@@ -1069,6 +1069,53 @@ public sealed class ConfigurationTests
         Assert.Empty(AccessFailures(WithRenders("Acme", renders)));
     }
 
+    [Theory]
+    [InlineData("fr")]
+    [InlineData("gb")]
+    [InlineData("us")]
+    public void A_card_country_of_fr_gb_or_us_is_accepted(string country)
+    {
+        var options = WithCountry(country);
+
+        Assert.Empty(AccessFailures(options));
+        Assert.Equal(country, options.Cards.Country);
+        Assert.Equal(country, options.Cards.CountryOrDefault);
+    }
+
+    [Theory]
+    [InlineData("GB")]
+    [InlineData("uk")]
+    [InlineData("de")]
+    [InlineData("france")]
+    public void A_card_country_outside_fr_gb_us_is_refused(string country)
+    {
+        Assert.Equal("Hub:Cards:Country must be fr, gb or us.", Assert.Single(AccessFailures(WithCountry(country))));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void A_blank_card_country_is_unset(string country)
+    {
+        var options = WithCountry(country);
+
+        Assert.Empty(AccessFailures(options));
+        Assert.Null(options.Cards.Country);
+        Assert.Equal("fr", options.Cards.CountryOrDefault);
+    }
+
+    [Fact]
+    public void A_card_country_is_trimmed()
+    {
+        Assert.Equal("gb", new CardsOptions { Country = " gb " }.Country);
+        Assert.Equal("fr", new HubOptions().Cards.CountryOrDefault);
+    }
+
+    private static HubOptions WithCountry(string country)
+    {
+        return ValidOptions() with { Cards = new CardsOptions { Organisation = "Acme", Country = country } };
+    }
+
     private static HubOptions WithRenders(string? organisation, int renders)
     {
         return ValidOptions() with
