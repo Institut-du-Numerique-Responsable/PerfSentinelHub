@@ -155,6 +155,26 @@ test("adopting the page's language does not store it, only a choice does", () =>
     }
 });
 
+test("a choice also goes to the cookie the sign-in and device pages read", () => {
+    const cookies = [];
+    globalThis.document = {
+        documentElement: {},
+        set cookie(value) {
+            cookies.push(value);
+        },
+    };
+    try {
+        PSL.setLang("fr", false);
+        assert.deepEqual(cookies, []);
+        PSL.setLang("fr");
+        assert.deepEqual(cookies, ["perf-sentinel-lang=fr;max-age=31536000;samesite=lax"]);
+        assert.equal(globalThis.document.documentElement.lang, "fr");
+    } finally {
+        delete globalThis.document;
+        PSL.setLang("en");
+    }
+});
+
 /** Every code a problem can carry: the constants of ProblemCodes.cs and the card refusals of CardRules.Reasons. */
 function problemCodes() {
     const fs = require("node:fs");

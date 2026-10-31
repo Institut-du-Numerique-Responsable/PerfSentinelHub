@@ -725,7 +725,9 @@ ou non, c'est le but : le lanceur n'envoie jamais un navigateur droit vers un
 fournisseur en panne.
 
 Le serveur écrit cette page et la page d'approbation du terminal en anglais ou en français : `?lang=en`
-ou `?lang=fr` d'abord, sinon l'`Accept-Language` du navigateur, sinon l'anglais. Chacune porte le bouton
+ou `?lang=fr` d'abord, sinon la dernière langue choisie avec le bouton du lanceur (le cookie
+`perf-sentinel-lang` qu'il écrit), sinon l'`Accept-Language` du navigateur, sinon l'anglais. Une session
+expirée revient donc dans la langue que le lecteur a choisie. Chacune porte le bouton
 FR/EN du lanceur, en lien vers la même page dans l'autre langue, et une connexion refusée répond dans la
 langue du formulaire d'où elle vient. Une langue choisie sur ces pages n'est pas stockée.
 

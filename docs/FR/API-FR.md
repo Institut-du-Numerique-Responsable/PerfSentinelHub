@@ -1557,7 +1557,7 @@ comme « pas de connexion du terminal ici ». Le flux est décrit dans
 |---|---|---|
 | `POST /auth/device` | anonyme (la CLI) | `200` ci-dessous ; `400` `invalid_request` ou `invalid_client` ; `403` avec `Sec-Fetch-Site` ; `413` au-delà de 4 Kio ; `429` `temporarily_unavailable` avec `Retry-After: 60` |
 | `POST /auth/device/token` | anonyme (la CLI) | `200` jeton ; `400` avec `authorization_pending`, `slow_down`, `access_denied`, `expired_token`, `invalid_grant`, `unsupported_grant_type`, `invalid_request` ou `invalid_client` ; `403` ; `413` |
-| `GET /device` | session du navigateur | la page d'approbation, dans `?lang=` (`en` ou `fr`), sinon `Accept-Language`, sinon l'anglais ; ou la connexion sans session ou s'il reste moins d'1 h |
+| `GET /device` | session du navigateur | la page d'approbation, dans `?lang=` (`en` ou `fr`), sinon le cookie `perf-sentinel-lang`, sinon `Accept-Language`, sinon l'anglais ; ou la connexion sans session ou s'il reste moins d'1 h |
 | `POST /api/device/verify` | session du navigateur seule | `200` ci-dessous ; `400` code mal formé ; `401` ; `403` ; `404` aucun code en attente ; `415` ; `429` |
 | `POST /api/device/approve` | session du navigateur seule | `204` ; `400` ; `401` ; `403` ; `404` ; `409` la session finit dans l'heure ; `415` ; `429` |
 | `POST /auth/revoke` | anonyme, par possession | RFC 7009 : `200` que le jeton ait existé ou non ; `400 invalid_request` ; `403` ; `413` ; `503` avec `Retry-After: 1` |
@@ -1636,7 +1636,7 @@ Voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux) pour le modèle
 
 | Route | Qui | Réponses |
 |---|---|---|
-| `GET /auth/sign-in?return_url=` | anonyme | `200` et la page, connecté ou non, dans `?lang=` (`en` ou `fr`), sinon `Accept-Language`, sinon l'anglais |
+| `GET /auth/sign-in?return_url=` | anonyme | `200` et la page, connecté ou non, dans `?lang=` (`en` ou `fr`), sinon le cookie `perf-sentinel-lang`, sinon `Accept-Language`, sinon l'anglais |
 | `GET /auth/sign-in/sso?return_url=` | anonyme | `302` vers le fournisseur, retour sur `return_url` après la connexion |
 | `POST /auth/sign-in/local` | anonyme, depuis la page | `302` vers `return_url` avec le cookie de session ; `403` et la page sur un nom ou un mot de passe faux ; `403` en texte brut depuis un autre site ; `413` ; `415` ; `429` ou `503` et la page, avec `Retry-After` |
 

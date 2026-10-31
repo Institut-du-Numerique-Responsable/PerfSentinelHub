@@ -1454,7 +1454,7 @@ any unmapped route does (`302` to the provider, `401` under `/api`), and a clien
 |---|---|---|
 | `POST /auth/device` | anonymous (the CLI) | `200` below; `400` `invalid_request` or `invalid_client`; `403` with `Sec-Fetch-Site`; `413` over 4 KiB; `429` `temporarily_unavailable` with `Retry-After: 60` |
 | `POST /auth/device/token` | anonymous (the CLI) | `200` token; `400` with `authorization_pending`, `slow_down`, `access_denied`, `expired_token`, `invalid_grant`, `unsupported_grant_type`, `invalid_request` or `invalid_client`; `403`; `413` |
-| `GET /device` | browser session | the approval page, in `?lang=` (`en` or `fr`), else `Accept-Language`, else English; or the sign-in when no session or less than 1 h is left |
+| `GET /device` | browser session | the approval page, in `?lang=` (`en` or `fr`), else the `perf-sentinel-lang` cookie, else `Accept-Language`, else English; or the sign-in when no session or less than 1 h is left |
 | `POST /api/device/verify` | browser session only | `200` below; `400` malformed code; `401`; `403`; `404` no such pending code; `415`; `429` |
 | `POST /api/device/approve` | browser session only | `204`; `400`; `401`; `403`; `404`; `409` the session ends within the hour; `415`; `429` |
 | `POST /auth/revoke` | anonymous, by possession | RFC 7009: `200` whether or not the token existed; `400 invalid_request`; `403`; `413`; `503` with `Retry-After: 1` |
@@ -1531,7 +1531,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md#local-accounts) for the model.
 
 | Route | Who | Answers |
 |---|---|---|
-| `GET /auth/sign-in?return_url=` | anonymous | `200` and the page, signed in or not, in `?lang=` (`en` or `fr`), else `Accept-Language`, else English |
+| `GET /auth/sign-in?return_url=` | anonymous | `200` and the page, signed in or not, in `?lang=` (`en` or `fr`), else the `perf-sentinel-lang` cookie, else `Accept-Language`, else English |
 | `GET /auth/sign-in/sso?return_url=` | anonymous | `302` to the provider, back to `return_url` after sign-in |
 | `POST /auth/sign-in/local` | anonymous, from the page | `302` to `return_url` with the session cookie; `403` and the page on a wrong name or password; `403` plain text from another site; `413`; `415`; `429` or `503` and the page, with `Retry-After` |
 

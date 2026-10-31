@@ -8,6 +8,9 @@ public static class HubLang
     public const string En = "en";
     public const string Fr = "fr";
 
+    /// <summary>The launcher's language button writes its choice here too, for the pages a redirect reaches.</summary>
+    public const string Cookie = "perf-sentinel-lang";
+
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-US");
 
     // The groups by hand, as launcher.js writes them: ICU builds disagree on the space fr-FR uses.
@@ -26,12 +29,13 @@ public static class HubLang
     }
 
     /// <summary>
-    ///     The language of a server page: <paramref name="lang" /> when it is en or fr, else the first en or fr
-    ///     variant of Accept-Language by quality, else English.
+    ///     The language of a server page: <paramref name="lang" /> when it is en or fr, else the launcher's
+    ///     choice cookie, else the first en or fr variant of Accept-Language by quality, else English.
     /// </summary>
     public static string Of(HttpRequest request, string? lang)
     {
         if (IsKnown(lang)) return lang!;
+        if (request.Cookies[Cookie] is { } chosen && IsKnown(chosen)) return chosen;
         foreach (var range in request.GetTypedHeaders().AcceptLanguage.Where(range => range.Quality is not 0)
                      .OrderByDescending(range => range.Quality ?? 1))
         {

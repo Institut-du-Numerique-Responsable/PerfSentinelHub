@@ -198,6 +198,21 @@ public sealed class LocalSignInTests : IAsyncLifetime
         Assert.Contains("<html lang=\"fr\">", unknown, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task The_launcher_choice_cookie_beats_accept_language_and_the_query_beats_it()
+    {
+        using var client = Client(Here);
+
+        // What a lapsed session's reload reaches: the cookie challenge, with no lang in the query.
+        var french = await PageAsync(client, "/auth/sign-in?return_url=%2F", "en-US", "perf-sentinel-lang=fr");
+        var english = await PageAsync(client, "/auth/sign-in?lang=en", "fr-FR", "perf-sentinel-lang=fr");
+        var unknown = await PageAsync(client, "/auth/sign-in", "fr-FR", "perf-sentinel-lang=de");
+
+        Assert.Contains("<html lang=\"fr\">", french, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"en\">", english, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"fr\">", unknown, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------------ signing in
 
     [Fact]
@@ -771,10 +786,12 @@ public sealed class LocalSignInTests : IAsyncLifetime
         return client.SendAsync(request, Cancel);
     }
 
-    private static async Task<string> PageAsync(HttpClient client, string path, string? acceptLanguage)
+    private static async Task<string> PageAsync(HttpClient client, string path, string? acceptLanguage,
+        string? cookie = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         if (acceptLanguage is not null) request.Headers.Add("Accept-Language", acceptLanguage);
+        if (cookie is not null) request.Headers.Add("Cookie", cookie);
         using var response = await client.SendAsync(request, Cancel);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var page = await response.Content.ReadAsStringAsync(Cancel);

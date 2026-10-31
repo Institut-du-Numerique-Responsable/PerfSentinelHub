@@ -18,8 +18,9 @@ All notable changes to PerfSentinelHub are recorded here.
   in the other language. A subscription takes `Language`, the language of its reports, its webhook's
   `plain` sentences and its mails, and `Recipients`, addresses with a language of their own: each
   mail's subject, body and attached page follow its address.
-- The sign-in page and the terminal approval page follow `?lang=`, then the browser's
-  `Accept-Language`, and carry the FR/EN button as a link.
+- The sign-in page and the terminal approval page follow `?lang=`, then the language picked with
+  the launcher's button (a `perf-sentinel-lang` cookie), then the browser's `Accept-Language`, and
+  carry the FR/EN button as a link.
 
 ## [0.10.0] - 2026-10-31
 

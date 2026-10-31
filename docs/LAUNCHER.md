@@ -664,7 +664,9 @@ reload is what reaches this page. A page that renders whether or not the provide
 is the point: the launcher never sends a browser straight to a provider that is down.
 
 The server writes this page and the terminal approval page in English or French: `?lang=en` or
-`?lang=fr` first, else the browser's `Accept-Language`, else English. Each carries the launcher's
+`?lang=fr` first, else the language last picked with the launcher's button (the
+`perf-sentinel-lang` cookie it writes), else the browser's `Accept-Language`, else English. So a
+lapsed session's reload comes back to the language the reader chose. Each carries the launcher's
 FR/EN button as a link to the same page in the other language, and a refused sign-in answers in the
 language of the form it came from. A language picked on these pages is not stored.
 

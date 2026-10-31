@@ -2990,6 +2990,8 @@
             } catch (error) {
                 // Storage off or absent: the choice lasts as long as the page.
             }
+            // The sign-in and device pages a redirect reaches carry no lang: HubLang.Of reads this cookie.
+            if (typeof document !== 'undefined') document.cookie = 'perf-sentinel-lang=' + LANG + ';max-age=31536000;samesite=lax';
         }
         if (typeof document !== 'undefined') document.documentElement.lang = LANG;
         LANG_LISTENERS.forEach(listener => listener(LANG));
