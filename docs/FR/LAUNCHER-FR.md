@@ -601,22 +601,22 @@ l'exécution, parce que le daemon cesse alors de charger aussi la baseline TOML,
 [ACK-WORKFLOW-FR.md](https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/blob/main/docs/FR/ACK-WORKFLOW-FR.md)
 du moteur.
 
-## Quand aucun grant ne vous atteint
+## Quand aucune autorisation ne vous concerne
 
-Avec `Hub:Access` activé, `/api/status` répond `403` à un appelant connecté qu'aucun grant
+Avec `Hub:Access` activé, `/api/status` répond `403` à un appelant connecté qu'aucune autorisation
 n'atteint. Le Hub répond, donc le lanceur n'affiche pas son bandeau d'injoignabilité. Chaque
-route affiche [Votre accès](#votre-accès) sous le bandeau « No grant on this Hub reaches
-you. An administrator grants access in the Hub's configuration. » Les onglets et la
+route affiche [Votre accès](#votre-accès) sous le bandeau « Aucune autorisation de ce Hub ne vous concerne. Un
+administrateur accorde les accès dans la configuration du Hub. » Les onglets et la
 pastille de version disparaissent, puisque chaque onglet mènerait au même refus, et la
 pastille d'identité nomme toujours l'appelant. À la place d'une portée vide, un bloc à
 copier réunit ce dont un administrateur a besoin : le nom, l'identifiant qu'il inscrit dans
-`Admins` ou `Members`, et les groupes qu'un grant peut nommer. Tout autre échec de
+`Admins` ou `Members`, et les groupes qu'une autorisation peut nommer. Tout autre échec de
 `/api/status` garde le bandeau d'injoignabilité. Voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant-dark.png">
-  <img alt="Le bandeau sans grant au-dessus de l'accès de l'appelant, avec la demande à envoyer à un administrateur" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
+  <img alt="Le bandeau sans autorisation au-dessus de l'accès de l'appelant, avec la demande à envoyer à un administrateur" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
 </picture>
 
 Avec le contrôle d'accès, chaque source de `/api/sources` porte les `permissions` de
@@ -641,7 +641,7 @@ ailleurs. Sa seule action révoque un jeton de terminal. Elle montre :
    fournisseur s'applique à la prochaine connexion, et « Your id, for an administrator »,
    le sujet en texte sélectionnable.
 2. **Vos groupes.** Des pastilles marquées fournisseur ou interne.
-3. **Ce que vous atteignez.** Projet, groupe, rôle et permissions par grant. Un grant sur
+3. **Ce que vous atteignez.** Projet, groupe, rôle et permissions par autorisation. Une autorisation sur
    `*` se lit « Everything, including records no project covers ».
 4. **Vos jetons de terminal**, tirés de `GET /api/tokens` : ceux que `perf-sentinel login`
    a obtenus pour cet appelant, avec l'adresse d'où la connexion a été demandée, la
@@ -652,7 +652,7 @@ ailleurs. Sa seule action révoque un jeton de terminal. Elle montre :
    `401` à sa requête suivante, ou le jeton n'existait déjà plus, ou il reste valide et
    pourquoi) et place le focus sur la carte. Voir
    [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal).
-5. **Projets que vous atteignez**, pour un membre : chaque projet que ces grants nomment,
+5. **Projets que vous atteignez**, pour un membre : chaque projet que ces autorisations nomment,
    avec ses motifs écrits `source lab-daemon · service checkout-* · attribute team=shop`.
    Un administrateur reçoit à la place un lien vers Couverture.
 
@@ -669,7 +669,7 @@ changement :
 
 1. **À traiter.** Les services, valeurs d'attribut et sources qu'aucun projet ne couvre,
    avec leurs nombres de findings et, par leur nom, les sources où chacun a été vu. Les
-   findings qu'aucun projet ne couvre ne se lisent que par des grants sur `*`. Chaque liste
+   findings qu'aucun projet ne couvre ne se lisent que par des autorisations sur `*`. Chaque liste
    s'arrête à ses 200 premières entrées et le dit.
 2. **Motifs à coller.** Une ligne YAML par service, attribut et source non couverts, avec
    un bouton Copy, prête à placer sous les `patterns` d'un projet de
@@ -677,12 +677,12 @@ changement :
    son sens.
 3. **Déploiements en désaccord sur un attribut de projet.** Les copies de finding qu'un
    motif d'attribut de projet lit sans pouvoir y écrire, parce que la copie porte deux
-   valeurs de la clé ou a aussi été vue sous un groupement sans elle. Un grant d'attribut
+   valeurs de la clé ou a aussi été vue sous un groupement sans elle. Une autorisation d'attribut
    les lit mais ne peut pas les acquitter, voir
    [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
 4. **Les jetons de terminal de tous**, avec le même Revoke.
 5. **Configuration**, telle que le Hub l'a chargée à son dernier démarrage, un pli par
-   partie avec son nombre : projets, rôles (les intégrés marqués), grants, groupes
+   partie avec son nombre : projets, rôles (les intégrés marqués), autorisations, groupes
    internes et leurs membres, admins par identifiant et par groupe, jetons machine avec
    leur expiration en « expired », « in less than a day » ou « in N days », jamais leur
    valeur, et comptes locaux par nom, jamais leur hash. Une partie vide affiche « None
@@ -690,7 +690,7 @@ changement :
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage-dark.png">
-  <img alt="L'écran Couverture d'un admin : ce qu'aucun projet ne couvre, les motifs à coller, les conflits, chaque jeton de terminal et la configuration avec les grants dépliés" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage.png">
+  <img alt="L'écran Couverture d'un admin : ce qu'aucun projet ne couvre, les motifs à coller, les conflits, chaque jeton de terminal et la configuration avec les autorisations dépliées" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage.png">
 </picture>
 
 La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le Hub la sert

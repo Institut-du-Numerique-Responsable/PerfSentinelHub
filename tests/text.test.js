@@ -155,12 +155,14 @@ test("adopting the page's language does not store it, only a choice does", () =>
     }
 });
 
-test("French says grant where English does, and no link dies", () => {
+test("French says autorisation for a grant, and a withdrawn share link is dead", () => {
     const keys = Object.keys(TEXT.en);
-    assert.deepEqual(keys.filter(key => /\bgrants?\b/i.test(TEXT.en[key]) && /\bdroits?\b/i.test(TEXT.fr[key])
-        && !/\brights?\b/i.test(TEXT.en[key])), []);
-    // A crashed process may die, a link is disabled or expires.
-    assert.deepEqual(keys.filter(key => /\blien/i.test(TEXT.fr[key]) && /\b(mort|morts|meurt)\b/i.test(TEXT.fr[key])), []);
+    // "grants access" is the verb, every other grant is the noun.
+    const grantNoun = text => /\bgrants?\b/i.test(text.replace(/\bgrants? access\b/gi, ""));
+    assert.deepEqual(keys.filter(key => /\bgrants?\b/i.test(TEXT.fr[key])), []);
+    assert.deepEqual(keys.filter(key => grantNoun(TEXT.en[key]) && !/\bautorisations?\b/i.test(TEXT.fr[key])), []);
+    for (const key of ["disc.link.withdrawn", "disc.banner.withdrawn", "disc.withdraw.done", "disc.withdraw.body"])
+        assert.match(TEXT.fr[key], /\bmorts?\b/, key);
 });
 
 test("a choice also goes to the cookie the sign-in and device pages read", () => {

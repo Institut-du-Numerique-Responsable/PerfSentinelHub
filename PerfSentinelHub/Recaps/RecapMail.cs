@@ -17,9 +17,11 @@ public static class RecapMail
         RecapReportSummary report, RecapSnapshot tech, string to, MailAddress from, Uri? publicUrl,
         string lang = HubLang.En)
     {
-        var period = RecapText.Period(
-            new RecapPeriodInfo(report.PeriodKind, report.PeriodFrom, report.PeriodTo, false, [], [], null, null),
-            lang);
+        var period = lang == HubLang.Fr && report.PeriodKind == "month"
+            ? RecapText.FrenchMonth(report.PeriodFrom)
+            : RecapText.Period(
+                new RecapPeriodInfo(report.PeriodKind, report.PeriodFrom, report.PeriodTo, false, [], [], null, null),
+                lang);
         var incomplete = report.Complete ? "" : HubText.Get(lang, "mail.subject.incomplete");
         var message = new MailMessage(new MailAddress(from.Address, "Perf Sentinel Hub"), new MailAddress(to))
         {

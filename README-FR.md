@@ -103,7 +103,7 @@ publication réussies.
 | [docs/FR/LAUNCHER-FR.md](docs/FR/LAUNCHER-FR.md)             | L'interface de navigateur, ses commandes imprimées et ses rapports live                                          |
 | [docs/FR/OPERATIONS-FR.md](docs/FR/OPERATIONS-FR.md)         | Fraîcheur, rétablissement, sauvegarde et restauration                                                            |
 | [docs/FR/AUTHENTICATION-FR.md](docs/FR/AUTHENTICATION-FR.md) | Connexion du navigateur via Keycloak, Entra ID, Google, GitLab ou Bitbucket                                      |
-| [docs/FR/ACCESS-CONTROL-FR.md](docs/FR/ACCESS-CONTROL-FR.md) | Qui atteint quels findings, sources et runs : projets, rôles, grants et jetons machine pour la CI                |
+| [docs/FR/ACCESS-CONTROL-FR.md](docs/FR/ACCESS-CONTROL-FR.md) | Qui atteint quels findings, sources et runs : projets, rôles, autorisations et jetons machine pour la CI         |
 | [docs/FR/LIMITATIONS-FR.md](docs/FR/LIMITATIONS-FR.md)       | Ce que le Hub déclare au lieu de le mesurer, et ce qu'un run ne promet pas                                       |
 | [docs/FR/BENCHMARKS-FR.md](docs/FR/BENCHMARKS-FR.md)         | Taille d'image, démarrage à froid et mémoire au repos, mesurés sur l'image publiée                               |
 | [RELEASING.md](RELEASING.md)                                 | Ce que contient une release, comment elle est signée, et comment en vérifier une publiquement                    |

@@ -18,6 +18,12 @@ public static class RecapText
     private static readonly string[] FrenchMonths =
         ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
+    private static readonly string[] FrenchMonthNames =
+    [
+        "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre",
+        "décembre"
+    ];
+
     private static string T(string lang, string key, params (string Name, string Value)[] values)
     {
         return HubText.Get(lang, key, values);
@@ -132,6 +138,14 @@ public static class RecapText
             return iso;
         return (day.Day == 1 ? "1er" : day.Day.ToString(CultureInfo.InvariantCulture)) + " " +
                FrenchMonths[day.Month - 1] + " " + day.Year.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The calendar month a French month recap mail names: <c>octobre 2026</c>.</summary>
+    public static string FrenchMonth(string iso)
+    {
+        return DateOnly.TryParseExact(iso, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+            ? FrenchMonthNames[day.Month - 1] + " " + day.Year.ToString(CultureInfo.InvariantCulture)
+            : iso;
     }
 
     public static string Incomplete(IReadOnlyList<string> reasons, string view = "tech", string lang = HubLang.En)

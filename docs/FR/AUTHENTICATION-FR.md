@@ -36,7 +36,7 @@ Les routes laissées ouvertes servent toujours qui joint le port :
 `/api/correlations` tous les incidents et tous les épisodes de corrélation. Gardez pour
 elles la frontière réseau, une NetworkPolicy ou un ingress qui ne publie pas ces
 chemins. Avec `Hub:Access:Enabled`, ces lectures exigent aussi une session ou un jeton
-machine, et chaque appelant atteint ce que couvrent ses grants, voir
+machine, et chaque appelant atteint ce que couvrent ses autorisations, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
 
 Sans `Hub:Auth:RequiredGroups`, tout utilisateur que le fournisseur connecte
@@ -229,10 +229,10 @@ dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Ce qui change à la connexion
   `machine:`, casse ignorée, fait échouer la connexion. Sans contrôle d'accès, l'identité
   n'est qu'un nom affiché et une telle valeur reste acceptée.
 - **Groupes.** `GroupsClaim` est lu une fois par connexion et alimente les deux portes,
-  selon les règles ci-dessus. La session ne garde que les groupes du fournisseur qu'un
-  grant ou `Hub:Access:AdminGroups` nomme, et jamais une valeur qui commence par
+  selon les règles ci-dessus. La session ne garde que les groupes du fournisseur qu'une
+  autorisation ou `Hub:Access:AdminGroups` nomme, et jamais une valeur qui commence par
   `internal:`. Les noms écartés sont journalisés en Debug (événement `1902`), ce qui
-  montre comment le fournisseur les écrit. Un grant donné à un groupe du fournisseur
+  montre comment le fournisseur les écrit. Une autorisation donnée à un groupe du fournisseur
   atteint un utilisateur connecté à sa connexion suivante.
 - **Groupes d'admins du fournisseur.** `AdminGroups` peut nommer un groupe du
   fournisseur. Chez un fournisseur où les utilisateurs créent des groupes de n'importe

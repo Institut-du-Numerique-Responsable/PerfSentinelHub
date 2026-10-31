@@ -423,11 +423,11 @@ public static class HubText
         ["recap.plain.other"] = "L'application fait à chaque action un travail qui pourrait être évité.",
         ["mail.subject.day"] = "Récap Perf Sentinel : journée du {period}{incomplete}",
         ["mail.subject.week"] = "Récap Perf Sentinel : semaine {period}{incomplete}",
-        ["mail.subject.month"] = "Récap Perf Sentinel : mois {period}{incomplete}",
+        ["mail.subject.month"] = "Récap Perf Sentinel : {period}{incomplete}",
         ["mail.subject.incomplete"] = " (période incomplète)",
         ["mail.intro.day"] = "Récap « {subscription} » pour la journée du {period}.",
         ["mail.intro.week"] = "Récap « {subscription} » pour la semaine {period}.",
-        ["mail.intro.month"] = "Récap « {subscription} » pour le mois {period}.",
+        ["mail.intro.month"] = "Récap « {subscription} » pour {period}.",
         ["mail.incomplete"] =
             "Certains jours de cette période sont incomplets : la comparaison avec la période précédente n'est donc pas exacte.",
         ["mail.attached"] =

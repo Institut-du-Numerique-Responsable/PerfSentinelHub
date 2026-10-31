@@ -1,7 +1,7 @@
 # Contrôle d'accès
 
 Plusieurs équipes partagent un Hub. Avec le contrôle d'accès, chaque appelant atteint ce
-que couvrent ses grants et rien d'autre : dans le navigateur, et pour les machines comme
+que couvrent ses autorisations et rien d'autre : dans le navigateur, et pour les machines comme
 les jobs de CI, les tableaux de bord et les plugins d'IDE. Il est désactivé par défaut,
 et désactivé le Hub répond exactement comme sans lui.
 
@@ -35,7 +35,7 @@ Vérifiez aussi ces points, qu'aucune validation ne peut contrôler :
 - **`Hub:Auth:RequiredGroups`.** Recommandé avec l'accès : c'est la porte extérieure, qui
   peut ouvrir une session, et l'accès décide de ce que chaque session atteint à
   l'intérieur. Sans lui, tout compte que le fournisseur connecte obtient une session, qui
-  n'atteint rien sans grant (`/api/status` répond `403`) mais charge quand même le
+  n'atteint rien sans autorisation (`/api/status` répond `403`) mais charge quand même le
   launcher.
 - **Le réseau.** Les utilisateurs ne doivent pas atteindre directement les démons et les
   backends de traces : le contrôle d'accès couvre ce que sert le Hub.
@@ -76,13 +76,13 @@ qui commence par `local:` ou `machine:` (casse ignorée) : ces préfixes sont r�
 
 Les **groupes du fournisseur** sont lus à la connexion dans le champ du userinfo que nomme
 `Hub:Auth:GroupsClaim`, celui que lit `RequiredGroups`, avec les mêmes règles : une liste
-de chaînes ou une chaîne seule. La session ne garde que les groupes du fournisseur qu'un
-grant ou `AdminGroups` nomme, jamais une valeur qui commence par `internal:`. Les noms
+de chaînes ou une chaîne seule. La session ne garde que les groupes du fournisseur qu'une
+autorisation ou `AdminGroups` nomme, jamais une valeur qui commence par `internal:`. Les noms
 écartés sont journalisés en Debug (événement `1902`), ce qui montre l'orthographe exacte
 qu'envoie le fournisseur : `acme/shop` chez GitLab, `/shop` chez Keycloak avec *Full group
 path* activé.
 
-Un groupe du fournisseur dans un grant ou dans `AdminGroups` doit être un nom que seule
+Un groupe du fournisseur dans une autorisation ou dans `AdminGroups` doit être un nom que seule
 l'organisation peut créer : le chemin complet sous son propre groupe chez GitLab
 (`acme/hub-admins`, jamais un `hub-admins` nu), le chemin complet du groupe chez Keycloak,
 et un champ `GroupsClaim` que les utilisateurs ne peuvent pas modifier. Là où les
@@ -108,7 +108,7 @@ lui correspond. Un motif renseigne un ou plusieurs de :
 
 Une partie est exacte, ou un préfixe qui se termine par un seul `*` (`checkout-*`). Les
 comparaisons sont exactes, casse comprise. Un `*` seul n'est pas un motif : `*` est une
-cible de grant, qui couvre chaque enregistrement, y compris ceux qu'aucun projet ne
+cible d'autorisation, qui couvre chaque enregistrement, y compris ceux qu'aucun projet ne
 couvre.
 
 Un finding est comparé source par source : sa copie dans chaque source a le service propre
@@ -150,9 +150,9 @@ divulgation ou un rapport de récap n'appartient à aucune source. Le rôle int�
 et un jeton machine ne les détient jamais. Un rôle configuré peut les porter, attribué sur `*`
 seulement : le Hub refuse de démarrer sur l'attribution d'un tel rôle à un projet.
 
-### Grants et admins
+### Autorisations et admins
 
-Un grant donne à un groupe un rôle sur un projet ou sur `*`. Les admins détiennent chaque
+Une autorisation (clé `Grants`) donne à un groupe un rôle sur un projet ou sur `*`. Les admins détiennent chaque
 permission sur `*` : les sujets de `Admins` (la voie de secours quand un groupe d'admins
 du fournisseur se casse), les groupes de `AdminGroups`, et les groupes qui ont le rôle
 intégré `admin` sur `*`. Un [compte local](#comptes-locaux) listé là, ou dans un groupe
@@ -160,33 +160,33 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 
 ### Ce que voit un appelant
 
-| Route                                                                  | Exige                                                              | Refus                       |
-|------------------------------------------------------------------------|--------------------------------------------------------------------|-----------------------------|
-| `/` et les fichiers du launcher                                        | n'importe quel appelant                                            | redirection ou `401`        |
-| `GET /api/status`, `GET /api/sources`                                  | une permission quelque part                                        | `403`                       |
-| `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtré                                            | `403` si détenue nulle part |
-| `GET /api/recap`                                                       | `findings.read`, filtré                                            | `403` si détenue nulle part |
-| `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` sur `*`, ou le créateur d'un rapport à la demande avec `findings.read` | `403` (liste), `404` (un rapport) |
-| `POST /api/recap/reports`                                              | `findings.read`, filtré, et quelqu'un à nommer                     | `403`                   |
-| `GET /api/cards/keys`, `POST /api/cards/keys/rotate` et `/revoke`     | `access.admin`, et quelqu'un à nommer                              | `403`                   |
-| `GET /api/cards/options`, `POST /api/cards/render` et `/attachment`   | `cards.write` et `findings.read` sur les sources demandées, et quelqu'un à nommer | `403`                   |
-| `GET /api/incidents`, `GET /api/incidents/{id}`                        | `findings.read`, filtré ; la copie la plus riche dans le périmètre | `403` ; `404`               |
-| `POST /api/incidents/refresh`                                          | `findings.read` ; ne lit que les démons dans le périmètre          | `403`                       |
-| `GET /api/correlations`                                                | `findings.read`, filtré sur les épisodes dont l'appelant lit les deux services à cette source | `403` s'il n'est détenu nulle part |
-| `GET /api/sources/{sourceId}/daemon`                                   | `sources.read` sur cette source entière                            | `404`                       |
-| `POST /api/sources/{sourceId}/acks` et `/acks/revoke`                  | `findings.read` et `acks.write` sur le finding dans cette source   | `404`, `403`                |
-| `POST` et `PATCH /api/actions`                                         | `findings.read` et `actions.write` sur une copie du finding, et quelqu'un à nommer | `404`, `403` |
-| `PUT /api/labels`                                                      | `findings.read` et `labels.write` sur une copie d'un finding de l'endpoint, et quelqu'un à nommer | `404`, `403` |
-| `PUT /api/labels/services`                                             | `findings.read` et `labels.write` sur une copie d'un finding du service, et quelqu'un à nommer | `404`, `403` |
-| `POST /api/analyses`                                                   | `analyses.run` et la règle de lecture du run, ci-dessous           | `403`                       |
-| `GET /api/analyses`, `GET /api/analyses/{id}`                          | la règle de lecture du run                                         | filtré ; `404`              |
-| `GET /reports/{id}.html`                                               | la règle de lecture du run                                         | `404`                       |
-| `GET /metrics`                                                         | anonyme, sur `Hub:MetricsPort` seulement                           | `404` ailleurs              |
-| `GET /api/access`                                                      | tout appelant, même sans grant ; davantage pour un admin, plus bas |                             |
-| `GET /api/disclosures`, `GET /api/disclosures/{id}` et ses fichiers    | `disclosures.read` sur `*`                                         | `403`                       |
-| `POST` et `DELETE` sous `/api/disclosures/{id}/`                       | `disclosures.manage` sur `*`, et quelqu'un à nommer                | `403`                       |
-| `GET /share/{token}/{name}`                                            | anonyme, le jeton seul                                             | `404`                       |
-| `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`, `POST /api/import/disclosures`, `/health/*` | inchangé                                                           |                             |
+| Route                                                                                                                                                                  | Exige                                                                                             | Refus                              |
+|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|------------------------------------|
+| `/` et les fichiers du launcher                                                                                                                                        | n'importe quel appelant                                                                           | redirection ou `401`               |
+| `GET /api/status`, `GET /api/sources`                                                                                                                                  | une permission quelque part                                                                       | `403`                              |
+| `GET /api/findings`, `GET /api/findings/{traceId}`                                                                                                                     | `findings.read`, filtré                                                                           | `403` si détenue nulle part        |
+| `GET /api/recap`                                                                                                                                                       | `findings.read`, filtré                                                                           | `403` si détenue nulle part        |
+| `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html`                                                                                | `recaps.read` sur `*`, ou le créateur d'un rapport à la demande avec `findings.read`              | `403` (liste), `404` (un rapport)  |
+| `POST /api/recap/reports`                                                                                                                                              | `findings.read`, filtré, et quelqu'un à nommer                                                    | `403`                              |
+| `GET /api/cards/keys`, `POST /api/cards/keys/rotate` et `/revoke`                                                                                                      | `access.admin`, et quelqu'un à nommer                                                             | `403`                              |
+| `GET /api/cards/options`, `POST /api/cards/render` et `/attachment`                                                                                                    | `cards.write` et `findings.read` sur les sources demandées, et quelqu'un à nommer                 | `403`                              |
+| `GET /api/incidents`, `GET /api/incidents/{id}`                                                                                                                        | `findings.read`, filtré ; la copie la plus riche dans le périmètre                                | `403` ; `404`                      |
+| `POST /api/incidents/refresh`                                                                                                                                          | `findings.read` ; ne lit que les démons dans le périmètre                                         | `403`                              |
+| `GET /api/correlations`                                                                                                                                                | `findings.read`, filtré sur les épisodes dont l'appelant lit les deux services à cette source     | `403` s'il n'est détenu nulle part |
+| `GET /api/sources/{sourceId}/daemon`                                                                                                                                   | `sources.read` sur cette source entière                                                           | `404`                              |
+| `POST /api/sources/{sourceId}/acks` et `/acks/revoke`                                                                                                                  | `findings.read` et `acks.write` sur le finding dans cette source                                  | `404`, `403`                       |
+| `POST` et `PATCH /api/actions`                                                                                                                                         | `findings.read` et `actions.write` sur une copie du finding, et quelqu'un à nommer                | `404`, `403`                       |
+| `PUT /api/labels`                                                                                                                                                      | `findings.read` et `labels.write` sur une copie d'un finding de l'endpoint, et quelqu'un à nommer | `404`, `403`                       |
+| `PUT /api/labels/services`                                                                                                                                             | `findings.read` et `labels.write` sur une copie d'un finding du service, et quelqu'un à nommer    | `404`, `403`                       |
+| `POST /api/analyses`                                                                                                                                                   | `analyses.run` et la règle de lecture du run, ci-dessous                                          | `403`                              |
+| `GET /api/analyses`, `GET /api/analyses/{id}`                                                                                                                          | la règle de lecture du run                                                                        | filtré ; `404`                     |
+| `GET /reports/{id}.html`                                                                                                                                               | la règle de lecture du run                                                                        | `404`                              |
+| `GET /metrics`                                                                                                                                                         | anonyme, sur `Hub:MetricsPort` seulement                                                          | `404` ailleurs                     |
+| `GET /api/access`                                                                                                                                                      | tout appelant, même sans autorisation ; davantage pour un admin, plus bas                         |                                    |
+| `GET /api/disclosures`, `GET /api/disclosures/{id}` et ses fichiers                                                                                                    | `disclosures.read` sur `*`                                                                        | `403`                              |
+| `POST` et `DELETE` sous `/api/disclosures/{id}/`                                                                                                                       | `disclosures.manage` sur `*`, et quelqu'un à nommer                                               | `403`                              |
+| `GET /share/{token}/{name}`                                                                                                                                            | anonyme, le jeton seul                                                                            | `404`                              |
+| `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`, `POST /api/import/disclosures`, `/health/*` | inchangé                                                                                          |                                    |
 
 `GET /api/sources` ne liste que les sources où l'appelant détient quelque chose, chacune
 avec un tableau `permissions` (absent sans contrôle d'accès). Une source absente de cette
@@ -204,7 +204,7 @@ une route.
   lancement d'une analyse, aucune permission du tout, un listing dont la permission n'est
   détenue nulle part) ; une écriture depuis un autre site.
 - Un listing répond `403` plutôt que `[]` quand sa permission n'est détenue nulle part :
-  une porte de CI dont le jeton n'a aucun grant échoue bruyamment au lieu de passer sur
+  une porte de CI dont le jeton n'a aucune autorisation échoue bruyamment au lieu de passer sur
   une liste vide.
 
 Une écriture depuis un navigateur doit porter `Sec-Fetch-Site: same-origin`, que tout
@@ -228,10 +228,10 @@ backend, son `service` (s'il y en a un) correspond à X, et, pour un motif d'att
 quand chaque copie de X que le Hub détient dans l'environnement du backend porte cet
 attribut, avec au moins une copie. Le moteur n'exporte aucun regroupement pour un span :
 ces copies sont la seule preuve de l'équipe à qui appartient un service. Un run sur un
-trace ID exige le backend entier : un grant de service ne peut pas faire récupérer au Hub
+trace ID exige le backend entier : une autorisation de service ne peut pas faire récupérer au Hub
 une trace arbitraire.
 
-Il n'y a pas de clause du demandeur : qui a lancé un run le lit tant que son grant tient.
+Il n'y a pas de clause du demandeur : qui a lancé un run le lit tant que son autorisation tient.
 
 **Un rapport de traces montre chaque service que ses traces traversent**, avec les
 comptes de `result`. Le moteur écrit le rapport et le Hub ne peut pas le filtrer, et les
@@ -252,11 +252,11 @@ est refusé avant la lecture du corps de la requête.
 `acks.write` par un motif d'attribut exige que chaque regroupement que le Hub a enregistré
 pour cette copie porte l'attribut avec une valeur qui correspond. Le démon indexe un ack
 sur la signature, aveugle aux regroupements : un ack fait aussi taire des regroupements
-que le Hub n'a jamais observés et ceux qui apparaîtront. **Un ack fait par un grant
+que le Hub n'a jamais observés et ceux qui apparaîtront. **Un ack fait par une autorisation
 d'attribut peut faire taire le même finding pour le déploiement d'une autre équipe sur ce
 démon**, jusqu'à son expiration ou sa révocation. Le Hub n'impose aucune expiration. Là où
 plusieurs équipes peuvent émettre le même nom de service, donnez à l'équipe propriétaire
-un grant de source ou de service pour `acks.write` et `analyses.run`.
+une autorisation de source ou de service pour `acks.write` et `analyses.run`.
 
 ### Actions
 
@@ -286,7 +286,7 @@ sur chaque copie de chaque finding de ce service.
 Deux écrans du lanceur lisent `GET /api/access` ([API-FR.md](API-FR.md#get-apiaccess)).
 **Votre accès**, derrière la pastille d'identité, montre à chaque appelant qui il est, son
 identifiant (le sujet à mettre dans `Admins` ou `Members`), ses groupes, ce qu'atteignent
-ses grants et ses propres jetons de terminal. Un appelant qu'aucun grant n'atteint reçoit
+ses autorisations et ses propres jetons de terminal. Un appelant qu'aucune autorisation n'atteint reçoit
 le même écran, avec un bloc à copier pour un administrateur. **Couverture**, un onglet
 réservé aux admins, commence par chaque service, valeur d'attribut et source qu'aucun
 projet ne couvre dans `Hub:Retention`, pour repérer un nouveau venu et l'affecter dans la
@@ -304,14 +304,14 @@ l'écrire. Pour une clé qu'utilise un motif de projet, la copie en porte deux v
 (`identities_without_key` compte ces regroupements, les observations sans regroupement
 comprises). Deux déploiements d'un même service rattachés à des équipes différentes, ou
 des spans émis sous le nom de service d'une autre équipe, en produisent un. Sur ces
-copies, un grant `acks.write` passant par l'attribut est refusé (`403`) alors que la copie
-reste lisible. Répondez-y par un grant de source ou de service pour
+copies, une autorisation `acks.write` passant par l'attribut est refusée (`403`) alors que la copie
+reste lisible. Répondez-y par une autorisation de source ou de service pour
 l'équipe propriétaire du service, ou en corrigeant l'attribut de regroupement au démon.
 
 ## Jetons machine
 
 Un jeton machine est un identifiant pour un job de CI ou un tableau de bord. Il détient au
-plus `findings.read`, par les grants de son groupe : quoi que disent les grants, une
+plus `findings.read`, par les autorisations de son groupe : quoi que disent les autorisations, une
 machine n'acquitte jamais, ne lance aucun run et n'ouvre aucune vue de démon.
 
 ```yaml
@@ -337,7 +337,7 @@ curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
   "https://hub.example.com/api/findings?environment=production&status=active"
 ```
 
-Un jeton sans grant reçoit `403` sur `/api/findings` : une porte construite dessus échoue
+Un jeton sans autorisation reçoit `403` sur `/api/findings` : une porte construite dessus échoue
 au lieu de passer sur rien. Un jeton inconnu ou expiré reçoit `401`. Une entrée expirée
 est journalisée au démarrage (événement `2001`) et n'arrête jamais le Hub.
 
@@ -359,7 +359,7 @@ envoyé en `Authorization: Bearer`, comme un jeton machine, et il est jugé comm
 personne qui l'a approuvé :
 
 - **Droits.** Le sujet et les groupes du fournisseur de la session qui approuve, figés à
-  l'approbation, avec les groupes internes et les grants lus à chaque requête.
+  l'approbation, avec les groupes internes et les autorisations lus à chaque requête.
   Contrairement à un jeton machine il écrit aussi : acks et analyses sont enregistrés
   sous l'identité de la personne.
 - **Jamais admin.** Pas même approuvé par un admin ; `GET /api/access` rapporte
@@ -396,7 +396,7 @@ usage, comme sous `RequiredGroups`. Une session locale aussi, et un nouveau hash
 compte y met fin au redémarrage qui le charge. Les groupes du fournisseur sont lus à la connexion :
 un groupe qu'un utilisateur rejoint ou quitte chez le fournisseur s'applique à sa
 connexion suivante, 8 heures plus tard au plus. Tout le reste, groupes internes, admins,
-grants et `RequiredGroups`, est lu à chaque requête : une modification s'applique au
+autorisations et `RequiredGroups`, est lu à chaque requête : une modification s'applique au
 redémarrage qui la déploie, sessions ouvertes comprises. Une session ouverte avant
 l'activation de l'accès ne porte aucun sujet et se reconnecte.
 

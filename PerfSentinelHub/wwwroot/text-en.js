@@ -1758,7 +1758,7 @@
         'card.contact.tech': 'Checking contacts cloudflare-dns.com (DNS over HTTPS) and {domain}.',
         'card.contact.pilotage': 'Checking contacts cloudflare-dns.com and {domain}.',
         'card.level.attached': 'On the check page, this card reads: Signed by {domain}.',
-        'card.level.unattached': 'On the check page, this card reads: Figures intact since their signature. Signer not verified.',
+        'card.level.unattached': 'On the check page, this card reads: Figures intact since they were signed. Signer not verified.',
         'card.env.one.tech': 'Environment {environment}, taken from the recap filter above. A card covers every service in it: the service and namespace filters do not apply.',
         'card.env.one.pilotage': 'Environment {environment}, taken from the recap filter above. A card covers every service in it.',
         'card.env.all.tech': 'Every environment, as the recap filter above reads. A card covers every service in them: the service and namespace filters do not apply.',

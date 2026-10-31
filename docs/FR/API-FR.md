@@ -1398,7 +1398,7 @@ sur `Hub:MetricsPort` seulement) et les `POST /auth/device`, `POST /auth/device/
 `POST /auth/revoke` de la CLI ([Connexion du terminal](#connexion-du-terminal)), et les
 routes de la page de connexion ([Connexion locale](#connexion-locale)), exige une
 session, un jeton de terminal ou un jeton machine, et chaque réponse couvre ce que couvrent
-les grants de l'appelant. Le modèle
+les autorisations de l'appelant. Le modèle
 est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil :
 
 - **Identifiants.** Une session du navigateur, ou `Authorization: Bearer` avec un jeton de
@@ -1422,7 +1422,7 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   tranches de cette liste unique. Un `source_id` ou un `environment` hors du `/api/sources`
   de l'appelant reçoit le même `400` qu'un inconnu. Un appelant qui ne détient
   `findings.read` nulle part reçoit `403` plutôt que `[]` : une porte de CI dont le jeton
-  n'a aucun grant échoue.
+  n'a aucune autorisation échoue.
 - **Les incidents** suivent `findings.read` de la même façon ; `/api/incidents/{id}` sert
   la copie la plus riche dans le périmètre, et `404` s'il n'y en a aucune. Un
   rafraîchissement ne lit que les démons où l'appelant lit quelque chose.
@@ -1490,7 +1490,7 @@ curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
 
 Montée seulement avec `Hub:Access:Enabled` : sans contrôle d'accès elle répond `404`, et le
 lanceur garde alors sa pastille d'identité en simple texte et masque l'onglet Coverage. Tout appelant la lit, y compris celui
-qu'aucun grant n'atteint, car c'est ainsi qu'il trouve l'identifiant qu'un administrateur
+qu'aucune autorisation n'atteint, car c'est ainsi qu'il trouve l'identifiant qu'un administrateur
 lui demande. Elle n'écrit jamais et ne liste jamais la valeur ni l'empreinte d'un jeton
 machine.
 
@@ -1520,7 +1520,7 @@ machine.
 - `groups` sont les groupes effectifs de l'appelant : les groupes du fournisseur que la
   configuration nomme, gardés à la connexion, et les groupes internes qui listent le sujet,
   nommés sans `internal:`.
-- `reach` porte les grants de l'appelant avec ce que chacun lui donne : un jeton machine
+- `reach` porte les autorisations de l'appelant avec ce que chacun lui donne : un jeton machine
   garde `findings.read`, et `access.admin` n'apparaît que dans la session d'un admin. Une
   entrée `Admins` ou `AdminGroups` se lit comme le rôle `admin` sur `*`, avec `group` nul
   pour `Admins`. `projects` sont les projets que `reach` nomme.
@@ -1541,7 +1541,7 @@ machine.
     motif de projet porte deux valeurs, ou manque à l'un des groupements sous lesquels la
     copie a été vue, sous la forme `{signature, source_id, service, key, values,
     identities_without_key}`, triées par source puis signature, 200 au plus. Ce sont les
-    copies où un grant d'attribut lit sans pouvoir acquitter, voir
+    copies où une autorisation d'attribut lit sans pouvoir acquitter, voir
     [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
 
 ### Connexion du terminal

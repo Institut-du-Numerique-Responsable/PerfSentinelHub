@@ -148,8 +148,7 @@ public sealed class RecapMailTests
 
     [Theory]
     [InlineData("day", "2026-10-29", "2026-10-29", "journée du 29 oct. 2026", "pour la journée du 29 oct. 2026.")]
-    [InlineData("month", "2026-10-01", "2026-10-31", "mois du 1er oct. 2026 au 31 oct. 2026",
-        "pour le mois du 1er oct. 2026 au 31 oct. 2026.")]
+    [InlineData("month", "2026-10-01", "2026-10-31", "octobre 2026", "pour octobre 2026.")]
     public void A_french_mail_names_its_period(string kind, string from, string to, string subject, string intro)
     {
         using var mail = Build(null, language: "fr", lang: "fr", kind: kind, from: from, to: to);

@@ -71,8 +71,8 @@
             + 'quelqu\'un.',
         'problem.foreign_origin': 'Une requête venue d\'un autre site est refusée.',
         'problem.machine_token_read_only': 'Un jeton machine ne fait que lire.',
-        'problem.no_grant': 'Aucun grant de ce Hub ne vous atteint.',
-        'problem.no_findings_read': 'Aucun grant ne vous donne findings.read sur ce Hub.',
+        'problem.no_grant': 'Aucune autorisation de ce Hub ne vous concerne.',
+        'problem.no_findings_read': 'Aucune autorisation ne vous donne findings.read sur ce Hub.',
         'problem.analysis_engine_missing': 'Aucun moteur d\'analyse n\'est configuré sur ce Hub.',
         'problem.detection_knob_unsupported': 'Un réglage de détection de cette requête demande un moteur '
             + 'plus récent que celui de ce Hub.',
@@ -522,7 +522,7 @@
             + 'deux, et une valeur marquée comme changée n\'est peut-être qu\'un autre défaut.',
         'daemon.settings.default': 'défaut {value}',
         'daemon.value.not_set': '(non défini)',
-        'daemon.value.off': 'off',
+        'daemon.value.off': 'désactivé',
         'daemon.value.none': '(aucun)',
         'daemon.value.configured': 'configuré',
         'daemon.value.unconfigured': 'non configuré',
@@ -538,7 +538,7 @@
         'new.overline': '// nouvelle analyse',
         'new.title': 'Lancer une analyse',
         'new.no_source': 'Ce Hub n\'a aucune source configurée.',
-        'new.no_grant': 'Aucun grant ne vous permet de lancer une analyse sur ce Hub. Un administrateur accorde '
+        'new.no_grant': 'Aucune autorisation ne vous permet de lancer une analyse sur ce Hub. Un administrateur accorde '
             + 'l\'accès dans la configuration du Hub.',
         'new.terminal.head': '// vous préférez votre terminal\u202f?',
         'new.terminal.sub': 'La même analyse, écrite en toutes lettres.',
@@ -945,7 +945,7 @@
         'ack.result.acknowledged': 'acquitté.',
         'ack.result.refused': 'Le Hub a refusé la requête avec le statut {status}.',
         'ack.result.line': '{name}\u00a0: {said}',
-        'access.no_grant': 'Aucun grant de ce Hub ne vous atteint. Un administrateur accorde les accès dans la '
+        'access.no_grant': 'Aucune autorisation de ce Hub ne vous concerne. Un administrateur accorde les accès dans la '
             + 'configuration du Hub.',
         'access.expiry.expired': 'expiré',
         'access.expiry.within_day': 'dans moins d\'un jour',
@@ -958,7 +958,7 @@
         'access.signed_in': 'Connexion en tant que {who}, par {via}{until}.',
         'access.group_note': 'Un changement de groupe chez votre fournisseur s\'applique à votre prochaine connexion.',
         'access.subject_label': 'Votre identifiant, pour un administrateur\u00a0: ',
-        'access.no_reach': 'Aucun grant n\'atteint vos groupes. Un administrateur accorde les accès dans la '
+        'access.no_reach': 'Aucune autorisation ne concerne vos groupes. Un administrateur accorde les accès dans la '
             + 'configuration du Hub.',
         'access.reach.everything': 'Tout, y compris les enregistrements qu\'aucun projet ne couvre',
         'access.reach.admins': 'votre identifiant, dans Admins',
@@ -1049,7 +1049,7 @@
         'incidents.analyse': 'Analyser cette fenêtre',
         'incidents.panel.overline': '// figé par le daemon',
         'incidents.panel.window': 'La fenêtre allait de {before} avant l\'incident à {after} après, et un finding '
-            + 'horodaté après l\'incident appartient au remplaçant, pas à ce qui est mort.',
+            + 'horodaté après l\'incident appartient au remplaçant, pas à l\'instance tombée.',
         'incidents.panel.no_finding': 'Le daemon n\'a figé aucun finding pour cet incident.',
         'incidents.filter.placeholder': 'endpoint ou template',
         'incidents.filter.shown': '{shown} sur {total} affichés',
@@ -1183,10 +1183,10 @@
         'access.groups.label': 'Vos groupes',
         'access.request.head': '// à envoyer à un administrateur',
         'access.request.sub': 'Votre nom, l\'identifiant qu\'un administrateur voit dans sa liste, et les groupes '
-            + 'qu\'un grant peut nommer.',
+            + 'qu\'une autorisation peut nommer.',
         'access.request.copy': 'Copier la demande d\'accès',
         'access.card.reach': 'ce que vous atteignez',
-        'access.reach.caption': 'Ce que vos grants vous donnent',
+        'access.reach.caption': 'Ce que vos autorisations vous donnent',
         'access.col.project': 'Projet',
         'access.col.group': 'Groupe',
         'access.col.role': 'Rôle',
@@ -1198,7 +1198,7 @@
         'access.card.projects': 'projets que vous atteignez',
         'coverage.overline': '// couverture',
         'coverage.title': 'Ce que couvre le contrôle d\'accès',
-        'coverage.sub': 'Les findings qu\'aucun projet ne couvre ne sont lus que par les grants sur «\u00a0*\u00a0». '
+        'coverage.sub': 'Les findings qu\'aucun projet ne couvre ne sont lus que par les autorisations sur «\u00a0*\u00a0». '
             + 'Les droits se changent dans les valeurs Helm hub.access et s\'appliquent au prochain redémarrage.',
         'coverage.snippet.head': '// motifs à coller',
         'coverage.snippet.sub': 'Une ligne par service, attribut et source non couverts.',
@@ -1225,7 +1225,7 @@
         'access.config.loaded': 'Telle que le Hub l\'a chargée depuis hub.access à son dernier démarrage.',
         'access.config.projects': 'Projets',
         'access.config.roles': 'Rôles',
-        'access.config.grants': 'Grants',
+        'access.config.grants': 'Autorisations',
         'access.config.internal_groups': 'Groupes internes',
         'access.config.admins': 'Admins',
         'access.config.machine_tokens': 'Jetons machine',
@@ -1260,7 +1260,7 @@
         'coverage.conflicts.title': 'déploiements en désaccord sur un attribut de projet',
         'coverage.conflicts.body': 'Le motif d\'attribut d\'un projet lit ces copies mais ne peut pas y '
             + 'écrire\u00a0: la copie porte deux valeurs de la clé, ou a aussi été vue sous un regroupement qui ne '
-            + 'l\'a pas. Un acquittement par un grant d\'attribut y est refusé. Un grant de source ou de service '
+            + 'l\'a pas. Un acquittement par une autorisation d\'attribut y est refusé. Une autorisation de source ou de service '
             + 'pour l\'équipe qui possède le service peut les acquitter.',
         'coverage.conflicts.none': 'Aucun.',
         'coverage.conflicts.caption': 'Findings dont les déploiements sont en désaccord',
@@ -1403,7 +1403,7 @@
         'disc.download_pdf': 'Télécharger le PDF',
         'disc.download.sent': '{name} envoyé à votre navigateur.',
         'disc.download.missing': 'Le Hub n\'a pas renvoyé {name}.',
-        'disc.banner.withdrawn': 'Retirée il y a {duration} par {by}\u00a0: {reason}. Ses fichiers restent, ses liens de partage sont désactivés.',
+        'disc.banner.withdrawn': 'Retirée il y a {duration} par {by}\u00a0: {reason}. Ses fichiers restent, ses liens de partage sont morts.',
         'disc.banner.withdrawn.someone': 'quelqu\'un',
         'disc.banner.withdrawn.no_reason': 'aucune raison donnée',
         'disc.banner.unsigned': 'Intention officielle sans signature. Chacun peut vérifier que ce fichier n\'a pas changé depuis le calcul de son empreinte, personne ne peut vérifier qui l\'a calculée. Signez l\'attestation avec cosign et publiez à nouveau pour relever le niveau.',
@@ -1468,7 +1468,7 @@
         'disc.files.col.role': 'Rôle',
         'disc.link.active': 'expire dans {duration}',
         'disc.link.revoked': 'révoqué par {by}',
-        'disc.link.withdrawn': 'désactivé par le retrait',
+        'disc.link.withdrawn': 'mort avec le retrait',
         'disc.link.expired': 'expiré',
         'disc.links.revoke': 'Révoquer',
         'disc.links.revoked': 'Lien révoqué.',
@@ -1515,8 +1515,8 @@
         'disc.withdraw.reason.placeholder': 'Pourquoi, en une phrase\u00a0: elle est gardée et envoyée avec le retrait.',
         'disc.withdraw.submit': 'Retirer cette divulgation',
         'disc.withdraw.reason.missing': 'Donnez d\'abord une raison.',
-        'disc.withdraw.done': 'Retirée. Ses liens de partage sont désactivés, et ses webhooks sont prévenus.',
-        'disc.withdraw.body': 'Le retrait est définitif. Les fichiers restent, chaque lien de partage est désactivé, et chaque webhook prévenu de la publication est prévenu du retrait. Publiez un rapport corrigé sous un nouvel uuid.',
+        'disc.withdraw.done': 'Retirée. Ses liens de partage sont morts, et ses webhooks sont prévenus.',
+        'disc.withdraw.body': 'Le retrait est définitif. Les fichiers restent, chaque lien de partage devient un lien mort, et chaque webhook prévenu de la publication est prévenu du retrait. Publiez un rapport corrigé sous un nouvel uuid.',
         'disc.back': 'Retour aux divulgations',
         'disc.detail.error': 'Le Hub n\'a pas renvoyé cette divulgation. Elle n\'existe peut-être pas, ou vous ne pouvez pas lire les divulgations.',
         'disc.detail.overline': '// divulgation · {period}',

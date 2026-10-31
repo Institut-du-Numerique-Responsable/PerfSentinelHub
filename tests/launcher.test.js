@@ -2231,7 +2231,7 @@ test("the revoke confirmation says every card reads revoked", () => {
 
 test("the level line says what the check page shows", () => {
     assert.equal(PSL.levelLine(false, "acme.example"),
-        "On the check page, this card reads: Figures intact since their signature. Signer not verified.");
+        "On the check page, this card reads: Figures intact since they were signed. Signer not verified.");
     assert.equal(PSL.levelLine(true, "acme.example"), "On the check page, this card reads: Signed by acme.example.");
 });
 
