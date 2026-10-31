@@ -53,13 +53,13 @@ public sealed class CardServiceTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    private IOptions<HubOptions> Configured(string? domain = null)
+    private IOptions<HubOptions> Configured(string? domain = null, string? country = null)
     {
         return Options.Create(new HubOptions
         {
             DatabasePath = _path,
             Sources = [.. Sources],
-            Cards = new CardsOptions { Organisation = "Acme", Domain = domain }
+            Cards = new CardsOptions { Organisation = "Acme", Domain = domain, Country = country }
         });
     }
 
@@ -552,6 +552,41 @@ public sealed class CardServiceTests : IAsyncLifetime
         Assert.Equal("acme.example",
             Assert.IsType<CardOutcome.Ready>(await withDomain.ComputeAsync(Ask("collective"), Token)).Input.Org.Domain);
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => _service.ComputeAsync(Ask("poster"), Token));
+    }
+
+    [Fact]
+    public async Task A_card_without_a_country_takes_the_hub_setting()
+    {
+        await _seed.LedgerAsync("a", Sealed(October));
+        await _seed.FixAsync("a", N1, Done);
+        var service = new CardService(_database, Configured(country: "gb"), _clock);
+
+        var input = Assert.IsType<CardOutcome.Ready>(await service.ComputeAsync(Ask("collective"), Token)).Input;
+
+        Assert.Equal("gb", input.EquivalenceCountry);
+        Assert.Equal("gb", (await service.OptionsAsync(Scope(), Token)).EquivalenceCountry);
+    }
+
+    [Fact]
+    public async Task A_card_country_overrides_the_hub_setting()
+    {
+        await _seed.LedgerAsync("a", Sealed(October));
+        await _seed.FixAsync("a", N1, Done);
+        var service = new CardService(_database, Configured(country: "gb"), _clock);
+
+        var outcome = await service.ComputeAsync(Ask("collective") with { EquivalenceCountry = "us" }, Token);
+
+        Assert.Equal("us", Assert.IsType<CardOutcome.Ready>(outcome).Input.EquivalenceCountry);
+    }
+
+    [Fact]
+    public async Task A_hub_without_a_country_setting_sends_fr()
+    {
+        await _seed.LedgerAsync("a", Sealed(October));
+        await _seed.FixAsync("a", N1, Done);
+
+        Assert.Equal("fr", (await ReadyAsync(Ask("collective"))).EquivalenceCountry);
+        Assert.Equal("fr", (await _service.OptionsAsync(Scope(), Token)).EquivalenceCountry);
     }
 
     [Fact]

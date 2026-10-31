@@ -170,11 +170,19 @@ public static partial class ApiEndpoints
             return (outside, null, null);
 
         var outcome = await call.Cards.ComputeAsync(
-            new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free), cancellationToken);
-        return outcome is CardOutcome.Refused { Reason: var reason }
-            ? (Problem(StatusCodes.Status422UnprocessableEntity, reason,
-                CardRules.Explain(reason, RecapPeriod.Of(ask.Kind, ask.At))), null, null)
-            : (null, ask, ((CardOutcome.Ready)outcome).Input);
+            new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free, ask.EquivalenceCountry), cancellationToken);
+        if (outcome is CardOutcome.Refused { Reason: var reason })
+            return (Problem(StatusCodes.Status422UnprocessableEntity, reason,
+                CardRules.Explain(reason, RecapPeriod.Of(ask.Kind, ask.At))), null, null);
+        var input = ((CardOutcome.Ready)outcome).Input;
+        if (call.Engine.SupportsCardCountry)
+            return (null, ask, input);
+        // An engine before 0.40.0 knows France alone, its default: the key stays out, as it did.
+        return input.EquivalenceCountry == "fr"
+            ? (null, ask, input with { EquivalenceCountry = null })
+            : (Problem(StatusCodes.Status422UnprocessableEntity, ProblemCodes.CardCountryUnsupported,
+                "This Hub's engine cannot print equivalences for this country: it needs perf-sentinel 0.40.0 or " +
+                "later."), null, null);
     }
 
     // The engine runs, under the slot the caller holds: the key on first use, then the render.

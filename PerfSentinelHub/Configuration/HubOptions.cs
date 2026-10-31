@@ -192,6 +192,15 @@ public sealed record CardsOptions
         set => field = value?.Trim();
     }
 
+    /// <summary>The equivalence country a card starts from when its request names none: fr, gb or us.</summary>
+    public string? Country
+    {
+        get;
+        set => field = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    public string CountryOrDefault => Country ?? "fr";
+
     /// <summary>How many card renders run the engine at once; one more is refused with a 503, never queued.</summary>
     public int MaxConcurrentRenders { get; set; } = 2;
 

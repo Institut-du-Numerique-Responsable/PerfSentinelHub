@@ -428,7 +428,11 @@ dit aussi si le fichier de la carte est celui qui a été signé, et
 liste les chiffres tels que signés, exacts, à comparer avec l'aperçu, qui les arrondit vers le bas.
 Sans `Hub:Cards:Domain`, une phrase dit que la page de
 vérification montre les cartes du Hub comme « Signer not verified ». La langue de la carte, anglais ou
-français, est retenue dans ce navigateur.
+français, est retenue dans ce navigateur. Pays des équivalences choisit la table dont vient
+l'équivalent du quotidien de la carte : France, Royaume-Uni ou États-Unis, à partir de
+`Hub:Cards:Country`, la France quand il n'est pas défini. Autre pays envoie la France et le dit
+sous le choix, puisque Perf Sentinel n'a pas encore de table pour les autres pays. Le pays n'est pas
+retenu : un rechargement repart de celui du Hub.
 
 Les administrateurs ont aussi Signing key and organisation, replié et accessible même section fermée :
 le nom de l'enregistrement et la ligne DNS de chaque clé, le fichier `.well-known` indenté pour la

@@ -193,7 +193,7 @@ public sealed class CardFiguresTests
     public void The_card_json_is_snake_case_without_absent_values()
     {
         var input = new CardInput(
-            "story", "en", new CardPeriod("month", "2026-10-01", "2026-10-31"),
+            "story", "en", "fr", new CardPeriod("month", "2026-10-01", "2026-10-31"),
             new CardScope(null, ["src"], 31, 0, 1000),
             new CardFiguresBlock(CitedOps: 41, BeforeFixOps: 1900, Co2LowUg: 5_700_000),
             new CardStory("n_plus_one_sql", "orders", "GET /orders", null, "2026-10-20"),
@@ -203,7 +203,7 @@ public sealed class CardFiguresTests
             1_791_793_800_000);
 
         Assert.Equal(
-            """{"angle":"story","lang":"en","period":{"kind":"month","from":"2026-10-01","to":"2026-10-31"},"scope":{"sources":["src"],"covered_days":31,"restart_days":0,"sampled_permille":1000},"figures":{"cited_ops":41,"before_fix_ops":1900,"co2_low_ug":5700000},"story":{"finding_type":"n_plus_one_sql","service":"orders","endpoint":"GET /orders","done_at":"2026-10-20"},"before_fix_period":{"from":"2026-09-01","to":"2026-09-30"},"free":{},"org":{"name":"Acme"},"generated_at_ms":1791793800000}""",
+            """{"angle":"story","lang":"en","equivalence_country":"fr","period":{"kind":"month","from":"2026-10-01","to":"2026-10-31"},"scope":{"sources":["src"],"covered_days":31,"restart_days":0,"sampled_permille":1000},"figures":{"cited_ops":41,"before_fix_ops":1900,"co2_low_ug":5700000},"story":{"finding_type":"n_plus_one_sql","service":"orders","endpoint":"GET /orders","done_at":"2026-10-20"},"before_fix_period":{"from":"2026-09-01","to":"2026-09-30"},"free":{},"org":{"name":"Acme"},"generated_at_ms":1791793800000}""",
             JsonSerializer.Serialize(input, CardJsonContext.Default.CardInput));
     }
 }

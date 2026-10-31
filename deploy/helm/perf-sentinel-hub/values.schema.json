@@ -71,6 +71,7 @@
           "properties": {
             "organisation": { "type": "string" },
             "domain": { "type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" },
+            "country": { "type": "string", "enum": ["", "fr", "gb", "us"] },
             "maxConcurrentRenders": { "type": "integer", "minimum": 1, "maximum": 16 }
           }
         },

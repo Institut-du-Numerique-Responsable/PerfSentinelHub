@@ -21,6 +21,23 @@ All notable changes to PerfSentinelHub are recorded here.
 - The sign-in page and the terminal approval page follow `?lang=`, then the language picked with
   the launcher's button (a `perf-sentinel-lang` cookie), then the browser's `Accept-Language`, and
   carry the FR/EN button as a link.
+- Share cards choose the country of their equivalences: France, the United Kingdom or the United
+  States. `Hub:Cards:Country` (`fr`, `gb` or `us`, France when unset, Helm `hub.cards.country`)
+  sets the default, the card screen gains a Country of the equivalences choice, and
+  `POST /api/cards/render` and `/api/cards/attachment` take `equivalence_country`, which the Hub
+  always passes to the engine in `card.json`. Another country sends France and says so. The options
+  response carries the Hub's country. On an engine before `0.40.0`, the image's being `0.40.0`, a
+  French card leaves the key out and a UK or US card is a `422 card_country_unsupported`.
+
+### Changed
+
+- The image ships perf-sentinel `0.40.0` as its analysis engine, repinned by digest from
+  `0.39.0`. It is also the version the launcher compares a polled daemon's
+  `producer_version` against, so a daemon still on `0.39.0` or earlier now reads behind.
+  `config/supply-chain.json` carries the same digest as the `Dockerfile`. The disclosure
+  schema stays `perf-sentinel-report/v1.8`. Engine `0.40.0` reads an equivalence country in a
+  share card's `card.json`, with UK rows from the DESNZ and a US row from the US EPA. A backend
+  analysis gives the same findings, signatures and energy figures as on `0.39.0`.
 
 ## [0.10.0] - 2026-10-31
 

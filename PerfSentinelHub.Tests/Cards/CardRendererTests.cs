@@ -29,7 +29,8 @@ public sealed partial class CardRendererTests : IDisposable
     // Engine plan 2's card.json, key by key; a figures key outside the angle's set fails every real render.
     private static readonly string[] Top =
     [
-        "angle", "lang", "period", "scope", "figures", "free", "org", "generated_at_ms", "period.kind", "period.from",
+        "angle", "lang", "equivalence_country", "period", "scope", "figures", "free", "org", "generated_at_ms",
+        "period.kind", "period.from",
         "period.to", "scope.environment", "scope.sources", "scope.covered_days", "scope.restart_days",
         "scope.sampled_permille", "org.name"
     ];
@@ -335,7 +336,7 @@ public sealed partial class CardRendererTests : IDisposable
     private static CardInput Collective()
     {
         return new CardInput(
-            "collective", "fr", new CardPeriod("month", "2026-10-01", "2026-10-31"),
+            "collective", "fr", "fr", new CardPeriod("month", "2026-10-01", "2026-10-31"),
             new CardScope("prod", ["prod-eu"], 31, 0, 1000),
             new CardFiguresBlock(ConfirmedFixesCount: 1, ServicesCount: 1, FixesByFamilyCount: new CardFamilies(1, 0, 0)),
             null, null, new CardFree("Our month", null, null), new CardOrg("Acme", null), NowMs);

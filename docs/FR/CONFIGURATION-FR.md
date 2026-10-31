@@ -380,6 +380,7 @@ ci-dessous est contrôlée au démarrage et son message nomme la clé.
 |--------------------------|--------|------------------------------------------------------------------------------------------------------------------------------------|
 | `Hub:Cards:Organisation` | aucun  | 1 à 60 caractères sans caractère de contrôle ni caractère caché. Le nom qui signe chaque carte                                     |
 | `Hub:Cards:Domain`       | aucun  | Exige `Organisation`. Un nom DNS en minuscules comme `example.com`, sans schéma, port ni point final. Ce que rattache la ligne DNS d'une carte |
+| `Hub:Cards:Country` | aucun | `fr`, `gb` ou `us`, contrôlé même cartes désactivées. Le pays des équivalences dont part l'écran de carte et que l'API prend quand une requête n'en nomme pas ; aucun vaut France |
 | `Hub:Cards:MaxConcurrentRenders` | `2` | 1 à 16, contrôlé même cartes désactivées. Combien de cartes le moteur dessine en même temps ; une de plus reçoit `503` avec `Retry-After: 5` |
 
 Une carte se vérifie sans le domaine. Avec lui, la ligne DNS de la carte nomme un enregistrement

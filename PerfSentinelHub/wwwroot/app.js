@@ -6871,7 +6871,7 @@
             }
             state.card = {
                 open: false, angle: 'curve', kind: 'month', from: null, signature: null, label: null,
-                remember: false, rememberError: null, title: '', team: '', lang: lang, format: 'png',
+                remember: false, rememberError: null, title: '', team: '', lang: lang, country: null, format: 'png',
                 options: null, optionsPath: null, curveRefusal: null, showAllFixes: false,
                 preview: null, stale: false, busy: null, renderError: null, fieldErrors: {},
                 attach: null, attachBusy: false, busyNote: null, attachNote: null,
@@ -6918,8 +6918,15 @@
         return {
             angle: card.angle, period: card.kind, at: cardPeriodFrom(card, route), environment: route.environment,
             signature: fix ? fix.signature : null, label: cardLabel(card), title: card.title, team: card.team,
-            lang: PSL.cardLang(card.lang), format: card.format
+            lang: PSL.cardLang(card.lang), format: card.format,
+            equivalence_country: PSL.cardCountryWire(PSL.cardCountry(card.country, cardHubCountry(card)))
         };
+    }
+
+    /** The Hub's equivalence country, once the options are read. */
+    function cardHubCountry(card) {
+        const options = cardOptionsReady(card);
+        return options ? options.equivalence_country : undefined;
     }
 
     function cardFileName(card, route) {
@@ -7393,6 +7400,7 @@
     }
 
     function cardFormatGroup(card) {
+        const country = PSL.cardCountry(card.country, cardHubCountry(card));
         return el('fieldset', {class: 'share-group'}, [
             cardLegend(t('card.legend.card')),
             el('div', {class: 'card-opts'}, [
@@ -7405,8 +7413,15 @@
                 el('div', {class: 'card-opt card-opt-format'}, [el('span', {class: 'card-opt-label', text: t('card.format_label')}),
                     cardSegmented(t('card.format_label'), 'format', PSL.CARD_FORMATS.map(function (format) {
                         return [format, PSL.CARD_FORMAT_LABELS[format]];
-                    }), card.format, cardPickFormat)])
+                    }), card.format, cardPickFormat)]),
+                el('div', {class: 'card-opt card-opt-country'}, [el('span', {class: 'card-opt-label', text: t('card.country')}),
+                    cardSegmented(t('card.country'), 'country', PSL.CARD_COUNTRIES.map(function (country) {
+                        return [country, t('card.country.' + country)];
+                    }), country, function (picked) {
+                        cardPick({country: picked});
+                    })])
             ]),
+            country === 'other' ? el('p', {class: 'free-note', text: t('card.country_note.other')}) : null,
             card.format === 'pdf' ? el('p', {class: 'free-note', text: PSL.CARD_COPY.carouselNote}) : null,
             PSL.CARD_FORMAT_NOTES[card.format] ? el('p', {class: 'free-note', text: PSL.CARD_FORMAT_NOTES[card.format]})
                 : null

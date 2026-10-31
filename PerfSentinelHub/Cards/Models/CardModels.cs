@@ -35,6 +35,7 @@ public sealed record CardKeysResponse(string? RecordName, IReadOnlyList<CardKeyI
 public sealed record CardInput(
     string Angle,
     string Lang,
+    string? EquivalenceCountry,
     CardPeriod Period,
     CardScope Scope,
     CardFiguresBlock Figures,
@@ -108,7 +109,14 @@ public sealed record CardScopeAsk(
     AccessScope? Reads,
     IReadOnlyList<SourceOptions> Sources);
 
-public sealed record CardAsk(CardScopeAsk Scope, string Angle, string Lang, string? Signature, CardFree Free);
+/// <summary>What a card asks for; a null EquivalenceCountry takes Hub:Cards:Country.</summary>
+public sealed record CardAsk(
+    CardScopeAsk Scope,
+    string Angle,
+    string Lang,
+    string? Signature,
+    CardFree Free,
+    string? EquivalenceCountry = null);
 
 public abstract record CardOutcome
 {
@@ -136,7 +144,8 @@ public sealed record CardOptions(
     int ConfirmedFixesCount,
     IReadOnlyList<CardFix> Fixes,
     string? DefaultSignature,
-    CardOrg Org);
+    CardOrg Org,
+    string EquivalenceCountry);
 
 public sealed record CardFix(
     string Signature,

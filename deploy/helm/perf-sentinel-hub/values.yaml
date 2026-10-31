@@ -147,11 +147,13 @@ hub:
     subscriptions: []
   # Share cards. organisation turns them on: the name that signs every card,
   # 1 to 60 characters. domain is optional, a lower-case DNS name such as
-  # example.com: what a card's DNS line attaches. maxConcurrentRenders: how
-  # many cards the engine renders at once, 1 to 16. See docs/CONFIGURATION.md.
+  # example.com: what a card's DNS line attaches. country: fr, gb or us, the
+  # equivalence country a card starts from, empty for France. maxConcurrentRenders:
+  # how many cards the engine renders at once, 1 to 16. See docs/CONFIGURATION.md.
   cards:
     organisation: ""
     domain: ""
+    country: ""
     maxConcurrentRenders: 2
   access:
     # Who reaches which findings, sources and runs: projects, roles, grants,

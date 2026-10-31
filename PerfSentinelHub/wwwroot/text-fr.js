@@ -132,6 +132,8 @@
             + 'organisation. Demandez à un administrateur un Hub:Cards:Domain plus court.',
         'problem.card_language_unsupported': 'Le moteur de ce Hub ne sait pas encore imprimer de cartes dans '
             + 'cette langue.',
+        'problem.card_country_unsupported': 'Le moteur de ce Hub ne sait pas imprimer d\'équivalences pour ce '
+            + 'pays\u00a0: il lui faut perf-sentinel 0.40.0 ou plus récent.',
         'problem.card_domain_missing': 'Renseignez Hub:Cards:Domain pour vérifier un rattachement.',
         'problem.card_attachment_unchecked': 'Le moteur n\'a pas pu vérifier le rattachement de cette carte.',
         'problem.card_key_forbidden': 'Vous ne pouvez pas gérer la clé de signature des cartes.',
@@ -1895,6 +1897,12 @@
         'card.label': 'Nom de tous les jours pour cette action',
         'card.label.placeholder': 'Afficher un panier',
         'card.legend.card': 'Carte',
+        'card.country': 'Pays des équivalences',
+        'card.country.fr': 'France',
+        'card.country.gb': 'Royaume-Uni',
+        'card.country.us': 'États-Unis',
+        'card.country.other': 'Autre pays',
+        'card.country_note.other': 'Les équivalences reprennent les chiffres français\u00a0: Perf Sentinel n\'a pas encore de table pour les autres pays.',
         'card.lang': 'Langue de la carte',
         'card.format_label': 'Format',
         'card.action.rendering': 'Création\u2026',

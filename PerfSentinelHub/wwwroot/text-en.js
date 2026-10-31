@@ -130,6 +130,8 @@
         'problem.card_domain_too_long': 'The card\'s QR code cannot hold this organisation\'s domain. Ask an '
             + 'administrator for a shorter Hub:Cards:Domain.',
         'problem.card_language_unsupported': 'This Hub\'s engine cannot print cards in this language yet.',
+        'problem.card_country_unsupported': 'This Hub\'s engine cannot print equivalences for this country: '
+            + 'it needs perf-sentinel 0.40.0 or later.',
         'problem.card_domain_missing': 'Set Hub:Cards:Domain to check an attachment.',
         'problem.card_attachment_unchecked': 'The engine could not check this card\'s attachment.',
         'problem.card_key_forbidden': 'You may not manage the card signing key.',
@@ -1825,6 +1827,12 @@
         'card.label': 'Everyday name for this action',
         'card.label.placeholder': 'Showing a cart',
         'card.legend.card': 'Card',
+        'card.country': 'Country of the equivalences',
+        'card.country.fr': 'France',
+        'card.country.gb': 'United Kingdom',
+        'card.country.us': 'United States',
+        'card.country.other': 'Another country',
+        'card.country_note.other': 'The equivalences use French figures: Perf Sentinel has no table for other countries yet.',
         'card.lang': 'Language of the card',
         'card.format_label': 'Format',
         'card.action.rendering': 'Rendering\u2026',

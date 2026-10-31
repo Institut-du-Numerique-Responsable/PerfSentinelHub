@@ -63,6 +63,12 @@ public sealed partial class EngineProbe(
     /// </summary>
     public bool SupportsCard { get; private set; }
 
+    // card.json's equivalence_country, which an older engine refuses as an unknown key.
+    private static readonly Version CardCountrySince = new(0, 40, 0);
+
+    public bool SupportsCardCountry => DetectionOverrides.ParseEngineVersion(Version) is { } engine &&
+                                       engine >= CardCountrySince;
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (_analysis.EngineBinaryPath is not { } path)

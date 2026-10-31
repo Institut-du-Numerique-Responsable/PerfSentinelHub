@@ -894,7 +894,8 @@ donne `400`. La réponse :
  "fixes": [{"signature": "…", "finding_type": "n_plus_one_sql", "service": "order-svc",
             "endpoint": "GET /orders", "plain": "…", "done_at_ms": 1792058400000,
             "before_fix_ops": 1900, "before_period_name": "September 2026", "label": "Order list"}],
- "default_signature": "…", "org": {"name": "Acme", "domain": "acme.example"}}
+ "default_signature": "…", "org": {"name": "Acme", "domain": "acme.example"},
+ "equivalence_country": "fr"}
 ```
 
 `refusal` est la raison propre à la période (ci-dessous) et `refusal_text` sa phrase, celle que
@@ -904,7 +905,7 @@ de côté sa comparaison avec la période d'avant, et `previous_whole` dit pourq
 cette période n'est pas entière, `true` quand l'une de ses corrections est passée à done avant que
 le Hub garde le détail des corrections. `confirmed_fixes_count` est le nombre que compte une carte
 collective. `fixes` sont les corrections confirmées qu'une histoire peut raconter, celles dont la
-carte peut imprimer les noms, avec le libellé de l'endpoint quand il en a un.
+carte peut imprimer les noms, avec le libellé de l'endpoint quand il en a un. `equivalence_country` est le pays par défaut du Hub, `Hub:Cards:Country` ou `fr`, celui dont part l'écran.
 
 **Rendu et rattachement.** Le corps est un objet JSON, 4 Kio au plus, avec la règle de même
 origine et le type de contenu JSON des autres écritures :
@@ -919,6 +920,7 @@ origine et le type de contenu JSON des autres écritures :
 | `title`, `team`             | Texte libre, 1 à 48 caractères                                                         |
 | `label`                     | Histoire seulement, texte libre, 1 à 80 caractères                                     |
 | `lang`                      | `en` (par défaut) ou `fr`                                                              |
+| `equivalence_country`       | `fr`, `gb` ou `us`, le pays de l'équivalence de la carte ; par défaut `Hub:Cards:Country`, sinon `fr`. Sinon `400 equivalence_country must be fr, gb or us.` |
 | `format`                    | `png` (par défaut), `svg`, `jxl` ou `pdf` (le carrousel) ; la vérification du rattachement dessine toujours un PNG |
 
 Les champs libres sont rognés, et un champ vide est laissé de côté. Un champ plus long que sa
@@ -929,7 +931,7 @@ carte garde pour sa signature, donne
 règle que suivent aussi les noms de service, d'endpoint, d'environnement et de source. Toute autre
 clé, `figures`, `org`, `scope` ou `generated_at_ms` par
 exemple, donne
-`400 Only angle, period, at, environment, source_id, signature, title, team, label, lang and format may be sent: the figures come from the Hub.`
+`400 Only angle, period, at, environment, source_id, signature, title, team, label, lang, equivalence_country and format may be sent: the figures come from the Hub.`
 Une période qui ne s'est pas terminée avant aujourd'hui donne
 `400 A card covers a closed period. Pick an earlier one.`, `signature` ou `label` sur un autre
 angle `400 signature and label belong to a story card.`
@@ -1672,6 +1674,6 @@ divulgation garde son `{"reason":"…"}` sans `detail`. Une réponse sans corps 
 - Findings, actions et libellés : `actions_forbidden`, `action_read_only`, `unknown_finding`, `action_exists`, `no_action`, `endpoint_labels_forbidden`, `service_labels_forbidden`, `unknown_endpoint`, `unknown_service`, `endpoint_label_read_only`, `service_label_read_only`.
 - Acquittements et leur relais vers un daemon : `acks_not_relayed`, `acks_forbidden`, `ack_read_only`, `unknown_finding_at_source`, `unknown_ack_at_source`, `daemon_unreachable`, `daemon_timeout`, `daemon_refused_signature`, `daemon_refused_credential`, `daemon_ack_not_found`, `daemon_already_acked`, `daemon_acks_disabled`, `daemon_ack_store_full`, `daemon_unexpected_answer`, `not_a_daemon`.
 - Récaps : `invalid_recap_query`, `recap_reports_forbidden`.
-- Cartes : `invalid_card_query`, `cards_forbidden`, `card_sources_forbidden`, `card_engine_missing`, `cards_busy`, `card_not_rendered`, `card_field_undrawable`, `card_organisation_undrawable`, `card_domain_too_long`, `card_language_unsupported`, `card_domain_missing`, `card_attachment_unchecked`, `card_key_forbidden`, `card_key_failed`, `unknown_card_key`, `invalid_revocation_date`.
+- Cartes : `invalid_card_query`, `cards_forbidden`, `card_sources_forbidden`, `card_engine_missing`, `cards_busy`, `card_not_rendered`, `card_field_undrawable`, `card_organisation_undrawable`, `card_domain_too_long`, `card_language_unsupported`, `card_country_unsupported`, `card_domain_missing`, `card_attachment_unchecked`, `card_key_forbidden`, `card_key_failed`, `unknown_card_key`, `invalid_revocation_date`.
 - Divulgations : `disclosures_read_forbidden`, `disclosures_manage_forbidden`, `withdrawn_not_shared`, `invalid_share_days`, `invalid_withdraw_reason`, `already_withdrawn`, `delivery_done`, `disclosure_busy`.
 - Refus de carte (`422`), la raison de `CardRules.Reasons` : `open_period`, `uncovered_days`, `open_day`, `overflow`, `previous_uncovered_days`, `previous_open_day`, `previous_overflow`, `no_confirmed_fix`, `unknown_fix`, `unprintable_fix`, `no_total_io`, `curve_needs_whole_sources`, `unprintable_scope`, `scope_too_long`, `unkept_fixes`.

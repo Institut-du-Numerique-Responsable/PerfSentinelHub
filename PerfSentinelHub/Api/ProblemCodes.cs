@@ -80,6 +80,7 @@ public static class ProblemCodes
     public const string CardOrganisationUndrawable = "card_organisation_undrawable";
     public const string CardDomainTooLong = "card_domain_too_long";
     public const string CardLanguageUnsupported = "card_language_unsupported";
+    public const string CardCountryUnsupported = "card_country_unsupported";
     public const string CardDomainMissing = "card_domain_missing";
     public const string CardAttachmentUnchecked = "card_attachment_unchecked";
     public const string CardKeyForbidden = "card_key_forbidden";

@@ -355,6 +355,7 @@ key.
 |--------------------------|---------|--------------------------------------------------------------------------------------------------------------------------------|
 | `Hub:Cards:Organisation` | none    | 1 to 60 characters with no control or hidden character. The name that signs every card                                        |
 | `Hub:Cards:Domain`       | none    | Needs `Organisation`. A lower-case DNS name such as `example.com`, with no scheme, port or trailing dot. What a card's DNS line attaches |
+| `Hub:Cards:Country` | none | `fr`, `gb` or `us`, checked with cards off too. The country of the equivalences the card screen starts from and the API uses when a request names none; none means France |
 | `Hub:Cards:MaxConcurrentRenders` | `2` | 1 to 16, checked with cards off too. How many cards the engine renders at once; one more gets `503` with `Retry-After: 5` |
 
 A card is verified without the domain. With it, the card's DNS line names a record under that

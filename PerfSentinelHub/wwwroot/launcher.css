@@ -6112,7 +6112,8 @@ a.chip {
     color: var(--text-2);
 }
 
-.card-opt-format .segmented button {
+.card-opt-format .segmented button,
+.card-opt-country .segmented button {
     white-space: nowrap;
 }
 
@@ -6125,6 +6126,20 @@ a.chip {
     }
 
     .card-opt-format .segmented button {
+        height: 30px;
+        text-align: left;
+    }
+}
+
+/* The four countries need about 430px in a row, the French names a little more: below, they stack too. */
+@container share-form (max-width: 520px) {
+    .card-opt-country .segmented {
+        flex-direction: column;
+        height: auto;
+        border-radius: 16px;
+    }
+
+    .card-opt-country .segmented button {
         height: 30px;
         text-align: left;
     }
