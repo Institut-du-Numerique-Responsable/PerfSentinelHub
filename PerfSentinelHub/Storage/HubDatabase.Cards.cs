@@ -96,7 +96,7 @@ public sealed partial class HubDatabase
                                 AND detections > 0;
                               """;
         command.Parameters.AddWithValue("$signatures", JsonArray(signatures));
-        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue(SourceIdsParameter, JsonArray(sourceIds));
 
         var pairs = new List<(string, string)>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -120,7 +120,7 @@ public sealed partial class HubDatabase
                               WHERE source_id IN (SELECT value FROM json_each($source_ids))
                                 AND day BETWEEN $from_day AND $to_day;
                               """;
-        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue(SourceIdsParameter, JsonArray(sourceIds));
         command.Parameters.AddWithValue("$from_day", fromDay);
         command.Parameters.AddWithValue("$to_day", toDay);
 
@@ -164,7 +164,7 @@ public sealed partial class HubDatabase
                                                   AND d2.day = dc.day AND d2.detections > 0);
                               """;
         command.Parameters.AddWithValue("$signatures", JsonArray(signatures));
-        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue(SourceIdsParameter, JsonArray(sourceIds));
         command.Parameters.AddWithValue("$after_day", afterDay);
 
         var days = new List<SignalDay>();
@@ -199,7 +199,7 @@ public sealed partial class HubDatabase
                                               WHERE dc.signature = fa.signature AND dc.detections > 0
                                                 AND dc.source_id IN (SELECT value FROM json_each($source_ids))));
                               """;
-        command.Parameters.AddWithValue("$source_ids", JsonArray(sourceIds));
+        command.Parameters.AddWithValue(SourceIdsParameter, JsonArray(sourceIds));
         command.Parameters.AddWithValue("$from_ms", fromDay * DayMs);
         command.Parameters.AddWithValue("$to_ms", (toDay + 1L) * DayMs - 1);
         return await command.ExecuteScalarAsync(cancellationToken) is 1L;

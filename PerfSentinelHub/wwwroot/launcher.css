@@ -6123,11 +6123,6 @@ a.chip {
     height: 28px;
 }
 
-.preview-empty svg {
-    width: 28px;
-    height: 28px;
-}
-
 .preview-empty.slim {
     aspect-ratio: auto;
     min-height: 150px;

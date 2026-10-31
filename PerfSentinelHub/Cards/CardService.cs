@@ -363,7 +363,11 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
                     await database.ReadDayTotalsAsync(ids, period.FromDay, period.ToDay, cancellationToken))
                 : null;
             if (point is null)
-                return points.Count > 0 ? (points, null) : ([], reason is null ? "no_total_io" : "previous_" + reason);
+            {
+                if (points.Count > 0)
+                    return (points, null);
+                return ([], reason is null ? "no_total_io" : "previous_" + reason);
+            }
 
             points.Add(point);
             period = period.Previous();
@@ -395,7 +399,7 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
         return Ready(frame, ask, frame.Scope, figures, null, befores.Count == 0 ? null : CardFigures.Range(previous));
     }
 
-    private CardOutcome Ready(
+    private CardOutcome.Ready Ready(
         Frame frame,
         CardAsk ask,
         CardScope scope,

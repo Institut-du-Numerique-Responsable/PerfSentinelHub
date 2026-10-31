@@ -641,13 +641,11 @@ public sealed class CardsApiTests : IDisposable
     }
 
     // The argument files the engine's card subcommands append to, in the reports directory they run in.
+    private static readonly string[] EngineRunFiles = ["card-args.txt", "card-keygen-args.txt", "verify-args.txt"];
+
     private string[] EngineRuns()
     {
-        return
-        [
-            .. new[] { "card-args.txt", "card-keygen-args.txt", "verify-args.txt" }
-                .Where(name => File.Exists(Path.Combine(_workspace, "reports", name)))
-        ];
+        return [.. EngineRunFiles.Where(name => File.Exists(Path.Combine(_workspace, "reports", name)))];
     }
 
     private static HubDatabase Database(WebApplicationFactory<Program> hub)

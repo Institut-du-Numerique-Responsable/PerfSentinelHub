@@ -12,6 +12,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 {
     private const int PurgeChunkSize = 5_000;
     private const string SourceIdParameter = "$source_id";
+    private const string SourceIdsParameter = "$source_ids";
     private const string ServiceParameter = "$service";
     private const string SignatureParameter = "$signature";
     private const string ObservedAtParameter = "$observed_at";

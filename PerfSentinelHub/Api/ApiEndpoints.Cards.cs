@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
@@ -194,7 +195,7 @@ public static partial class ApiEndpoints
     }
 
     // A render lasts seconds, so one retry after the 1 s of the other gates would likely meet the same renders.
-    private static IResult CardsBusy(HttpRequest request)
+    private static JsonHttpResult<AnalysisProblem> CardsBusy(HttpRequest request)
     {
         request.HttpContext.Response.Headers.RetryAfter = "5";
         return Problem(StatusCodes.Status503ServiceUnavailable,
@@ -260,7 +261,7 @@ public static partial class ApiEndpoints
     }
 
     // The candidate sources are those both scopes reach; the curve signs only those both hold whole.
-    private static IResult? CardScopeRefusal(
+    private static JsonHttpResult<AnalysisProblem>? CardScopeRefusal(
         HttpContext context,
         AccessPolicy access,
         HubOptions options,
@@ -399,7 +400,7 @@ public static partial class ApiEndpoints
             : null;
     }
 
-    private static IResult CardEngineProblem(CardEngineException exception)
+    private static JsonHttpResult<AnalysisProblem> CardEngineProblem(CardEngineException exception)
     {
         return exception.Reason == "unsupported"
             ? Problem(StatusCodes.Status503ServiceUnavailable, NoCardEngine)

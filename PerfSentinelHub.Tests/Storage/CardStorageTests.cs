@@ -32,7 +32,7 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
         return Database.MergeDetectionPageAsync(sourceId, page, true, DoneMs, Token);
     }
 
-    private Task DoneAsync(string signature, long atMs)
+    private Task<ActionWriteOutcome> DoneAsync(string signature, long atMs)
     {
         return Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", atMs, null, Token);
     }
