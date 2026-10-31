@@ -2905,6 +2905,7 @@
      * @returns {Object<string, string>}
      */
     function cardBody(form) {
+        /** @type {Object<string, string>} */
         const body = {};
         ['angle', 'period', 'at', 'environment', 'source_id', 'signature', 'label', 'title', 'team', 'lang', 'format']
             .forEach(function (key) {
@@ -2969,7 +2970,7 @@
 
     /**
      * verify-card's verdict as one sentence; the engine's raw reason goes in a title only.
-     * @param {{integrity: string, level: number, domain: string|null, reason: string|null}} result
+     * @param {{integrity: string, content?: string, level: number, domain: string|null, reason: string|null}} result
      * @param {boolean} isAdmin
      * @returns {{text: string, title: string|null}}
      */
