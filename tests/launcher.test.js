@@ -244,6 +244,32 @@ test("only open folds are worth remembering", () => {
     assert.deepEqual(PSL.openFolds({a: "true", b: 1, c: {}, d: true}), {d: true});
 });
 
+test("a settings group opened under its old English heading stays open under its key", () => {
+    assert.deepEqual(PSL.daemonGroupFolds({
+        "s1|// declared": true,
+        "s1|// ingestion and memory": true,
+        "s2|// what it keeps for readers": true,
+        "s2|// metrics labels": false,
+        "s3|// listeners": true,
+        "s3|// sub-systems": true,
+        "s3|// correlation": true,
+        "s3|labels": true,
+        "a|b|// declared": true,
+        "s4|// unknown": true,
+    }), {
+        "s1|declared": true,
+        "s1|ingestion": true,
+        "s2|readers": true,
+        "s3|listeners": true,
+        "s3|subsystems": true,
+        "s3|correlation": true,
+        "s3|labels": true,
+        "a|b|declared": true,
+        "s4|// unknown": true,
+    });
+    assert.deepEqual(PSL.daemonGroupFolds(null), {});
+});
+
 test("a gauge takes a tone only once it is close to a cap it published", () => {
     // 90 is the engine's own advisor line, the one that turns the row's verdict.
     assert.equal(PSL.gaugeTone(90), "crit");

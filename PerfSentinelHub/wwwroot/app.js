@@ -491,7 +491,7 @@
         if (!stored || typeof stored !== 'object') return;
         state.daemonOpen = PSL.openFolds(stored.row);
         state.daemonSettingsOpen = PSL.openFolds(stored.settings);
-        state.daemonGroupOpen = PSL.openFolds(stored.group);
+        state.daemonGroupOpen = PSL.daemonGroupFolds(stored.group);
         state.daemonTerminalOpen = PSL.openFolds(stored.terminal);
         state.panelOpen = PSL.openFolds(stored.panel);
     }

@@ -703,6 +703,34 @@
         return open;
     }
 
+    /** The settings groups' fold keys named each group by its English heading before the French launcher. */
+    const OLD_DAEMON_GROUPS = {
+        '// declared': 'declared',
+        '// ingestion and memory': 'ingestion',
+        '// what it keeps for readers': 'readers',
+        '// metrics labels': 'labels',
+        '// listeners': 'listeners',
+        '// sub-systems': 'subsystems',
+        '// correlation': 'correlation'
+    };
+
+    /**
+     * The open settings groups, with a `<source>|<old heading>` key renamed to its group key, so
+     * an upgrade keeps them open and the next save drops the old key.
+     * @param {Record<string, boolean>} folds
+     * @returns {Record<string, true>}
+     */
+    function daemonGroupFolds(folds) {
+        /** @type {Record<string, true>} */
+        const open = {};
+        Object.keys(openFolds(folds)).forEach(function (key) {
+            const bar = key.lastIndexOf('|');
+            const group = OLD_DAEMON_GROUPS[key.slice(bar + 1)];
+            open[group ? key.slice(0, bar + 1) + group : key] = true;
+        });
+        return open;
+    }
+
     /* The engine's own advisor line: at 90 % of a cap the daemon starts saying so
        in its hints, and the row's verdict turns to near capacity. The 75 % step
        below it is the Hub's, a heads-up before the daemon complains rather than a
@@ -3394,6 +3422,7 @@
         refreshPlan,
         releaseUrl,
         openFolds,
+        daemonGroupFolds,
         hubReleaseUrl,
         updateState,
         knownShell,
