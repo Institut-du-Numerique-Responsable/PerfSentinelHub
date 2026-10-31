@@ -313,7 +313,7 @@ the organisation's relay instead. `From` is one address with no display name. Th
 through a Secret (`Hub__Recaps__Smtp__Password`).
 
 **Subscriptions.** Each one is `{ Name, Cadences, Views, Environment, SourceId, Service, Grouping,
-Webhooks, Emails }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
+Webhooks, Emails, Language, Recipients }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
 `Cadences` lists `day`, `week` or `month`, each once, at least one. `Views` lists `pilotage`,
 `tech` or both, each once. `Environment` and `SourceId` must match a declared source, and a
 `SourceId` must belong to the `Environment` when both are set. `Service` and `Grouping` are 1 to
@@ -322,15 +322,26 @@ Webhooks, Emails }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, a
 `Hub:Recaps:Smtp:Host`. A subscription with no destination is valid: it archives its reports and
 delivers none.
 
+**Languages.** `Language` is `en` (the default) or `fr`. Its frozen reports, its webhook's `plain`
+sentences and the mail to each `Emails` address are in that language. `Recipients` lists
+`{ Address, Language }` for an address that reads its mail in a language of its own, also through
+`Hub:Recaps:Smtp:Host`: `Address` is one address without a display name, and `Language`, `en` or
+`fr`, falls back to the subscription's when absent. A mail's subject, body and attached management
+page are in its address's language, and its engineering link carries `?lang=` when that language is
+not the report's. An address appears in one list only, ignoring case, and `Emails` and `Recipients`
+hold 50 addresses at most together. A webhook's JSON keys and other values stay the same in both
+languages.
+
 Under Helm the block is `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` and
 `publicUrl` follow the settings above. `subscriptions` passes its items as they are, keys in
 camel case: `{ name, cadences, views, environment, sourceId, service, grouping, webhooks,
-emails }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
+emails, language, recipients }`, a recipient being `{ address, language }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
 come from that Secret. `smtp` takes `host`, `port`, `startTls`, `userName` and `from`, and the
 chart writes it only once `host` is set. `passwordSecretName` and `passwordSecretKey` name the
 Secret holding the password, which reaches the pod as `Hub__Recaps__Smtp__Password`. The chart
 refuses a duplicate subscription or webhook name and a subscription naming an undeclared webhook.
-The schema refuses `emails` without `smtp.host`, port 465, and a `userName` without `startTls` on
+The schema refuses `emails` or `recipients` without `smtp.host`, a `language` other than `en` or
+`fr`, a recipient without `address`, port 465, and a `userName` without `startTls` on
 a relay off loopback. A wrong `environment` or `sourceId` is left to the Hub's startup check.
 
 ## Share cards

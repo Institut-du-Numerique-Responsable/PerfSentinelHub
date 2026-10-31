@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Recaps;
@@ -51,7 +52,7 @@ public sealed partial class RecapDeliveryWorker(
             return;
         }
 
-        var pilotage = RecapViews.Frozen(Snapshot(report));
+        var pilotage = RecapViews.Frozen(Snapshot(report), report.Summary.Language);
         var status = await WebhookDelivery.PostAsync(
             clients.CreateClient(DeliveryWorker.ClientName), webhook.Url!, webhook.Secret!,
             RecapWebhook.Body(report.Summary, pilotage, settings.RecapPublicUrl), timeProvider,
@@ -84,7 +85,7 @@ public sealed partial class RecapDeliveryWorker(
 
         using var message = RecapMail.Build(
             report.Summary, Snapshot(report), delivery.Target, new MailAddress(settings.Recaps.Smtp.From!),
-            settings.RecapPublicUrl);
+            settings.RecapPublicUrl, LanguageOf(settings, report.Summary, delivery.Target));
         var status = await mailer.SendAsync(message, cancellationToken);
         if (status == 250)
         {
@@ -125,6 +126,16 @@ public sealed partial class RecapDeliveryWorker(
         await database.RecordRecapDeliveryAttemptAsync(
             delivery.Id, status, DeliveryStates.Pending, Now(),
             Now() + (long)DeliveryWorker.Backoff(attempts).TotalMilliseconds, cancellationToken);
+    }
+
+    // The address's own language from the configuration of now, else the one its report was frozen in.
+    private static string LanguageOf(HubOptions settings, RecapReportSummary report, string address)
+    {
+        var language = settings.Recaps.Subscriptions
+            .FirstOrDefault(subscription => subscription.Name == report.Subscription)?.Recipients
+            .FirstOrDefault(recipient => string.Equals(recipient.Address, address, StringComparison.OrdinalIgnoreCase))
+            ?.Language;
+        return HubLang.IsKnown(language) ? language! : HubLang.Normalize(report.Language);
     }
 
     private static RecapSnapshot Snapshot(RecapReportRecord report)

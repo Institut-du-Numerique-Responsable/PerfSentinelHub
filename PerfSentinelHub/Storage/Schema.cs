@@ -495,7 +495,8 @@ internal static class Schema
 
     // A report is its snapshot as generated, never rewritten; one per subscription, cadence and
     // period, while on-demand reports carry no subscription and so never conflict. A delivery row
-    // names a webhook or an address, never a URL.
+    // names a webhook or an address, never a URL. Its language column is version 21, added by
+    // HubDatabase.EnsureRecapLanguageColumnAsync on a fresh database too.
     internal const string V18 = """
                                 CREATE TABLE IF NOT EXISTS recap_reports (
                                   id TEXT PRIMARY KEY,

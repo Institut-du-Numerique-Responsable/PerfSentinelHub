@@ -60,7 +60,7 @@ public sealed class StorageTests
         await using var command = connection.CreateCommand();
         command.CommandText =
             "SELECT group_concat(version, ',') FROM (SELECT version FROM schema_migrations ORDER BY version);";
-        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",
+        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21",
             (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 

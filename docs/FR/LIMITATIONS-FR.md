@@ -312,7 +312,7 @@ Cette section décrit le Hub avec `Hub:Auth:Enabled` désactivé, le défaut. Ac
 le Hub connecte lui-même les utilisateurs du navigateur et seules les routes
 machines restent ouvertes, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md). Avec
 `Hub:Access` activé en plus, ces routes demandent elles aussi un jeton machine et chaque
-lecture est réduite aux grants de l'appelant, voir
+lecture est réduite aux autorisations de l'appelant, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) et
 [Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
@@ -364,7 +364,7 @@ donc sa place derrière un proxy qui ne relaie pas des origines arbitraires.
 
 ## Ce que le contrôle d'accès ne couvre pas
 
-Avec `Hub:Access` activé, un appelant ne lit et n'écrit que ce qu'un grant lui donne, voir
+Avec `Hub:Access` activé, un appelant ne lit et n'écrit que ce qu'une autorisation lui donne, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md). Voici les limites de ce modèle.
 
 À qui un finding est attribué :
@@ -384,17 +384,17 @@ Avec `Hub:Access` activé, un appelant ne lit et n'écrit que ce qu'un grant lui
     au projet d'evil l'enveloppe la plus récente de cette copie, qui peut être celle de
     l'autre équipe ;
   - les mêmes spans sans attribut de regroupement, ou avec une autre valeur, privent
-    l'équipe propriétaire de son grant par attribut : `403` sur chaque acquittement et
+    l'équipe propriétaire de son autorisation par attribut : `403` sur chaque acquittement et
     chaque révocation de ce finding à cette source, et sur un run de backend de traces de
     ce service, tant que les spans arrivent, plus `Hub:Retention` ;
-  - un acquittement porte sur la signature, aveugle au regroupement. Celui qu'écrit un
-    grant par attribut fait aussi taire les regroupements de cette signature que le Hub
+  - un acquittement porte sur la signature, aveugle au regroupement. Celui qu'écrit une
+    autorisation par attribut fait aussi taire les regroupements de cette signature que le Hub
     n'a pas vus sur ce daemon, et ceux qui apparaîtront, donc il peut faire taire le même
     finding pour le déploiement d'une autre équipe sur ce daemon. Le Hub ne lui impose
     aucune expiration.
 
   Là où plusieurs équipes peuvent émettre le même nom de service, donnez à l'équipe
-  propriétaire un grant de source ou de service pour `acks.write` et `analyses.run`.
+  propriétaire une autorisation de source ou de service pour `acks.write` et `analyses.run`.
 - Lancer un run sur un backend de traces demande que toutes les copies du service dans
   l'environnement du backend s'accordent. Nommez l'environnement d'un backend de traces
   comme les daemons qui remontent ses services.
@@ -421,7 +421,7 @@ La fraîcheur d'une décision :
 - les groupes du fournisseur sont lus à la connexion, ils ont donc 8 heures au plus, et un
   jeton de terminal garde ceux de la session qui l'a approuvé, pas plus longtemps que
   cette session ;
-- `Hub:Auth:RequiredGroups`, les groupes internes, les admins, les grants et les jetons
+- `Hub:Auth:RequiredGroups`, les groupes internes, les admins, les autorisations et les jetons
   machine s'appliquent au redémarrage qui les déploie ;
 - un jeton machine renouvelé demande un rollout restart, un jeton retiré part avec la
   modification de ConfigMap qui relance le pod.

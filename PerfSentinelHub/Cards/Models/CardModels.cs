@@ -197,4 +197,4 @@ public sealed record CardSignedFigures(
     long? ServicesCount);
 
 /// <summary>A refusal the screen shows under one free field: title, team or label.</summary>
-public sealed record CardFieldProblem(string Detail, string Field);
+public sealed record CardFieldProblem(string Detail, string Field, string Code);

@@ -40,7 +40,8 @@ public static partial class ApiEndpoints
             return refused;
         if (!HasValidUtf8(request.QueryString.Value) ||
             !CardRequest.TryParseOptionsQuery(request, Today(timeProvider), out var query))
-            return Problem(StatusCodes.Status400BadRequest, "The card options query is invalid.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidCardQuery,
+                "The card options query is invalid.");
         if (CardScopeRefusal(request.HttpContext, access, settings, reads, writes, query, out var scope) is { } outside)
             return outside;
 
@@ -135,7 +136,8 @@ public static partial class ApiEndpoints
             return await renderer.VerifyAsync(png!, cancellationToken) is { } verdict
                 ? TypedResults.Json(verdict with { Contacted = [CardRenderer.DohHost, options.Value.Cards.Domain!] },
                     HubJsonContext.Default.CardAttachmentResponse)
-                : Problem(StatusCodes.Status502BadGateway, "The engine could not check this card's attachment.");
+                : Problem(StatusCodes.Status502BadGateway, ProblemCodes.CardAttachmentUnchecked,
+                    "The engine could not check this card's attachment.");
         }
         finally
         {
@@ -155,12 +157,14 @@ public static partial class ApiEndpoints
             { } refused)
             return (refused, null, null);
         if (attachment && call.Options.Cards.Domain is null)
-            return (Problem(StatusCodes.Status409Conflict, "Set Hub:Cards:Domain to check an attachment."), null, null);
+            return (Problem(StatusCodes.Status409Conflict, ProblemCodes.CardDomainMissing,
+                "Set Hub:Cards:Domain to check an attachment."), null, null);
         var payload = await ReadBodyAsync(request, cancellationToken, MaxCardBodyBytes);
         if (payload is null)
             return (TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge), null, null);
         if (CardRequest.TryParse(payload, Today(call.Clock), out var error) is not { } ask)
-            return (Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid."), null, null);
+            return (Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                error ?? "The request is invalid."), null, null);
         if (CardScopeRefusal(request.HttpContext, call.Access, call.Options, reads, writes,
                 (ask.Kind, ask.At, ask.Environment, ask.SourceId), out var scope) is { } outside)
             return (outside, null, null);
@@ -168,7 +172,7 @@ public static partial class ApiEndpoints
         var outcome = await call.Cards.ComputeAsync(
             new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free), cancellationToken);
         return outcome is CardOutcome.Refused { Reason: var reason }
-            ? (Problem(StatusCodes.Status422UnprocessableEntity,
+            ? (Problem(StatusCodes.Status422UnprocessableEntity, reason,
                 CardRules.Explain(reason, RecapPeriod.Of(ask.Kind, ask.At))), null, null)
             : (null, ask, ((CardOutcome.Ready)outcome).Input);
     }
@@ -199,6 +203,7 @@ public static partial class ApiEndpoints
     {
         request.HttpContext.Response.Headers.RetryAfter = "5";
         return Problem(StatusCodes.Status503ServiceUnavailable,
+            ProblemCodes.CardsBusy,
             "Another card is being made. Try again in a few seconds.");
     }
 
@@ -209,16 +214,20 @@ public static partial class ApiEndpoints
         return render switch
         {
             CardRender.Refused { Reason: "unsupported_characters", Field: "free.title" or "free.team" or "free.label" }
-                refused => TypedResults.Json(new CardFieldProblem(UndrawableField, refused.Field["free.".Length..]),
+                refused => TypedResults.Json(new CardFieldProblem(UndrawableField, refused.Field["free.".Length..],
+                        ProblemCodes.CardFieldUndrawable),
                     HubJsonContext.Default.CardFieldProblem, statusCode: StatusCodes.Status422UnprocessableEntity),
             CardRender.Refused { Reason: "unsupported_characters" } =>
-                Problem(StatusCodes.Status422UnprocessableEntity, UndrawableOrganisation),
+                Problem(StatusCodes.Status422UnprocessableEntity, ProblemCodes.CardOrganisationUndrawable,
+                    UndrawableOrganisation),
             CardRender.Refused { Reason: "compact_too_large" } => Problem(StatusCodes.Status422UnprocessableEntity,
+                ProblemCodes.CardDomainTooLong,
                 "The card's QR code cannot hold this organisation's domain. Ask an administrator for a shorter " +
                 "Hub:Cards:Domain."),
             CardRender.Refused { Reason: "unsupported_language" } => Problem(StatusCodes.Status422UnprocessableEntity,
+                ProblemCodes.CardLanguageUnsupported,
                 "This Hub's engine cannot print cards in this language yet."),
-            _ => Problem(StatusCodes.Status502BadGateway, CardNotRendered)
+            _ => Problem(StatusCodes.Status502BadGateway, ProblemCodes.CardNotRendered, CardNotRendered)
         };
     }
 
@@ -244,17 +253,19 @@ public static partial class ApiEndpoints
             return TypedResults.NotFound();
         if (RelayIdentity(request, options) is not { } caller)
             return Problem(StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and a card is made in somebody's name.");
         if (write && RefuseForeignRequest(request) is { } foreign)
             return foreign;
         writes = access.Scope(request.HttpContext, AccessPermissions.CardsWrite);
         if (writes.IsNothing)
-            return Problem(StatusCodes.Status403Forbidden, "You may not create cards.");
+            return Problem(StatusCodes.Status403Forbidden, ProblemCodes.CardsForbidden, "You may not create cards.");
         reads = access.Scope(request.HttpContext, AccessPermissions.FindingsRead);
         if (reads.IsNothing)
             return NoFindingsRead();
         if (!engine.SupportsCard)
             return Problem(StatusCodes.Status503ServiceUnavailable,
+                ProblemCodes.CardEngineMissing,
                 "This Hub's engine cannot render cards: it needs a perf-sentinel release with the card subcommand.");
         identity = caller;
         return null;
@@ -273,14 +284,16 @@ public static partial class ApiEndpoints
         scope = null!;
         var sources = access.Sources(context, options.Sources);
         if (!RecapSchedule.TryScope(query.Environment, query.SourceId, sources, out var ids))
-            return Problem(StatusCodes.Status400BadRequest, "Unknown environment or source_id.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.UnknownScope,
+                "Unknown environment or source_id.");
         List<string> candidates =
         [
             .. (ids ?? [.. sources.Select(source => source.Id)])
             .Where(id => reads.ReachesSource(id) && writes.ReachesSource(id))
         ];
         if (candidates.Count == 0)
-            return Problem(StatusCodes.Status403Forbidden, "You may not create cards for these sources.");
+            return Problem(StatusCodes.Status403Forbidden, ProblemCodes.CardSourcesForbidden,
+                "You may not create cards for these sources.");
 
         scope = new CardScopeAsk(query.Kind, query.At, candidates,
             [.. candidates.Where(id => reads.HoldsAtSource(id) && writes.HoldsAtSource(id))], query.Environment,
@@ -334,7 +347,7 @@ public static partial class ApiEndpoints
         if (CardKeyRefusal(request, access, options.Value, true) is { } refused)
             return refused;
         if (!engine.SupportsCard)
-            return Problem(StatusCodes.Status503ServiceUnavailable, NoCardEngine);
+            return Problem(StatusCodes.Status503ServiceUnavailable, ProblemCodes.CardEngineMissing, NoCardEngine);
         if (!gate.TryEnter())
             return CardsBusy(request);
         try
@@ -372,13 +385,15 @@ public static partial class ApiEndpoints
         if (payload is null)
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
         if (ReadRevoke(payload, out var fingerprint, out var on) is { } invalid)
-            return Problem(StatusCodes.Status400BadRequest, invalid);
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest, invalid);
 
         return await keys.RevokeAsync(fingerprint, on, cancellationToken) switch
         {
             CardRevokeOutcome.Unknown => Problem(StatusCodes.Status404NotFound,
+                ProblemCodes.UnknownCardKey,
                 "The Hub holds no card key with this fingerprint."),
             CardRevokeOutcome.BadDate => Problem(StatusCodes.Status400BadRequest,
+                ProblemCodes.InvalidRevocationDate,
                 "The revocation date must lie between the key's creation and today."),
             _ => await CardKeysAsync(database, options.Value, cancellationToken)
         };
@@ -392,19 +407,22 @@ public static partial class ApiEndpoints
             return TypedResults.NotFound();
         if (RelayIdentity(request, options) is null)
             return Problem(StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and a card key is managed in somebody's name.");
         if (write && RefuseForeignRequest(request) is { } foreign)
             return foreign;
         return access.Scope(request.HttpContext, AccessPermissions.AccessAdmin).IsNothing
-            ? Problem(StatusCodes.Status403Forbidden, "You may not manage the card signing key.")
+            ? Problem(StatusCodes.Status403Forbidden, ProblemCodes.CardKeyForbidden,
+                "You may not manage the card signing key.")
             : null;
     }
 
     private static JsonHttpResult<AnalysisProblem> CardEngineProblem(CardEngineException exception)
     {
         return exception.Reason == "unsupported"
-            ? Problem(StatusCodes.Status503ServiceUnavailable, NoCardEngine)
-            : Problem(StatusCodes.Status502BadGateway, $"The engine did not make a signing key ({exception.Reason}).");
+            ? Problem(StatusCodes.Status503ServiceUnavailable, ProblemCodes.CardEngineMissing, NoCardEngine)
+            : Problem(StatusCodes.Status502BadGateway, ProblemCodes.CardKeyFailed,
+                $"The engine did not make a signing key ({exception.Reason}).");
     }
 
     private static async Task<IResult> CardKeysAsync(HubDatabase database, HubOptions options,

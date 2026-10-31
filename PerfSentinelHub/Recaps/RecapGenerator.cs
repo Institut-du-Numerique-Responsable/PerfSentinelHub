@@ -74,7 +74,8 @@ public sealed partial class RecapGenerator(
                 snapshot.Period.Incomplete.Count == 0,
                 snapshot.NothingMoved,
                 null,
-                now.ToUnixTimeMilliseconds()),
+                now.ToUnixTimeMilliseconds(),
+                subscription.Language),
             JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot));
 
         if (await database.InsertRecapReportAsync(report, DeliveriesOf(subscription, snapshot), cancellationToken))
@@ -92,7 +93,8 @@ public sealed partial class RecapGenerator(
         return
         [
             .. subscription.Webhooks.Distinct(StringComparer.Ordinal).Select(name => (RecapChannels.Webhook, name)),
-            .. subscription.Emails.Distinct(StringComparer.OrdinalIgnoreCase)
+            .. subscription.Emails.Concat(subscription.Recipients.Select(recipient => recipient.Address!))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(address => (RecapChannels.Email, address))
         ];
     }

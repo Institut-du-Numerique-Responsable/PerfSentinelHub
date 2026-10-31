@@ -33,7 +33,8 @@ public static partial class ApiEndpoints
         if (access.Sources(context, options.Value.Sources).FirstOrDefault(candidate =>
                     string.Equals(candidate.Id, sourceId, StringComparison.Ordinal))
                 is not { Kind: SourceKinds.Daemon, HasAckCredential: true } source || !reads.ReachesSource(source.Id))
-            return Problem(StatusCodes.Status404NotFound, "This source relays no acknowledgments.");
+            return Problem(StatusCodes.Status404NotFound, ProblemCodes.AcksNotRelayed,
+                "This source relays no acknowledgments.");
 
         var listed = await database.ReadSourceAcksAsync(
             source.Id, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), MaxListedAcks, cancellationToken);
@@ -97,20 +98,23 @@ public static partial class ApiEndpoints
         if (RelayIdentity(request, options) is not { } identity)
             return Problem(
                 StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and an ack is taken in somebody's name.");
         // One answer for an unknown source, a trace backend and a daemon with
         // no ack credential, so the route tells nothing /api/sources does not.
         if (access.Sources(request.HttpContext, options.Sources).FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, sourceId, StringComparison.Ordinal))
             is not { Kind: SourceKinds.Daemon, HasAckCredential: true } source)
-            return Problem(StatusCodes.Status404NotFound, "This source relays no acknowledgments.");
+            return Problem(StatusCodes.Status404NotFound, ProblemCodes.AcksNotRelayed,
+                "This source relays no acknowledgments.");
         if (RefuseForeignRequest(request) is { } refusal)
             return refusal;
         // From the configuration alone and before a slot is taken, so a caller who may ack
         // nothing here cannot hold both slots with slow bodies. It names no finding.
         var acks = access.Scope(request.HttpContext, AccessPermissions.AcksWrite);
         if (!acks.ReachesSource(source.Id))
-            return Problem(StatusCodes.Status403Forbidden, "You may not acknowledge findings at this source.");
+            return Problem(StatusCodes.Status403Forbidden, ProblemCodes.AcksForbidden,
+                "You may not acknowledge findings at this source.");
         if (!relay.Gate.TryEnter())
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
@@ -124,7 +128,8 @@ public static partial class ApiEndpoints
                 return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
             var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
             if (AckWrite.TryParse(payload, revoke, nowMs, out var error) is not { } write)
-                return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
+                return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                    error ?? "The request is invalid.");
             // The daemon acks any canonical signature. The Hub only spends the
             // key on one it holds at that source, which bounds what a caller
             // can grow the daemon's ack store by.
@@ -134,7 +139,9 @@ public static partial class ApiEndpoints
                 return refused;
 
             var answer = await relay.SendAsync(source, write, identity, cancellationToken);
-            return answer.Detail is null ? TypedResults.NoContent() : Problem(answer.Status, answer.Detail);
+            return answer.Detail is null
+                ? TypedResults.NoContent()
+                : Problem(answer.Status, answer.Code!, answer.Detail);
         }
         finally
         {
@@ -153,14 +160,16 @@ public static partial class ApiEndpoints
         if (target.Held && reads.Reads(new AccessCopy(sourceId, target.Service, target.Rows)))
             return acks.Writes(new AccessCopy(sourceId, target.Service, target.Rows))
                 ? null
-                : Problem(StatusCodes.Status403Forbidden, readOnly);
+                : Problem(StatusCodes.Status403Forbidden, ProblemCodes.AckReadOnly, readOnly);
         if (!target.Held && revoke && target.Mirrored && reads.HoldsAtSource(sourceId))
-            return acks.HoldsAtSource(sourceId) ? null : Problem(StatusCodes.Status403Forbidden, readOnly);
-        return Problem(
-            StatusCodes.Status404NotFound,
-            revoke
-                ? "The Hub holds no such finding at this source and mirrors no ack of it."
-                : "The Hub holds no such finding at this source.");
+            return acks.HoldsAtSource(sourceId)
+                ? null
+                : Problem(StatusCodes.Status403Forbidden, ProblemCodes.AckReadOnly, readOnly);
+        return revoke
+            ? Problem(StatusCodes.Status404NotFound, ProblemCodes.UnknownAckAtSource,
+                "The Hub holds no such finding at this source and mirrors no ack of it.")
+            : Problem(StatusCodes.Status404NotFound, ProblemCodes.UnknownFindingAtSource,
+                "The Hub holds no such finding at this source.");
     }
 
     /// <summary>
@@ -191,7 +200,8 @@ public static partial class ApiEndpoints
     private static IResult? RefuseForeignRequest(HttpRequest request)
     {
         if (request.Headers.TryGetValue("Sec-Fetch-Site", out var site) && site != "same-origin")
-            return Problem(StatusCodes.Status403Forbidden, "A request from another site is refused.");
+            return Problem(StatusCodes.Status403Forbidden, ProblemCodes.ForeignOrigin,
+                "A request from another site is refused.");
         return request.HasJsonContentType()
             ? null
             : TypedResults.StatusCode(StatusCodes.Status415UnsupportedMediaType);

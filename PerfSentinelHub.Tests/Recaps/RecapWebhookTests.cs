@@ -91,6 +91,24 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_french_subscription_s_webhook_carries_french_plain_sentences()
+    {
+        var hub = await ReportedAsync(language: "fr");
+
+        await RunAsync(hub);
+
+        var received = Assert.Single(_received);
+        using var body = JsonDocument.Parse(received.Body);
+        var recap = body.RootElement.GetProperty("recap");
+        var french = RecapSentences.For("n_plus_one_sql", "fr");
+        Assert.Equal(french, recap.GetProperty("priorities")[0].GetProperty("plain").GetString());
+        Assert.Equal(french, recap.GetProperty("movements").GetProperty("new")[0].GetProperty("plain").GetString());
+        Assert.Equal("pilotage", recap.GetProperty("view").GetString());
+        Assert.Equal("week", body.RootElement.GetProperty("period").GetProperty("kind").GetString());
+        Assert.Equal("n_plus_one_sql", recap.GetProperty("priorities")[0].GetProperty("finding_type").GetString());
+    }
+
+    [Fact]
     public async Task An_unlabelled_row_reaches_the_webhook_without_its_endpoint()
     {
         var snapshot = RecapSnapshots.Distinctive() with
@@ -321,14 +339,15 @@ public sealed class RecapWebhookTests : IAsyncLifetime
         string channel = RecapChannels.Webhook,
         string target = "ops-chat",
         string? databasePath = null,
-        RecapSnapshot? snapshot = null)
+        RecapSnapshot? snapshot = null,
+        string language = "en")
     {
         var hub = Hub(publicUrl, disclosureUrl, databasePath);
         _reportId = Guid.NewGuid().ToString("N");
         var report = new RecapReportRecord(
             new RecapReportSummary(
                 _reportId, "weekly-shop", "week", "2026-10-19", "2026-10-25",
-                views ?? [RecapViewNames.Pilotage, RecapViewNames.Tech], true, false, null, 10_000),
+                views ?? [RecapViewNames.Pilotage, RecapViewNames.Tech], true, false, null, 10_000, language),
             JsonSerializer.Serialize(snapshot ?? RecapSnapshots.Distinctive(), Wire));
         Assert.True(await Database(hub).InsertRecapReportAsync(report, [(channel, target)], CancellationToken.None));
         return hub;

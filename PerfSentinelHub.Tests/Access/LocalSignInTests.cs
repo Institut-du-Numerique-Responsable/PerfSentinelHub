@@ -155,7 +155,86 @@ public sealed class LocalSignInTests : IAsyncLifetime
         Assert.Equal("/", signIn.Headers.Location!.OriginalString);
     }
 
+    [Fact]
+    public async Task The_page_follows_accept_language()
+    {
+        using var client = Client(Here);
+
+        var french = await PageAsync(client, "/auth/sign-in?return_url=%2Fdevice", "de-DE, en;q=0.5, fr-CA;q=0.8");
+        var english = await PageAsync(client, "/auth/sign-in", "en-GB, fr;q=0.9");
+        var neither = await PageAsync(client, "/auth/sign-in", "de, es;q=0.5");
+        var none = await PageAsync(client, "/auth/sign-in", null);
+
+        Assert.Contains("<html lang=\"fr\">", french, StringComparison.Ordinal);
+        Assert.Contains("<title>Connexion · Perf Sentinel Hub</title>", french, StringComparison.Ordinal);
+        Assert.Contains(">Se connecter par authentification unique</a>", french, StringComparison.Ordinal);
+        Assert.Contains("<summary>Se connecter avec un compte local</summary>", french, StringComparison.Ordinal);
+        Assert.Contains("href=\"/auth/sign-in?return_url=%2Fdevice&amp;lang=en\"", french, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Afficher cette page en anglais\"", french, StringComparison.Ordinal);
+        Assert.Contains("<input name=\"lang\" type=\"hidden\" value=\"fr\">", french, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sign in", french, StringComparison.Ordinal);
+        foreach (var page in new[] { english, neither, none })
+        {
+            Assert.Contains("<html lang=\"en\">", page, StringComparison.Ordinal);
+            Assert.Contains(">Sign in with single sign-on</a>", page, StringComparison.Ordinal);
+            Assert.Contains("href=\"/auth/sign-in?return_url=%2F&amp;lang=fr\"", page, StringComparison.Ordinal);
+            Assert.Contains("aria-label=\"Show this page in French\"", page, StringComparison.Ordinal);
+            Assert.Contains("<input name=\"lang\" type=\"hidden\" value=\"en\">", page, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Lang_in_the_query_wins()
+    {
+        using var client = Client(Here);
+
+        var english = await PageAsync(client, "/auth/sign-in?lang=en", "fr-FR");
+        var french = await PageAsync(client, "/auth/sign-in?lang=fr&return_url=%2Fdevice", "en-US");
+        var unknown = await PageAsync(client, "/auth/sign-in?lang=de", "fr-FR");
+
+        Assert.Contains("<html lang=\"en\">", english, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"fr\">", french, StringComparison.Ordinal);
+        Assert.Contains("value=\"/device\"", french, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"fr\">", unknown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_launcher_choice_cookie_beats_accept_language_and_the_query_beats_it()
+    {
+        using var client = Client(Here);
+
+        // What a lapsed session's reload reaches: the cookie challenge, with no lang in the query.
+        var french = await PageAsync(client, "/auth/sign-in?return_url=%2F", "en-US", "perf-sentinel-lang=fr");
+        var english = await PageAsync(client, "/auth/sign-in?lang=en", "fr-FR", "perf-sentinel-lang=fr");
+        var unknown = await PageAsync(client, "/auth/sign-in", "fr-FR", "perf-sentinel-lang=de");
+
+        Assert.Contains("<html lang=\"fr\">", french, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"en\">", english, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"fr\">", unknown, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------------ signing in
+
+    [Fact]
+    public async Task A_wrong_password_keeps_the_language()
+    {
+        using var first = Client(Here);
+        using var second = Client(Elsewhere);
+
+        using var wrong = await SignInAsync(first, "ops", Password + "!", lang: "fr");
+        using var unknown = await SignInAsync(second, "nobody", Password, lang: "fr");
+        var wrongBytes = await wrong.Content.ReadAsByteArrayAsync(Cancel);
+
+        Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
+        Assert.Equal(wrongBytes, await unknown.Content.ReadAsByteArrayAsync(Cancel));
+        var page = Encoding.UTF8.GetString(wrongBytes);
+        AssertPageHeaders(wrong, page);
+        Assert.Contains("<html lang=\"fr\">", page, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"alert\" role=\"alert\">Le nom ou le mot de passe est incorrect.</p>", page,
+            StringComparison.Ordinal);
+        Assert.Contains("<details open>", page, StringComparison.Ordinal);
+        Assert.Contains("<input name=\"lang\" type=\"hidden\" value=\"fr\">", page, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task A_local_account_signs_in_as_local_name_reaches_its_internal_groups_and_is_logged()
@@ -690,19 +769,34 @@ public sealed class LocalSignInTests : IAsyncLifetime
         string password,
         string returnUrl = "/",
         string? site = "same-origin",
-        string? origin = null)
+        string? origin = null,
+        string? lang = null)
     {
+        List<KeyValuePair<string, string>> fields =
+        [
+            new("name", name), new("password", password), new("return_url", returnUrl)
+        ];
+        if (lang is not null) fields.Add(new KeyValuePair<string, string>("lang", lang));
         var request = new HttpRequestMessage(HttpMethod.Post, "/auth/sign-in/local")
         {
-            Content = new FormUrlEncodedContent(
-            [
-                new KeyValuePair<string, string>("name", name), new KeyValuePair<string, string>("password", password),
-                new KeyValuePair<string, string>("return_url", returnUrl)
-            ])
+            Content = new FormUrlEncodedContent(fields)
         };
         if (site is not null) request.Headers.Add("Sec-Fetch-Site", site);
         if (origin is not null) request.Headers.Add("Origin", origin);
         return client.SendAsync(request, Cancel);
+    }
+
+    private static async Task<string> PageAsync(HttpClient client, string path, string? acceptLanguage,
+        string? cookie = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        if (acceptLanguage is not null) request.Headers.Add("Accept-Language", acceptLanguage);
+        if (cookie is not null) request.Headers.Add("Cookie", cookie);
+        using var response = await client.SendAsync(request, Cancel);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = await response.Content.ReadAsStringAsync(Cancel);
+        AssertPageHeaders(response, page);
+        return page;
     }
 
     private async Task<string> LocalSessionAsync(WebApplicationFactory<Program> hub)

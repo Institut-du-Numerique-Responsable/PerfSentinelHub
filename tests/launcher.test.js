@@ -8,6 +8,8 @@ const test = require("node:test");
 const assert = require("node:assert");
 
 globalThis.window = globalThis;
+require("../PerfSentinelHub/wwwroot/text-en.js");
+require("../PerfSentinelHub/wwwroot/text-fr.js");
 require("../PerfSentinelHub/wwwroot/launcher.js");
 const PSL = globalThis.PSL;
 
@@ -240,6 +242,32 @@ test("only open folds are worth remembering", () => {
     assert.deepEqual(PSL.openFolds(undefined), {});
     // And nothing that is not exactly true counts as open.
     assert.deepEqual(PSL.openFolds({a: "true", b: 1, c: {}, d: true}), {d: true});
+});
+
+test("a settings group opened under its old English heading stays open under its key", () => {
+    assert.deepEqual(PSL.daemonGroupFolds({
+        "s1|// declared": true,
+        "s1|// ingestion and memory": true,
+        "s2|// what it keeps for readers": true,
+        "s2|// metrics labels": false,
+        "s3|// listeners": true,
+        "s3|// sub-systems": true,
+        "s3|// correlation": true,
+        "s3|labels": true,
+        "a|b|// declared": true,
+        "s4|// unknown": true,
+    }), {
+        "s1|declared": true,
+        "s1|ingestion": true,
+        "s2|readers": true,
+        "s3|listeners": true,
+        "s3|subsystems": true,
+        "s3|correlation": true,
+        "s3|labels": true,
+        "a|b|declared": true,
+        "s4|// unknown": true,
+    });
+    assert.deepEqual(PSL.daemonGroupFolds(null), {});
 });
 
 test("a gauge takes a tone only once it is close to a cap it published", () => {
@@ -2203,7 +2231,7 @@ test("the revoke confirmation says every card reads revoked", () => {
 
 test("the level line says what the check page shows", () => {
     assert.equal(PSL.levelLine(false, "acme.example"),
-        "On the check page, this card reads: Figures intact since their signature. Signer not verified.");
+        "On the check page, this card reads: Figures intact since they were signed. Signer not verified.");
     assert.equal(PSL.levelLine(true, "acme.example"), "On the check page, this card reads: Signed by acme.example.");
 });
 
@@ -2288,4 +2316,54 @@ test("only the refusal of the period before offers the other two angles", () => 
         + "some of its days were not recorded. A story or a collective card still works for October 2026."), true);
     assert.equal(PSL.isPreviousRefusal("The curve covers whole sources, and you read only part of one."), false);
     assert.equal(PSL.isPreviousRefusal(null), false);
+});
+
+// ---- the shell in two languages
+
+const SHELL_FUNCTIONS = ["renderShell", "renderUpdates", "renderFleetSkew", "applyTheme", "helpDot",
+    "terminalBlock", "downloadButton", "engineNeed", "tokenStep", "stepsBlock", "shellTabs", "applyStaticText", "engineText", "initLang"];
+
+function wwwroot(file) {
+    return require("node:fs").readFileSync(
+        require("node:path").join(__dirname, "..", "PerfSentinelHub", "wwwroot", file), "utf8");
+}
+
+test("the shell holds no prose literal", () => {
+    const source = wwwroot("app.js");
+    for (const name of SHELL_FUNCTIONS) {
+        assert.ok(source.includes("function " + name + "("), "app.js has no " + name);
+    }
+    assert.deepEqual(PSL.literalsIn(source, SHELL_FUNCTIONS), []);
+});
+
+test("every data-i18n key of index.html exists", () => {
+    const html = wwwroot("index.html");
+    const keys = [...html.matchAll(/data-i18n="([^"]+)"/g)].map(m => m[1]);
+    for (const m of html.matchAll(/data-i18n-attr="([^"]+)"/g)) {
+        for (const pair of m[1].split(";")) keys.push(pair.split(":")[1]);
+    }
+    // The tabs, the footer and the language button are all read from the tables.
+    assert.ok(keys.length >= 12, "index.html marks only " + keys.length + " texts");
+    assert.match(html, /id="lang-toggle"/);
+    const missing = keys.filter(key => !Object.prototype.hasOwnProperty.call(globalThis.PSL_TEXT.en, key));
+    assert.deepEqual(missing, []);
+});
+
+test("boot adopts the page's language without storing it", () => {
+    // Only the button's click may call setLang with storage on.
+    assert.match(wwwroot("app.js"), /PSL\.setLang\(document\.documentElement\.lang, false\)/);
+});
+
+test("the language button rests on the active language and slides to the other on hover", () => {
+    // Same behaviour as perf-sentinel.dev. Track order stays FR then EN: an English page rests
+    // on EN (-19px) and slides to FR on hover, a French page rests on FR and slides to EN.
+    const css = wwwroot("launcher.css");
+    const rule = selector => {
+        const m = css.match(new RegExp(selector.replace(/[.[\]"]/g, "\\$&") + "\\s*\\{([^}]*)\\}"));
+        return m ? m[1].replace(/\s+/g, " ").trim() : null;
+    };
+    assert.match(rule(".shell-lang-track") || "", /transform: translateX\(-19px\)/);
+    assert.match(rule(':root[lang="fr"] .shell-lang-track') || "", /transform: none/);
+    assert.match(rule(".shell-lang:hover .shell-lang-track") || "", /transform: none/);
+    assert.match(rule(':root[lang="fr"] .shell-lang:hover .shell-lang-track') || "", /translateX\(-19px\)/);
 });

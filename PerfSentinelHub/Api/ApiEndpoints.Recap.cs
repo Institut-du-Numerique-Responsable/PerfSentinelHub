@@ -30,7 +30,8 @@ public static partial class ApiEndpoints
         var sources = access.Sources(context, options.Value.Sources);
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         if (!TryParseRecapQuery(context.Request, sources, today, out var query, out var pilotage))
-            return Problem(StatusCodes.Status400BadRequest, "The recap query is invalid.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRecapQuery,
+                "The recap query is invalid.");
 
         var snapshot = await recaps.ComputeAsync(query with { Access = Narrowing(scope) }, cancellationToken);
         return TypedResults.Json(

@@ -2,6 +2,26 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- The launcher reads in French as well as English. A FR/EN button in the top bar switches the
+  language in place, a first visit follows the browser's languages, and a click is remembered under
+  `perf-sentinel:lang`. Numbers, dates and durations follow the language. What the engine writes
+  (daemon recommendations, run warnings, suggested fixes, disclosure limits) stays in English,
+  marked `lang="en"` and tagged EN on a French screen, and printed commands keep the engine's syntax.
+- Every refusal the Hub words itself carries a stable `code` beside its unchanged English
+  `detail`, which the launcher translates. A client that does not know a code shows `detail`.
+- Recap reports have a language. `POST /api/recap/reports` takes `lang` (`en` by default or
+  `fr`), a report item carries `language`, and `GET /recaps/{id}/{view}.html?lang=` renders a page
+  in the other language. A subscription takes `Language`, the language of its reports, its webhook's
+  `plain` sentences and its mails, and `Recipients`, addresses with a language of their own: each
+  mail's subject, body and attached page follow its address.
+- The sign-in page and the terminal approval page follow `?lang=`, then the language picked with
+  the launcher's button (a `perf-sentinel-lang` cookie), then the browser's `Accept-Language`, and
+  carry the FR/EN button as a link.
+
 ## [0.10.0] - 2026-10-31
 
 ### Added

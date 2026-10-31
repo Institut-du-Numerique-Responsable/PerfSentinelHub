@@ -679,7 +679,8 @@ archived and sent nowhere. The body carries the management view only: the `recap
 all: a row that has no label keeps its `null` `label` and its `service`, nothing more. An action has
 a `null` `owner` and carries the owner's name only, in `owner_display`, as the attached page shows it:
 no e-mail or account reaches a receiver. The engineering view reaches a receiver as a link, never as
-content.
+content. The `plain` sentences of `recap` are in the subscription's `Language`. Every key and every
+other value is the same in both languages.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
@@ -717,8 +718,9 @@ it, so a link keeps showing what the team was told on the day.
 
 A report item holds `id` (32 lowercase hex), `subscription` (`null` for an on-demand report),
 `period` (`kind`, `from`, `to`), `views[]`, `complete` (no `incomplete` reason in the snapshot),
-`nothing_moved`, `created_by` (`null` for a subscription report), `generated_at_ms` and
-`deliveries[]`: `channel` (`webhook` or `email`), `target`, `state` (`pending`, `delivered` or
+`nothing_moved`, `created_by` (`null` for a subscription report), `generated_at_ms`, `language` (`en` or
+`fr`, the subscription's `Language` or the `lang` it was generated with) and `deliveries[]`: `channel`
+(`webhook` or `email`), `target`, `state` (`pending`, `delivered` or
 `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` and `last_status`. The HTML page lives
 outside `/api`, so a browser that follows a mailed link and holds no session is sent to sign in.
 
@@ -731,6 +733,7 @@ JSON content type of the other writes:
 | `at`                        | Any day of the period, `yyyy-MM-dd`, from 1900; default: the last closed period        |
 | `environment`, `source_id`  | As on `/api/recap`; an unknown one is `400 Unknown environment or source_id.`          |
 | `service`, `grouping`       | As on `/api/recap`                                                                     |
+| `lang`                      | `en` (default) or `fr`, the language of the report's pages; else `400 lang must be en or fr.` |
 
 Each string is 1 to 256 characters with no control character. A period that has not ended before
 today is `400 A report covers a closed period; pick a date in an earlier one.` The report is built
@@ -749,7 +752,9 @@ permission, and only the caller's own reports otherwise.
 **The page.** `Content-Type: text/html; charset=utf-8`,
 `Content-Disposition: inline; filename="perf-sentinel-recap-<from>-<view>.html"`,
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and a `Content-Security-Policy` that
-allows nothing but the two inline scripts of the page, by hash. `pilotage` is the management
+allows nothing but the two inline scripts of the page, by hash. The page is in the report's `language`.
+`?lang=en` or `?lang=fr` renders it in the other one instead, since the text is written when the page is
+served, and any other value is ignored. `pilotage` is the management
 projection of the stored snapshot, made when the page is served, with two cuts the live screen does
 not make. A row with no label shows no endpoint: its title reads "An unnamed step in" and the
 service, with "Name it in the Hub to see it here." under it. Wherever a management row names its
@@ -1449,7 +1454,7 @@ any unmapped route does (`302` to the provider, `401` under `/api`), and a clien
 |---|---|---|
 | `POST /auth/device` | anonymous (the CLI) | `200` below; `400` `invalid_request` or `invalid_client`; `403` with `Sec-Fetch-Site`; `413` over 4 KiB; `429` `temporarily_unavailable` with `Retry-After: 60` |
 | `POST /auth/device/token` | anonymous (the CLI) | `200` token; `400` with `authorization_pending`, `slow_down`, `access_denied`, `expired_token`, `invalid_grant`, `unsupported_grant_type`, `invalid_request` or `invalid_client`; `403`; `413` |
-| `GET /device` | browser session | the approval page, or the sign-in when no session or less than 1 h is left |
+| `GET /device` | browser session | the approval page, in `?lang=` (`en` or `fr`), else the `perf-sentinel-lang` cookie, else `Accept-Language`, else English; or the sign-in when no session or less than 1 h is left |
 | `POST /api/device/verify` | browser session only | `200` below; `400` malformed code; `401`; `403`; `404` no such pending code; `415`; `429` |
 | `POST /api/device/approve` | browser session only | `204`; `400`; `401`; `403`; `404`; `409` the session ends within the hour; `415`; `429` |
 | `POST /auth/revoke` | anonymous, by possession | RFC 7009: `200` whether or not the token existed; `400 invalid_request`; `403`; `413`; `503` with `Retry-After: 1` |
@@ -1526,7 +1531,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md#local-accounts) for the model.
 
 | Route | Who | Answers |
 |---|---|---|
-| `GET /auth/sign-in?return_url=` | anonymous | `200` and the page, signed in or not |
+| `GET /auth/sign-in?return_url=` | anonymous | `200` and the page, signed in or not, in `?lang=` (`en` or `fr`), else the `perf-sentinel-lang` cookie, else `Accept-Language`, else English |
 | `GET /auth/sign-in/sso?return_url=` | anonymous | `302` to the provider, back to `return_url` after sign-in |
 | `POST /auth/sign-in/local` | anonymous, from the page | `302` to `return_url` with the session cookie; `403` and the page on a wrong name or password; `403` plain text from another site; `413`; `415`; `429` or `503` and the page, with `Retry-After` |
 
@@ -1543,3 +1548,25 @@ same `403` page, byte for byte. A client address and name past five consecutive 
 or an address past 5 attempts in its minute, get `429` and `Retry-After` in seconds; a
 request that waits more than 10 seconds for the hashing slot, or finds 8 already waiting,
 gets `503` and `Retry-After: 1`.
+
+## Problem codes
+
+A refusal the Hub words itself carries `code` beside `detail`, as in
+`{"detail":"This source relays no acknowledgments.","code":"acks_not_relayed"}`. The `detail`
+stays the English sentence it always was, and `code` is a stable `snake_case` name for the
+refusal, never renamed, that the launcher translates. A code names the refusal, not the route,
+so one code serves every route that refuses for the same reason. A client that does not know a
+code shows `detail`. A card field refusal also carries `field`, and a disclosure refusal keeps
+its `{"reason":"…"}` with no `detail`. A response with no body (`413`, `415`, a full gate's
+`503`) has no code either. The codes:
+
+- The request itself: `invalid_json`, `invalid_request`, `unknown_source`, `unknown_scope`.
+- Who asks, and from where: `unknown_caller`, `foreign_origin`, `machine_token_read_only`, `no_grant`, `no_findings_read`.
+- Analyses: `analysis_engine_missing`, `detection_knob_unsupported`, `analysis_forbidden`.
+- Terminal sign-in and tokens: `browser_session_required`, `browser_not_allowed`, `unknown_token`, `session_ending`, `invalid_user_code`, `no_pending_sign_in`, `too_many_user_codes`.
+- Findings, actions and labels: `actions_forbidden`, `action_read_only`, `unknown_finding`, `action_exists`, `no_action`, `endpoint_labels_forbidden`, `service_labels_forbidden`, `unknown_endpoint`, `unknown_service`, `endpoint_label_read_only`, `service_label_read_only`.
+- Acknowledgments and their relay to a daemon: `acks_not_relayed`, `acks_forbidden`, `ack_read_only`, `unknown_finding_at_source`, `unknown_ack_at_source`, `daemon_unreachable`, `daemon_timeout`, `daemon_refused_signature`, `daemon_refused_credential`, `daemon_ack_not_found`, `daemon_already_acked`, `daemon_acks_disabled`, `daemon_ack_store_full`, `daemon_unexpected_answer`, `not_a_daemon`.
+- Recaps: `invalid_recap_query`, `recap_reports_forbidden`.
+- Cards: `invalid_card_query`, `cards_forbidden`, `card_sources_forbidden`, `card_engine_missing`, `cards_busy`, `card_not_rendered`, `card_field_undrawable`, `card_organisation_undrawable`, `card_domain_too_long`, `card_language_unsupported`, `card_domain_missing`, `card_attachment_unchecked`, `card_key_forbidden`, `card_key_failed`, `unknown_card_key`, `invalid_revocation_date`.
+- Disclosures: `disclosures_read_forbidden`, `disclosures_manage_forbidden`, `withdrawn_not_shared`, `invalid_share_days`, `invalid_withdraw_reason`, `already_withdrawn`, `delivery_done`, `disclosure_busy`.
+- Card refusals (`422`), the reason from `CardRules.Reasons`: `open_period`, `uncovered_days`, `open_day`, `overflow`, `previous_uncovered_days`, `previous_open_day`, `previous_overflow`, `no_confirmed_fix`, `unknown_fix`, `unprintable_fix`, `no_total_io`, `curve_needs_whole_sources`, `unprintable_scope`, `scope_too_long`, `unkept_fixes`.

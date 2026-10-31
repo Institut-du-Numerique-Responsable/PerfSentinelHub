@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 
 namespace PerfSentinelHub.Tests.Recaps;
@@ -55,6 +56,60 @@ public sealed partial class RecapReportRendererTests
     private static string Hash(string script)
     {
         return "'sha256-" + Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(script))) + "'";
+    }
+
+    [Fact]
+    public void The_french_management_report_uses_no_technical_word()
+    {
+        var html = Encoding.UTF8.GetString(
+            RecapReportRenderer.Render(RecapViews.Frozen(RecapSnapshots.Distinctive(3)), HubLang.Fr));
+        // The service a team runs is a value the report shows, not a word it chose.
+        var visible = Visible(html).Replace("checkout-api", "", StringComparison.Ordinal);
+
+        RecapSentencesTests.AssertPlainFrench(visible);
+        Assert.Contains("Ce qui a changé", visible, StringComparison.Ordinal);
+        Assert.Contains(RecapSentences.For("n_plus_one_sql", HubLang.Fr), visible, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_french_report_says_lang_fr()
+    {
+        var html = Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapSnapshots.Distinctive(), HubLang.Fr));
+
+        Assert.StartsWith("<!doctype html>\n<html lang=\"fr\" data-theme=\"light\">", html, StringComparison.Ordinal);
+        Assert.Contains("<title>Récap Perf Sentinel, du 26 oct. 2026 au 1er nov. 2026</title>", WebUtility.HtmlDecode(html),
+            StringComparison.Ordinal);
+        Assert.Contains("<time datetime=\"2026-10-29T14:32:05Z\">29/10/2026 14:32 UTC</time>", html,
+            StringComparison.Ordinal);
+        // The engine's own suggestion stays English, and says so.
+        Assert.Contains("<p class=\"suggest\" lang=\"en\">", html, StringComparison.Ordinal);
+        // Its own time script, hashed in its own policy, while the English policy keeps its two.
+        var policy = RecapReportRenderer.ContentSecurityPolicyFor(HubLang.Fr);
+        foreach (var script in ExecutableScripts(html))
+            Assert.Contains(Hash(script), policy, StringComparison.Ordinal);
+        Assert.Equal(RecapReportRenderer.ContentSecurityPolicy, RecapReportRenderer.ContentSecurityPolicyFor(HubLang.En));
+        Assert.NotEqual(RecapReportRenderer.ContentSecurityPolicy, policy);
+    }
+
+    [Fact]
+    public void An_old_report_renders_as_it_did()
+    {
+        // Frozen before the language existed: no language reads English, and a type this Hub does not
+        // know keeps the English sentence its snapshot stored.
+        const string stored = "The application waits on something this Hub has no sentence for.";
+        var old = RecapSnapshots.Distinctive() with
+        {
+            Priorities = [RecapSnapshots.Priority(1, null) with { FindingType = "blocking_wait", Plain = stored }]
+        };
+
+        var html = RecapReportRenderer.Render(RecapViews.Frozen(old));
+
+        Assert.Equal(html, RecapReportRenderer.Render(RecapViews.Frozen(old), HubLang.En));
+        Assert.Contains(stored, Visible(Encoding.UTF8.GetString(html)), StringComparison.Ordinal);
+        Assert.Contains(stored,
+            Visible(Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapViews.Frozen(old), HubLang.Fr))),
+            StringComparison.Ordinal);
+        Assert.StartsWith("<!doctype html>\n<html lang=\"en\"", Encoding.UTF8.GetString(html), StringComparison.Ordinal);
     }
 
     [Fact]

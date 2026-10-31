@@ -73,6 +73,25 @@ position est stockée sous `perf-sentinel:theme` dans `localStorage` et dans
 origine. C'est ce passage de relais qui impose que le lanceur et les rapports partagent
 une origine.
 
+## La langue
+
+Le lanceur se lit en anglais ou en français. Le bouton FR/EN de la barre du haut montre la langue de
+l'écran et glisse au survol vers l'autre, celle qu'un clic affiche. Le changement redessine l'écran sur
+place : la route, les filtres et un formulaire à moitié rempli restent tels quels. Une première visite
+suit le navigateur, la première variante française ou anglaise de sa liste de langues, sinon l'anglais.
+Un clic stocke le choix sous `perf-sentinel:lang` dans `localStorage`, et dès lors le choix stocké
+l'emporte sur le navigateur. Un navigateur qui refuse le stockage garde le choix tant que la page est
+ouverte.
+
+Les nombres, les dates et les durées suivent la langue : `1,937,000`, `3.1%` et `2026-10-29 14:05`
+s'écrivent `1 937 000`, `3,1 %` et `29/10/2026 14:05` en français. Ce que le moteur écrit reste en
+anglais : les recommandations du daemon, les avertissements d'un run, le correctif suggéré d'un
+finding, les limites d'une divulgation et la raison pour laquelle une application en a été écartée.
+Chacun de ces textes porte `lang="en"`, pour qu'un lecteur d'écran le lise en anglais, et en français
+une petite étiquette EN le précède. Le rapport d'analyse est la page du moteur et reste en anglais lui
+aussi. Chaque commande imprimée garde la syntaxe du moteur dans les deux langues, pour qu'une commande
+copiée s'exécute de la même façon.
+
 ## Les commandes imprimées
 
 Chaque commande imprimée porte un onglet par shell, parce que la différence n'est pas
@@ -326,9 +345,9 @@ phrase fixe par type, le nom de l'endpoint quand quelqu'un l'a donné (sinon l'e
 chiffre en opérations inutiles, la tendance et l'action, en lecture seule. Elle ne porte aucun mot
 technique, ses sept textes d'aide non plus.
 
-### Reports
+### Rapports
 
-Sous What moved, Reports liste les copies figées des périodes closes, la plus récente d'abord, depuis
+Sous What moved, Reports (Rapports en français) liste les copies figées des périodes closes, la plus récente d'abord, depuis
 `GET /api/recap/reports` ([l'API](../API.md#recap-reports)). La section est absente pour un appelant que le
 Hub ne laisse pas les lire : il faut `recaps.read`, ou `findings.read` pour les rapports qu'on a générés
 soi-même. Une ligne nomme la période et l'origine du rapport, `Week 2026-10-19 to 2026-10-25 · weekly-shop`
@@ -351,6 +370,11 @@ vous pouvez lire : sans date choisie, c'est la dernière période close, et un j
 pas finie est refusé avec la phrase du Hub dans la section. Il refuse aussi quand le Hub ne sait pas qui
 demande, ce qui est le cas d'un navigateur derrière aucune connexion ni proxy d'identité, et quand votre
 accès ne porte aucun `findings.read`. Un succès ajoute la ligne aussitôt.
+
+Un rapport garde une seule langue : celle de l'écran pour un rapport généré ici, le `Language` de
+l'abonnement pour un rapport planifié. Ses deux téléchargements s'ouvrent dans cette langue. Un rapport
+envoyé par mail arrive à chaque adresse dans la langue de cette adresse, voir
+[la configuration](CONFIGURATION-FR.md).
 
 ## Cartes à partager
 
@@ -579,22 +603,22 @@ l'exécution, parce que le daemon cesse alors de charger aussi la baseline TOML,
 [ACK-WORKFLOW-FR.md](https://github.com/Institut-du-Numerique-Responsable/perf-sentinel/blob/main/docs/FR/ACK-WORKFLOW-FR.md)
 du moteur.
 
-## Quand aucun grant ne vous atteint
+## Quand aucune autorisation ne vous concerne
 
-Avec `Hub:Access` activé, `/api/status` répond `403` à un appelant connecté qu'aucun grant
+Avec `Hub:Access` activé, `/api/status` répond `403` à un appelant connecté qu'aucune autorisation
 n'atteint. Le Hub répond, donc le lanceur n'affiche pas son bandeau d'injoignabilité. Chaque
-route affiche [Votre accès](#votre-accès) sous le bandeau « No grant on this Hub reaches
-you. An administrator grants access in the Hub's configuration. » Les onglets et la
+route affiche [Votre accès](#votre-accès) sous le bandeau « Aucune autorisation de ce Hub ne vous concerne. Un
+administrateur accorde les accès dans la configuration du Hub. » Les onglets et la
 pastille de version disparaissent, puisque chaque onglet mènerait au même refus, et la
 pastille d'identité nomme toujours l'appelant. À la place d'une portée vide, un bloc à
 copier réunit ce dont un administrateur a besoin : le nom, l'identifiant qu'il inscrit dans
-`Admins` ou `Members`, et les groupes qu'un grant peut nommer. Tout autre échec de
+`Admins` ou `Members`, et les groupes qu'une autorisation peut nommer. Tout autre échec de
 `/api/status` garde le bandeau d'injoignabilité. Voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant-dark.png">
-  <img alt="Le bandeau sans grant au-dessus de l'accès de l'appelant, avec la demande à envoyer à un administrateur" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
+  <img alt="Le bandeau sans autorisation au-dessus de l'accès de l'appelant, avec la demande à envoyer à un administrateur" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-no-grant.png">
 </picture>
 
 Avec le contrôle d'accès, chaque source de `/api/sources` porte les `permissions` de
@@ -619,7 +643,7 @@ ailleurs. Sa seule action révoque un jeton de terminal. Elle montre :
    fournisseur s'applique à la prochaine connexion, et « Your id, for an administrator »,
    le sujet en texte sélectionnable.
 2. **Vos groupes.** Des pastilles marquées fournisseur ou interne.
-3. **Ce que vous atteignez.** Projet, groupe, rôle et permissions par grant. Un grant sur
+3. **Ce que vous atteignez.** Projet, groupe, rôle et permissions par autorisation. Une autorisation sur
    `*` se lit « Everything, including records no project covers ».
 4. **Vos jetons de terminal**, tirés de `GET /api/tokens` : ceux que `perf-sentinel login`
    a obtenus pour cet appelant, avec l'adresse d'où la connexion a été demandée, la
@@ -630,7 +654,7 @@ ailleurs. Sa seule action révoque un jeton de terminal. Elle montre :
    `401` à sa requête suivante, ou le jeton n'existait déjà plus, ou il reste valide et
    pourquoi) et place le focus sur la carte. Voir
    [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#connexion-du-terminal).
-5. **Projets que vous atteignez**, pour un membre : chaque projet que ces grants nomment,
+5. **Projets que vous atteignez**, pour un membre : chaque projet que ces autorisations nomment,
    avec ses motifs écrits `source lab-daemon · service checkout-* · attribute team=shop`.
    Un administrateur reçoit à la place un lien vers Couverture.
 
@@ -647,7 +671,7 @@ changement :
 
 1. **À traiter.** Les services, valeurs d'attribut et sources qu'aucun projet ne couvre,
    avec leurs nombres de findings et, par leur nom, les sources où chacun a été vu. Les
-   findings qu'aucun projet ne couvre ne se lisent que par des grants sur `*`. Chaque liste
+   findings qu'aucun projet ne couvre ne se lisent que par des autorisations sur `*`. Chaque liste
    s'arrête à ses 200 premières entrées et le dit.
 2. **Motifs à coller.** Une ligne YAML par service, attribut et source non couverts, avec
    un bouton Copy, prête à placer sous les `patterns` d'un projet de
@@ -655,12 +679,12 @@ changement :
    son sens.
 3. **Déploiements en désaccord sur un attribut de projet.** Les copies de finding qu'un
    motif d'attribut de projet lit sans pouvoir y écrire, parce que la copie porte deux
-   valeurs de la clé ou a aussi été vue sous un groupement sans elle. Un grant d'attribut
+   valeurs de la clé ou a aussi été vue sous un groupement sans elle. Une autorisation d'attribut
    les lit mais ne peut pas les acquitter, voir
    [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
 4. **Les jetons de terminal de tous**, avec le même Revoke.
 5. **Configuration**, telle que le Hub l'a chargée à son dernier démarrage, un pli par
-   partie avec son nombre : projets, rôles (les intégrés marqués), grants, groupes
+   partie avec son nombre : projets, rôles (les intégrés marqués), autorisations, groupes
    internes et leurs membres, admins par identifiant et par groupe, jetons machine avec
    leur expiration en « expired », « in less than a day » ou « in N days », jamais leur
    valeur, et comptes locaux par nom, jamais leur hash. Une partie vide affiche « None
@@ -668,7 +692,7 @@ changement :
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage-dark.png">
-  <img alt="L'écran Couverture d'un admin : ce qu'aucun projet ne couvre, les motifs à coller, les conflits, chaque jeton de terminal et la configuration avec les grants dépliés" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage.png">
+  <img alt="L'écran Couverture d'un admin : ce qu'aucun projet ne couvre, les motifs à coller, les conflits, chaque jeton de terminal et la configuration avec les autorisations dépliées" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-coverage.png">
 </picture>
 
 La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le Hub la sert
@@ -676,7 +700,7 @@ La page de connexion du terminal, `/device`, n'est pas un écran du lanceur : le
 navigateur qui approuve un `perf-sentinel login`. Le champ du code prend le focus et
 accepte le code en majuscules ou minuscules, avec ou sans son tiret. Une fois le code
 vérifié, le focus passe sur l'endroit et l'heure de la demande. Un code venu d'un autre
-réseau change **Approve** en **Approve anyway**, ce que la page annonce, et le résultat
+réseau change **Approve** (**Autoriser**) en **Approve anyway** (**Autoriser quand même**), ce que la page annonce, et le résultat
 est annoncé et prend le focus une fois les boutons disparus.
 
 <picture>
@@ -691,8 +715,9 @@ session arrive sur la page de connexion du Hub, `/auth/sign-in`, au lieu de cell
 fournisseur. Ce n'est pas non plus un écran du lanceur : une page autonome, styles en
 ligne et sans script, puisque les fichiers du lanceur sont derrière la connexion. Elle
 porte le logo du lanceur, en ligne, sa police, DM Sans écrite dans la feuille de style en
-polices `data:`, et sa palette, claire ou sombre selon le système. **Sign in with single sign-on** vient d'abord et mène au
-fournisseur ; **Sign in with a local account** est replié en dessous, avec la mention
+polices `data:`, et sa palette, claire ou sombre selon le système. **Sign in with single sign-on**
+(**Se connecter par authentification unique** en français) vient d'abord et mène au
+fournisseur ; **Sign in with a local account** (**Se connecter avec un compte local**) est replié en dessous, avec la mention
 qu'il sert quand l'authentification unique est indisponible et que chaque connexion
 locale est journalisée. Après une tentative refusée, le pli s'ouvre avec la raison,
 jamais avec ce qui a été tapé. Dans les deux cas, le navigateur revient sur la page
@@ -700,6 +725,13 @@ demandée. Le lanceur lui-même ne change pas : sur un `401` il se recharge, et 
 rechargement qui atteint cette page. Une page qui s'affiche que le fournisseur réponde
 ou non, c'est le but : le lanceur n'envoie jamais un navigateur droit vers un
 fournisseur en panne.
+
+Le serveur écrit cette page et la page d'approbation du terminal en anglais ou en français : `?lang=en`
+ou `?lang=fr` d'abord, sinon la dernière langue choisie avec le bouton du lanceur (le cookie
+`perf-sentinel-lang` qu'il écrit), sinon l'`Accept-Language` du navigateur, sinon l'anglais. Une session
+expirée revient donc dans la langue que le lecteur a choisie. Chacune porte le bouton
+FR/EN du lanceur, en lien vers la même page dans l'autre langue, et une connexion refusée répond dans la
+langue du formulaire d'où elle vient. Une langue choisie sur ces pages n'est pas stockée.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in-dark.png">

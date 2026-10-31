@@ -149,7 +149,7 @@ public sealed class AckRelayApiTests(HubApplicationFactory factory) : IClassFixt
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(
-            """{"detail":"This source relays no acknowledgments."}""",
+            """{"detail":"This source relays no acknowledgments.","code":"acks_not_relayed"}""",
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
@@ -575,7 +575,7 @@ public sealed class AckRelayApiTests(HubApplicationFactory factory) : IClassFixt
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(
-            """{"detail":"This source relays no acknowledgments."}""",
+            """{"detail":"This source relays no acknowledgments.","code":"acks_not_relayed"}""",
             await response.Content.ReadAsStringAsync(cancellationToken));
     }
 

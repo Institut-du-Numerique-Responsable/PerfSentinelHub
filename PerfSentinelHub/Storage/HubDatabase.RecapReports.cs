@@ -8,7 +8,7 @@ public sealed partial class HubDatabase
 {
     private const string SelectRecapSummary = """
                                               SELECT id, subscription, period_kind, period_from, period_to, views,
-                                                     complete, nothing_moved, created_by, generated_at_ms
+                                                     complete, nothing_moved, created_by, generated_at_ms, language
                                               FROM recap_reports
                                               """;
 
@@ -50,9 +50,10 @@ public sealed partial class HubDatabase
         command.CommandText = """
                               INSERT INTO recap_reports(
                                 id, subscription, period_kind, period_from, period_to, views, complete,
-                                nothing_moved, created_by, created_by_subject, generated_at_ms, snapshot_json)
+                                nothing_moved, created_by, created_by_subject, generated_at_ms, snapshot_json, language)
                               VALUES ($id, $subscription, $kind, $from, $to, $views, $complete,
-                                      $nothing_moved, $created_by, $created_by_subject, $generated_at_ms, $snapshot)
+                                      $nothing_moved, $created_by, $created_by_subject, $generated_at_ms, $snapshot,
+                                      $language)
                               ON CONFLICT DO NOTHING;
                               """;
         command.Parameters.AddWithValue("$id", summary.Id);
@@ -67,6 +68,7 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue("$created_by_subject", Nullable(report.CreatorSubject));
         command.Parameters.AddWithValue("$generated_at_ms", summary.GeneratedAtMs);
         command.Parameters.AddWithValue("$snapshot", report.SnapshotJson);
+        command.Parameters.AddWithValue("$language", summary.Language);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
@@ -144,14 +146,14 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = """
                               SELECT id, subscription, period_kind, period_from, period_to, views,
-                                     complete, nothing_moved, created_by, generated_at_ms, snapshot_json,
+                                     complete, nothing_moved, created_by, generated_at_ms, language, snapshot_json,
                                      created_by_subject
                               FROM recap_reports WHERE id = $id;
                               """;
         command.Parameters.AddWithValue("$id", id);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken)
-            ? new RecapReportRecord(ReadRecapSummary(reader), reader.GetString(10), NullableString(reader, 11))
+            ? new RecapReportRecord(ReadRecapSummary(reader), reader.GetString(11), NullableString(reader, 12))
             : null;
     }
 
@@ -160,7 +162,7 @@ public sealed partial class HubDatabase
         return new RecapReportSummary(
             reader.GetString(0), NullableString(reader, 1), reader.GetString(2), reader.GetString(3),
             reader.GetString(4), reader.GetString(5).Split(','), reader.GetBoolean(6), reader.GetBoolean(7),
-            NullableString(reader, 8), reader.GetInt64(9));
+            NullableString(reader, 8), reader.GetInt64(9), reader.GetString(10));
     }
 
     public Task<IReadOnlyList<RecapDeliveryRecord>> ListRecapDeliveriesAsync(

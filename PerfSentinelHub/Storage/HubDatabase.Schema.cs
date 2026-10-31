@@ -88,6 +88,7 @@ public sealed partial class HubDatabase
             await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
             await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
+            await EnsureRecapLanguageColumnAsync(connection, transaction, cancellationToken);
             await EnsureDetectionSignalColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionFrozenFindingColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
@@ -103,7 +104,7 @@ public sealed partial class HubDatabase
                                              (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms),
                                              (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
                                              (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
-                                             (19, $applied_at_ms), (20, $applied_at_ms);
+                                             (19, $applied_at_ms), (20, $applied_at_ms), (21, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -331,6 +332,24 @@ public sealed partial class HubDatabase
         await using var alter = connection.CreateCommand();
         alter.Transaction = transaction;
         alter.CommandText = "ALTER TABLE recap_reports ADD COLUMN created_by_subject TEXT;";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Version 21: the language a report's pages render in. A report frozen before it reads en, as
+    ///     every report did until then.
+    /// </summary>
+    private static async Task EnsureRecapLanguageColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "recap_reports", "language", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = "ALTER TABLE recap_reports ADD COLUMN language TEXT NOT NULL DEFAULT 'en';";
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 

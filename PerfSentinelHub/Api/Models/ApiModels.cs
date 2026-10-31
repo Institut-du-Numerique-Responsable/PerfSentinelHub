@@ -166,7 +166,11 @@ public sealed record CorrelationQuery(
 
 public sealed record SubmittedAnalysis(string Id, string Status);
 
-public sealed record AnalysisProblem(string Detail);
+/// <summary>A refusal: the English detail, and the stable code the launcher translates.</summary>
+public sealed record AnalysisProblem(
+    string Detail,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Code = null);
 
 /// <summary>A publication the Hub refused, with the reason from the closed set.</summary>
 public sealed record DisclosureRefusal(string Reason);
@@ -283,7 +287,8 @@ public sealed record RecapReportItem(
     bool NothingMoved,
     string? CreatedBy,
     long GeneratedAtMs,
-    IReadOnlyList<RecapDeliveryView> Deliveries);
+    IReadOnlyList<RecapDeliveryView> Deliveries,
+    string Language);
 
 /// <summary>A report and its snapshot, the stored text served as it was frozen.</summary>
 public sealed record RecapReportDetail(RecapReportItem Report, JsonElement Snapshot);

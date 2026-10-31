@@ -57,8 +57,10 @@ public sealed partial class AckRelay(
             var unreachable = exception is HttpRequestException;
             LogRelayFailed(logger, action, source.Id, identity, unreachable ? "network_error" : "timeout");
             return unreachable
-                ? new AckRelayAnswer(StatusCodes.Status502BadGateway, "The daemon could not be reached.")
-                : new AckRelayAnswer(StatusCodes.Status504GatewayTimeout, "The daemon did not answer in time.");
+                ? new AckRelayAnswer(StatusCodes.Status502BadGateway, "The daemon could not be reached.",
+                    ProblemCodes.DaemonUnreachable)
+                : new AckRelayAnswer(StatusCodes.Status504GatewayTimeout, "The daemon did not answer in time.",
+                    ProblemCodes.DaemonTimeout);
         }
 
         LogRelayed(logger, action, source.Id, identity, status);
@@ -80,21 +82,28 @@ public sealed partial class AckRelay(
         {
             >= 200 and < 300 => new AckRelayAnswer(StatusCodes.Status204NoContent, null),
             StatusCodes.Status400BadRequest => new AckRelayAnswer(
-                StatusCodes.Status400BadRequest, "The daemon refused the signature as not canonical."),
+                StatusCodes.Status400BadRequest, "The daemon refused the signature as not canonical.",
+                ProblemCodes.DaemonRefusedSignature),
             // Never relayed as a 401: the launcher answers one by reloading into
             // a sign-in, and no sign-in mends a key the Hub holds.
             StatusCodes.Status401Unauthorized => new AckRelayAnswer(
-                StatusCodes.Status502BadGateway, "The daemon refused the Hub's ack credential."),
+                StatusCodes.Status502BadGateway, "The daemon refused the Hub's ack credential.",
+                ProblemCodes.DaemonRefusedCredential),
             StatusCodes.Status404NotFound when revoke => new AckRelayAnswer(
                 StatusCodes.Status404NotFound,
-                "This finding is not acked at this daemon, or only by its CI baseline, which no API revokes."),
+                "This finding is not acked at this daemon, or only by its CI baseline, which no API revokes.",
+                ProblemCodes.DaemonAckNotFound),
             StatusCodes.Status409Conflict => new AckRelayAnswer(
-                StatusCodes.Status409Conflict, "This finding is already acked at the daemon or by its CI baseline."),
+                StatusCodes.Status409Conflict, "This finding is already acked at the daemon or by its CI baseline.",
+                ProblemCodes.DaemonAlreadyAcked),
             StatusCodes.Status503ServiceUnavailable => new AckRelayAnswer(
-                StatusCodes.Status503ServiceUnavailable, "Acknowledgments are disabled on this daemon."),
+                StatusCodes.Status503ServiceUnavailable, "Acknowledgments are disabled on this daemon.",
+                ProblemCodes.DaemonAcksDisabled),
             StatusCodes.Status507InsufficientStorage => new AckRelayAnswer(
-                StatusCodes.Status507InsufficientStorage, "The ack store of this daemon is full."),
-            _ => new AckRelayAnswer(StatusCodes.Status502BadGateway, $"The daemon answered {daemonStatus}.")
+                StatusCodes.Status507InsufficientStorage, "The ack store of this daemon is full.",
+                ProblemCodes.DaemonAckStoreFull),
+            _ => new AckRelayAnswer(StatusCodes.Status502BadGateway, $"The daemon answered {daemonStatus}.",
+                ProblemCodes.DaemonUnexpectedAnswer)
         };
     }
 

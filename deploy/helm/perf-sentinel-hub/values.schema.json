@@ -78,7 +78,7 @@
           "type": "object",
           "additionalProperties": false,
           "$comment": "Name uniqueness and webhook references are checked in configmap.yaml, environment and sourceId by the Hub.",
-          "if": { "properties": { "subscriptions": { "contains": { "properties": { "emails": { "minItems": 1 } }, "required": ["emails"] } } }, "required": ["subscriptions"] },
+          "if": { "properties": { "subscriptions": { "contains": { "anyOf": [{ "properties": { "emails": { "minItems": 1 } }, "required": ["emails"] }, { "properties": { "recipients": { "minItems": 1 } }, "required": ["recipients"] }] } } }, "required": ["subscriptions"] },
           "then": { "properties": { "smtp": { "properties": { "host": { "minLength": 1 } }, "required": ["host"] } }, "required": ["smtp"] },
           "properties": {
             "movementThreshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
@@ -140,7 +140,21 @@
                   "service": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" },
                   "grouping": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" },
                   "webhooks": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" } },
-                  "emails": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[^\\s<>@\"]+@[^\\s<>@\"]+$" } }
+                  "emails": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[^\\s<>@\"]+@[^\\s<>@\"]+$" } },
+                  "language": { "enum": ["en", "fr"] },
+                  "recipients": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["address"],
+                      "properties": {
+                        "address": { "type": "string", "pattern": "^[^\\s<>@\"]+@[^\\s<>@\"]+$" },
+                        "language": { "enum": ["en", "fr"] }
+                      }
+                    }
+                  }
                 }
               }
             }

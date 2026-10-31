@@ -731,7 +731,9 @@ est le snapshot `pilotage` décrit plus haut, il ne contient donc aucune clé d'
 `endpoint` : une ligne sans libellé garde son `label` à `null` et son `service`, rien de plus. Une
 action a un `owner` à `null` et ne porte que le nom du responsable, dans `owner_display`, comme la
 page jointe le montre : aucun e-mail ni compte n'arrive chez le destinataire. La vue d'ingénierie
-arrive chez le destinataire sous forme de lien, jamais de contenu.
+arrive chez le destinataire sous forme de lien, jamais de contenu. Les phrases `plain` de `recap` sont
+dans le `Language` de l'abonnement. Toutes les clés et toutes les autres valeurs sont les mêmes dans
+les deux langues.
 
 ```json
 {"event":"recap","report_id":"…","subscription":"weekly-shop",
@@ -771,7 +773,8 @@ reçu le jour même.
 Un élément de rapport porte `id` (32 caractères hexadécimaux minuscules), `subscription` (`null` pour
 un rapport à la demande), `period` (`kind`, `from`, `to`), `views[]`, `complete` (aucune raison
 `incomplete` dans le snapshot), `nothing_moved`, `created_by` (`null` pour un rapport d'abonnement),
-`generated_at_ms` et `deliveries[]` : `channel` (`webhook` ou `email`), `target`, `state` (`pending`,
+`generated_at_ms`, `language` (`en` ou `fr`, le `Language` de l'abonnement ou le `lang` avec lequel il a
+été généré) et `deliveries[]` : `channel` (`webhook` ou `email`), `target`, `state` (`pending`,
 `delivered` ou `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` et `last_status`. La page
 HTML est hors de `/api` : un navigateur qui suit un lien reçu par e-mail sans session est envoyé se
 connecter.
@@ -785,6 +788,7 @@ type de contenu JSON des autres écritures :
 | `at`                        | Un jour quelconque de la période, `yyyy-MM-dd`, à partir de 1900 ; par défaut la dernière période close |
 | `environment`, `source_id`  | Comme sur `/api/recap` ; un inconnu est `400 Unknown environment or source_id.`        |
 | `service`, `grouping`       | Comme sur `/api/recap`                                                                 |
+| `lang`                      | `en` (par défaut) ou `fr`, la langue des pages du rapport ; sinon `400 lang must be en or fr.` |
 
 Chaque chaîne fait de 1 à 256 caractères sans caractère de contrôle. Une période qui n'est pas
 terminée avant aujourd'hui est `400 A report covers a closed period; pick a date in an earlier one.`
@@ -805,7 +809,9 @@ détient aucune des deux permissions, et seulement ses propres rapports sinon.
 **La page.** `Content-Type: text/html; charset=utf-8`,
 `Content-Disposition: inline; filename="perf-sentinel-recap-<from>-<view>.html"`,
 `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` et une `Content-Security-Policy` qui
-n'autorise que les deux scripts en ligne de la page, par empreinte. `pilotage` est la projection de
+n'autorise que les deux scripts en ligne de la page, par empreinte. La page est dans la `language` du
+rapport. `?lang=en` ou `?lang=fr` la rend dans l'autre, puisque le texte s'écrit au moment de servir la
+page, et toute autre valeur est ignorée. `pilotage` est la projection de
 pilotage du snapshot stocké, faite au moment de servir la page, avec deux coupes que l'écran en
 direct ne fait pas. Une ligne sans libellé ne montre aucun endpoint : son titre se lit « An unnamed
 step in » suivi du service, avec « Name it in the Hub to see it here. » dessous. Partout où une
@@ -1392,7 +1398,7 @@ sur `Hub:MetricsPort` seulement) et les `POST /auth/device`, `POST /auth/device/
 `POST /auth/revoke` de la CLI ([Connexion du terminal](#connexion-du-terminal)), et les
 routes de la page de connexion ([Connexion locale](#connexion-locale)), exige une
 session, un jeton de terminal ou un jeton machine, et chaque réponse couvre ce que couvrent
-les grants de l'appelant. Le modèle
+les autorisations de l'appelant. Le modèle
 est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil :
 
 - **Identifiants.** Une session du navigateur, ou `Authorization: Bearer` avec un jeton de
@@ -1416,7 +1422,7 @@ est dans [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) ; ce qui change sur le fil
   tranches de cette liste unique. Un `source_id` ou un `environment` hors du `/api/sources`
   de l'appelant reçoit le même `400` qu'un inconnu. Un appelant qui ne détient
   `findings.read` nulle part reçoit `403` plutôt que `[]` : une porte de CI dont le jeton
-  n'a aucun grant échoue.
+  n'a aucune autorisation échoue.
 - **Les incidents** suivent `findings.read` de la même façon ; `/api/incidents/{id}` sert
   la copie la plus riche dans le périmètre, et `404` s'il n'y en a aucune. Un
   rafraîchissement ne lit que les démons où l'appelant lit quelque chose.
@@ -1484,7 +1490,7 @@ curl -fsS -H "Authorization: Bearer $HUB_TOKEN" \
 
 Montée seulement avec `Hub:Access:Enabled` : sans contrôle d'accès elle répond `404`, et le
 lanceur garde alors sa pastille d'identité en simple texte et masque l'onglet Coverage. Tout appelant la lit, y compris celui
-qu'aucun grant n'atteint, car c'est ainsi qu'il trouve l'identifiant qu'un administrateur
+qu'aucune autorisation n'atteint, car c'est ainsi qu'il trouve l'identifiant qu'un administrateur
 lui demande. Elle n'écrit jamais et ne liste jamais la valeur ni l'empreinte d'un jeton
 machine.
 
@@ -1514,7 +1520,7 @@ machine.
 - `groups` sont les groupes effectifs de l'appelant : les groupes du fournisseur que la
   configuration nomme, gardés à la connexion, et les groupes internes qui listent le sujet,
   nommés sans `internal:`.
-- `reach` porte les grants de l'appelant avec ce que chacun lui donne : un jeton machine
+- `reach` porte les autorisations de l'appelant avec ce que chacun lui donne : un jeton machine
   garde `findings.read`, et `access.admin` n'apparaît que dans la session d'un admin. Une
   entrée `Admins` ou `AdminGroups` se lit comme le rôle `admin` sur `*`, avec `group` nul
   pour `Admins`. `projects` sont les projets que `reach` nomme.
@@ -1535,7 +1541,7 @@ machine.
     motif de projet porte deux valeurs, ou manque à l'un des groupements sous lesquels la
     copie a été vue, sous la forme `{signature, source_id, service, key, values,
     identities_without_key}`, triées par source puis signature, 200 au plus. Ce sont les
-    copies où un grant d'attribut lit sans pouvoir acquitter, voir
+    copies où une autorisation d'attribut lit sans pouvoir acquitter, voir
     [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#lire-les-conflits).
 
 ### Connexion du terminal
@@ -1551,7 +1557,7 @@ comme « pas de connexion du terminal ici ». Le flux est décrit dans
 |---|---|---|
 | `POST /auth/device` | anonyme (la CLI) | `200` ci-dessous ; `400` `invalid_request` ou `invalid_client` ; `403` avec `Sec-Fetch-Site` ; `413` au-delà de 4 Kio ; `429` `temporarily_unavailable` avec `Retry-After: 60` |
 | `POST /auth/device/token` | anonyme (la CLI) | `200` jeton ; `400` avec `authorization_pending`, `slow_down`, `access_denied`, `expired_token`, `invalid_grant`, `unsupported_grant_type`, `invalid_request` ou `invalid_client` ; `403` ; `413` |
-| `GET /device` | session du navigateur | la page d'approbation, ou la connexion sans session ou s'il reste moins d'1 h |
+| `GET /device` | session du navigateur | la page d'approbation, dans `?lang=` (`en` ou `fr`), sinon le cookie `perf-sentinel-lang`, sinon `Accept-Language`, sinon l'anglais ; ou la connexion sans session ou s'il reste moins d'1 h |
 | `POST /api/device/verify` | session du navigateur seule | `200` ci-dessous ; `400` code mal formé ; `401` ; `403` ; `404` aucun code en attente ; `415` ; `429` |
 | `POST /api/device/approve` | session du navigateur seule | `204` ; `400` ; `401` ; `403` ; `404` ; `409` la session finit dans l'heure ; `415` ; `429` |
 | `POST /auth/revoke` | anonyme, par possession | RFC 7009 : `200` que le jeton ait existé ou non ; `400 invalid_request` ; `403` ; `413` ; `503` avec `Retry-After: 1` |
@@ -1630,7 +1636,7 @@ Voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md#comptes-locaux) pour le modèle
 
 | Route | Qui | Réponses |
 |---|---|---|
-| `GET /auth/sign-in?return_url=` | anonyme | `200` et la page, connecté ou non |
+| `GET /auth/sign-in?return_url=` | anonyme | `200` et la page, connecté ou non, dans `?lang=` (`en` ou `fr`), sinon le cookie `perf-sentinel-lang`, sinon `Accept-Language`, sinon l'anglais |
 | `GET /auth/sign-in/sso?return_url=` | anonyme | `302` vers le fournisseur, retour sur `return_url` après la connexion |
 | `POST /auth/sign-in/local` | anonyme, depuis la page | `302` vers `return_url` avec le cookie de session ; `403` et la page sur un nom ou un mot de passe faux ; `403` en texte brut depuis un autre site ; `413` ; `415` ; `429` ou `503` et la page, avec `Retry-After` |
 
@@ -1647,3 +1653,25 @@ vide répondent la même page `403`, octet pour octet. Une adresse cliente et un
 de cinq échecs consécutifs, ou une adresse au-delà de 5 tentatives dans sa minute,
 reçoivent `429` et `Retry-After` en secondes ; une requête qui attend plus de 10 secondes
 la place de hachage, ou en trouve déjà 8 en attente, reçoit `503` et `Retry-After: 1`.
+
+## Codes de problème
+
+Un refus que le Hub formule lui-même porte `code` à côté de `detail`, comme dans
+`{"detail":"This source relays no acknowledgments.","code":"acks_not_relayed"}`. Le `detail`
+reste la phrase anglaise qu'il a toujours été, et `code` est un nom stable en `snake_case`
+pour le refus, jamais renommé, que le lanceur traduit. Un code nomme le refus, pas la route :
+un même code sert toutes les routes qui refusent pour la même raison. Un client qui ne connaît
+pas un code affiche `detail`. Un refus de champ de carte porte aussi `field`, et un refus de
+divulgation garde son `{"reason":"…"}` sans `detail`. Une réponse sans corps (`413`, `415`, le
+`503` d'une porte pleine) n'a pas non plus de code. Les codes :
+
+- La requête elle-même : `invalid_json`, `invalid_request`, `unknown_source`, `unknown_scope`.
+- Qui demande, et d'où : `unknown_caller`, `foreign_origin`, `machine_token_read_only`, `no_grant`, `no_findings_read`.
+- Analyses : `analysis_engine_missing`, `detection_knob_unsupported`, `analysis_forbidden`.
+- Connexion du terminal et jetons : `browser_session_required`, `browser_not_allowed`, `unknown_token`, `session_ending`, `invalid_user_code`, `no_pending_sign_in`, `too_many_user_codes`.
+- Findings, actions et libellés : `actions_forbidden`, `action_read_only`, `unknown_finding`, `action_exists`, `no_action`, `endpoint_labels_forbidden`, `service_labels_forbidden`, `unknown_endpoint`, `unknown_service`, `endpoint_label_read_only`, `service_label_read_only`.
+- Acquittements et leur relais vers un daemon : `acks_not_relayed`, `acks_forbidden`, `ack_read_only`, `unknown_finding_at_source`, `unknown_ack_at_source`, `daemon_unreachable`, `daemon_timeout`, `daemon_refused_signature`, `daemon_refused_credential`, `daemon_ack_not_found`, `daemon_already_acked`, `daemon_acks_disabled`, `daemon_ack_store_full`, `daemon_unexpected_answer`, `not_a_daemon`.
+- Récaps : `invalid_recap_query`, `recap_reports_forbidden`.
+- Cartes : `invalid_card_query`, `cards_forbidden`, `card_sources_forbidden`, `card_engine_missing`, `cards_busy`, `card_not_rendered`, `card_field_undrawable`, `card_organisation_undrawable`, `card_domain_too_long`, `card_language_unsupported`, `card_domain_missing`, `card_attachment_unchecked`, `card_key_forbidden`, `card_key_failed`, `unknown_card_key`, `invalid_revocation_date`.
+- Divulgations : `disclosures_read_forbidden`, `disclosures_manage_forbidden`, `withdrawn_not_shared`, `invalid_share_days`, `invalid_withdraw_reason`, `already_withdrawn`, `delivery_done`, `disclosure_busy`.
+- Refus de carte (`422`), la raison de `CardRules.Reasons` : `open_period`, `uncovered_days`, `open_day`, `overflow`, `previous_uncovered_days`, `previous_open_day`, `previous_overflow`, `no_confirmed_fix`, `unknown_fix`, `unprintable_fix`, `no_total_io`, `curve_needs_whole_sources`, `unprintable_scope`, `scope_too_long`, `unkept_fixes`.

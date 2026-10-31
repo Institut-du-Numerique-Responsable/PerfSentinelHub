@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -24,7 +25,8 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         if (!TryRecapReader(request, access, out var creator))
-            return Problem(StatusCodes.Status403Forbidden, "You may not read recap reports.");
+            return Problem(StatusCodes.Status403Forbidden, ProblemCodes.RecapReportsForbidden,
+                "You may not read recap reports.");
 
         var reports = await database.ListRecapReportsAsync(creator, RecapReportListLimit, cancellationToken);
         var deliveries = (await database.ListRecapDeliveriesAsync([.. reports.Select(report => report.Id)],
@@ -54,11 +56,13 @@ public static partial class ApiEndpoints
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
         var now = timeProvider.GetUtcNow();
         if (RecapOnDemand.TryParse(payload, DateOnly.FromDateTime(now.UtcDateTime), out var error) is not { } ask)
-            return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                error ?? "The request is invalid.");
 
         var sources = access.Sources(request.HttpContext, settings.Sources);
         if (!RecapSchedule.TryScope(ask.Environment, ask.SourceId, sources, out var sourceIds))
-            return Problem(StatusCodes.Status400BadRequest, "Unknown environment or source_id.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.UnknownScope,
+                "Unknown environment or source_id.");
 
         var snapshot = await recaps.ComputeAsync(
             new RecapRequest(
@@ -77,7 +81,8 @@ public static partial class ApiEndpoints
                 snapshot.Period.Incomplete.Count == 0,
                 snapshot.NothingMoved,
                 identity,
-                now.ToUnixTimeMilliseconds()),
+                now.ToUnixTimeMilliseconds(),
+                ask.Lang),
             JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot),
             AccessCaller.Of(request.HttpContext)?.Subject);
         // No subscription, so the unique period index does not apply: only an id collision could refuse.
@@ -122,14 +127,17 @@ public static partial class ApiEndpoints
             return TypedResults.NotFound();
 
         var snapshot = JsonSerializer.Deserialize(report.SnapshotJson, HubJsonContext.Default.RecapSnapshot)!;
+        // The text renders at read time, so a link may ask for the other language than the stored one.
+        var asked = context.Request.Query["lang"].ToString();
+        var lang = HubLang.IsKnown(asked) ? asked : HubLang.Normalize(report.Summary.Language);
         var headers = context.Response.Headers;
-        headers.ContentSecurityPolicy = RecapReportRenderer.ContentSecurityPolicy;
+        headers.ContentSecurityPolicy = RecapReportRenderer.ContentSecurityPolicyFor(lang);
         headers.XContentTypeOptions = "nosniff";
         headers.CacheControl = "no-store";
         headers.ContentDisposition =
             $"inline; filename=\"perf-sentinel-recap-{report.Summary.PeriodFrom}-{view}.html\"";
         return TypedResults.Bytes(
-            RecapReportRenderer.Render(view == RecapViewNames.Pilotage ? RecapViews.Frozen(snapshot) : snapshot),
+            RecapReportRenderer.Render(view == RecapViewNames.Pilotage ? RecapViews.Frozen(snapshot) : snapshot, lang),
             "text/html; charset=utf-8");
     }
 
@@ -146,6 +154,7 @@ public static partial class ApiEndpoints
         if (RelayIdentity(request, options) is not { } caller)
             return Problem(
                 StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and a report is generated in somebody's name.");
         if (RefuseForeignRequest(request) is { } refusal)
             return refusal;
@@ -204,6 +213,7 @@ public static partial class ApiEndpoints
                 .. deliveries.Select(delivery => new RecapDeliveryView(
                     delivery.Channel, delivery.Target, delivery.State, delivery.Attempts, delivery.LastAttemptMs,
                     delivery.NextAttemptMs, delivery.LastStatus))
-            ]);
+            ],
+            report.Language);
     }
 }

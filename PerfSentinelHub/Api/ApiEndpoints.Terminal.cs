@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -28,43 +29,50 @@ public static partial class ApiEndpoints
     // Served by GET /device alone, never as a static file: only this route sends the page's
     // policy, no-store and the re-challenge of a session about to end. No inline script, and
     // the input carries no value, so no link can fill it. fonts.css embeds its faces as data:
-    // URIs, which the policy admits for fonts alone, so the page sets the launcher's type.
-    private const string DevicePage =
-        """
+    // URIs, which the policy admits for fonts alone, so the page sets the launcher's type. The server
+    // writes the page's language and static text, device.js draws the rest in that language.
+    private static string DevicePage(string lang)
+    {
+        return $"""
         <!doctype html>
-        <html lang="en">
+        <html lang="{lang}">
         <head>
             <meta charset="utf-8">
             <meta content="width=device-width, initial-scale=1" name="viewport">
-            <title>Perf Sentinel Hub - terminal sign-in</title>
+            <title>{T("device.title")}</title>
             <link href="fonts.css" rel="stylesheet">
             <link href="tokens.css" rel="stylesheet">
             <link href="launcher.css" rel="stylesheet">
+            <script src="text-en.js"></script>
+            <script src="text-fr.js"></script>
             <script src="launcher.js"></script>
             <script src="device.js"></script>
         </head>
         <body>
         <main class="shell-main device-main">
-            <div aria-label="Perf Sentinel Hub" class="shell-wordmark device-brand" role="img">
-                <img alt="" data-logo="light" src="logo-horiz-light.svg">
-                <img alt="" data-logo="dark" src="logo-horiz-dark.svg">
-                <span aria-hidden="true" class="shell-wordmark-suffix">hub</span>
+            <div class="device-top">
+                <div aria-label="Perf Sentinel Hub" class="shell-wordmark" role="img">
+                    <img alt="" data-logo="light" src="logo-horiz-light.svg">
+                    <img alt="" data-logo="dark" src="logo-horiz-dark.svg">
+                    <span aria-hidden="true" class="shell-wordmark-suffix">hub</span>
+                </div>
+                {LocalSignIn.LangLink("?lang=" + (lang == HubLang.Fr ? HubLang.En : HubLang.Fr), lang)}
             </div>
-            <span class="overline"><span aria-hidden="true">// </span>terminal sign-in</span>
-            <h1 class="page-title">Approve a terminal</h1>
-            <p class="page-sub" id="device-intro">Enter the code your terminal shows. Only enter a code from a perf-sentinel login you started yourself, just now: approving gives that terminal your access until your session ends.</p>
+            <span class="overline"><span aria-hidden="true">// </span>{T("device.overline")}</span>
+            <h1 class="page-title">{T("device.heading")}</h1>
+            <p class="page-sub" id="device-intro">{HubText.Get(lang, "device.intro", ("until", T("device.intro.session_end")))}</p>
             <form class="card device-card" id="device-form">
-                <label class="field-label" for="device-code">Code</label>
+                <label class="field-label" for="device-code">{T("device.code")}</label>
                 <input aria-describedby="device-code-hint" autocapitalize="characters" autocomplete="off" autofocus class="input" id="device-code" maxlength="9" name="user_code" placeholder="XXXX-XXXX" required spellcheck="false" type="text">
-                <p class="device-hint" id="device-code-hint">Eight letters, as perf-sentinel login prints them. Case and the dash do not matter.</p>
-                <button class="pill-button pill-primary" type="submit">Continue</button>
+                <p class="device-hint" id="device-code-hint">{T("device.code.hint")}</p>
+                <button class="pill-button pill-primary" type="submit">{T("device.continue")}</button>
             </form>
             <section aria-labelledby="device-request" class="card device-card" hidden id="device-details">
                 <p id="device-request" tabindex="-1"></p>
                 <div class="banner" data-tone="warn" hidden id="device-alert" role="alert"></div>
                 <div class="device-actions">
-                    <button aria-describedby="device-alert" class="pill-button pill-primary" id="device-approve" type="button">Approve</button>
-                    <button class="pill-button" id="device-deny" type="button">Deny</button>
+                    <button aria-describedby="device-alert" class="pill-button pill-primary" id="device-approve" type="button">{T("device.approve")}</button>
+                    <button class="pill-button" id="device-deny" type="button">{T("device.deny")}</button>
                 </div>
             </section>
             <div aria-live="polite" class="device-result" id="device-result" tabindex="-1"></div>
@@ -72,6 +80,12 @@ public static partial class ApiEndpoints
         </body>
         </html>
         """;
+
+        string T(string key)
+        {
+            return HubText.Get(lang, key);
+        }
+    }
 
     private const string TerminalLog = "TerminalAccess";
 
@@ -215,20 +229,21 @@ public static partial class ApiEndpoints
     /// <summary>
     ///     The approval page, for a cookie session with at least an hour left: a shorter one, or
     ///     none, is sent through the default challenge, which comes back with a fresh session.
-    ///     The query string is ignored.
+    ///     The query string is ignored but lang, which the challenge keeps.
     /// </summary>
     private static async Task<IResult> DevicePageAsync(HttpContext context, TimeProvider timeProvider)
     {
+        var asked = context.Request.Query["lang"] is [{ } value] && HubLang.IsKnown(value) ? value : null;
         var session = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!session.Succeeded || EndsWithinTheHour(session, timeProvider))
             return TypedResults.Challenge(new AuthenticationProperties
             {
-                RedirectUri = context.Request.PathBase + "/device"
+                RedirectUri = context.Request.PathBase + "/device" + (asked is null ? "" : "?lang=" + asked)
             });
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers.ContentSecurityPolicy =
             "default-src 'self'; font-src 'self' data:; frame-ancestors 'none'";
-        return TypedResults.Content(DevicePage, "text/html; charset=utf-8");
+        return TypedResults.Content(DevicePage(HubLang.Of(context.Request, asked)), "text/html; charset=utf-8");
     }
 
     private static async Task<IResult> VerifyDeviceAsync(
@@ -240,10 +255,10 @@ public static partial class ApiEndpoints
         if (refusal is not null) return refusal;
         using var body = await ReadDecisionAsync(context.Request, cancellationToken);
         if (UserCodeOf(body) is not { } userCode)
-            return Failed(devices, caller!, StatusCodes.Status400BadRequest,
+            return Failed(devices, caller!, StatusCodes.Status400BadRequest, ProblemCodes.InvalidUserCode,
                 "Enter the eight letters your terminal shows.");
         if (devices.Find(userCode) is not { } pending)
-            return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
+            return Failed(devices, caller!, StatusCodes.Status404NotFound, ProblemCodes.NoPendingSignIn, NoPendingCode);
         return TypedResults.Json(
             new DeviceVerifyResponse(
                 DeviceAuthorizations.Display(pending.UserCode),
@@ -268,12 +283,14 @@ public static partial class ApiEndpoints
         if (UserCodeOf(body) is not { } userCode ||
             !body!.RootElement.TryGetProperty("approve", out var approveField) ||
             approveField.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-            return Failed(devices, caller!, StatusCodes.Status400BadRequest, "The request is invalid.");
+            return Failed(devices, caller!, StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                "The request is invalid.");
         if (EndsWithinTheHour(session!, timeProvider))
             return Problem(StatusCodes.Status409Conflict,
+                ProblemCodes.SessionEnding,
                 "Your session ends within the hour. Reload the page to sign in again.");
         if (devices.Find(userCode) is not { } pending)
-            return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
+            return Failed(devices, caller!, StatusCodes.Status404NotFound, ProblemCodes.NoPendingSignIn, NoPendingCode);
 
         var principal = session!.Principal!;
         // Sanitized as on the ack and run paths: a provider name may carry a line break.
@@ -289,7 +306,7 @@ public static partial class ApiEndpoints
                 pending.ClientAddress != ClientAddress.Normalize(context.Connection.RemoteIpAddress))
             : null;
         if (!devices.Decide(userCode, approval))
-            return Failed(devices, caller!, StatusCodes.Status404NotFound, NoPendingCode);
+            return Failed(devices, caller!, StatusCodes.Status404NotFound, ProblemCodes.NoPendingSignIn, NoPendingCode);
         // Logged when given, so an approval nobody collects still leaves a line; the token's
         // id follows in event 2015 when the terminal collects it.
         if (approval is null) LogDeviceDenied(logger, identity, caller!.Subject, pending.ClientAddress);
@@ -308,7 +325,7 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         if (await BrowserCallerAsync(context) is not { } caller)
-            return Problem(StatusCodes.Status401Unauthorized, NoBrowserSession);
+            return Problem(StatusCodes.Status401Unauthorized, ProblemCodes.BrowserSessionRequired, NoBrowserSession);
         var tokens = await database.ListTerminalTokensAsync(
             access.IsAdmin(caller) ? null : caller.Subject,
             timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
@@ -332,12 +349,12 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         if (await BrowserCallerAsync(context) is not { } caller)
-            return Problem(StatusCodes.Status401Unauthorized, NoBrowserSession);
+            return Problem(StatusCodes.Status401Unauthorized, ProblemCodes.BrowserSessionRequired, NoBrowserSession);
         if (RefuseForeignRequest(context.Request) is { } refusal)
             return refusal;
         // Another user's token reads as a missing one.
         if (id.Length != TokenIdHexChars || !id.All(char.IsAsciiHexDigitLower))
-            return Problem(StatusCodes.Status404NotFound, NoSuchToken);
+            return Problem(StatusCodes.Status404NotFound, ProblemCodes.UnknownToken, NoSuchToken);
         var (stored, owner) = await database.TryDeleteTerminalTokenAsync(
             id, access.IsAdmin(caller) ? null : caller.Subject, cancellationToken);
         if (!stored)
@@ -346,7 +363,7 @@ public static partial class ApiEndpoints
             return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (owner is null) return Problem(StatusCodes.Status404NotFound, NoSuchToken);
+        if (owner is null) return Problem(StatusCodes.Status404NotFound, ProblemCodes.UnknownToken, NoSuchToken);
         LogTokenRevoked(loggerFactory.CreateLogger(TerminalLog), caller.Subject, owner, id);
         return TypedResults.NoContent();
     }
@@ -364,7 +381,8 @@ public static partial class ApiEndpoints
     {
         request.HttpContext.Response.Headers.CacheControl = "no-store";
         if (request.Headers.ContainsKey("Sec-Fetch-Site"))
-            return (null, Problem(StatusCodes.Status403Forbidden, "A browser never calls this route."));
+            return (null, Problem(StatusCodes.Status403Forbidden, ProblemCodes.BrowserNotAllowed,
+                "A browser never calls this route."));
         if (await ReadBodyAsync(request, cancellationToken, MaxOAuthBodyBytes) is not { } body)
             return (null, TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
         if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType) ||
@@ -399,7 +417,8 @@ public static partial class ApiEndpoints
     {
         var session = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!session.Succeeded || AccessCaller.Of(session.Principal) is not { } caller)
-            return (null, null, Problem(StatusCodes.Status401Unauthorized, NoBrowserSession));
+            return (null, null, Problem(StatusCodes.Status401Unauthorized, ProblemCodes.BrowserSessionRequired,
+                NoBrowserSession));
         if (RefuseForeignRequest(context.Request) is { } refusal)
             return (null, null, refusal);
         // The refusal stays the guard, and the answer comes last.
@@ -409,6 +428,7 @@ public static partial class ApiEndpoints
             context.Response.Headers.RetryAfter =
                 ((long)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
             return (null, null, Problem(StatusCodes.Status429TooManyRequests,
+                ProblemCodes.TooManyUserCodes,
                 "Too many codes that match no sign-in. Wait, then try again."));
         }
 
@@ -444,9 +464,9 @@ public static partial class ApiEndpoints
     }
 
     private static JsonHttpResult<AnalysisProblem> Failed(DeviceAuthorizations devices, AccessCaller caller,
-        int statusCode, string detail)
+        int statusCode, string code, string detail)
     {
         devices.Fail(caller.Subject);
-        return Problem(statusCode, detail);
+        return Problem(statusCode, code, detail);
     }
 }

@@ -275,6 +275,33 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_device_page_follows_lang()
+    {
+        using var browser = await SignedInAsync("member", Here);
+
+        var french = await DevicePageAsync(browser, "/device?lang=fr&code=BCDFGHJK", "en-US");
+        var fromHeader = await DevicePageAsync(browser, "/device", "de, fr-FR;q=0.9, en;q=0.8");
+        var english = await DevicePageAsync(browser, "/device?lang=en", "fr-FR");
+
+        foreach (var page in new[] { french, fromHeader })
+        {
+            Assert.Contains("<html lang=\"fr\">", page, StringComparison.Ordinal);
+            Assert.Contains("<h1 class=\"page-title\">Autoriser un terminal</h1>", page, StringComparison.Ordinal);
+            Assert.Contains("Saisissez le code affiché par votre terminal.", page, StringComparison.Ordinal);
+            Assert.Contains("href=\"?lang=en\"", page, StringComparison.Ordinal);
+            Assert.Contains("aria-label=\"Afficher cette page en anglais\"", page, StringComparison.Ordinal);
+            Assert.DoesNotContain("Approve", page, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("BCDFGHJK", french, StringComparison.Ordinal);
+        Assert.DoesNotContain("value=", french, StringComparison.Ordinal);
+        Assert.Contains("<html lang=\"en\">", english, StringComparison.Ordinal);
+        Assert.Contains("<h1 class=\"page-title\">Approve a terminal</h1>", english, StringComparison.Ordinal);
+        Assert.Contains("href=\"?lang=fr\"", english, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Show this page in French\"", english, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_browser_is_refused_on_the_RFC_routes()
     {
         using var cli = Cli(Here);
@@ -813,6 +840,15 @@ public sealed class TerminalAccessApiTests : IAsyncLifetime
         using var callback = await FakeProvider.SignInAsync(client, user);
         Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
         return client;
+    }
+
+    private static async Task<string> DevicePageAsync(HttpClient browser, string path, string acceptLanguage)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Add("Accept-Language", acceptLanguage);
+        using var response = await browser.SendAsync(request, Cancel);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadAsStringAsync(Cancel);
     }
 
     private static Task<HttpResponseMessage> FormAsync(HttpClient client, string path, string body)

@@ -10,15 +10,15 @@ public static partial class ApiEndpoints
 {
     private static readonly LabelTarget EndpointLabels = new(
         true,
-        "You may not name endpoints.",
-        "The Hub holds no finding at this endpoint.",
-        "You can read this endpoint but not name it.");
+        new LabelRefusal(ProblemCodes.EndpointLabelsForbidden, "You may not name endpoints."),
+        new LabelRefusal(ProblemCodes.UnknownEndpoint, "The Hub holds no finding at this endpoint."),
+        new LabelRefusal(ProblemCodes.EndpointLabelReadOnly, "You can read this endpoint but not name it."));
 
     private static readonly LabelTarget ServiceLabels = new(
         false,
-        "You may not name services.",
-        "The Hub holds no finding of this service.",
-        "You can read this service but not name it.");
+        new LabelRefusal(ProblemCodes.ServiceLabelsForbidden, "You may not name services."),
+        new LabelRefusal(ProblemCodes.UnknownService, "The Hub holds no finding of this service."),
+        new LabelRefusal(ProblemCodes.ServiceLabelReadOnly, "You can read this service but not name it."));
 
     /// <summary>Names or renames an endpoint, in the name of the caller.</summary>
     private static Task<IResult> SetLabelAsync(
@@ -57,13 +57,14 @@ public static partial class ApiEndpoints
         if (RelayIdentity(request, options) is not { } identity)
             return Problem(
                 StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and a label is set in somebody's name.");
         if (RefuseForeignRequest(request) is { } refusal)
             return refusal;
         // From the configuration alone and before the body is read, so it names nothing.
         var writes = access.Scope(request.HttpContext, AccessPermissions.LabelsWrite);
         if (writes.IsNothing)
-            return Problem(StatusCodes.Status403Forbidden, target.MayNot);
+            return Problem(StatusCodes.Status403Forbidden, target.MayNot.Code, target.MayNot.Detail);
         var payload = await ReadBodyAsync(request, cancellationToken, MaxAckBodyBytes);
         if (payload is null)
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
@@ -71,7 +72,8 @@ public static partial class ApiEndpoints
             ? LabelWrite.TryParse(payload, out var error)
             : LabelWrite.TryParseService(payload, out error);
         if (write is null)
-            return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                error ?? "The request is invalid.");
 
         var reads = access.Scope(request.HttpContext, AccessPermissions.FindingsRead);
         var copies = await database.ReadLabelCopiesAsync(write.Service, write.Endpoint,
@@ -107,12 +109,15 @@ public static partial class ApiEndpoints
     {
         var readable = copies.Where(reads.Reads).ToList();
         if (readable.Count == 0)
-            return Problem(StatusCodes.Status404NotFound, target.Unknown);
+            return Problem(StatusCodes.Status404NotFound, target.Unknown.Code, target.Unknown.Detail);
         return readable.Any(writes.Writes)
             ? null
-            : Problem(StatusCodes.Status403Forbidden, target.ReadOnly);
+            : Problem(StatusCodes.Status403Forbidden, target.ReadOnly.Code, target.ReadOnly.Detail);
     }
 
     // What one kind of label is named on, and the sentences it refuses with.
-    private sealed record LabelTarget(bool WithEndpoint, string MayNot, string Unknown, string ReadOnly);
+    private sealed record LabelTarget(
+        bool WithEndpoint, LabelRefusal MayNot, LabelRefusal Unknown, LabelRefusal ReadOnly);
+
+    private sealed record LabelRefusal(string Code, string Detail);
 }

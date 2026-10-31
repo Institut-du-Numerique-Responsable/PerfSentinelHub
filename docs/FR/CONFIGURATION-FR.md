@@ -336,7 +336,7 @@ l'organisation. `From` est une seule adresse sans nom d'affichage. Le mot de pas
 Secret (`Hub__Recaps__Smtp__Password`).
 
 **Les abonnements.** Chacun vaut `{ Name, Cadences, Views, Environment, SourceId, Service,
-Grouping, Webhooks, Emails }`. `Name` compte de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`,
+Grouping, Webhooks, Emails, Language, Recipients }`. `Name` compte de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`,
 et est unique. `Cadences` liste `day`, `week` ou `month`, chacune une fois, au moins une. `Views`
 liste `pilotage`, `tech` ou les deux, chacune une fois. `Environment` et `SourceId` doivent
 correspondre à une source déclarée, et un `SourceId` doit appartenir à l'`Environment` quand les
@@ -345,15 +345,27 @@ contrôle. `Webhooks` nomme des entrées de `Hub:Recaps:Webhooks`, et `Emails` c
 adresses distinctes sans nom d'affichage, ce qui exige `Hub:Recaps:Smtp:Host`. Un abonnement sans
 destination est valide : il archive ses rapports et n'en livre aucun.
 
+**Les langues.** `Language` vaut `en` (par défaut) ou `fr`. Les rapports figés de l'abonnement, les
+phrases `plain` de son webhook et le mail de chaque adresse de `Emails` sont dans cette langue.
+`Recipients` liste des `{ Address, Language }` pour une adresse qui lit son mail dans sa propre
+langue, elle aussi via `Hub:Recaps:Smtp:Host` : `Address` est une adresse sans nom d'affichage, et
+`Language`, `en` ou `fr`, reprend celle de l'abonnement quand elle manque. L'objet, le corps et la
+page Pilotage jointe d'un mail sont dans la langue de son adresse, et son lien vers la vue
+Technique porte `?lang=` quand cette langue n'est pas celle du rapport. Une adresse ne figure que
+dans une liste, sans tenir compte de la casse, et `Emails` et `Recipients` comptent au plus 50
+adresses à eux deux. Les clés JSON d'un webhook et ses autres valeurs restent les mêmes dans les
+deux langues.
+
 Sous Helm le bloc est `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` et
 `publicUrl` suivent les réglages ci-dessus. `subscriptions` transmet ses éléments tels quels,
 clés en camel case : `{ name, cadences, views, environment, sourceId, service, grouping,
-webhooks, emails }`. Un webhook vaut `{ name, secretName, urlKey, secretKey }` : son URL et son
+webhooks, emails, language, recipients }`, un destinataire valant `{ address, language }`. Un webhook vaut `{ name, secretName, urlKey, secretKey }` : son URL et son
 secret viennent tous deux de ce Secret. `smtp` prend `host`, `port`, `startTls`, `userName` et
 `from`, et le chart ne l'écrit qu'une fois `host` posé. `passwordSecretName` et
 `passwordSecretKey` nomment le Secret qui tient le mot de passe, qui arrive dans le pod en
 `Hub__Recaps__Smtp__Password`. Le chart refuse un nom d'abonnement ou de webhook en double et un
-abonnement qui nomme un webhook non déclaré. Le schéma refuse `emails` sans `smtp.host`, le port
+abonnement qui nomme un webhook non déclaré. Le schéma refuse `emails` ou `recipients` sans `smtp.host`, un `language` autre que `en` ou
+`fr`, un destinataire sans `address`, le port
 465, et un `userName` sans `startTls` vers un relais hors boucle locale. Un `environment` ou un
 `sourceId` faux reste au contrôle de démarrage du Hub.
 

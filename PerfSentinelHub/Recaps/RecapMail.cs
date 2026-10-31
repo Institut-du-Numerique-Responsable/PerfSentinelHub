@@ -1,6 +1,7 @@
 using System.Net.Mail;
 using System.Text;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Recaps;
@@ -11,37 +12,44 @@ namespace PerfSentinelHub.Recaps;
 /// </summary>
 public static class RecapMail
 {
+    /// <summary>The message in <paramref name="lang" />, the language of the address it goes to.</summary>
     public static MailMessage Build(
-        RecapReportSummary report, RecapSnapshot tech, string to, MailAddress from, Uri? publicUrl)
+        RecapReportSummary report, RecapSnapshot tech, string to, MailAddress from, Uri? publicUrl,
+        string lang = HubLang.En)
     {
-        var period = RecapText.Period(
-            new RecapPeriodInfo(report.PeriodKind, report.PeriodFrom, report.PeriodTo, false, [], [], null, null));
+        var period = lang == HubLang.Fr && report.PeriodKind == "month"
+            ? RecapText.FrenchMonth(report.PeriodFrom)
+            : RecapText.Period(
+                new RecapPeriodInfo(report.PeriodKind, report.PeriodFrom, report.PeriodTo, false, [], [], null, null),
+                lang);
+        var incomplete = report.Complete ? "" : HubText.Get(lang, "mail.subject.incomplete");
         var message = new MailMessage(new MailAddress(from.Address, "Perf Sentinel Hub"), new MailAddress(to))
         {
-            Subject = $"Perf Sentinel recap: {report.PeriodKind} {period}{(report.Complete ? "" : " (incomplete)")}",
+            Subject = HubText.Get(lang, "mail.subject." + report.PeriodKind, ("period", period),
+                ("incomplete", incomplete)),
             SubjectEncoding = Encoding.UTF8,
-            Body = string.Join('\n', BodyLines(report, period, publicUrl)),
+            Body = string.Join('\n', BodyLines(report, period, publicUrl, lang)),
             BodyEncoding = Encoding.UTF8
         };
         if (report.Views.Contains(RecapViewNames.Pilotage))
             message.Attachments.Add(new Attachment(
-                new MemoryStream(RecapReportRenderer.Render(RecapViews.Frozen(tech))),
+                new MemoryStream(RecapReportRenderer.Render(RecapViews.Frozen(tech), lang)),
                 $"perf-sentinel-recap-{report.PeriodFrom}-pilotage.html", "text/html; charset=utf-8"));
         return message;
     }
 
-    private static IEnumerable<string> BodyLines(RecapReportSummary report, string period, Uri? publicUrl)
+    private static IEnumerable<string> BodyLines(RecapReportSummary report, string period, Uri? publicUrl, string lang)
     {
-        yield return $"Recap \"{report.Subscription}\" for {period}.";
+        yield return HubText.Get(lang, "mail.intro." + report.PeriodKind, ("subscription", report.Subscription ?? ""),
+            ("period", period));
         if (!report.Complete)
-            yield return
-                "Some days of this period are incomplete, so the comparison with the previous period is not exact.";
+            yield return HubText.Get(lang, "mail.incomplete");
         if (report.Views.Contains(RecapViewNames.Pilotage))
-            yield return "The management view is attached. Open it in a browser; it needs no network.";
+            yield return HubText.Get(lang, "mail.attached");
         if (report.Views.Contains(RecapViewNames.Tech))
-            yield return RecapWebhook.LinkTo(report, RecapViewNames.Tech, publicUrl) is { } link
-                ? $"Engineering view, after signing in to the Hub: {link}"
-                : "No link to the engineering view: the Hub has no public address set (Hub:Recaps:PublicUrl).";
-        yield return "Figures are frozen at generation. CO2 is an order-of-magnitude estimate.";
+            yield return RecapWebhook.LinkTo(report, RecapViewNames.Tech, publicUrl, lang) is { } link
+                ? HubText.Get(lang, "mail.tech_link", ("link", link))
+                : HubText.Get(lang, "mail.no_link");
+        yield return HubText.Get(lang, "mail.footer");
     }
 }

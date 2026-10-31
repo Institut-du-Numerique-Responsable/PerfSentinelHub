@@ -315,7 +315,7 @@ politique, `hub`, qui renvoie une requête portant `Authorization: Bearer` vers
 le challenge va toujours au fournisseur. Le handler de jetons compare l'empreinte du bearer
 à celle de chaque jeton machine par `AccessPolicy.MachineTokenName`, et une correspondance
 devient un principal dont le sujet est `machine:<nom>`. La connexion chez le fournisseur
-ajoute au cookie le sujet, les groupes du fournisseur qu'un grant nomme, `hub:access` et
+ajoute au cookie le sujet, les groupes du fournisseur qu'une autorisation nomme, `hub:access` et
 `hub:caller`. `AccessCaller.Of` lit ces claims une fois par requête. Après l'autorisation,
 une porte refuse l'écriture d'une machine et une écriture du navigateur sans
 `Sec-Fetch-Site: same-origin`, et un premier middleware pose `frame-ancestors 'self'` sur

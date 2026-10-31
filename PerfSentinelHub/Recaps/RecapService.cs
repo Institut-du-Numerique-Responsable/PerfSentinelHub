@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Recaps;
@@ -281,7 +282,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
                     finding.FindingType,
                     finding.Severity,
                     finding.Service,
-                    RecapSentences.For(finding.FindingType),
+                    // The API's plain stays English; a page reads its own language from the type.
+                    RecapSentences.For(finding.FindingType, HubLang.En),
                     finding.Detections,
                     finding.AvoidableIoOps,
                     co2?.Grams,
@@ -365,7 +367,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     private static RecapMove Move(RecapFinding finding, string trend, double? change, Labels labels)
     {
         return new RecapMove(
-            finding.FindingType, finding.Service, RecapSentences.For(finding.FindingType), trend, change,
+            finding.FindingType, finding.Service, RecapSentences.For(finding.FindingType, HubLang.En), trend, change,
             labels.Of(finding), labels.OfService(finding), finding.Signature, finding.Endpoint);
     }
 

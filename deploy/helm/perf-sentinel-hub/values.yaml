@@ -118,9 +118,13 @@ hub:
   # past which a finding reads up or down on the recap page. Frozen reports are
   # off until subscriptions lists one: items { name, cadences (day, week,
   # month), views (pilotage, tech), environment, sourceId, service, grouping,
-  # webhooks (names declared below), emails (needs smtp.host) }. retention is at
-  # least 32 days, maxDelay above zero and at most 7 days. publicUrl falls back to
-  # hub.disclosures.publicUrl. Webhooks are items { name, secretName, urlKey,
+  # webhooks (names declared below), emails (needs smtp.host), language (en or
+  # fr, default en), recipients (items { address, language }, needs smtp.host) }:
+  # a recipient reads its mail in its own language, the rest in the
+  # subscription's, and emails and recipients hold 50 addresses at most
+  # together, each in one list. retention is at least 32 days, maxDelay above
+  # zero and at most 7 days. publicUrl falls back to hub.disclosures.publicUrl.
+  # Webhooks are items { name, secretName, urlKey,
   # secretKey }, as for disclosures but without a share link: the URL and the
   # HMAC secret both come from that Secret. smtp.host turns e-mail on and needs
   # from; the Hub speaks STARTTLS, so 465 is refused. userName goes with

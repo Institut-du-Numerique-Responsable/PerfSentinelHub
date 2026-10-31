@@ -37,10 +37,12 @@ public static class RecapWebhook
         return [.. buffer.WrittenSpan];
     }
 
-    internal static string? LinkTo(RecapReportSummary report, string view, Uri? publicUrl)
+    // A reader whose language is not the report's gets the page in their own, through ?lang.
+    internal static string? LinkTo(RecapReportSummary report, string view, Uri? publicUrl, string? lang = null)
     {
-        return publicUrl is null || !report.Views.Contains(view)
-            ? null
-            : new Uri(publicUrl, $"/recaps/{report.Id}/{view}.html").ToString();
+        if (publicUrl is null || !report.Views.Contains(view))
+            return null;
+        var query = lang is null || lang == report.Language ? "" : "?lang=" + lang;
+        return new Uri(publicUrl, $"/recaps/{report.Id}/{view}.html{query}").ToString();
     }
 }

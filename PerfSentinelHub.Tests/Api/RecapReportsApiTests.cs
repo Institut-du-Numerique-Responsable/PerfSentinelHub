@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Localization;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -78,6 +79,37 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
         Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
         var snapshot = (await JsonAsync(detail)).RootElement.GetProperty("snapshot");
         Assert.Equal("tech", snapshot.GetProperty("view").GetString());
+    }
+
+    [Fact]
+    public async Task An_on_demand_report_keeps_its_language()
+    {
+        using var client = Client(7);
+
+        using var french = await PostAsync(client, """{"period":"day","at":"1970-01-01","lang":"fr"}""");
+        using var plain = await PostAsync(client, """{"period":"day","at":"1970-01-02"}""");
+        using var unknown = await PostAsync(client, """{"period":"day","at":"1970-01-01","lang":"de"}""");
+
+        Assert.Equal(HttpStatusCode.Created, french.StatusCode);
+        var item = (await JsonAsync(french)).RootElement;
+        Assert.Equal("fr", item.GetProperty("language").GetString());
+        Assert.Equal("en", (await JsonAsync(plain)).RootElement.GetProperty("language").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+        var id = item.GetProperty("id").GetString()!;
+        using var page = await client.SendAsync(Get($"/recaps/{id}/pilotage.html"), Token);
+        Assert.StartsWith("<!doctype html>\n<html lang=\"fr\"", await page.Content.ReadAsStringAsync(Token),
+            StringComparison.Ordinal);
+        Assert.Equal(RecapReportRenderer.ContentSecurityPolicyFor(HubLang.Fr),
+            Assert.Single(page.Headers.GetValues("Content-Security-Policy")));
+        // A link may ask for the other language: the text is rendered at read time.
+        using var english = await client.SendAsync(Get($"/recaps/{id}/pilotage.html?lang=en"), Token);
+        Assert.StartsWith("<!doctype html>\n<html lang=\"en\"", await english.Content.ReadAsStringAsync(Token),
+            StringComparison.Ordinal);
+        using var detail = await client.SendAsync(Get($"/api/recap/reports/{id}"), Token);
+        Assert.Equal("fr", (await JsonAsync(detail)).RootElement.GetProperty("report").GetProperty("language").GetString());
+        using var list = await client.SendAsync(Get("/api/recap/reports"), Token);
+        Assert.Contains((await JsonAsync(list)).RootElement.EnumerateArray(),
+            entry => entry.GetProperty("id").GetString() == id && entry.GetProperty("language").GetString() == "fr");
     }
 
     [Fact]

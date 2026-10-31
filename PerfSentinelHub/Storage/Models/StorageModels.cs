@@ -385,7 +385,9 @@ public sealed record RecapReportSummary(
     bool Complete,
     bool NothingMoved,
     string? CreatedBy,
-    long GeneratedAtMs);
+    long GeneratedAtMs,
+    // The language its pages render in: en for a report frozen before the column existed.
+    string Language = "en");
 
 /// <summary>A report with the snapshot exactly as it was generated, the one thing a listing never reads.</summary>
 // CreatorSubject is the immutable account id of an on-demand report's creator, the only key

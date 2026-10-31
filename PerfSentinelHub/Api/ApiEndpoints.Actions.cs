@@ -51,18 +51,21 @@ public static partial class ApiEndpoints
         if (RelayIdentity(request, options) is not { } identity)
             return Problem(
                 StatusCodes.Status403Forbidden,
+                ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and an action is taken in somebody's name.");
         if (RefuseForeignRequest(request) is { } refusal)
             return refusal;
         // From the configuration alone and before the body is read, so it names no finding.
         var writes = access.Scope(request.HttpContext, AccessPermissions.ActionsWrite);
         if (writes.IsNothing)
-            return Problem(StatusCodes.Status403Forbidden, "You may not act on findings.");
+            return Problem(StatusCodes.Status403Forbidden, ProblemCodes.ActionsForbidden,
+                "You may not act on findings.");
         var payload = await ReadBodyAsync(request, cancellationToken, MaxAckBodyBytes);
         if (payload is null)
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
         if (ActionWrite.TryParse(payload, create, out var error) is not { } write)
-            return Problem(StatusCodes.Status400BadRequest, error ?? "The request is invalid.");
+            return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRequest,
+                error ?? "The request is invalid.");
 
         var reads = access.Scope(request.HttpContext, AccessPermissions.FindingsRead);
         var copies = await database.ReadFindingCopiesAsync(write.Signature, cancellationToken);
@@ -114,10 +117,12 @@ public static partial class ApiEndpoints
     {
         var readable = copies.Where(reads.Reads).ToList();
         if (readable.Count == 0)
-            return Problem(StatusCodes.Status404NotFound, "The Hub holds no such finding.");
+            return Problem(StatusCodes.Status404NotFound, ProblemCodes.UnknownFinding,
+                "The Hub holds no such finding.");
         return readable.Any(writes.Writes)
             ? null
-            : Problem(StatusCodes.Status403Forbidden, "You can read this finding but not act on it.");
+            : Problem(StatusCodes.Status403Forbidden, ProblemCodes.ActionReadOnly,
+                "You can read this finding but not act on it.");
     }
 
     private static async Task<IResult> ActionAnswerAsync(
@@ -132,9 +137,10 @@ public static partial class ApiEndpoints
         {
             case ActionWriteOutcome.Exists:
                 return Problem(StatusCodes.Status409Conflict,
+                    ProblemCodes.ActionExists,
                     "This finding already has an action; change it with PATCH.");
             case ActionWriteOutcome.Missing:
-                return Problem(StatusCodes.Status404NotFound, "This finding has no action yet.");
+                return Problem(StatusCodes.Status404NotFound, ProblemCodes.NoAction, "This finding has no action yet.");
             case ActionWriteOutcome.Busy:
                 request.HttpContext.Response.Headers.RetryAfter = "1";
                 return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);

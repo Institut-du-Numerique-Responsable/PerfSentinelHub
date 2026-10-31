@@ -52,12 +52,12 @@ sonar-prepare: analysis-config-check tool-restore coverage
 python-tests:
 	python3 -m unittest discover -s scripts/tests
 
-# The launcher's command builders, then the same builders against the real
-# engine. Node's own runner, no package and no build step, the way launcher.js
-# itself is authored. The second file skips itself when there is no engine
-# build to run, so this target needs nothing that the first one did not.
+# The launcher's command builders and its text tables, then the same builders
+# against the real engine. Node's own runner, no package and no build step, the
+# way launcher.js itself is authored. The last file skips itself when there is
+# no engine build to run, so this target needs nothing that the others did not.
 js-tests:
-	node --test tests/launcher.test.js tests/launcher-e2e.test.js
+	node --test tests/launcher.test.js tests/text.test.js tests/launcher-e2e.test.js
 
 test: coverage
 
@@ -147,6 +147,10 @@ helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set hub.recaps.smtp.startTls=false 2>&1 >/dev/null | grep -q '/hub/recaps/smtp/host'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set 'hub.recaps.subscriptions[0].webhooks={other}' 2>&1 >/dev/null | grep -q 'recap subscription shop names an undeclared webhook: other'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set 'hub.recaps.subscriptions[1].name=shop' --set 'hub.recaps.subscriptions[1].cadences={day}' --set 'hub.recaps.subscriptions[1].views={tech}' 2>&1 >/dev/null | grep -q 'duplicate recap subscription name: shop'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set 'hub.recaps.subscriptions[0].language=fr' --set 'hub.recaps.subscriptions[0].recipients[0].address=cto@example.com' --set 'hub.recaps.subscriptions[0].recipients[0].language=en' --show-only templates/configmap.yaml | grep -q '"Subscriptions":\[{"cadences":\["week"\],"emails":\["lead@example.com"\],"language":"fr","name":"shop","recipients":\[{"address":"cto@example.com","language":"en"}\],"views":\["pilotage"\],"webhooks":\["team"\]}\]'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set 'hub.recaps.subscriptions[0].language=de' 2>&1 >/dev/null | grep -q '/hub/recaps/subscriptions/0/language'
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_RECAP_VALUES) --set 'hub.recaps.subscriptions[0].recipients[0].language=fr' 2>&1 >/dev/null | grep -q "/hub/recaps/subscriptions/0/recipients/0': missing property 'address'"
+	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set 'hub.recaps.subscriptions[0].name=shop' --set 'hub.recaps.subscriptions[0].cadences={week}' --set 'hub.recaps.subscriptions[0].views={pilotage}' --set 'hub.recaps.subscriptions[0].recipients[0].address=cto@example.com' 2>&1 >/dev/null | grep -q '/hub/recaps/smtp'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) | grep -q 'name: Hub__Access__MachineTokens__0__Token'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) 2>&1 >/dev/null | grep -q '/hub/auth/enabled'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) $(HELM_AUTH_VALUES) $(HELM_ACCESS_VALUES) $(HELM_ACCESS_ON) --set hub.ackRelay.trustIdentityHeader=true 2>&1 >/dev/null | grep -q '/hub/ackRelay/trustIdentityHeader'

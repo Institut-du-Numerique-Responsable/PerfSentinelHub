@@ -828,6 +828,115 @@ public sealed class ConfigurationTests
             new RecapsOptions { Smtp = smtp })));
     }
 
+    [Theory]
+    [InlineData("en", true)]
+    [InlineData("fr", true)]
+    [InlineData("FR", false)]
+    [InlineData("de", false)]
+    [InlineData("", false)]
+    public void A_subscription_language_is_en_or_fr(string language, bool valid)
+    {
+        var failures = AccessFailures(WithSubscription(Subscription() with { Language = language }));
+
+        if (valid)
+            Assert.Empty(failures);
+        else
+            Assert.Equal("Hub:Recaps:Subscriptions:0:Language must be en or fr.", Assert.Single(failures));
+    }
+
+    [Fact]
+    public void A_subscription_reads_english_unless_it_says_otherwise()
+    {
+        Assert.Equal("en", new RecapSubscriptionOptions().Language);
+        Assert.Empty(new RecapSubscriptionOptions().Recipients);
+    }
+
+    [Fact]
+    public void An_address_in_both_lists_is_refused()
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", From = "hub@example.test" };
+        var subscription = Subscription() with
+        {
+            Emails = ["pm@example.test"],
+            Recipients = [new RecapRecipientOptions { Address = "PM@example.test", Language = "fr" }]
+        };
+
+        Assert.Equal(
+            "Hub:Recaps:Subscriptions:0:Emails and Recipients hold 50 addresses at most together, each address "
+            + "in one list, once.",
+            Assert.Single(AccessFailures(WithSubscription(subscription, new RecapsOptions { Smtp = smtp }))));
+        Assert.Empty(AccessFailures(WithSubscription(
+            subscription with { Recipients = [new RecapRecipientOptions { Address = "dg@example.test" }] },
+            new RecapsOptions { Smtp = smtp })));
+    }
+
+    [Fact]
+    public void Fifty_one_addresses_across_both_lists_are_refused()
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", From = "hub@example.test" };
+        var emails = Enumerable.Range(0, 30).Select(i => $"u{i}@example.test").ToArray();
+        var recipients = Enumerable.Range(30, 21)
+            .Select(i => new RecapRecipientOptions { Address = $"u{i}@example.test", Language = "fr" }).ToArray();
+
+        Assert.Single(AccessFailures(WithSubscription(
+            Subscription() with { Emails = emails, Recipients = recipients }, new RecapsOptions { Smtp = smtp })));
+        Assert.Empty(AccessFailures(WithSubscription(
+            Subscription() with { Emails = emails, Recipients = recipients[..20] },
+            new RecapsOptions { Smtp = smtp })));
+    }
+
+    [Fact]
+    public void A_recipient_needs_an_address_and_a_known_language()
+    {
+        var smtp = new RecapSmtpOptions { Host = "smtp.example", From = "hub@example.test" };
+
+        Assert.Equal(
+            "Hub:Recaps:Subscriptions:0:Recipients:0:Address must be one e-mail address, without a display name.",
+            Assert.Single(AccessFailures(WithSubscription(
+                Subscription() with { Recipients = [new RecapRecipientOptions { Language = "fr" }] },
+                new RecapsOptions { Smtp = smtp }))));
+        Assert.Equal(
+            "Hub:Recaps:Subscriptions:0:Recipients:0:Language must be en or fr.",
+            Assert.Single(AccessFailures(WithSubscription(
+                Subscription() with
+                {
+                    Recipients = [new RecapRecipientOptions { Address = "dg@example.test", Language = "de" }]
+                },
+                new RecapsOptions { Smtp = smtp }))));
+    }
+
+    [Fact]
+    public void Recipients_without_an_smtp_host_are_refused()
+    {
+        Assert.Equal("Hub:Recaps:Subscriptions:0:Recipients needs Hub:Recaps:Smtp:Host.",
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with
+            {
+                Recipients = [new RecapRecipientOptions { Address = "dg@example.test", Language = "fr" }]
+            }))));
+    }
+
+    [Fact]
+    public void A_recipient_binds_from_the_keys_the_chart_writes()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hub:Recaps:Subscriptions:0:name"] = "weekly-shop",
+                ["Hub:Recaps:Subscriptions:0:language"] = "fr",
+                ["Hub:Recaps:Subscriptions:0:recipients:0:address"] = "dg@example.test",
+                ["Hub:Recaps:Subscriptions:0:recipients:0:language"] = "en"
+            })
+            .Build();
+
+        var options = configuration.GetSection(HubOptions.SectionName).Get<HubOptions>()!;
+        var subscription = Assert.Single(options.Recaps.Subscriptions);
+
+        Assert.Equal("fr", subscription.Language);
+        var recipient = Assert.Single(subscription.Recipients);
+        Assert.Equal("dg@example.test", recipient.Address);
+        Assert.Equal("en", recipient.Language);
+    }
+
     [Fact]
     public void Recaps_read_granted_on_a_project_is_refused()
     {
