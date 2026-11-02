@@ -29,6 +29,10 @@ COPY --from=build /out/appsettings.json /app/appsettings.json
 COPY --from=build /out/wwwroot /app/wwwroot
 COPY --from=engine /perf-sentinel /app/perf-sentinel
 ENV ASPNETCORE_HTTP_PORTS=8080
+# SQLite's own temporary files (a sort past its cache, an index build) go beside the database, not
+# into /tmp, which the chart caps at 32 MiB: past it the kubelet evicts the pod. Without a /data,
+# SQLite falls back to /tmp.
+ENV SQLITE_TMPDIR=/data
 EXPOSE 8080
 USER 1654:1654
 ENTRYPOINT ["/app/PerfSentinelHub"]
