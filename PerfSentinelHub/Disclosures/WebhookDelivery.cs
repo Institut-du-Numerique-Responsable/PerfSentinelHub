@@ -50,7 +50,9 @@ public static class WebhookDelivery
         limit.CancelAfter(timeout);
         try
         {
-            using var response = await client.SendAsync(request, limit.Token);
+            // Only the status matters: the body is never read, so a receiver cannot make the Hub
+            // buffer it, nor lose a 2xx by stalling it until the timeout.
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, limit.Token);
             return (int)response.StatusCode;
         }
         catch (Exception exception) when (exception is HttpRequestException ||

@@ -84,6 +84,11 @@ a cross-origin fetch cannot send without a preflight the Hub never answers. A
 Hub reachable from a browser session should still sit behind a proxy that does
 not forward arbitrary origins.
 
+With sign-in on, every response also carries
+`Content-Security-Policy: frame-ancestors 'self'`, unless the route sets a stricter
+one of its own, access control on or off. A same-site page cannot frame the
+signed-in launcher and steer its clicks into the Hub's own same-origin writes.
+
 The keys that encrypt the cookie live in a `keys` directory next to
 `Hub:DatabasePath`, on the data volume, so a restart does not sign everyone out.
 The Hub logs at startup that no XML encryptor is configured: the keys sit

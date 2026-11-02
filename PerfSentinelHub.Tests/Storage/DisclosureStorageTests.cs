@@ -173,7 +173,7 @@ public sealed class DisclosureStorageTests : IAsyncLifetime
             cancellationToken);
         await _database.InsertShareLinkAsync(Link("revoked", "d1", Hash("b")), cancellationToken);
 
-        Assert.True(await _database.RevokeShareLinkAsync("d1", "revoked", "alice", NowMs, cancellationToken));
+        Assert.True(await _database.RevokeShareLinkAsync("d1", "revoked", "alice", NowMs, false, cancellationToken));
 
         Assert.Null(await _database.FindShareLinkAsync(Hash("a"), NowMs, cancellationToken));
         Assert.Null(await _database.FindShareLinkAsync(Hash("b"), NowMs, cancellationToken));

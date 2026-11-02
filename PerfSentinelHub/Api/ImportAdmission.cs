@@ -5,8 +5,9 @@ namespace PerfSentinelHub.Api;
 ///     whether a request runs at all, and the counter that records every refusal.
 ///     One parameter rather than two because a refusal always touches both. Each
 ///     import route closes it over its own metrics type, so each counts on its own series.
+///     The clock times the body read a slot is held for.
 /// </summary>
-public sealed record ImportAdmission<TMetrics>(ImportGate Gate, TMetrics Metrics)
+public sealed record ImportAdmission<TMetrics>(ImportGate Gate, TMetrics Metrics, TimeProvider Clock)
     where TMetrics : ImportMetrics
 {
     /// <summary>Counts a refused import and hands its result straight back.</summary>

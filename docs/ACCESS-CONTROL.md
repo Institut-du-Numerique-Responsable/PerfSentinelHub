@@ -197,7 +197,8 @@ A write from a browser must carry `Sec-Fetch-Site: same-origin`, which every cur
 browser sends: a page on a sibling subdomain cannot post with the user's cookie. A
 request with a bearer is not a browser's and is not held to it. Every response carries
 `Content-Security-Policy: frame-ancestors 'self'`, so no other site can frame the
-launcher and click its buttons.
+launcher and click its buttons. That header comes with sign-in, not with access control:
+`Hub:Auth` on and access off sends it too, see [AUTHENTICATION.md](AUTHENTICATION.md).
 
 ### Analyses and reports
 
@@ -210,10 +211,14 @@ A run is read, and its report opened, under one rule:
 | Trace backend, trace ID   | `traces.read` at the backend as a whole                       | `analyses.run` the same way |
 
 A service run is covered when a pattern's `source` (if any) matches the backend, its
-`service` (if any) matches X, and, for an attribute pattern, every copy of X the Hub holds
-in the backend's environment carries that attribute, with at least one copy. The engine
-exports no grouping for a span, so those copies are the only evidence of which team owns
-a service. A trace ID run needs the backend as a whole, so a service grant cannot make the
+`service` (if any) matches X, and, for an attribute pattern, the pattern also names a
+`service` and every copy of X the Hub holds in the backend's environment carries that
+attribute, with at least one copy. The engine exports no grouping for a span, so those
+copies are the only evidence of which team owns a service, and any source in that
+environment reports them, the requester's own included. An attribute-only pattern, with or
+without a `source`, therefore covers no trace-backend service run: give a team that runs
+them a `service` pattern (an attribute beside it still narrows it) or a `source` pattern on
+the backend. Findings reads are unchanged, since each copy is judged at its own source. A trace ID run needs the backend as a whole, so a service grant cannot make the
 Hub fetch an arbitrary trace.
 
 There is no requester clause: whoever started a run reads it while their grant stands.

@@ -67,11 +67,13 @@ public sealed record AccessPattern(
 
     // A trace-backend run on service X at backend T, judged on the Hub's copies of X in T's
     // environment: the engine exports no grouping for a span, so they are the only evidence.
-    // The caller applies that bound and passes only those copies.
+    // The caller applies that bound and passes only those copies. Any source in the environment
+    // reports them, the requester's own included, so an attribute alone never proves a service is
+    // the team's: the pattern must name the service too, which puts the name in configuration.
     public bool CoversSubject(string source, string service, IReadOnlyList<AccessCopy> copies)
     {
         return MatchesSource(source) && MatchesService(service) &&
-               (Key is null || (copies.Count > 0 && copies.All(AttributeWrites)));
+               (Key is null || (Service is not null && copies.Count > 0 && copies.All(AttributeWrites)));
     }
 
     private bool MatchesService(string? service)

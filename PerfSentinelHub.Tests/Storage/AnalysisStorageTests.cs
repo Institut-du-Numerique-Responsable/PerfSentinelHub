@@ -43,6 +43,20 @@ public sealed class AnalysisStorageTests : IDisposable
     }
 
     [Fact]
+    public async Task A_run_past_the_pending_bound_is_not_inserted()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = await OpenAsync(cancellationToken);
+        Assert.True(await database.TryInsertRunAsync(Run("first", Now), 2, cancellationToken));
+        Assert.True(await database.TryInsertRunAsync(Run("second", Now + 1), 2, cancellationToken));
+
+        Assert.False(await database.TryInsertRunAsync(Run("third", Now + 2), 2, cancellationToken));
+
+        Assert.Equal(2, await database.CountPendingRunsAsync(cancellationToken));
+        Assert.Null(await database.FindRunAsync("third", cancellationToken));
+    }
+
+    [Fact]
     public async Task A_run_the_service_lost_comes_back_interrupted_rather_than_replayed()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

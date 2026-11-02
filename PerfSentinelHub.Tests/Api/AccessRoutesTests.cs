@@ -1022,6 +1022,27 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             Assert.Equal("Unknown source_id.", await DetailAsync(response));
     }
 
+    // Copies are data any source reports, the requester's own included: one team=shop copy of a
+    // service nobody else reported yet must not make that service the team's on the trace backend.
+    [Fact]
+    public async Task A_planted_copy_does_not_bring_a_service_into_an_attribute_project()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await SeedFindingAsync("shop-d", "prod", "slow_sql:ledger:0000000000000000000000000000000000000010",
+            "ledger", """[{"key":"team","value":"shop"}]""");
+        var id = await SeedRunAsync("tempo", "tempo", """{"service":"ledger","lookback":"1h"}""",
+            "tempo@example.internal");
+        using var attr = await SignedInAsync("attr");
+
+        using var started = await attr.SendAsync(
+            Post("/api/analyses", """{"source_id":"tempo","request":{"service":"ledger","lookback":"1h"}}"""),
+            cancellationToken);
+        using var row = await attr.GetAsync($"/api/analyses/{id}", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, started.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, row.StatusCode);
+    }
+
     [Fact]
     public async Task A_service_report_is_read_on_the_requested_service_by_whoever_holds_traces_read_there()
     {
@@ -1351,7 +1372,17 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             Projects =
             [
                 new ProjectOptions { Name = "cart-svc", Patterns = [new PatternOptions { Service = "cart" }] },
-                new ProjectOptions { Name = "shop", Patterns = [new PatternOptions { Attribute = "team=shop" }] },
+                new ProjectOptions
+                {
+                    Name = "shop",
+                    // The second pattern reads nothing the first does not; it names checkout, which is
+                    // what lets the attribute cover a trace run there.
+                    Patterns =
+                    [
+                        new PatternOptions { Attribute = "team=shop" },
+                        new PatternOptions { Service = "checkout", Attribute = "team=shop" }
+                    ]
+                },
                 new ProjectOptions
                     { Name = "shop-cart", Patterns = [new PatternOptions { Source = "shop-d", Service = "cart" }] },
                 new ProjectOptions { Name = "lab", Patterns = [new PatternOptions { Source = "lab-d" }] },

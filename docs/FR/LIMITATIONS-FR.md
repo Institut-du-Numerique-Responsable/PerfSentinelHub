@@ -357,9 +357,8 @@ et un greffon d'IDE ne le posent pas. Ce qui défend ce cas, c'est le type de
 contenu seul : le Hub prend un type de contenu JSON et rien d'autre, ce qu'un
 formulaire d'une autre origine ne sait pas produire et qu'un fetch d'une autre
 origine ne peut pas envoyer sans un preflight auquel le Hub ne répond jamais.
-C'est un plancher et non une frontière, et ce plancher n'est que celui du
-relais : `POST /api/analyses` et `POST /api/incidents/refresh` ne jugent ni le
-site ni le type de contenu. Un Hub joignable depuis une session de navigateur a
+C'est un plancher et non une frontière, et `POST /api/analyses` comme
+`POST /api/incidents/refresh` reposent sur le même. Un Hub joignable depuis une session de navigateur a
 donc sa place derrière un proxy qui ne relaie pas des origines arbitraires.
 
 ## Ce que le contrôle d'accès ne couvre pas
@@ -397,7 +396,10 @@ Avec `Hub:Access` activé, un appelant ne lit et n'écrit que ce qu'une autorisa
   propriétaire une autorisation de source ou de service pour `acks.write` et `analyses.run`.
 - Lancer un run sur un backend de traces demande que toutes les copies du service dans
   l'environnement du backend s'accordent. Nommez l'environnement d'un backend de traces
-  comme les daemons qui remontent ses services.
+  comme les daemons qui remontent ses services. Un motif d'attribut ne couvre un tel run que
+  s'il nomme aussi le service : une équipe remonte des copies sous le nom de service qu'elle
+  veut, donc des copies seules ne font jamais d'un service celui de l'équipe. Un run de traces
+  demande un motif de service ou de source.
 - Une copie enregistrée avant la version 9 du schéma ne correspond à aucun motif
   d'attribut ni à aucune partie de service tant que sa source ne la remonte pas à nouveau.
 - Ajouter un attribut de regroupement change l'identité des spans qui ne portaient aucun

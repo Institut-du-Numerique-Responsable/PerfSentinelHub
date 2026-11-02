@@ -35,6 +35,20 @@ credentials are Dependabot secrets, commits the refilled inventory on the pull r
 commit is signed and starts the CI again. The SDK-injected NativeAOT packages follow the .NET SDK
 and stay manual. Run the script from the repository root to refill the inventory locally.
 
+A run uses the pull request's own copy of the workflow, so a bump of one of the sync's own actions
+would hand the App private key to action code nobody has read yet. A first job, which runs no
+action, compares `dependabot-inventory.yml` with the base branch, and the job holding the key only
+runs when they match. When they differ, the run leaves an "Inventory sync skipped" notice and mints
+no token: review the new action versions, run the script, and commit the inventory by hand.
+
+The CI run on the same pull request has no such guard. When a bump moves an action that `ci.yml`
+uses, the run started by the App commit, or by your own inventory commit, hands `SONAR_TOKEN` and
+the CI gate App private key to that new action code before review. That key can publish the
+required `CI / Gate` check on any commit, so read the action diff of such a bump before merging it
+even when the gate is green, and rotate both credentials if a bumped action is later reported
+compromised. A guard there would need a job outside the harden-runner-first rule and a new entry in
+the gate's result matrix, so it is not in place yet.
+
 ## Security updates and exceptions
 
 Security updates are not delayed either and remain in individual pull requests. They do not bypass
