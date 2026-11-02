@@ -17,11 +17,14 @@ public sealed partial class HubDatabase
     // counts: what a done action keeps once the finding's own rows are purged.
     private const string FreezeUpdate = """
                                         UPDATE finding_actions SET frozen_finding_json = COALESCE(
-                                          (SELECT fs.finding_json FROM finding_sources AS fs
-                                           WHERE fs.signature = $signature AND fs.finding_json IS NOT NULL
+                                          (SELECT e.finding_json FROM finding_sources AS fs
+                                           JOIN finding_source_envelopes AS e
+                                             ON e.signature = fs.signature AND e.source_id = fs.source_id
+                                           WHERE fs.signature = $signature
                                              AND ($sources IS NULL OR fs.source_id IN (SELECT value FROM json_each($sources)))
                                            ORDER BY fs.last_seen_ms DESC, fs.source_id LIMIT 1),
-                                          CASE WHEN $sources IS NULL THEN (SELECT finding_json FROM findings WHERE signature = $signature) END)
+                                          CASE WHEN $sources IS NULL
+                                            THEN (SELECT finding_json FROM finding_envelopes WHERE signature = $signature) END)
                                         WHERE signature = $signature;
                                         """;
 

@@ -51,9 +51,9 @@ public sealed class WorkerAndRetentionTests : IDisposable
         {
             command.CommandText = """
                                   INSERT INTO findings VALUES
-                                    ('old','{}','svc','type','warning','/old','h',NULL,100,500,'local_batch',1),
-                                    ('recent','{}','svc','type','warning','/recent','h',NULL,1200,1500,'local_batch',1),
-                                    ('seen-again','{}','svc','type','warning','/again','h',NULL,100,1500,'local_batch',1);
+                                    ('old','svc','type','warning','/old','h',NULL,100,500,'local_batch',1),
+                                    ('recent','svc','type','warning','/recent','h',NULL,1200,1500,'local_batch',1),
+                                    ('seen-again','svc','type','warning','/again','h',NULL,100,1500,'local_batch',1);
                                   INSERT INTO endpoint_heartbeats VALUES
                                     ('a','svc','/old',500),
                                     ('a','svc','/recent',1500);
@@ -168,7 +168,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
         {
             command.CommandText = $$"""
                                     INSERT INTO findings VALUES
-                                      ('sig','{}','svc','type','warning','/old','h',NULL,{{50 * dayMs}},{{50 * dayMs}},'local_batch',1);
+                                      ('sig','svc','type','warning','/old','h',NULL,{{50 * dayMs}},{{50 * dayMs}},'local_batch',1);
                                     """;
             await command.ExecuteNonQueryAsync(cancellationToken);
         }

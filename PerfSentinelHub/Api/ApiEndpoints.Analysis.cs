@@ -17,6 +17,13 @@ public static partial class ApiEndpoints
     private const int RunIdHexChars = 16;
     private const int MaxIdentityChars = 254;
 
+    // A request is a few named fields and at most a dozen knobs: a few hundred bytes.
+    private const int MaxAnalysisBodyBytes = 64 * 1024;
+
+    // Runs waiting per worker before a submission is refused, so one caller cannot grow the
+    // table, and the launcher's list of it, faster than the engine drains it.
+    private const int PendingRunsPerWorker = 4;
+
     public static void MapAnalysisApi(this WebApplication app)
     {
         app.MapPost("/api/analyses", SubmitAnalysisAsync);
@@ -39,8 +46,11 @@ public static partial class ApiEndpoints
             return Problem(StatusCodes.Status503ServiceUnavailable,
                 ProblemCodes.AnalysisEngineMissing,
                 "No analysis engine is configured on this Hub.");
+        // A run starts work in the caller's name, so only the Hub's own page may ask for one.
+        if (RefuseForeignRequest(request) is { } refusal)
+            return refusal;
 
-        var payload = await ReadBodyAsync(request, cancellationToken);
+        var payload = await ReadBodyAsync(request, cancellationToken, MaxAnalysisBodyBytes);
         if (payload is null)
             return TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge);
 
@@ -82,8 +92,16 @@ public static partial class ApiEndpoints
                 return Problem(StatusCodes.Status403Forbidden, ProblemCodes.AnalysisForbidden,
                     "You may not start this analysis.");
 
-            var run = NewRun(source, requestElement, Identity(request, hubOptions.Analysis), nowMs);
-            if (await database.TryInsertRunAsync(run, cancellationToken))
+            var maxPending = PendingRunsPerWorker * hubOptions.Analysis.Workers;
+            if (await database.CountPendingRunsAsync(cancellationToken) >= maxPending)
+            {
+                // A full queue drains at the engine's pace, minutes rather than the second a busy gate takes.
+                request.HttpContext.Response.Headers.RetryAfter = "30";
+                return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+
+            var run = NewRun(source, parsed.ToJson(), Identity(request, hubOptions.Analysis), nowMs);
+            if (await database.TryInsertRunAsync(run, maxPending, cancellationToken))
                 return TypedResults.Accepted($"/api/analyses/{run.Id}", new SubmittedAnalysis(run.Id, run.Status));
 
             request.HttpContext.Response.Headers.RetryAfter = "1";
@@ -168,7 +186,7 @@ public static partial class ApiEndpoints
 
     private static AnalysisRun NewRun(
         SourceOptions source,
-        JsonElement request,
+        string requestJson,
         string requestedBy,
         long nowMs)
     {
@@ -179,7 +197,7 @@ public static partial class ApiEndpoints
             source.Name,
             source.Environment,
             source.Kind,
-            request.ValueKind == JsonValueKind.Undefined ? "{}" : request.GetRawText(),
+            requestJson,
             requestedBy,
             nowMs,
             null, null, null, null, null, null);

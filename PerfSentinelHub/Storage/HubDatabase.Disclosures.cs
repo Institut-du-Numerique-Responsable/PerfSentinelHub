@@ -36,7 +36,7 @@ public sealed partial class HubDatabase
         IReadOnlyList<string> webhooks,
         CancellationToken cancellationToken)
     {
-        return WriteTransactionAsync(async (connection, transaction) =>
+        return WriteTransactionAsync(true, async (connection, transaction) =>
         {
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
@@ -96,7 +96,7 @@ public sealed partial class HubDatabase
         var (pdf, renderReason) = rendering;
         bool? hashChecked = pdf is null ? null : true;
         bool? bindingChecked = pdf is null || files.Attestation is null ? null : true;
-        return WriteAsync(async command =>
+        return WriteAsync(true, async command =>
         {
             command.CommandText = """
                                   UPDATE disclosures
@@ -129,7 +129,7 @@ public sealed partial class HubDatabase
         bool? bindingChecked,
         CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return WriteAsync(true, async command =>
         {
             command.CommandText = """
                                   UPDATE disclosures
@@ -199,7 +199,7 @@ public sealed partial class HubDatabase
         IReadOnlyList<string> tell,
         CancellationToken cancellationToken)
     {
-        return WriteTransactionAsync(async (connection, transaction) =>
+        return WriteTransactionAsync(true, async (connection, transaction) =>
         {
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
@@ -221,7 +221,7 @@ public sealed partial class HubDatabase
 
     public Task InsertShareLinkAsync(ShareLinkRecord link, CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return WriteAsync(true, async command =>
         {
             command.CommandText = """
                                   INSERT INTO disclosure_share_links(
@@ -267,9 +267,10 @@ public sealed partial class HubDatabase
         string linkId,
         string by,
         long nowMs,
+        bool request,
         CancellationToken cancellationToken)
     {
-        return await WriteAsync(async command =>
+        return await WriteAsync(request, async command =>
         {
             command.CommandText = """
                                   UPDATE disclosure_share_links SET revoked_at_ms = $now, revoked_by = $by
@@ -313,7 +314,7 @@ public sealed partial class HubDatabase
     {
         if (downloads.Count == 0)
             return;
-        await WriteTransactionAsync(async (connection, transaction) =>
+        await WriteTransactionAsync(false, async (connection, transaction) =>
         {
             foreach (var (linkId, counted) in downloads)
             {
@@ -346,7 +347,7 @@ public sealed partial class HubDatabase
     {
         if (webhooks.Count == 0)
             return;
-        await WriteTransactionAsync(async (connection, transaction) =>
+        await WriteTransactionAsync(false, async (connection, transaction) =>
         {
             await InsertDeliveriesAsync(connection, transaction, disclosureId, eventName, webhooks, nowMs,
                 cancellationToken);
@@ -411,7 +412,7 @@ public sealed partial class HubDatabase
         long? nextAttemptMs,
         CancellationToken cancellationToken)
     {
-        return await WriteAsync(async command =>
+        return await WriteAsync(false, async command =>
         {
             command.CommandText = """
                                   UPDATE disclosure_deliveries
@@ -432,7 +433,7 @@ public sealed partial class HubDatabase
     /// <summary>Back to pending, due now, with a fresh run of attempts, for a delivery that gave up or waits.</summary>
     public Task RetryDeliveryAsync(string id, long nowMs, CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return WriteAsync(true, async command =>
         {
             command.CommandText = """
                                   UPDATE disclosure_deliveries SET state = 'pending', next_attempt_ms = $now, attempts = 0
@@ -492,10 +493,13 @@ public sealed partial class HubDatabase
         return deliveries;
     }
 
-    // One write under the gate, on a connection of its own.
-    private async Task<T> WriteAsync<T>(Func<SqliteCommand, Task<T>> write, CancellationToken cancellationToken)
+    // One write under the gate, on a connection of its own. request: see EnterWriteGateAsync.
+    private async Task<T> WriteAsync<T>(
+        bool request,
+        Func<SqliteCommand, Task<T>> write,
+        CancellationToken cancellationToken)
     {
-        await _writeGate.WaitAsync(cancellationToken);
+        await EnterWriteGateAsync(request, cancellationToken);
         try
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -510,10 +514,11 @@ public sealed partial class HubDatabase
 
     // Several writes under the gate, committed together or not at all.
     private async Task<T> WriteTransactionAsync<T>(
+        bool request,
         Func<SqliteConnection, SqliteTransaction, Task<T>> write,
         CancellationToken cancellationToken)
     {
-        await _writeGate.WaitAsync(cancellationToken);
+        await EnterWriteGateAsync(request, cancellationToken);
         try
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);

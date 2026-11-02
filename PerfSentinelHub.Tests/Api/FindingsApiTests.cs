@@ -668,6 +668,29 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             envelope.GetProperty("finding").GetProperty("trace_id").GetString());
     }
 
+    [Theory]
+    [InlineData("?source_id=production-a", HttpStatusCode.OK)]
+    [InlineData("?environment=staging", HttpStatusCode.OK)]
+    [InlineData("?source_id=nope", HttpStatusCode.BadRequest)]
+    [InlineData("?source_id=production-a&source_id=staging-a", HttpStatusCode.BadRequest)]
+    public async Task A_trace_lookup_takes_the_scope_a_listing_takes(string query, HttpStatusCode expected)
+    {
+        await SeedAsync();
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+
+        using var response = await client.GetAsync("/api/findings/rider-trace-file-line" + query,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, response.StatusCode);
+        if (expected != HttpStatusCode.OK)
+            return;
+        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
+            TestContext.Current.CancellationToken));
+        var envelope = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Single(envelope.GetProperty("sources").EnumerateArray());
+    }
+
     [Fact]
     public async Task A_windowed_read_carries_the_volume_fields()
     {
@@ -957,12 +980,15 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-                              UPDATE finding_sources SET finding_json = NULL, severity = NULL
+                              DELETE FROM finding_source_envelopes
+                              WHERE source_id = $source_id AND signature = $signature;
+                              UPDATE finding_sources SET severity = NULL
                               WHERE source_id = $source_id AND signature = $signature;
                               """;
         command.Parameters.AddWithValue("$source_id", source.SourceId);
         command.Parameters.AddWithValue("$signature", signature);
-        Assert.Equal(1, await command.ExecuteNonQueryAsync(cancellationToken));
+        // The copy's envelope and its row, one each.
+        Assert.Equal(2, await command.ExecuteNonQueryAsync(cancellationToken));
     }
 
     // What an ack read of that source leaves: its whole mirror and the ledger row.

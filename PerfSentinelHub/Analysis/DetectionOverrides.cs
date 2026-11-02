@@ -78,6 +78,9 @@ public sealed record DetectionOverrides
     // TOML literals, formatted when read, so the file is a concatenation.
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
 
+    // Every knob as submitted, defaults included, so the stored run shows what the operator set.
+    private readonly Dictionary<string, JsonElement> _submitted = new(StringComparer.Ordinal);
+
     public bool IsEmpty => _values.Count == 0;
 
     /// <summary>Every knob, for the daemon defaults, which any engine version is compared against.</summary>
@@ -153,6 +156,7 @@ public sealed record DetectionOverrides
                 return null;
             if (literal is not null)
                 overrides._values[property.Name] = literal;
+            overrides._submitted[property.Name] = property.Value.Clone();
         }
 
         return overrides;
@@ -287,6 +291,32 @@ public sealed record DetectionOverrides
     private static string Quoted(string value)
     {
         return "\"" + value + "\"";
+    }
+
+    /// <summary>
+    ///     The submitted knobs as the values they were read as, under <c>detection</c>, or
+    ///     nothing when none was: a long decimal spelling is written back at its shortest.
+    /// </summary>
+    internal void WriteSubmitted(Utf8JsonWriter writer)
+    {
+        if (_submitted.Count == 0)
+            return;
+        writer.WriteStartObject("detection");
+        foreach (var (name, value) in _submitted)
+            switch (Array.Find(All, entry => entry.Knob.Name == name).Knob.Kind)
+            {
+                case "integer":
+                    writer.WriteNumber(name, value.GetInt32());
+                    break;
+                case "decimal":
+                    writer.WriteNumber(name, value.GetDouble());
+                    break;
+                default:
+                    writer.WriteString(name, value.GetString());
+                    break;
+            }
+
+        writer.WriteEndObject();
     }
 
     /// <summary>

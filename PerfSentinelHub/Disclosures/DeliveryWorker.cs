@@ -81,7 +81,7 @@ public sealed partial class DeliveryWorker(
         // The link went nowhere: it dies with the attempt, and the next one gets its own.
         if (link is not null)
             await database.RevokeShareLinkAsync(disclosure.Id, link.Id, "webhook:" + webhook.Name, Now(),
-                cancellationToken);
+                request: false, cancellationToken);
         var attempts = delivery.Attempts + 1;
         if (attempts >= MaxAttempts)
         {

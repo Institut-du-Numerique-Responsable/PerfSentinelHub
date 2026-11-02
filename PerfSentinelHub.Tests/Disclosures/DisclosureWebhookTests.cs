@@ -30,6 +30,7 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
     private Func<Task>? _onReceive;
     private FakeDaemon _receiver = null!;
     private int _redirectTargetHits;
+    private bool _stallAfterHeaders;
 
     public async ValueTask InitializeAsync()
     {
@@ -52,6 +53,20 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
             if (status == StatusCodes.Status302Found)
                 context.Response.Headers.Location = "/elsewhere";
             context.Response.StatusCode = status;
+            if (!_stallAfterHeaders)
+                return;
+            // The status and a first chunk are on the wire, then the body never finishes.
+            context.Response.ContentLength = 1_000_000;
+            await context.Response.Body.WriteAsync("0123456789"u8.ToArray(), context.RequestAborted);
+            await context.Response.Body.FlushAsync(context.RequestAborted);
+            try
+            {
+                await Task.Delay(Timeout.Infinite, context.RequestAborted);
+            }
+            catch (OperationCanceledException)
+            {
+                // The Hub hung up once it had the status.
+            }
         }, TestContext.Current.CancellationToken);
     }
 
@@ -112,6 +127,20 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
         Assert.Equal(2, delivery.Attempts);
         await RunAsync(hub);
         Assert.Equal(2, _received.Count);
+    }
+
+    [Fact]
+    public async Task A_2xx_whose_body_stalls_is_recorded_as_delivered()
+    {
+        _stallAfterHeaders = true;
+        _statuses.Enqueue(StatusCodes.Status202Accepted);
+        var hub = await PublishedAsync(httpTimeout: TimeSpan.FromSeconds(3));
+
+        await RunAsync(hub);
+
+        var delivery = Assert.Single(await Database(hub).ListDeliveriesAsync("d1", CancellationToken.None));
+        Assert.Equal(202, delivery.LastStatus);
+        Assert.Equal(DeliveryStates.Delivered, delivery.State);
     }
 
     [Fact]
@@ -229,21 +258,24 @@ public sealed class DisclosureWebhookTests : IAsyncLifetime
     }
 
     private async Task<WebApplicationFactory<Program>> PublishedAsync(bool includeShareLink = false,
-        string? databasePath = null)
+        string? databasePath = null, TimeSpan? httpTimeout = null)
     {
-        var hub = Hub(includeShareLink, databasePath);
+        var hub = Hub(includeShareLink, databasePath, httpTimeout);
         await DisclosuresApiTests.SeedAsync(hub, "d1", "u1", "2026-09-30");
         await Database(hub).EnqueueDeliveriesAsync("d1", "published", ["auditors"], 10_000, CancellationToken.None);
         return hub;
     }
 
-    private WebApplicationFactory<Program> Hub(bool includeShareLink = false, string? databasePath = null)
+    private WebApplicationFactory<Program> Hub(bool includeShareLink = false, string? databasePath = null,
+        TimeSpan? httpTimeout = null)
     {
         var hub = new HubApplicationFactory().WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
             {
                 if (databasePath is not null)
                     options.DatabasePath = databasePath;
+                if (httpTimeout is { } timeout)
+                    options.HttpTimeout = timeout;
                 options.Disclosures = new DisclosuresOptions
                 {
                     ImportKey = ImportKey,
