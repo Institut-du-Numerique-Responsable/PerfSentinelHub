@@ -189,18 +189,18 @@ public static partial class HubAuthentication
     public static void UseHubAuthentication(this WebApplication app)
     {
         var access = app.Services.GetRequiredService<AccessPolicy>().Enabled;
-        // A same-site page could otherwise frame the launcher and click its writes. Every
-        // response, static files and reports and challenges included, unless it set its own.
-        if (access)
-            app.Use((context, next) =>
+        // Signed in, a same-site page could otherwise frame the launcher and click its writes,
+        // access on or off. Every response, static files and reports and challenges included,
+        // unless it set a stricter one of its own.
+        app.Use((context, next) =>
+        {
+            context.Response.OnStarting(() =>
             {
-                context.Response.OnStarting(() =>
-                {
-                    context.Response.Headers.TryAdd("Content-Security-Policy", "frame-ancestors 'self'");
-                    return Task.CompletedTask;
-                });
-                return next(context);
+                context.Response.Headers.TryAdd("Content-Security-Policy", "frame-ancestors 'self'");
+                return Task.CompletedTask;
             });
+            return next(context);
+        });
         app.UseForwardedHeaders();
         app.UseAuthentication();
         app.UseAuthorization();

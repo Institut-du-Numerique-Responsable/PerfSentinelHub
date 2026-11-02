@@ -185,12 +185,16 @@ la même chose que résolu. Seule la rétention retire une ligne.
 Chaque table est créée dans `Storage/Schema.cs`. Un finding y est tenu deux fois : une
 fois pour toute la flotte, sous sa signature aveugle au regroupement, et une fois par source
 qui l'a remonté, parce que la ligne de flotte garde l'enveloppe la plus récente, quelle que
-soit la source, et rien d'autre.
+soit la source, et rien d'autre. Une copie porte ses propres service, type, endpoint, trace
+d'exemple et sévérité, sur lesquels toute lecture limitée à une source, un environnement ou
+une autorisation filtre, compte et juge le statut.
 
 | Table                          | Une ligne par                                                        | Part                                       |
 |--------------------------------|----------------------------------------------------------------------|--------------------------------------------|
 | `findings`                     | signature, avec l'enveloppe la plus récente de toutes les sources    | rétention, sur `last_seen_ms`              |
-| `finding_sources`              | signature et source, avec l'enveloppe et le service de cette source  | rétention, sur `last_seen_ms`              |
+| `finding_sources`              | signature et source, avec les colonnes propres à la copie            | rétention, sur `last_seen_ms`              |
+| `finding_envelopes`            | signature, l'enveloppe de la ligne `findings`                        | avec sa ligne `findings`                   |
+| `finding_source_envelopes`     | signature et source, l'enveloppe de la ligne `finding_sources`       | avec sa ligne `finding_sources`            |
 | `finding_observations`         | signature, source et jour                                            | rétention, par jour entier                 |
 | `finding_groupings`            | signature, source et valeur de regroupement effective                | rétention, sur `last_seen_ms`              |
 | `finding_attributes`           | signature, source, identité de regroupement et paire captée          | rétention, sur `last_seen_ms`              |
@@ -318,8 +322,8 @@ devient un principal dont le sujet est `machine:<nom>`. La connexion chez le fou
 ajoute au cookie le sujet, les groupes du fournisseur qu'une autorisation nomme, `hub:access` et
 `hub:caller`. `AccessCaller.Of` lit ces claims une fois par requête. Après l'autorisation,
 une porte refuse l'écriture d'une machine et une écriture du navigateur sans
-`Sec-Fetch-Site: same-origin`, et un premier middleware pose `frame-ancestors 'self'` sur
-chaque réponse.
+`Sec-Fetch-Site: same-origin`. Un premier middleware, qui tourne dès que la connexion est
+active, accès actif ou non, pose `frame-ancestors 'self'` sur chaque réponse.
 
 **Connexion du terminal.** `ApiEndpoints.MapTerminalAccess` (`Api/ApiEndpoints.Terminal.cs`)
 ne déclare le flux d'appareil qu'avec `Hub:Auth:TrustedProxyNetworks` renseigné, puisque

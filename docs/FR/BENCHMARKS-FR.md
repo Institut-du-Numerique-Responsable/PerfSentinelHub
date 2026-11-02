@@ -91,10 +91,9 @@ défaut 500m de CPU, donc une base qui tient plusieurs millions de findings gel�
 sur des nœuds lents peut échouer la sonde, et un démarrage tué reprend de zéro.
 Relevez alors `resources.limits.cpu` le temps de la mise à jour. Le premier
 démarrage tient aussi chaque enveloppe qu'il complète, environ 90 Mo ici, dans
-le stockage temporaire de SQLite, qui écrit dans `/tmp` au-delà de son cache de
-2 Mo, et le chart monte `/tmp` comme un `emptyDir` de 32 Mio. Que le kubelet
-compte ce fichier, que SQLite supprime dès son ouverture, dans la limite n'a pas
-été vérifié.
+le stockage temporaire de SQLite, qui écrit dans un fichier au-delà de son cache
+de 2 Mo. L'image dirige ce fichier vers `/data` (`SQLITE_TMPDIR`), le volume de
+la base, plutôt que vers `/tmp`, que le chart monte comme un `emptyDir` de 32 Mio.
 
 ## Portée d'accès sur 100 000 copies
 

@@ -72,10 +72,15 @@ newest done come first, at most 10,000. The list is always sent, `[]` when empty
 replaces its own on every answer. Only a push gets it: a polled daemon never does.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
-there are. Writes are serialized against the poll and retention paths. An import that
+there are, and one source holds at most one of them: a second import from a source whose
+first is still running, of any kind, gets `503 Retry-After: 1`. A body still arriving after
+60 seconds is cut with a `408`, so a trickled upload gives its slot back. Writes are serialized against the poll and retention paths. An import that
 cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon
 exporters retain and retry their coalesced batches. Retention purges in bounded chunks, so
-a long purge does not reject imports for its whole duration.
+a long purge does not reject imports for its whole duration. Every other write a request makes (a disclosure,
+a share link, a card key) waits the same five seconds, then answers `503 Retry-After: 1` with
+no body and writes nothing. A frozen report is the exception: it waits for the lock as long as
+it takes, since giving up would throw away a computation that can last minutes.
 
 A push updates findings, incidents, detection ledgers and per-source observations only. It
 never clears the poll path's `unreachable_since_ms`. A source the Hub cannot reach still
@@ -89,7 +94,7 @@ reachability is a fact about the Hub's route to the daemon, which a push does no
 | `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention. `disclosures: true` only while disclosures are on and the caller reads them. `cards`: `true` when the caller may make cards, `false` when the engine has no `card` subcommand, absent while cards are off or the caller holds `cards.write` nowhere |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`               |
-| `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
+| `GET /api/findings/{traceId}`        | Findings for a sample trace, narrowed by `environment` and `source_id` as a listing is                                                                                                     |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
 | `GET /api/incidents/{id}`            | One incident whole, the frozen findings included                                                                                                                                           |
@@ -284,7 +289,10 @@ by `Hub:MaxConcurrentPolls` exactly as the poll worker is, and answers the same 
 one round trip. The filters narrow the answer, never the read: the fan-out covers the
 whole fleet whatever the query asks for. It shares the poll's failure isolation: a
 401, a 404, a 503 or an oversized page files its own `incidents_state` and never touches
-the source's reachability, and one refusing daemon costs the others nothing.
+the source's reachability, and one refusing daemon costs the others nothing. Like an ack, a
+refresh comes from the Hub's own page or from no browser at all: a `Sec-Fetch-Site` other
+than `same-origin` is a `403` and a content type that is not JSON a `415`, so the launcher
+posts it with no body and `Content-Type: application/json`.
 
 What it guarantees the daemons: a source whose last read is younger than ten seconds is
 skipped and its stored copy served instead, so a reload loop, or five people watching the
@@ -363,12 +371,17 @@ time.
 
 Read with `environment` or `source_id`, an envelope describes that scope and not the fleet.
 The daemon's document is the copy of the source in scope that saw the finding last, so
-`severity` judges that copy. `first_seen` is the earliest and `last_seen` the latest over
+`severity` judges that copy, and so do the `service`, `finding_type` and trace filters, the
+status heartbeats and the counts by type: another source pushing the same signature with
+other values moves none of them. `first_seen` is the earliest and `last_seen` the latest over
 the sources in scope, `status` is derived from that `last_seen` and from the heartbeats of
 those sources alone, and `sources` and `acks` list only them. `max_confidence` stays
 fleet-wide on purpose, the highest confidence any source ever reported. A source's own copy
 starts at its first observation after the upgrade that records it. Until then its row
-serves the copy the fleet shares, the freshest one from any source.
+serves the copy the fleet shares, the freshest one from any source. A copy stored before
+schema version 23 has no type, endpoint or trace of its own: the boot after the upgrade
+reads the fleet's for it, and the Hub fills them from the copy's envelope once it answers,
+a chunk at a time.
 
 A read with `from` or `to` also serves how many times the daemons detected the finding in
 the window, from the detection ledgers the Hub polls or receives. A read with neither carries
@@ -700,7 +713,9 @@ are validated but unused here.
 
 Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart resumes them. A
 delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a
-request.
+request. So does one, webhook or e-mail, whose target the report's subscription no longer lists in
+the configuration in force when it is sent: taking an address or a webhook off a subscription
+stops the deliveries still queued for it at the next restart.
 
 ## Recap reports
 
@@ -1047,6 +1062,20 @@ The request shape follows the source's kind: `{}` for a daemon, which takes no p
 at all, `{service, lookback | from_ms + to_ms, max_traces}` for a trace backend, or
 `{trace_id}`. The engine's own exclusions are enforced before anything is queued, so an
 impossible pair is refused rather than discovered as a failed run three minutes later.
+A `service` is 1 to 256 characters with no whitespace, no control character and none of
+`"`, `=` and `\`: a `service.name` never needs them, and a trace backend's tag search would
+read them as syntax, so one is a `400`.
+A run starts work in the caller's name, so before the body is read a submission is held to
+the rule an ack is: a `Sec-Fetch-Site` other than `same-origin` is a `403` and a content type
+that is not JSON a `415`.
+
+A submission is at most 64 KiB, past which it is a `413`. The run stores the request rebuilt
+from the fields above and the `detection` knobs, so a property the Hub does not read is
+dropped rather than kept, and `GET /api/analyses` returns that stored form. At most four runs
+per `Hub:Analysis:Workers` wait at once (eight by default): past that a submission is a `503`
+with `Retry-After: 30`, since the queue drains at the engine's pace. A `503` with
+`Retry-After: 1` still means the write gate was busy. Runs stored before this rule keep the
+request they were submitted with.
 
 ### Two invocations, not one
 
