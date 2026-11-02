@@ -193,8 +193,12 @@ public sealed record AnalysisRequest
             return ValidateTraceRequest(request, traceId);
         if (request.Service is not { } service)
             return "Either a service or a trace ID is required.";
-        if (service.Length is 0 or > MaxServiceLength)
-            return $"The service name must be 1 to {MaxServiceLength} characters.";
+        // A service.name never needs them, and a trace backend's tag search reads them as syntax:
+        // a space or a newline would start a second logfmt pair after the grant judged the first.
+        if (service.Length is 0 or > MaxServiceLength ||
+            service.Any(c => char.IsWhiteSpace(c) || char.IsControl(c) || c is '"' or '=' or '\\'))
+            return $"The service name must be 1 to {MaxServiceLength} characters, with no space, control character, "
+                   + "'\"', '=' or '\\'.";
 
         return ValidateWindow(request, nowMs) ?? ValidateMaxTraces(request, analysis);
     }

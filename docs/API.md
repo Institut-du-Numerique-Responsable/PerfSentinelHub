@@ -1057,6 +1057,9 @@ The request shape follows the source's kind: `{}` for a daemon, which takes no p
 at all, `{service, lookback | from_ms + to_ms, max_traces}` for a trace backend, or
 `{trace_id}`. The engine's own exclusions are enforced before anything is queued, so an
 impossible pair is refused rather than discovered as a failed run three minutes later.
+A `service` is 1 to 256 characters with no whitespace, no control character and none of
+`"`, `=` and `\`: a `service.name` never needs them, and a trace backend's tag search would
+read them as syntax, so one is a `400`.
 A run starts work in the caller's name, so before the body is read a submission is held to
 the rule an ack is: a `Sec-Fetch-Site` other than `same-origin` is a `403` and a content type
 that is not JSON a `415`.
