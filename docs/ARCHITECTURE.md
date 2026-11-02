@@ -171,11 +171,13 @@ resolved. Only retention removes a row.
 Every table is created in `Storage/Schema.cs`. A finding is held twice over: once
 fleet-wide, keyed on its grouping-blind signature, and once per source that reported it,
 because the fleet-wide row keeps the newest envelope from any source and nothing else.
+A copy carries its own service, type, endpoint, sample trace and severity, which every read
+scoped to a source, an environment or a grant filters, counts and judges status on.
 
 | Table                          | One row per                                                    | Leaves                                     |
 |--------------------------------|----------------------------------------------------------------|--------------------------------------------|
 | `findings`                     | signature, with the newest envelope from any source            | retention, on `last_seen_ms`               |
-| `finding_sources`              | signature and source, with that source's envelope and service  | retention, on `last_seen_ms`               |
+| `finding_sources`              | signature and source, with that copy's own columns             | retention, on `last_seen_ms`               |
 | `finding_envelopes`            | signature, the `findings` row's envelope                       | with its `findings` row                    |
 | `finding_source_envelopes`     | signature and source, the `finding_sources` row's envelope     | with its `finding_sources` row             |
 | `finding_observations`         | signature, source and day                                      | retention, by whole day                    |

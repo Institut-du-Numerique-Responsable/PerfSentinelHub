@@ -668,6 +668,29 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
             envelope.GetProperty("finding").GetProperty("trace_id").GetString());
     }
 
+    [Theory]
+    [InlineData("?source_id=production-a", HttpStatusCode.OK)]
+    [InlineData("?environment=staging", HttpStatusCode.OK)]
+    [InlineData("?source_id=nope", HttpStatusCode.BadRequest)]
+    [InlineData("?source_id=production-a&source_id=staging-a", HttpStatusCode.BadRequest)]
+    public async Task A_trace_lookup_takes_the_scope_a_listing_takes(string query, HttpStatusCode expected)
+    {
+        await SeedAsync();
+        await using var scoped = Scoped();
+        using var client = scoped.CreateClient();
+
+        using var response = await client.GetAsync("/api/findings/rider-trace-file-line" + query,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, response.StatusCode);
+        if (expected != HttpStatusCode.OK)
+            return;
+        using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(
+            TestContext.Current.CancellationToken));
+        var envelope = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Single(envelope.GetProperty("sources").EnumerateArray());
+    }
+
     [Fact]
     public async Task A_windowed_read_carries_the_volume_fields()
     {

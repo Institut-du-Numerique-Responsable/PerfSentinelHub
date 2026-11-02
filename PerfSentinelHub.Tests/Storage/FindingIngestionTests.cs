@@ -624,6 +624,42 @@ public sealed class FindingIngestionTests : IDisposable
                 row => row.Signature == signature).Status);
     }
 
+    // Another source's import key rewrites the fleet-wide columns of a signature it pushes too, so a
+    // scoped read filters, counts and finds by trace on the copy's own values.
+    [Fact]
+    public async Task A_scoped_read_judges_the_copy_s_own_service_type_and_trace()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var own = new ParsedFinding("shared-signature", "{}", "checkout", "n_plus_one_sql", "warning", "GET /cart",
+            "hash", "trace-own", "daemon_production", 4, null);
+        var decoy = own with
+        {
+            Service = "decoy",
+            FindingType = "slow_http",
+            Endpoint = "GET /decoy",
+            TraceId = "trace-decoy"
+        };
+        await database.UpsertBatchAsync(ProductionA, new ParsedBatch([own], 0), 1000, cancellationToken);
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"), new ParsedBatch([decoy], 0), 2000,
+            cancellationToken);
+        var scope = new FindingQuery(null, null, null, 100, SourceIds: ["production-a"]);
+
+        Assert.Single(await database.QueryFindingsAsync(scope with { Service = "checkout" }, cancellationToken));
+        Assert.Single(await database.QueryFindingsAsync(scope with { FindingType = "n_plus_one_sql" },
+            cancellationToken));
+        Assert.Empty(await database.QueryFindingsAsync(scope with { Service = "decoy" }, cancellationToken));
+        Assert.Single(await database.FindByTraceAsync("trace-own", ["production-a"], null, cancellationToken));
+        Assert.Empty(await database.FindByTraceAsync("trace-decoy", ["production-a"], null, cancellationToken));
+        Assert.Equal("n_plus_one_sql",
+            Assert.Single(await database.CountFindingsAsync(["production-a"], cancellationToken)).FindingType);
+        // The whole fleet reads the newest observation, as it always did.
+        Assert.Single(await database.QueryFindingsAsync(
+            new FindingQuery("decoy", null, null, 100), cancellationToken));
+    }
+
     [Fact]
     public async Task A_scope_of_several_sources_serves_its_freshest_copy()
     {

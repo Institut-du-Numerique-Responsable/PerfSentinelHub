@@ -77,6 +77,39 @@ public sealed partial class HubDatabase
           """
         + IncidentAttributesWhere("true");
 
+    // A copy an older build wrote, holding an envelope of its own that names the type and endpoint
+    // every stored finding has. finding_type is the marker: a NULL trace is a copy's own value.
+    private const string CopyColumnsPending =
+        """
+        fs.finding_type IS NULL
+          AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END, '$.finding.type') = 'text'
+          AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END,
+                        '$.finding.source_endpoint') = 'text'
+        """;
+
+    private const string CopyColumnsNeeded =
+        """
+        SELECT EXISTS (
+          SELECT 1 FROM finding_sources AS fs
+          JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+          WHERE
+        """ + " " + CopyColumnsPending + ");";
+
+    private const string CopyColumnsChunk =
+        """
+        UPDATE finding_sources AS fs SET
+          finding_type = json_extract(e.finding_json, '$.finding.type'),
+          endpoint = json_extract(e.finding_json, '$.finding.source_endpoint'),
+          sample_trace_id = CASE WHEN json_type(e.finding_json, '$.finding.trace_id') = 'text'
+                              THEN json_extract(e.finding_json, '$.finding.trace_id') END
+        FROM finding_source_envelopes AS e
+        WHERE e.signature = fs.signature AND e.source_id = fs.source_id
+          AND fs.rowid IN (
+            SELECT fs.rowid FROM finding_sources AS fs
+            JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+            WHERE
+        """ + " " + CopyColumnsPending + " LIMIT $chunk);";
+
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await _initializeGate.WaitAsync(cancellationToken);
@@ -111,6 +144,7 @@ public sealed partial class HubDatabase
             await EnsureLineageColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceServiceColumnAsync(connection, transaction, cancellationToken);
+            await EnsureFindingSourceCopyColumnsAsync(connection, transaction, cancellationToken);
             await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
             await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
@@ -130,7 +164,8 @@ public sealed partial class HubDatabase
                                              (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms),
                                              (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
                                              (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
-                                             (19, $applied_at_ms), (20, $applied_at_ms), (21, $applied_at_ms);
+                                             (19, $applied_at_ms), (20, $applied_at_ms), (21, $applied_at_ms),
+                                             (23, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -252,6 +287,31 @@ public sealed partial class HubDatabase
         await using var alter = connection.CreateCommand();
         alter.Transaction = transaction;
         alter.CommandText = "ALTER TABLE finding_sources ADD COLUMN service TEXT;";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Version 23: each copy's own type, endpoint and sample trace, which the shared row cannot
+    ///     stand for in a scoped read, since any source's newer push rewrites it. Added before the
+    ///     version 22 rebuild, which keeps every column but the envelope. Nothing is read here: a
+    ///     copy an older build wrote reads NULL, and the shared row meanwhile, until
+    ///     CatchUpCopyColumnsAsync fills it from its own envelope.
+    /// </summary>
+    private static async Task EnsureFindingSourceCopyColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "finding_sources", "finding_type", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE finding_sources ADD COLUMN finding_type TEXT;
+                            ALTER TABLE finding_sources ADD COLUMN endpoint TEXT;
+                            ALTER TABLE finding_sources ADD COLUMN sample_trace_id TEXT;
+                            """;
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -567,6 +627,40 @@ public sealed partial class HubDatabase
         finally
         {
             _writeGate.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Version 23's columns for the copies an older build wrote, run after the Hub answers for the
+    ///     reason the attributes catch-up above is. A read-only check first, then a chunk at a time
+    ///     under the write gate, so an import waits one chunk rather than the whole scan. Until it
+    ///     lands such a copy is read on the shared row. True when it wrote.
+    /// </summary>
+    public async Task<bool> CatchUpCopyColumnsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using (var check = connection.CreateCommand())
+        {
+            check.CommandText = CopyColumnsNeeded;
+            if ((long)(await check.ExecuteScalarAsync(cancellationToken))! == 0)
+                return false;
+        }
+
+        while (true)
+        {
+            await _writeGate.WaitAsync(cancellationToken);
+            try
+            {
+                await using var chunk = connection.CreateCommand();
+                chunk.CommandText = CopyColumnsChunk;
+                chunk.Parameters.AddWithValue("$chunk", PurgeChunkSize);
+                if (await chunk.ExecuteNonQueryAsync(cancellationToken) == 0)
+                    return true;
+            }
+            finally
+            {
+                _writeGate.Release();
+            }
         }
     }
 

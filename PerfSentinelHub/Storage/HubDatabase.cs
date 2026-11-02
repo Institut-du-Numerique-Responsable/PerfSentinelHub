@@ -94,16 +94,20 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // max_confidence stays fleet-wide, a source row carries no confidence of its own.
     // Every row of the scope is read and sorted before any filter or
     // LIMIT, so a read costs the scope and not the page. service and
-    // finding_type are fleet-wide and could move into `scope` if it ever hurts.
-    // severity cannot, it judges the scoped envelope, nor can the ack filter,
-    // which judges every source of the scope.
+    // The copy's own service, type, endpoint and sample trace too: any source's newer
+    // push rewrites the shared row's, and a scope must not move with another source's
+    // key. A copy an older build wrote reads the shared ones until the version 23
+    // catch-up fills it, its type standing for all three since a NULL trace is a value.
+    // The ack filter cannot move, it judges every source of the scope.
     private static string ScopedFindings(string copies)
     {
         return $"""
                 scope AS (
-                  SELECT signature, first_seen_ms, last_seen_ms, copy_source_id, severity
+                  SELECT signature, first_seen_ms, last_seen_ms, copy_source_id, severity, service,
+                         finding_type, endpoint, sample_trace_id
                   FROM (
-                    SELECT fs.signature, fs.source_id AS copy_source_id, fs.severity,
+                    SELECT fs.signature, fs.source_id AS copy_source_id, fs.severity, fs.service,
+                           fs.finding_type, fs.endpoint, fs.sample_trace_id,
                            MIN(fs.first_seen_ms) OVER w AS first_seen_ms,
                            MAX(fs.last_seen_ms) OVER w AS last_seen_ms,
                            ROW_NUMBER() OVER (
@@ -117,9 +121,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 ),
                 scoped AS (
                   SELECT findings.signature, scope.copy_source_id,
-                         findings.service, findings.finding_type,
+                         COALESCE(scope.service, findings.service) AS service,
+                         COALESCE(scope.finding_type, findings.finding_type) AS finding_type,
                          COALESCE(scope.severity, findings.severity) AS severity,
-                         findings.endpoint, findings.sample_trace_id,
+                         IIF(scope.finding_type IS NULL, findings.endpoint, scope.endpoint) AS endpoint,
+                         IIF(scope.finding_type IS NULL, findings.sample_trace_id, scope.sample_trace_id)
+                           AS sample_trace_id,
                          scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
                   FROM scope
                   JOIN findings ON findings.signature = scope.signature
@@ -480,11 +487,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
     public Task<IReadOnlyList<StoredFinding>> FindByTraceAsync(
         string traceId,
+        IReadOnlyList<string>? sourceIds,
         AccessScope? access,
         CancellationToken cancellationToken)
     {
-        return QueryAsync(new FindingQuery(null, null, null, _maxReadLimit, Access: access), traceId,
-            cancellationToken);
+        return QueryAsync(new FindingQuery(null, null, null, _maxReadLimit, SourceIds: sourceIds, Access: access),
+            traceId, cancellationToken);
     }
 
     /// <summary>
@@ -1117,10 +1125,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.CommandText = """
                               INSERT INTO finding_sources(
                                 signature, source_id, source_name, environment, producer_version,
-                                first_seen_ms, last_seen_ms, severity, first_observed_day, service)
+                                first_seen_ms, last_seen_ms, severity, first_observed_day, service,
+                                finding_type, endpoint, sample_trace_id)
                               VALUES (
                                 $signature, $source_id, $source_name, $environment, $producer_version,
-                                $first_seen, $observed_at, $severity, $day, $service)
+                                $first_seen, $observed_at, $severity, $day, $service,
+                                $finding_type, $endpoint, $sample_trace_id)
                               ON CONFLICT(signature, source_id) DO UPDATE SET
                                 source_name = excluded.source_name,
                                 environment = excluded.environment,
@@ -1131,6 +1141,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                   excluded.severity, finding_sources.severity),
                                 service = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
                                   excluded.service, finding_sources.service),
+                                finding_type = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
+                                  excluded.finding_type, finding_sources.finding_type),
+                                endpoint = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
+                                  excluded.endpoint, finding_sources.endpoint),
+                                sample_trace_id = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
+                                  excluded.sample_trace_id, finding_sources.sample_trace_id),
                                 -- Set once: a MIN(day) read later would move with the purge.
                                 first_observed_day = COALESCE(
                                   finding_sources.first_observed_day, excluded.first_observed_day),
@@ -1165,6 +1181,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
         command.Parameters.AddWithValue(ServiceParameter, finding.Service);
         command.Parameters.AddWithValue("$severity", finding.Severity);
+        command.Parameters.AddWithValue("$finding_type", finding.FindingType);
+        command.Parameters.AddWithValue("$endpoint", finding.Endpoint);
+        command.Parameters.AddWithValue("$sample_trace_id", (object?)finding.TraceId ?? DBNull.Value);
         command.Parameters.AddWithValue("$severity_rank", FindingParser.SeverityRank(finding.Severity));
         command.Parameters.AddWithValue("$day", seenAtMs / DayMs);
         command.Parameters.AddWithValue("$grouping", (object?)finding.Grouping ?? DBNull.Value);

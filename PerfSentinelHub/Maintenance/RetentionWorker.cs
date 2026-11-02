@@ -42,6 +42,21 @@ public sealed partial class RetentionWorker(
             LogCatchUpFailure(logger, exception);
         }
 
+        // Once per start, after the Hub answers: see HubDatabase.CatchUpCopyColumnsAsync.
+        try
+        {
+            if (await database.CatchUpCopyColumnsAsync(stoppingToken))
+                LogCopyColumnsCaughtUp(logger);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            LogCopyColumnsFailure(logger, exception);
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             var now = timeProvider.GetUtcNow();
@@ -88,4 +103,12 @@ public sealed partial class RetentionWorker(
 
     [LoggerMessage(1205, LogLevel.Error, "Building the findings read indexes failed; the next start retries.")]
     private static partial void LogReadIndexesFailure(ILogger logger, Exception exception);
+
+    [LoggerMessage(1206, LogLevel.Information,
+        "Filled the type, endpoint and trace of the copies an older build stored without them.")]
+    private static partial void LogCopyColumnsCaughtUp(ILogger logger);
+
+    [LoggerMessage(1207, LogLevel.Error,
+        "Filling the type, endpoint and trace older copies lack failed; the next start retries.")]
+    private static partial void LogCopyColumnsFailure(ILogger logger, Exception exception);
 }

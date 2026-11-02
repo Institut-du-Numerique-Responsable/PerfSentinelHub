@@ -516,6 +516,7 @@ public static partial class ApiEndpoints
         HttpContext context,
         HubDatabase database,
         AccessPolicy access,
+        IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
@@ -527,7 +528,16 @@ public static partial class ApiEndpoints
             return;
         }
 
-        var rows = await database.FindByTraceAsync(traceId, Narrowing(scope), cancellationToken);
+        // A scope matches the trace each copy in it reported, which another source's push cannot move.
+        if (!HasValidUtf8(context.Request.QueryString.Value) ||
+            context.Request.Query.Any(item => item.Value.Count != 1) ||
+            !TryReadSourceScope(context.Request, access.Sources(context, options.Value.Sources), out var sourceIds))
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        var rows = await database.FindByTraceAsync(traceId, sourceIds, Narrowing(scope), cancellationToken);
         await FindingEnvelopeWriter.WriteArrayAsync(
             context.Response,
             rows,
