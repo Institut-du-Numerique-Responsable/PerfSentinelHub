@@ -294,8 +294,8 @@ machine token's through `AccessPolicy.MachineTokenName`, and a match becomes a p
 whose subject is `machine:<name>`. The provider sign-in adds the subject, the provider
 groups a grant names, `hub:access` and `hub:caller` to the cookie. `AccessCaller.Of` reads
 those claims once per request. After authorization, a gate refuses a machine's write and
-a browser write without `Sec-Fetch-Site: same-origin`, and a first middleware sets
-`frame-ancestors 'self'` on every response.
+a browser write without `Sec-Fetch-Site: same-origin`. A first middleware, which runs
+whenever sign-in is on, access on or off, sets `frame-ancestors 'self'` on every response.
 
 **Terminal sign-in.** `ApiEndpoints.MapTerminalAccess` (`Api/ApiEndpoints.Terminal.cs`)
 maps the device flow only with `Hub:Auth:TrustedProxyNetworks` set, since the client

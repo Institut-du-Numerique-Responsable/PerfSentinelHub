@@ -17,7 +17,7 @@ namespace PerfSentinelHub.Tests.Api;
 
 /// <summary>
 ///     Hub:Access:Enabled off, the default, is today's Hub byte for byte: with Auth off,
-///     and with Auth on and access off. The fixtures were captured before enforcement
+///     and with Auth on and access off but for the framing header every signed-in response carries. The fixtures were captured before enforcement
 ///     existed, on a seeded database under a fixed clock. The Hub's own version is the
 ///     one field that moves with a release, so it is read from the build.
 /// </summary>
@@ -31,6 +31,7 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
     // Every header a golden route answered with before enforcement, Date aside.
     private const string Json = "Content-Type: application/json";
     private const string JsonUtf8 = "Content-Type: application/json; charset=utf-8";
+    private const string FrameAncestors = "Content-Security-Policy: frame-ancestors 'self'";
 
     private static readonly DateTimeOffset SignInAt = DateTimeOffset.UtcNow;
     private readonly FakeTimeProvider _clock = new(SignInAt);
@@ -114,7 +115,8 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
                                                                  CultureInfo.InvariantCulture)) / 1000)
             .ToString(CultureInfo.InvariantCulture));
         Assert.Equal(golden, actual);
-        Assert.Equal(headers, Headers(response));
+        // Signed in, the one header added since: no other site frames a response.
+        Assert.Equal(auth ? $"{FrameAncestors}; {headers}" : headers, Headers(response));
     }
 
     [Theory]
@@ -128,7 +130,7 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
         using var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.False(response.Headers.Contains("Content-Security-Policy"));
+        Assert.Equal("frame-ancestors 'self'", Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
     }
 
     [Fact]
@@ -203,7 +205,8 @@ public sealed partial class AccessOffCompatibilityTests : IAsyncLifetime
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, response.StatusCode);
-        Assert.False(response.Headers.Contains("Content-Security-Policy"));
+        // Access off or on, a signed-in launcher is never framed by another site.
+        Assert.Equal("frame-ancestors 'self'", Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
     }
 
     [Theory]

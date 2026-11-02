@@ -197,7 +197,8 @@ A write from a browser must carry `Sec-Fetch-Site: same-origin`, which every cur
 browser sends: a page on a sibling subdomain cannot post with the user's cookie. A
 request with a bearer is not a browser's and is not held to it. Every response carries
 `Content-Security-Policy: frame-ancestors 'self'`, so no other site can frame the
-launcher and click its buttons.
+launcher and click its buttons. That header comes with sign-in, not with access control:
+`Hub:Auth` on and access off sends it too, see [AUTHENTICATION.md](AUTHENTICATION.md).
 
 ### Analyses and reports
 
