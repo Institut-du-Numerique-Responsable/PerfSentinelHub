@@ -1066,7 +1066,7 @@ public sealed class FindingIngestionTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         await CreateDatabase().InitializeAsync(cancellationToken);
         await ExecuteAsync(
-            """
+            LegacySchema.InlineEnvelopes + """
             INSERT INTO findings(
               signature, finding_json, service, finding_type, severity, endpoint,
               template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
@@ -1103,7 +1103,7 @@ public sealed class FindingIngestionTests : IDisposable
         // Copies an older build wrote: one with its own envelope, one before the per-source
         // envelope existed, one garbled, and one this build already covered.
         await ExecuteAsync(
-            """
+            LegacySchema.InlineEnvelopes + """
             INSERT INTO findings(
               signature, finding_json, service, finding_type, severity, endpoint,
               template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
@@ -1145,11 +1145,12 @@ public sealed class FindingIngestionTests : IDisposable
         Assert.False(await idle.CatchUpAttributesAsync(cancellationToken));
         await ExecuteAsync("DROP TRIGGER fail_attribute_write;", cancellationToken);
 
-        // An image rolled back below this build observes the copy again, without rows.
+        // The copy observed again by a write that left no rows, as a build before the backfill did.
         await ExecuteAsync(
             """
-            UPDATE finding_sources SET last_seen_ms = 900,
-              finding_json = '{"finding":{"grouping":[{"key":"team","value":"billing"}]}}'
+            UPDATE finding_sources SET last_seen_ms = 900 WHERE source_id = 'own';
+            UPDATE finding_source_envelopes
+            SET finding_json = '{"finding":{"grouping":[{"key":"team","value":"billing"}]}}'
             WHERE source_id = 'own';
             """,
             cancellationToken);
@@ -1212,12 +1213,16 @@ public sealed class FindingIngestionTests : IDisposable
             """
             INSERT INTO finding_sources(
               signature, source_id, source_name, environment, producer_version,
-              first_seen_ms, last_seen_ms, finding_json)
-            SELECT signature, 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL FROM findings
+              first_seen_ms, last_seen_ms)
+            SELECT signature, 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900 FROM findings
             UNION ALL
-            SELECT signature, 'garbled', 'Garbled', 'staging', '0.26.2', 500, 900, '{not json' FROM findings
+            SELECT signature, 'garbled', 'Garbled', 'staging', '0.26.2', 500, 900 FROM findings
             UNION ALL
-            SELECT signature, 'unnamed', 'Unnamed', 'staging', '0.26.2', 500, 900, '{"finding":{}}' FROM findings;
+            SELECT signature, 'unnamed', 'Unnamed', 'staging', '0.26.2', 500, 900 FROM findings;
+            INSERT INTO finding_source_envelopes(signature, source_id, finding_json)
+            SELECT signature, 'garbled', '{not json' FROM findings
+            UNION ALL
+            SELECT signature, 'unnamed', '{"finding":{}}' FROM findings;
             UPDATE finding_sources SET service = NULL;
             """,
             cancellationToken);
@@ -1285,7 +1290,11 @@ public sealed class FindingIngestionTests : IDisposable
     {
         await using var command = connection.CreateCommand();
         command.CommandText =
-            "SELECT severity || ' ' || finding_json FROM finding_sources WHERE source_id = $source_id;";
+            """
+            SELECT fs.severity || ' ' || e.finding_json FROM finding_sources AS fs
+            LEFT JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+            WHERE fs.source_id = $source_id;
+            """;
         command.Parameters.AddWithValue("$source_id", sourceId);
         return (string)(await command.ExecuteScalarAsync(cancellationToken))!;
     }

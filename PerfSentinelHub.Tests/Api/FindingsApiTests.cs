@@ -957,12 +957,15 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         await using var connection = await factory.Database.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-                              UPDATE finding_sources SET finding_json = NULL, severity = NULL
+                              DELETE FROM finding_source_envelopes
+                              WHERE source_id = $source_id AND signature = $signature;
+                              UPDATE finding_sources SET severity = NULL
                               WHERE source_id = $source_id AND signature = $signature;
                               """;
         command.Parameters.AddWithValue("$source_id", source.SourceId);
         command.Parameters.AddWithValue("$signature", signature);
-        Assert.Equal(1, await command.ExecuteNonQueryAsync(cancellationToken));
+        // The copy's envelope and its row, one each.
+        Assert.Equal(2, await command.ExecuteNonQueryAsync(cancellationToken));
     }
 
     // What an ack read of that source leaves: its whole mirror and the ledger row.

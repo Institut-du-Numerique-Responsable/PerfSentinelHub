@@ -84,13 +84,26 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // finding_type are fleet-wide and could move into `scope` if it ever hurts.
     // severity cannot, it judges the scoped envelope, nor can the ack filter,
     // which judges every source of the scope.
+    // The envelopes live apart from the rows a read filters and sorts on (version 22), and are
+    // looked up for the rows that need one only.
+    private static string SharedEnvelope(string signature)
+    {
+        return $"(SELECT e.finding_json FROM finding_envelopes AS e WHERE e.signature = {signature})";
+    }
+
+    private static string CopyEnvelope(string signature, string sourceId)
+    {
+        return $"(SELECT e.finding_json FROM finding_source_envelopes AS e "
+               + $"WHERE e.signature = {signature} AND e.source_id = {sourceId})";
+    }
+
     private static string ScopedFindings(string copies)
     {
         return $"""
                 scope AS (
-                  SELECT signature, first_seen_ms, last_seen_ms, finding_json, severity
+                  SELECT signature, first_seen_ms, last_seen_ms, copy_source_id, severity
                   FROM (
-                    SELECT fs.signature, fs.finding_json, fs.severity,
+                    SELECT fs.signature, fs.source_id AS copy_source_id, fs.severity,
                            MIN(fs.first_seen_ms) OVER w AS first_seen_ms,
                            MAX(fs.last_seen_ms) OVER w AS last_seen_ms,
                            ROW_NUMBER() OVER (
@@ -103,8 +116,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                   WHERE pick = 1
                 ),
                 scoped AS (
-                  SELECT findings.signature,
-                         COALESCE(scope.finding_json, findings.finding_json) AS finding_json,
+                  SELECT findings.signature, scope.copy_source_id,
                          findings.service, findings.finding_type,
                          COALESCE(scope.severity, findings.severity) AS severity,
                          findings.endpoint, findings.sample_trace_id,
@@ -715,6 +727,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 $" AND fs.source_id {InScope}"),
             _ => ("WITH", "findings", "", "")
         };
+        var envelope = row == "scoped"
+            ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
+            : SharedEnvelope("f.signature");
         var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
         var grouped = query.Grouping is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));
@@ -732,7 +747,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                   LIMIT $limit OFFSET $offset
                 )
                 SELECT
-                  f.signature, f.finding_json, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
+                  f.signature, {envelope}, f.first_seen_ms, f.last_seen_ms, f.max_confidence,
                   fs.source_id, fs.source_name, fs.environment, fs.producer_version,
                   fs.last_seen_ms, ss.unreachable_since_ms, f.status,
                   fl.origin_first_seen_ms, fl.depth,
@@ -871,9 +886,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                       AND {copies}
                       AND CASE
                             WHEN ur.source_id IS NULL THEN json_extract(
-                              COALESCE(u.finding_json, (
-                                SELECT shared.finding_json FROM findings AS shared
-                                WHERE shared.signature = u.signature)), '$.acknowledged_by') IS NULL
+                              COALESCE({CopyEnvelope("u.signature", "u.source_id")},
+                                {SharedEnvelope("u.signature")}), '$.acknowledged_by') IS NULL
                             ELSE NOT EXISTS (
                               SELECT 1 FROM source_acks AS sa
                               WHERE sa.source_id = u.source_id AND sa.signature = u.signature
@@ -1039,18 +1053,16 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.Transaction = transaction;
         command.CommandText = """
                               INSERT INTO findings(
-                                signature, finding_json, service, finding_type, severity, endpoint,
+                                signature, service, finding_type, severity, endpoint,
                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
                                 max_confidence, max_confidence_rank)
                               VALUES (
-                                $signature, $finding_json, $service, $finding_type, $severity, $endpoint,
+                                $signature, $service, $finding_type, $severity, $endpoint,
                                 $template_hash, $sample_trace_id, $first_seen, $observed_at,
                                 $confidence, $confidence_rank)
                               ON CONFLICT(signature) DO UPDATE SET
                                 -- Only a newer observation may replace the envelope and its indexed columns:
                                 -- a slower source polled earlier must not overwrite a fresher severity or trace.
-                                finding_json = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
-                                  excluded.finding_json, findings.finding_json),
                                 service = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
                                   excluded.service, findings.service),
                                 finding_type = IIF(excluded.last_seen_ms >= findings.last_seen_ms,
@@ -1069,6 +1081,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                   WHEN excluded.max_confidence_rank > findings.max_confidence_rank
                                   THEN excluded.max_confidence ELSE findings.max_confidence END,
                                 max_confidence_rank = MAX(findings.max_confidence_rank, excluded.max_confidence_rank);
+                              -- After the row: last_seen_ms is now the newer of the two, which this
+                              -- observation reaches only when it is not older than the stored one.
+                              INSERT INTO finding_envelopes(signature, finding_json)
+                              SELECT $signature, $finding_json
+                              WHERE $observed_at >= (SELECT last_seen_ms FROM findings WHERE signature = $signature)
+                              ON CONFLICT(signature) DO UPDATE SET finding_json = excluded.finding_json;
                               """;
         command.Parameters.AddWithValue(SignatureParameter, finding.Signature);
         command.Parameters.AddWithValue("$finding_json", finding.EnvelopeJson);
@@ -1099,18 +1117,16 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         command.CommandText = """
                               INSERT INTO finding_sources(
                                 signature, source_id, source_name, environment, producer_version,
-                                first_seen_ms, last_seen_ms, finding_json, severity, first_observed_day, service)
+                                first_seen_ms, last_seen_ms, severity, first_observed_day, service)
                               VALUES (
                                 $signature, $source_id, $source_name, $environment, $producer_version,
-                                $first_seen, $observed_at, $finding_json, $severity, $day, $service)
+                                $first_seen, $observed_at, $severity, $day, $service)
                               ON CONFLICT(signature, source_id) DO UPDATE SET
                                 source_name = excluded.source_name,
                                 environment = excluded.environment,
                                 producer_version = excluded.producer_version,
                                 -- A push and a poll of one source each read the clock before waiting on the
                                 -- write gate, so the older observation can commit last and must not win.
-                                finding_json = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
-                                  excluded.finding_json, finding_sources.finding_json),
                                 severity = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
                                   excluded.severity, finding_sources.severity),
                                 service = IIF(excluded.last_seen_ms >= finding_sources.last_seen_ms,
@@ -1120,6 +1136,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                   finding_sources.first_observed_day, excluded.first_observed_day),
                                 first_seen_ms = MIN(finding_sources.first_seen_ms, excluded.first_seen_ms),
                                 last_seen_ms = MAX(finding_sources.last_seen_ms, excluded.last_seen_ms);
+                              -- The copy's envelope, on the rule of findings' own.
+                              INSERT INTO finding_source_envelopes(signature, source_id, finding_json)
+                              SELECT $signature, $source_id, $finding_json
+                              WHERE $observed_at >= (SELECT last_seen_ms FROM finding_sources
+                                                     WHERE signature = $signature AND source_id = $source_id)
+                              ON CONFLICT(signature, source_id) DO UPDATE SET finding_json = excluded.finding_json;
                               -- The WHERE keeps the worst severity of the day and makes a repeated
                               -- observation a true no-op.
                               INSERT INTO finding_observations(signature, source_id, day, severity, severity_rank)
