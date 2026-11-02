@@ -80,7 +80,7 @@ public sealed class DisclosureShareTests : IDisposable
         switch (death)
         {
             case "revoked":
-                await database.RevokeShareLinkAsync("d1", "l1", "alice", NowMs, CancellationToken.None);
+                await database.RevokeShareLinkAsync("d1", "l1", "alice", NowMs, false, CancellationToken.None);
                 break;
             case "withdrawn":
                 await database.WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);

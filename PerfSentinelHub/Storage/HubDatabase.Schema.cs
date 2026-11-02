@@ -1,20 +1,39 @@
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
 namespace PerfSentinelHub.Storage;
 
 public sealed partial class HubDatabase
 {
+    // The columns a windowed or newest-first findings read filters and orders on, so a page walks
+    // the index in order instead of sorting the whole scope.
+    private const string ReadIndexes =
+        """
+        CREATE INDEX IF NOT EXISTS ix_findings_last_seen
+          ON findings(last_seen_ms DESC, signature, service, endpoint);
+        CREATE INDEX IF NOT EXISTS ix_finding_sources_window
+          ON finding_sources(signature, source_id, first_seen_ms, first_observed_day, last_seen_ms);
+        """;
+
+    private const string ReadIndexesNeeded =
+        """
+        SELECT 2 > COUNT(*) FROM sqlite_master
+        WHERE type = 'index' AND name IN ('ix_findings_last_seen', 'ix_finding_sources_window');
+        """;
+
     // Whether AttributesBackfill has anything to write, each arm its read-only mirror: the
     // backfill takes the write lock for as long as it scans, so it runs only when this says so.
     private const string AttributesBackfillNeeded =
         """
         SELECT EXISTS (
-                 SELECT 1 FROM finding_sources
-                 WHERE service IS NULL
-                   AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text')
+                 SELECT 1 FROM finding_sources AS fs
+                 LEFT JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+                 WHERE fs.service IS NULL
+                   AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END, '$.finding.service') = 'text')
             OR EXISTS (
                  SELECT 1 FROM finding_sources AS fs
-                 WHERE json_valid(fs.finding_json)
+                 LEFT JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+                 WHERE json_valid(e.finding_json)
                    AND NOT EXISTS (
                      SELECT 1 FROM finding_attributes AS fa
                      WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
@@ -31,15 +50,21 @@ public sealed partial class HubDatabase
 
     private static readonly string AttributesBackfill =
         """
-        UPDATE finding_sources SET service = json_extract(finding_json, '$.finding.service')
+        UPDATE finding_sources SET service = (
+          SELECT json_extract(e.finding_json, '$.finding.service') FROM finding_source_envelopes AS e
+          WHERE e.signature = finding_sources.signature AND e.source_id = finding_sources.source_id)
         WHERE service IS NULL
-          AND json_type(CASE WHEN json_valid(finding_json) THEN finding_json END, '$.finding.service') = 'text';
+          AND EXISTS (
+            SELECT 1 FROM finding_source_envelopes AS e
+            WHERE e.signature = finding_sources.signature AND e.source_id = finding_sources.source_id
+              AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END, '$.finding.service') = 'text');
         """
         + FindingAttributesFrom(
             """
-            SELECT CASE WHEN json_valid(fs.finding_json) THEN fs.finding_json END,
+            SELECT CASE WHEN json_valid(e.finding_json) THEN e.finding_json END,
                    fs.signature, fs.source_id, fs.last_seen_ms
             FROM finding_sources AS fs
+            LEFT JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
             WHERE NOT EXISTS (
               SELECT 1 FROM finding_attributes AS fa
               WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
@@ -51,6 +76,39 @@ public sealed partial class HubDatabase
             WHERE i.id = incident_attributes.id AND i.source_id = incident_attributes.source_id);
           """
         + IncidentAttributesWhere("true");
+
+    // A copy an older build wrote, holding an envelope of its own that names the type and endpoint
+    // every stored finding has. finding_type is the marker: a NULL trace is a copy's own value.
+    private const string CopyColumnsPending =
+        """
+        fs.finding_type IS NULL
+          AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END, '$.finding.type') = 'text'
+          AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END,
+                        '$.finding.source_endpoint') = 'text'
+        """;
+
+    private const string CopyColumnsNeeded =
+        """
+        SELECT EXISTS (
+          SELECT 1 FROM finding_sources AS fs
+          JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+          WHERE
+        """ + " " + CopyColumnsPending + ");";
+
+    private const string CopyColumnsChunk =
+        """
+        UPDATE finding_sources AS fs SET
+          finding_type = json_extract(e.finding_json, '$.finding.type'),
+          endpoint = json_extract(e.finding_json, '$.finding.source_endpoint'),
+          sample_trace_id = CASE WHEN json_type(e.finding_json, '$.finding.trace_id') = 'text'
+                              THEN json_extract(e.finding_json, '$.finding.trace_id') END
+        FROM finding_source_envelopes AS e
+        WHERE e.signature = fs.signature AND e.source_id = fs.source_id
+          AND fs.rowid IN (
+            SELECT fs.rowid FROM finding_sources AS fs
+            JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+            WHERE
+        """ + " " + CopyColumnsPending + " LIMIT $chunk);";
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -78,13 +136,15 @@ public sealed partial class HubDatabase
                 migration.CommandText =
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
                     Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12 + Schema.V13 + Schema.V14 +
-                    Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18 + Schema.V19 + Schema.V20;
+                    Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18 + Schema.V19 + Schema.V20 +
+                    Schema.V22;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
             await EnsureLineageColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceColumnsAsync(connection, transaction, cancellationToken);
             await EnsureFindingSourceServiceColumnAsync(connection, transaction, cancellationToken);
+            await EnsureFindingSourceCopyColumnsAsync(connection, transaction, cancellationToken);
             await EnsureDetectionDayCarbonColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionOwnerDisplayColumnsAsync(connection, transaction, cancellationToken);
             await EnsureRecapCreatorSubjectColumnAsync(connection, transaction, cancellationToken);
@@ -104,7 +164,8 @@ public sealed partial class HubDatabase
                                              (10, $applied_at_ms), (11, $applied_at_ms), (12, $applied_at_ms),
                                              (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
                                              (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
-                                             (19, $applied_at_ms), (20, $applied_at_ms), (21, $applied_at_ms);
+                                             (19, $applied_at_ms), (20, $applied_at_ms), (21, $applied_at_ms),
+                                             (23, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -113,6 +174,7 @@ public sealed partial class HubDatabase
             }
 
             await transaction.CommitAsync(cancellationToken);
+            await MoveEnvelopesOutAsync(connection, cancellationToken);
             Volatile.Write(ref _ready, 1);
         }
         finally
@@ -162,7 +224,8 @@ public sealed partial class HubDatabase
         SqliteTransaction transaction,
         CancellationToken cancellationToken)
     {
-        if (await HasColumnAsync(connection, transaction, "finding_sources", "finding_json", cancellationToken))
+        // finding_json leaves again with version 22: probe a column that stays.
+        if (await HasColumnAsync(connection, transaction, "finding_sources", "severity", cancellationToken))
             return;
 
         await using var alter = connection.CreateCommand();
@@ -224,6 +287,31 @@ public sealed partial class HubDatabase
         await using var alter = connection.CreateCommand();
         alter.Transaction = transaction;
         alter.CommandText = "ALTER TABLE finding_sources ADD COLUMN service TEXT;";
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Version 23: each copy's own type, endpoint and sample trace, which the shared row cannot
+    ///     stand for in a scoped read, since any source's newer push rewrites it. Added before the
+    ///     version 22 rebuild, which keeps every column but the envelope. Nothing is read here: a
+    ///     copy an older build wrote reads NULL, and the shared row meanwhile, until
+    ///     CatchUpCopyColumnsAsync fills it from its own envelope.
+    /// </summary>
+    private static async Task EnsureFindingSourceCopyColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "finding_sources", "finding_type", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE finding_sources ADD COLUMN finding_type TEXT;
+                            ALTER TABLE finding_sources ADD COLUMN endpoint TEXT;
+                            ALTER TABLE finding_sources ADD COLUMN sample_trace_id TEXT;
+                            """;
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -354,6 +442,175 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
+    ///     Version 22: each envelope moves to a table of its own, the shared one to finding_envelopes
+    ///     and each copy's to finding_source_envelopes. Stored inline, an envelope spread the rows
+    ///     every read scans over as many pages as the envelopes filled, and over their overflow
+    ///     pages on a large database. Run on the boot that still finds an inline envelope, after the boot's
+    ///     transaction: foreign_keys only changes outside one, and dropping the old tables must not
+    ///     cascade. It copies the envelopes and rebuilds both tables, so this boot lasts as long as
+    ///     rewriting them takes, and needs their size free again on the volume. A build before
+    ///     version 22 refuses to start on the result: its column probe re-adds a severity still there.
+    /// </summary>
+    private async Task MoveEnvelopesOutAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        // On the columns rather than the recorded version: the boot re-adds finding_sources.finding_json
+        // to a database from before version 6, whatever it recorded since.
+        command.CommandText = """
+                              SELECT EXISTS (SELECT 1 FROM pragma_table_info('findings') WHERE name = 'finding_json')
+                                  OR EXISTS (SELECT 1 FROM pragma_table_info('finding_sources') WHERE name = 'finding_json');
+                              """;
+        if ((long)(await command.ExecuteScalarAsync(cancellationToken))! == 0)
+            return;
+
+        // Its temp files go where SQLITE_TMPDIR says, /data in the image: in memory, they would sit
+        // beside a Hub already near its limit.
+        command.CommandText = "PRAGMA foreign_keys = OFF;";
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        try
+        {
+            await using var transaction = connection.BeginTransaction(false);
+            command.Transaction = transaction;
+            await RebuildWithoutEnvelopeAsync(
+                command, "findings",
+                "INSERT INTO finding_envelopes(signature, finding_json) SELECT signature, finding_json FROM findings;",
+                cancellationToken);
+            // A copy written before the column existed has none, and reads the shared one.
+            await RebuildWithoutEnvelopeAsync(
+                command, "finding_sources",
+                """
+                INSERT INTO finding_source_envelopes(signature, source_id, finding_json)
+                SELECT signature, source_id, finding_json FROM finding_sources WHERE finding_json IS NOT NULL;
+                """,
+                cancellationToken);
+
+            command.CommandText = """
+                                  SELECT EXISTS (SELECT 1 FROM pragma_foreign_key_check('finding_sources'))
+                                      OR EXISTS (SELECT 1 FROM pragma_foreign_key_check('finding_envelopes'))
+                                      OR EXISTS (SELECT 1 FROM pragma_foreign_key_check('finding_source_envelopes'));
+                                  """;
+            if ((long)(await command.ExecuteScalarAsync(cancellationToken))! == 1)
+                throw new InvalidOperationException("Version 22 left a dangling finding reference; nothing was written.");
+
+            command.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms) VALUES (22, $applied_at_ms);";
+            command.Parameters.AddWithValue("$applied_at_ms", timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            // The connection goes back to the pool.
+            command.Transaction = null;
+            command.Parameters.Clear();
+            command.CommandText = "PRAGMA foreign_keys = ON;";
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+    }
+
+    // Copies the envelopes out, then the rest of the table into a fresh one created from the
+    // table's own stored definition without the column, and rebuilds its indexes from theirs. A
+    // DROP COLUMN would rewrite every page of the old table first, keeping a rollback copy of each
+    // for this transaction, then leave the rows as sparse as the envelopes made them.
+    // table is one of two constants.
+    private static async Task RebuildWithoutEnvelopeAsync(
+        SqliteCommand command,
+        string table,
+        string copyEnvelopes,
+        CancellationToken cancellationToken)
+    {
+        // The command is shared with the caller and the other table's call: bind afresh.
+        command.Parameters.Clear();
+        command.CommandText = "SELECT name FROM pragma_table_info($table) ORDER BY cid;";
+        command.Parameters.AddWithValue("$table", table);
+        var columns = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                columns.Add(reader.GetString(0));
+        }
+
+        if (!columns.Remove("finding_json"))
+        {
+            command.Parameters.Clear();
+            return;
+        }
+
+        command.CommandText = """
+                              SELECT type, sql FROM sqlite_master
+                              WHERE tbl_name = $table AND sql IS NOT NULL ORDER BY type = 'index';
+                              """;
+        var definition = "";
+        var indexes = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                if (reader.GetString(0) == "table")
+                    definition = reader.GetString(1);
+                else
+                    indexes.Add(reader.GetString(1) + ";");
+        }
+
+        command.Parameters.Clear();
+
+        // A table an earlier rename created is stored with its name quoted. The column is never
+        // the first: V1 puts it second in findings, and an ALTER appended it to finding_sources.
+        var head = new[] { $"CREATE TABLE {table}", $"CREATE TABLE \"{table}\"" }
+            .FirstOrDefault(prefix => definition.StartsWith(prefix, StringComparison.Ordinal));
+        var body = head is null ? "" : EnvelopeColumn().Replace(definition[head.Length..], "", 1);
+        if (head is null || body.Length == definition.Length - head.Length)
+            throw new InvalidOperationException($"Version 22 cannot read the definition of {table}.");
+
+        var fresh = table + "_v22";
+        var list = string.Join(", ", columns);
+        // Identifiers cannot be bound: table is one of two constants, the columns and the
+        // definition are the table's own, read from sqlite_master above.
+#pragma warning disable S2077
+        command.CommandText = copyEnvelopes + $"""
+                                               CREATE TABLE {fresh}{body};
+                                               INSERT INTO {fresh}({list}) SELECT {list} FROM {table};
+                                               DROP TABLE {table};
+                                               ALTER TABLE {fresh} RENAME TO {table};
+                                               """ + string.Concat(indexes);
+#pragma warning restore S2077
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    [GeneratedRegex(@",\s*finding_json TEXT[^,)]*(?=[,)])")]
+    private static partial Regex EnvelopeColumn();
+
+    /// <summary>
+    ///     The read indexes of <see cref="ReadIndexes" />, built after the Hub answers for the
+    ///     reason the attributes catch-up below is: building them reads every row. Imports wait
+    ///     on the write gate meanwhile and the daemons push again. Reads work without them,
+    ///     only slower. True when it built.
+    /// </summary>
+    public async Task<bool> CatchUpReadIndexesAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using (var check = connection.CreateCommand())
+        {
+            check.CommandText = ReadIndexesNeeded;
+            if ((long)(await check.ExecuteScalarAsync(cancellationToken))! == 0)
+                return false;
+        }
+
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            // The build sorts every row: its temp file goes where SQLITE_TMPDIR says, /data in the
+            // image, as the version 22 rebuild's does, rather than into the Hub's own memory.
+            await using var create = connection.CreateCommand();
+            create.CommandText = ReadIndexes;
+            await create.ExecuteNonQueryAsync(cancellationToken);
+            return true;
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    /// <summary>
     ///     The version 9 derivation below, run after the Hub answers rather than in
     ///     InitializeAsync: it scans every copy, which on a large database outlasted
     ///     the startup probe and got the boot killed and started over. A read-only
@@ -382,6 +639,40 @@ public sealed partial class HubDatabase
         finally
         {
             _writeGate.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Version 23's columns for the copies an older build wrote, run after the Hub answers for the
+    ///     reason the attributes catch-up above is. A read-only check first, then a chunk at a time
+    ///     under the write gate, so an import waits one chunk rather than the whole scan. Until it
+    ///     lands such a copy is read on the shared row. True when it wrote.
+    /// </summary>
+    public async Task<bool> CatchUpCopyColumnsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using (var check = connection.CreateCommand())
+        {
+            check.CommandText = CopyColumnsNeeded;
+            if ((long)(await check.ExecuteScalarAsync(cancellationToken))! == 0)
+                return false;
+        }
+
+        while (true)
+        {
+            await _writeGate.WaitAsync(cancellationToken);
+            try
+            {
+                await using var chunk = connection.CreateCommand();
+                chunk.CommandText = CopyColumnsChunk;
+                chunk.Parameters.AddWithValue("$chunk", PurgeChunkSize);
+                if (await chunk.ExecuteNonQueryAsync(cancellationToken) == 0)
+                    return true;
+            }
+            finally
+            {
+                _writeGate.Release();
+            }
         }
     }
 

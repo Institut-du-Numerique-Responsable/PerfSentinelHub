@@ -5,6 +5,8 @@ using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
 
+using PerfSentinelHub.Tests.Storage;
+
 namespace PerfSentinelHub.Tests.Access;
 
 /// <summary>
@@ -112,9 +114,9 @@ public sealed class AccessScopeParityTests : IDisposable
             """
             WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 99999)
             INSERT INTO findings(
-              signature, finding_json, service, finding_type, severity, endpoint, template_hash,
+              signature, service, finding_type, severity, endpoint, template_hash,
               first_seen_ms, last_seen_ms, max_confidence, max_confidence_rank)
-            SELECT 's' || i, '{}', 'svc-' || (i % 40), 'slow_sql', 'warning', 'GET /', 'h', 1, 1, 'daemon_production', 4
+            SELECT 's' || i, 'svc-' || (i % 40), 'slow_sql', 'warning', 'GET /', 'h', 1, 1, 'daemon_production', 4
             FROM n;
             INSERT INTO finding_sources(
               signature, source_id, source_name, environment, producer_version, first_seen_ms, last_seen_ms, service)
@@ -159,7 +161,7 @@ public sealed class AccessScopeParityTests : IDisposable
         {
             await ExecuteAsync(
                 connection,
-                """
+                LegacySchema.InlineEnvelopes + """
                 INSERT INTO findings(
                   signature, finding_json, service, finding_type, severity, endpoint, template_hash,
                   first_seen_ms, last_seen_ms, max_confidence, max_confidence_rank)

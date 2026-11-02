@@ -6,7 +6,10 @@ rules:
   # immediately instead: every bump is reviewed by a human, lockfiles and checksums are pinned, and
   # the full pipeline runs before anything merges, so a bad release is caught by the gate rather
   # than by waiting. The cost of the delay on security patches is judged higher than the residual
-  # risk. Reviewed 2026-08-14.
+  # risk. The pipeline does run a bumped action before that review: the inventory sync refuses to
+  # mint its App token when a bump moves its own actions, but the CI run on the same pull request
+  # still hands SONAR_TOKEN and the CI gate App key to bumped ci.yml actions (DEPENDENCY-POLICY.md,
+  # Inventory sync). Reviewed 2026-11-02.
   dependabot-cooldown:
     ignore:
       - dependabot.yml
@@ -23,7 +26,8 @@ rules:
   # restriction cannot apply either, because the gate runs on pull_request events and never on main.
   # The inventory sync has the same shape: it runs on Dependabot branches, its secrets are
   # Dependabot secrets that only Dependabot-triggered runs receive, and the job also requires a
-  # Dependabot-authored pull request from this repository.
+  # Dependabot-authored pull request from this repository whose copy of the workflow matches the
+  # base branch.
   #
   # What genuinely matters is already covered: the release path sits behind the hub-release
   # environment with a required reviewer, forks never receive secrets, and CI additionally checks
