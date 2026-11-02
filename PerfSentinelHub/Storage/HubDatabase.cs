@@ -178,6 +178,20 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         return connection;
     }
 
+    /// <summary>
+    ///     Takes the write lock. A write a request makes gives up after WriteGateWait, as an import
+    ///     does, rather than hold the request open behind a long purge or an index build: the
+    ///     request then answers 503 (see ApiEndpoints.UseWriteGateBusy). A background write waits
+    ///     its turn, since some, like the download counts, are lost when they give up.
+    /// </summary>
+    private async Task EnterWriteGateAsync(bool request, CancellationToken cancellationToken)
+    {
+        if (!request)
+            await _writeGate.WaitAsync(cancellationToken);
+        else if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
+            throw new WriteGateBusyException();
+    }
+
     public async Task UpsertBatchAsync(
         SourceSnapshot source,
         ParsedBatch batch,
@@ -1160,3 +1174,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
     private sealed record LineageCandidate(string Signature, long FirstSeenMs, long OriginFirstSeenMs, int Depth);
 }
+
+/// <summary>A request's write found the write lock held past WriteGateWait; nothing was written.</summary>
+public sealed class WriteGateBusyException() : Exception("The write lock is held by a long write.");

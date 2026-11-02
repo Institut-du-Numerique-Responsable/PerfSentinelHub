@@ -78,7 +78,7 @@ public sealed partial class RecapGenerator(
                 subscription.Language),
             JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot));
 
-        if (await database.InsertRecapReportAsync(report, DeliveriesOf(subscription, snapshot), cancellationToken))
+        if (await database.InsertRecapReportAsync(report, DeliveriesOf(subscription, snapshot), false, cancellationToken))
             LogGenerated(logger, subscription.Name, cadence, from, report.Summary.Complete,
                 report.Summary.NothingMoved);
     }

@@ -29,6 +29,27 @@ public static partial class ApiEndpoints
     // The engine's default max_signatures_per_day; the daemon caps again at its own value.
     private const int MaxWatchSignatures = 10_000;
 
+    /// <summary>
+    ///     A request whose write found the lock held past WriteGateWait answers what the bounded
+    ///     writes answer: 503 with Retry-After: 1 and no body. Nothing was written.
+    /// </summary>
+    public static void UseWriteGateBusy(this WebApplication app)
+    {
+        app.Use(async (context, next) =>
+        {
+            try
+            {
+                await next(context);
+            }
+            catch (WriteGateBusyException) when (!context.Response.HasStarted)
+            {
+                context.Response.Clear();
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                context.Response.Headers.RetryAfter = "1";
+            }
+        });
+    }
+
     public static void MapHubApi(this WebApplication app)
     {
         var version = HubVersion.Current;

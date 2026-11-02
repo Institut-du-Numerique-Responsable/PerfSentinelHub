@@ -35,7 +35,7 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
         var snapshot = "{ \"z\" : 1,\n  \"a\": \"é\" }\n";
         var report = Report("r1", "weekly", snapshot, views: [RecapViewNames.Pilotage, RecapViewNames.Tech]);
 
-        Assert.True(await _database.InsertRecapReportAsync(report, [], cancellationToken));
+        Assert.True(await _database.InsertRecapReportAsync(report, [], false, cancellationToken));
 
         var read = await _database.GetRecapReportAsync("r1", cancellationToken);
         Assert.NotNull(read);
@@ -51,7 +51,7 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         var french = Report("fr1", "weekly-fr");
         french = french with { Summary = french.Summary with { Language = "fr" } };
-        Assert.True(await _database.InsertRecapReportAsync(french, [], cancellationToken));
+        Assert.True(await _database.InsertRecapReportAsync(french, [], false, cancellationToken));
         await using (var connection = await _database.OpenConnectionAsync(cancellationToken))
         await using (var command = connection.CreateCommand())
         {
@@ -77,10 +77,10 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         (string, string)[] deliveries = [(RecapChannels.Webhook, "ops")];
 
-        Assert.True(await _database.InsertRecapReportAsync(Report("r1", "weekly"), deliveries, cancellationToken));
+        Assert.True(await _database.InsertRecapReportAsync(Report("r1", "weekly"), deliveries, false, cancellationToken));
         Assert.True(await _database.RecapReportExistsAsync("weekly", "week", "2026-10-19", cancellationToken));
         Assert.False(await _database.RecapReportExistsAsync("weekly", "week", "2026-10-26", cancellationToken));
-        Assert.False(await _database.InsertRecapReportAsync(Report("r2", "weekly"), deliveries, cancellationToken));
+        Assert.False(await _database.InsertRecapReportAsync(Report("r2", "weekly"), deliveries, false, cancellationToken));
 
         var reports = await _database.ListRecapReportsAsync(null, 10, cancellationToken);
         Assert.Equal(["r1"], reports.Select(report => report.Id));
@@ -92,8 +92,8 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
-        Assert.True(await _database.InsertRecapReportAsync(Report("r1", null), [], cancellationToken));
-        Assert.True(await _database.InsertRecapReportAsync(Report("r2", null), [], cancellationToken));
+        Assert.True(await _database.InsertRecapReportAsync(Report("r1", null), [], false, cancellationToken));
+        Assert.True(await _database.InsertRecapReportAsync(Report("r2", null), [], false, cancellationToken));
 
         Assert.Equal(2, (await _database.ListRecapReportsAsync(null, 10, cancellationToken)).Count);
     }
@@ -104,7 +104,7 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
         var cancellationToken = TestContext.Current.CancellationToken;
         (string, string)[] deliveries = [(RecapChannels.Webhook, "ops"), (RecapChannels.Email, "pm@example.test")];
 
-        await _database.InsertRecapReportAsync(Report("r1", "weekly"), deliveries, cancellationToken);
+        await _database.InsertRecapReportAsync(Report("r1", "weekly"), deliveries, false, cancellationToken);
 
         var stored = await _database.ListRecapDeliveriesAsync(["r1"], cancellationToken);
         Assert.Equal([("webhook", "ops"), ("email", "pm@example.test")], stored.Select(d => (d.Channel, d.Target)));
@@ -126,11 +126,11 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await _database.InsertRecapReportAsync(Report("old", null, createdBy: "ana", generatedAtMs: NowMs - 10), [],
-            cancellationToken);
+            false, cancellationToken);
         await _database.InsertRecapReportAsync(Report("new", null, createdBy: "bob", generatedAtMs: NowMs), [],
-            cancellationToken);
+            false, cancellationToken);
         await _database.InsertRecapReportAsync(Report("mid", "weekly", generatedAtMs: NowMs - 5), [],
-            cancellationToken);
+            false, cancellationToken);
 
         var all = await _database.ListRecapReportsAsync(null, 10, cancellationToken);
         var mine = await _database.ListRecapReportsAsync("sub-ana", 10, cancellationToken);
@@ -151,7 +151,7 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
             (RecapChannels.Webhook, "a"), (RecapChannels.Webhook, "b"),
             (RecapChannels.Webhook, "c")
         ];
-        await _database.InsertRecapReportAsync(Report("r1", "weekly"), deliveries, cancellationToken);
+        await _database.InsertRecapReportAsync(Report("r1", "weekly"), deliveries, false, cancellationToken);
         var ids = (await _database.ListRecapDeliveriesAsync(["r1"], cancellationToken)).Select(d => d.Id).ToArray();
 
         await _database.RecordRecapDeliveryAttemptAsync(ids[0], 200, DeliveryStates.Delivered, NowMs, null,
@@ -172,8 +172,8 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         (string, string)[] deliveries = [(RecapChannels.Webhook, "ops")];
-        await _database.InsertRecapReportAsync(Report("old", "a", generatedAtMs: 100), deliveries, cancellationToken);
-        await _database.InsertRecapReportAsync(Report("new", "b", generatedAtMs: 900), deliveries, cancellationToken);
+        await _database.InsertRecapReportAsync(Report("old", "a", generatedAtMs: 100), deliveries, false, cancellationToken);
+        await _database.InsertRecapReportAsync(Report("new", "b", generatedAtMs: 900), deliveries, false, cancellationToken);
 
         await _database.PurgeRecapReportsAsync(500, cancellationToken);
 
