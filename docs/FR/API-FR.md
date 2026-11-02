@@ -1132,7 +1132,10 @@ La forme de la requête suit le kind de la source : `{}` pour un daemon, qui ne 
 paramètre, `{service, lookback | from_ms + to_ms, max_traces}` pour un backend de traces,
 ou `{trace_id}`. Les exclusions propres au moteur sont appliquées avant toute mise en
 file, donc une combinaison impossible est refusée plutôt que découverte trois minutes plus
-tard sous la forme d'un run échoué. Un run lance du travail au nom de l'appelant, donc
+tard sous la forme d'un run échoué. Un `service` fait 1 à 256 caractères sans espace, sans
+caractère de contrôle et sans `"`, `=` ni `\` : un `service.name` n'en a jamais besoin, et la
+recherche par tags d'un backend de traces les lirait comme de la syntaxe, donc un tel nom vaut
+un `400`. Un run lance du travail au nom de l'appelant, donc
 avant la lecture du corps une soumission est tenue à la règle d'un acquittement : un
 `Sec-Fetch-Site` autre que `same-origin` vaut un `403` et un type de contenu qui n'est pas
 JSON un `415`.

@@ -59,6 +59,35 @@ public sealed class AnalysisRequestTests
         Assert.Equal(stored, Parse(stored, SourceKinds.Tempo, out _)!.ToJson());
     }
 
+    [Theory]
+    // A service.name never needs them, and a trace backend's tag search reads them as syntax:
+    // Tempo parses `service.name=<value>` as logfmt, where a space or a newline starts a second pair.
+    [InlineData("orders-x service.name=payments")]
+    [InlineData("orders-x\nservice.name=payments")]
+    [InlineData("orders\tx")]
+    [InlineData("orders\u00a0x")]
+    [InlineData("orders=x")]
+    [InlineData("orders\"x")]
+    [InlineData("orders\\x")]
+    [InlineData("orders\u0001")]
+    public void A_service_name_carrying_tag_syntax_is_refused(string service)
+    {
+        Assert.Null(Parse($$"""{"service":{{JsonSerializer.Serialize(service)}},"lookback":"1h"}""", SourceKinds.Tempo,
+            out var error));
+        Assert.Equal("The service name must be 1 to 256 characters, with no space, control character, '\"', '=' or '\\'.",
+            error);
+    }
+
+    [Theory]
+    [InlineData("orders")]
+    [InlineData("checkout-api.v2/eu_west:1")]
+    [InlineData("caf\u00e9")]
+    public void An_ordinary_service_name_is_accepted(string service)
+    {
+        Assert.NotNull(Parse($$"""{"service":{{JsonSerializer.Serialize(service)}},"lookback":"1h"}""", SourceKinds.Tempo,
+            out _));
+    }
+
     [Fact]
     public void An_absolute_window_must_be_ordered_and_already_past()
     {
