@@ -364,7 +364,9 @@ Who a finding is attributed to:
   service grant for `acks.write` and `analyses.run`.
 - Starting a run at a trace backend needs every copy of the service in the backend's
   environment to agree. Name a trace backend's environment like the daemons that report
-  its services.
+  its services. An attribute pattern covers such a run only when it also names the service:
+  a team reports copies of any service name it likes, so copies alone never make a service
+  the team's. A trace run needs a service or a source pattern.
 - A copy recorded before schema version 9 matches no attribute pattern and no service part
   until its source reports it again.
 - Adding a grouping attribute changes the identity of spans that carried none of the

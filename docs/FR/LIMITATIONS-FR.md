@@ -396,7 +396,10 @@ Avec `Hub:Access` activé, un appelant ne lit et n'écrit que ce qu'une autorisa
   propriétaire une autorisation de source ou de service pour `acks.write` et `analyses.run`.
 - Lancer un run sur un backend de traces demande que toutes les copies du service dans
   l'environnement du backend s'accordent. Nommez l'environnement d'un backend de traces
-  comme les daemons qui remontent ses services.
+  comme les daemons qui remontent ses services. Un motif d'attribut ne couvre un tel run que
+  s'il nomme aussi le service : une équipe remonte des copies sous le nom de service qu'elle
+  veut, donc des copies seules ne font jamais d'un service celui de l'équipe. Un run de traces
+  demande un motif de service ou de source.
 - Une copie enregistrée avant la version 9 du schéma ne correspond à aucun motif
   d'attribut ni à aucune partie de service tant que sa source ne la remonte pas à nouveau.
 - Ajouter un attribut de regroupement change l'identité des spans qui ne portaient aucun
