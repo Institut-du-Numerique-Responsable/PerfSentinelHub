@@ -176,6 +176,8 @@ because the fleet-wide row keeps the newest envelope from any source and nothing
 |--------------------------------|----------------------------------------------------------------|--------------------------------------------|
 | `findings`                     | signature, with the newest envelope from any source            | retention, on `last_seen_ms`               |
 | `finding_sources`              | signature and source, with that source's envelope and service  | retention, on `last_seen_ms`               |
+| `finding_envelopes`            | signature, the `findings` row's envelope                       | with its `findings` row                    |
+| `finding_source_envelopes`     | signature and source, the `finding_sources` row's envelope     | with its `finding_sources` row             |
 | `finding_observations`         | signature, source and day                                      | retention, by whole day                    |
 | `finding_groupings`            | signature, source and effective grouping value                 | retention, on `last_seen_ms`               |
 | `finding_attributes`           | signature, source, grouping identity and captured pair         | retention, on `last_seen_ms`               |

@@ -191,6 +191,8 @@ soit la source, et rien d'autre.
 |--------------------------------|----------------------------------------------------------------------|--------------------------------------------|
 | `findings`                     | signature, avec l'enveloppe la plus récente de toutes les sources    | rétention, sur `last_seen_ms`              |
 | `finding_sources`              | signature et source, avec l'enveloppe et le service de cette source  | rétention, sur `last_seen_ms`              |
+| `finding_envelopes`            | signature, l'enveloppe de la ligne `findings`                        | avec sa ligne `findings`                   |
+| `finding_source_envelopes`     | signature et source, l'enveloppe de la ligne `finding_sources`       | avec sa ligne `finding_sources`            |
 | `finding_observations`         | signature, source et jour                                            | rétention, par jour entier                 |
 | `finding_groupings`            | signature, source et valeur de regroupement effective                | rétention, sur `last_seen_ms`              |
 | `finding_attributes`           | signature, source, identité de regroupement et paire captée          | rétention, sur `last_seen_ms`              |

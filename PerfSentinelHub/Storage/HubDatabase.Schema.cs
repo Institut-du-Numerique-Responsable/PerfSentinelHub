@@ -525,20 +525,11 @@ public sealed partial class HubDatabase
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
-            // The build sorts every row, and a temp file would land in /tmp, which the chart caps
-            // at 32Mi: past it the pod is evicted. Reset after, the connection goes back to the pool.
+            // The build sorts every row: its temp file goes where SQLITE_TMPDIR says, /data in the
+            // image, as the version 22 rebuild's does, rather than into the Hub's own memory.
             await using var create = connection.CreateCommand();
-            create.CommandText = "PRAGMA temp_store = MEMORY;" + ReadIndexes;
-            try
-            {
-                await create.ExecuteNonQueryAsync(cancellationToken);
-            }
-            finally
-            {
-                create.CommandText = "PRAGMA temp_store = DEFAULT;";
-                await create.ExecuteNonQueryAsync(CancellationToken.None);
-            }
-
+            create.CommandText = ReadIndexes;
+            await create.ExecuteNonQueryAsync(cancellationToken);
             return true;
         }
         finally
