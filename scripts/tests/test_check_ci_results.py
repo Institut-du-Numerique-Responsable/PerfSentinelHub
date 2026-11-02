@@ -469,7 +469,15 @@ class CiWorkflowTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertIn(internal_cache, job_body(name))
         self.assertNotIn("cache: true", job_body("dependency-review"))
-        self.assertIn("cache: true", job_body("sonar"))
+
+    def test_secret_holding_jobs_restore_no_actions_cache(self):
+        # A dispatched fork run holds the main cache scope, so a job with a secret restores nothing.
+        sonar_main = (ROOT / ".github" / "workflows" / "sonar-main.yml").read_text(encoding="utf-8")
+        for name, body in (("sonar", job_body("sonar")), ("sonar-main", sonar_main)):
+            with self.subTest(job=name):
+                self.assertIn("cache: false", body)
+                self.assertNotIn("cache: true", body)
+                self.assertIn("--locked-mode", body)
 
     def test_native_smoke_supplies_the_minimum_valid_source_configuration(self):
         native = job_body("native-aot")
