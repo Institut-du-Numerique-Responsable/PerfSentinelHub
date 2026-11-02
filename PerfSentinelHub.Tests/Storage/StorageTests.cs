@@ -498,6 +498,41 @@ public sealed class StorageTests
         Assert.Equal("frozen_finding_json TEXT | -", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
+    [Fact]
+    public async Task The_read_indexes_land_after_the_boot_once_and_serve_the_newest_first_order()
+    {
+        using var fixture = TestDatabase.Create();
+        var database = fixture.Database;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await database.InitializeAsync(cancellationToken);
+
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = connection.CreateCommand();
+        read.CommandText = """
+                           SELECT COUNT(*) FROM sqlite_master WHERE type = 'index'
+                             AND name IN ('ix_findings_last_seen', 'ix_finding_sources_window');
+                           """;
+        // The boot leaves them out: on a large database building them outlasts the startup probe.
+        Assert.Equal(0L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+
+        Assert.True(await database.CatchUpReadIndexesAsync(cancellationToken));
+        Assert.Equal(2L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+        Assert.False(await database.CatchUpReadIndexesAsync(cancellationToken));
+
+        // A newest-first page walks the index instead of sorting every row and its envelope.
+        await using var plan = connection.CreateCommand();
+        plan.CommandText = "EXPLAIN QUERY PLAN SELECT signature, service, endpoint FROM findings "
+                           + "ORDER BY last_seen_ms DESC, signature LIMIT 1;";
+        var details = new List<string>();
+        await using (var reader = await plan.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                details.Add(reader.GetString(3));
+        }
+
+        Assert.Equal(["SCAN findings USING COVERING INDEX ix_findings_last_seen"], details);
+    }
+
     private static async Task<List<string>> SourceColumnsAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)

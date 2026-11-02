@@ -4,6 +4,23 @@ namespace PerfSentinelHub.Storage;
 
 public sealed partial class HubDatabase
 {
+    // The columns a windowed or newest-first findings read filters and orders on, kept out of the
+    // rows: finding_json sits before them, so reading them from the table walks every envelope's
+    // overflow pages, which on a database larger than the page cache is the whole file per read.
+    private const string ReadIndexes =
+        """
+        CREATE INDEX IF NOT EXISTS ix_findings_last_seen
+          ON findings(last_seen_ms DESC, signature, service, endpoint);
+        CREATE INDEX IF NOT EXISTS ix_finding_sources_window
+          ON finding_sources(signature, source_id, first_seen_ms, first_observed_day, last_seen_ms);
+        """;
+
+    private const string ReadIndexesNeeded =
+        """
+        SELECT 2 > COUNT(*) FROM sqlite_master
+        WHERE type = 'index' AND name IN ('ix_findings_last_seen', 'ix_finding_sources_window');
+        """;
+
     // Whether AttributesBackfill has anything to write, each arm its read-only mirror: the
     // backfill takes the write lock for as long as it scans, so it runs only when this says so.
     private const string AttributesBackfillNeeded =
@@ -351,6 +368,36 @@ public sealed partial class HubDatabase
         alter.Transaction = transaction;
         alter.CommandText = "ALTER TABLE recap_reports ADD COLUMN language TEXT NOT NULL DEFAULT 'en';";
         await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     The read indexes of <see cref="ReadIndexes" />, built after the Hub answers for the
+    ///     reason the attributes catch-up below is: building them reads every row. Imports wait
+    ///     on the write gate meanwhile and the daemons push again. Reads work without them,
+    ///     only slower. True when it built.
+    /// </summary>
+    public async Task<bool> CatchUpReadIndexesAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using (var check = connection.CreateCommand())
+        {
+            check.CommandText = ReadIndexesNeeded;
+            if ((long)(await check.ExecuteScalarAsync(cancellationToken))! == 0)
+                return false;
+        }
+
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var create = connection.CreateCommand();
+            create.CommandText = ReadIndexes;
+            await create.ExecuteNonQueryAsync(cancellationToken);
+            return true;
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     /// <summary>
