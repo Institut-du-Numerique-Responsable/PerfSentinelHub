@@ -39,6 +39,9 @@ public static partial class ApiEndpoints
             return Problem(StatusCodes.Status503ServiceUnavailable,
                 ProblemCodes.AnalysisEngineMissing,
                 "No analysis engine is configured on this Hub.");
+        // A run starts work in the caller's name, so only the Hub's own page may ask for one.
+        if (RefuseForeignRequest(request) is { } refusal)
+            return refusal;
 
         var payload = await ReadBodyAsync(request, cancellationToken);
         if (payload is null)
