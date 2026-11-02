@@ -518,7 +518,10 @@ public sealed partial class HubDatabase
         string copyEnvelopes,
         CancellationToken cancellationToken)
     {
-        command.CommandText = $"SELECT name FROM pragma_table_info('{table}') ORDER BY cid;";
+        // The command is shared with the caller and the other table's call: bind afresh.
+        command.Parameters.Clear();
+        command.CommandText = "SELECT name FROM pragma_table_info($table) ORDER BY cid;";
+        command.Parameters.AddWithValue("$table", table);
         var columns = new List<string>();
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
@@ -527,12 +530,15 @@ public sealed partial class HubDatabase
         }
 
         if (!columns.Remove("finding_json"))
+        {
+            command.Parameters.Clear();
             return;
+        }
 
-        command.CommandText = $"""
-                               SELECT type, sql FROM sqlite_master
-                               WHERE tbl_name = '{table}' AND sql IS NOT NULL ORDER BY type = 'index';
-                               """;
+        command.CommandText = """
+                              SELECT type, sql FROM sqlite_master
+                              WHERE tbl_name = $table AND sql IS NOT NULL ORDER BY type = 'index';
+                              """;
         var definition = "";
         var indexes = new List<string>();
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -544,6 +550,8 @@ public sealed partial class HubDatabase
                     indexes.Add(reader.GetString(1) + ";");
         }
 
+        command.Parameters.Clear();
+
         // A table an earlier rename created is stored with its name quoted. The column is never
         // the first: V1 puts it second in findings, and an ALTER appended it to finding_sources.
         var head = new[] { $"CREATE TABLE {table}", $"CREATE TABLE \"{table}\"" }
@@ -554,12 +562,16 @@ public sealed partial class HubDatabase
 
         var fresh = table + "_v22";
         var list = string.Join(", ", columns);
+        // Identifiers cannot be bound: table is one of two constants, the columns and the
+        // definition are the table's own, read from sqlite_master above.
+#pragma warning disable S2077
         command.CommandText = copyEnvelopes + $"""
                                                CREATE TABLE {fresh}{body};
                                                INSERT INTO {fresh}({list}) SELECT {list} FROM {table};
                                                DROP TABLE {table};
                                                ALTER TABLE {fresh} RENAME TO {table};
                                                """ + string.Concat(indexes);
+#pragma warning restore S2077
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
