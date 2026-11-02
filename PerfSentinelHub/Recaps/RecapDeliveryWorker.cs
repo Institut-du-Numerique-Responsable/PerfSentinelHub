@@ -12,8 +12,8 @@ namespace PerfSentinelHub.Recaps;
 /// <summary>
 ///     Sends the webhook deliveries of the recap_deliveries rows, so a restart resumes what was due.
 ///     A 2xx settles one; anything else, a redirect included, is retried with the disclosures' backoff
-///     and given up after the same number of attempts. A webhook no longer configured or a report
-///     purged meanwhile fails without a request. An e-mail row goes through the relay: a 250 settles it,
+///     and given up after the same number of attempts. A webhook no longer configured, a target its
+///     subscription no longer lists or a report purged meanwhile fails without a request. An e-mail row goes through the relay: a 250 settles it,
 ///     a 5xx fails it at once, and a 4xx or silence is retried the same way. After the first silence of a
 ///     pass the other e-mails wait for the next one, so a dead relay costs one timeout, not one per address.
 /// </summary>
@@ -45,7 +45,7 @@ public sealed partial class RecapDeliveryWorker(
         var settings = options.Value;
         var webhook = settings.Recaps.Webhooks.FirstOrDefault(candidate => candidate.Name == delivery.Target);
         var report = await database.GetRecapReportAsync(delivery.ReportId, cancellationToken);
-        if (webhook is null || report is null)
+        if (webhook is null || report is null || !StillListed(settings, report.Summary, delivery))
         {
             await database.RecordRecapDeliveryAttemptAsync(
                 delivery.Id, null, DeliveryStates.Failed, Now(), null, cancellationToken);
@@ -76,7 +76,7 @@ public sealed partial class RecapDeliveryWorker(
     {
         var settings = options.Value;
         var report = await database.GetRecapReportAsync(delivery.ReportId, cancellationToken);
-        if (!settings.Recaps.Smtp.Enabled || report is null)
+        if (!settings.Recaps.Smtp.Enabled || report is null || !StillListed(settings, report.Summary, delivery))
         {
             await database.RecordRecapDeliveryAttemptAsync(
                 delivery.Id, null, DeliveryStates.Failed, Now(), null, cancellationToken);
@@ -126,6 +126,19 @@ public sealed partial class RecapDeliveryWorker(
         await database.RecordRecapDeliveryAttemptAsync(
             delivery.Id, status, DeliveryStates.Pending, Now(),
             Now() + (long)DeliveryWorker.Backoff(attempts).TotalMilliseconds, cancellationToken);
+    }
+
+    // Recipients are judged against the configuration of now, with the comparers the report's deliveries were
+    // listed with: a target taken off its subscription, or a subscription removed, gets nothing more.
+    private static bool StillListed(HubOptions settings, RecapReportSummary report, RecapDeliveryRecord delivery)
+    {
+        if (settings.Recaps.Subscriptions.FirstOrDefault(candidate => candidate.Name == report.Subscription) is not
+            { } subscription)
+            return false;
+        return delivery.Channel == RecapChannels.Webhook
+            ? subscription.Webhooks.Contains(delivery.Target, StringComparer.Ordinal)
+            : subscription.Emails.Concat(subscription.Recipients.Select(recipient => recipient.Address!))
+                .Contains(delivery.Target, StringComparer.OrdinalIgnoreCase);
     }
 
     // The address's own language from the configuration of now, else the one its report was frozen in.

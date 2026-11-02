@@ -762,7 +762,10 @@ Un webhook de récap dont `IncludeShareLink` est activé est refusé au démarra
 
 Les livraisons tournent toutes les 15 secondes depuis la table `recap_deliveries`, si bien qu'un
 redémarrage les reprend. Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
-été purgé entre-temps, échoue sans requête.
+été purgé entre-temps, échoue sans requête. De même pour une livraison, webhook ou e-mail, dont la
+souscription du rapport ne liste plus la cible dans la configuration en vigueur à l'envoi : retirer
+une adresse ou un webhook d'une souscription arrête dès le redémarrage suivant les livraisons
+encore en file pour elle.
 
 ## Rapports de récap
 

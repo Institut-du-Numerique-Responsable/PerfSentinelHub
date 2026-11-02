@@ -272,6 +272,18 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_webhook_its_subscription_no_longer_lists_fails_without_a_request()
+    {
+        // Still declared, for another subscription, but dropped from this one after the report froze.
+        var hub = await ReportedAsync(subscriptionWebhooks: []);
+
+        await RunAsync(hub);
+
+        Assert.Empty(_received);
+        Assert.Equal(DeliveryStates.Failed, Assert.Single(await DeliveriesAsync(hub)).State);
+    }
+
+    [Fact]
     public async Task A_purged_report_fails_its_delivery_without_a_request()
     {
         var hub = await ReportedAsync();
@@ -340,9 +352,10 @@ public sealed class RecapWebhookTests : IAsyncLifetime
         string target = "ops-chat",
         string? databasePath = null,
         RecapSnapshot? snapshot = null,
-        string language = "en")
+        string language = "en",
+        string[]? subscriptionWebhooks = null)
     {
-        var hub = Hub(publicUrl, disclosureUrl, databasePath);
+        var hub = Hub(publicUrl, disclosureUrl, databasePath, subscriptionWebhooks);
         _reportId = Guid.NewGuid().ToString("N");
         var report = new RecapReportRecord(
             new RecapReportSummary(
@@ -353,7 +366,8 @@ public sealed class RecapWebhookTests : IAsyncLifetime
         return hub;
     }
 
-    private WebApplicationFactory<Program> Hub(string? publicUrl, string? disclosureUrl, string? databasePath = null)
+    private WebApplicationFactory<Program> Hub(string? publicUrl, string? disclosureUrl, string? databasePath = null,
+        string[]? subscriptionWebhooks = null)
     {
         var hub = new HubApplicationFactory().WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.PostConfigure<HubOptions>(options =>
@@ -371,6 +385,16 @@ public sealed class RecapWebhookTests : IAsyncLifetime
                     [
                         new WebhookOptions
                             { Name = "ops-chat", Url = new Uri(_receiver.BaseUrl, "hook"), Secret = Secret }
+                    ],
+                    // The reports' subscription, which a delivery is checked against when it is sent.
+                    Subscriptions =
+                    [
+                        new RecapSubscriptionOptions
+                        {
+                            Name = "weekly-shop", Cadences = ["week"],
+                            Views = [RecapViewNames.Pilotage, RecapViewNames.Tech],
+                            Webhooks = subscriptionWebhooks ?? ["ops-chat"]
+                        }
                     ]
                 };
             })));

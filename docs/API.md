@@ -708,7 +708,9 @@ are validated but unused here.
 
 Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart resumes them. A
 delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a
-request.
+request. So does one, webhook or e-mail, whose target the report's subscription no longer lists in
+the configuration in force when it is sent: taking an address or a webhook off a subscription
+stops the deliveries still queued for it at the next restart.
 
 ## Recap reports
 
