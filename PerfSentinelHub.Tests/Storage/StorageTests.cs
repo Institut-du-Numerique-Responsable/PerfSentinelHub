@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -40,8 +41,8 @@ public sealed class StorageTests
                 "ack_reads", "analysis_runs", "card_keys", "correlation_episodes", "detection_counts", "detection_days",
                 "detection_ledgers", "disclosure_deliveries", "disclosure_share_links",
                 "disclosures", "endpoint_heartbeats", "endpoint_labels", "finding_action_events",
-                "finding_actions", "finding_attributes", "finding_groupings", "finding_lineage", "finding_observations",
-                "finding_sources", "findings", "incident_attributes", "incident_reads", "incidents",
+                "finding_actions", "finding_attributes", "finding_envelopes", "finding_groupings", "finding_lineage",
+                "finding_observations", "finding_source_envelopes", "finding_sources", "findings", "incident_attributes", "incident_reads", "incidents",
                 "recap_deliveries", "recap_reports", "schema_migrations", "service_labels", "source_acks",
                 "source_finding_imports", "source_imports", "source_state", "terminal_tokens"
             ],
@@ -60,7 +61,7 @@ public sealed class StorageTests
         await using var command = connection.CreateCommand();
         command.CommandText =
             "SELECT group_concat(version, ',') FROM (SELECT version FROM schema_migrations ORDER BY version);";
-        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21",
+        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22",
             (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
@@ -136,10 +137,10 @@ public sealed class StorageTests
         {
             seed.CommandText = """
                                INSERT INTO findings(
-                                 signature, finding_json, service, finding_type, severity, endpoint,
+                                 signature, service, finding_type, severity, endpoint,
                                  template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
                                  max_confidence, max_confidence_rank)
-                               VALUES ('successor', '{}', 'order-service', 'n_plus_one_sql', 'warning',
+                               VALUES ('successor', 'order-service', 'n_plus_one_sql', 'warning',
                                  'GET /orders', 'hash-b', 'trace', 500, 900, 'daemon_staging', 2);
                                INSERT INTO finding_lineage(
                                  successor_signature, predecessor_signature, predecessor_first_seen_ms,
@@ -193,16 +194,15 @@ public sealed class StorageTests
             await using var seed = connection.CreateCommand();
             seed.CommandText = """
                                INSERT INTO findings(
-                                 signature, finding_json, service, finding_type, severity, endpoint,
+                                 signature, service, finding_type, severity, endpoint,
                                  template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
                                  max_confidence, max_confidence_rank)
-                               VALUES ('signature', '{}', 'checkout', 'slow_sql', 'warning',
+                               VALUES ('signature', 'checkout', 'slow_sql', 'warning',
                                  'POST /checkout', 'template-hash', 'trace', 500, 900, 'daemon_production', 4);
                                INSERT INTO finding_sources(
                                  signature, source_id, source_name, environment, producer_version,
                                  first_seen_ms, last_seen_ms)
                                VALUES ('signature', 'production-a', 'Production A', 'production', '0.11.2', 500, 900);
-                               ALTER TABLE finding_sources DROP COLUMN finding_json;
                                ALTER TABLE finding_sources DROP COLUMN severity;
                                ALTER TABLE finding_sources DROP COLUMN first_observed_day;
                                ALTER TABLE finding_sources DROP COLUMN service;
@@ -223,7 +223,7 @@ public sealed class StorageTests
         var upgradedShape = await SourceColumnsAsync(reopened, cancellationToken);
         Assert.Equal(freshShape, upgradedShape);
         Assert.Equal(
-            ["finding_json TEXT 0", "severity TEXT 0", "first_observed_day INTEGER 0", "service TEXT 0"],
+            ["severity TEXT 0", "first_observed_day INTEGER 0", "service TEXT 0"],
             upgradedShape.Skip(7));
 
         await using var read = reopened.CreateCommand();
@@ -237,8 +237,10 @@ public sealed class StorageTests
 
         // No backfill: the old row reads NULL until its source is observed again.
         read.CommandText = """
-                           SELECT COUNT(*) FROM finding_sources
-                           WHERE finding_json IS NULL AND severity IS NULL AND first_observed_day IS NULL;
+                           SELECT COUNT(*) FROM finding_sources AS fs
+                           WHERE severity IS NULL AND first_observed_day IS NULL
+                             AND NOT EXISTS (SELECT 1 FROM finding_source_envelopes AS e
+                                             WHERE e.signature = fs.signature AND e.source_id = fs.source_id);
                            """;
         Assert.Equal(1L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
 
@@ -260,6 +262,70 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public async Task Initialize_moves_the_inline_envelopes_out_once_and_reads_them_back()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        {
+            await using var seed = connection.CreateCommand();
+            // An older build's rows: a copy with its own envelope, and one written before copies had any.
+            seed.CommandText = LegacySchema.InlineEnvelopes + """
+                               INSERT INTO findings(
+                                 signature, finding_json, service, finding_type, severity, endpoint,
+                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                 max_confidence, max_confidence_rank)
+                               VALUES ('signature', '{"shared":1}', 'checkout', 'slow_sql', 'warning',
+                                 'POST /checkout', 'template-hash', 'trace', 500, 900, 'daemon_production', 4);
+                               INSERT INTO finding_sources(
+                                 signature, source_id, source_name, environment, producer_version,
+                                 first_seen_ms, last_seen_ms, finding_json)
+                               VALUES ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 900, '{"own":1}'),
+                                      ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 800, NULL);
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        await restarted.Database.InitializeAsync(cancellationToken);
+        // A third boot finds the columns gone and moves nothing again.
+        using var restartedAgain = TestDatabase.Create(fixture.DatabasePath);
+        await restartedAgain.Database.InitializeAsync(cancellationToken);
+
+        await using var reopened = await restartedAgain.Database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT (SELECT COUNT(*) FROM pragma_table_info('findings') WHERE name = 'finding_json')
+                                + (SELECT COUNT(*) FROM pragma_table_info('finding_sources') WHERE name = 'finding_json');
+                           """;
+        Assert.Equal(0L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+        read.CommandText = """
+                           SELECT (SELECT group_concat(finding_json) FROM finding_envelopes) || ' '
+                                  || (SELECT group_concat(source_id || '=' || finding_json) FROM finding_source_envelopes);
+                           """;
+        Assert.Equal("""{"shared":1} own={"own":1}""", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+
+        // The fleet reads the shared envelope, a source its own, and a source without one the shared one.
+        var fleet = await restartedAgain.Database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 10), cancellationToken);
+        Assert.Equal("""{"shared":1}""", Assert.Single(fleet).EnvelopeJson);
+        var own = await restartedAgain.Database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 10, SourceIds: ["own"]), cancellationToken);
+        Assert.Equal("""{"own":1}""", Assert.Single(own).EnvelopeJson);
+        var legacy = await restartedAgain.Database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 10, SourceIds: ["legacy"]), cancellationToken);
+        Assert.Equal("""{"shared":1}""", Assert.Single(legacy).EnvelopeJson);
+
+        // A purged finding takes its envelopes along.
+        read.CommandText = """
+                           DELETE FROM findings;
+                           SELECT (SELECT COUNT(*) FROM finding_envelopes) + (SELECT COUNT(*) FROM finding_source_envelopes);
+                           """;
+        Assert.Equal(0L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
     public async Task Initialize_backfills_groupings_from_each_source_copy_once()
     {
         using var fixture = TestDatabase.Create();
@@ -271,7 +337,7 @@ public sealed class StorageTests
         await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
         {
             await using var seed = connection.CreateCommand();
-            seed.CommandText = """
+            seed.CommandText = LegacySchema.InlineEnvelopes + """
                                INSERT INTO findings(
                                  signature, finding_json, service, finding_type, severity, endpoint,
                                  template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
