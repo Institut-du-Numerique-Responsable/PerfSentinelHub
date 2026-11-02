@@ -74,16 +74,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
     public bool IsReady => Volatile.Read(ref _ready) == 1;
 
-    // A scoped read describes its scope: each finding as the freshest source in
-    // scope reported it, first and last seen over those sources alone. The
-    // partition and the pick share one sort. A source row written before the
-    // per-source columns has no copy of its own yet and serves the shared one.
-    // max_confidence stays fleet-wide, a source row carries no confidence of its own.
-    // Every row of the scope is read and sorted before any filter or
-    // LIMIT, so a read costs the scope and not the page. service and
-    // finding_type are fleet-wide and could move into `scope` if it ever hurts.
-    // severity cannot, it judges the scoped envelope, nor can the ack filter,
-    // which judges every source of the scope.
     // The envelopes live apart from the rows a read filters and sorts on (version 22), and are
     // looked up for the rows that need one only.
     private static string SharedEnvelope(string signature)
@@ -97,6 +87,16 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                + $"WHERE e.signature = {signature} AND e.source_id = {sourceId})";
     }
 
+    // A scoped read describes its scope: each finding as the freshest source in
+    // scope reported it, first and last seen over those sources alone. The
+    // partition and the pick share one sort. A source row written before the
+    // per-source columns has no copy of its own yet and serves the shared one.
+    // max_confidence stays fleet-wide, a source row carries no confidence of its own.
+    // Every row of the scope is read and sorted before any filter or
+    // LIMIT, so a read costs the scope and not the page. service and
+    // finding_type are fleet-wide and could move into `scope` if it ever hurts.
+    // severity cannot, it judges the scoped envelope, nor can the ack filter,
+    // which judges every source of the scope.
     private static string ScopedFindings(string copies)
     {
         return $"""
