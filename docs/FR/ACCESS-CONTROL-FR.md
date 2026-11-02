@@ -227,9 +227,14 @@ Un run se lit, et son rapport s'ouvre, sous une seule règle :
 
 Un run de service est couvert quand la `source` d'un motif (s'il y en a une) correspond au
 backend, son `service` (s'il y en a un) correspond à X, et, pour un motif d'attribut,
-quand chaque copie de X que le Hub détient dans l'environnement du backend porte cet
-attribut, avec au moins une copie. Le moteur n'exporte aucun regroupement pour un span :
-ces copies sont la seule preuve de l'équipe à qui appartient un service. Un run sur un
+quand le motif nomme aussi un `service` et que chaque copie de X que le Hub détient dans
+l'environnement du backend porte cet attribut, avec au moins une copie. Le moteur n'exporte
+aucun regroupement pour un span : ces copies sont la seule preuve de l'équipe à qui
+appartient un service, et toute source de cet environnement les rapporte, celle du
+demandeur comprise. Un motif d'attribut seul, avec ou sans `source`, ne couvre donc aucun
+run de service sur un backend de traces : donnez à une équipe qui en lance un motif de
+`service` (un attribut à côté le resserre encore) ou un motif de `source` sur le backend.
+Les lectures de findings ne changent pas, chaque copie étant jugée à sa propre source. Un run sur un
 trace ID exige le backend entier : une autorisation de service ne peut pas faire récupérer au Hub
 une trace arbitraire.
 
