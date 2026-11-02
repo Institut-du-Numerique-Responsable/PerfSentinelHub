@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
 namespace PerfSentinelHub.Storage;
@@ -402,8 +403,9 @@ public sealed partial class HubDatabase
         if ((long)(await command.ExecuteScalarAsync(cancellationToken))! == 0)
             return;
 
-        // The index builds sort every row, and a temp file would land in the 32Mi /tmp of the chart.
-        command.CommandText = "PRAGMA foreign_keys = OFF; PRAGMA temp_store = MEMORY;";
+        // Its temp files go where SQLITE_TMPDIR says, /data in the image: in memory, they would sit
+        // beside a Hub already near its limit.
+        command.CommandText = "PRAGMA foreign_keys = OFF;";
         await command.ExecuteNonQueryAsync(cancellationToken);
         try
         {
@@ -440,27 +442,32 @@ public sealed partial class HubDatabase
             // The connection goes back to the pool.
             command.Transaction = null;
             command.Parameters.Clear();
-            command.CommandText = "PRAGMA foreign_keys = ON; PRAGMA temp_store = DEFAULT;";
+            command.CommandText = "PRAGMA foreign_keys = ON;";
             await command.ExecuteNonQueryAsync(CancellationToken.None);
         }
     }
 
-    // Copies the envelopes out, drops the column, then copies the table into a fresh one: a dropped
-    // column leaves each row on its page, as sparse as the envelopes made it. The new table is
-    // created from the table's own stored definition, which the drop has already edited, and its
-    // indexes from theirs. table is one of two constants.
+    // Copies the envelopes out, then the rest of the table into a fresh one created from the
+    // table's own stored definition without the column, and rebuilds its indexes from theirs. A
+    // DROP COLUMN would rewrite every page of the old table first, keeping a rollback copy of each
+    // for this transaction, then leave the rows as sparse as the envelopes made them.
+    // table is one of two constants.
     private static async Task RebuildWithoutEnvelopeAsync(
         SqliteCommand command,
         string table,
         string copyEnvelopes,
         CancellationToken cancellationToken)
     {
-        command.CommandText = $"SELECT 1 FROM pragma_table_info('{table}') WHERE name = 'finding_json';";
-        if (await command.ExecuteScalarAsync(cancellationToken) is null)
-            return;
+        command.CommandText = $"SELECT name FROM pragma_table_info('{table}') ORDER BY cid;";
+        var columns = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                columns.Add(reader.GetString(0));
+        }
 
-        command.CommandText = copyEnvelopes + $"ALTER TABLE {table} DROP COLUMN finding_json;";
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        if (!columns.Remove("finding_json"))
+            return;
 
         command.CommandText = $"""
                                SELECT type, sql FROM sqlite_master
@@ -477,19 +484,27 @@ public sealed partial class HubDatabase
                     indexes.Add(reader.GetString(1) + ";");
         }
 
-        var fresh = table + "_v22";
-        // A table an earlier rename created is stored with its name quoted.
+        // A table an earlier rename created is stored with its name quoted. The column is never
+        // the first: V1 puts it second in findings, and an ALTER appended it to finding_sources.
         var head = new[] { $"CREATE TABLE {table}", $"CREATE TABLE \"{table}\"" }
-            .FirstOrDefault(prefix => definition.StartsWith(prefix, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException($"Version 22 cannot read the definition of {table}.");
-        command.CommandText = $"""
-                               CREATE TABLE {fresh}{definition[head.Length..]};
-                               INSERT INTO {fresh} SELECT * FROM {table};
-                               DROP TABLE {table};
-                               ALTER TABLE {fresh} RENAME TO {table};
-                               """ + string.Concat(indexes);
+            .FirstOrDefault(prefix => definition.StartsWith(prefix, StringComparison.Ordinal));
+        var body = head is null ? "" : EnvelopeColumn().Replace(definition[head.Length..], "", 1);
+        if (head is null || body.Length == definition.Length - head.Length)
+            throw new InvalidOperationException($"Version 22 cannot read the definition of {table}.");
+
+        var fresh = table + "_v22";
+        var list = string.Join(", ", columns);
+        command.CommandText = copyEnvelopes + $"""
+                                               CREATE TABLE {fresh}{body};
+                                               INSERT INTO {fresh}({list}) SELECT {list} FROM {table};
+                                               DROP TABLE {table};
+                                               ALTER TABLE {fresh} RENAME TO {table};
+                                               """ + string.Concat(indexes);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    [GeneratedRegex(@",\s*finding_json TEXT[^,)]*(?=[,)])")]
+    private static partial Regex EnvelopeColumn();
 
     /// <summary>
     ///     The read indexes of <see cref="ReadIndexes" />, built after the Hub answers for the
