@@ -12,6 +12,21 @@ public sealed partial class RetentionWorker(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Once per start, after the Hub answers: see HubDatabase.CatchUpReadIndexesAsync.
+        try
+        {
+            if (await database.CatchUpReadIndexesAsync(stoppingToken))
+                LogReadIndexesBuilt(logger);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            LogReadIndexesFailure(logger, exception);
+        }
+
         // Once per start, after the Hub answers: see HubDatabase.CatchUpAttributesAsync.
         try
         {
@@ -67,4 +82,10 @@ public sealed partial class RetentionWorker(
 
     [LoggerMessage(1203, LogLevel.Error, "Deriving the attributes older copies lack failed; the next start retries.")]
     private static partial void LogCatchUpFailure(ILogger logger, Exception exception);
+
+    [LoggerMessage(1204, LogLevel.Information, "Built the findings read indexes.")]
+    private static partial void LogReadIndexesBuilt(ILogger logger);
+
+    [LoggerMessage(1205, LogLevel.Error, "Building the findings read indexes failed; the next start retries.")]
+    private static partial void LogReadIndexesFailure(ILogger logger, Exception exception);
 }
