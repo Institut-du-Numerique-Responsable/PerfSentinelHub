@@ -248,7 +248,7 @@ public sealed partial class RecapMailDeliveryTests : IAsyncLifetime
                 [RecapViewNames.Pilotage, RecapViewNames.Tech], true, false, null, 10_000),
             JsonSerializer.Serialize(RecapSnapshots.Distinctive(), Wire));
         Assert.True(await hub.Services.GetRequiredService<HubDatabase>().InsertRecapReportAsync(
-            report, [.. addresses.Select(address => (RecapChannels.Email, address))], false, CancellationToken.None));
+            report, [.. addresses.Select(address => (RecapChannels.Email, address))], CancellationToken.None));
         return hub;
     }
 

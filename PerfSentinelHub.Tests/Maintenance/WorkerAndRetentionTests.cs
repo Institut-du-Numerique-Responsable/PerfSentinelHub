@@ -469,9 +469,9 @@ public sealed class WorkerAndRetentionTests : IDisposable
         var nowMs = clock.GetUtcNow().ToUnixTimeMilliseconds();
         await database.InsertRecapReportAsync(
             Report("old", nowMs - (long)TimeSpan.FromDays(33).TotalMilliseconds), [(RecapChannels.Webhook, "ops")],
-            false, cancellationToken);
+            cancellationToken);
         await database.InsertRecapReportAsync(
-            Report("kept", nowMs - (long)TimeSpan.FromDays(31).TotalMilliseconds), [], false, cancellationToken);
+            Report("kept", nowMs - (long)TimeSpan.FromDays(31).TotalMilliseconds), [], cancellationToken);
         using var worker = new RetentionWorker(database, options, clock, new ListLogger<RetentionWorker>());
 
         await worker.StartAsync(cancellationToken);

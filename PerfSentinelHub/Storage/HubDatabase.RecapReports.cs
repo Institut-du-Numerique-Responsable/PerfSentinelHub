@@ -21,14 +21,15 @@ public sealed partial class HubDatabase
     /// <summary>
     ///     Stores a report and its pending deliveries, due at once, in one transaction. False when
     ///     the subscription already holds a report for that cadence and period: nothing is written.
+    ///     It waits for the write lock even from a request: the report it stores can take minutes to
+    ///     compute, and giving up would throw that work away.
     /// </summary>
     public Task<bool> InsertRecapReportAsync(
         RecapReportRecord report,
         IReadOnlyList<(string Channel, string Target)> deliveries,
-        bool request,
         CancellationToken cancellationToken)
     {
-        return WriteTransactionAsync(request, async (connection, transaction) =>
+        return WriteTransactionAsync(false, async (connection, transaction) =>
         {
             if (!await InsertRecapReportRowAsync(connection, transaction, report, cancellationToken))
                 return false;
