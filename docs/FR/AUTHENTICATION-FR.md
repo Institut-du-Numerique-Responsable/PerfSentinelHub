@@ -89,6 +89,11 @@ autre origine ne peut pas envoyer sans un preflight auquel le Hub ne répond
 jamais. Un Hub joignable depuis une session de navigateur devrait malgré tout se
 tenir derrière un proxy qui ne relaie pas des origines arbitraires.
 
+Connexion active, chaque réponse porte aussi
+`Content-Security-Policy: frame-ancestors 'self'`, sauf si la route en pose une plus
+stricte, contrôle d'accès actif ou non. Une page du même site ne peut pas encadrer le
+launcher connecté et diriger ses clics vers les écritures same-origin du Hub.
+
 Les clés qui chiffrent le cookie vivent dans un répertoire `keys` à côté de
 `Hub:DatabasePath`, sur le volume de données, si bien qu'un redémarrage ne
 déconnecte personne. Le Hub journalise au démarrage qu'aucun chiffreur XML n'est

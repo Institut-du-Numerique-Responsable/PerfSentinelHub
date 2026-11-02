@@ -320,8 +320,8 @@ devient un principal dont le sujet est `machine:<nom>`. La connexion chez le fou
 ajoute au cookie le sujet, les groupes du fournisseur qu'une autorisation nomme, `hub:access` et
 `hub:caller`. `AccessCaller.Of` lit ces claims une fois par requête. Après l'autorisation,
 une porte refuse l'écriture d'une machine et une écriture du navigateur sans
-`Sec-Fetch-Site: same-origin`, et un premier middleware pose `frame-ancestors 'self'` sur
-chaque réponse.
+`Sec-Fetch-Site: same-origin`. Un premier middleware, qui tourne dès que la connexion est
+active, accès actif ou non, pose `frame-ancestors 'self'` sur chaque réponse.
 
 **Connexion du terminal.** `ApiEndpoints.MapTerminalAccess` (`Api/ApiEndpoints.Terminal.cs`)
 ne déclare le flux d'appareil qu'avec `Hub:Auth:TrustedProxyNetworks` renseigné, puisque

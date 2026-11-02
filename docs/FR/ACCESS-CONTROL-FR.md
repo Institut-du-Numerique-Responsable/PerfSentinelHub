@@ -211,7 +211,9 @@ Une écriture depuis un navigateur doit porter `Sec-Fetch-Site: same-origin`, qu
 navigateur actuel envoie : une page sur un sous-domaine voisin ne peut pas poster avec le
 cookie de l'utilisateur. Une requête avec un bearer n'est pas celle d'un navigateur et
 n'y est pas tenue. Chaque réponse porte `Content-Security-Policy: frame-ancestors 'self'` :
-aucun autre site ne peut encadrer le launcher et cliquer sur ses boutons.
+aucun autre site ne peut encadrer le launcher et cliquer sur ses boutons. Cet en-tête vient
+avec la connexion, non avec le contrôle d'accès : `Hub:Auth` actif et l'accès coupé l'envoient
+aussi, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
 
 ### Analyses et rapports
 
