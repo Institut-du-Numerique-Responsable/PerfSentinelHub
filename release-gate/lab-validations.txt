@@ -341,3 +341,15 @@ v0.10.0	7be8a1b	2026-10-31	PASS
 # regression check ran a Release build of 1dd14c7 with a local perf-sentinel
 # 0.40.0 release build. Not run: the cluster scenarios.
 v0.11.0	43e4a05	2026-10-31	PASS
+# v0.12.0: the eleven cluster hub-* scenarios plus hub-recap, 159 checks ok and
+# no skip, at lab commit 8924457 on a Release image of Hub cc0ab57 against a
+# daemon on a local perf-sentinel 0.41.0 build (423c45c3, the v0.41.0 code). The
+# lab Hub started on its 0.11.0 database, so the schema 22 and 23 migrations ran
+# on real data. hub-incidents-mirror first failed on the new 415 for a refresh
+# without a JSON content type, the intended change: 8924457 posts it as JSON.
+# hub-ingestion first failed on a port-forward the daemon restart had dropped,
+# and passed on rerun. 6af7c59, after the pass, only binds the table name in the
+# version 22 reads, covered by StorageTests. Not run: hub-detection-volume and
+# hub-card, which need older local daemons. The lab ran with local, uncommitted
+# image pins in its manifests.
+v0.12.0	8924457	2026-11-02	PASS
