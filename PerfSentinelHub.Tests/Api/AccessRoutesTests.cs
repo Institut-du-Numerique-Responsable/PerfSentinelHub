@@ -1567,7 +1567,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                     id, "weekly-shop", "week", "2026-10-19", "2026-10-25",
                     [RecapViewNames.Pilotage, RecapViewNames.Tech], true, false, null, NowMs),
                 snapshot),
-            [], false, TestContext.Current.CancellationToken));
+            [], TestContext.Current.CancellationToken));
         return id;
     }
 

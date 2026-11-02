@@ -349,7 +349,7 @@ public sealed class RecapWebhookTests : IAsyncLifetime
                 _reportId, "weekly-shop", "week", "2026-10-19", "2026-10-25",
                 views ?? [RecapViewNames.Pilotage, RecapViewNames.Tech], true, false, null, 10_000, language),
             JsonSerializer.Serialize(snapshot ?? RecapSnapshots.Distinctive(), Wire));
-        Assert.True(await Database(hub).InsertRecapReportAsync(report, [(channel, target)], false, CancellationToken.None));
+        Assert.True(await Database(hub).InsertRecapReportAsync(report, [(channel, target)], CancellationToken.None));
         return hub;
     }
 

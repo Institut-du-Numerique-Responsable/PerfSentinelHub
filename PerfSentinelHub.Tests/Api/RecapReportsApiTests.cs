@@ -83,30 +83,31 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
     }
 
     [Fact]
-    public async Task A_held_write_lock_answers_503_and_stores_nothing()
+    public async Task A_held_write_lock_delays_the_frozen_report_past_the_request_wait_rather_than_losing_it()
     {
         using var client = Client(7);
-        // No public seam holds the write lock, and the request only gives up after WriteGateWait (5 s).
+        // No public seam holds the write lock. Held past WriteGateWait (5 s), where a request's write gives up.
         var database = _hubs[^1].Services.GetRequiredService<HubDatabase>();
         var writeGate = (SemaphoreSlim)typeof(HubDatabase)
             .GetField("_writeGate", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(database)!;
         var before = (await database.ListRecapReportsAsync(null, 1000, Token)).Count;
         await writeGate.WaitAsync(Token);
+        Task<HttpResponseMessage> posting;
         try
         {
-            using var response = await PostAsync(client, """{"period":"day","at":"1970-01-01"}""");
-
-            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-            Assert.Equal("1", response.Headers.GetValues("Retry-After").Single());
-            Assert.Empty(await response.Content.ReadAsByteArrayAsync(Token));
+            posting = PostAsync(client, """{"period":"day","at":"1970-01-01"}""");
+            await Task.Delay(TimeSpan.FromSeconds(6), Token);
+            Assert.False(posting.IsCompleted);
         }
         finally
         {
             writeGate.Release();
         }
 
-        Assert.Equal(before, (await database.ListRecapReportsAsync(null, 1000, Token)).Count);
+        using var response = await posting;
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(before + 1, (await database.ListRecapReportsAsync(null, 1000, Token)).Count);
     }
 
     [Fact]
@@ -301,7 +302,7 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
         var summary = Summary([RecapViewNames.Pilotage]);
         Assert.True(await factory.Database.InsertRecapReportAsync(
             new RecapReportRecord(summary, JsonSerializer.Serialize(RecapSnapshots.Distinctive(), Wire)),
-            [(RecapChannels.Webhook, "ops-chat"), (RecapChannels.Email, "boss@example.test")], false, Token));
+            [(RecapChannels.Webhook, "ops-chat"), (RecapChannels.Email, "boss@example.test")], Token));
 
         using var response = await client.SendAsync(Get($"/api/recap/reports/{summary.Id}"), Token);
 
@@ -340,7 +341,7 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
 
     private async Task<string> StoreAsync(RecapReportSummary summary, string snapshot)
     {
-        Assert.True(await factory.Database.InsertRecapReportAsync(new RecapReportRecord(summary, snapshot), [], false, Token));
+        Assert.True(await factory.Database.InsertRecapReportAsync(new RecapReportRecord(summary, snapshot), [], Token));
         return summary.Id;
     }
 
