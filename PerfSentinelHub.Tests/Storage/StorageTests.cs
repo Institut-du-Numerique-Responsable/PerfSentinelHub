@@ -61,7 +61,7 @@ public sealed class StorageTests
         await using var command = connection.CreateCommand();
         command.CommandText =
             "SELECT group_concat(version, ',') FROM (SELECT version FROM schema_migrations ORDER BY version);";
-        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22",
+        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",
             (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 
@@ -206,6 +206,9 @@ public sealed class StorageTests
                                ALTER TABLE finding_sources DROP COLUMN severity;
                                ALTER TABLE finding_sources DROP COLUMN first_observed_day;
                                ALTER TABLE finding_sources DROP COLUMN service;
+                               ALTER TABLE finding_sources DROP COLUMN finding_type;
+                               ALTER TABLE finding_sources DROP COLUMN endpoint;
+                               ALTER TABLE finding_sources DROP COLUMN sample_trace_id;
                                DROP INDEX ix_finding_sources_source;
                                DROP TABLE finding_observations;
                                DELETE FROM schema_migrations WHERE version = 6;
@@ -223,7 +226,10 @@ public sealed class StorageTests
         var upgradedShape = await SourceColumnsAsync(reopened, cancellationToken);
         Assert.Equal(freshShape, upgradedShape);
         Assert.Equal(
-            ["severity TEXT 0", "first_observed_day INTEGER 0", "service TEXT 0"],
+            [
+                "severity TEXT 0", "first_observed_day INTEGER 0", "service TEXT 0", "finding_type TEXT 0",
+                "endpoint TEXT 0", "sample_trace_id TEXT 0"
+            ],
             upgradedShape.Skip(7));
 
         await using var read = reopened.CreateCommand();
@@ -323,6 +329,71 @@ public sealed class StorageTests
                            SELECT (SELECT COUNT(*) FROM finding_envelopes) + (SELECT COUNT(*) FROM finding_source_envelopes);
                            """;
         Assert.Equal(0L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    // Version 23 on a database from before version 22: the boot adds the columns and moves the
+    // envelopes out without reading a copy, reads fall back to the shared row meanwhile, and the
+    // catch-up the retention worker runs fills them from each copy's own envelope, once.
+    [Fact]
+    public async Task A_copy_from_before_version_23_takes_its_own_type_endpoint_and_trace_after_the_boot()
+    {
+        using var fixture = TestDatabase.Create();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await fixture.Database.InitializeAsync(cancellationToken);
+        await using (var connection = await fixture.Database.OpenConnectionAsync(cancellationToken))
+        {
+            await using var seed = connection.CreateCommand();
+            // The shared row is another source's newer push; 'own' holds its own envelope, 'legacy'
+            // none, 'broken' one that is not JSON.
+            seed.CommandText = LegacySchema.InlineEnvelopes + """
+                               ALTER TABLE finding_sources DROP COLUMN finding_type;
+                               ALTER TABLE finding_sources DROP COLUMN endpoint;
+                               ALTER TABLE finding_sources DROP COLUMN sample_trace_id;
+                               DELETE FROM schema_migrations WHERE version = 23;
+                               INSERT INTO findings(
+                                 signature, finding_json, service, finding_type, severity, endpoint,
+                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                 max_confidence, max_confidence_rank)
+                               VALUES ('signature', '{}', 'decoy', 'slow_http', 'warning',
+                                 'GET /decoy', 'template-hash', 'trace-decoy', 500, 900, 'daemon_production', 4);
+                               INSERT INTO finding_sources(
+                                 signature, source_id, source_name, environment, producer_version,
+                                 first_seen_ms, last_seen_ms, service, finding_json)
+                               VALUES ('signature', 'own', 'Own', 'production', '0.26.2', 500, 800, 'checkout',
+                                 '{"finding":{"service":"checkout","type":"n_plus_one_sql","source_endpoint":"GET /cart","trace_id":"trace-own"}}'),
+                                      ('signature', 'legacy', 'Legacy', 'production', '0.11.2', 500, 700, NULL, NULL),
+                                      ('signature', 'broken', 'Broken', 'production', '0.26.2', 500, 600, NULL,
+                                       'not json');
+                               """;
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        using var restarted = TestDatabase.Create(fixture.DatabasePath);
+        var database = restarted.Database;
+        await database.InitializeAsync(cancellationToken);
+        var own = new FindingQuery(null, null, null, 10, SourceIds: ["own"]);
+
+        // Before the catch-up, the shared row answers.
+        Assert.Single(await database.QueryFindingsAsync(own with { FindingType = "slow_http" }, cancellationToken));
+        Assert.True(await database.CatchUpCopyColumnsAsync(cancellationToken));
+        Assert.False(await database.CatchUpCopyColumnsAsync(cancellationToken));
+
+        Assert.Single(await database.QueryFindingsAsync(own with { FindingType = "n_plus_one_sql" }, cancellationToken));
+        Assert.Single(await database.FindByTraceAsync("trace-own", ["own"], null, cancellationToken));
+        Assert.Empty(await database.FindByTraceAsync("trace-decoy", ["own"], null, cancellationToken));
+        // A copy without an envelope of its own keeps reading the shared row.
+        Assert.Single(await database.QueryFindingsAsync(
+            new FindingQuery(null, "slow_http", null, 10, SourceIds: ["legacy"]), cancellationToken));
+        await using var reopened = await database.OpenConnectionAsync(cancellationToken);
+        await using var read = reopened.CreateCommand();
+        read.CommandText = """
+                           SELECT group_concat(source_id || '=' || COALESCE(finding_type, '-') || ' '
+                                  || COALESCE(endpoint, '-') || ' ' || COALESCE(sample_trace_id, '-'), ',')
+                           FROM (SELECT * FROM finding_sources ORDER BY source_id);
+                           """;
+        // A malformed envelope is skipped rather than stopping the catch-up.
+        Assert.Equal("broken=- - -,legacy=- - -,own=n_plus_one_sql GET /cart trace-own",
+            (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
     [Fact]

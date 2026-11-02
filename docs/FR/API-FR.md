@@ -105,7 +105,7 @@ joignabilité est un fait sur la route du Hub vers le daemon, qu'un push n'exerc
 | `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport. `disclosures: true` seulement tant que les divulgations sont actives et que l'appelant les lit. `cards` : `true` quand l'appelant peut faire des cartes, `false` quand le moteur n'a pas de sous-commande `card`, absent tant que les cartes sont désactivées ou que l'appelant n'a `cards.write` nulle part |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
 | `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                   |
-| `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
+| `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple, resserrés par `environment` et `source_id` comme une liste                                                                                                                     |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                       |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
 | `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                         |
@@ -404,13 +404,18 @@ d'observation et le battement de l'endpoint suivent la même heure.
 
 Lue avec `environment` ou `source_id`, une enveloppe décrit ce périmètre et non la flotte.
 Le document du daemon est la copie de la source du périmètre qui a vu le finding en dernier,
-donc `severity` juge cette copie. `first_seen` est le plus ancien et `last_seen` le plus
+donc `severity` juge cette copie, comme les filtres `service`, `finding_type` et de trace, les
+battements du statut et les comptes par type : une autre source qui pousse la même signature
+avec d'autres valeurs n'en déplace aucun. `first_seen` est le plus ancien et `last_seen` le plus
 récent sur les sources du périmètre, `status` est dérivé de ce `last_seen` et des battements
 de ces seules sources, et `sources` et `acks` ne listent qu'elles. `max_confidence` reste à
 l'échelle de la flotte, délibérément, la plus haute confiance qu'une source ait jamais
 rapportée. La copie propre à une source commence à sa première observation après la mise à
 niveau qui l'enregistre. Jusque-là, sa ligne sert la copie que la flotte partage, la plus
-fraîche toutes sources confondues.
+fraîche toutes sources confondues. Une copie stockée avant la version 23 du schéma n'a ni
+type, ni endpoint, ni trace à elle : le démarrage qui suit la mise à niveau lit ceux de la
+flotte pour elle, et le Hub les remplit depuis l'enveloppe de la copie une fois qu'il répond,
+par tranches.
 
 Une lecture avec `from` ou `to` sert aussi combien de fois les daemons ont détecté le
 finding dans la fenêtre, d'après les registres de détections que le Hub lit par poll ou

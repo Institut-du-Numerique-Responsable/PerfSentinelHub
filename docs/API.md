@@ -94,7 +94,7 @@ reachability is a fact about the Hub's route to the daemon, which a push does no
 | `GET /api/status`                    | The Hub's version, the engine version it would run (`engine_version`, null when none is configured), and what a run costs: worker count, queue depth, trace cap, timeout, report retention. `disclosures: true` only while disclosures are on and the caller reads them. `cards`: `true` when the caller may make cards, `false` when the engine has no `card` subcommand, absent while cards are off or the caller holds `cards.write` nowhere |
 | `GET /api/sources`                   | Every configured source with its kind and last known collection state                                                                                                                      |
 | `GET /api/findings`                  | Findings, filtered by `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`               |
-| `GET /api/findings/{traceId}`        | Findings for a sample trace                                                                                                                                                                |
+| `GET /api/findings/{traceId}`        | Findings for a sample trace, narrowed by `environment` and `source_id` as a listing is                                                                                                     |
 | `GET /api/sources/{sourceId}/daemon` | One daemon's applied settings and its own account of its state. See below                                                                                                                  |
 | `GET /api/incidents`                 | The incidents the polled daemons recorded, newest first, filtered by `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Without their findings, see below      |
 | `GET /api/incidents/{id}`            | One incident whole, the frozen findings included                                                                                                                                           |
@@ -371,12 +371,17 @@ time.
 
 Read with `environment` or `source_id`, an envelope describes that scope and not the fleet.
 The daemon's document is the copy of the source in scope that saw the finding last, so
-`severity` judges that copy. `first_seen` is the earliest and `last_seen` the latest over
+`severity` judges that copy, and so do the `service`, `finding_type` and trace filters, the
+status heartbeats and the counts by type: another source pushing the same signature with
+other values moves none of them. `first_seen` is the earliest and `last_seen` the latest over
 the sources in scope, `status` is derived from that `last_seen` and from the heartbeats of
 those sources alone, and `sources` and `acks` list only them. `max_confidence` stays
 fleet-wide on purpose, the highest confidence any source ever reported. A source's own copy
 starts at its first observation after the upgrade that records it. Until then its row
-serves the copy the fleet shares, the freshest one from any source.
+serves the copy the fleet shares, the freshest one from any source. A copy stored before
+schema version 23 has no type, endpoint or trace of its own: the boot after the upgrade
+reads the fleet's for it, and the Hub fills them from the copy's envelope once it answers,
+a chunk at a time.
 
 A read with `from` or `to` also serves how many times the daemons detected the finding in
 the window, from the detection ledgers the Hub polls or receives. A read with neither carries
