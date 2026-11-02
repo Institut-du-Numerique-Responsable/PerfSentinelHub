@@ -1057,6 +1057,14 @@ A run starts work in the caller's name, so before the body is read a submission 
 the rule an ack is: a `Sec-Fetch-Site` other than `same-origin` is a `403` and a content type
 that is not JSON a `415`.
 
+A submission is at most 64 KiB, past which it is a `413`. The run stores the request rebuilt
+from the fields above and the `detection` knobs, so a property the Hub does not read is
+dropped rather than kept, and `GET /api/analyses` returns that stored form. At most four runs
+per `Hub:Analysis:Workers` wait at once (eight by default): past that a submission is a `503`
+with `Retry-After: 30`, since the queue drains at the engine's pace. A `503` with
+`Retry-After: 1` still means the write gate was busy. Runs stored before this rule keep the
+request they were submitted with.
+
 ### Two invocations, not one
 
 The query subcommands emit text, JSON or SARIF, and only `report` writes HTML. So the
