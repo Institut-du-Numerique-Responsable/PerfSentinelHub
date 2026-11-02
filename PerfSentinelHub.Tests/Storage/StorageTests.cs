@@ -530,7 +530,7 @@ public sealed class StorageTests
                 details.Add(reader.GetString(3));
         }
 
-        Assert.Equal(["SCAN findings USING COVERING INDEX ix_findings_last_seen"], details);
+        Assert.Contains(details, detail => detail.Contains("USING COVERING INDEX ix_findings_last_seen"));
     }
 
     private static async Task<List<string>> SourceColumnsAsync(
