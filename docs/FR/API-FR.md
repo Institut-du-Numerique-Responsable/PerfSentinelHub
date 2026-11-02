@@ -84,7 +84,9 @@ nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit
 `503 Retry-After: 1`, et les exportateurs des daemons conservent puis rejouent leurs lots
 fusionnés. La rétention purge par tranches bornées, pour qu'une purge longue ne rejette
-pas les imports pendant toute sa durée.
+pas les imports pendant toute sa durée. Toute autre écriture faite par une requête (rapport
+figé, publication, lien de partage, clé de carte) attend les mêmes cinq secondes, puis répond
+`503 Retry-After: 1` sans corps, sans rien écrire.
 
 Un push met à jour les findings, les incidents, les registres de détections et les
 observations par source, rien d'autre. Il n'efface jamais le `unreachable_since_ms` du

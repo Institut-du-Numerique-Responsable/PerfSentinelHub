@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -79,6 +80,33 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
         Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
         var snapshot = (await JsonAsync(detail)).RootElement.GetProperty("snapshot");
         Assert.Equal("tech", snapshot.GetProperty("view").GetString());
+    }
+
+    [Fact]
+    public async Task A_held_write_lock_answers_503_and_stores_nothing()
+    {
+        using var client = Client(7);
+        // No public seam holds the write lock, and the request only gives up after WriteGateWait (5 s).
+        var database = _hubs[^1].Services.GetRequiredService<HubDatabase>();
+        var writeGate = (SemaphoreSlim)typeof(HubDatabase)
+            .GetField("_writeGate", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(database)!;
+        var before = (await database.ListRecapReportsAsync(null, 1000, Token)).Count;
+        await writeGate.WaitAsync(Token);
+        try
+        {
+            using var response = await PostAsync(client, """{"period":"day","at":"1970-01-01"}""");
+
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            Assert.Equal("1", response.Headers.GetValues("Retry-After").Single());
+            Assert.Empty(await response.Content.ReadAsByteArrayAsync(Token));
+        }
+        finally
+        {
+            writeGate.Release();
+        }
+
+        Assert.Equal(before, (await database.ListRecapReportsAsync(null, 1000, Token)).Count);
     }
 
     [Fact]
@@ -273,7 +301,7 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
         var summary = Summary([RecapViewNames.Pilotage]);
         Assert.True(await factory.Database.InsertRecapReportAsync(
             new RecapReportRecord(summary, JsonSerializer.Serialize(RecapSnapshots.Distinctive(), Wire)),
-            [(RecapChannels.Webhook, "ops-chat"), (RecapChannels.Email, "boss@example.test")], Token));
+            [(RecapChannels.Webhook, "ops-chat"), (RecapChannels.Email, "boss@example.test")], false, Token));
 
         using var response = await client.SendAsync(Get($"/api/recap/reports/{summary.Id}"), Token);
 
@@ -312,7 +340,7 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
 
     private async Task<string> StoreAsync(RecapReportSummary summary, string snapshot)
     {
-        Assert.True(await factory.Database.InsertRecapReportAsync(new RecapReportRecord(summary, snapshot), [], Token));
+        Assert.True(await factory.Database.InsertRecapReportAsync(new RecapReportRecord(summary, snapshot), [], false, Token));
         return summary.Id;
     }
 

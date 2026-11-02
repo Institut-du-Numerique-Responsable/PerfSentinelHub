@@ -25,9 +25,10 @@ public sealed partial class HubDatabase
     public Task<bool> InsertRecapReportAsync(
         RecapReportRecord report,
         IReadOnlyList<(string Channel, string Target)> deliveries,
+        bool request,
         CancellationToken cancellationToken)
     {
-        return WriteTransactionAsync(async (connection, transaction) =>
+        return WriteTransactionAsync(request, async (connection, transaction) =>
         {
             if (!await InsertRecapReportRowAsync(connection, transaction, report, cancellationToken))
                 return false;
@@ -214,7 +215,7 @@ public sealed partial class HubDatabase
         long? nextAttemptMs,
         CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return WriteAsync(false, async command =>
         {
             command.CommandText = """
                                   UPDATE recap_deliveries
@@ -234,7 +235,7 @@ public sealed partial class HubDatabase
     /// <summary>Drops the reports generated before the cutoff, then the deliveries whose report is gone.</summary>
     public Task PurgeRecapReportsAsync(long cutoffMs, CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return WriteAsync(false, async command =>
         {
             command.CommandText = """
                                   DELETE FROM recap_reports WHERE generated_at_ms < $cutoff;

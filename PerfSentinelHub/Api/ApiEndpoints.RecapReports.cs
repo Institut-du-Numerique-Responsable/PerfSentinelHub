@@ -86,7 +86,7 @@ public static partial class ApiEndpoints
             JsonSerializer.Serialize(snapshot, HubJsonContext.Default.RecapSnapshot),
             AccessCaller.Of(request.HttpContext)?.Subject);
         // No subscription, so the unique period index does not apply: only an id collision could refuse.
-        if (!await database.InsertRecapReportAsync(report, [], cancellationToken))
+        if (!await database.InsertRecapReportAsync(report, [], true, cancellationToken))
             throw new InvalidOperationException("The Hub could not store the recap report.");
 
         return TypedResults.Json(
