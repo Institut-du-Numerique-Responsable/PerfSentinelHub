@@ -5974,6 +5974,9 @@
             return section;
         }
         if (state.recap === null) {
+            // Built from every finding of the period, so a large database takes minutes: said, lest
+            // the reader leave, and come back to start the same work again.
+            section.appendChild(el('p', {class: 'recap-loading', role: 'status', text: t('recap.loading')}));
             section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px'}));
             return section;
         }

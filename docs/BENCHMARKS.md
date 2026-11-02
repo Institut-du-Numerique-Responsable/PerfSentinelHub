@@ -86,10 +86,9 @@ startup probe gives it 60 s and its default limit 500m of CPU, so a database
 holding several million frozen findings on slow nodes can fail the probe, and a
 killed start begins again from nothing. Raise `resources.limits.cpu` for the
 upgrade if so. The first start also holds every envelope it fills in, about
-90 MB here, in SQLite's temporary storage, which writes to `/tmp` past its 2 MB
-cache, and the chart mounts `/tmp` as a 32 MiB `emptyDir`. Whether the kubelet
-counts that file, which SQLite deletes as it opens it, against the limit was not
-checked.
+90 MB here, in SQLite's temporary storage, which writes to a file past its 2 MB
+cache. The image points that file at `/data` (`SQLITE_TMPDIR`), the database's
+volume, rather than at `/tmp`, which the chart mounts as a 32 MiB `emptyDir`.
 
 ## Access scope over 100,000 copies
 

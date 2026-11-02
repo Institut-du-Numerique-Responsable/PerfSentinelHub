@@ -1729,6 +1729,7 @@
         'recap.freeze.filters': ', avec les filtres ci-dessus',
         'recap.error.forbidden.pilotage': 'Le Hub ne vous a pas laissé lire le récap : votre accès ne le comprend pas.',
         'recap.error.forbidden.tech': 'Le Hub ne vous a pas laissé lire le récap : votre accès ne comprend pas findings.read.',
+        'recap.loading': 'Le récap se calcule à partir de tous les findings de la période : sur une grosse base, cela peut prendre plusieurs minutes. Restez sur cette page, il s\'affiche dès qu\'il est prêt. La quitter puis revenir relance le calcul depuis le début.',
         'recap.error.invalid': 'Le Hub n\'a pas pu lire de récap pour cette période ou ces filtres.',
         'recap.error.other.pilotage': 'Le Hub n\'a pas renvoyé le récap.',
         'recap.error.other.tech': 'Le Hub n\'a pas renvoyé le récap. Le problème vient du Hub lui-même, pas d\'un daemon.',
