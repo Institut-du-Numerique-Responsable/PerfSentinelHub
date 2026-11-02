@@ -17,6 +17,13 @@ public static partial class ApiEndpoints
     // A deep OFFSET is a scan: SQLite steps over every skipped row.
     private const int MaxFindingOffset = 1_000_000;
 
+    // What a body read is capped at unless its route says otherwise.
+    private const int MaxBodyBytes = 2 * 1024 * 1024;
+
+    // An import slot is held across its body read: a daemon on a working link sends 8 MiB in
+    // seconds, so a read this long is a trickle, and it gives the slot back.
+    private static readonly TimeSpan ImportBodyDeadline = TimeSpan.FromSeconds(60);
+
     // One incident carries up to a thousand frozen findings: the cap of one daemon page.
     private const int IncidentImportMaxBytes = 4 * 1024 * 1024;
 
@@ -241,7 +248,7 @@ public static partial class ApiEndpoints
 
         try
         {
-            var payload = await ReadBodyAsync(request, cancellationToken);
+            var payload = await ReadImportBodyAsync(request, admission.Clock, MaxBodyBytes, cancellationToken);
             if (payload is null)
                 return admission.Refuse(ImportRejection.TooLarge,
                     TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge));
@@ -282,9 +289,13 @@ public static partial class ApiEndpoints
                     import.Batch.RejectedCount);
             return TypedResults.Ok(new ImportResponse(import.Batch.Findings.Count, import.Batch.RejectedCount));
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return TypedResults.StatusCode(StatusCodes.Status408RequestTimeout);
+        }
         finally
         {
-            admission.Gate.Exit();
+            admission.Gate.Exit(source.Id);
         }
     }
 
@@ -312,7 +323,7 @@ public static partial class ApiEndpoints
             string.Equals(candidate.Id, sourceIds[0], StringComparison.Ordinal));
         if (match is null || !IsAuthorized(request, match.ImportApiKey))
             return refuse(ImportRejection.Unauthorized, TypedResults.Unauthorized());
-        if (!gate.TryEnter())
+        if (!gate.TryEnter(match.Id))
         {
             request.HttpContext.Response.Headers.RetryAfter = "1";
             return refuse(ImportRejection.GateFull,
@@ -333,10 +344,11 @@ public static partial class ApiEndpoints
         int maxBytes,
         Func<ReadOnlyMemory<byte>, T> parse,
         Func<ImportRejection, IResult, IResult> refuse,
+        TimeProvider clock,
         CancellationToken cancellationToken)
         where T : class
     {
-        var payload = await ReadBodyAsync(request, cancellationToken, maxBytes);
+        var payload = await ReadImportBodyAsync(request, clock, maxBytes, cancellationToken);
         if (payload is null)
             return (null!, refuse(ImportRejection.TooLarge,
                 TypedResults.StatusCode(StatusCodes.Status413PayloadTooLarge)));
@@ -377,7 +389,7 @@ public static partial class ApiEndpoints
         try
         {
             var (import, rejected) =
-                await ReadImportAsync(request, maxBytes, parse, admission.Refuse, cancellationToken);
+                await ReadImportAsync(request, maxBytes, parse, admission.Refuse, admission.Clock, cancellationToken);
             if (rejected is not null)
                 return rejected;
             if (await store(source, import) is { } stored)
@@ -386,9 +398,13 @@ public static partial class ApiEndpoints
             return admission.Refuse(ImportRejection.WriteTimeout,
                 TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable));
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return TypedResults.StatusCode(StatusCodes.Status408RequestTimeout);
+        }
         finally
         {
-            admission.Gate.Exit();
+            admission.Gate.Exit(source.Id);
         }
     }
 
@@ -656,10 +672,26 @@ public static partial class ApiEndpoints
         return CryptographicOperations.FixedTimeEquals(expected, actual);
     }
 
+    /// <summary>
+    ///     An admitted import's body, read under a deadline as well as the request's token: Kestrel's
+    ///     minimum rate lets a trickled 8 MiB body take hours, and the read holds a shared gate slot.
+    ///     The deadline's cancellation reaches the caller, which answers 408.
+    /// </summary>
+    private static async Task<byte[]?> ReadImportBodyAsync(
+        HttpRequest request,
+        TimeProvider clock,
+        int maxBodyBytes,
+        CancellationToken cancellationToken)
+    {
+        using var deadline = new CancellationTokenSource(ImportBodyDeadline, clock);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
+        return await ReadBodyAsync(request, linked.Token, maxBodyBytes);
+    }
+
     private static async Task<byte[]?> ReadBodyAsync(
         HttpRequest request,
         CancellationToken cancellationToken,
-        int maxBodyBytes = 2 * 1024 * 1024)
+        int maxBodyBytes = MaxBodyBytes)
     {
         if (request.ContentLength > maxBodyBytes)
             return null;

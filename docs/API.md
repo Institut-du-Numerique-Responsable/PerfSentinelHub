@@ -72,7 +72,9 @@ newest done come first, at most 10,000. The list is always sent, `[]` when empty
 replaces its own on every answer. Only a push gets it: a polled daemon never does.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
-there are. Writes are serialized against the poll and retention paths. An import that
+there are, and one source holds at most one of them: a second import from a source whose
+first is still running, of any kind, gets `503 Retry-After: 1`. A body still arriving after
+60 seconds is cut with a `408`, so a trickled upload gives its slot back. Writes are serialized against the poll and retention paths. An import that
 cannot take the write lock within five seconds gets `503 Retry-After: 1`, and daemon
 exporters retain and retry their coalesced batches. Retention purges in bounded chunks, so
 a long purge does not reject imports for its whole duration. Every other write a request makes (a disclosure,

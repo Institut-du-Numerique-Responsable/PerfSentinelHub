@@ -80,7 +80,10 @@ remplace la sienne à chaque réponse. Seul un push la reçoit : un daemon inter
 reçoit jamais.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
-nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
+nombre de daemons, et une source en tient au plus un : un second import d'une source dont le
+premier tourne encore, de quelque type qu'il soit, reçoit `503 Retry-After: 1`. Un corps qui
+arrive encore au bout de 60 secondes est coupé par un `408`, pour qu'un envoi au compte-gouttes
+rende sa place. Les écritures sont sérialisées face aux chemins de poll et de
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit
 `503 Retry-After: 1`, et les exportateurs des daemons conservent puis rejouent leurs lots
 fusionnés. La rétention purge par tranches bornées, pour qu'une purge longue ne rejette

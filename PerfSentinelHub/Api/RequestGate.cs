@@ -44,6 +44,31 @@ public abstract class RequestGate(int maxConcurrent) : IDisposable
 public sealed class ImportGate() : RequestGate(MaxImports)
 {
     public const int MaxImports = 4;
+
+    // One slot per source: a key holder trickling uploads leaves the other slots to the fleet.
+    private readonly HashSet<string> _held = new(StringComparer.Ordinal);
+    private readonly Lock _lock = new();
+
+    /// <summary>A slot for this source, refused while it already holds one or the gate is full.</summary>
+    public bool TryEnter(string sourceId)
+    {
+        lock (_lock)
+        {
+            if (_held.Contains(sourceId) || !TryEnter())
+                return false;
+            _held.Add(sourceId);
+            return true;
+        }
+    }
+
+    public void Exit(string sourceId)
+    {
+        lock (_lock)
+        {
+            _held.Remove(sourceId);
+            Exit();
+        }
+    }
 }
 
 /// <summary>
