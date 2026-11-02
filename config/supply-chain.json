@@ -176,10 +176,10 @@
     {
       "name": "oras-project/setup-oras",
       "kind": "github-action",
-      "version": "2.0.2",
-      "digest_or_sha": "005458ad77f1c8facd38a094e4af2e69e5607ff4",
-      "released_at": "2026-09-29T16:29:00Z",
-      "source": "https://github.com/oras-project/setup-oras/releases/tag/v2.0.2",
+      "version": "2.0.3",
+      "digest_or_sha": "5e2f2482b30b0cb3e14e67f89a80c88c659a7c63",
+      "released_at": "2026-10-27T17:53:34Z",
+      "source": "https://github.com/oras-project/setup-oras/releases/tag/v2.0.3",
       "reason": "Latest stable official ORAS setup action."
     },
     {
@@ -203,10 +203,10 @@
     {
       "name": "step-security/harden-runner",
       "kind": "github-action",
-      "version": "2.22.2",
-      "digest_or_sha": "dc2769abcc0fcfbadfc1df54081c1608579ef6b2",
-      "released_at": "2026-10-19T16:55:35Z",
-      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.22.2",
+      "version": "2.22.3",
+      "digest_or_sha": "46b06cea07f9e64621fdf066ba77ac6915163d43",
+      "released_at": "2026-10-27T18:25:34Z",
+      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.22.3",
       "reason": "Latest stable Harden-Runner release."
     },
     {
