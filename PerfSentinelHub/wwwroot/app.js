@@ -332,9 +332,12 @@
     }
 
     function fetchJson(path, method) {
+        const headers = {accept: 'application/json'};
+        // A write carries the JSON content type the server's same-origin guard requires.
+        if (method !== 'GET') headers['content-type'] = 'application/json';
         return fetch(path, {
             method: method,
-            headers: {accept: 'application/json'}
+            headers: headers
         }).then(signInOn401).then(function (response) {
             if (!response.ok) {
                 // The parsed problem rides on the error, so a screen can say it in the shown language.

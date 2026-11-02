@@ -97,7 +97,7 @@ public sealed class IncidentRefreshApiTests(HubApplicationFactory factory) : ICl
         await using var scoped = Scoped(Daemon(refusedId, refusing), Daemon(healthyId, healthy));
         using var client = scoped.CreateClient();
 
-        using var response = await client.PostAsync("/api/incidents/refresh", null, cancellationToken);
+        using var response = await client.PostAsync("/api/incidents/refresh", NoBody(), cancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         // The refusal is filed in its own table.
@@ -128,7 +128,7 @@ public sealed class IncidentRefreshApiTests(HubApplicationFactory factory) : ICl
             Assert.Equal(IncidentRefreshGate.MaxReads, entered);
             Assert.False(gate.TryEnter());
 
-            using var refused = await client.PostAsync("/api/incidents/refresh", null, cancellationToken);
+            using var refused = await client.PostAsync("/api/incidents/refresh", NoBody(), cancellationToken);
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
             Assert.Equal("1", refused.Headers.RetryAfter?.ToString());
@@ -138,6 +138,26 @@ public sealed class IncidentRefreshApiTests(HubApplicationFactory factory) : ICl
             for (var slot = 0; slot < entered; slot++)
                 gate.Exit();
         }
+    }
+
+    [Theory]
+    // The fan-out holds a gate slot and writes the store, so a foreign page cannot start it.
+    [InlineData("same-site", "application/json", HttpStatusCode.Forbidden)]
+    [InlineData("cross-site", "text/plain", HttpStatusCode.Forbidden)]
+    [InlineData(null, "text/plain", HttpStatusCode.UnsupportedMediaType)]
+    [InlineData(null, null, HttpStatusCode.UnsupportedMediaType)]
+    public async Task A_refresh_from_another_site_or_without_json_is_refused(
+        string? site, string? contentType, HttpStatusCode expected)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/incidents/refresh");
+        if (contentType is not null)
+            request.Content = new StringContent("", Encoding.UTF8, contentType);
+        if (site is not null)
+            request.Headers.Add("Sec-Fetch-Site", site);
+
+        using var response = await factory.CreateClient().SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, response.StatusCode);
     }
 
     [Theory]
@@ -151,7 +171,7 @@ public sealed class IncidentRefreshApiTests(HubApplicationFactory factory) : ICl
     public async Task Invalid_query_is_rejected_the_way_the_listing_rejects_it(string path)
     {
         using var response = await factory.CreateClient()
-            .PostAsync(path, null, TestContext.Current.CancellationToken);
+            .PostAsync(path, NoBody(), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
@@ -164,7 +184,7 @@ public sealed class IncidentRefreshApiTests(HubApplicationFactory factory) : ICl
             cancellationToken);
         await using var scoped = Scoped(Daemon("stamped", daemon));
         using var client = scoped.CreateClient();
-        using var refreshed = await client.PostAsync("/api/incidents/refresh", null, cancellationToken);
+        using var refreshed = await client.PostAsync("/api/incidents/refresh", NoBody(), cancellationToken);
         Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
 
         var sources = await client.GetFromJsonAsync<JsonElement>("/api/sources", cancellationToken);
@@ -217,11 +237,19 @@ public sealed class IncidentRefreshApiTests(HubApplicationFactory factory) : ICl
     private static async Task<JsonElement[]> ListAsync(HttpClient client, string path, HttpMethod method)
     {
         using var request = new HttpRequestMessage(method, path);
+        if (method == HttpMethod.Post)
+            request.Content = NoBody();
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var document = JsonDocument.Parse(
             await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
         return [.. document.RootElement.EnumerateArray().Select(item => item.Clone())];
+    }
+
+    // The Hub's page posts no body but the JSON content type the write guard requires.
+    private static StringContent NoBody()
+    {
+        return new StringContent("", Encoding.UTF8, "application/json");
     }
 
     // The factory's own source is left in place: it points at a closed port, so

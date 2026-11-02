@@ -327,9 +327,8 @@ such header at all passes, since curl, a CI job and an IDE plugin do not set it.
 What defends that case is the content type alone: the Hub takes a JSON content
 type and nothing else, which a cross-origin form cannot produce and a
 cross-origin fetch cannot send without a preflight the Hub never answers. That
-is a floor and not a boundary, and the floor is the relay's alone:
-`POST /api/analyses` and `POST /api/incidents/refresh` judge neither the site
-nor the content type. A Hub reachable from a browser session therefore belongs
+is a floor and not a boundary, and `POST /api/analyses` and
+`POST /api/incidents/refresh` stand on the same one. A Hub reachable from a browser session therefore belongs
 behind a proxy that does not forward arbitrary origins.
 
 ## What access control does not cover

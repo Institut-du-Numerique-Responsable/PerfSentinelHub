@@ -287,7 +287,10 @@ by `Hub:MaxConcurrentPolls` exactly as the poll worker is, and answers the same 
 one round trip. The filters narrow the answer, never the read: the fan-out covers the
 whole fleet whatever the query asks for. It shares the poll's failure isolation: a
 401, a 404, a 503 or an oversized page files its own `incidents_state` and never touches
-the source's reachability, and one refusing daemon costs the others nothing.
+the source's reachability, and one refusing daemon costs the others nothing. Like an ack, a
+refresh comes from the Hub's own page or from no browser at all: a `Sec-Fetch-Site` other
+than `same-origin` is a `403` and a content type that is not JSON a `415`, so the launcher
+posts it with no body and `Content-Type: application/json`.
 
 What it guarantees the daemons: a source whose last read is younger than ten seconds is
 skipped and its stored copy served instead, so a reload loop, or five people watching the
@@ -1050,6 +1053,9 @@ The request shape follows the source's kind: `{}` for a daemon, which takes no p
 at all, `{service, lookback | from_ms + to_ms, max_traces}` for a trace backend, or
 `{trace_id}`. The engine's own exclusions are enforced before anything is queued, so an
 impossible pair is refused rather than discovered as a failed run three minutes later.
+A run starts work in the caller's name, so before the body is read a submission is held to
+the rule an ack is: a `Sec-Fetch-Site` other than `same-origin` is a `403` and a content type
+that is not JSON a `415`.
 
 ### Two invocations, not one
 

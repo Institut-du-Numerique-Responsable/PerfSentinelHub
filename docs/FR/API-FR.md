@@ -312,7 +312,10 @@ paramètres, validés à l'identique, de sorte qu'un écran n'a besoin que d'un 
 Les filtres resserrent la réponse, jamais la lecture : l'éventail couvre toute la flotte
 quoi que demande la requête. Elle partage l'isolation des pannes du poll : un 401, un
 404, un 503 ou une page trop grosse classe son propre `incidents_state` et ne touche jamais
-la joignabilité de la source, et un daemon qui refuse ne coûte rien aux autres.
+la joignabilité de la source, et un daemon qui refuse ne coûte rien aux autres. Comme un
+acquittement, un rafraîchissement vient de la page du Hub ou d'aucun navigateur : un
+`Sec-Fetch-Site` autre que `same-origin` vaut un `403` et un type de contenu qui n'est pas
+JSON un `415`, donc le lanceur le poste sans corps avec `Content-Type: application/json`.
 
 Ce qu'elle garantit aux daemons : une source dont la dernière lecture a moins de dix
 secondes est sautée et sa copie stockée est servie à la place, pour qu'une boucle de
@@ -1123,7 +1126,10 @@ La forme de la requête suit le kind de la source : `{}` pour un daemon, qui ne 
 paramètre, `{service, lookback | from_ms + to_ms, max_traces}` pour un backend de traces,
 ou `{trace_id}`. Les exclusions propres au moteur sont appliquées avant toute mise en
 file, donc une combinaison impossible est refusée plutôt que découverte trois minutes plus
-tard sous la forme d'un run échoué.
+tard sous la forme d'un run échoué. Un run lance du travail au nom de l'appelant, donc
+avant la lecture du corps une soumission est tenue à la règle d'un acquittement : un
+`Sec-Fetch-Site` autre que `same-origin` vaut un `403` et un type de contenu qui n'est pas
+JSON un `415`.
 
 ### Deux invocations, pas une
 
