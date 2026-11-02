@@ -327,9 +327,8 @@ such header at all passes, since curl, a CI job and an IDE plugin do not set it.
 What defends that case is the content type alone: the Hub takes a JSON content
 type and nothing else, which a cross-origin form cannot produce and a
 cross-origin fetch cannot send without a preflight the Hub never answers. That
-is a floor and not a boundary, and the floor is the relay's alone:
-`POST /api/analyses` and `POST /api/incidents/refresh` judge neither the site
-nor the content type. A Hub reachable from a browser session therefore belongs
+is a floor and not a boundary, and `POST /api/analyses` and
+`POST /api/incidents/refresh` stand on the same one. A Hub reachable from a browser session therefore belongs
 behind a proxy that does not forward arbitrary origins.
 
 ## What access control does not cover
@@ -365,7 +364,9 @@ Who a finding is attributed to:
   service grant for `acks.write` and `analyses.run`.
 - Starting a run at a trace backend needs every copy of the service in the backend's
   environment to agree. Name a trace backend's environment like the daemons that report
-  its services.
+  its services. An attribute pattern covers such a run only when it also names the service:
+  a team reports copies of any service name it likes, so copies alone never make a service
+  the team's. A trace run needs a service or a source pattern.
 - A copy recorded before schema version 9 matches no attribute pattern and no service part
   until its source reports it again.
 - Adding a grouping attribute changes the identity of spans that carried none of the

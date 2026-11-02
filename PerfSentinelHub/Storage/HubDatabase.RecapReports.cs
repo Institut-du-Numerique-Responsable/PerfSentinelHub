@@ -21,13 +21,15 @@ public sealed partial class HubDatabase
     /// <summary>
     ///     Stores a report and its pending deliveries, due at once, in one transaction. False when
     ///     the subscription already holds a report for that cadence and period: nothing is written.
+    ///     It waits for the write lock even from a request: the report it stores can take minutes to
+    ///     compute, and giving up would throw that work away.
     /// </summary>
     public Task<bool> InsertRecapReportAsync(
         RecapReportRecord report,
         IReadOnlyList<(string Channel, string Target)> deliveries,
         CancellationToken cancellationToken)
     {
-        return WriteTransactionAsync(async (connection, transaction) =>
+        return WriteTransactionAsync(false, async (connection, transaction) =>
         {
             if (!await InsertRecapReportRowAsync(connection, transaction, report, cancellationToken))
                 return false;
@@ -214,7 +216,7 @@ public sealed partial class HubDatabase
         long? nextAttemptMs,
         CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return WriteAsync(false, async command =>
         {
             command.CommandText = """
                                   UPDATE recap_deliveries
@@ -234,7 +236,7 @@ public sealed partial class HubDatabase
     /// <summary>Drops the reports generated before the cutoff, then the deliveries whose report is gone.</summary>
     public Task PurgeRecapReportsAsync(long cutoffMs, CancellationToken cancellationToken)
     {
-        return WriteAsync(async command =>
+        return WriteAsync(false, async command =>
         {
             command.CommandText = """
                                   DELETE FROM recap_reports WHERE generated_at_ms < $cutoff;

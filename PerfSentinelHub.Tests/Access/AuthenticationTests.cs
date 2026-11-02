@@ -127,6 +127,21 @@ public sealed class AuthenticationTests : IAsyncLifetime
     }
 
     [Theory]
+    // Access off: a framed launcher would run its own same-origin writes as the signed-in user.
+    [InlineData("/")]
+    [InlineData("/api/status")]
+    [InlineData("/health/live")]
+    public async Task With_sign_in_on_no_other_site_may_frame_a_response(string path)
+    {
+        using var client = Client();
+
+        using var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Equal("frame-ancestors 'self'",
+            Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
+    }
+
+    [Theory]
     [InlineData("/api/status")]
     [InlineData("/api/sources")]
     [InlineData("/api/analyses")]

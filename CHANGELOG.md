@@ -2,6 +2,66 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.12.0] - 2026-11-02
+
+### Changed
+
+- Schema version 22 moves each finding envelope out of the rows every read scans: the shared one
+  to `finding_envelopes`, each source's copy to `finding_source_envelopes`. Stored inline, the
+  envelopes spread `findings` and `finding_sources` over as many pages as they filled, so a
+  windowed read walked them all. The first start after the upgrade copies the envelopes and
+  rebuilds both tables in one transaction, before `/health/ready` answers. That start lasts as
+  long as the rewrite, and the volume needs about the two tables' size free again. A build before
+  this one refuses to start on the result.
+- Two read indexes, `ix_findings_last_seen` and `ix_finding_sources_window`, let a newest-first or
+  windowed findings read walk an index in order instead of sorting its whole scope. They are built
+  after the Hub answers, under the write lock. Reads work without them, only slower.
+- SQLite's temporary files (a sort past its cache, an index build, the version 22 rewrite) go to
+  `/data` in the image (`SQLITE_TMPDIR`), not to `/tmp`, which the chart caps at 32 MiB.
+- A disclosure, a share link or a card key written by a request gives up after five seconds when
+  the write lock is held, with `503 Retry-After: 1` and no body, as an import already did,
+  instead of holding the request behind a long purge or index build. A frozen recap report is the exception: it waits for the lock, since giving up would
+  throw away a computation that can last minutes. The recap screen now says that computing one
+  can take minutes.
+- The image ships perf-sentinel `0.41.0` as its analysis engine, repinned by digest from
+  `0.40.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.40.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. Engine `0.41.0` is a hardening release: no
+  detection, score or report format changes, and the disclosure schema stays
+  `perf-sentinel-report/v1.8`.
+- The French launcher credits Perf Sentinel and its designer with "Propulsé par" and "par".
+
+### Security
+
+- `POST /api/analyses` and `POST /api/incidents/refresh` are held to the rule an ack is: a
+  `Sec-Fetch-Site` other than `same-origin` is a `403`, and a content type that is not JSON a
+  `415`. The launcher posts them with `Content-Type: application/json`.
+- An analysis submission is at most 64 KiB (`413`). The run stores the request rebuilt from the
+  fields the Hub reads, so an unknown property is dropped, and `GET /api/analyses` returns that
+  form. At most four runs per `Hub:Analysis:Workers` wait at once, past which a submission is a
+  `503` with `Retry-After: 30`.
+- An analysis `service` is 1 to 256 characters with no whitespace, no control character and none
+  of `"`, `=` and `\`, which a trace backend's tag search would read as syntax. Another is a `400`.
+- One source holds at most one of the four import slots: a second import from a source whose
+  first is still running gets `503 Retry-After: 1`. A body still arriving after 60 seconds is cut
+  with a `408`, so a trickled upload gives its slot back.
+- A source-, environment- or grant-scoped findings read judges each copy on its own service,
+  type, endpoint and sample trace, as it already did on severity. Another source pushing the same
+  signature with other values no longer moves a scoped filter, count or status. Schema version 23
+  adds `finding_type`, `endpoint` and `sample_trace_id` to `finding_sources`. A copy stored
+  before it reads the fleet's values until the Hub, once it answers, fills them from the copy's
+  envelope, a chunk at a time. `GET /api/findings/{traceId}` takes `environment` and `source_id`
+  as a listing does.
+- An attribute pattern covers a trace-backend service run only when it also names the service: a
+  team reports copies under any service name it likes, so copies alone never make a service the
+  team's. A team that runs them needs a `service` or a `source` pattern.
+- `frame-ancestors 'self'` is set whenever sign-in is on, access control on or off.
+- A queued recap delivery, webhook or e-mail, whose target its subscription no longer lists is
+  not sent: taking an address or a webhook off a subscription stops its queued deliveries at the
+  next restart.
+- A webhook delivery is settled on the response status without reading the body, so a receiver
+  can neither make the Hub buffer it nor turn a `2xx` into a timeout by stalling it.
+
 ## [0.11.0] - 2026-10-31
 
 ### Added

@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
@@ -84,6 +86,35 @@ public sealed record AnalysisRequest
     }
 
     /// <summary>
+    ///     The request as a run stores it: the fields read above, rebuilt, so nothing the parser
+    ///     ignored reaches the table or the launcher's list of runs.
+    /// </summary>
+    public string ToJson()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            if (Service is not null)
+                writer.WriteString("service", Service);
+            if (TraceId is not null)
+                writer.WriteString("trace_id", TraceId);
+            if (Lookback is not null)
+                writer.WriteString("lookback", Lookback);
+            if (FromMs is { } fromMs)
+                writer.WriteNumber("from_ms", fromMs);
+            if (ToMs is { } toMs)
+                writer.WriteNumber("to_ms", toMs);
+            if (MaxTraces is { } maxTraces)
+                writer.WriteNumber("max_traces", maxTraces);
+            Detection.WriteSubmitted(writer);
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    /// <summary>
     ///     The engine arguments this request becomes, for the subcommand matching
     ///     the source kind. Never called for a daemon: a snapshot is an HTTP read.
     /// </summary>
@@ -162,8 +193,12 @@ public sealed record AnalysisRequest
             return ValidateTraceRequest(request, traceId);
         if (request.Service is not { } service)
             return "Either a service or a trace ID is required.";
-        if (service.Length is 0 or > MaxServiceLength)
-            return $"The service name must be 1 to {MaxServiceLength} characters.";
+        // A service.name never needs them, and a trace backend's tag search reads them as syntax:
+        // a space or a newline would start a second logfmt pair after the grant judged the first.
+        if (service.Length is 0 or > MaxServiceLength ||
+            service.Any(c => char.IsWhiteSpace(c) || char.IsControl(c) || c is '"' or '=' or '\\'))
+            return $"The service name must be 1 to {MaxServiceLength} characters, with no space, control character, "
+                   + "'\"', '=' or '\\'.";
 
         return ValidateWindow(request, nowMs) ?? ValidateMaxTraces(request, analysis);
     }

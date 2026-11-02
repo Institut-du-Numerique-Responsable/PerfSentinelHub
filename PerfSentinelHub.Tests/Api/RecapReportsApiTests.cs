@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -79,6 +80,34 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
         Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
         var snapshot = (await JsonAsync(detail)).RootElement.GetProperty("snapshot");
         Assert.Equal("tech", snapshot.GetProperty("view").GetString());
+    }
+
+    [Fact]
+    public async Task A_held_write_lock_delays_the_frozen_report_past_the_request_wait_rather_than_losing_it()
+    {
+        using var client = Client(7);
+        // No public seam holds the write lock. Held past WriteGateWait (5 s), where a request's write gives up.
+        var database = _hubs[^1].Services.GetRequiredService<HubDatabase>();
+        var writeGate = (SemaphoreSlim)typeof(HubDatabase)
+            .GetField("_writeGate", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(database)!;
+        var before = (await database.ListRecapReportsAsync(null, 1000, Token)).Count;
+        await writeGate.WaitAsync(Token);
+        Task<HttpResponseMessage> posting;
+        try
+        {
+            posting = PostAsync(client, """{"period":"day","at":"1970-01-01"}""");
+            await Task.Delay(TimeSpan.FromSeconds(6), Token);
+            Assert.False(posting.IsCompleted);
+        }
+        finally
+        {
+            writeGate.Release();
+        }
+
+        using var response = await posting;
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(before + 1, (await database.ListRecapReportsAsync(null, 1000, Token)).Count);
     }
 
     [Fact]

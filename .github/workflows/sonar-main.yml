@@ -31,10 +31,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.403
-          cache: true
-          cache-dependency-path: |
-            Directory.Packages.props
-            **/packages.lock.json
+          # No Actions cache in a job that holds a secret: a dispatched fork run sits on refs/heads/main
+          # and holds that cache scope, so an entry it wrote could feed this build. The locked restore
+          # downloads from NuGet and checks every package hash instead.
+          cache: false
       - name: Restore locked dependencies and tools
         run: |
           dotnet restore PerfSentinelHub.sln --locked-mode
