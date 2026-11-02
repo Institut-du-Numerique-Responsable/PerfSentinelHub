@@ -211,7 +211,9 @@ Une écriture depuis un navigateur doit porter `Sec-Fetch-Site: same-origin`, qu
 navigateur actuel envoie : une page sur un sous-domaine voisin ne peut pas poster avec le
 cookie de l'utilisateur. Une requête avec un bearer n'est pas celle d'un navigateur et
 n'y est pas tenue. Chaque réponse porte `Content-Security-Policy: frame-ancestors 'self'` :
-aucun autre site ne peut encadrer le launcher et cliquer sur ses boutons.
+aucun autre site ne peut encadrer le launcher et cliquer sur ses boutons. Cet en-tête vient
+avec la connexion, non avec le contrôle d'accès : `Hub:Auth` actif et l'accès coupé l'envoient
+aussi, voir [AUTHENTICATION-FR.md](AUTHENTICATION-FR.md).
 
 ### Analyses et rapports
 
@@ -225,9 +227,14 @@ Un run se lit, et son rapport s'ouvre, sous une seule règle :
 
 Un run de service est couvert quand la `source` d'un motif (s'il y en a une) correspond au
 backend, son `service` (s'il y en a un) correspond à X, et, pour un motif d'attribut,
-quand chaque copie de X que le Hub détient dans l'environnement du backend porte cet
-attribut, avec au moins une copie. Le moteur n'exporte aucun regroupement pour un span :
-ces copies sont la seule preuve de l'équipe à qui appartient un service. Un run sur un
+quand le motif nomme aussi un `service` et que chaque copie de X que le Hub détient dans
+l'environnement du backend porte cet attribut, avec au moins une copie. Le moteur n'exporte
+aucun regroupement pour un span : ces copies sont la seule preuve de l'équipe à qui
+appartient un service, et toute source de cet environnement les rapporte, celle du
+demandeur comprise. Un motif d'attribut seul, avec ou sans `source`, ne couvre donc aucun
+run de service sur un backend de traces : donnez à une équipe qui en lance un motif de
+`service` (un attribut à côté le resserre encore) ou un motif de `source` sur le backend.
+Les lectures de findings ne changent pas, chaque copie étant jugée à sa propre source. Un run sur un
 trace ID exige le backend entier : une autorisation de service ne peut pas faire récupérer au Hub
 une trace arbitraire.
 

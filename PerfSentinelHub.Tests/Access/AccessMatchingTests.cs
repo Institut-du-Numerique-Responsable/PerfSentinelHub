@@ -141,7 +141,7 @@ public sealed class AccessMatchingTests
     [Fact]
     public void A_trace_subject_needs_every_copy_of_the_service_in_its_environment_to_write_match()
     {
-        var shop = AccessPattern.Compile(new PatternOptions { Attribute = "team=shop" });
+        var shop = AccessPattern.Compile(new PatternOptions { Service = "cart", Attribute = "team=shop" });
         var shopCopy = Copy("prod-daemon", "cart", Row("team", "shop", "team", "shop"));
         var billingCopy = Copy("prod-daemon-2", "cart", Row("team", "billing", "team", "billing"));
 
@@ -157,8 +157,14 @@ public sealed class AccessMatchingTests
             .CoversSubject("tempo", "billing", []));
         Assert.False(AccessPattern.Compile(new PatternOptions { Source = "jaeger" })
             .CoversSubject("tempo", "cart", [shopCopy]));
+        // Without a service part, an attribute never covers a trace subject: any source reports copies,
+        // the requester's own included, so they cannot say which services are the team's.
+        Assert.False(AccessPattern.Compile(new PatternOptions { Attribute = "team=shop" })
+            .CoversSubject("tempo", "cart", [shopCopy]));
+        Assert.False(AccessPattern.Compile(new PatternOptions { Source = "tempo", Attribute = "team=shop" })
+            .CoversSubject("tempo", "cart", [shopCopy]));
         // The copies' own source is not the subject's: a source part reads T alone.
-        Assert.True(AccessPattern.Compile(new PatternOptions { Source = "tempo", Attribute = "team=shop" })
+        Assert.True(AccessPattern.Compile(new PatternOptions { Source = "tempo", Service = "c*", Attribute = "team=shop" })
             .CoversSubject("tempo", "cart", [shopCopy]));
     }
 

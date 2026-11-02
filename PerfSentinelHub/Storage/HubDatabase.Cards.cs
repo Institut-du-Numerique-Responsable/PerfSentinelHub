@@ -276,7 +276,8 @@ public sealed partial class HubDatabase
         Action<SqliteParameterCollection>? bind,
         CancellationToken cancellationToken)
     {
-        await _writeGate.WaitAsync(cancellationToken);
+        // Only a request makes, rotates or revokes a key.
+        await EnterWriteGateAsync(true, cancellationToken);
         try
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);

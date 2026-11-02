@@ -36,6 +36,13 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
 #pragma warning restore S107
     {
+        // A fan-out holds a gate slot and writes the store, so only the Hub's own page starts one.
+        if (RefuseForeignRequest(context.Request) is { } refusal)
+        {
+            await refusal.ExecuteAsync(context);
+            return;
+        }
+
         // Before the gate: a caller who may read nothing never holds one of its two slots.
         var scope = access.Scope(context, AccessPermissions.FindingsRead);
         if (scope.IsNothing)

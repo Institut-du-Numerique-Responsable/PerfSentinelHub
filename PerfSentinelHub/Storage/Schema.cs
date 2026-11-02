@@ -552,4 +552,21 @@ internal static class Schema
                                   revoked_on TEXT
                                 );
                                 """;
+
+    // Version 22 (V21 is a column, see EnsureRecapLanguageColumnAsync): the envelopes, apart from
+    // the rows every read scans. MoveEnvelopesOutAsync fills them from a database that predates them.
+    internal const string V22 = """
+                                CREATE TABLE IF NOT EXISTS finding_envelopes (
+                                  signature TEXT PRIMARY KEY REFERENCES findings(signature) ON DELETE CASCADE,
+                                  finding_json TEXT NOT NULL
+                                );
+                                CREATE TABLE IF NOT EXISTS finding_source_envelopes (
+                                  signature TEXT NOT NULL,
+                                  source_id TEXT NOT NULL,
+                                  finding_json TEXT NOT NULL,
+                                  PRIMARY KEY(signature, source_id),
+                                  FOREIGN KEY(signature, source_id)
+                                    REFERENCES finding_sources(signature, source_id) ON DELETE CASCADE
+                                );
+                                """;
 }

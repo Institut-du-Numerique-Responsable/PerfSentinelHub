@@ -170,6 +170,20 @@ public sealed partial class RecapMailDeliveryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_address_its_subscription_no_longer_lists_gets_no_mail()
+    {
+        // Frozen for pm@, then pm@ was taken off the subscription before the relay took it.
+        var hub = await ReportedAsync(Relay(_relay.Port), [Subscription("ops@example.test")], "pm@example.test");
+
+        await RunAsync(hub);
+
+        Assert.Empty(_relay.Received);
+        var delivery = Assert.Single(await DeliveriesAsync(hub));
+        Assert.Equal(DeliveryStates.Failed, delivery.State);
+        Assert.Null(delivery.LastStatus);
+    }
+
+    [Fact]
     public async Task One_report_to_two_addresses_of_two_languages_makes_two_mails()
     {
         var subscription = new RecapSubscriptionOptions
@@ -229,9 +243,22 @@ public sealed partial class RecapMailDeliveryTests : IAsyncLifetime
         return stopped.Port;
     }
 
+    // The reports' subscription lists the addresses, as it did when they were frozen. A relay-less Hub
+    // takes none: the configuration refuses addresses without a relay.
     private Task<WebApplicationFactory<Program>> ReportedAsync(RecapSmtpOptions smtp, params string[] addresses)
     {
-        return ReportedAsync(smtp, [], addresses);
+        return ReportedAsync(smtp, smtp.Enabled ? [Subscription(addresses)] : [], addresses);
+    }
+
+    private static RecapSubscriptionOptions Subscription(params string[] emails)
+    {
+        return new RecapSubscriptionOptions
+        {
+            Name = "weekly-shop",
+            Cadences = ["week"],
+            Views = [RecapViewNames.Pilotage, RecapViewNames.Tech],
+            Emails = emails
+        };
     }
 
     private async Task<WebApplicationFactory<Program>> ReportedAsync(

@@ -154,6 +154,31 @@ public sealed class AnalysisApiTests : IDisposable
     }
 
     [Theory]
+    // A page on a sibling host carries the session cookie on a same-site POST, and a
+    // text/plain one needs no preflight: neither starts a run in the caller's name.
+    [InlineData("same-site", "application/json", HttpStatusCode.Forbidden)]
+    [InlineData("cross-site", "text/plain", HttpStatusCode.Forbidden)]
+    [InlineData(null, "text/plain", HttpStatusCode.UnsupportedMediaType)]
+    public async Task A_submission_from_another_site_or_without_json_is_refused_without_queueing(
+        string? site, string contentType, HttpStatusCode expected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/analyses");
+        request.Content = new StringContent(
+            """{"source_id":"prod-tempo","request":{"service":"order-service","lookback":"1h"}}""",
+            Encoding.UTF8, contentType);
+        if (site is not null)
+            request.Headers.Add("Sec-Fetch-Site", site);
+
+        using var response = await _client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(expected, response.StatusCode);
+        using var status = await _client.GetAsync("/api/status", cancellationToken);
+        var payload = await status.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        Assert.Equal(0, payload.GetProperty("queue_depth").GetInt32());
+    }
+
+    [Theory]
     // What this actually pins is the response, not the IsRunId guard: an id the
     // Hub never minted finds no row and 404s with or without it. The guard is
     // defence in depth ahead of that lookup, and its removal is deliberately

@@ -198,6 +198,7 @@ app.UseStaticFiles(new StaticFileOptions
     OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache"
 });
 
+app.UseWriteGateBusy();
 app.MapHubApi();
 app.MapAnalysisApi();
 var accessPolicy = app.Services.GetRequiredService<AccessPolicy>();

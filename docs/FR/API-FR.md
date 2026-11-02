@@ -80,11 +80,17 @@ remplace la sienne à chaque réponse. Seul un push la reçoit : un daemon inter
 reçoit jamais.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
-nombre de daemons. Les écritures sont sérialisées face aux chemins de poll et de
+nombre de daemons, et une source en tient au plus un : un second import d'une source dont le
+premier tourne encore, de quelque type qu'il soit, reçoit `503 Retry-After: 1`. Un corps qui
+arrive encore au bout de 60 secondes est coupé par un `408`, pour qu'un envoi au compte-gouttes
+rende sa place. Les écritures sont sérialisées face aux chemins de poll et de
 rétention. Un import qui ne peut pas prendre le verrou d'écriture en cinq secondes reçoit
 `503 Retry-After: 1`, et les exportateurs des daemons conservent puis rejouent leurs lots
 fusionnés. La rétention purge par tranches bornées, pour qu'une purge longue ne rejette
-pas les imports pendant toute sa durée.
+pas les imports pendant toute sa durée. Toute autre écriture faite par une requête (publication,
+lien de partage, clé de carte) attend les mêmes cinq secondes, puis répond `503 Retry-After: 1`
+sans corps, sans rien écrire. Un rapport figé fait exception : il attend le verrou aussi longtemps
+qu'il le faut, car abandonner jetterait un calcul qui peut durer plusieurs minutes.
 
 Un push met à jour les findings, les incidents, les registres de détections et les
 observations par source, rien d'autre. Il n'efface jamais le `unreachable_since_ms` du
@@ -99,7 +105,7 @@ joignabilité est un fait sur la route du Hub vers le daemon, qu'un push n'exerc
 | `GET /api/status`                    | La version du Hub, celle du moteur qu'il lancerait (`engine_version`, null quand aucun n'est configuré), et ce que coûte un run : workers, profondeur de file, plafond de traces, timeout, rétention de rapport. `disclosures: true` seulement tant que les divulgations sont actives et que l'appelant les lit. `cards` : `true` quand l'appelant peut faire des cartes, `false` quand le moteur n'a pas de sous-commande `card`, absent tant que les cartes sont désactivées ou que l'appelant n'a `cards.write` nulle part |
 | `GET /api/sources`                   | Chaque source configurée avec son kind et son dernier état de collecte connu                                                                                                                                       |
 | `GET /api/findings`                  | Les findings, filtrés par `service`, `finding_type`, `severity`, `status`, `signature`, `grouping`, `environment`, `source_id`, `from`, `to`, `offset`, `limit`, `include_acked`                                   |
-| `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple                                                                                                                                                                                 |
+| `GET /api/findings/{traceId}`        | Les findings d'une trace d'exemple, resserrés par `environment` et `source_id` comme une liste                                                                                                                     |
 | `GET /api/sources/{sourceId}/daemon` | Les réglages appliqués d'un daemon et son propre compte rendu. Voir plus bas                                                                                                                                       |
 | `GET /api/incidents`                 | Les incidents enregistrés par les daemons interrogés, du plus récent au plus ancien, filtrés par `service`, `kind`, `namespace`, `environment`, `source_id`, `offset`, `limit`. Sans leurs findings, voir plus bas |
 | `GET /api/incidents/{id}`            | Un incident entier, findings figés compris                                                                                                                                                                         |
@@ -309,7 +315,10 @@ paramètres, validés à l'identique, de sorte qu'un écran n'a besoin que d'un 
 Les filtres resserrent la réponse, jamais la lecture : l'éventail couvre toute la flotte
 quoi que demande la requête. Elle partage l'isolation des pannes du poll : un 401, un
 404, un 503 ou une page trop grosse classe son propre `incidents_state` et ne touche jamais
-la joignabilité de la source, et un daemon qui refuse ne coûte rien aux autres.
+la joignabilité de la source, et un daemon qui refuse ne coûte rien aux autres. Comme un
+acquittement, un rafraîchissement vient de la page du Hub ou d'aucun navigateur : un
+`Sec-Fetch-Site` autre que `same-origin` vaut un `403` et un type de contenu qui n'est pas
+JSON un `415`, donc le lanceur le poste sans corps avec `Content-Type: application/json`.
 
 Ce qu'elle garantit aux daemons : une source dont la dernière lecture a moins de dix
 secondes est sautée et sa copie stockée est servie à la place, pour qu'une boucle de
@@ -395,13 +404,18 @@ d'observation et le battement de l'endpoint suivent la même heure.
 
 Lue avec `environment` ou `source_id`, une enveloppe décrit ce périmètre et non la flotte.
 Le document du daemon est la copie de la source du périmètre qui a vu le finding en dernier,
-donc `severity` juge cette copie. `first_seen` est le plus ancien et `last_seen` le plus
+donc `severity` juge cette copie, comme les filtres `service`, `finding_type` et de trace, les
+battements du statut et les comptes par type : une autre source qui pousse la même signature
+avec d'autres valeurs n'en déplace aucun. `first_seen` est le plus ancien et `last_seen` le plus
 récent sur les sources du périmètre, `status` est dérivé de ce `last_seen` et des battements
 de ces seules sources, et `sources` et `acks` ne listent qu'elles. `max_confidence` reste à
 l'échelle de la flotte, délibérément, la plus haute confiance qu'une source ait jamais
 rapportée. La copie propre à une source commence à sa première observation après la mise à
 niveau qui l'enregistre. Jusque-là, sa ligne sert la copie que la flotte partage, la plus
-fraîche toutes sources confondues.
+fraîche toutes sources confondues. Une copie stockée avant la version 23 du schéma n'a ni
+type, ni endpoint, ni trace à elle : le démarrage qui suit la mise à niveau lit ceux de la
+flotte pour elle, et le Hub les remplit depuis l'enveloppe de la copie une fois qu'il répond,
+par tranches.
 
 Une lecture avec `from` ou `to` sert aussi combien de fois les daemons ont détecté le
 finding dans la fenêtre, d'après les registres de détections que le Hub lit par poll ou
@@ -753,7 +767,10 @@ Un webhook de récap dont `IncludeShareLink` est activé est refusé au démarra
 
 Les livraisons tournent toutes les 15 secondes depuis la table `recap_deliveries`, si bien qu'un
 redémarrage les reprend. Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
-été purgé entre-temps, échoue sans requête.
+été purgé entre-temps, échoue sans requête. De même pour une livraison, webhook ou e-mail, dont la
+souscription du rapport ne liste plus la cible dans la configuration en vigueur à l'envoi : retirer
+une adresse ou un webhook d'une souscription arrête dès le redémarrage suivant les livraisons
+encore en file pour elle.
 
 ## Rapports de récap
 
@@ -1120,7 +1137,22 @@ La forme de la requête suit le kind de la source : `{}` pour un daemon, qui ne 
 paramètre, `{service, lookback | from_ms + to_ms, max_traces}` pour un backend de traces,
 ou `{trace_id}`. Les exclusions propres au moteur sont appliquées avant toute mise en
 file, donc une combinaison impossible est refusée plutôt que découverte trois minutes plus
-tard sous la forme d'un run échoué.
+tard sous la forme d'un run échoué. Un `service` fait 1 à 256 caractères sans espace, sans
+caractère de contrôle et sans `"`, `=` ni `\` : un `service.name` n'en a jamais besoin, et la
+recherche par tags d'un backend de traces les lirait comme de la syntaxe, donc un tel nom vaut
+un `400`. Un run lance du travail au nom de l'appelant, donc
+avant la lecture du corps une soumission est tenue à la règle d'un acquittement : un
+`Sec-Fetch-Site` autre que `same-origin` vaut un `403` et un type de contenu qui n'est pas
+JSON un `415`.
+
+Une soumission fait au plus 64 Kio, au-delà c'est un `413`. Le run stocke la requête
+reconstruite à partir des champs ci-dessus et des réglages `detection`, donc une propriété
+que le Hub ne lit pas est écartée plutôt que gardée, et `GET /api/analyses` renvoie cette
+forme stockée. Au plus quatre runs par `Hub:Analysis:Workers` attendent à la fois (huit par
+défaut) : au-delà, une soumission reçoit un `503` avec `Retry-After: 30`, puisque la file se
+vide au rythme du moteur. Un `503` avec `Retry-After: 1` signifie toujours que le verrou
+d'écriture était pris. Les runs stockés avant cette règle gardent la requête avec laquelle
+ils ont été soumis.
 
 ### Deux invocations, pas une
 

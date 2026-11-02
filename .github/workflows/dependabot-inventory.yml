@@ -16,9 +16,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A run uses the pull request's own copy of this file, so a Dependabot bump of one of its actions
+  # would hand the App private key to action code nobody has read yet. The sync runs only when this
+  # file matches the base branch, whose pins were reviewed when they merged. The guard runs no
+  # action at all, harden-runner included, since any action here would be the pull request's pin and
+  # could forge the verdict.
+  guard:
+    name: Refuse a bump of this workflow's own actions
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      same: ${{ steps.compare.outputs.same }}
+    steps:
+      - name: Compare this workflow with the base branch
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          workflow=.github/workflows/dependabot-inventory.yml
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$REPOSITORY/contents/$workflow?ref=$BASE_SHA" > "$RUNNER_TEMP/base.yml"
+          gh api -H 'Accept: application/vnd.github.raw' "repos/$REPOSITORY/contents/$workflow?ref=$HEAD_SHA" > "$RUNNER_TEMP/head.yml"
+          if cmp -s "$RUNNER_TEMP/base.yml" "$RUNNER_TEMP/head.yml"; then
+            echo "same=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "same=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Inventory sync skipped::This pull request moves the actions of $workflow, so no App token is minted. Review the new action versions, then run python3 scripts/sync-supply-chain.py and commit config/supply-chain.json by hand."
+          fi
+
   sync:
     name: Sync the supply-chain inventory
-    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: guard
+    if: ${{ needs.guard.outputs.same == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

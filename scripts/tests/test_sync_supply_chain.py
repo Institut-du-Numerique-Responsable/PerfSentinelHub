@@ -130,5 +130,28 @@ class SyncSupplyChainTests(unittest.TestCase):
             sync.sync(self.root)
 
 
+class InventoryWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        text = (REPOSITORY / ".github/workflows/dependabot-inventory.yml").read_text(encoding="utf-8")
+        self.guard = text[text.index("\n  guard:\n"):text.index("\n  sync:\n")]
+        self.sync = text[text.index("\n  sync:\n"):]
+
+    def test_the_guard_runs_no_action_and_compares_this_workflow_with_the_base(self):
+        # Any action in the guard would be the pull request's own pin, able to forge the verdict.
+        self.assertNotIn("uses:", self.guard)
+        self.assertNotIn("secrets.", self.guard)
+        self.assertIn("dependabot[bot]", self.guard)
+        self.assertIn(".github/workflows/dependabot-inventory.yml", self.guard)
+        self.assertIn("github.event.pull_request.base.sha", self.guard)
+        self.assertIn("github.event.pull_request.head.sha", self.guard)
+        self.assertIn("cmp -s", self.guard)
+        self.assertIn("::notice", self.guard)
+
+    def test_the_app_key_is_only_reached_when_the_workflow_matches_the_base(self):
+        self.assertIn("needs: guard", self.sync)
+        self.assertIn("if: ${{ needs.guard.outputs.same == 'true' }}", self.sync)
+        self.assertIn("secrets.INVENTORY_SYNC_APP_PRIVATE_KEY", self.sync)
+
+
 if __name__ == "__main__":
     unittest.main()
