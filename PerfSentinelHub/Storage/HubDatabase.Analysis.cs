@@ -15,7 +15,17 @@ public sealed partial class HubDatabase
     ///     submission answers 503 instead of hanging behind a long purge, matching
     ///     what the import path already does.
     /// </summary>
-    public async Task<bool> TryInsertRunAsync(AnalysisRun run, CancellationToken cancellationToken)
+    public Task<bool> TryInsertRunAsync(AnalysisRun run, CancellationToken cancellationToken)
+    {
+        return TryInsertRunAsync(run, int.MaxValue, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Also false when <paramref name="maxPending" /> runs already wait: the count and the
+    ///     insert are one statement under the write gate, so two submissions cannot both take
+    ///     the last place.
+    /// </summary>
+    public async Task<bool> TryInsertRunAsync(AnalysisRun run, int maxPending, CancellationToken cancellationToken)
     {
         if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
             return false;
@@ -25,9 +35,11 @@ public sealed partial class HubDatabase
             await using var command = connection.CreateCommand();
             command.CommandText = $"""
                                    INSERT INTO analysis_runs({RunColumns})
-                                   VALUES ($id, $status, $source_id, $source_name, $environment, $kind,
-                                           $request_json, $requested_by, $created_at_ms, NULL, NULL,
-                                           NULL, NULL, NULL, NULL);
+                                   SELECT $id, $status, $source_id, $source_name, $environment, $kind,
+                                          $request_json, $requested_by, $created_at_ms, NULL, NULL,
+                                          NULL, NULL, NULL, NULL
+                                   WHERE (SELECT COUNT(*) FROM analysis_runs
+                                          WHERE status = '{AnalysisStatuses.Pending}') < $max_pending;
                                    """;
             command.Parameters.AddWithValue("$id", run.Id);
             command.Parameters.AddWithValue("$status", run.Status);
@@ -38,8 +50,8 @@ public sealed partial class HubDatabase
             command.Parameters.AddWithValue("$request_json", run.RequestJson);
             command.Parameters.AddWithValue("$requested_by", run.RequestedBy);
             command.Parameters.AddWithValue("$created_at_ms", run.CreatedAtMs);
-            await command.ExecuteNonQueryAsync(cancellationToken);
-            return true;
+            command.Parameters.AddWithValue("$max_pending", maxPending);
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
         }
         finally
         {

@@ -1131,6 +1131,15 @@ avant la lecture du corps une soumission est tenue à la règle d'un acquittemen
 `Sec-Fetch-Site` autre que `same-origin` vaut un `403` et un type de contenu qui n'est pas
 JSON un `415`.
 
+Une soumission fait au plus 64 Kio, au-delà c'est un `413`. Le run stocke la requête
+reconstruite à partir des champs ci-dessus et des réglages `detection`, donc une propriété
+que le Hub ne lit pas est écartée plutôt que gardée, et `GET /api/analyses` renvoie cette
+forme stockée. Au plus quatre runs par `Hub:Analysis:Workers` attendent à la fois (huit par
+défaut) : au-delà, une soumission reçoit un `503` avec `Retry-After: 30`, puisque la file se
+vide au rythme du moteur. Un `503` avec `Retry-After: 1` signifie toujours que le verrou
+d'écriture était pris. Les runs stockés avant cette règle gardent la requête avec laquelle
+ils ont été soumis.
+
 ### Deux invocations, pas une
 
 Les sous-commandes de query émettent du texte, du JSON ou du SARIF, et seule `report`

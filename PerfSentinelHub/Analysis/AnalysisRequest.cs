@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
@@ -81,6 +83,35 @@ public sealed record AnalysisRequest
             ? ValidateDaemon(request)
             : ValidateBackend(request, analysis, nowMs);
         return error is null ? request : null;
+    }
+
+    /// <summary>
+    ///     The request as a run stores it: the fields read above, rebuilt, so nothing the parser
+    ///     ignored reaches the table or the launcher's list of runs.
+    /// </summary>
+    public string ToJson()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            if (Service is not null)
+                writer.WriteString("service", Service);
+            if (TraceId is not null)
+                writer.WriteString("trace_id", TraceId);
+            if (Lookback is not null)
+                writer.WriteString("lookback", Lookback);
+            if (FromMs is { } fromMs)
+                writer.WriteNumber("from_ms", fromMs);
+            if (ToMs is { } toMs)
+                writer.WriteNumber("to_ms", toMs);
+            if (MaxTraces is { } maxTraces)
+                writer.WriteNumber("max_traces", maxTraces);
+            Detection.WriteSubmitted(writer);
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     /// <summary>
