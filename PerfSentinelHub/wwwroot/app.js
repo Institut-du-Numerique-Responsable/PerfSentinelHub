@@ -6816,9 +6816,9 @@
         ]);
     }
 
-    // The trend chip says something only when it differs from its group's title or carries a
-    // figure: under New, a "new" on every line repeated the heading and floated off its line.
-    function recapMoveItem(item, management, group) {
+    // Every line keeps its trend pill: a coloured pill marks the move where the group's plain title
+    // does not, and the rule between lines ties each pill to its own.
+    function recapMoveItem(item, management) {
         const who = management
             ? recapMoveWho(item)
             : el('span', {class: 'who'}, [
@@ -6829,8 +6829,7 @@
                 el('span', {class: 'table-strong', text: item.service}),
                 el('span', {class: 'recap-endpoint', text: item.endpoint})
             ]);
-        const repeats = item.trend === group && item.change == null;
-        return el('li', {}, [who, repeats ? null : recapTrend(item)]);
+        return el('li', {}, [who, recapTrend(item)]);
     }
 
     function recapMoved(snapshot, labels) {
@@ -6864,7 +6863,7 @@
                         group[2] ? el('span', {class: 'sub', text: group[2]}) : null
                     ]),
                     el('ul', {}, recapMovesShown(group[1], group[4]).map(function (item) {
-                        return recapMoveItem(item, management, group[4]);
+                        return recapMoveItem(item, management);
                     })),
                     // The failure line right under the list it explains, the retry button after it.
                     recapMovesRest(moves, group[1], group[4]),
