@@ -602,7 +602,7 @@ public static class RecapReportRenderer
             (page.T("recap.moves.came_back"), moves.CameBack, "", "warn"),
             (page.T("recap.moves.done_still"), moves.DoneStillDetected, "", "crit")
         ];
-        html.Append("<section class=\"section\">\n").Append(Overline("// " + labels.Moved.ToLowerInvariant()))
+        html.Append("<section class=\"section\">\n").Append(Overline(page.T("recap.moves.overline")))
             .Append("<h2 class=\"section-head\">").Append(E(labels.Moved)).Append("<small>")
             .Append(E(Against(page, "recap.moves.since.", snapshot.Previous))).Append("</small></h2>\n");
         Note(html, MovedNote(page), "more-note");
