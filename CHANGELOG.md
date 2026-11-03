@@ -29,7 +29,8 @@ All notable changes to PerfSentinelHub are recorded here.
 ### Fixed
 
 - A long endpoint, service name or signature on the recap no longer runs out of its column: it
-  moves whole to the next line and breaks inside itself only when it is wider than the line.
+  moves whole to the next line and, when it is wider than the line, breaks after a `.`, `/`, `-`
+  or `{` before it breaks mid-word. An incident's endpoints break the same way.
 
 ## [0.12.0] - 2026-11-02
 
