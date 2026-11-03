@@ -22,7 +22,9 @@ All notable changes to PerfSentinelHub are recorded here.
 - The recap screen shows the first five moves of each group and a button that opens all of them,
   reading the recap again with `moves=all` when the Hub cut the group. An incident shows its first
   five correlated episodes the same way, and a finding's template at most four lines, scrolled
-  inside its cell, which the keyboard reaches whenever it scrolls.
+  inside its cell, which the keyboard reaches whenever it scrolls. While more of the template lies
+  below, its last visible line fades, so a cut query does not read as whole where the browser hides
+  its scrollbar.
 - What moved reads under the overline `// movements` instead of repeating its own title, on the
   screen and in a frozen report.
 
