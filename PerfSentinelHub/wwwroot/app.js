@@ -120,6 +120,8 @@
         recap: null,
         recapError: null,
         recapShowAll: false,
+        // The What moved groups shown whole, by their key; the others stop at RECAP_MOVES_FIRST.
+        recapMovesOpen: {},
         recapRowError: {},
         recapBusy: {},
         recapNaming: null,
@@ -147,6 +149,8 @@
         disclosureBusy: false,
         withdrawOpen: false,
         incidentCorrelations: {},
+        // The incident panels whose episodes list is shown whole, by their cache key.
+        incidentCorrelationsAll: {},
         // A trace an episode handed to New analysis, with the pair's other one.
         traceHandoff: null,
         // The ack page: the finding its link names, the form, and what the last
@@ -5028,7 +5032,11 @@
                 el('td', {'data-align': 'right', text: impact == null ? '—' : PSL.num(impact)}),
                 el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
                 // Whole, wrapped: the template is what tells two rows apart.
-                el('td', {class: 'table-mono'}, [el('span', {class: 'findings-template', text: template || '—'})]),
+                // Four lines at most, scrolled inside the cell: a long SQL made each row a screen tall.
+                el('td', {class: 'table-mono'}, [el('span', {
+                    // shortcut: a tab stop past ~4 lines of 300px mono, by length, not measured scroll; measure if it misfires.
+                    class: 'findings-template', text: template || '—', tabindex: template && template.length > 160 ? '0' : null
+                })]),
                 el('td', {'data-align': 'right', text: String(row.seen_count == null ? '?' : row.seen_count)}),
                 el('td', {
                     title: PSL.dateTime(row.first_seen_ms),
@@ -5487,7 +5495,11 @@
                 text: t('correlations.incident.error')
             }));
         } else if (held.rows.length > 0) {
-            block.appendChild(el('div', {class: 'sources-wrap'}, [incidentEpisodesTable(held.rows)]));
+            const whole = state.incidentCorrelationsAll[cacheKey] || held.rows.length <= INCIDENT_EPISODES_FIRST;
+            block.appendChild(el('div', {class: 'sources-wrap'}, [
+                incidentEpisodesTable(whole ? held.rows : held.rows.slice(0, INCIDENT_EPISODES_FIRST))
+            ]));
+            if (!whole) block.appendChild(incidentEpisodesMore(incident, cacheKey, held.rows.length));
         } else {
             block.appendChild(el('p', {
                 class: 'empty-state',
@@ -5497,6 +5509,28 @@
             }));
         }
         return block;
+    }
+
+    const INCIDENT_EPISODES_FIRST = 5;
+
+    /** Opens the whole list in place: the panel is drawn again, not the screen. */
+    function incidentEpisodesMore(incident, cacheKey, count) {
+        const more = el('button', {
+            class: 'pill-button pill-sm incident-episodes-more',
+            type: 'button',
+            text: t('recap.prio.show_all', {count: count})
+        });
+        more.addEventListener('click', function () {
+            state.incidentCorrelationsAll[cacheKey] = true;
+            const cell = document.getElementById('incident-detail-' + incidentKey(incident));
+            if (!cell) return;
+            cell.replaceChildren(incidentPanel(incident));
+            // On the first row the button had hidden, where the reader was headed.
+            const next = cell.querySelectorAll('.incident-correlations tbody tr')[INCIDENT_EPISODES_FIRST];
+            const link = next && next.querySelector('a');
+            if (link) link.focus();
+        });
+        return more;
     }
 
     function incidentEpisodesTable(episodes) {
@@ -5903,6 +5937,7 @@
     // -------------------------------------------------------- screen: recap
 
     const RECAP_FIRST_PAGE = 10;
+    const RECAP_MOVES_FIRST = 5;
     const RECAP_PERIOD_CHOICES = ['day', 'week', 'month'];
     const RECAP_STATE_GLYPH = {
         confirmed: [['path', {d: 'M5 12.5l4.5 4.5L19 7.5'}]],
@@ -5939,6 +5974,7 @@
             state.recapNaming = null;
             state.recapNameDraft = null;
             state.recapShowAll = false;
+            state.recapMovesOpen = {};
             state.recapReports = null;
             state.recapGenerateError = null;
             render();
@@ -6708,18 +6744,18 @@
         const moves = snapshot.movements;
         const confirmed = moves.gone_with_confirmed_action;
         const groups = [
-            [t('recap.moves.new'), moves.new, '', ''],
+            [t('recap.moves.new'), moves.new, '', '', 'new'],
             [t('recap.moves.gone'), moves.gone,
-                confirmed > 0 ? t('recap.moves.confirmed.' + PSL.plural(confirmed), {count: confirmed}) : '', ''],
-            [t('recap.moves.up'), moves.up, '', 'crit'],
-            [t('recap.moves.down'), moves.down, '', ''],
-            [t('recap.moves.came_back'), moves.came_back, '', 'warn'],
-            [t('recap.moves.done_still'), moves.done_still_detected, '', 'crit']
+                confirmed > 0 ? t('recap.moves.confirmed.' + PSL.plural(confirmed), {count: confirmed}) : '', '', 'gone'],
+            [t('recap.moves.up'), moves.up, '', 'crit', 'up'],
+            [t('recap.moves.down'), moves.down, '', '', 'down'],
+            [t('recap.moves.came_back'), moves.came_back, '', 'warn', 'came_back'],
+            [t('recap.moves.done_still'), moves.done_still_detected, '', 'crit', 'done_still_detected']
         ].filter(function (group) {
             return group[1].length > 0;
         });
         const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-moved'}, [
-            ruledOverline('// ' + labels.moved.toLowerCase()),
+            ruledOverline(t('recap.moves.overline')),
             recapHeading('recap-h-moved', labels.moved, recapAgainst('recap.moves.since.', snapshot.previous),
                 recapHelp(snapshot, 'moved'), labels.moved)
         ]);
@@ -6730,12 +6766,14 @@
                 return el('div', {class: 'recap-move', 'data-tone': group[3] || null}, [
                     el('h3', {}, [
                         document.createTextNode(group[0]),
-                        el('span', {class: 'n', text: String(group[1].length)}),
+                        el('span', {class: 'n', text: String(recapMovesTotal(moves, group[1], group[4]))}),
                         group[2] ? el('span', {class: 'sub', text: group[2]}) : null
                     ]),
-                    el('ul', {}, group[1].map(function (item) {
+                    el('ul', {}, recapMovesShown(group[1], group[4]).map(function (item) {
                         return recapMoveItem(item, management);
-                    }))
+                    })),
+                    recapMovesMore(moves, group[1], group[4]),
+                    recapMovesRest(moves, group[1], group[4])
                 ]);
             })));
         }
@@ -6748,6 +6786,40 @@
             section.appendChild(el('p', {class: 'sources-note', text: PSL.recapLateNote(snapshot.late_sources)}));
         }
         return section;
+    }
+
+    /** A list's whole length: the Hub cuts each list and counts it in `counts`, absent before it did. */
+    function recapMovesTotal(moves, items, key) {
+        return moves.counts ? moves.counts[key] : items.length;
+    }
+
+    /** Once a cut list is open, what the Hub did not send is said, not silently missing. */
+    function recapMovesRest(moves, items, key) {
+        const rest = recapMovesTotal(moves, items, key) - items.length;
+        if (rest <= 0 || (!state.recapMovesOpen[key] && items.length > RECAP_MOVES_FIRST)) return null;
+        return el('p', {class: 'recap-more', text: t('recap.moves.rest.' + PSL.plural(rest), {count: rest})});
+    }
+
+    function recapMovesShown(items, key) {
+        return state.recapMovesOpen[key] ? items : items.slice(0, RECAP_MOVES_FIRST);
+    }
+
+    /** A long group stops at its first few lines: the whole list made the section run for screens. */
+    function recapMovesMore(moves, items, key) {
+        if (state.recapMovesOpen[key] || items.length <= RECAP_MOVES_FIRST) return null;
+        const more = el('button', {
+            class: 'pill-button pill-sm recap-moves-more',
+            type: 'button',
+            'data-moves': key,
+            // "All" only when it is: past the Hub's cut, the button opens the first ones it sent.
+            text: t(recapMovesTotal(moves, items, key) > items.length
+                ? 'recap.moves.show_first' : 'recap.prio.show_all', {count: items.length})
+        });
+        more.addEventListener('click', function () {
+            state.recapMovesOpen[key] = true;
+            renderFocus('#recap-h-moved');
+        });
+        return more;
     }
 
     /**

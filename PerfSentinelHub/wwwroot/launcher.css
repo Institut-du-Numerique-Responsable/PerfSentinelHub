@@ -985,6 +985,8 @@ a.shell-identity[aria-current="page"] {
 .findings-template {
     display: block;
     max-width: 300px;
+    max-height: calc(4lh + 2px);
+    overflow-y: auto;
 }
 
 /* Underlined, unlike the rest of the product's links: a lone word in a table
@@ -5144,11 +5146,13 @@ a.chip {
     color: var(--text-2);
 }
 
-/* The endpoint stays whole on a phone and breaks inside itself only when it must. */
-.recap-where .code-inline,
-.recap-move li .code-inline {
+/* An endpoint or a signature moves whole to the next line and breaks inside itself only when it is
+   wider than the line: the base rule's nowrap would push it out of its column. */
+.recap-section .code-inline,
+.empty-state .code-inline {
     display: inline-block;
     max-width: 100%;
+    white-space: normal;
     overflow-wrap: anywhere;
 }
 
@@ -5567,6 +5571,11 @@ a.chip {
 
 .recap-showall {
     margin-top: 12px;
+}
+
+.recap-moves-more,
+.incident-episodes-more {
+    margin-top: 10px;
 }
 
 .recap-moves {
