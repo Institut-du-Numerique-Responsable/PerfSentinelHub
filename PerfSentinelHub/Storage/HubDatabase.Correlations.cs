@@ -69,8 +69,6 @@ public sealed partial class HubDatabase
                                                  WHEN $now - ce.last_seen_ms > ce.gap_ms + 900000 THEN ce.last_seen_ms END
                                             """;
 
-    private const string AnyPair = "($pair_key IS NULL OR ce.pair_key = $pair_key)";
-
     private const string EpisodeListWhere = $"""
                                              SELECT ce.id, ce.source_id, ce.pair_key, ce.source_type, ce.source_service,
                                                     ce.source_template, ce.source_grouping, ce.source_grouping_value,
@@ -84,7 +82,7 @@ public sealed partial class HubDatabase
                                              FROM correlation_episodes AS ce
                                              WHERE ($source_ids IS NULL OR ce.source_id IN (SELECT value FROM json_each($source_ids)))
                                                AND ($service IS NULL OR ce.source_service = $service OR ce.target_service = $service)
-                                               AND {AnyPair}
+                                               AND ($pair_key IS NULL OR ce.pair_key = $pair_key)
                                                AND ($to IS NULL OR ce.started_at_ms <= $to)
                                                AND ($from IS NULL OR ({EpisodeServedEnd}) IS NULL OR ({EpisodeServedEnd}) >= $from)
                                                AND ($active = 0 OR ({EpisodeServedEnd}) IS NULL)
@@ -111,16 +109,11 @@ public sealed partial class HubDatabase
         $"WITH {AccessPatternsCte}\n{EpisodeListWhere} AND {EpisodeAccess}\n{EpisodeListPage}";
 
     // The OR form hides ix_episodes_pair_key from the planner, so a pair link names its pair outright.
-    private static readonly string PairEpisodeList = OnePair(EpisodeList);
-    private static readonly string ScopedPairEpisodeList = OnePair(ScopedEpisodeList);
+    private const string OnePair = " AND ce.pair_key = $pair_key";
+    private const string PairEpisodeList = $"{EpisodeListWhere}{OnePair} {EpisodeListPage}";
 
-    // Fails the type's first use, so every correlations test, if the fragment ever stops matching.
-    private static string OnePair(string list)
-    {
-        return list.Contains(AnyPair, StringComparison.Ordinal)
-            ? list.Replace(AnyPair, "ce.pair_key = $pair_key", StringComparison.Ordinal)
-            : throw new InvalidOperationException("The episode listing no longer holds its pair filter.");
-    }
+    private static readonly string ScopedPairEpisodeList =
+        $"WITH {AccessPatternsCte}\n{EpisodeListWhere} AND {EpisodeAccess}{OnePair}\n{EpisodeListPage}";
 
     /// <summary>
     ///     Stores a daemon's pushed episodes under the merge rule. Waits for the write lock

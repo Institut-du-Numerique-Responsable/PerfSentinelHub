@@ -762,6 +762,9 @@
         // Same for the daemon tickers: they write into nodes this render replaces.
         stopAllTickers();
         stopDurationTicker();
+        // And the template boxes: one never laid out (a row the filter hid) never reaches the
+        // observer's callback, so it would hold that box and its old screen for good.
+        if (TEMPLATE_FIT) TEMPLATE_FIT.disconnect();
         state.screen = currentScreen();
         Array.prototype.forEach.call(document.querySelectorAll('.shell-tab'), function (tab) {
             // A disclosure's own screen sits under the Disclosures tab.
