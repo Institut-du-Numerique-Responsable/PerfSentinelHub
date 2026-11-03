@@ -649,6 +649,7 @@ liste des findings.
 | `view`                      | `tech`            | `tech` (Engineering) ou `pilotage` (Management)                   |
 | `environment`, `source_id`  | toute la flotte   | Comme sur `/api/findings`                                         |
 | `service`, `grouping`       | aucun             | Comme sur `/api/findings`                                         |
+| `moves`                     | coupé à 50        | `all` liste tous les mouvements de chaque groupe, sans `counts`   |
 
 Un paramètre répété, une valeur que la liste ne connaît pas ou de l'UTF-8 invalide est un
 `400`.
@@ -686,8 +687,9 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   ou a été contredite. `nothing_moved` est vrai quand aucune de ces listes ne contient rien et
   qu'aucun finding des rangs 1 à 10 n'est passé `up` ou `down`. Chacune des six listes
   s'arrête à ses 50 premiers, et `movements.counts` (`new`, `gone`, `up`, `down`,
-  `came_back`, `done_still_detected`) donne sa longueur entière. Un rapport figé et son
-  webhook gardent tous les mouvements et ne portent pas `counts`.
+  `came_back`, `done_still_detected`) donne sa longueur entière ; `moves=all` lève la
+  coupe. Un rapport figé et son webhook gardent tous les mouvements et ne portent pas
+  `counts`.
 - **Incomplet et notes.** `incomplete` nomme ce qui interdit une comparaison exacte :
   `uncovered_days`, `open_day` (un jour passé non scellé), `restart` (un redémarrage du
   daemon a interrompu ses comptes) et `overflow`. `notes` nomme ce qui mérite une ligne et

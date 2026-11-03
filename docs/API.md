@@ -600,6 +600,7 @@ nowhere gets the `403` the findings list gives.
 | `view`                      | `tech`            | `tech` (Engineering) or `pilotage` (Management)                  |
 | `environment`, `source_id`  | the whole fleet   | As on `/api/findings`                                            |
 | `service`, `grouping`       | none              | As on `/api/findings`                                            |
+| `moves`                     | cut at 50         | `all` lists every move of each group, without `counts`           |
 
 A repeated parameter, a value the list does not know or invalid UTF-8 is a `400`.
 
@@ -635,8 +636,8 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   `nothing_moved` is true when none of those lists holds anything and no finding of ranks 1
   to 10 went `up` or `down`. Each of the six lists stops at its first 50, and
   `movements.counts` (`new`, `gone`, `up`, `down`, `came_back`, `done_still_detected`)
-  gives its whole length. A frozen report and its webhook keep every move and carry no
-  `counts`.
+  gives its whole length; `moves=all` lifts the cut. A frozen report and its webhook keep
+  every move and carry no `counts`.
 - **Incomplete and notes.** `incomplete` names what forbids an exact comparison:
   `uncovered_days`, `open_day` (a past day not sealed), `restart` (a daemon restart
   interrupted its counts) and `overflow`. `notes` names what is worth a line and leaves the
