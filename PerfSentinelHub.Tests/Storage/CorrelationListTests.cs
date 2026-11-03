@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -123,6 +124,24 @@ public sealed class CorrelationListTests : IAsyncLifetime
         Assert.Equal(expected, Ids(await ListAsync(All() with { FromMs = Now + from, ToMs = Now + to })));
     }
 
+    // A pair link under access patterns: its own query, which reads a pair only where the
+    // caller reads both of its services.
+    [Fact]
+    public async Task A_pair_under_access_patterns_reads_only_what_both_sides_allow()
+    {
+        var both = AccessScope.Of(
+        [
+            AccessPattern.Compile(new PatternOptions { Service = "gateway-svc" }),
+            AccessPattern.Compile(new PatternOptions { Service = "order-svc" })
+        ]);
+        var oneSide = AccessScope.Of([AccessPattern.Compile(new PatternOptions { Service = "gateway-svc" })]);
+        var pair = All() with { PairKey = EpisodeJson.Id(0xa2) };
+
+        Assert.Equal("2", Ids(await ListAsync(pair with { Access = both })));
+        Assert.Equal("", Ids(await ListAsync(pair with { Access = oneSide })));
+        Assert.Equal("", Ids(await ListAsync(pair with { Access = both, SourceIds = ["daemon-b"] })));
+    }
+
     [Fact]
     public async Task Pages_and_the_closed_filters_narrow_the_listing()
     {
@@ -141,5 +160,18 @@ public sealed class CorrelationListTests : IAsyncLifetime
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT group_concat(name, ',') FROM pragma_index_info('ix_episodes_listing');";
         Assert.Equal("started_at_ms,id,source_id", (string?)await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    // A pair link reads one pair over 180 days: it must seek it, not scan the listing index. A read
+    // index, built after the boot like the findings ones, since the table can be large.
+    [Fact]
+    public async Task A_pair_is_read_through_its_own_index()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Assert.True(await _database.CatchUpReadIndexesAsync(cancellationToken));
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT group_concat(name, ',') FROM pragma_index_info('ix_episodes_pair_key');";
+        Assert.Equal("pair_key,started_at_ms", (string?)await command.ExecuteScalarAsync(cancellationToken));
     }
 }

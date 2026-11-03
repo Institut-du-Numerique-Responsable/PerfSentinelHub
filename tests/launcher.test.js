@@ -1677,6 +1677,19 @@ test("the recap hash carries only what differs from the defaults", () => {
         "#/recap");
 });
 
+test("a long name breaks at its separators and word boundaries, never inside a parameter", () => {
+    assert.deepStrictEqual(PSL.breakParts("/api/entreprises/{entrepriseId}/documents"),
+        ["/", "api/", "entreprises/", "{entrepriseId}/", "documents"]);
+    assert.deepStrictEqual(PSL.breakParts("repo.ClientRepository.findByIdIsNotNull"),
+        ["repo.", "Client", "Repository.", "find", "By", "Id", "Is", "Not", "Null"]);
+    assert.deepStrictEqual(PSL.breakParts("lettres-missions"), ["lettres-", "missions"]);
+    assert.deepStrictEqual(PSL.breakParts("{a.b}/c"), ["{a.b}/", "c"]);
+    assert.deepStrictEqual(PSL.breakParts("x"), ["x"]);
+    // The pieces put back together are the name as sent: a copy reads it whole.
+    const name = "fr.nexcer.devis.ClientRepository.findByDossierIdAndClientOriginalIdIsNotNull";
+    assert.equal(PSL.breakParts(name).join(""), name);
+});
+
 test("the recap path always names its period and view", () => {
     assert.equal(PSL.recapPath(PSL.readRecapRoute("#/recap")), "/api/recap?period=week&view=tech");
     assert.equal(PSL.recapPath({

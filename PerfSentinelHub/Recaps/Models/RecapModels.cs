@@ -126,7 +126,13 @@ public sealed record RecapMovements(
     IReadOnlyList<RecapMove> Up,
     IReadOnlyList<RecapMove> Down,
     IReadOnlyList<RecapMove> CameBack,
-    IReadOnlyList<RecapMove> DoneStillDetected);
+    IReadOnlyList<RecapMove> DoneStillDetected,
+    // Each list's whole length once GET /api/recap cut them; absent from a report or a webhook, whose
+    // lists are whole.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    RecapMoveCounts? Counts = null);
+
+public sealed record RecapMoveCounts(int New, int Gone, int Up, int Down, int CameBack, int DoneStillDetected);
 
 public sealed record RecapMove(
     string FindingType,

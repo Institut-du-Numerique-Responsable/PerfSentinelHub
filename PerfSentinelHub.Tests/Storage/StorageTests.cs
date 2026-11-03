@@ -647,13 +647,14 @@ public sealed class StorageTests
         await using var read = connection.CreateCommand();
         read.CommandText = """
                            SELECT COUNT(*) FROM sqlite_master WHERE type = 'index'
-                             AND name IN ('ix_findings_last_seen', 'ix_finding_sources_window');
+                             AND name IN ('ix_findings_last_seen', 'ix_finding_sources_window',
+                                          'ix_finding_sources_recent', 'ix_episodes_pair_key');
                            """;
         // The boot leaves them out: on a large database building them outlasts the startup probe.
         Assert.Equal(0L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
 
         Assert.True(await database.CatchUpReadIndexesAsync(cancellationToken));
-        Assert.Equal(2L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
+        Assert.Equal(4L, (long)(await read.ExecuteScalarAsync(cancellationToken))!);
         Assert.False(await database.CatchUpReadIndexesAsync(cancellationToken));
 
         // A newest-first page walks the index instead of sorting every row and its envelope.
@@ -668,6 +669,18 @@ public sealed class StorageTests
         }
 
         Assert.Contains(details, detail => detail.Contains("USING COVERING INDEX ix_findings_last_seen"));
+
+        // So does a one-source page, through the copies of that source.
+        plan.CommandText = "EXPLAIN QUERY PLAN SELECT signature FROM finding_sources WHERE source_id = 'a' "
+                           + "ORDER BY last_seen_ms DESC, signature LIMIT 1;";
+        details.Clear();
+        await using (var reader = await plan.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                details.Add(reader.GetString(3));
+        }
+
+        Assert.Contains(details, detail => detail.Contains("USING COVERING INDEX ix_finding_sources_recent"));
     }
 
     private static async Task<List<string>> SourceColumnsAsync(

@@ -660,6 +660,42 @@ public sealed class FindingIngestionTests : IDisposable
             new FindingQuery("decoy", null, null, 100), cancellationToken));
     }
 
+    // A one-source read walks that source's copies by recency instead of ranking the whole scope:
+    // newest first, ties by signature, and pages as before, with or without the index built.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_one_source_read_pages_newest_first_with_ties_by_signature(bool indexed)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var database = CreateDatabase();
+        await database.InitializeAsync(cancellationToken);
+        var finding = new ParsedFinding("sig-c", "{}", "checkout", "n_plus_one_sql", "warning", "GET /cart", "hash-c",
+            null, "daemon_production", 4, null);
+        await database.UpsertBatchAsync(ProductionA, new ParsedBatch([finding], 0), 1000, cancellationToken);
+        await database.UpsertBatchAsync(ProductionA, new ParsedBatch(
+        [
+            finding with { Signature = "sig-b", TemplateHash = "hash-b" },
+            finding with { Signature = "sig-a", TemplateHash = "hash-a" }
+        ], 0), 2000, cancellationToken);
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("staging-a", "Staging A", "staging", "0.11.2"),
+            new ParsedBatch([finding with { Signature = "sig-d", TemplateHash = "hash-d" }], 0), 3000,
+            cancellationToken);
+        if (indexed)
+            await database.CatchUpReadIndexesAsync(cancellationToken);
+        var scope = new FindingQuery(null, null, null, 2, SourceIds: ["production-a"]);
+
+        var first = await database.QueryFindingsAsync(scope, cancellationToken);
+        var second = await database.QueryFindingsAsync(scope with { Offset = 2 }, cancellationToken);
+
+        Assert.Equal(["sig-a", "sig-b"], first.Select(row => row.Signature));
+        Assert.Equal([2000L, 2000L], first.Select(row => row.LastSeenMs));
+        Assert.Equal(["sig-c"], second.Select(row => row.Signature));
+        Assert.Equal(1000, second[0].FirstSeenMs);
+        Assert.Equal(["production-a"], second[0].Sources.Select(source => source.SourceId));
+    }
+
     [Fact]
     public async Task A_scope_of_several_sources_serves_its_freshest_copy()
     {

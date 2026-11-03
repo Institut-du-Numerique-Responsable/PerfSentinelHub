@@ -2,6 +2,49 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.13.0] - 2026-11-03
+
+### Changed
+
+- A findings read scoped to one source, a `source_id` or an environment of one daemon, walks that
+  source's copies by recency through `ix_finding_sources_recent` and stops at its page, as a
+  fleet-wide read walks `ix_findings_last_seen`. It used to rank every copy of the scope first: on
+  a production Hub a page of 50 took 7 to 15 seconds. A scope of several sources or one narrowed
+  by access patterns reads as before.
+- A pair link (`#/correlations?pair_key=…`, "All its episodes") reads its pair through
+  `ix_episodes_pair_key` instead of scanning every stored episode, which took 18 seconds on a
+  production Hub. Both indexes are read indexes: built after the Hub answers, under the write lock,
+  like the two of 0.12.0. Reads work without them, only slower.
+- `GET /api/recap` lists the first 50 moves of each What moved group, in ranking order, and
+  `movements.counts` gives each group's whole length. A week of churn listed over 6,000 moves, a
+  1.8 MB answer. `moves=all` lifts the cut. A frozen report and its webhook keep every move and
+  carry no `counts`.
+- The recap screen shows the first five moves of each group and a button that opens all of them,
+  reading the recap again with `moves=all` when the Hub cut the group. An incident shows its first
+  five correlated episodes the same way, and a finding's template at most four lines, scrolled
+  inside its cell, which the keyboard reaches whenever it scrolls. While more of the template lies
+  below, its last visible line fades, so a cut query does not read as whole where the browser hides
+  its scrollbar.
+- An incident's correlated episodes are read a page at a time until the last one, so "Show all"
+  counts every episode of the window, not the first 200 the route answers by default. After "Show
+  all", the focus lands on the first line the button had hidden. A whole read that a write
+  interrupts is taken over by the write's own re-read, so the click is kept, and a failed one says
+  so once, under its list.
+- What moved reads under the overline `// movements` instead of repeating its own title, on the
+  screen and in a frozen report.
+- On the screen, each What moved group's title is a pill in the colour of its moves ("New 120"
+  in blue, "Up" in red…), a rule separates two moves as it does two table rows, and a move keeps
+  its own trend pill only when it says more than the title: a change figure, or another trend.
+
+### Fixed
+
+- A long endpoint, service name or signature on the recap no longer runs out of its column: it
+  moves whole to the next line and, when it is wider than the line, breaks after a `.`, `/` or
+  `-`, or between two words of a camelCase name, never inside a `{parameter}`, before it breaks
+  mid-word. A copy still reads it whole. An incident's endpoints break the same way.
+- The theme button's glyph settles with the language pill's ease-out instead of overshooting and
+  bouncing back.
+
 ## [0.12.0] - 2026-11-02
 
 ### Changed
