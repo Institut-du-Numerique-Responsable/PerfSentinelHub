@@ -25,6 +25,11 @@ All notable changes to PerfSentinelHub are recorded here.
   inside its cell, which the keyboard reaches whenever it scrolls. While more of the template lies
   below, its last visible line fades, so a cut query does not read as whole where the browser hides
   its scrollbar.
+- An incident's correlated episodes are read a page at a time until the last one, so "Show all"
+  counts every episode of the window, not the first 200 the route answers by default. After "Show
+  all", the focus lands on the first line the button had hidden. A whole read that a write
+  interrupts is taken over by the write's own re-read, so the click is kept, and a failed one says
+  so once, under its list.
 - What moved reads under the overline `// movements` instead of repeating its own title, on the
   screen and in a frozen report.
 
