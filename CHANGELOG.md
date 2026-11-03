@@ -32,8 +32,9 @@ All notable changes to PerfSentinelHub are recorded here.
   so once, under its list.
 - What moved reads under the overline `// movements` instead of repeating its own title, on the
   screen and in a frozen report.
-- On the screen, a rule separates two moves, as it does two table rows, so a move's trend pill,
-  at the far end of a group that runs the whole width, reads as part of its own line.
+- On the screen, each What moved group's title is a pill in the colour of its moves ("New 120"
+  in blue, "Up" in red…), a rule separates two moves as it does two table rows, and a move keeps
+  its own trend pill only when it says more than the title: a change figure, or another trend.
 
 ### Fixed
 

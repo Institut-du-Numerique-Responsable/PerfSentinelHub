@@ -6816,9 +6816,9 @@
         ]);
     }
 
-    // Every line keeps its trend pill: a coloured pill marks the move where the group's plain title
-    // does not, and the rule between lines ties each pill to its own.
-    function recapMoveItem(item, management) {
+    // A line keeps its own trend pill only when it says more than the group's title pill: a change
+    // figure, or a trend other than the group's, as under Came back.
+    function recapMoveItem(item, management, group) {
         const who = management
             ? recapMoveWho(item)
             : el('span', {class: 'who'}, [
@@ -6829,7 +6829,8 @@
                 el('span', {class: 'table-strong', text: item.service}),
                 el('span', {class: 'recap-endpoint', text: item.endpoint})
             ]);
-        return el('li', {}, [who, recapTrend(item)]);
+        const repeats = item.trend === group && item.change == null;
+        return el('li', {}, [who, repeats ? null : recapTrend(item)]);
     }
 
     function recapMoved(snapshot, labels) {
@@ -6837,11 +6838,11 @@
         const moves = snapshot.movements;
         const confirmed = moves.gone_with_confirmed_action;
         const groups = [
-            [t('recap.moves.new'), moves.new, '', '', 'new'],
+            [t('recap.moves.new'), moves.new, '', 'info', 'new'],
             [t('recap.moves.gone'), moves.gone,
-                confirmed > 0 ? t('recap.moves.confirmed.' + PSL.plural(confirmed), {count: confirmed}) : '', '', 'gone'],
+                confirmed > 0 ? t('recap.moves.confirmed.' + PSL.plural(confirmed), {count: confirmed}) : '', 'ok', 'gone'],
             [t('recap.moves.up'), moves.up, '', 'crit', 'up'],
-            [t('recap.moves.down'), moves.down, '', '', 'down'],
+            [t('recap.moves.down'), moves.down, '', 'ok', 'down'],
             [t('recap.moves.came_back'), moves.came_back, '', 'warn', 'came_back'],
             [t('recap.moves.done_still'), moves.done_still_detected, '', 'crit', 'done_still_detected']
         ].filter(function (group) {
@@ -6856,14 +6857,17 @@
         if (note) section.appendChild(el('p', {class: 'recap-more', text: note}));
         if (groups.length) {
             section.appendChild(el('div', {class: 'recap-moves'}, groups.map(function (group) {
-                return el('div', {class: 'recap-move', 'data-tone': group[3] || null, 'data-moves-group': group[4]}, [
+                return el('div', {class: 'recap-move', 'data-moves-group': group[4]}, [
+                    // The group's title as a pill in its rows' colour: said once, and seen.
                     el('h3', {}, [
-                        document.createTextNode(group[0]),
-                        el('span', {class: 'n', text: String(recapMovesTotal(moves, group[1], group[4]))}),
+                        el('span', {class: 'recap-move-tag', 'data-tone': group[3]}, [
+                            document.createTextNode(group[0]),
+                            el('span', {class: 'n', text: String(recapMovesTotal(moves, group[1], group[4]))})
+                        ]),
                         group[2] ? el('span', {class: 'sub', text: group[2]}) : null
                     ]),
                     el('ul', {}, recapMovesShown(group[1], group[4]).map(function (item) {
-                        return recapMoveItem(item, management);
+                        return recapMoveItem(item, management, group[4]);
                     })),
                     // The failure line right under the list it explains, the retry button after it.
                     recapMovesRest(moves, group[1], group[4]),

@@ -5615,17 +5615,49 @@ a.chip {
 
 .recap-move h3 {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
-    margin: 0 0 8px;
+    margin: 0 0 10px;
     font-size: 13px;
     font-weight: 600;
 }
 
-.recap-move h3 .n {
+/* The group's title as a pill, in the colours of .recap-trend for the same move. */
+.recap-move-tag {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.recap-move-tag .n {
     font-family: var(--font-mono);
     font-size: 12px;
-    color: var(--text-3);
+    font-weight: 500;
+    opacity: .8;
+}
+
+.recap-move-tag[data-tone="info"] {
+    background: var(--info-bg);
+    color: var(--info-fg);
+}
+
+.recap-move-tag[data-tone="ok"] {
+    background: var(--ok-bg);
+    color: var(--ok-fg);
+}
+
+.recap-move-tag[data-tone="warn"] {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.recap-move-tag[data-tone="crit"] {
+    background: var(--crit-bg);
+    color: var(--crit-fg);
 }
 
 .recap-move h3 .sub {
@@ -5688,14 +5720,6 @@ a.chip {
 .recap-move li .plain {
     max-width: 68ch;
     color: var(--text);
-}
-
-.recap-move[data-tone="crit"] h3 {
-    color: var(--crit-fg);
-}
-
-.recap-move[data-tone="warn"] h3 {
-    color: var(--warn-fg);
 }
 
 @media (max-width: 560px) {
