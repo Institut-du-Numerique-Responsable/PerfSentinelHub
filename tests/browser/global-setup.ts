@@ -409,8 +409,9 @@ async function seedCardLedger(importKey: string): Promise<void> {
     const lastClosed = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1) / dayMs;
     const before = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1) / dayMs;
     const months: [number, number, number][] = [[before, lastClosed - 1, 5], [lastClosed, today - now.getUTCDate(), 12]];
-    // One page per month, pushed together: each carries its own ledger.
-    await Promise.all(months.map(async ([first, last, share]) => {
+    // One page per month, each carrying its own ledger, pushed one after the other: a source
+    // holds a single import slot, so a second push while the first runs is a 503.
+    for (const [first, last, share] of months) {
         const days = [];
         for (let day = first; day <= last; day++) {
             const total = 40_000_000 + (day % 7) * 1_000_000;
@@ -430,7 +431,7 @@ async function seedCardLedger(importKey: string): Promise<void> {
             })
         });
         if (!response.ok) throw new Error(`the card ledger push answered ${response.status}`);
-    }));
+    }
 }
 
 // The disclosures screens read what a scheduled job publishes, and nothing here publishes. So three
