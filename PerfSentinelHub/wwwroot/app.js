@@ -6736,9 +6736,10 @@
     }
 
     /**
-     * An endpoint or a class path as a chip that breaks after its separators, so a line ends at
-     * `repository.` or `{id}/` rather than mid-word; overflow-wrap still breaks a long word. A
-     * <wbr> carries no text, so a copy reads the name whole.
+     * An endpoint or a class path as a chip that breaks at its separators and word boundaries
+     * (see PSL.breakParts), so a line ends at `repository.` or `{id}/` rather than mid-word;
+     * overflow-wrap still breaks what is left. A <wbr> carries no text, so a copy reads the
+     * name whole.
      */
     function codeChip(text) {
         const chip = el('code', {class: 'code-inline'});
@@ -6748,7 +6749,7 @@
 
     function breakable(text) {
         const fragment = document.createDocumentFragment();
-        text.split(/(?<=[./{-])/).forEach(function (part, index) {
+        PSL.breakParts(text).forEach(function (part, index) {
             if (index > 0) fragment.appendChild(document.createElement('wbr'));
             fragment.appendChild(document.createTextNode(part));
         });
