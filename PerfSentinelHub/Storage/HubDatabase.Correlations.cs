@@ -69,6 +69,8 @@ public sealed partial class HubDatabase
                                                  WHEN $now - ce.last_seen_ms > ce.gap_ms + 900000 THEN ce.last_seen_ms END
                                             """;
 
+    private const string AnyPair = "($pair_key IS NULL OR ce.pair_key = $pair_key)";
+
     private const string EpisodeListWhere = $"""
                                              SELECT ce.id, ce.source_id, ce.pair_key, ce.source_type, ce.source_service,
                                                     ce.source_template, ce.source_grouping, ce.source_grouping_value,
@@ -82,7 +84,7 @@ public sealed partial class HubDatabase
                                              FROM correlation_episodes AS ce
                                              WHERE ($source_ids IS NULL OR ce.source_id IN (SELECT value FROM json_each($source_ids)))
                                                AND ($service IS NULL OR ce.source_service = $service OR ce.target_service = $service)
-                                               AND ($pair_key IS NULL OR ce.pair_key = $pair_key)
+                                               AND {AnyPair}
                                                AND ($to IS NULL OR ce.started_at_ms <= $to)
                                                AND ($from IS NULL OR ({EpisodeServedEnd}) IS NULL OR ({EpisodeServedEnd}) >= $from)
                                                AND ($active = 0 OR ({EpisodeServedEnd}) IS NULL)
@@ -191,6 +193,8 @@ public sealed partial class HubDatabase
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = query.Access is null ? EpisodeList : ScopedEpisodeList;
+        // The OR form hides ix_episodes_pair_key from the planner, so a pair link names its pair outright.
+        if (query.PairKey is not null) command.CommandText = command.CommandText.Replace(AnyPair, "ce.pair_key = $pair_key");
         BindAccess(command, query.Access);
         var parameters = command.Parameters;
         parameters.AddWithValue("$source_ids", query.SourceIds is null ? DBNull.Value : JsonArray(query.SourceIds));

@@ -87,19 +87,45 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                + $"WHERE e.signature = {signature} AND e.source_id = {sourceId})";
     }
 
+    // The one source a read without access patterns is scoped to, null for none or several.
+    private static string? OneSource(FindingQuery query)
+    {
+        return query is { Access: null, SourceIds: [var only] } ? only : null;
+    }
+
     // A scoped read describes its scope: each finding as the freshest source in
     // scope reported it, first and last seen over those sources alone. The
     // partition and the pick share one sort. A source row written before the
     // per-source columns has no copy of its own yet and serves the shared one.
     // max_confidence stays fleet-wide, a source row carries no confidence of its own.
-    // Every row of the scope is read and sorted before any filter or
-    // LIMIT, so a read costs the scope and not the page. service and
+    // Every row of a several-source scope is read and sorted before any filter or
+    // LIMIT, so that read costs the scope and not the page; a one-source scope does not.
     // The copy's own service, type, endpoint and sample trace too: any source's newer
     // push rewrites the shared row's, and a scope must not move with another source's
     // key. A copy an older build wrote reads the shared ones until the version 23
     // catch-up fills it, its type standing for all three since a NULL trace is a value.
     // The ack filter cannot move, it judges every source of the scope.
-    private static string ScopedFindings(string copies)
+    private static string ScopedFindings(string copies, bool oneSource = false)
+    {
+        var scope = oneSource ? OneSourceCopies : RankedCopies(copies);
+        return $"""
+                {scope}
+                scoped AS (
+                  SELECT findings.signature, scope.copy_source_id,
+                         COALESCE(scope.service, findings.service) AS service,
+                         COALESCE(scope.finding_type, findings.finding_type) AS finding_type,
+                         COALESCE(scope.severity, findings.severity) AS severity,
+                         IIF(scope.finding_type IS NULL, findings.endpoint, scope.endpoint) AS endpoint,
+                         IIF(scope.finding_type IS NULL, findings.sample_trace_id, scope.sample_trace_id)
+                           AS sample_trace_id,
+                         scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
+                  FROM scope
+                  JOIN findings ON findings.signature = scope.signature
+                )
+                """;
+    }
+
+    private static string RankedCopies(string copies)
     {
         return $"""
                 scope AS (
@@ -119,20 +145,21 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                   )
                   WHERE pick = 1
                 ),
-                scoped AS (
-                  SELECT findings.signature, scope.copy_source_id,
-                         COALESCE(scope.service, findings.service) AS service,
-                         COALESCE(scope.finding_type, findings.finding_type) AS finding_type,
-                         COALESCE(scope.severity, findings.severity) AS severity,
-                         IIF(scope.finding_type IS NULL, findings.endpoint, scope.endpoint) AS endpoint,
-                         IIF(scope.finding_type IS NULL, findings.sample_trace_id, scope.sample_trace_id)
-                           AS sample_trace_id,
-                         scope.first_seen_ms, scope.last_seen_ms, findings.max_confidence
-                  FROM scope
-                  JOIN findings ON findings.signature = scope.signature
-                )
                 """;
     }
+
+    // One source holds one copy of a finding, so its scope is its copies as they stand: no window to
+    // rank, and a newest-first page walks ix_finding_sources_recent and stops at its limit, as the
+    // fleet's walks ix_findings_last_seen. The window version sorted every copy first.
+    private const string OneSourceCopies = """
+                                           scope AS (
+                                             SELECT fs.signature, fs.first_seen_ms, fs.last_seen_ms,
+                                                    fs.source_id AS copy_source_id, fs.severity, fs.service,
+                                                    fs.finding_type, fs.endpoint, fs.sample_trace_id
+                                             FROM finding_sources AS fs
+                                             WHERE fs.source_id = $scope_source_id
+                                           ),
+                                           """;
 
     // Every pair a finding copy carries, each under the grouping identity of the
     // first entry, or the marker row alone when that entry is not a well-formed
@@ -629,6 +656,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
         if (query.Grouping is not null)
             parameters.Add(("$grouping", query.Grouping));
+        if (OneSource(query) is { } sourceId)
+            parameters.Add(("$scope_source_id", sourceId));
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -731,8 +760,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 $"WITH {AccessPatternsCte}, {VisibleCopiesCte}, {ScopedFindings($"(fs.signature, fs.source_id) {Visible}")},",
                 "scoped", $" AND (scoped.signature, eh.source_id) {Visible}",
                 $" AND (fs.signature, fs.source_id) {Visible}"),
-            (false, true) => ($"WITH {ScopedFindings($"fs.source_id {InScope}")},", "scoped", HeartbeatInScope,
-                $" AND fs.source_id {InScope}"),
+            (false, true) => ($"WITH {ScopedFindings($"fs.source_id {InScope}", OneSource(query) is not null)},",
+                "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}"),
             _ => ("WITH", "findings", "", "")
         };
         var envelope = row == "scoped"
