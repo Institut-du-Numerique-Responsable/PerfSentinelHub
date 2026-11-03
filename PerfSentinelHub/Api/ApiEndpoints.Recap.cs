@@ -35,7 +35,7 @@ public static partial class ApiEndpoints
 
         var snapshot = await recaps.ComputeAsync(query with { Access = Narrowing(scope) }, cancellationToken);
         return TypedResults.Json(
-            pilotage ? RecapViews.Pilotage(snapshot) : snapshot,
+            RecapViews.Listed(pilotage ? RecapViews.Pilotage(snapshot) : snapshot),
             HubJsonContext.Default.RecapSnapshot);
     }
 

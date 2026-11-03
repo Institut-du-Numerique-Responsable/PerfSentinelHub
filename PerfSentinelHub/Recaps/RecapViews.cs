@@ -5,6 +5,30 @@ namespace PerfSentinelHub.Recaps;
 public static class RecapViews
 {
     public const int PilotagePriorities = 5;
+    public const int ListedMoves = 50;
+
+    /// <summary>
+    ///     The screen's cut of either view: each move list stops at its first <see cref="ListedMoves" />, in
+    ///     ranking order, and says how long it was. A week of churn listed thousands, megabytes nobody reads.
+    /// </summary>
+    public static RecapSnapshot Listed(RecapSnapshot view)
+    {
+        var moves = view.Movements;
+        return view with
+        {
+            Movements = moves with
+            {
+                New = [.. moves.New.Take(ListedMoves)],
+                Gone = [.. moves.Gone.Take(ListedMoves)],
+                Up = [.. moves.Up.Take(ListedMoves)],
+                Down = [.. moves.Down.Take(ListedMoves)],
+                CameBack = [.. moves.CameBack.Take(ListedMoves)],
+                DoneStillDetected = [.. moves.DoneStillDetected.Take(ListedMoves)],
+                Counts = new RecapMoveCounts(moves.New.Count, moves.Gone.Count, moves.Up.Count, moves.Down.Count,
+                    moves.CameBack.Count, moves.DoneStillDetected.Count)
+            }
+        };
+    }
 
     /// <summary>
     ///     The management view of a tech snapshot: top five, the plain sentence, no technical key. The
