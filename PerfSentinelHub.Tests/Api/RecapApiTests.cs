@@ -27,6 +27,8 @@ public sealed class RecapApiTests(HubApplicationFactory factory) : IClassFixture
         var period = root.GetProperty("period");
         Assert.Equal("1970-01-01", period.GetProperty("from").GetString());
         Assert.True(period.GetProperty("in_progress").GetBoolean());
+        // The screen's cut: each list's whole length rides beside it.
+        Assert.Equal(0, root.GetProperty("movements").GetProperty("counts").GetProperty("new").GetInt32());
     }
 
     [Fact]
