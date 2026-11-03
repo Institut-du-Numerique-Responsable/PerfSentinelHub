@@ -52,6 +52,19 @@ public sealed class RecapViewsTests
         Assert.Contains("\"counts\":{\"new\":57,", JsonSerializer.Serialize(listed, Wire));
     }
 
+    // The cut and the management view compose in either order: the counts ride through Pilotage.
+    [Fact]
+    public void Pilotage_keeps_the_counts_of_a_cut_snapshot()
+    {
+        var many = Enumerable.Range(0, RecapViews.ListedMoves + 7).Select(index => Move($"m{index}")).ToList();
+        var listed = RecapViews.Listed(Tech(1) with { Movements = Tech(1).Movements with { New = many } });
+
+        var view = RecapViews.Pilotage(listed);
+
+        Assert.Equal(listed.Movements.Counts, view.Movements.Counts);
+        Assert.Equal(RecapViews.ListedMoves, view.Movements.New.Count);
+    }
+
     // A frozen report and its webhook keep every move, and their JSON gains no key.
     [Fact]
     public void Frozen_keeps_every_move_and_no_count()

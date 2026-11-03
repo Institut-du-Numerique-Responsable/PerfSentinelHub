@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
@@ -121,6 +122,24 @@ public sealed class CorrelationListTests : IAsyncLifetime
         // In order: an end exactly at from, a running episode, a served end exactly at from,
         // a start exactly at to, and a span between two episodes that touches neither.
         Assert.Equal(expected, Ids(await ListAsync(All() with { FromMs = Now + from, ToMs = Now + to })));
+    }
+
+    // A pair link under access patterns: its own query, which reads a pair only where the
+    // caller reads both of its services.
+    [Fact]
+    public async Task A_pair_under_access_patterns_reads_only_what_both_sides_allow()
+    {
+        var both = AccessScope.Of(
+        [
+            AccessPattern.Compile(new PatternOptions { Service = "gateway-svc" }),
+            AccessPattern.Compile(new PatternOptions { Service = "order-svc" })
+        ]);
+        var oneSide = AccessScope.Of([AccessPattern.Compile(new PatternOptions { Service = "gateway-svc" })]);
+        var pair = All() with { PairKey = EpisodeJson.Id(0xa2) };
+
+        Assert.Equal("2", Ids(await ListAsync(pair with { Access = both })));
+        Assert.Equal("", Ids(await ListAsync(pair with { Access = oneSide })));
+        Assert.Equal("", Ids(await ListAsync(pair with { Access = both, SourceIds = ["daemon-b"] })));
     }
 
     [Fact]
