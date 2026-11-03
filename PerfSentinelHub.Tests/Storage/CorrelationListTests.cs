@@ -142,4 +142,17 @@ public sealed class CorrelationListTests : IAsyncLifetime
         command.CommandText = "SELECT group_concat(name, ',') FROM pragma_index_info('ix_episodes_listing');";
         Assert.Equal("started_at_ms,id,source_id", (string?)await command.ExecuteScalarAsync(cancellationToken));
     }
+
+    // A pair link reads one pair over 180 days: it must seek it, not scan the listing index. A read
+    // index, built after the boot like the findings ones, since the table can be large.
+    [Fact]
+    public async Task A_pair_is_read_through_its_own_index()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Assert.True(await _database.CatchUpReadIndexesAsync(cancellationToken));
+        await using var connection = await _database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT group_concat(name, ',') FROM pragma_index_info('ix_episodes_pair_key');";
+        Assert.Equal("pair_key,started_at_ms", (string?)await command.ExecuteScalarAsync(cancellationToken));
+    }
 }
