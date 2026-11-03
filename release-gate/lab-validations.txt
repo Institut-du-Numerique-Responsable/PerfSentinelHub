@@ -354,3 +354,14 @@ v0.11.0	43e4a05	2026-10-31	PASS
 # hub-card, which need older local daemons. The lab ran with local, uncommitted
 # image pins in its manifests.
 v0.12.0	8924457	2026-11-02	PASS
+# v0.13.0: targeted pass at lab commit 142b30b on a rebuilt cluster (make up-cni),
+# a Release image of Hub 6c002fe (built as cdaac43, the same tree before the authors
+# were rewritten) against the published perf-sentinel 0.41.0 image
+# (sha256:a49922bd). hub-ingestion, hub-incidents-mirror (correlated episodes),
+# hub-correlations-push (pair reads), hub-derived-status, hub-plugin-contract,
+# hub-access-control (scoped reads), hub-recap (the move cut) and
+# hub-retention-purge passed, 131 checks with no fail and no skip, first run. Not
+# run: hub-incidents-push, hub-disclosures, hub-source-reachability,
+# hub-lineage-mutation, hub-detection-volume and hub-card, untouched by this
+# release. The lab ran with a local, uncommitted Hub image pin.
+v0.13.0	142b30b	2026-11-03	PASS
