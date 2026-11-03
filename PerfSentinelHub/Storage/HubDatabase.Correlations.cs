@@ -110,6 +110,18 @@ public sealed partial class HubDatabase
     private static readonly string ScopedEpisodeList =
         $"WITH {AccessPatternsCte}\n{EpisodeListWhere} AND {EpisodeAccess}\n{EpisodeListPage}";
 
+    // The OR form hides ix_episodes_pair_key from the planner, so a pair link names its pair outright.
+    private static readonly string PairEpisodeList = OnePair(EpisodeList);
+    private static readonly string ScopedPairEpisodeList = OnePair(ScopedEpisodeList);
+
+    // Fails the type's first use, so every correlations test, if the fragment ever stops matching.
+    private static string OnePair(string list)
+    {
+        return list.Contains(AnyPair, StringComparison.Ordinal)
+            ? list.Replace(AnyPair, "ce.pair_key = $pair_key", StringComparison.Ordinal)
+            : throw new InvalidOperationException("The episode listing no longer holds its pair filter.");
+    }
+
     /// <summary>
     ///     Stores a daemon's pushed episodes under the merge rule. Waits for the write lock
     ///     as long as the two other imports do, then gives up: a 503 the daemon retries beats
@@ -192,9 +204,13 @@ public sealed partial class HubDatabase
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = query.Access is null ? EpisodeList : ScopedEpisodeList;
-        // The OR form hides ix_episodes_pair_key from the planner, so a pair link names its pair outright.
-        if (query.PairKey is not null) command.CommandText = command.CommandText.Replace(AnyPair, "ce.pair_key = $pair_key");
+        command.CommandText = (query.Access is null, query.PairKey is null) switch
+        {
+            (true, true) => EpisodeList,
+            (true, false) => PairEpisodeList,
+            (false, true) => ScopedEpisodeList,
+            _ => ScopedPairEpisodeList
+        };
         BindAccess(command, query.Access);
         var parameters = command.Parameters;
         parameters.AddWithValue("$source_ids", query.SourceIds is null ? DBNull.Value : JsonArray(query.SourceIds));

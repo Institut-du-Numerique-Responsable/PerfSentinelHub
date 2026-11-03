@@ -111,7 +111,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         return $"""
                 {scope}
                 scoped AS (
-                  SELECT findings.signature, scope.copy_source_id,
+                  SELECT scope.signature, scope.copy_source_id,
                          COALESCE(scope.service, findings.service) AS service,
                          COALESCE(scope.finding_type, findings.finding_type) AS finding_type,
                          COALESCE(scope.severity, findings.severity) AS severity,
@@ -150,7 +150,9 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
 
     // One source holds one copy of a finding, so its scope is its copies as they stand: no window to
     // rank, and a newest-first page walks ix_finding_sources_recent and stops at its limit, as the
-    // fleet's walks ix_findings_last_seen. The window version sorted every copy first.
+    // fleet's walks ix_findings_last_seen. The window version sorted every copy first. scoped
+    // reads scope.signature, not findings.signature: the joined one hid the signature tie-break
+    // from the index, and a push writes one last_seen_ms for all its copies, so it sorted them all.
     private const string OneSourceCopies = """
                                            scope AS (
                                              SELECT fs.signature, fs.first_seen_ms, fs.last_seen_ms,
