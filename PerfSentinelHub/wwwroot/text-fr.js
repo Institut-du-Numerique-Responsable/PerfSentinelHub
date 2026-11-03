@@ -1122,6 +1122,7 @@
         'correlations.incident.reading': 'Lecture des corrélations.',
         'correlations.incident.error': 'Le Hub n\'a pas renvoyé les corrélations de cette fenêtre.',
         'correlations.incident.none': 'Aucune corrélation n\'était active dans cette fenêtre.',
+        'correlations.incident.show_all': 'Tout afficher ({count})',
         'correlations.incident.no_push': '{name} ne pousse aucune corrélation que vous puissiez lire, aucune ne peut '
             + 'donc s\'afficher ici.',
         'correlations.all_episodes': 'Tous ses épisodes',
@@ -1683,7 +1684,8 @@
         'recap.moves.none_closed': 'Aucun jour de cette période n\'est encore clos, donc rien n\'est comparé à la période précédente.',
         'recap.moves.nothing': 'Rien n\'a bougé depuis la période précédente.',
         'recap.moves.overline': '// mouvements',
-        'recap.moves.show_first': 'Afficher les {count} premiers',
+        'recap.moves.loading': 'Lecture de la liste complète…',
+        'recap.moves.failed': 'La liste complète n\'a pas pu être lue.',
         'recap.moves.rest.one': '… et {count} autre, non listé.',
         'recap.moves.rest.other': '… et {count} autres, non listés.',
         'recap.plain.n_plus_one_sql': 'Pour chaque élément d\'une page, l\'application va de nouveau chercher le même type d\'information, au lieu de tout récupérer en une fois.',

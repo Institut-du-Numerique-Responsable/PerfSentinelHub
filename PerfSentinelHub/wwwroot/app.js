@@ -122,6 +122,9 @@
         recapShowAll: false,
         // The What moved groups shown whole, by their key; the others stop at RECAP_MOVES_FIRST.
         recapMovesOpen: {},
+        // The group whose whole list is being read with moves=all, and whether that read failed.
+        recapMovesLoading: null,
+        recapMovesFailed: false,
         recapRowError: {},
         recapBusy: {},
         recapNaming: null,
@@ -4512,8 +4515,9 @@
      */
     function loadIncidents() {
         state.incidents = null;
-        // A re-read may bring episodes pushed since: an unfolded incident asks again.
+        // A re-read may bring episodes pushed since: an unfolded incident asks again, cut again.
         state.incidentCorrelations = {};
+        state.incidentCorrelationsAll = {};
         state.incidentsError = false;
         state.incidentsDone = false;
         state.incidentsReading = true;
@@ -5033,10 +5037,7 @@
                 el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
                 // Whole, wrapped: the template is what tells two rows apart.
                 // Four lines at most, scrolled inside the cell: a long SQL made each row a screen tall.
-                el('td', {class: 'table-mono'}, [el('span', {
-                    // shortcut: a tab stop past ~4 lines of 300px mono, by length, not measured scroll; measure if it misfires.
-                    class: 'findings-template', text: template || '—', tabindex: template && template.length > 160 ? '0' : null
-                })]),
+                el('td', {class: 'table-mono'}, [templateBox(template)]),
                 el('td', {'data-align': 'right', text: String(row.seen_count == null ? '?' : row.seen_count)}),
                 el('td', {
                     title: PSL.dateTime(row.first_seen_ms),
@@ -5055,6 +5056,29 @@
             class: 'field-note',
             text: t('incidents.findings.no_credential')
         })]);
+    }
+
+    // Measured, not guessed from the length: a box that scrolls becomes a named tab stop, so the
+    // keyboard reaches the whole template too. A panel unfolded later is measured when it shows.
+    const TEMPLATE_FIT = typeof ResizeObserver === 'function' ? new ResizeObserver(function (entries) {
+        entries.forEach(function (entry) {
+            const box = entry.target;
+            if (box.scrollHeight > box.clientHeight) {
+                box.setAttribute('tabindex', '0');
+                box.setAttribute('role', 'region');
+                box.setAttribute('aria-label', t('incidents.finding.col.template'));
+            } else {
+                ['tabindex', 'role', 'aria-label'].forEach(function (name) {
+                    box.removeAttribute(name);
+                });
+            }
+        });
+    }) : null;
+
+    function templateBox(template) {
+        const box = el('span', {class: 'findings-template', text: template || '—'});
+        if (template && TEMPLATE_FIT) TEMPLATE_FIT.observe(box);
+        return box;
     }
 
     /** The columns a click sorts on, each under the sort key of its name. The ack column does not sort. */
@@ -5518,7 +5542,7 @@
         const more = el('button', {
             class: 'pill-button pill-sm incident-episodes-more',
             type: 'button',
-            text: t('recap.prio.show_all', {count: count})
+            text: t('correlations.incident.show_all', {count: count})
         });
         more.addEventListener('click', function () {
             state.incidentCorrelationsAll[cacheKey] = true;
@@ -5975,6 +5999,8 @@
             state.recapNameDraft = null;
             state.recapShowAll = false;
             state.recapMovesOpen = {};
+            state.recapMovesLoading = null;
+            state.recapMovesFailed = false;
             state.recapReports = null;
             state.recapGenerateError = null;
             render();
@@ -6793,33 +6819,66 @@
         return moves.counts ? moves.counts[key] : items.length;
     }
 
-    /** Once a cut list is open, what the Hub did not send is said, not silently missing. */
+    /** A whole list that could not be read says so, and how much the Hub did not send. */
     function recapMovesRest(moves, items, key) {
         const rest = recapMovesTotal(moves, items, key) - items.length;
-        if (rest <= 0 || (!state.recapMovesOpen[key] && items.length > RECAP_MOVES_FIRST)) return null;
-        return el('p', {class: 'recap-more', text: t('recap.moves.rest.' + PSL.plural(rest), {count: rest})});
+        if (rest <= 0 || !state.recapMovesFailed) return null;
+        return el('p', {
+            class: 'recap-more', role: 'alert',
+            text: t('recap.moves.failed') + ' ' + t('recap.moves.rest.' + PSL.plural(rest), {count: rest})
+        });
     }
 
     function recapMovesShown(items, key) {
         return state.recapMovesOpen[key] ? items : items.slice(0, RECAP_MOVES_FIRST);
     }
 
-    /** A long group stops at its first few lines: the whole list made the section run for screens. */
+    /**
+     * A long group stops at its first few lines: the whole list made the section run for screens.
+     * The button opens all of it, reading it again with moves=all when the Hub cut it, so nothing a
+     * reader wants to dig into stays out of reach.
+     */
     function recapMovesMore(moves, items, key) {
-        if (state.recapMovesOpen[key] || items.length <= RECAP_MOVES_FIRST) return null;
+        const total = recapMovesTotal(moves, items, key);
+        const cut = total > items.length;
+        if ((state.recapMovesOpen[key] && !cut) || total <= RECAP_MOVES_FIRST) return null;
+        const loading = state.recapMovesLoading === key;
         const more = el('button', {
             class: 'pill-button pill-sm recap-moves-more',
             type: 'button',
             'data-moves': key,
-            // "All" only when it is: past the Hub's cut, the button opens the first ones it sent.
-            text: t(recapMovesTotal(moves, items, key) > items.length
-                ? 'recap.moves.show_first' : 'recap.prio.show_all', {count: items.length})
+            disabled: loading ? 'disabled' : null,
+            'aria-busy': loading ? 'true' : null,
+            text: loading ? t('recap.moves.loading') : t('recap.prio.show_all', {count: total})
         });
         more.addEventListener('click', function () {
-            state.recapMovesOpen[key] = true;
-            renderFocus('#recap-h-moved');
+            if (!cut) {
+                state.recapMovesOpen[key] = true;
+                renderFocus('#recap-h-moved');
+                return;
+            }
+            recapMovesReadAll(key);
         });
         return more;
+    }
+
+    /** The whole snapshot again with every move: the screen then reads one snapshot, not two. */
+    function recapMovesReadAll(key) {
+        const sequence = state.recapSeq;
+        state.recapMovesLoading = key;
+        state.recapMovesFailed = false;
+        renderFocus('[data-moves="' + key + '"]');
+        getJson(PSL.recapPath(recapRoute()) + '&moves=all').then(function (snapshot) {
+            if (sequence !== state.recapSeq) return;
+            state.recap = snapshot;
+            state.recapMovesOpen[key] = true;
+        }).catch(function () {
+            if (sequence === state.recapSeq) state.recapMovesFailed = true;
+        }).finally(function () {
+            if (sequence !== state.recapSeq) return;
+            state.recapMovesLoading = null;
+            if (currentScreen() === 'recap') renderFocus('#recap-h-moved');
+        });
     }
 
     /**
