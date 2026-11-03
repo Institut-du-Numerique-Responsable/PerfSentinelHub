@@ -992,6 +992,13 @@ a.shell-identity[aria-current="page"] {
     overflow-y: auto;
 }
 
+/* The last visible line fades while more lies below, and comes back whole at the end. Not under
+   the keyboard focus: the mask would clip the focus ring, and that reader is already scrolling. */
+.findings-template[data-more]:not(:focus-visible) {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.25lh), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.25lh), transparent);
+}
+
 /* Underlined, unlike the rest of the product's links: a lone word in a table
    cell does not read as a link by its colour alone. */
 .ack-link {

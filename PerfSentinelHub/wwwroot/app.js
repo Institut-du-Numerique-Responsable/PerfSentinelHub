@@ -5074,12 +5074,24 @@
                     box.removeAttribute(name);
                 });
             }
+            templateMore(box);
         });
     }) : null;
 
+    // data-more while text lies below the box's last line: a browser that hides its scrollbar
+    // until a scroll (Firefox on macOS) otherwise shows a cut query as a whole one.
+    function templateMore(box) {
+        box.toggleAttribute('data-more', box.scrollTop + box.clientHeight < box.scrollHeight - 1);
+    }
+
     function templateBox(template) {
         const box = el('span', {class: 'findings-template', text: template || '—'});
-        if (template && TEMPLATE_FIT) TEMPLATE_FIT.observe(box);
+        if (template && TEMPLATE_FIT) {
+            TEMPLATE_FIT.observe(box);
+            box.addEventListener('scroll', function () {
+                templateMore(box);
+            }, {passive: true});
+        }
         return box;
     }
 
