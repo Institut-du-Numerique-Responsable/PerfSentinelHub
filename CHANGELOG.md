@@ -17,10 +17,12 @@ All notable changes to PerfSentinelHub are recorded here.
   like the two of 0.12.0. Reads work without them, only slower.
 - `GET /api/recap` lists the first 50 moves of each What moved group, in ranking order, and
   `movements.counts` gives each group's whole length. A week of churn listed over 6,000 moves, a
-  1.8 MB answer. A frozen report and its webhook keep every move and carry no `counts`.
-- The recap screen shows the first five moves of each group, with a button for the rest of what
-  the Hub sent and a line for what it did not. An incident shows its first five correlated
-  episodes the same way, and a finding's template at most four lines, scrolled inside its cell.
+  1.8 MB answer. `moves=all` lifts the cut. A frozen report and its webhook keep every move and
+  carry no `counts`.
+- The recap screen shows the first five moves of each group and a button that opens all of them,
+  reading the recap again with `moves=all` when the Hub cut the group. An incident shows its first
+  five correlated episodes the same way, and a finding's template at most four lines, scrolled
+  inside its cell, which the keyboard reaches whenever it scrolls.
 - What moved reads under the overline `// movements` instead of repeating its own title, on the
   screen and in a frozen report.
 
