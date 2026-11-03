@@ -41,14 +41,16 @@ public static class RecapViews
             View = "pilotage",
             Priorities = [.. tech.Priorities.Take(PilotagePriorities).Select(Plain)],
             MorePriorities = Math.Max(0, tech.Priorities.Count - PilotagePriorities),
-            Movements = new RecapMovements(
-                Plain(tech.Movements.New),
-                Plain(tech.Movements.Gone),
-                tech.Movements.GoneWithConfirmedAction,
-                Plain(tech.Movements.Up),
-                Plain(tech.Movements.Down),
-                Plain(tech.Movements.CameBack),
-                Plain(tech.Movements.DoneStillDetected))
+            // with, not a new record: the counts of a cut snapshot ride through.
+            Movements = tech.Movements with
+            {
+                New = Plain(tech.Movements.New),
+                Gone = Plain(tech.Movements.Gone),
+                Up = Plain(tech.Movements.Up),
+                Down = Plain(tech.Movements.Down),
+                CameBack = Plain(tech.Movements.CameBack),
+                DoneStillDetected = Plain(tech.Movements.DoneStillDetected)
+            }
         };
     }
 
