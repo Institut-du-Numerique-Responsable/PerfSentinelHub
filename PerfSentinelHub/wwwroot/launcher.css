@@ -982,8 +982,10 @@ a.shell-identity[aria-current="page"] {
     min-width: 820px;
 }
 
+/* Wide enough that four lines show a query's shape, not its first two columns. */
 .findings-template {
     display: block;
+    min-width: 220px;
     max-width: 300px;
     max-height: calc(4lh + 2px);
     overflow-y: auto;
@@ -1370,6 +1372,15 @@ a.shell-identity[aria-current="page"] {
 .pill-button:disabled {
     opacity: .55;
     cursor: not-allowed;
+}
+
+/* Busy, not disabled: it keeps the focus while it reads, and does not answer the hover. */
+.pill-button[aria-busy="true"],
+.pill-button[aria-busy="true"]:hover {
+    border-color: var(--btn-bd);
+    background: var(--surface-2);
+    opacity: .55;
+    cursor: progress;
 }
 
 .pill-primary {
@@ -5573,14 +5584,18 @@ a.chip {
     margin-top: 12px;
 }
 
+/* start: a grid or column parent would stretch the pill to its whole width. */
 .recap-moves-more,
 .incident-episodes-more {
+    justify-self: start;
+    align-self: start;
     margin-top: 10px;
 }
 
+/* auto-fit: a lone group takes the width instead of a 300px column beside empty tracks. */
 .recap-moves {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 10px;
 }
 
@@ -5647,7 +5662,9 @@ a.chip {
     margin-top: 0;
 }
 
+/* The measure of .recap-plain above it, now that a lone group runs the whole width. */
 .recap-move li .plain {
+    max-width: 68ch;
     color: var(--text);
 }
 

@@ -122,9 +122,9 @@
         recapShowAll: false,
         // The What moved groups shown whole, by their key; the others stop at RECAP_MOVES_FIRST.
         recapMovesOpen: {},
-        // The group whose whole list is being read with moves=all, and whether that read failed.
+        // The group whose whole list is being read with moves=all, and the group whose read failed.
         recapMovesLoading: null,
-        recapMovesFailed: false,
+        recapMovesFailed: null,
         recapRowError: {},
         recapBusy: {},
         recapNaming: null,
@@ -5034,7 +5034,7 @@
                     text: severityLabel(finding.severity)
                 })]),
                 el('td', {'data-align': 'right', text: impact == null ? '—' : PSL.num(impact)}),
-                el('td', {class: 'table-mono', text: finding.source_endpoint || '?'}),
+                el('td', {class: 'table-mono'}, [breakable(finding.source_endpoint || '?')]),
                 // Whole, wrapped: the template is what tells two rows apart.
                 // Four lines at most, scrolled inside the cell: a long SQL made each row a screen tall.
                 el('td', {class: 'table-mono'}, [templateBox(template)]),
@@ -5063,6 +5063,8 @@
     const TEMPLATE_FIT = typeof ResizeObserver === 'function' ? new ResizeObserver(function (entries) {
         entries.forEach(function (entry) {
             const box = entry.target;
+            // A redrawn table drops its boxes: let them go instead of holding every one ever drawn.
+            if (!box.isConnected) return TEMPLATE_FIT.unobserve(box);
             if (box.scrollHeight > box.clientHeight) {
                 box.setAttribute('tabindex', '0');
                 box.setAttribute('role', 'region');
@@ -5991,6 +5993,9 @@
      */
     function loadRecap(keep) {
         const sequence = ++state.recapSeq;
+        // A write re-reads every move when the screen already held them all, and drops a pending moves=all.
+        const all = keep && state.recap && !state.recap.movements.counts;
+        state.recapMovesLoading = null;
         if (!keep) {
             state.recap = null;
             state.recapError = null;
@@ -5999,13 +6004,13 @@
             state.recapNameDraft = null;
             state.recapShowAll = false;
             state.recapMovesOpen = {};
-            state.recapMovesLoading = null;
-            state.recapMovesFailed = false;
+            state.recapMovesFailed = null;
             state.recapReports = null;
             state.recapGenerateError = null;
             render();
         }
-        Promise.all([getJson(PSL.recapPath(recapRoute())), readRecapReports()]).then(function (results) {
+        const path = PSL.recapPath(recapRoute()) + (all ? '&moves=all' : '');
+        Promise.all([getJson(path), readRecapReports()]).then(function (results) {
             if (sequence !== state.recapSeq) return;
             state.recap = results[0];
             state.recapReports = results[1];
@@ -6367,7 +6372,7 @@
             el('div', {class: 'recap-where'}, item.label || !item.endpoint
                 ? [document.createTextNode(t('recap.where', {service: service}))]
                 : [document.createTextNode(t('recap.where', {service: service}) + ' · '),
-                    el('code', {class: 'code-inline', text: item.endpoint})])
+                    codeChip(item.endpoint)])
         ]);
     }
 
@@ -6376,7 +6381,7 @@
         const parts = PSL.serviceParts(priority.service, priority.service_label);
         return el('span', {class: 'recap-service'}, [
             el('span', {class: 'table-strong', text: parts.name}),
-            parts.code ? el('code', {class: 'code-inline', text: parts.code}) : null
+            parts.code ? codeChip(parts.code) : null
         ]);
     }
 
@@ -6730,6 +6735,26 @@
             });
     }
 
+    /**
+     * An endpoint or a class path as a chip that breaks after its separators, so a line ends at
+     * `repository.` or `{id}/` rather than mid-word; overflow-wrap still breaks a long word. A
+     * <wbr> carries no text, so a copy reads the name whole.
+     */
+    function codeChip(text) {
+        const chip = el('code', {class: 'code-inline'});
+        chip.appendChild(breakable(text));
+        return chip;
+    }
+
+    function breakable(text) {
+        const fragment = document.createDocumentFragment();
+        text.split(/(?<=[./{-])/).forEach(function (part, index) {
+            if (index > 0) fragment.appendChild(document.createElement('wbr'));
+            fragment.appendChild(document.createTextNode(part));
+        });
+        return fragment;
+    }
+
     // ---- what moved
 
     /** The sentence in a line, led by the label when the endpoint has one. */
@@ -6737,11 +6762,8 @@
         const service = PSL.serviceParts(item.service, item.service_label).name;
         const where = item.label || !item.endpoint
             ? [document.createTextNode(t('recap.where.move', {service: service}))]
-            : [document.createTextNode(t('recap.where.move.at', {service: service})), el('code', {
-                class: 'code-inline',
-                text: item.endpoint
-            }),
-                document.createTextNode('.')];
+            // No closing period: a chip that takes the whole line would leave it alone on the next.
+            : [document.createTextNode(t('recap.where.move.at', {service: service})), codeChip(item.endpoint)];
         return el('span', {class: 'who'}, [
             el('span', {class: 'plain'}, [
                 item.label ? el('b', {class: 'recap-label', text: item.label + '. '}) : null,
@@ -6822,7 +6844,7 @@
     /** A whole list that could not be read says so, and how much the Hub did not send. */
     function recapMovesRest(moves, items, key) {
         const rest = recapMovesTotal(moves, items, key) - items.length;
-        if (rest <= 0 || !state.recapMovesFailed) return null;
+        if (rest <= 0 || state.recapMovesFailed !== key) return null;
         return el('p', {
             class: 'recap-more', role: 'alert',
             text: t('recap.moves.failed') + ' ' + t('recap.moves.rest.' + PSL.plural(rest), {count: rest})
@@ -6847,11 +6869,13 @@
             class: 'pill-button pill-sm recap-moves-more',
             type: 'button',
             'data-moves': key,
-            disabled: loading ? 'disabled' : null,
+            // aria-disabled, not disabled: the focus stays on the button while the list is read.
+            'aria-disabled': loading ? 'true' : null,
             'aria-busy': loading ? 'true' : null,
             text: loading ? t('recap.moves.loading') : t('recap.prio.show_all', {count: total})
         });
         more.addEventListener('click', function () {
+            if (state.recapMovesLoading) return;
             if (!cut) {
                 state.recapMovesOpen[key] = true;
                 renderFocus('#recap-h-moved');
@@ -6866,14 +6890,17 @@
     function recapMovesReadAll(key) {
         const sequence = state.recapSeq;
         state.recapMovesLoading = key;
-        state.recapMovesFailed = false;
+        state.recapMovesFailed = null;
         renderFocus('[data-moves="' + key + '"]');
         getJson(PSL.recapPath(recapRoute()) + '&moves=all').then(function (snapshot) {
             if (sequence !== state.recapSeq) return;
             state.recap = snapshot;
             state.recapMovesOpen[key] = true;
         }).catch(function () {
-            if (sequence === state.recapSeq) state.recapMovesFailed = true;
+            if (sequence !== state.recapSeq) return;
+            // The cut the Hub sent is shown whole, so the rest line counts what is really missing.
+            state.recapMovesFailed = key;
+            state.recapMovesOpen[key] = true;
         }).finally(function () {
             if (sequence !== state.recapSeq) return;
             state.recapMovesLoading = null;
