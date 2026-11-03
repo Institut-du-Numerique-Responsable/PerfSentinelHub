@@ -5,6 +5,30 @@ namespace PerfSentinelHub.Recaps;
 public static class RecapViews
 {
     public const int PilotagePriorities = 5;
+    public const int ListedMoves = 50;
+
+    /// <summary>
+    ///     The screen's cut of either view: each move list stops at its first <see cref="ListedMoves" />, in
+    ///     ranking order, and says how long it was. A week of churn listed thousands, megabytes nobody reads.
+    /// </summary>
+    public static RecapSnapshot Listed(RecapSnapshot view)
+    {
+        var moves = view.Movements;
+        return view with
+        {
+            Movements = moves with
+            {
+                New = [.. moves.New.Take(ListedMoves)],
+                Gone = [.. moves.Gone.Take(ListedMoves)],
+                Up = [.. moves.Up.Take(ListedMoves)],
+                Down = [.. moves.Down.Take(ListedMoves)],
+                CameBack = [.. moves.CameBack.Take(ListedMoves)],
+                DoneStillDetected = [.. moves.DoneStillDetected.Take(ListedMoves)],
+                Counts = new RecapMoveCounts(moves.New.Count, moves.Gone.Count, moves.Up.Count, moves.Down.Count,
+                    moves.CameBack.Count, moves.DoneStillDetected.Count)
+            }
+        };
+    }
 
     /// <summary>
     ///     The management view of a tech snapshot: top five, the plain sentence, no technical key. The
@@ -17,14 +41,16 @@ public static class RecapViews
             View = "pilotage",
             Priorities = [.. tech.Priorities.Take(PilotagePriorities).Select(Plain)],
             MorePriorities = Math.Max(0, tech.Priorities.Count - PilotagePriorities),
-            Movements = new RecapMovements(
-                Plain(tech.Movements.New),
-                Plain(tech.Movements.Gone),
-                tech.Movements.GoneWithConfirmedAction,
-                Plain(tech.Movements.Up),
-                Plain(tech.Movements.Down),
-                Plain(tech.Movements.CameBack),
-                Plain(tech.Movements.DoneStillDetected))
+            // with, not a new record: the counts of a cut snapshot ride through.
+            Movements = tech.Movements with
+            {
+                New = Plain(tech.Movements.New),
+                Gone = Plain(tech.Movements.Gone),
+                Up = Plain(tech.Movements.Up),
+                Down = Plain(tech.Movements.Down),
+                CameBack = Plain(tech.Movements.CameBack),
+                DoneStillDetected = Plain(tech.Movements.DoneStillDetected)
+            }
         };
     }
 

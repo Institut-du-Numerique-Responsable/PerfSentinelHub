@@ -6,19 +6,27 @@ namespace PerfSentinelHub.Storage;
 public sealed partial class HubDatabase
 {
     // The columns a windowed or newest-first findings read filters and orders on, so a page walks
-    // the index in order instead of sorting the whole scope.
+    // the index in order instead of sorting the whole scope: the fleet's through ix_findings_last_seen,
+    // one source's through ix_finding_sources_recent. ix_episodes_pair_key serves a pair link, which
+    // names no daemon and so cannot use ix_episodes_pair. Each one missing is built, so a database
+    // that holds the first two gets the others.
     private const string ReadIndexes =
         """
         CREATE INDEX IF NOT EXISTS ix_findings_last_seen
           ON findings(last_seen_ms DESC, signature, service, endpoint);
         CREATE INDEX IF NOT EXISTS ix_finding_sources_window
           ON finding_sources(signature, source_id, first_seen_ms, first_observed_day, last_seen_ms);
+        CREATE INDEX IF NOT EXISTS ix_finding_sources_recent
+          ON finding_sources(source_id, last_seen_ms DESC, signature);
+        CREATE INDEX IF NOT EXISTS ix_episodes_pair_key
+          ON correlation_episodes(pair_key, started_at_ms);
         """;
 
     private const string ReadIndexesNeeded =
         """
-        SELECT 2 > COUNT(*) FROM sqlite_master
-        WHERE type = 'index' AND name IN ('ix_findings_last_seen', 'ix_finding_sources_window');
+        SELECT 4 > COUNT(*) FROM sqlite_master
+        WHERE type = 'index' AND name IN ('ix_findings_last_seen', 'ix_finding_sources_window',
+                                          'ix_finding_sources_recent', 'ix_episodes_pair_key');
         """;
 
     // Whether AttributesBackfill has anything to write, each arm its read-only mirror: the

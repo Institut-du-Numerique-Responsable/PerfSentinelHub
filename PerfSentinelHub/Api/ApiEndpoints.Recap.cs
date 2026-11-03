@@ -29,14 +29,13 @@ public static partial class ApiEndpoints
 
         var sources = access.Sources(context, options.Value.Sources);
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-        if (!TryParseRecapQuery(context.Request, sources, today, out var query, out var pilotage))
+        if (!TryParseRecapQuery(context.Request, sources, today, out var query, out var pilotage, out var allMoves))
             return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRecapQuery,
                 "The recap query is invalid.");
 
         var snapshot = await recaps.ComputeAsync(query with { Access = Narrowing(scope) }, cancellationToken);
-        return TypedResults.Json(
-            pilotage ? RecapViews.Pilotage(snapshot) : snapshot,
-            HubJsonContext.Default.RecapSnapshot);
+        var view = pilotage ? RecapViews.Pilotage(snapshot) : snapshot;
+        return TypedResults.Json(allMoves ? view : RecapViews.Listed(view), HubJsonContext.Default.RecapSnapshot);
     }
 
     private static bool TryParseRecapQuery(
@@ -44,15 +43,20 @@ public static partial class ApiEndpoints
         IReadOnlyList<SourceOptions> sources,
         DateOnly today,
         out RecapRequest query,
-        out bool pilotage)
+        out bool pilotage,
+        out bool allMoves)
     {
         query = null!;
         pilotage = false;
+        allMoves = false;
         if (!HasValidUtf8(request.QueryString.Value) || request.Query.Any(item => item.Value.Count != 1))
             return false;
 
         var view = ReadOptional(request, "view") ?? "tech";
-        if (view is not ("tech" or RecapPilotageView) ||
+        // moves=all lifts the cut of Listed, for a reader who opens a whole group.
+        var moves = ReadOptional(request, "moves");
+        if (moves is not (null or "all") ||
+            view is not ("tech" or RecapPilotageView) ||
             !RecapPeriod.TryParseKind(ReadOptional(request, "period") ?? "week", out var kind) ||
             !TryReadRecapDate(request, today, out var at) ||
             !TryReadSourceScope(request, sources, out var sourceIds))
@@ -61,6 +65,7 @@ public static partial class ApiEndpoints
         var service = ReadOptional(request, "service");
         var grouping = ReadOptional(request, "grouping");
         pilotage = view == RecapPilotageView;
+        allMoves = moves == "all";
         query = new RecapRequest(
             kind, at, sourceIds, service, grouping, null, sources,
             new RecapFilters(

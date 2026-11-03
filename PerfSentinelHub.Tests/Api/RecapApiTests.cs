@@ -27,6 +27,21 @@ public sealed class RecapApiTests(HubApplicationFactory factory) : IClassFixture
         var period = root.GetProperty("period");
         Assert.Equal("1970-01-01", period.GetProperty("from").GetString());
         Assert.True(period.GetProperty("in_progress").GetBoolean());
+        // The screen's cut: each list's whole length rides beside it.
+        Assert.Equal(0, root.GetProperty("movements").GetProperty("counts").GetProperty("new").GetInt32());
+    }
+
+    // A reader who wants to dig past the cut asks for every move: whole lists, so no counts.
+    [Fact]
+    public async Task Moves_all_lists_every_move_without_counts()
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/recap?period=day&moves=all", Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Token));
+        Assert.False(document.RootElement.GetProperty("movements").TryGetProperty("counts", out _));
     }
 
     [Fact]
@@ -46,6 +61,7 @@ public sealed class RecapApiTests(HubApplicationFactory factory) : IClassFixture
     [InlineData("view=other")]
     [InlineData("environment=nowhere")]
     [InlineData("period=day&period=week")]
+    [InlineData("moves=some")]
     public async Task A_bad_query_is_a_400(string query)
     {
         using var client = factory.CreateClient();

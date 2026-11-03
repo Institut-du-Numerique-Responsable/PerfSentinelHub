@@ -36,6 +36,48 @@ public sealed class RecapViewsTests
             new RecapMovements([Move()], [Move()], 0, [Move()], [Move()], [Move()], [Move()]), false, [], false);
     }
 
+    // A week of churn listed thousands of moves: the screen reads the first of each list and its count.
+    [Fact]
+    public void Listed_cuts_each_move_list_and_keeps_its_count()
+    {
+        var many = Enumerable.Range(0, RecapViews.ListedMoves + 7).Select(index => Move($"m{index}")).ToList();
+        var tech = Tech(1) with { Movements = Tech(1).Movements with { New = many, Gone = [] } };
+
+        var listed = RecapViews.Listed(tech);
+
+        Assert.Equal(many.Take(RecapViews.ListedMoves), listed.Movements.New);
+        Assert.Empty(listed.Movements.Gone);
+        Assert.Single(listed.Movements.Up);
+        Assert.Equal(new RecapMoveCounts(RecapViews.ListedMoves + 7, 0, 1, 1, 1, 1), listed.Movements.Counts);
+        Assert.Contains("\"counts\":{\"new\":57,", JsonSerializer.Serialize(listed, Wire));
+    }
+
+    // The cut and the management view compose in either order: the counts ride through Pilotage.
+    [Fact]
+    public void Pilotage_keeps_the_counts_of_a_cut_snapshot()
+    {
+        var many = Enumerable.Range(0, RecapViews.ListedMoves + 7).Select(index => Move($"m{index}")).ToList();
+        var listed = RecapViews.Listed(Tech(1) with { Movements = Tech(1).Movements with { New = many } });
+
+        var view = RecapViews.Pilotage(listed);
+
+        Assert.Equal(listed.Movements.Counts, view.Movements.Counts);
+        Assert.Equal(RecapViews.ListedMoves, view.Movements.New.Count);
+    }
+
+    // A frozen report and its webhook keep every move, and their JSON gains no key.
+    [Fact]
+    public void Frozen_keeps_every_move_and_no_count()
+    {
+        var many = Enumerable.Range(0, RecapViews.ListedMoves + 7).Select(index => Move($"m{index}")).ToList();
+        var tech = Tech(1) with { Movements = Tech(1).Movements with { New = many } };
+
+        var frozen = RecapViews.Frozen(tech);
+
+        Assert.Equal(RecapViews.ListedMoves + 7, frozen.Movements.New.Count);
+        Assert.DoesNotContain("\"counts\"", JsonSerializer.Serialize(frozen, Wire));
+    }
+
     [Fact]
     public void Pilotage_json_carries_no_tech_key()
     {
