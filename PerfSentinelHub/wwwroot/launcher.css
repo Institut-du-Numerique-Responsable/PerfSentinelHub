@@ -416,13 +416,14 @@ a.shell-identity[aria-current="page"] {
 }
 
 /* Only on click. A re-resolution caused by the OS must not animate, or the
-   theme spins by itself at sunset. */
+   theme spins by itself at sunset. It settles on the language pill's ease-out
+   rather than overshooting past the glyph's rest and bouncing back. */
 .shell-theme[data-spin="a"] .shell-theme-glyph svg {
-    animation: psSpinA .44s cubic-bezier(.34, 1.5, .5, 1);
+    animation: psSpinA .44s cubic-bezier(.22, 1, .36, 1);
 }
 
 .shell-theme[data-spin="b"] .shell-theme-glyph svg {
-    animation: psSpinB .44s cubic-bezier(.34, 1.5, .5, 1);
+    animation: psSpinB .44s cubic-bezier(.22, 1, .36, 1);
 }
 
 @keyframes psSpinA {
