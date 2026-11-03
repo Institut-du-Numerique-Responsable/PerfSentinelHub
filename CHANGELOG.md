@@ -32,6 +32,9 @@ All notable changes to PerfSentinelHub are recorded here.
   so once, under its list.
 - What moved reads under the overline `// movements` instead of repeating its own title, on the
   screen and in a frozen report.
+- On the screen, a rule separates two moves, as it does two table rows, and a move's trend chip
+  shows only when it says more than its group's title: a change figure, or a trend other than the
+  group's. Under New, every line carried "new" and the chip floated away from its own line.
 
 ### Fixed
 
