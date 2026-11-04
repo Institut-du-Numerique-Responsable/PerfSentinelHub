@@ -769,7 +769,8 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   précédents du Hub, les lectures de findings le plus tant qu'il n'y en a pas eu. Elle avance quand
   une étape se termine, jamais au milieu d'une étape, et vaut `1` une fois la tâche réussie.
 - **Réutilisation.** Un récap calculé est gardé pour son audience et sa requête : 24 heures pour une
-  période close, 10 minutes pour une période en cours, jusqu'à `expires_at_ms`. Entre-temps, un
+  période close, 10 minutes pour une période en cours ou dont un jour est encore compté (`open_day`),
+  jusqu'à `expires_at_ms`. Entre-temps, un
   `POST` pour la même requête renvoie la même tâche, déjà `succeeded` : une autre vue, la liste
   entière d'un groupe ou un retour sur l'écran ne recalculent rien. `refresh=true` recalcule toujours,
   même par-dessus une tâche encore en cours, qui a pu lire avant l'écriture qui le demande : le

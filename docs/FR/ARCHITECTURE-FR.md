@@ -268,8 +268,8 @@ fois ses ledgers scellés, `RecapReportRenderer` écrit le HTML autonome d'un in
 `RecapMailer`, au relais SMTP, et `RecapLoop` fait tourner le générateur et le worker toutes les
 15 secondes. `RecapJobs` mène le même calcul pour l'écran en dehors de la requête, sur un fil à lui, prévenu de
 chaque étape à mesure que `RecapService` y entre, et garde en mémoire chaque récap calculé pour son
-audience et sa requête, une journée pour une période close et 10 minutes pour une période en cours, au
-plus 2 en cours et 32 en tout. Un redémarrage les oublie tous.
+audience et sa requête, une journée pour une période close et 10 minutes pour une période en cours ou
+dont un jour est encore compté, au plus 2 en cours et 32 en tout. Un redémarrage les oublie tous.
 
 Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : les lignes
 d'attributs d'une copie dont l'observation la plus récente n'en a aucune, le service d'une

@@ -714,7 +714,7 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
   computations, the findings reads most until there is one. It moves when a stage ends, never
   inside one, and is `1` once the job succeeded.
 - **Reuse.** A finished recap is kept for its audience and query: 24 hours for a closed period, 10
-  minutes for one in progress, until `expires_at_ms`. Meanwhile a `POST` for the same query answers
+  minutes for one in progress or with a day still being counted (`open_day`), until `expires_at_ms`. Meanwhile a `POST` for the same query answers
   the same job, already `succeeded`, so another view, the whole list of a group or a return to the
   screen computes nothing. `refresh=true` always computes it again, even over a job still running,
   which may have read before the write that asked for it: the launcher sends it after a write from

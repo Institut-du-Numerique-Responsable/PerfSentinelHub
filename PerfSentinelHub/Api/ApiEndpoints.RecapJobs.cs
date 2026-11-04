@@ -35,8 +35,9 @@ public static partial class ApiEndpoints
         if (RecapAudience(context, scope, sources) is not { } audience)
             return NoFindingsRead();
 
-        var key = new RecapJobKey(audience, query.Kind, query.At, query.Filters.Environment, query.Filters.SourceId,
-            query.Service, query.Grouping);
+        // Keyed on the period's first day, not the day named: every day of one period computes the same recap.
+        var key = new RecapJobKey(audience, query.Kind, RecapPeriod.Of(query.Kind, query.At).From,
+            query.Filters.Environment, query.Filters.SourceId, query.Service, query.Grouping);
         var start = jobs.Start(key, query with { Access = Narrowing(scope) }, refresh is not null);
         if (start.Job is not { } job)
         {
@@ -72,11 +73,7 @@ public static partial class ApiEndpoints
     {
         if (RecapJobAudienceOf(context, access, options) is not { } audience)
             return NoFindingsRead();
-        var view = ReadOptional(context.Request, "view") ?? "tech";
-        var moves = ReadOptional(context.Request, "moves");
-        if (!HasValidUtf8(context.Request.QueryString.Value) ||
-            context.Request.Query.Any(item => item.Value.Count != 1) ||
-            view is not ("tech" or RecapPilotageView) || moves is not (null or "all"))
+        if (!TryReadRecapView(context.Request, out var pilotage, out var allMoves))
             return Problem(StatusCodes.Status400BadRequest, ProblemCodes.InvalidRecapQuery,
                 "The recap query is invalid.");
 
@@ -90,8 +87,8 @@ public static partial class ApiEndpoints
                 _ => Problem(StatusCodes.Status409Conflict, ProblemCodes.RecapFailed,
                     "This recap was not computed. Start it again.")
             };
-        var shown = view == RecapPilotageView ? RecapViews.Pilotage(snapshot) : snapshot;
-        return TypedResults.Json(moves == "all" ? shown : RecapViews.Listed(shown), HubJsonContext.Default.RecapSnapshot);
+        var shown = pilotage ? RecapViews.Pilotage(snapshot) : snapshot;
+        return TypedResults.Json(allMoves ? shown : RecapViews.Listed(shown), HubJsonContext.Default.RecapSnapshot);
     }
 
     /// <summary>

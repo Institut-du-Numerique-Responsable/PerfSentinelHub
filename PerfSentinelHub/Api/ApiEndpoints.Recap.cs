@@ -47,16 +47,7 @@ public static partial class ApiEndpoints
         out bool allMoves)
     {
         query = null!;
-        pilotage = false;
-        allMoves = false;
-        if (!HasValidUtf8(request.QueryString.Value) || request.Query.Any(item => item.Value.Count != 1))
-            return false;
-
-        var view = ReadOptional(request, "view") ?? "tech";
-        // moves=all lifts the cut of Listed, for a reader who opens a whole group.
-        var moves = ReadOptional(request, "moves");
-        if (moves is not (null or "all") ||
-            view is not ("tech" or RecapPilotageView) ||
+        if (!TryReadRecapView(request, out pilotage, out allMoves) ||
             !RecapPeriod.TryParseKind(ReadOptional(request, "period") ?? "week", out var kind) ||
             !TryReadRecapDate(request, today, out var at) ||
             !TryReadSourceScope(request, sources, out var sourceIds))
@@ -64,13 +55,23 @@ public static partial class ApiEndpoints
 
         var service = ReadOptional(request, "service");
         var grouping = ReadOptional(request, "grouping");
-        pilotage = view == RecapPilotageView;
-        allMoves = moves == "all";
         query = new RecapRequest(
             kind, at, sourceIds, service, grouping, null, sources,
             new RecapFilters(
                 ReadOptional(request, "environment"), ReadOptional(request, "source_id"), service, grouping));
         return true;
+    }
+
+    // The view and the cut of a recap read, a job's result included, on a query with one value per key.
+    // moves=all lifts the cut of Listed, for a reader who opens a whole group.
+    private static bool TryReadRecapView(HttpRequest request, out bool pilotage, out bool allMoves)
+    {
+        var view = ReadOptional(request, "view") ?? "tech";
+        var moves = ReadOptional(request, "moves");
+        pilotage = view == RecapPilotageView;
+        allMoves = moves == "all";
+        return HasValidUtf8(request.QueryString.Value) && request.Query.All(item => item.Value.Count == 1) &&
+               view is ("tech" or RecapPilotageView) && moves is (null or "all");
     }
 
     // Today UTC when absent; a day in the future has nothing to recap.

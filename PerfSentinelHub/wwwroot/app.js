@@ -6047,7 +6047,11 @@
         clearTimeout(state.recapPollTimer);
         // A job this screen stops following is let go, so the Hub stops it once nobody follows it: one
         // for other filters, or the one a refresh replaces, since it may have read before the write.
-        if (previous && previous.status === 'running' && (previous.key !== key || refresh)) cancelRecapJob(previous.id);
+        // Forgotten at once, so a second read before the next job answers does not let it go twice.
+        if (previous && previous.status === 'running' && (previous.key !== key || refresh)) {
+            cancelRecapJob(previous.id);
+            state.recapJob = null;
+        }
         if (!keep) {
             state.recapLoadingSince = Date.now();
             state.recapMovesLoading = null;
@@ -6075,12 +6079,22 @@
             readRecapResult(sequence, previous, route, all, opening);
             return;
         }
+        // Still computing for these filters, after a return or a view switch: followed again, not joined
+        // again, so this screen counts once among its followers and one let-go stops it.
+        if (previous && previous.key === key && previous.status === 'running' && !refresh) {
+            pollRecapJob(sequence, previous.id, route, all, opening);
+            return;
+        }
         startRecapJob(sequence, route, Boolean(refresh), all, opening);
     }
 
     function startRecapJob(sequence, route, refresh, all, opening) {
-        fetchJson(PSL.recapJobPath(route, refresh), 'POST').then(function (job) {
-            if (sequence !== state.recapSeq) return;
+        postJson(PSL.recapJobPath(route, refresh)).then(function (job) {
+            if (sequence !== state.recapSeq) {
+                // Started or joined for a read no longer wanted: let go, lest it hold one of the Hub's places.
+                if (job.status === 'running') cancelRecapJob(job.id);
+                return;
+            }
             state.recapHubBusy = false;
             followRecapJob(sequence, job, route, all, opening);
         }).catch(function (error) {
@@ -6111,11 +6125,9 @@
             readRecapResult(sequence, state.recapJob, route, all, opening);
             return;
         }
-        if (job.status === 'cancelled' && state.recapRestarts === 0) {
+        if (job.status === 'cancelled') {
             // Stopped with a Hub that restarted: computed again, once, as a forgotten job is.
-            state.recapRestarts += 1;
-            state.recapJob = null;
-            startRecapJob(sequence, route, false, all, opening);
+            restartRecapJob(sequence, route, all, opening, Object.assign(new Error(job.status), {status: 500}));
             return;
         }
         if (job.status !== 'running') {
@@ -6138,13 +6150,7 @@
             if (sequence !== state.recapSeq) return;
             if (error.status === 404) {
                 // Forgotten by a Hub that restarted: computed again, once, rather than shown as an error.
-                state.recapJob = null;
-                if (state.recapRestarts > 0) {
-                    landRecap(sequence, Promise.reject(error), opening);
-                    return;
-                }
-                state.recapRestarts += 1;
-                startRecapJob(sequence, route, false, all, opening);
+                restartRecapJob(sequence, route, all, opening, error);
                 return;
             }
             // A refusal, such as a 403 once the access changed, does not pass by asking again: said.
@@ -6166,14 +6172,23 @@
         }).catch(function (error) {
             if (sequence !== state.recapSeq) return;
             // Expired or forgotten since: computed again, once.
-            if ((error.status === 404 || error.status === 409) && state.recapRestarts === 0) {
-                state.recapRestarts += 1;
-                state.recapJob = null;
-                startRecapJob(sequence, route, false, all, opening);
+            if (error.status === 404 || error.status === 409) {
+                restartRecapJob(sequence, route, all, opening, error);
                 return;
             }
             landRecap(sequence, Promise.reject(error), opening);
         });
+    }
+
+    /** A job the Hub forgot or stopped is started again once per read; a second time, `error` is said. */
+    function restartRecapJob(sequence, route, all, opening, error) {
+        state.recapJob = null;
+        if (state.recapRestarts > 0) {
+            landRecap(sequence, Promise.reject(error), opening);
+            return;
+        }
+        state.recapRestarts += 1;
+        startRecapJob(sequence, route, false, all, opening);
     }
 
     /** Stops a job nobody follows any more. Fire and forget: its answer changes nothing on screen. */

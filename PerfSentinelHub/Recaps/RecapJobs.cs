@@ -6,7 +6,8 @@ namespace PerfSentinelHub.Recaps;
 /// <summary>
 ///     Recap computations the Hub runs off the request that asked for them, so the screen can show
 ///     where one is and a reader can leave and come back to it. A finished recap is kept for its
-///     audience and query, 24 hours for a closed period and 10 minutes for one in progress, so a
+///     audience and query, 24 hours for a closed period and 10 minutes for one in progress or with a
+///     day still being counted, so a
 ///     view switch, the whole list of a group or a return to the screen reuses it. In memory only:
 ///     a restart forgets every job, and the next request computes again.
 /// </summary>
@@ -177,8 +178,9 @@ public sealed partial class RecapJobs(
                 var nowMs = _clock.GetUtcNow().ToUnixTimeMilliseconds();
                 job.Finish(RecapJobStatus.Succeeded, nowMs);
                 job.Result = snapshot;
-                job.ExpiresAtMs = nowMs + (long)(snapshot.Period.InProgress ? OpenLifetime : ClosedLifetime)
-                    .TotalMilliseconds;
+                // A closed period with a day still being counted (open_day) still changes: kept as one in progress.
+                var settled = !snapshot.Period.InProgress && !snapshot.Period.Incomplete.Contains("open_day");
+                job.ExpiresAtMs = nowMs + (long)(settled ? ClosedLifetime : OpenLifetime).TotalMilliseconds;
                 Learn(job);
                 stages = job.Timings();
                 totalMs = nowMs - job.StartedAtMs;
@@ -244,14 +246,15 @@ public sealed partial class RecapJobs(
             job.StartedAtMs,
             job.FinishedAtMs,
             job.ExpiresAtMs,
-            job.Status == RecapJobStatus.Failed ? "recap_failed" : null);
+            job.Status == RecapJobStatus.Failed ? ProblemCodes.RecapFailed : null);
     }
 
     private void Learn(Job job)
     {
         foreach (var stage in RecapStages.All)
+            // At least 1 ms: weights that all decayed to 0 would make the progress 0/0, which JSON cannot write.
             if (job.States[(int)stage] == RecapStageState.Done && job.Ms[(int)stage] is { } ms)
-                _expectedMs[(int)stage] = (_expectedMs[(int)stage] * (1 - Smoothing)) + (ms * Smoothing);
+                _expectedMs[(int)stage] = (_expectedMs[(int)stage] * (1 - Smoothing)) + (Math.Max(1, ms) * Smoothing);
     }
 
     private void Prune()

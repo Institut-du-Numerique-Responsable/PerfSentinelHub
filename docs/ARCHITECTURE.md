@@ -250,7 +250,7 @@ the self-contained HTML of a stored snapshot, `RecapDeliveryWorker` sends the du
 runs the generator and the worker every 15 seconds. `RecapJobs` runs the same computation for the
 screen off the request, on a thread of its own, told each stage as `RecapService` enters it, and keeps
 each finished recap in memory for its audience and query, a day for a closed period and 10 minutes for
-one in progress, at most 2 running and 32 held. A restart forgets them all.
+one in progress or with a day still being counted, at most 2 running and 32 held. A restart forgets them all.
 
 Each start fills in what an older build left out: the attribute rows of a copy whose newest
 observation has none, the service of a copy that has none, both from that copy's own

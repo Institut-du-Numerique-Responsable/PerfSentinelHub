@@ -67,6 +67,20 @@ public sealed class RecapJobsApiTests(HubApplicationFactory factory) : IClassFix
         Assert.NotEqual(id, await IdAsync(refreshed));
     }
 
+    // Every day of one period computes the same recap, so a day named inside it reuses the job of another.
+    [Fact]
+    public async Task Two_days_of_one_period_share_a_job()
+    {
+        using var client = factory.CreateClient();
+        using var first = await client.SendAsync(Start("period=week&at=1969-12-30&refresh=true"), Token);
+        var id = await IdAsync(first);
+        await SettledAsync(client, id);
+
+        using var again = await client.SendAsync(Start("period=week&at=1969-12-31"), Token);
+
+        Assert.Equal(id, await IdAsync(again));
+    }
+
     [Fact]
     public async Task A_job_is_started_from_this_site_with_a_JSON_request_only()
     {

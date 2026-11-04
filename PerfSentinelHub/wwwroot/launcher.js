@@ -2333,12 +2333,21 @@
      * @returns {string}
      */
     function recapPath(route) {
-        let path = '/api/recap?period=' + encodeURIComponent(route.period)
-            + '&view=' + encodeURIComponent(route.view);
+        return '/api/recap?period=' + encodeURIComponent(route.period)
+            + '&view=' + encodeURIComponent(route.view) + recapFilterQuery(route);
+    }
+
+    /**
+     * The day and the filters a route names, each as `&key=value`, in the order the Hub reads them.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @returns {string}
+     */
+    function recapFilterQuery(route) {
+        let query = '';
         ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
-            if (route[key]) path += '&' + key + '=' + encodeURIComponent(route[key]);
+            if (route[key]) query += '&' + key + '=' + encodeURIComponent(route[key]);
         });
-        return path;
+        return query;
     }
 
     /**
@@ -2361,10 +2370,7 @@
      * @returns {string}
      */
     function recapJobPath(route, refresh) {
-        let path = '/api/recap/jobs?period=' + encodeURIComponent(route.period);
-        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
-            if (route[key]) path += '&' + key + '=' + encodeURIComponent(route[key]);
-        });
+        const path = '/api/recap/jobs?period=' + encodeURIComponent(route.period) + recapFilterQuery(route);
         return refresh ? path + '&refresh=true' : path;
     }
 

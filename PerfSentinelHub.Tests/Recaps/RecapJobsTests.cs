@@ -131,6 +131,19 @@ public sealed class RecapJobsTests : IDisposable
         Assert.NotEqual(first.Id, Start(Key()).Job!.Id);
     }
 
+    // A day not sealed yet still changes the figures: such a recap is kept as one in progress is.
+    [Fact]
+    public async Task A_closed_recap_with_a_day_still_being_counted_is_reused_for_ten_minutes_only()
+    {
+        var first = Start(Key()).Job!;
+        var closed = Snapshot(inProgress: false);
+        (await NextComputationAsync()).Finish(closed with { Period = closed.Period with { Incomplete = ["open_day"] } });
+        var done = await SettledAsync(first.Id);
+
+        Assert.Equal(_clock.GetUtcNow().ToUnixTimeMilliseconds() + (long)RecapJobs.OpenLifetime.TotalMilliseconds,
+            done.ExpiresAtMs);
+    }
+
     [Fact]
     public async Task A_refresh_computes_again_over_a_finished_recap()
     {
@@ -380,7 +393,13 @@ public sealed class RecapJobsTests : IDisposable
 
     private async Task<Computation> NextComputationAsync()
     {
-        var seen = _computations.Count(computation => computation.Claimed);
+        int seen;
+        // Under the lock: a job's thread may be adding its computation while this counts.
+        lock (_computations)
+        {
+            seen = _computations.Count(computation => computation.Claimed);
+        }
+
         await WaitUntilAsync(() =>
         {
             lock (_computations)

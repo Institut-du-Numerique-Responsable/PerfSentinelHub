@@ -286,7 +286,7 @@ On a large database the recap takes minutes, so the screen asks the Hub to compu
 steps each ticked off with its duration, marked running, or not needed that day, and the time since the
 computation started. You can leave the page: the Hub goes on, and coming back picks up the same job, or
 shows the result at once if it finished. Once computed, a line says when, and until when the Hub reuses
-it (10 minutes for a period in progress, a day for a closed one), with Recompute beside it. Switching
+it (10 minutes for a period in progress or with a day still being counted, a day for a closed one), with Recompute beside it. Switching
 between Engineering and Management, or opening every move of a group, reads the same computed recap
 again; changing a filter starts another one and stops the one nobody follows any more. A write from the
 screen, an action or a name, computes the recap again. A Hub without jobs is read the way it was before,

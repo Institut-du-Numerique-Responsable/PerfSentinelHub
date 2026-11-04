@@ -313,8 +313,8 @@ tâche ([l'API](API-FR.md#calcul-du-récap-en-tâche)) et montre où il en est :
 faite, les neuf étapes chacune cochée avec sa durée, marquée en cours, ou pas nécessaire ce jour-là, et
 le temps écoulé depuis le début du calcul. Vous pouvez quitter la page : le Hub poursuit, et en revenant
 vous retrouvez la même tâche, ou le résultat tout de suite si elle a fini. Une fois calculé, une ligne
-dit quand, et jusqu'à quand le Hub le réutilise (10 minutes pour une période en cours, une journée pour
-une période close), avec Recalculer à côté. Passer d'Engineering à Management, ou ouvrir tous les
+dit quand, et jusqu'à quand le Hub le réutilise (10 minutes pour une période en cours ou dont un jour est encore compté, une
+journée pour une période close), avec Recalculer à côté. Passer d'Engineering à Management, ou ouvrir tous les
 mouvements d'un groupe, relit le même récap calculé ; changer un filtre en lance un autre et arrête celui
 que plus personne ne suit. Une écriture depuis l'écran, une action ou un nom, recalcule le récap. Un Hub
 sans tâches se lit comme avant, en une requête, avec un bandeau qui dit que quitter la page relance le
