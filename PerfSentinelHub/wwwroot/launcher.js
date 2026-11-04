@@ -2358,8 +2358,10 @@
      * @returns {string}
      */
     function recapJobKey(route, now) {
-        // The Hub reads an absent day as today in UTC, so the key does too: past midnight UTC, another job.
-        const at = route.at || new Date(now === undefined ? Date.now() : now).toISOString().slice(0, 10);
+        // The Hub reads an absent day as today in UTC and keys a job on its period's first day, so the
+        // key does too: another day of the same period is the same job, past its end another one.
+        const day = route.at || cardIso(new Date(now === undefined ? Date.now() : now));
+        const at = route.period === 'day' ? day : cardPeriodStart(route.period, day);
         return recapPath(Object.assign({}, route, {view: 'tech', at: at}));
     }
 
@@ -2408,9 +2410,7 @@
         if (job.finished_at_ms == null || job.expires_at_ms == null) return null;
         const today = new Date(now).toDateString();
         const when = function (/** @type {number} */ ms) {
-            if (new Date(ms).toDateString() !== today) return dateTime(ms);
-            const d = new Date(ms);
-            return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+            return new Date(ms).toDateString() !== today ? dateTime(ms) : time(ms);
         };
         return {at: when(job.finished_at_ms), until: when(job.expires_at_ms)};
     }

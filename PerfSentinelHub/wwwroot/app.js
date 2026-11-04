@@ -144,6 +144,8 @@
         recapPollTimer: null,
         recapPollFailures: 0,
         recapHubBusy: false,
+        // The start sent and not answered yet, with the key it computes and the promise of its end.
+        recapStarting: null,
         // Jobs started again by the current read after the Hub forgot its own, at most one.
         recapRestarts: 0,
         // The frozen reports under the recap: the list GET /api/recap/reports answered, null when the
@@ -6054,6 +6056,10 @@
         let released = Promise.resolve();
         if (previous && previous.status === 'running' && previous.key !== key) released = cancelRecapJob(previous.id);
         if (previous && previous.status === 'running' && (previous.key !== key || refresh)) state.recapJob = null;
+        // A start for other filters not answered yet is let go once it answers (startRecapJob): waited
+        // for too, or the Hub would find this caller busy with the job it is about to give up.
+        const starting = state.recapStarting;
+        if (starting && starting.key !== key) released = Promise.all([released, starting.done]);
         if (!keep) {
             state.recapLoadingSince = Date.now();
             state.recapMovesLoading = null;
@@ -6093,11 +6099,12 @@
     }
 
     function startRecapJob(sequence, route, refresh, all, opening) {
-        postJson(PSL.recapJobPath(route, refresh)).then(function (job) {
+        const start = {key: route.jobKey || PSL.recapJobKey(route), done: null};
+        state.recapStarting = start;
+        start.done = postJson(PSL.recapJobPath(route, refresh)).then(function (job) {
             if (sequence !== state.recapSeq) {
                 // Started or joined for a read no longer wanted: let go, lest it hold one of the Hub's places.
-                if (job.status === 'running') cancelRecapJob(job.id);
-                return;
+                return job.status === 'running' ? cancelRecapJob(job.id) : null;
             }
             state.recapHubBusy = false;
             followRecapJob(sequence, job, route, all, opening);
@@ -6120,6 +6127,8 @@
                 return;
             }
             landRecap(sequence, Promise.reject(error), opening);
+        }).finally(function () {
+            if (state.recapStarting === start) state.recapStarting = null;
         });
     }
 
@@ -6271,7 +6280,10 @@
         if (state.recap === null) {
             const job = state.recapJob;
             if (state.recapHubBusy) section.appendChild(recapHubBusyBanner());
-            if (job && job.status === 'running' && job.key === PSL.recapJobKey(route)) {
+            // A running job is always the current read's (loadRecap drops one for other filters); its key
+            // is not compared, since past midnight UTC a route with no day names another and the panel
+            // would never draw, leaving showRecapProgress to render the whole screen on every poll.
+            if (job && job.status === 'running') {
                 section.appendChild(recapProgressPanel(job));
                 return section;
             }

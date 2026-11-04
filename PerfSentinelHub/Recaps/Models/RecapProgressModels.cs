@@ -72,4 +72,7 @@ public enum RecapJobOutcome
 }
 
 /// <summary>A job started, joined or reused, or none because as many as the Hub runs at once are running.</summary>
-public sealed record RecapJobStart(RecapJobState? Job, bool Busy);
+public sealed record RecapJobStart(RecapJobState? Job)
+{
+    public bool Busy => Job is null;
+}

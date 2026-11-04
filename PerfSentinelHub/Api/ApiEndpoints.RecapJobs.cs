@@ -83,7 +83,8 @@ public static partial class ApiEndpoints
             return jobs.Find(id, audience) switch
             {
                 null => TypedResults.NotFound(),
-                { Status: "running" } => Problem(StatusCodes.Status409Conflict,
+                // Succeeded between the two reads: it is ready on the next one, not failed.
+                { Status: "running" or "succeeded" } => Problem(StatusCodes.Status409Conflict,
                     ProblemCodes.RecapNotReady, "This recap is not computed yet."),
                 // Failed, or stopped with the Hub: it will never be, and waiting on it would wait forever.
                 _ => Problem(StatusCodes.Status409Conflict, ProblemCodes.RecapFailed,

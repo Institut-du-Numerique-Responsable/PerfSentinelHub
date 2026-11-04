@@ -72,7 +72,7 @@ public sealed partial class RecapJobs(
                 if (known.Status == RecapJobStatus.Running)
                     known.Followers.Add(caller ?? "");
                 Count(RecapJobOutcome.Reused);
-                return new RecapJobStart(ViewOf(known), false);
+                return new RecapJobStart(ViewOf(known));
             }
 
             // A refresh replaces the caller's own follow of the job it supersedes, so it never finds
@@ -86,7 +86,7 @@ public sealed partial class RecapJobs(
                     item.Followers.Contains(caller)) >= MaxRunningPerCaller))
             {
                 Count(RecapJobOutcome.Busy);
-                return new RecapJobStart(null, true);
+                return new RecapJobStart(null);
             }
 
             job = new Job(this, key, _clock.GetUtcNow().ToUnixTimeMilliseconds(),
@@ -106,7 +106,7 @@ public sealed partial class RecapJobs(
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default).Unwrap();
-        return new RecapJobStart(view, false);
+        return new RecapJobStart(view);
     }
 
     /// <summary>The job, for its audience only: any other caller reads it as unknown.</summary>
@@ -153,9 +153,11 @@ public sealed partial class RecapJobs(
     {
         if (!job.Followers.Remove(caller ?? "") || job.Followers.Count > 0)
             return;
-        job.Cancellation.Cancel();
+        // Marked first: Cancel runs its callbacks inline, and one that ends the computation reaches
+        // RunAsync's finally, which forgets only a job already abandoned.
         job.Abandoned = true;
         Unkey(job);
+        job.Cancellation.Cancel();
     }
 
     /// <summary>The jobs running and the jobs held, finished or not, for the metrics.</summary>
@@ -347,8 +349,8 @@ public sealed partial class RecapJobs(
         // The expected durations as they stood at its start, so a job finishing elsewhere never moves its bar back.
         public double[] Weights { get; } = [.. owner._expectedMs];
 
-        // The screens that started or joined it while it ran, and whether the last one let it go.
-        // Who started or joined it while it ran, once per time; "" for a caller with no identity.
+        // Who started or joined it while it ran, once per time ("" for a caller with no identity),
+        // and whether the last one let it go.
         public List<string> Followers { get; } = [];
         public bool Abandoned { get; set; }
 

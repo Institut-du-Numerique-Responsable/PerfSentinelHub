@@ -1707,12 +1707,21 @@ test("a recap job is keyed on everything but the view and started with the same 
     const route = {period: "day", at: "2026-10-29", environment: "prod", service: "a b", grouping: null, view: "tech"};
     assert.equal(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {view: "pilotage"})));
     assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {service: "c"})));
-    // No day named reads as today in UTC, as the Hub does: past midnight UTC it is another job.
-    const today = PSL.readRecapRoute("#/recap");
+    // No day named reads as today in UTC, as the Hub does: past midnight UTC it is another day's job.
+    const today = PSL.readRecapRoute("#/recap?period=day");
     const beforeMidnight = Date.UTC(2026, 10, 3, 23, 59);
     assert.equal(PSL.recapJobKey(today, beforeMidnight),
         PSL.recapJobKey(Object.assign({}, today, {at: "2026-11-03"}), beforeMidnight));
     assert.notEqual(PSL.recapJobKey(today, beforeMidnight), PSL.recapJobKey(today, beforeMidnight + 120_000));
+    // The Hub keys a job on its period's first day: two days of one week or month read the same job.
+    const week = PSL.readRecapRoute("#/recap");
+    assert.equal(PSL.recapJobKey(week, beforeMidnight), PSL.recapJobKey(week, beforeMidnight + 120_000));
+    assert.equal(PSL.recapJobKey(Object.assign({}, week, {at: "2026-10-27"})),
+        PSL.recapJobKey(Object.assign({}, week, {at: "2026-11-01"})));
+    assert.notEqual(PSL.recapJobKey(Object.assign({}, week, {at: "2026-11-01"})),
+        PSL.recapJobKey(Object.assign({}, week, {at: "2026-11-02"})));
+    const month = PSL.readRecapRoute("#/recap?period=month&at=2026-10-03");
+    assert.equal(PSL.recapJobKey(month), PSL.recapJobKey(Object.assign({}, month, {at: "2026-10-31"})));
     assert.equal(PSL.recapJobPath(route, false),
         "/api/recap/jobs?period=day&at=2026-10-29&environment=prod&service=a%20b");
     assert.equal(PSL.recapJobPath(PSL.readRecapRoute("#/recap"), true), "/api/recap/jobs?period=week&refresh=true");
