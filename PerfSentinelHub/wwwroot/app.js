@@ -331,14 +331,14 @@
         // the filters it computes (PSL.recapJobKey). True in recapDirect once the Hub has no job route,
         // an older one or the site's replay, which reads GET /api/recap as before. The poll's timer and
         // its failures in a row; recapHubBusy while the Hub runs as many recaps as it can at once.
-        /** @type {FollowedRecapJob | null} */
+        /** @type {?FollowedRecapJob} */
         recapJob: null,
         recapDirect: false,
         recapPollTimer: null,
         recapPollFailures: 0,
         recapHubBusy: false,
         // The start sent and not answered yet, with the key it computes and the promise of its end.
-        /** @type {{key: string, done: Promise<unknown> | null} | null} */
+        /** @type {?{key: string, done: ?Promise<unknown>}} */
         recapStarting: null,
         // Jobs started again by the current read after the Hub forgot its own, at most one.
         recapRestarts: 0,
@@ -350,7 +350,7 @@
         recapGenerating: false,
         recapGenerateError: null,
         // The share card form, made on first use (cardState).
-        /** @type {ShareCard} */
+        /** @type {?ShareCard} */
         card: null,
         // GET /api/disclosures, null while it loads.
         /** @type {Disclosure[]} */
@@ -364,7 +364,7 @@
         disclosureError: false,
         // What the last action on the detail did, and a share link's token, shown once.
         disclosureNote: null,
-        /** @type {{id: string, pdfUrl: string, reportUrl: string} | null} */
+        /** @type {?{id: string, pdfUrl: string, reportUrl: string}} */
         disclosureLink: null,
         disclosureBusy: false,
         withdrawOpen: false,
@@ -373,7 +373,7 @@
         // The incident panels whose episodes list is shown whole, by their cache key.
         incidentCorrelationsAll: {},
         // A trace an episode handed to New analysis, with the pair's other one.
-        /** @type {TraceHandoff | null} */
+        /** @type {?TraceHandoff} */
         traceHandoff: null,
         // The ack page: the finding its link names, the form, and what the last
         // submit came to. Null until a link opens it.
@@ -387,7 +387,7 @@
         // What was typed above each incident's findings, by incident key.
         findingQuery: {},
         // The incident a `#/new?from=…` link pre-filled the form from, or null.
-        /** @type {Handoff | null} */
+        /** @type {?Handoff} */
         handoff: null,
         // Which shell every printed command is spelled for.
         shell: 'posix',
