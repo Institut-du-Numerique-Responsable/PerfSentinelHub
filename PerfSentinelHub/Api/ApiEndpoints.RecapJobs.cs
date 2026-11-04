@@ -39,7 +39,7 @@ public static partial class ApiEndpoints
         var key = new RecapJobKey(audience, query.Kind, RecapPeriod.Of(query.Kind, query.At).From,
             query.Filters.Environment, query.Filters.SourceId, query.Service, query.Grouping);
         var start = jobs.Start(key, query with { Access = Narrowing(scope) }, refresh is not null,
-            AccessCaller.Of(context)?.Subject);
+            RecapFollowerOf(context));
         if (start.Job is not { } job)
         {
             context.Response.Headers.RetryAfter = "5";
@@ -60,7 +60,7 @@ public static partial class ApiEndpoints
     {
         if (RecapJobAudienceOf(context, access, options) is not { } audience)
             return NoFindingsRead();
-        return jobs.Find(id, audience, AccessCaller.Of(context)?.Subject) is { } job
+        return jobs.Find(id, audience, RecapFollowerOf(context)) is { } job
             ? TypedResults.Json(job, HubJsonContext.Default.RecapJobState)
             : TypedResults.NotFound();
     }
@@ -109,7 +109,7 @@ public static partial class ApiEndpoints
             return refusal;
         if (RecapJobAudienceOf(context, access, options) is not { } audience)
             return NoFindingsRead();
-        return jobs.Cancel(id, audience, AccessCaller.Of(context)?.Subject)
+        return jobs.Cancel(id, audience, RecapFollowerOf(context))
             ? TypedResults.NoContent()
             : TypedResults.NotFound();
     }
@@ -136,5 +136,17 @@ public static partial class ApiEndpoints
         }
 
         return new RecapJobAudience(owner, string.Join('\n', sources.Select(source => source.Id)));
+    }
+
+    private const string RecapScreenHeader = "X-Recap-Screen";
+
+    // The caller, and the screen a launcher page names in X-Recap-Screen: an id it draws once per load,
+    // so two tabs of one person, or two people on a Hub without sign-in, follow a job apart. A value
+    // that is not a short token is ignored, as if no screen were named.
+    private static RecapFollower RecapFollowerOf(HttpContext context)
+    {
+        var screen = context.Request.Headers[RecapScreenHeader].ToString();
+        var valid = screen.Length is > 0 and <= 64 && screen.All(c => char.IsAsciiLetterOrDigit(c) || c == '-');
+        return new RecapFollower(AccessCaller.Of(context)?.Subject, valid ? screen : null);
     }
 }

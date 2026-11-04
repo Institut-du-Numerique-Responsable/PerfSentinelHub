@@ -71,9 +71,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // ObjectDisposedException for any poll still in flight when the host stops.
     private readonly SemaphoreSlim _writeGate = new(1, 1);
 
-    // Moves on every write a recap reads besides the findings themselves: an action, a label, a change
-    // of a source's acknowledgments. A recap computed before it moved is not reused. In memory: a
-    // restart forgets the recaps it guards along with it.
+    // Moves on every write a recap reads besides the findings themselves: finding_actions (with its
+    // events), endpoint_labels and service_labels, and a real change of source_acks or of ack_reads'
+    // state. A recap computed before it moved is not reused. Each writer moves it twice, before its
+    // write and after its commit, so a recap started in between holds a version already gone. A new
+    // writer of one of those tables must do the same. In memory: a restart forgets the recaps it
+    // guards along with it.
     private long _recapInputsVersion;
 
     /// <summary>The version <see cref="Recaps.RecapJobs" /> reuses a computed recap under.</summary>

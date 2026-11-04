@@ -163,6 +163,34 @@ public sealed class RecapJobsApiTests(HubApplicationFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task Each_screen_named_in_X_Recap_Screen_lets_go_of_its_own_follow()
+    {
+        using var client = Stalled();
+        using var first = Start("period=day&service=screens");
+        first.Headers.Add("X-Recap-Screen", "screen-1");
+        using var second = Start("period=day&service=screens");
+        second.Headers.Add("X-Recap-Screen", "screen-2");
+        using var started = await client.SendAsync(first, Token);
+        var id = await IdAsync(started);
+        using var joined = await client.SendAsync(second, Token);
+        Assert.Equal(id, await IdAsync(joined));
+
+        using var letGoFirst = Cancel(id);
+        letGoFirst.Headers.Add("X-Recap-Screen", "screen-1");
+        using var afterFirst = await client.SendAsync(letGoFirst, Token);
+        using var stillRunning = await client.GetAsync($"/api/recap/jobs/{id}", Token);
+        using var letGoSecond = Cancel(id);
+        letGoSecond.Headers.Add("X-Recap-Screen", "screen-2");
+        using var afterSecond = await client.SendAsync(letGoSecond, Token);
+        using var gone = await client.GetAsync($"/api/recap/jobs/{id}", Token);
+
+        Assert.Equal(HttpStatusCode.NoContent, afterFirst.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, stillRunning.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, afterSecond.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
+    }
+
+    [Fact]
     public async Task Past_the_running_cap_a_start_is_a_503_with_retry_after()
     {
         using var client = Stalled();

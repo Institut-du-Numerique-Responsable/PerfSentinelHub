@@ -62,6 +62,7 @@ public sealed partial class HubDatabase
             return false;
         try
         {
+            TouchRecapInputs();
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
             command.CommandText = sql;

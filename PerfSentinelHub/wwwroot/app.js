@@ -355,8 +355,8 @@
         return response;
     }
 
-    function fetchJson(path, method) {
-        const headers = {accept: 'application/json'};
+    function fetchJson(path, method, extra) {
+        const headers = Object.assign({accept: 'application/json'}, extra || {});
         // A write carries the JSON content type the server's same-origin guard requires.
         if (method !== 'GET') headers['content-type'] = 'application/json';
         return fetch(path, {
@@ -6102,7 +6102,7 @@
     function startRecapJob(sequence, route, refresh, all, opening) {
         const start = {key: route.jobKey || PSL.recapJobKey(route), done: null};
         state.recapStarting = start;
-        start.done = postJson(PSL.recapJobPath(route, refresh)).then(function (job) {
+        start.done = fetchJson(PSL.recapJobPath(route, refresh), 'POST', RECAP_SCREEN_HEADERS).then(function (job) {
             if (sequence !== state.recapSeq) {
                 // Started or joined for a read no longer wanted: let go, lest it hold one of the Hub's places.
                 // Kept when a newer read for the same filters follows it too: the Hub counts one follow per
@@ -6161,7 +6161,7 @@
 
     function pollRecapJob(sequence, id, route, all, opening) {
         if (sequence !== state.recapSeq || currentScreen() !== 'recap') return;
-        getJson('/api/recap/jobs/' + encodeURIComponent(id)).then(function (job) {
+        fetchJson('/api/recap/jobs/' + encodeURIComponent(id), 'GET', RECAP_SCREEN_HEADERS).then(function (job) {
             if (sequence !== state.recapSeq) return;
             state.recapPollFailures = 0;
             followRecapJob(sequence, job, route, all, opening);
@@ -6217,7 +6217,7 @@
     function cancelRecapJob(id) {
         return fetch('/api/recap/jobs/' + encodeURIComponent(id), {
             method: 'DELETE',
-            headers: {'content-type': 'application/json'},
+            headers: Object.assign({'content-type': 'application/json'}, RECAP_SCREEN_HEADERS),
             keepalive: true
         }).catch(function () {
             return null;
@@ -7167,6 +7167,9 @@
     }
 
     const RECAP_POLL_MS = 1000;
+    // This page among the screens that follow a recap job on the Hub, drawn once per load: two tabs
+    // follow a job apart, and a let-go from one never stops the computation the other waits on.
+    const RECAP_SCREEN_HEADERS = {'x-recap-screen': PSL.screenId()};
     const RECAP_BUSY_RETRY_MS = 5000;
 
     /**

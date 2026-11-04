@@ -64,6 +64,7 @@ public sealed partial class HubDatabase
             return ActionWriteOutcome.Busy;
         try
         {
+            TouchRecapInputs();
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
             await using var insert = connection.CreateCommand();
@@ -126,6 +127,7 @@ public sealed partial class HubDatabase
             return ActionWriteOutcome.Busy;
         try
         {
+            TouchRecapInputs();
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
             string currentStatus;

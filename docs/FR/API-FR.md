@@ -788,7 +788,8 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   donné.
 - **Limites.** Le Hub mène 2 tâches de front, et un appelant connecté suit au plus une tâche en
   cours qu'il a lancée ou rejointe : un `POST` qui en lancerait une autre est un `503` avec
-  `Retry-After: 5` et le code `recap_busy`, jusqu'à ce qu'il la lâche ou cesse de la lire. Un suivi
+  `Retry-After: 5` et le code `recap_busy`, jusqu'à ce qu'il la lâche ou cesse de la lire, quel
+  que soit celui de ses écrans qui la suit. Un suivi
   compte 30 secondes après la dernière lecture de la tâche par l'appelant avec
   `GET /api/recap/jobs/{id}`, si bien qu'un onglet fermé ou rechargé sans lâcher cesse alors de
   bloquer son appelant, tandis que la tâche va jusqu'au bout. Un recalcul déplace le suivi
@@ -798,11 +799,14 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   garde 32 tâches en tout, et oublie la plus ancienne terminée au-delà. Une tâche échouée reste
   lisible une minute. Une tâche lâchée se lit aussitôt comme inconnue, mais garde sa place parmi les
   2 jusqu'à ce que son calcul s'arrête ; une tâche terminée reste gardée.
-- **Lâcher.** Un appelant connecté suit une tâche une seule fois, quel que soit le nombre d'écrans
-  qu'il y ouvre, et un `DELETE` met fin à ce suivi ; les appelants sans identité, qu'on ne peut
-  distinguer, comptent une fois par lancement ou ralliement. Un appelant qui ne suit pas la tâche ne
-  change rien, si bien que personne n'arrête un calcul qu'un autre attend. Une tâche en cours
-  s'arrête quand son dernier suiveur la lâche.
+- **Lâcher.** Un client nomme son écran dans l'en-tête `X-Recap-Screen`, un jeton d'au plus 64
+  lettres, chiffres ou tirets que le launcher tire une fois par chargement de page, sur `POST`, `GET`
+  et `DELETE`. Un écran suit une tâche une seule fois, quel que soit le nombre de ralliements, et un
+  `DELETE` ne met fin qu'au suivi de cet écran : deux onglets d'une même personne, ou deux personnes
+  sur un Hub sans connexion, suivent une tâche séparément. Un client qui ne nomme pas d'écran suit une
+  fois par appelant connecté, et une fois par lancement ou ralliement sans identité. Un suiveur qui
+  ne suit pas la tâche ne change rien, si bien que personne n'arrête un calcul qu'un autre écran
+  attend. Une tâche en cours s'arrête quand son dernier suiveur la lâche.
 - **Résultat.** `GET …/result` pendant que la tâche tourne est un `409` avec le code
   `recap_not_ready`, et pour une tâche échouée ou arrêtée avec le Hub un `409` avec le code
   `recap_failed` : il ne viendra jamais, relancez la tâche. Quitter l'écran n'arrête pas une tâche :

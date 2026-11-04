@@ -58,13 +58,13 @@ public sealed partial class RecapJobs(
 
     /// <summary>
     ///     The job for this key: the one running or the finished one while it is kept, else a new one,
-    ///     unless <see cref="MaxRunning" /> already run or <paramref name="caller" /> already follows
-    ///     <see cref="MaxRunningPerCaller" /> running. <paramref name="refresh" /> always starts a new
+    ///     unless <see cref="MaxRunning" /> already run or the caller of <paramref name="follower" />
+    ///     already follows <see cref="MaxRunningPerCaller" /> running from any screen. <paramref name="refresh" /> always starts a new
     ///     one: it follows a write, which a computation already running may have read before. The one it
     ///     replaces stays readable by its id for the screens that follow it, and no request joins it.
-    ///     <paramref name="caller" /> follows the job it gets, until it lets it go.
+    ///     <paramref name="follower" /> follows the job it gets, until it lets it go.
     /// </summary>
-    public RecapJobStart Start(RecapJobKey key, RecapRequest request, bool refresh, string? caller)
+    public RecapJobStart Start(RecapJobKey key, RecapRequest request, bool refresh, RecapFollower follower)
     {
         Job job;
         RecapJobState view;
@@ -78,20 +78,21 @@ public sealed partial class RecapJobs(
                 known.Status is RecapJobStatus.Running or RecapJobStatus.Succeeded)
             {
                 if (known.Status == RecapJobStatus.Running)
-                    known.Follow(caller);
+                    known.Follow(follower);
                 Count(RecapJobOutcome.Reused);
                 return new RecapJobStart(ViewOf(known));
             }
 
-            // The new job replaces the caller's own follow of the running one it supersedes, refreshed or
+            // The new job replaces this screen's own follow of the running one it supersedes, refreshed or
             // made stale by a write, so it never finds the caller busy with the very computation it
-            // replaces. A caller with no identity lets go only on a refresh: its follow is not told apart.
-            if ((refresh || caller is not null) && _byKey.TryGetValue(key, out var replaced) &&
+            // replaces. A follower with neither screen nor identity lets go only on a refresh: its
+            // follow is not told apart from another's.
+            if ((refresh || follower != RecapFollower.Anonymous) && _byKey.TryGetValue(key, out var replaced) &&
                 replaced.Status == RecapJobStatus.Running)
-                LetGo(replaced, caller);
+                LetGo(replaced, follower);
 
             if (_jobs.Values.Count(item => item.Status == RecapJobStatus.Running) >= MaxRunning ||
-                (caller is not null && _jobs.Values.Count(item =>
+                (follower.Caller is { } caller && _jobs.Values.Count(item =>
                     item is { Status: RecapJobStatus.Running, Abandoned: false } &&
                     item.FollowedLatelyBy(caller)) >= MaxRunningPerCaller))
             {
@@ -104,7 +105,7 @@ public sealed partial class RecapJobs(
             {
                 InputsVersion = version
             };
-            job.Follow(caller);
+            job.Follow(follower);
             _jobs[job.Id] = job;
             _byKey[key] = job;
             EvictOverflow();
@@ -123,17 +124,18 @@ public sealed partial class RecapJobs(
     }
 
     /// <summary>
-    ///     The job, for its audience only: any other caller reads it as unknown. A read by a caller who
-    ///     follows it renews their follow, which is how a screen keeps holding its place.
+    ///     The job, for its audience only: any other caller reads it as unknown. A read by a screen that
+    ///     follows it renews its follow, which is how a screen keeps holding its place.
     /// </summary>
-    public RecapJobState? Find(string id, RecapJobAudience audience, string? caller = null)
+    public RecapJobState? Find(string id, RecapJobAudience audience, RecapFollower? follower = null)
     {
         lock (_gate)
         {
             Prune();
             if (Visible(id, audience) is not { } job)
                 return null;
-            job.Renew(caller);
+            if (follower is not null)
+                job.Renew(follower);
             return ViewOf(job);
         }
     }
@@ -149,28 +151,29 @@ public sealed partial class RecapJobs(
     }
 
     /// <summary>
-    ///     Lets a job go for <paramref name="caller" />, once per time they started or joined it: a caller
-    ///     who does not follow it changes nothing, so nobody stops a computation someone else waits on. A
+    ///     Ends the follow of <paramref name="follower" />, its screen's or, for a client that names none,
+    ///     its caller's: one that does not follow it changes nothing, so nobody stops a computation
+    ///     another screen waits on. A
     ///     running one stops once none follows it, reads as unknown at once and holds its place under
     ///     <see cref="MaxRunning" /> until its computation returns; a finished one stays kept for the
     ///     others. False for an unknown one.
     /// </summary>
-    public bool Cancel(string id, RecapJobAudience audience, string? caller)
+    public bool Cancel(string id, RecapJobAudience audience, RecapFollower follower)
     {
         lock (_gate)
         {
             if (Visible(id, audience) is not { } job)
                 return false;
             if (job.Status == RecapJobStatus.Running)
-                LetGo(job, caller);
+                LetGo(job, follower);
             return true;
         }
     }
 
     // One follow of the caller ends; the computation stops with the last one.
-    private void LetGo(Job job, string? caller)
+    private void LetGo(Job job, RecapFollower follower)
     {
-        if (!job.Unfollow(caller) || job.Followed)
+        if (!job.Unfollow(follower) || job.Followed)
             return;
         // Marked first: Cancel runs its callbacks inline, and one that ends the computation reaches
         // RunAsync's finally, which forgets only a job already abandoned.
@@ -368,44 +371,56 @@ public sealed partial class RecapJobs(
         // The expected durations as they stood at its start, so a job finishing elsewhere never moves its bar back.
         public double[] Weights { get; } = [.. owner._expectedMs];
 
-        // When each signed-in caller following it last read it, one follow per caller however many
-        // screens they open, and the follows of callers with no identity, who cannot be told apart.
-        private readonly Dictionary<string, long> _follows = new(StringComparer.Ordinal);
+        // Each follow and when it was last read: one per screen, the id a launcher page sends, or one
+        // per signed-in caller for a client that sends none. Callers with neither, who cannot be told
+        // apart, count once per start or join.
+        private readonly Dictionary<string, (string? Caller, long Seen)> _follows = new(StringComparer.Ordinal);
         private int _anonymousFollows;
 
         public long InputsVersion { get; init; }
 
         public bool Followed => _follows.Count > 0 || _anonymousFollows > 0;
 
-        public void Follow(string? caller)
+        private static string? KeyOf(RecapFollower follower)
         {
-            if (caller is null)
-                _anonymousFollows++;
+            return follower switch
+            {
+                { Screen: { } screen } => (follower.Caller ?? "") + "\n" + screen,
+                { Caller: { } caller } => caller + "\n",
+                _ => null
+            };
+        }
+
+        public void Follow(RecapFollower follower)
+        {
+            if (KeyOf(follower) is { } key)
+                _follows[key] = (follower.Caller, owner._clock.GetTimestamp());
             else
-                _follows[caller] = owner._clock.GetTimestamp();
+                _anonymousFollows++;
         }
 
-        // A read of the job by a caller who follows it keeps that follow counting.
-        public void Renew(string? caller)
+        // A read of the job by a screen or caller that follows it keeps that follow counting.
+        public void Renew(RecapFollower follower)
         {
-            if (caller is not null && _follows.ContainsKey(caller))
-                _follows[caller] = owner._clock.GetTimestamp();
+            if (KeyOf(follower) is { } key && _follows.ContainsKey(key))
+                _follows[key] = (follower.Caller, owner._clock.GetTimestamp());
         }
 
-        public bool Unfollow(string? caller)
+        public bool Unfollow(RecapFollower follower)
         {
-            if (caller is not null)
-                return _follows.Remove(caller);
+            if (KeyOf(follower) is { } key)
+                return _follows.Remove(key);
             if (_anonymousFollows == 0)
                 return false;
             _anonymousFollows--;
             return true;
         }
 
+        // Whether one of the caller's screens read it within the lease.
         public bool FollowedLatelyBy(string caller)
         {
-            return _follows.TryGetValue(caller, out var seen) &&
-                   owner._clock.GetElapsedTime(seen) < FollowLease;
+            return _follows.Values.Any(follow =>
+                follow.Caller == caller && owner._clock.GetElapsedTime(follow.Seen) < FollowLease);
         }
 
         // Let go by its last follower: unknown to every read, though it holds its place until it returns.

@@ -730,7 +730,8 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
   job as unknown, `404`, the same answer as an id the Hub never gave.
 - **Bounds.** The Hub runs 2 jobs at once, and a signed-in caller follows at most one running job
   they started or joined: a `POST` that would start another is a `503` with `Retry-After: 5` and
-  the code `recap_busy`, until they let it go or stop reading it. A follow counts for 30 seconds
+  the code `recap_busy`, until they let it go or stop reading it, whichever of their screens
+  follows it. A follow counts for 30 seconds
   after the caller last read the job with `GET /api/recap/jobs/{id}`, so a tab closed or reloaded
   without letting go stops holding its caller then, while the job runs on to its end. A refresh moves the caller's follow from the job it
   replaces, as a signed-in caller's `POST` over a running job a write made stale does, so it never finds
@@ -738,10 +739,13 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
   sign-in, is held by the 2 alone. It holds 32 jobs in all, and drops the oldest finished one past
   that. A failed job stays readable for a minute. A job let go reads as unknown at once, yet holds
   its place among the 2 until its computation stops; a finished one stays kept.
-- **Letting go.** A signed-in caller follows a job once, however many screens they open on it, and a
-  `DELETE` ends that follow; callers with no identity, who cannot be told apart, count once per time
-  they started or joined it. A caller who does not follow the job changes nothing, so nobody stops a
-  computation someone else waits on. A running job stops when its last follower lets it go.
+- **Letting go.** A client names its screen in the `X-Recap-Screen` header, a token of up to 64
+  letters, digits or dashes the launcher draws once per page load, on `POST`, `GET` and `DELETE`. A
+  screen follows a job once, however often it joins it, and a `DELETE` ends that screen's follow
+  alone: two tabs of one person, or two people on a Hub without sign-in, follow a job apart. A
+  client that names no screen follows once per signed-in caller, and once per start or join without
+  an identity. A follower that does not follow the job changes nothing, so nobody stops a
+  computation another screen waits on. A running job stops when its last follower lets it go.
 - **Result.** `GET …/result` while the job runs is a `409` with the code `recap_not_ready`, and for
   a job that failed or stopped with the Hub a `409` with the code `recap_failed`: it will never come,
   start the job again. Leaving the screen does not stop a job: the launcher lets go only of one whose

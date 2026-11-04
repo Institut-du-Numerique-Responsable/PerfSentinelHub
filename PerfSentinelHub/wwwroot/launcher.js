@@ -2366,6 +2366,19 @@
     }
 
     /**
+     * A random token naming one page among the screens that follow a recap job: 32 hex characters
+     * from the browser's random source.
+     * @returns {string}
+     */
+    function screenId() {
+        const bytes = new Uint8Array(16);
+        globalThis.crypto.getRandomValues(bytes);
+        return Array.from(bytes, function (b) {
+            return b.toString(16).padStart(2, '0');
+        }).join('');
+    }
+
+    /**
      * The route that starts, joins or reuses the job for a route, computing it again with `refresh`.
      * @param {ReturnType<typeof readRecapRoute>} route
      * @param {boolean} refresh
@@ -3636,6 +3649,7 @@
         recapFreezeText,
         recapErrorText,
         recapJobKey,
+        screenId,
         recapJobPath,
         recapJobResultPath,
         recapJobPercent,

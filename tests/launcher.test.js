@@ -1731,6 +1731,12 @@ test("a recap job is keyed on everything but the view and started with the same 
         "/api/recap/jobs/0123abcd/result?view=tech&moves=all");
 });
 
+test("a screen id is 32 hex characters, drawn anew each time", () => {
+    const one = PSL.screenId();
+    assert.match(one, /^[0-9a-f]{32}$/);
+    assert.notEqual(one, PSL.screenId());
+});
+
 test("a recap job reads 100 % only once it succeeded", () => {
     assert.equal(PSL.recapJobPercent({status: "running", progress: 0}), 0);
     assert.equal(PSL.recapJobPercent({status: "running", progress: 0.4211}), 42);

@@ -55,6 +55,9 @@ public sealed partial class HubDatabase
             var after = new Dictionary<string, long?>(StringComparer.Ordinal);
             foreach (var ack in acks)
                 after[ack.Signature] = ack.ExpiresAtMs;
+            var changed = stateBefore != state || !before.SetEquals(after.Select(pair => (pair.Key, pair.Value)));
+            if (changed)
+                TouchRecapInputs();
 
             await using (var delete = connection.CreateCommand())
             {
@@ -74,7 +77,7 @@ public sealed partial class HubDatabase
                 new SourceRead(observedAtMs, state, null),
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            if (stateBefore != state || !before.SetEquals(after.Select(pair => (pair.Key, pair.Value))))
+            if (changed)
                 TouchRecapInputs();
         }
         finally
@@ -125,11 +128,13 @@ public sealed partial class HubDatabase
         string? errorCode,
         CancellationToken cancellationToken)
     {
-        var before = await ReadAckReadStateAsync(sourceId, cancellationToken);
-        await RecordReadAsync(AckReadUpsert, sourceId, new SourceRead(readAtMs, state, errorCode), cancellationToken);
         // A read that fails, or recovers, switches what the recap counts as acked between the mirror
         // and each finding's own envelope: a change of state is a change of what it reads.
-        if (before != state)
+        var changed = await ReadAckReadStateAsync(sourceId, cancellationToken) != state;
+        if (changed)
+            TouchRecapInputs();
+        await RecordReadAsync(AckReadUpsert, sourceId, new SourceRead(readAtMs, state, errorCode), cancellationToken);
+        if (changed)
             TouchRecapInputs();
     }
 

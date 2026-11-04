@@ -71,6 +71,15 @@ public enum RecapJobOutcome
     Cancelled
 }
 
+/// <summary>
+///     Who follows a recap job: the signed-in caller, or null on a Hub without sign-in, and the
+///     screen, the id a launcher page draws once per load, or null for a client that sends none.
+/// </summary>
+public sealed record RecapFollower(string? Caller, string? Screen)
+{
+    public static readonly RecapFollower Anonymous = new(null, null);
+}
+
 /// <summary>A job started, joined or reused, or none because as many as the Hub runs at once are running.</summary>
 public sealed record RecapJobStart(RecapJobState? Job)
 {

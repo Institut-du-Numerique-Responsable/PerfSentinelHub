@@ -90,12 +90,12 @@ public sealed class RecapJobsTests : IDisposable
     [Fact]
     public async Task A_refresh_while_one_runs_computes_again_and_leaves_the_other_to_its_followers()
     {
-        var first = _jobs.Start(Key(), Request, false, "alice").Job!;
+        var first = _jobs.Start(Key(), Request, false, new RecapFollower("alice", null)).Job!;
         await NextComputationAsync();
-        _jobs.Start(Key(), Request, false, "bob");
+        _jobs.Start(Key(), Request, false, new RecapFollower("bob", null));
 
         // Alice wrote: her follow moves to the new computation, Bob's stays on the first.
-        var refreshed = _jobs.Start(Key(), Request, true, "alice").Job!;
+        var refreshed = _jobs.Start(Key(), Request, true, new RecapFollower("alice", null)).Job!;
         await NextComputationAsync();
 
         Assert.NotEqual(first.Id, refreshed.Id);
@@ -155,7 +155,7 @@ public sealed class RecapJobsTests : IDisposable
         (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
         await SettledAsync(first.Id);
 
-        var refreshed = _jobs.Start(Key(), Request, true, null).Job!;
+        var refreshed = _jobs.Start(Key(), Request, true, RecapFollower.Anonymous).Job!;
 
         Assert.NotEqual(first.Id, refreshed.Id);
         // Still read by its id until it expires; a new request reaches the refreshed one.
@@ -184,7 +184,7 @@ public sealed class RecapJobsTests : IDisposable
     [Fact]
     public async Task Another_audience_reads_the_job_as_unknown()
     {
-        var mine = _jobs.Start(Key(audience: Alice), Request, false, null).Job!;
+        var mine = _jobs.Start(Key(audience: Alice), Request, false, RecapFollower.Anonymous).Job!;
         (await NextComputationAsync()).Finish(Snapshot(inProgress: true));
         await WaitUntilAsync(() => _jobs.Result(mine.Id, Alice) is not null);
 
@@ -192,7 +192,7 @@ public sealed class RecapJobsTests : IDisposable
         Assert.Null(_jobs.Find(mine.Id, Alice with { Owner = "local:bob" }));
         Assert.Null(_jobs.Find(mine.Id, Alice with { Sources = "a\nb" }));
         Assert.Null(_jobs.Result(mine.Id, Everyone));
-        Assert.False(_jobs.Cancel(mine.Id, Everyone, null));
+        Assert.False(_jobs.Cancel(mine.Id, Everyone, RecapFollower.Anonymous));
         Assert.NotNull(_jobs.Find(mine.Id, Alice));
     }
 
@@ -202,12 +202,12 @@ public sealed class RecapJobsTests : IDisposable
         var job = Start(Key()).Job!;
         var computation = await NextComputationAsync();
 
-        Assert.True(_jobs.Cancel(job.Id, Everyone, null));
+        Assert.True(_jobs.Cancel(job.Id, Everyone, RecapFollower.Anonymous));
 
         await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
         Assert.Null(Find(job.Id));
         await WaitUntilAsync(() => _jobs.Outcomes().Contains(("cancelled", 1L)));
-        Assert.False(_jobs.Cancel(job.Id, Everyone, null));
+        Assert.False(_jobs.Cancel(job.Id, Everyone, RecapFollower.Anonymous));
     }
 
     [Fact]
@@ -217,12 +217,12 @@ public sealed class RecapJobsTests : IDisposable
         Assert.Equal(job.Id, Start(Key()).Job!.Id);
         var computation = await NextComputationAsync();
 
-        Assert.True(_jobs.Cancel(job.Id, Everyone, null));
+        Assert.True(_jobs.Cancel(job.Id, Everyone, RecapFollower.Anonymous));
 
         Assert.False(computation.Token.IsCancellationRequested);
         Assert.Equal("running", Find(job.Id)!.Status);
 
-        Assert.True(_jobs.Cancel(job.Id, Everyone, null));
+        Assert.True(_jobs.Cancel(job.Id, Everyone, RecapFollower.Anonymous));
 
         await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
         Assert.Null(Find(job.Id));
@@ -234,18 +234,18 @@ public sealed class RecapJobsTests : IDisposable
         var release = new TaskCompletionSource<RecapSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
         // A read that does not look at its token, as a SQLite step does not until it returns.
         var jobs = new RecapJobs((_, _, _) => release.Task, () => _version, _clock, _stopping.Token, _logger);
-        var first = jobs.Start(Key("a"), Request, false, null).Job!;
-        jobs.Start(Key("b"), Request, false, null);
+        var first = jobs.Start(Key("a"), Request, false, RecapFollower.Anonymous).Job!;
+        jobs.Start(Key("b"), Request, false, RecapFollower.Anonymous);
 
-        Assert.True(jobs.Cancel(first.Id, Everyone, null));
+        Assert.True(jobs.Cancel(first.Id, Everyone, RecapFollower.Anonymous));
 
         Assert.Null(jobs.Find(first.Id, Everyone));
-        Assert.True(jobs.Start(Key("c"), Request, false, null).Busy);
+        Assert.True(jobs.Start(Key("c"), Request, false, RecapFollower.Anonymous).Busy);
 
         release.SetCanceled(TestContext.Current.CancellationToken);
         await WaitUntilAsync(() => jobs.Sizes().Running == 0);
         Assert.Equal(1, jobs.Sizes().Kept);
-        Assert.False(jobs.Start(Key("c"), Request, false, null).Busy);
+        Assert.False(jobs.Start(Key("c"), Request, false, RecapFollower.Anonymous).Busy);
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public sealed class RecapJobsTests : IDisposable
         (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
         await SettledAsync(job.Id);
 
-        Assert.True(_jobs.Cancel(job.Id, Everyone, null));
+        Assert.True(_jobs.Cancel(job.Id, Everyone, RecapFollower.Anonymous));
 
         Assert.Equal(job.Id, Start(Key()).Job!.Id);
     }
@@ -347,7 +347,7 @@ public sealed class RecapJobsTests : IDisposable
             message.Contains("findings_period 90000 ms, labels 2000 ms", StringComparison.Ordinal));
 
         // The period read now weighs more than the default it started from.
-        var second = _jobs.Start(Key("other"), Request, false, null).Job!;
+        var second = _jobs.Start(Key("other"), Request, false, RecapFollower.Anonymous).Job!;
         var next = await NextComputationAsync();
         next.Progress.Enter(RecapStage.FindingsPeriod);
         next.Progress.Enter(RecapStage.FindingsOpen);
@@ -357,12 +357,12 @@ public sealed class RecapJobsTests : IDisposable
     [Fact]
     public async Task One_caller_computes_one_recap_at_a_time_and_others_keep_their_place()
     {
-        var mine = _jobs.Start(Key("a"), Request, false, "alice").Job!;
+        var mine = _jobs.Start(Key("a"), Request, false, new RecapFollower("alice", null)).Job!;
         await NextComputationAsync();
 
-        var second = _jobs.Start(Key("b"), Request, false, "alice");
-        var joined = _jobs.Start(Key("a"), Request, false, "alice");
-        var bobs = _jobs.Start(Key("b"), Request, false, "bob");
+        var second = _jobs.Start(Key("b"), Request, false, new RecapFollower("alice", null));
+        var joined = _jobs.Start(Key("a"), Request, false, new RecapFollower("alice", null));
+        var bobs = _jobs.Start(Key("b"), Request, false, new RecapFollower("bob", null));
 
         Assert.True(second.Busy);
         Assert.Equal(mine.Id, joined.Job!.Id);
@@ -370,22 +370,22 @@ public sealed class RecapJobsTests : IDisposable
         await NextComputationAsync();
 
         // Joining again, as a reload or a second tab does, is still one follow: one let-go stops it.
-        Assert.True(_jobs.Cancel(mine.Id, Everyone, "alice"));
+        Assert.True(_jobs.Cancel(mine.Id, Everyone, new RecapFollower("alice", null)));
         await WaitUntilAsync(() => _jobs.Sizes().Running == 1);
-        Assert.False(_jobs.Start(Key("c"), Request, false, "alice").Busy);
+        Assert.False(_jobs.Start(Key("c"), Request, false, new RecapFollower("alice", null)).Busy);
     }
 
     [Fact]
     public async Task A_follow_its_screen_stops_reading_no_longer_holds_its_caller_and_the_job_runs_on()
     {
-        var mine = _jobs.Start(Key("a"), Request, false, "alice").Job!;
+        var mine = _jobs.Start(Key("a"), Request, false, new RecapFollower("alice", null)).Job!;
         var computation = await NextComputationAsync();
 
         _clock.Advance(RecapJobs.FollowLease - TimeSpan.FromSeconds(1));
-        Assert.True(_jobs.Start(Key("b"), Request, false, "alice").Busy);
+        Assert.True(_jobs.Start(Key("b"), Request, false, new RecapFollower("alice", null)).Busy);
 
         _clock.Advance(TimeSpan.FromSeconds(1));
-        Assert.False(_jobs.Start(Key("b"), Request, false, "alice").Busy);
+        Assert.False(_jobs.Start(Key("b"), Request, false, new RecapFollower("alice", null)).Busy);
         Assert.Equal("running", Find(mine.Id)!.Status);
         Assert.False(computation.Token.IsCancellationRequested);
     }
@@ -393,14 +393,14 @@ public sealed class RecapJobsTests : IDisposable
     [Fact]
     public async Task Reading_the_job_keeps_the_callers_follow_counting()
     {
-        var mine = _jobs.Start(Key("a"), Request, false, "alice").Job!;
+        var mine = _jobs.Start(Key("a"), Request, false, new RecapFollower("alice", null)).Job!;
         await NextComputationAsync();
 
         _clock.Advance(TimeSpan.FromSeconds(20));
-        Assert.NotNull(_jobs.Find(mine.Id, Everyone, "alice"));
+        Assert.NotNull(_jobs.Find(mine.Id, Everyone, new RecapFollower("alice", null)));
         _clock.Advance(TimeSpan.FromSeconds(20));
 
-        Assert.True(_jobs.Start(Key("b"), Request, false, "alice").Busy);
+        Assert.True(_jobs.Start(Key("b"), Request, false, new RecapFollower("alice", null)).Busy);
     }
 
     [Fact]
@@ -425,25 +425,25 @@ public sealed class RecapJobsTests : IDisposable
     [Fact]
     public async Task A_caller_who_does_not_follow_a_job_cannot_stop_it()
     {
-        var job = _jobs.Start(Key(), Request, false, "alice").Job!;
+        var job = _jobs.Start(Key(), Request, false, new RecapFollower("alice", null)).Job!;
         var computation = await NextComputationAsync();
 
-        Assert.True(_jobs.Cancel(job.Id, Everyone, "bob"));
-        Assert.True(_jobs.Cancel(job.Id, Everyone, null));
+        Assert.True(_jobs.Cancel(job.Id, Everyone, new RecapFollower("bob", null)));
+        Assert.True(_jobs.Cancel(job.Id, Everyone, RecapFollower.Anonymous));
 
         Assert.False(computation.Token.IsCancellationRequested);
         Assert.Equal("running", Find(job.Id)!.Status);
-        Assert.True(_jobs.Cancel(job.Id, Everyone, "alice"));
+        Assert.True(_jobs.Cancel(job.Id, Everyone, new RecapFollower("alice", null)));
         await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
     }
 
     [Fact]
     public async Task A_refresh_lets_go_of_the_callers_own_running_job_rather_than_finding_them_busy()
     {
-        var first = _jobs.Start(Key(), Request, false, "alice").Job!;
+        var first = _jobs.Start(Key(), Request, false, new RecapFollower("alice", null)).Job!;
         var computation = await NextComputationAsync();
 
-        var refreshed = _jobs.Start(Key(), Request, true, "alice");
+        var refreshed = _jobs.Start(Key(), Request, true, new RecapFollower("alice", null));
 
         Assert.False(refreshed.Busy);
         Assert.NotEqual(first.Id, refreshed.Job!.Id);
@@ -454,11 +454,11 @@ public sealed class RecapJobsTests : IDisposable
     [Fact]
     public async Task A_start_over_a_running_job_a_write_made_stale_moves_the_callers_follow()
     {
-        var first = _jobs.Start(Key(), Request, false, "alice").Job!;
+        var first = _jobs.Start(Key(), Request, false, new RecapFollower("alice", null)).Job!;
         var computation = await NextComputationAsync();
 
         _version++;
-        var again = _jobs.Start(Key(), Request, false, "alice");
+        var again = _jobs.Start(Key(), Request, false, new RecapFollower("alice", null));
 
         Assert.False(again.Busy);
         Assert.NotEqual(first.Id, again.Job!.Id);
@@ -480,6 +480,49 @@ public sealed class RecapJobsTests : IDisposable
         Assert.Equal(30_000, Find(job.Id)!.ElapsedMs);
     }
 
+    [Fact]
+    public async Task Two_tabs_of_one_caller_follow_a_job_apart()
+    {
+        var first = new RecapFollower("alice", "tab-1");
+        var second = new RecapFollower("alice", "tab-2");
+        var job = _jobs.Start(Key(), Request, false, first).Job!;
+        var computation = await NextComputationAsync();
+        _jobs.Start(Key(), Request, false, second);
+
+        Assert.True(_jobs.Cancel(job.Id, Everyone, first));
+        Assert.False(computation.Token.IsCancellationRequested);
+        Assert.Equal("running", Find(job.Id)!.Status);
+
+        Assert.True(_jobs.Cancel(job.Id, Everyone, second));
+        await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
+    }
+
+    [Fact]
+    public async Task Two_screens_without_sign_in_are_told_apart_and_a_screen_joining_twice_counts_once()
+    {
+        var one = new RecapFollower(null, "screen-1");
+        var two = new RecapFollower(null, "screen-2");
+        var job = _jobs.Start(Key(), Request, false, one).Job!;
+        var computation = await NextComputationAsync();
+        _jobs.Start(Key(), Request, false, one);
+        _jobs.Start(Key(), Request, false, two);
+
+        Assert.True(_jobs.Cancel(job.Id, Everyone, one));
+        Assert.False(computation.Token.IsCancellationRequested);
+        Assert.True(_jobs.Cancel(job.Id, Everyone, two));
+        await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
+    }
+
+    [Fact]
+    public async Task The_one_recap_per_caller_counts_every_screen_of_theirs()
+    {
+        _jobs.Start(Key("a"), Request, false, new RecapFollower("alice", "tab-1"));
+        await NextComputationAsync();
+
+        Assert.True(_jobs.Start(Key("b"), Request, false, new RecapFollower("alice", "tab-2")).Busy);
+        Assert.False(_jobs.Start(Key("b"), Request, false, new RecapFollower("bob", "tab-1")).Busy);
+    }
+
     // ------------------------------------------------------------ helpers
 
     private static RecapJobKey Key(string? service = null, RecapJobAudience? audience = null)
@@ -490,7 +533,7 @@ public sealed class RecapJobsTests : IDisposable
 
     private RecapJobStart Start(RecapJobKey key)
     {
-        return _jobs.Start(key, Request, false, null);
+        return _jobs.Start(key, Request, false, RecapFollower.Anonymous);
     }
 
     private RecapJobState? Find(string id, RecapJobKey? key = null)
