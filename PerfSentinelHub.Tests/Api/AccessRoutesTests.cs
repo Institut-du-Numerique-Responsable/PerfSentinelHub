@@ -143,6 +143,10 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("PUT", "/api/labels")]
     [InlineData("PUT", "/api/labels/services")]
     [InlineData("GET", "/api/recap")]
+    [InlineData("POST", "/api/recap/jobs")]
+    [InlineData("GET", "/api/recap/jobs/0123456789abcdef0123456789abcdef")]
+    [InlineData("GET", "/api/recap/jobs/0123456789abcdef0123456789abcdef/result")]
+    [InlineData("DELETE", "/api/recap/jobs/0123456789abcdef0123456789abcdef")]
     [InlineData("GET", "/api/recap/reports")]
     [InlineData("POST", "/api/recap/reports")]
     [InlineData("GET", "/api/recap/reports/0123456789abcdef0123456789abcdef")]
@@ -443,6 +447,43 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         Assert.DoesNotContain(F2, ranked);
         Assert.DoesNotContain(F1, ranked);
         Assert.Equal(1, root.GetProperty("tiles").GetProperty("acked_findings").GetInt32());
+    }
+
+    // A narrowed scope computes a recap of its own: nobody else reads it, not even the same e-mail
+    // under another subject, nor an admin, whose recap is the whole fleet's.
+    [Fact]
+    public async Task A_recap_job_of_a_narrowed_scope_is_read_by_its_caller_alone()
+    {
+        using var attr = await SignedInAsync("attr");
+        using var twin = await SignedInAsync("attrtwin");
+        using var admin = await SignedInAsync("admin");
+        using var started = await attr.SendAsync(RecapJobsApiTests.Start("refresh=true"),
+            TestContext.Current.CancellationToken);
+        var id = await RecapJobsApiTests.IdAsync(started);
+
+        using var own = await attr.GetAsync($"/api/recap/jobs/{id}", TestContext.Current.CancellationToken);
+        using var byTwin = await twin.GetAsync($"/api/recap/jobs/{id}", TestContext.Current.CancellationToken);
+        using var byAdmin = await admin.GetAsync($"/api/recap/jobs/{id}", TestContext.Current.CancellationToken);
+        using var resultByTwin = await twin.GetAsync($"/api/recap/jobs/{id}/result",
+            TestContext.Current.CancellationToken);
+        using var cancelByAdmin = await admin.SendAsync(RecapJobsApiTests.Cancel(id),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, own.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, byTwin.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, byAdmin.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, resultByTwin.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, cancelByAdmin.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_caller_without_findings_read_gets_403_on_a_recap_job()
+    {
+        using var client = await SignedInAsync("tracer");
+
+        using var response = await client.SendAsync(RecapJobsApiTests.Start(""), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

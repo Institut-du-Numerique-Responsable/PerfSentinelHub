@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
+using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -90,13 +91,14 @@ public static partial class MetricsEndpoint
                 FindingMetrics findings,
                 RingWatch rings,
                 DetectionWatch detections,
+                RecapJobs recapJobs,
                 TimeProvider timeProvider,
                 CancellationToken cancellationToken) =>
 #pragma warning restore S107
         {
             var body = await RenderAsync(
                 database, options.Value, imports, incidentImports, correlationImports, detectionImports, disclosures,
-                findings, rings, detections, timeProvider, version, cancellationToken);
+                findings, rings, detections, recapJobs, timeProvider, version, cancellationToken);
             return Results.Text(body, ContentType);
         }).AllowAnonymous();
     }
@@ -114,6 +116,7 @@ public static partial class MetricsEndpoint
         FindingMetrics findings,
         RingWatch rings,
         DetectionWatch detections,
+        RecapJobs recapJobs,
         TimeProvider timeProvider,
         string version,
         CancellationToken cancellationToken)
@@ -256,6 +259,18 @@ public static partial class MetricsEndpoint
         foreach (var status in AnalysisStatuses.All)
             Line(text, "perf_sentinel_hub_analysis_runs", $"status=\"{status}\"",
                 Runs(runs, status));
+
+        // A gauge: a job runs, then is kept, then expires.
+        var (running, kept) = recapJobs.Sizes();
+        Family(text, "perf_sentinel_hub_recap_jobs",
+            "Recap jobs in memory: running, and held in all (running, finished and reused, or failed for a minute).");
+        Line(text, "perf_sentinel_hub_recap_jobs", "state=\"running\"", running);
+        Line(text, "perf_sentinel_hub_recap_jobs", "state=\"kept\"", kept);
+        Counter(text, "perf_sentinel_hub_recap_jobs_total",
+            "Recap job requests and endings since startup, by outcome: started, reused (joined or served kept), "
+            + "busy (refused at the running cap), succeeded, failed, cancelled.");
+        foreach (var (outcome, count) in recapJobs.Outcomes())
+            Line(text, "perf_sentinel_hub_recap_jobs_total", $"outcome=\"{outcome}\"", count);
 
         AppendFindings(text, counted?.Value ?? []);
         Family(text, "perf_sentinel_hub_findings_age_seconds",

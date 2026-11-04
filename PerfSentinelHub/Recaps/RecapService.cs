@@ -29,18 +29,32 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     private const long DayMs = 86_400_000;
     private const string Unknown = "unknown";
 
-    public async Task<RecapSnapshot> ComputeAsync(RecapRequest request, CancellationToken cancellationToken)
+    public Task<RecapSnapshot> ComputeAsync(RecapRequest request, CancellationToken cancellationToken)
+    {
+        return ComputeAsync(request, null, cancellationToken);
+    }
+
+    /// <summary>The same computation, telling <paramref name="progress" /> each stage it starts or passes over.</summary>
+    public async Task<RecapSnapshot> ComputeAsync(
+        RecapRequest request,
+        IRecapProgress? progress,
+        CancellationToken cancellationToken)
     {
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var span = Span.Of(request, (int)(nowMs / DayMs));
         var scope = ScopeSourceIds(request);
-        var reads = await ReadFindingsAsync(request, span, cancellationToken);
+        var reads = await ReadFindingsAsync(request, span, progress, cancellationToken);
+        progress?.Enter(RecapStage.Coverage);
         var coverage = await JudgeCoverageAsync(span, scope, cancellationToken);
+        progress?.Enter(RecapStage.Carbon);
         var current = await CarbonAsync(reads.Ranked, span.Period, scope, cancellationToken);
         var previous = await CarbonAsync(reads.Previous, span.PreviousWindow, scope, cancellationToken);
+        progress?.Enter(RecapStage.Actions);
         var actions = await ReadActionsAsync(reads, scope, cancellationToken);
+        progress?.Enter(RecapStage.Labels);
         var labels = await ReadLabelsAsync(reads, cancellationToken);
 
+        progress?.Enter(RecapStage.Assemble);
         var priorities = PrioritiesOf(reads, current, actions, labels);
         var movements = MovementsOf(reads, priorities, actions, labels);
         return new RecapSnapshot(
@@ -63,19 +77,40 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
 
     // ------------------------------------------------------------ reads
 
-    private async Task<Reads> ReadFindingsAsync(RecapRequest request, Span span, CancellationToken cancellationToken)
+    private async Task<Reads> ReadFindingsAsync(
+        RecapRequest request,
+        Span span,
+        IRecapProgress? progress,
+        CancellationToken cancellationToken)
     {
+        progress?.Enter(RecapStage.FindingsPeriod);
         var all = await ReadAsync(request, span.Period, true, cancellationToken);
+        progress?.Enter(RecapStage.FindingsOpen);
         var unacked = await ReadAsync(request, span.Period, false, cancellationToken);
         // A closed period compares as it stands; one in progress compares its closed days only.
         var closed = unacked;
-        if (span.InProgress)
-            closed = span.ClosedWindow is { } window
-                ? await ReadAsync(request, window, false, cancellationToken)
-                : Read.None;
-        var previous = span.PreviousWindow is { } before
-            ? await ReadAsync(request, before, false, cancellationToken)
-            : null;
+        if (span is { InProgress: true, ClosedWindow: { } window })
+        {
+            progress?.Enter(RecapStage.FindingsClosed);
+            closed = await ReadAsync(request, window, false, cancellationToken);
+        }
+        else
+        {
+            progress?.Skip(RecapStage.FindingsClosed);
+            if (span.InProgress)
+                closed = Read.None;
+        }
+
+        Read? previous = null;
+        if (span.PreviousWindow is { } before)
+        {
+            progress?.Enter(RecapStage.FindingsPrevious);
+            previous = await ReadAsync(request, before, false, cancellationToken);
+        }
+        else
+        {
+            progress?.Skip(RecapStage.FindingsPrevious);
+        }
 
         return new Reads(
             all.Findings,

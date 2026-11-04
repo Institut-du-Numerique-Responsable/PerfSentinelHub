@@ -69,6 +69,15 @@ builder.Services.AddOptions<HubOptions>()
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<HubDatabase>();
 builder.Services.AddSingleton<RecapService>();
+builder.Services.AddSingleton(services =>
+{
+    var recaps = services.GetRequiredService<RecapService>();
+    return new RecapJobs(
+        recaps.ComputeAsync,
+        services.GetRequiredService<TimeProvider>(),
+        services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
+        services.GetRequiredService<ILogger<RecapJobs>>());
+});
 // Always registered, disabled with access off: registered only with it on, a handler taking it
 // would have the Request Delegate Generator read it as a JSON body, which a GET refuses.
 builder.Services.AddSingleton<AccessPolicy>();

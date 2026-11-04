@@ -112,6 +112,11 @@ public static partial class ApiEndpoints
         app.MapPut("/api/labels/services", SetServiceLabelAsync);
         // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
         app.MapGet("/api/recap", GetRecapAsync);
+        // Never anonymous: a job is read only by the audience it was computed for.
+        app.MapPost("/api/recap/jobs", StartRecapJob);
+        app.MapGet("/api/recap/jobs/{id}", GetRecapJob);
+        app.MapGet("/api/recap/jobs/{id}/result", GetRecapJobResult);
+        app.MapDelete("/api/recap/jobs/{id}", CancelRecapJob);
         // Never anonymous: a frozen report is read by who made it or by a recaps.read holder, and made in a name.
         // The page sits outside /api so a browser that follows the mailed link is signed in by redirect.
         app.MapGet("/api/recap/reports", GetRecapReportsAsync);

@@ -117,6 +117,8 @@
         'problem.not_a_daemon': 'Only a daemon publishes its settings; this source is a trace backend.',
         'problem.invalid_recap_query': 'The recap query is invalid.',
         'problem.recap_reports_forbidden': 'You may not read recap reports.',
+        'problem.recap_busy': 'The Hub is computing as many recaps as it runs at once. Try again in a few seconds.',
+        'problem.recap_not_ready': 'This recap is not computed yet.',
         'problem.invalid_card_query': 'The card options query is invalid.',
         'problem.cards_forbidden': 'You may not create cards.',
         'problem.card_sources_forbidden': 'You may not create cards for these sources.',

@@ -28,6 +28,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(IReadOnlyList<RecapReportItem>))]
 [JsonSerializable(typeof(RecapReportItem))]
 [JsonSerializable(typeof(RecapReportDetail))]
+[JsonSerializable(typeof(RecapJobState))]
 [JsonSerializable(typeof(CardKeysResponse))]
 [JsonSerializable(typeof(CardOptions))]
 [JsonSerializable(typeof(CardAttachmentResponse))]

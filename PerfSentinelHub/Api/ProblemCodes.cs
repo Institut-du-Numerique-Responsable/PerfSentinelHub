@@ -68,6 +68,8 @@ public static class ProblemCodes
     // Recaps.
     public const string InvalidRecapQuery = "invalid_recap_query";
     public const string RecapReportsForbidden = "recap_reports_forbidden";
+    public const string RecapBusy = "recap_busy";
+    public const string RecapNotReady = "recap_not_ready";
 
     // Cards.
     public const string InvalidCardQuery = "invalid_card_query";
