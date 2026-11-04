@@ -70,9 +70,11 @@ public static class RecapReportRenderer
         var page = new Page(snapshot, lang);
         var labels = RecapText.Labels(snapshot.View, lang);
         var html = new StringBuilder(32 * 1024);
-        html.Append("<!doctype html>\n<html lang=\"").Append(lang).Append("\" data-theme=\"light\">\n<head>\n<meta charset=\"utf-8\">\n")
+        html.Append("<!doctype html>\n<html lang=\"").Append(lang)
+            .Append("\" data-theme=\"light\">\n<head>\n<meta charset=\"utf-8\">\n")
             .Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
-            .Append("<title>").Append(E(page.T("recap.page.title", ("period", RecapText.Period(snapshot.Period, lang)))))
+            .Append("<title>")
+            .Append(E(page.T("recap.page.title", ("period", RecapText.Period(snapshot.Period, lang)))))
             .Append("</title>\n")
             .Append("<style>").Append(Style.Value).Append("</style>\n")
             .Append("<script>").Append(ThemeScript).Append("</script>\n</head>\n<body>\n<main class=\"recap\">\n");
@@ -87,27 +89,6 @@ public static class RecapReportRenderer
             .Append("</script>\n<script>").Append(lang == HubLang.Fr ? FrenchTimeScript : TimeScript)
             .Append("</script>\n</body>\n</html>\n");
         return Encoding.UTF8.GetBytes(html.ToString());
-    }
-
-    // What every part of the page reads: the snapshot, the language and the text in that language.
-    private sealed record Page(RecapSnapshot Snapshot, string Lang)
-    {
-        public bool Management => Snapshot.View == RecapViewNames.Pilotage;
-
-        public string T(string key, params (string Name, string Value)[] values)
-        {
-            return HubText.Get(Lang, key, values);
-        }
-
-        public string Number(long value)
-        {
-            return RecapText.Number(value, Lang);
-        }
-
-        public string Plural(long count)
-        {
-            return HubLang.Plural(Lang, count);
-        }
     }
 
     // ---- the head of the page
@@ -192,7 +173,12 @@ public static class RecapReportRenderer
         var snapshot = page.Snapshot;
         var tiles = snapshot.Tiles;
         var actions = tiles.Actions;
-        string N(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+        string N(int value)
+        {
+            return value.ToString(CultureInfo.InvariantCulture);
+        }
+
         html.Append("<div class=\"tiles\">\n");
         Tile(html, page, labels.Io, snapshot.Period.InProgress, Count(page, tiles.AvoidableIoOps) ?? "—",
             [PreviousText(page, Count(page, tiles.PreviousAvoidableIoOps))]);
@@ -205,11 +191,11 @@ public static class RecapReportRenderer
         ]);
         Tile(html, page, page.T("recap.tile.actions"), false,
             E(N(actions.Done)) + Unit(page.T("recap.tile.done." + page.Plural(actions.Done))),
-        [
-            page.T("recap.tile.actions.checked", ("confirmed", N(actions.Confirmed)),
-                ("contradicted", N(actions.Contradicted)), ("came_back", N(actions.CameBack))),
-            page.T("recap.tile.actions.open", (InProgress, N(actions.InProgress)), ("todo", N(actions.Todo)))
-        ], true);
+            [
+                page.T("recap.tile.actions.checked", ("confirmed", N(actions.Confirmed)),
+                    ("contradicted", N(actions.Contradicted)), ("came_back", N(actions.CameBack))),
+                page.T("recap.tile.actions.open", (InProgress, N(actions.InProgress)), ("todo", N(actions.Todo)))
+            ], true);
         html.Append(DivEndLine);
     }
 
@@ -373,7 +359,8 @@ public static class RecapReportRenderer
         html.Append("<div class=\"what\">");
         if (priority.Label is not null)
             html.Append("<p class=\"label\">").Append(E(priority.Label)).Append("</p>");
-        html.Append("<div class=\"head\"><span class=\"chip\">").Append(E(RecapText.Type(priority.FindingType, page.Lang)))
+        html.Append("<div class=\"head\"><span class=\"chip\">")
+            .Append(E(RecapText.Type(priority.FindingType, page.Lang)))
             .Append(SpanEnd).Append(ServiceHead(priority.Service, priority.ServiceLabel))
             .Append("<span class=\"endpoint\">").Append(E(priority.Endpoint ?? "")).Append("</span></div>");
         if (priority.Suggestion is not null)
@@ -724,5 +711,26 @@ public static class RecapReportRenderer
                            throw new InvalidOperationException($"The embedded resource {name} is missing.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd();
+    }
+
+    // What every part of the page reads: the snapshot, the language and the text in that language.
+    private sealed record Page(RecapSnapshot Snapshot, string Lang)
+    {
+        public bool Management => Snapshot.View == RecapViewNames.Pilotage;
+
+        public string T(string key, params (string Name, string Value)[] values)
+        {
+            return HubText.Get(Lang, key, values);
+        }
+
+        public string Number(long value)
+        {
+            return RecapText.Number(value, Lang);
+        }
+
+        public string Plural(long count)
+        {
+            return HubLang.Plural(Lang, count);
+        }
     }
 }

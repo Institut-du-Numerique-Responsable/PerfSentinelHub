@@ -1,9 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
-using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Recaps;
 
@@ -24,9 +22,9 @@ public sealed class RecapJobsTests : IDisposable
         new(DateTimeOffset.Parse("2026-10-29T10:00:00Z", CultureInfo.InvariantCulture));
 
     private readonly List<Computation> _computations = [];
+    private readonly RecapJobs _jobs;
     private readonly ListLogger<RecapJobs> _logger = new();
     private readonly CancellationTokenSource _stopping = new();
-    private readonly RecapJobs _jobs;
     private long _version;
 
     public RecapJobsTests()
@@ -65,7 +63,7 @@ public sealed class RecapJobsTests : IDisposable
         // Two findings reads of the four weighted, the done one and the skipped one, out of the whole.
         Assert.Equal(40_000.0 / 95_000, running.Progress, 4);
 
-        computation.Finish(Snapshot(inProgress: true));
+        computation.Finish(Snapshot(true));
         var done = await SettledAsync(started.Id);
 
         Assert.Equal("succeeded", done.Status);
@@ -109,7 +107,7 @@ public sealed class RecapJobsTests : IDisposable
     public async Task A_finished_recap_in_progress_is_reused_for_ten_minutes()
     {
         var first = Start(Key()).Job!;
-        (await NextComputationAsync()).Finish(Snapshot(inProgress: true));
+        (await NextComputationAsync()).Finish(Snapshot(true));
         await SettledAsync(first.Id);
 
         _clock.Advance(RecapJobs.OpenLifetime - TimeSpan.FromSeconds(1));
@@ -123,7 +121,7 @@ public sealed class RecapJobsTests : IDisposable
     public async Task A_finished_recap_of_a_closed_period_is_reused_for_a_day()
     {
         var first = Start(Key()).Job!;
-        (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
+        (await NextComputationAsync()).Finish(Snapshot(false));
         var done = await SettledAsync(first.Id);
 
         Assert.Equal(_clock.GetUtcNow().ToUnixTimeMilliseconds() + (long)RecapJobs.ClosedLifetime.TotalMilliseconds,
@@ -140,8 +138,11 @@ public sealed class RecapJobsTests : IDisposable
     public async Task A_closed_recap_with_a_day_still_being_counted_is_reused_for_ten_minutes_only()
     {
         var first = Start(Key()).Job!;
-        var closed = Snapshot(inProgress: false);
-        (await NextComputationAsync()).Finish(closed with { Period = closed.Period with { Incomplete = ["open_day"] } });
+        var closed = Snapshot(false);
+        (await NextComputationAsync()).Finish(closed with
+        {
+            Period = closed.Period with { Incomplete = ["open_day"] }
+        });
         var done = await SettledAsync(first.Id);
 
         Assert.Equal(_clock.GetUtcNow().ToUnixTimeMilliseconds() + (long)RecapJobs.OpenLifetime.TotalMilliseconds,
@@ -152,7 +153,7 @@ public sealed class RecapJobsTests : IDisposable
     public async Task A_refresh_computes_again_over_a_finished_recap()
     {
         var first = Start(Key()).Job!;
-        (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
+        (await NextComputationAsync()).Finish(Snapshot(false));
         await SettledAsync(first.Id);
 
         var refreshed = _jobs.Start(Key(), Request, true, RecapFollower.Anonymous).Job!;
@@ -176,7 +177,7 @@ public sealed class RecapJobsTests : IDisposable
         Assert.Null(refused.Job);
         Assert.Contains(("busy", 1L), _jobs.Outcomes());
 
-        _computations[0].Finish(Snapshot(inProgress: true));
+        _computations[0].Finish(Snapshot(true));
         await WaitUntilAsync(() => _jobs.Sizes().Running < RecapJobs.MaxRunning);
         Assert.False(Start(Key("another")).Busy);
     }
@@ -185,7 +186,7 @@ public sealed class RecapJobsTests : IDisposable
     public async Task Another_audience_reads_the_job_as_unknown()
     {
         var mine = _jobs.Start(Key(audience: Alice), Request, false, RecapFollower.Anonymous).Job!;
-        (await NextComputationAsync()).Finish(Snapshot(inProgress: true));
+        (await NextComputationAsync()).Finish(Snapshot(true));
         await WaitUntilAsync(() => _jobs.Result(mine.Id, Alice) is not null);
 
         Assert.Null(_jobs.Find(mine.Id, Everyone));
@@ -252,7 +253,7 @@ public sealed class RecapJobsTests : IDisposable
     public async Task A_cancellation_that_arrives_after_the_recap_finished_leaves_it_kept()
     {
         var job = Start(Key()).Job!;
-        (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
+        (await NextComputationAsync()).Finish(Snapshot(false));
         await SettledAsync(job.Id);
 
         Assert.True(_jobs.Cancel(job.Id, Everyone, RecapFollower.Anonymous));
@@ -273,7 +274,7 @@ public sealed class RecapJobsTests : IDisposable
         var otherComputation = await NextComputationAsync();
         otherComputation.Progress.Enter(RecapStage.FindingsPeriod);
         _clock.Advance(TimeSpan.FromMinutes(5));
-        otherComputation.Finish(Snapshot(inProgress: false));
+        otherComputation.Finish(Snapshot(false));
         await SettledAsync(other.Id);
 
         // The finished one taught the weights; the bar of the one still running does not jump for it.
@@ -317,7 +318,7 @@ public sealed class RecapJobsTests : IDisposable
         for (var index = 0; index <= RecapJobs.MaxKept; index++)
         {
             var job = Start(Key("service-" + index)).Job!;
-            (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
+            (await NextComputationAsync()).Finish(Snapshot(false));
             await SettledAsync(job.Id);
             ids.Add(job.Id);
             _clock.Advance(TimeSpan.FromSeconds(1));
@@ -340,7 +341,7 @@ public sealed class RecapJobsTests : IDisposable
         _clock.Advance(TimeSpan.FromSeconds(90));
         computation.Progress.Enter(RecapStage.Labels);
         _clock.Advance(TimeSpan.FromSeconds(2));
-        computation.Finish(Snapshot(inProgress: false));
+        computation.Finish(Snapshot(false));
         await SettledAsync(first.Id);
 
         Assert.Contains(_logger.Messages, message =>
@@ -407,7 +408,7 @@ public sealed class RecapJobsTests : IDisposable
     public async Task A_write_a_recap_reads_makes_the_next_request_compute_again()
     {
         var kept = Start(Key("a")).Job!;
-        (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
+        (await NextComputationAsync()).Finish(Snapshot(false));
         await SettledAsync(kept.Id);
         var running = Start(Key("b")).Job!;
         await NextComputationAsync();
@@ -417,7 +418,7 @@ public sealed class RecapJobsTests : IDisposable
         // The running one may have read before the write: not joined, computed again beside it.
         Assert.NotEqual(running.Id, Start(Key("b")).Job!.Id);
         foreach (var computation in _computations.Skip(1))
-            computation.Release.TrySetResult(Snapshot(inProgress: false));
+            computation.Release.TrySetResult(Snapshot(false));
         await WaitUntilAsync(() => _jobs.Sizes().Running == 0);
         Assert.NotEqual(kept.Id, Start(Key("a")).Job!.Id);
     }
@@ -474,7 +475,7 @@ public sealed class RecapJobsTests : IDisposable
         _clock.Advance(TimeSpan.FromSeconds(30));
         Assert.Equal(30_000, Find(job.Id)!.ElapsedMs);
 
-        computation.Finish(Snapshot(inProgress: true));
+        computation.Finish(Snapshot(true));
         await SettledAsync(job.Id);
         _clock.Advance(TimeSpan.FromSeconds(30));
         Assert.Equal(30_000, Find(job.Id)!.ElapsedMs);
@@ -610,7 +611,10 @@ public sealed class RecapJobsTests : IDisposable
     {
         public IRecapProgress Progress { get; } = progress;
         public CancellationToken Token { get; } = token;
-        public TaskCompletionSource<RecapSnapshot> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<RecapSnapshot> Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public bool Claimed { get; set; }
 
         public void Finish(RecapSnapshot snapshot)

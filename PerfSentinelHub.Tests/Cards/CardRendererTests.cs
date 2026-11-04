@@ -38,7 +38,8 @@ public sealed partial class CardRendererTests : IDisposable
     private static readonly string[] StoryKeys =
         ["story.finding_type", "story.service", "story.endpoint", "story.observed_at", "story.done_at"];
 
-    private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-cardr-{Guid.NewGuid():N}");
+    private readonly string _workspace =
+        Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-cardr-{Guid.NewGuid():N}");
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -95,7 +96,7 @@ public sealed partial class CardRendererTests : IDisposable
         var collective = await WrittenKeysAsync(service, renderer, "collective", new CardFree(null, null, null));
 
         Assert.Equal(Keys([.. Top, "story", .. beforeFix, .. storyFree], StoryKeys,
-                ["figures.cited_ops", "figures.before_fix_ops", "figures.co2_low_ug"]), story);
+            ["figures.cited_ops", "figures.before_fix_ops", "figures.co2_low_ug"]), story);
         Assert.Equal(Keys(Top,
             ["figures.waste_permille", "figures.avoidable_ops", "figures.co2_low_ug"]), curve);
         Assert.Equal(Keys([.. Top, .. beforeFix], collectiveFigures), collective);
@@ -168,7 +169,7 @@ public sealed partial class CardRendererTests : IDisposable
     public async Task A_reason_line_is_a_refusal(int exitCode, string line, string reason, string? field)
     {
         var renderer = await RendererAsync(new FakeEngine
-        { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
+            { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
 
         var outcome = await renderer.RenderAsync(Collective(), Key, KeyFile(), "png", Token);
 
@@ -182,7 +183,7 @@ public sealed partial class CardRendererTests : IDisposable
     public async Task A_line_without_its_keys_is_out_of_contract(int exitCode, string line)
     {
         var renderer = await RendererAsync(new FakeEngine
-        { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
+            { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
 
         Assert.IsType<CardRender.Malformed>(await renderer.RenderAsync(Collective(), Key, KeyFile(), "png", Token));
     }
@@ -247,7 +248,8 @@ public sealed partial class CardRendererTests : IDisposable
     [InlineData("not json")]
     public async Task A_verdict_with_a_missing_or_mistyped_key_is_null(string line)
     {
-        var renderer = await RendererAsync(new FakeEngine { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = line });
+        var renderer = await RendererAsync(new FakeEngine
+            { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = line });
 
         Assert.Null(await renderer.VerifyAsync([1], Token));
     }
@@ -298,8 +300,10 @@ public sealed partial class CardRendererTests : IDisposable
     [InlineData("""{"period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":41}""")]
     [InlineData("""{"angle":"story","period":{"kind":"month","from":"2026-09-01"},"cited_ops":41}""")]
     [InlineData("""{"angle":"story","cited_ops":41}""")]
-    [InlineData("""{"angle":"story","period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":"41"}""")]
-    [InlineData("""{"angle":"story","period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":18446744073709551615}""")]
+    [InlineData(
+        """{"angle":"story","period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":"41"}""")]
+    [InlineData(
+        """{"angle":"story","period":{"kind":"month","from":"2026-09-01","to":"2026-09-30"},"cited_ops":18446744073709551615}""")]
     [InlineData("""[41]""")]
     public async Task A_verify_line_with_unreadable_figures_is_out_of_contract(string figures)
     {
@@ -338,7 +342,8 @@ public sealed partial class CardRendererTests : IDisposable
         return new CardInput(
             "collective", "fr", "fr", new CardPeriod("month", "2026-10-01", "2026-10-31"),
             new CardScope("prod", ["prod-eu"], 31, 0, 1000),
-            new CardFiguresBlock(ConfirmedFixesCount: 1, ServicesCount: 1, FixesByFamilyCount: new CardFamilies(1, 0, 0)),
+            new CardFiguresBlock(ConfirmedFixesCount: 1, ServicesCount: 1,
+                FixesByFamilyCount: new CardFamilies(1, 0, 0)),
             null, null, new CardFree("Our month", null, null), new CardOrg("Acme", null), NowMs);
     }
 
@@ -418,7 +423,8 @@ public sealed partial class CardRendererTests : IDisposable
             [
                 .. Sealed(September,
                     day => day with { AvoidableGco2Low = 3.0, AvoidableIoOps = 1000, TotalIoOps = 10_000 }),
-                .. Sealed(October, day => day with { AvoidableGco2Low = 0.5, AvoidableIoOps = 100, TotalIoOps = 10_000 })
+                .. Sealed(October,
+                    day => day with { AvoidableGco2Low = 0.5, AvoidableIoOps = 100, TotalIoOps = 10_000 })
             ],
             new DetectionCountRow(September.FromDay, N1, 2, 100));
         await seed.FixAsync("a", N1, October.FromDay + 14);
@@ -432,7 +438,8 @@ public sealed partial class CardRendererTests : IDisposable
             Analysis = new AnalysisOptions
             {
                 EngineBinaryPath =
-                    (engine with { Version = "perf-sentinel 0.39.0" }).WriteTo(Path.Combine(_workspace, "perf-sentinel")),
+                    (engine with { Version = "perf-sentinel 0.39.0" }).WriteTo(
+                        Path.Combine(_workspace, "perf-sentinel")),
                 ReportDirectory = Reports
             }
         });

@@ -256,16 +256,19 @@ public sealed class RecapTextTests
             RecapText.Period(new RecapPeriodInfo("day", "2026-10-29", "2026-10-29", false, [], [], null, null), fr));
         Assert.Equal("Période incomplète\u00a0: une journée pas encore terminée, un autre manque de mesure",
             RecapText.Incomplete(["open_day", "x"], "pilotage", fr));
-        Assert.Equal("Période incomplète\u00a0: un jour encore ouvert, x", RecapText.Incomplete(["open_day", "x"], "tech", fr));
+        Assert.Equal("Période incomplète\u00a0: un jour encore ouvert, x",
+            RecapText.Incomplete(["open_day", "x"], "tech", fr));
         Assert.Equal(
             "Note\u00a0: seule une partie du trafic a été examinée (taux 0,5), une partie de l'activité a été écartée sous la charge",
             RecapText.Notes(["sampling", "shed"], 0.5, "pilotage", fr));
         Assert.Equal("Confirmée par le moteur", RecapText.Confirmation("confirmed", "tech", fr));
-        Assert.Equal("En attente d'une journée complète de mesures", RecapText.Confirmation("awaiting", "pilotage", fr));
+        Assert.Equal("En attente d'une journée complète de mesures",
+            RecapText.Confirmation("awaiting", "pilotage", fr));
         Assert.Equal(
             "Le Hub a lu les 5\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
             RecapText.Truncated("pilotage", fr));
-        Assert.Equal("Sources sans volume de détection\u00a0: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "tech", fr));
+        Assert.Equal("Sources sans volume de détection\u00a0: a, b.",
+            RecapText.SourcesWithoutVolume(["a", "b"], "tech", fr));
         Assert.Equal(("Opérations inutiles", "Problèmes ouverts", "Ce qui a changé"), RecapText.Labels("pilotage", fr));
         Assert.Equal(("I/O évitables", "Findings actifs", "Ce qui a bougé"), RecapText.Labels("tech", fr));
         Assert.Equal("SQL redondant", RecapText.Type("redundant_sql", fr));
@@ -282,7 +285,8 @@ public sealed class RecapTextTests
         Assert.Equal(7, pilotage.Count);
         Assert.Equal("Opérations inutiles", pilotage[1].Term);
         Assert.EndsWith(" " + RecapText.NamingHelpIn(HubLang.Fr), pilotage[5].Text, StringComparison.Ordinal);
-        Assert.Equal("Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue.",
+        Assert.Equal(
+            "Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue.",
             RecapText.NamingHelpIn(HubLang.Fr));
         Assert.Equal(RecapText.NamingHelp, RecapText.NamingHelpIn(HubLang.En));
     }

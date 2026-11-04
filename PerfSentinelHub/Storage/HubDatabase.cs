@@ -44,6 +44,21 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                            AND sa.signature = f.signature AND {ActiveAck}
                                          """;
 
+    // One source holds one copy of a finding, so its scope is its copies as they stand: no window to
+    // rank, and a newest-first page walks ix_finding_sources_recent and stops at its limit, as the
+    // fleet's walks ix_findings_last_seen. The window version sorted every copy first. scoped
+    // reads scope.signature, not findings.signature: the joined one hid the signature tie-break
+    // from the index, and a push writes one last_seen_ms for all its copies, so it sorted them all.
+    private const string OneSourceCopies = """
+                                           scope AS (
+                                             SELECT fs.signature, fs.first_seen_ms, fs.last_seen_ms,
+                                                    fs.source_id AS copy_source_id, fs.severity, fs.service,
+                                                    fs.finding_type, fs.endpoint, fs.sample_trace_id
+                                             FROM finding_sources AS fs
+                                             WHERE fs.source_id = $scope_source_id
+                                           ),
+                                           """;
+
     private static readonly TimeSpan WriteGateWait = TimeSpan.FromSeconds(5);
 
     // A predecessor must still be a live problem when its successor appears:
@@ -70,6 +85,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // which nothing here does, so disposing would free nothing and would arm an
     // ObjectDisposedException for any poll still in flight when the host stops.
     private readonly SemaphoreSlim _writeGate = new(1, 1);
+    private int _ready;
 
     // Moves on every write a recap reads besides the findings themselves: finding_actions (with its
     // events), endpoint_labels and service_labels, and a real change of source_acks or of ack_reads'
@@ -82,13 +98,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     /// <summary>The version <see cref="Recaps.RecapJobs" /> reuses a computed recap under.</summary>
     public long RecapInputsVersion => Interlocked.Read(ref _recapInputsVersion);
 
+    public bool IsReady => Volatile.Read(ref _ready) == 1;
+
     private void TouchRecapInputs()
     {
         Interlocked.Increment(ref _recapInputsVersion);
     }
-    private int _ready;
-
-    public bool IsReady => Volatile.Read(ref _ready) == 1;
 
     // The envelopes live apart from the rows a read filters and sorts on (version 22), and are
     // looked up for the rows that need one only.
@@ -163,21 +178,6 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 ),
                 """;
     }
-
-    // One source holds one copy of a finding, so its scope is its copies as they stand: no window to
-    // rank, and a newest-first page walks ix_finding_sources_recent and stops at its limit, as the
-    // fleet's walks ix_findings_last_seen. The window version sorted every copy first. scoped
-    // reads scope.signature, not findings.signature: the joined one hid the signature tie-break
-    // from the index, and a push writes one last_seen_ms for all its copies, so it sorted them all.
-    private const string OneSourceCopies = """
-                                           scope AS (
-                                             SELECT fs.signature, fs.first_seen_ms, fs.last_seen_ms,
-                                                    fs.source_id AS copy_source_id, fs.severity, fs.service,
-                                                    fs.finding_type, fs.endpoint, fs.sample_trace_id
-                                             FROM finding_sources AS fs
-                                             WHERE fs.source_id = $scope_source_id
-                                           ),
-                                           """;
 
     // Every pair a finding copy carries, each under the grouping identity of the
     // first entry, or the marker row alone when that entry is not a well-formed

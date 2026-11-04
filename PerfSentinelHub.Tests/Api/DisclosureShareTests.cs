@@ -86,6 +86,7 @@ public sealed class DisclosureShareTests : IDisposable
                 await database.WithdrawAsync("d1", "wrong", "alice", NowMs, CancellationToken.None);
                 break;
         }
+
         using var client = hub.CreateClient();
 
         using var response =

@@ -26,6 +26,11 @@ public static partial class ApiEndpoints
     private const string NoSuchToken = "No such token.";
     private const string InvalidRequest = "invalid_request";
 
+    private const string TerminalLog = "TerminalAccess";
+
+    private const string NoPendingCode =
+        "No sign-in is waiting for this code: it was decided, it expired, or it was mistyped. Run perf-sentinel login again.";
+
     // Served by GET /device alone, never as a static file: only this route sends the page's
     // policy, no-store and the re-challenge of a session about to end. No inline script, and
     // the input carries no value, so no link can fill it. fonts.css embeds its faces as data:
@@ -34,63 +39,58 @@ public static partial class ApiEndpoints
     private static string DevicePage(string lang)
     {
         return $"""
-        <!doctype html>
-        <html lang="{lang}">
-        <head>
-            <meta charset="utf-8">
-            <meta content="width=device-width, initial-scale=1" name="viewport">
-            <title>{T("device.title")}</title>
-            <link href="fonts.css" rel="stylesheet">
-            <link href="tokens.css" rel="stylesheet">
-            <link href="launcher.css" rel="stylesheet">
-            <script src="text-en.js"></script>
-            <script src="text-fr.js"></script>
-            <script src="launcher.js"></script>
-            <script src="device.js"></script>
-        </head>
-        <body>
-        <main class="shell-main device-main">
-            <div class="device-top">
-                <div aria-label="Perf Sentinel Hub" class="shell-wordmark" role="img">
-                    <img alt="" data-logo="light" src="logo-horiz-light.svg">
-                    <img alt="" data-logo="dark" src="logo-horiz-dark.svg">
-                    <span aria-hidden="true" class="shell-wordmark-suffix">hub</span>
-                </div>
-                {LocalSignIn.LangLink("?lang=" + (lang == HubLang.Fr ? HubLang.En : HubLang.Fr), lang)}
-            </div>
-            <span class="overline"><span aria-hidden="true">// </span>{T("device.overline")}</span>
-            <h1 class="page-title">{T("device.heading")}</h1>
-            <p class="page-sub" id="device-intro">{HubText.Get(lang, "device.intro", ("until", T("device.intro.session_end")))}</p>
-            <form class="card device-card" id="device-form">
-                <label class="field-label" for="device-code">{T("device.code")}</label>
-                <input aria-describedby="device-code-hint" autocapitalize="characters" autocomplete="off" autofocus class="input" id="device-code" maxlength="9" name="user_code" placeholder="XXXX-XXXX" required spellcheck="false" type="text">
-                <p class="device-hint" id="device-code-hint">{T("device.code.hint")}</p>
-                <button class="pill-button pill-primary" type="submit">{T("device.continue")}</button>
-            </form>
-            <section aria-labelledby="device-request" class="card device-card" hidden id="device-details">
-                <p id="device-request" tabindex="-1"></p>
-                <div class="banner" data-tone="warn" hidden id="device-alert" role="alert"></div>
-                <div class="device-actions">
-                    <button aria-describedby="device-alert" class="pill-button pill-primary" id="device-approve" type="button">{T("device.approve")}</button>
-                    <button class="pill-button" id="device-deny" type="button">{T("device.deny")}</button>
-                </div>
-            </section>
-            <div aria-live="polite" class="device-result" id="device-result" tabindex="-1"></div>
-        </main>
-        </body>
-        </html>
-        """;
+                <!doctype html>
+                <html lang="{lang}">
+                <head>
+                    <meta charset="utf-8">
+                    <meta content="width=device-width, initial-scale=1" name="viewport">
+                    <title>{T("device.title")}</title>
+                    <link href="fonts.css" rel="stylesheet">
+                    <link href="tokens.css" rel="stylesheet">
+                    <link href="launcher.css" rel="stylesheet">
+                    <script src="text-en.js"></script>
+                    <script src="text-fr.js"></script>
+                    <script src="launcher.js"></script>
+                    <script src="device.js"></script>
+                </head>
+                <body>
+                <main class="shell-main device-main">
+                    <div class="device-top">
+                        <div aria-label="Perf Sentinel Hub" class="shell-wordmark" role="img">
+                            <img alt="" data-logo="light" src="logo-horiz-light.svg">
+                            <img alt="" data-logo="dark" src="logo-horiz-dark.svg">
+                            <span aria-hidden="true" class="shell-wordmark-suffix">hub</span>
+                        </div>
+                        {LocalSignIn.LangLink("?lang=" + (lang == HubLang.Fr ? HubLang.En : HubLang.Fr), lang)}
+                    </div>
+                    <span class="overline"><span aria-hidden="true">// </span>{T("device.overline")}</span>
+                    <h1 class="page-title">{T("device.heading")}</h1>
+                    <p class="page-sub" id="device-intro">{HubText.Get(lang, "device.intro", ("until", T("device.intro.session_end")))}</p>
+                    <form class="card device-card" id="device-form">
+                        <label class="field-label" for="device-code">{T("device.code")}</label>
+                        <input aria-describedby="device-code-hint" autocapitalize="characters" autocomplete="off" autofocus class="input" id="device-code" maxlength="9" name="user_code" placeholder="XXXX-XXXX" required spellcheck="false" type="text">
+                        <p class="device-hint" id="device-code-hint">{T("device.code.hint")}</p>
+                        <button class="pill-button pill-primary" type="submit">{T("device.continue")}</button>
+                    </form>
+                    <section aria-labelledby="device-request" class="card device-card" hidden id="device-details">
+                        <p id="device-request" tabindex="-1"></p>
+                        <div class="banner" data-tone="warn" hidden id="device-alert" role="alert"></div>
+                        <div class="device-actions">
+                            <button aria-describedby="device-alert" class="pill-button pill-primary" id="device-approve" type="button">{T("device.approve")}</button>
+                            <button class="pill-button" id="device-deny" type="button">{T("device.deny")}</button>
+                        </div>
+                    </section>
+                    <div aria-live="polite" class="device-result" id="device-result" tabindex="-1"></div>
+                </main>
+                </body>
+                </html>
+                """;
 
         string T(string key)
         {
             return HubText.Get(lang, key);
         }
     }
-
-    private const string TerminalLog = "TerminalAccess";
-
-    private const string NoPendingCode =
-        "No sign-in is waiting for this code: it was decided, it expired, or it was mistyped. Run perf-sentinel login again.";
 
     /// <summary>
     ///     Terminal sign-in, mapped with Hub:Access:Enabled only. The token routes always, so a

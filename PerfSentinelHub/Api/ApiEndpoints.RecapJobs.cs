@@ -7,6 +7,8 @@ namespace PerfSentinelHub.Api;
 
 public static partial class ApiEndpoints
 {
+    private const string RecapScreenHeader = "X-Recap-Screen";
+
     /// <summary>
     ///     Starts the recap GET /api/recap computes, on the Hub rather than inside the request, or
     ///     joins the one already running or kept for the same audience and query. The screen polls
@@ -137,8 +139,6 @@ public static partial class ApiEndpoints
 
         return new RecapJobAudience(owner, string.Join('\n', sources.Select(source => source.Id)));
     }
-
-    private const string RecapScreenHeader = "X-Recap-Screen";
 
     // The caller, and the screen a launcher page names in X-Recap-Screen: an id it draws once per load,
     // so two tabs of one person, or two people on a Hub without sign-in, follow a job apart. A value

@@ -56,35 +56,6 @@ public sealed partial class HubDatabase
                    SELECT 1 FROM incident_attributes AS ia WHERE ia.id = i.id AND ia.source_id = i.source_id));
         """;
 
-    private static readonly string AttributesBackfill =
-        """
-        UPDATE finding_sources SET service = (
-          SELECT json_extract(e.finding_json, '$.finding.service') FROM finding_source_envelopes AS e
-          WHERE e.signature = finding_sources.signature AND e.source_id = finding_sources.source_id)
-        WHERE service IS NULL
-          AND EXISTS (
-            SELECT 1 FROM finding_source_envelopes AS e
-            WHERE e.signature = finding_sources.signature AND e.source_id = finding_sources.source_id
-              AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END, '$.finding.service') = 'text');
-        """
-        + FindingAttributesFrom(
-            """
-            SELECT CASE WHEN json_valid(e.finding_json) THEN e.finding_json END,
-                   fs.signature, fs.source_id, fs.last_seen_ms
-            FROM finding_sources AS fs
-            LEFT JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
-            WHERE NOT EXISTS (
-              SELECT 1 FROM finding_attributes AS fa
-              WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
-                AND fa.last_seen_ms >= fs.last_seen_ms)
-            """)
-        + """
-          DELETE FROM incident_attributes WHERE last_seen_ms IS NOT (
-            SELECT i.last_seen_ms FROM incidents AS i
-            WHERE i.id = incident_attributes.id AND i.source_id = incident_attributes.source_id);
-          """
-        + IncidentAttributesWhere("true");
-
     // A copy an older build wrote, holding an envelope of its own that names the type and endpoint
     // every stored finding has. finding_type is the marker: a NULL trace is a copy's own value.
     private const string CopyColumnsPending =
@@ -117,6 +88,35 @@ public sealed partial class HubDatabase
             JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
             WHERE
         """ + " " + CopyColumnsPending + " LIMIT $chunk);";
+
+    private static readonly string AttributesBackfill =
+        """
+        UPDATE finding_sources SET service = (
+          SELECT json_extract(e.finding_json, '$.finding.service') FROM finding_source_envelopes AS e
+          WHERE e.signature = finding_sources.signature AND e.source_id = finding_sources.source_id)
+        WHERE service IS NULL
+          AND EXISTS (
+            SELECT 1 FROM finding_source_envelopes AS e
+            WHERE e.signature = finding_sources.signature AND e.source_id = finding_sources.source_id
+              AND json_type(CASE WHEN json_valid(e.finding_json) THEN e.finding_json END, '$.finding.service') = 'text');
+        """
+        + FindingAttributesFrom(
+            """
+            SELECT CASE WHEN json_valid(e.finding_json) THEN e.finding_json END,
+                   fs.signature, fs.source_id, fs.last_seen_ms
+            FROM finding_sources AS fs
+            LEFT JOIN finding_source_envelopes AS e ON e.signature = fs.signature AND e.source_id = fs.source_id
+            WHERE NOT EXISTS (
+              SELECT 1 FROM finding_attributes AS fa
+              WHERE fa.signature = fs.signature AND fa.source_id = fs.source_id
+                AND fa.last_seen_ms >= fs.last_seen_ms)
+            """)
+        + """
+          DELETE FROM incident_attributes WHERE last_seen_ms IS NOT (
+            SELECT i.last_seen_ms FROM incidents AS i
+            WHERE i.id = incident_attributes.id AND i.source_id = incident_attributes.source_id);
+          """
+        + IncidentAttributesWhere("true");
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -498,9 +498,11 @@ public sealed partial class HubDatabase
                                       OR EXISTS (SELECT 1 FROM pragma_foreign_key_check('finding_source_envelopes'));
                                   """;
             if ((long)(await command.ExecuteScalarAsync(cancellationToken))! == 1)
-                throw new InvalidOperationException("Version 22 left a dangling finding reference; nothing was written.");
+                throw new InvalidOperationException(
+                    "Version 22 left a dangling finding reference; nothing was written.");
 
-            command.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms) VALUES (22, $applied_at_ms);";
+            command.CommandText =
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at_ms) VALUES (22, $applied_at_ms);";
             command.Parameters.AddWithValue("$applied_at_ms", timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
             await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

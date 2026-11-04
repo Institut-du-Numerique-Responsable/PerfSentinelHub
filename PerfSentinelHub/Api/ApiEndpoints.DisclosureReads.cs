@@ -170,7 +170,7 @@ public static partial class ApiEndpoints
             return refused;
         return await database.RevokeShareLinkAsync(
             id, linkId, RelayIdentity(request, options.Value)!, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(),
-            request: true, cancellationToken)
+            true, cancellationToken)
             ? TypedResults.NoContent()
             : TypedResults.NotFound();
     }

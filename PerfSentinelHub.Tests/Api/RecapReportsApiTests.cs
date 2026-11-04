@@ -135,7 +135,8 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
         Assert.StartsWith("<!doctype html>\n<html lang=\"en\"", await english.Content.ReadAsStringAsync(Token),
             StringComparison.Ordinal);
         using var detail = await client.SendAsync(Get($"/api/recap/reports/{id}"), Token);
-        Assert.Equal("fr", (await JsonAsync(detail)).RootElement.GetProperty("report").GetProperty("language").GetString());
+        Assert.Equal("fr",
+            (await JsonAsync(detail)).RootElement.GetProperty("report").GetProperty("language").GetString());
         using var list = await client.SendAsync(Get("/api/recap/reports"), Token);
         Assert.Contains((await JsonAsync(list)).RootElement.EnumerateArray(),
             entry => entry.GetProperty("id").GetString() == id && entry.GetProperty("language").GetString() == "fr");

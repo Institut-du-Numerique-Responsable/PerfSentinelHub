@@ -129,7 +129,9 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
     {
         var judged = await database.ReadRecapCoverageAsync(sourceIds, period.FromDay, period.ToDay,
             cancellationToken);
-        return judged.Count == 0 ? "uncovered_days" : CardRules.Refusal(RecapCoverage.Judge(period, today, judged, null));
+        return judged.Count == 0
+            ? "uncovered_days"
+            : CardRules.Refusal(RecapCoverage.Judge(period, today, judged, null));
     }
 
     // Whether the previous period holds the period rule, and whether its fixes can be counted:
@@ -209,7 +211,8 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
 
     // Each fix with its story, its volume before and its compared threshold. Every fix of the period
     // shares one before-fix period, RecapPeriod.Of(kind, done day).Previous() being the card's previous.
-    private async Task<IReadOnlyList<Told>> TellAsync(Frame frame, bool previousWhole, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<Told>> TellAsync(Frame frame, bool previousWhole,
+        CancellationToken cancellationToken)
     {
         var fixes = await FixesAsync(frame, frame.Period, cancellationToken);
         var previous = frame.Period.Previous();

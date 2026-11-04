@@ -3,8 +3,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using PerfSentinelHub.Configuration;
 
@@ -16,7 +14,8 @@ namespace PerfSentinelHub.Tests.Api;
 /// </summary>
 public sealed partial class ProblemCodeTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
-    private const string CiToken = "psh_problemcodes_0123456789abcdef0123456789"; // gitleaks:allow -- synthetic test credential
+    private const string
+        CiToken = "psh_problemcodes_0123456789abcdef0123456789"; // gitleaks:allow -- synthetic test credential
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 

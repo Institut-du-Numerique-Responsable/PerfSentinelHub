@@ -26,12 +26,15 @@ public sealed partial class RecapJobs(
     // identity, a Hub without sign-in, is held by MaxRunning alone.
     public const int MaxRunningPerCaller = 1;
 
+    // A recap of 5,000 findings weighs a few MB, beside a Hub that runs in 1 GiB.
+    public const int MaxKept = 32;
+
+    // How much one finished computation moves the expected duration of each stage.
+    private const double Smoothing = 0.3;
+
     // How long a follow counts toward MaxRunningPerCaller without its screen reading the job again. A
     // tab closed or reloaded without letting go stops holding its caller past it; the job runs on.
     public static readonly TimeSpan FollowLease = TimeSpan.FromSeconds(30);
-
-    // A recap of 5,000 findings weighs a few MB, beside a Hub that runs in 1 GiB.
-    public const int MaxKept = 32;
 
     public static readonly TimeSpan ClosedLifetime = TimeSpan.FromHours(24);
     public static readonly TimeSpan OpenLifetime = TimeSpan.FromMinutes(10);
@@ -39,10 +42,8 @@ public sealed partial class RecapJobs(
     // Long enough for the screen that polled it to read the failure.
     public static readonly TimeSpan EndedLifetime = TimeSpan.FromMinutes(1);
 
-    // How much one finished computation moves the expected duration of each stage.
-    private const double Smoothing = 0.3;
-
     private static readonly RecapJobOutcome[] AllOutcomes = Enum.GetValues<RecapJobOutcome>();
+    private readonly Dictionary<RecapJobKey, Job> _byKey = [];
 
     private readonly TimeProvider _clock = timeProvider;
     private readonly long[] _counts = new long[AllOutcomes.Length];
@@ -53,13 +54,13 @@ public sealed partial class RecapJobs(
         [.. RecapStages.All.Select(stage => stage <= RecapStage.FindingsPrevious ? 20_000.0 : 3_000.0)];
 
     private readonly Lock _gate = new();
-    private readonly Dictionary<RecapJobKey, Job> _byKey = [];
     private readonly Dictionary<string, Job> _jobs = new(StringComparer.Ordinal);
 
     /// <summary>
     ///     The job for this key: the one running or the finished one while it is kept, else a new one,
     ///     unless <see cref="MaxRunning" /> already run or the caller of <paramref name="follower" />
-    ///     already follows <see cref="MaxRunningPerCaller" /> running from any screen. <paramref name="refresh" /> always starts a new
+    ///     already follows <see cref="MaxRunningPerCaller" /> running from any screen. <paramref name="refresh" /> always
+    ///     starts a new
     ///     one: it follows a write, which a computation already running may have read before. The one it
     ///     replaces stays readable by its id for the screens that follow it, and no request joins it.
     ///     <paramref name="follower" /> follows the job it gets, until it lets it go.
@@ -303,7 +304,7 @@ public sealed partial class RecapJobs(
         foreach (var stage in RecapStages.All)
             // At least 1 ms: weights that all decayed to 0 would make the progress 0/0, which JSON cannot write.
             if (job.States[(int)stage] == RecapStageState.Done && job.Ms[(int)stage] is { } ms)
-                _expectedMs[(int)stage] = (_expectedMs[(int)stage] * (1 - Smoothing)) + (Math.Max(1, ms) * Smoothing);
+                _expectedMs[(int)stage] = _expectedMs[(int)stage] * (1 - Smoothing) + Math.Max(1, ms) * Smoothing;
     }
 
     private void Prune()
@@ -356,10 +357,18 @@ public sealed partial class RecapJobs(
     [LoggerMessage(2508, LogLevel.Warning, "A recap computation failed.")]
     private static partial void LogFailed(ILogger logger, Exception exception);
 
-    /// <summary>One computation, told its stages as RecapService takes them. Every field is read and written under the registry's lock.</summary>
+    /// <summary>
+    ///     One computation, told its stages as RecapService takes them. Every field is read and written under the
+    ///     registry's lock.
+    /// </summary>
     private sealed class Job(RecapJobs owner, RecapJobKey key, long startedAtMs, CancellationTokenSource cancellation)
         : IRecapProgress
     {
+        // Each follow and when it was last read: one per screen, the id a launcher page sends, or one
+        // per signed-in caller for a client that sends none. Callers with neither, who cannot be told
+        // apart, count once per start or join.
+        private readonly Dictionary<string, (string? Caller, long Seen)> _follows = new(StringComparer.Ordinal);
+        private int _anonymousFollows;
         private long _stageStarted;
 
         public string Id { get; } = Guid.NewGuid().ToString("N");
@@ -367,19 +376,43 @@ public sealed partial class RecapJobs(
         public long StartedAtMs { get; } = startedAtMs;
         public CancellationTokenSource Cancellation { get; } = cancellation;
         public RecapJobStatus Status { get; private set; } = RecapJobStatus.Running;
+
         public RecapStage? Current { get; private set; }
+
         // The expected durations as they stood at its start, so a job finishing elsewhere never moves its bar back.
         public double[] Weights { get; } = [.. owner._expectedMs];
-
-        // Each follow and when it was last read: one per screen, the id a launcher page sends, or one
-        // per signed-in caller for a client that sends none. Callers with neither, who cannot be told
-        // apart, count once per start or join.
-        private readonly Dictionary<string, (string? Caller, long Seen)> _follows = new(StringComparer.Ordinal);
-        private int _anonymousFollows;
 
         public long InputsVersion { get; init; }
 
         public bool Followed => _follows.Count > 0 || _anonymousFollows > 0;
+
+        // Let go by its last follower: unknown to every read, though it holds its place until it returns.
+        public bool Abandoned { get; set; }
+
+        public RecapStageState[] States { get; } = new RecapStageState[RecapStages.All.Count];
+        public long?[] Ms { get; } = new long?[RecapStages.All.Count];
+        public long? FinishedAtMs { get; private set; }
+        public long? ExpiresAtMs { get; set; }
+        public RecapSnapshot? Result { get; set; }
+
+        public void Enter(RecapStage stage)
+        {
+            lock (owner._gate)
+            {
+                CloseStage();
+                States[(int)stage] = RecapStageState.Running;
+                Current = stage;
+                _stageStarted = owner._clock.GetTimestamp();
+            }
+        }
+
+        public void Skip(RecapStage stage)
+        {
+            lock (owner._gate)
+            {
+                States[(int)stage] = RecapStageState.Skipped;
+            }
+        }
 
         private static string? KeyOf(RecapFollower follower)
         {
@@ -421,34 +454,6 @@ public sealed partial class RecapJobs(
         {
             return _follows.Values.Any(follow =>
                 follow.Caller == caller && owner._clock.GetElapsedTime(follow.Seen) < FollowLease);
-        }
-
-        // Let go by its last follower: unknown to every read, though it holds its place until it returns.
-        public bool Abandoned { get; set; }
-
-        public RecapStageState[] States { get; } = new RecapStageState[RecapStages.All.Count];
-        public long?[] Ms { get; } = new long?[RecapStages.All.Count];
-        public long? FinishedAtMs { get; private set; }
-        public long? ExpiresAtMs { get; set; }
-        public RecapSnapshot? Result { get; set; }
-
-        public void Enter(RecapStage stage)
-        {
-            lock (owner._gate)
-            {
-                CloseStage();
-                States[(int)stage] = RecapStageState.Running;
-                Current = stage;
-                _stageStarted = owner._clock.GetTimestamp();
-            }
-        }
-
-        public void Skip(RecapStage stage)
-        {
-            lock (owner._gate)
-            {
-                States[(int)stage] = RecapStageState.Skipped;
-            }
         }
 
         public void CloseStage()

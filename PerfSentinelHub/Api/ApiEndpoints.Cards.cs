@@ -170,7 +170,8 @@ public static partial class ApiEndpoints
             return (outside, null, null);
 
         var outcome = await call.Cards.ComputeAsync(
-            new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free, ask.EquivalenceCountry), cancellationToken);
+            new CardAsk(scope, ask.Angle, ask.Lang, ask.Signature, ask.Free, ask.EquivalenceCountry),
+            cancellationToken);
         if (outcome is CardOutcome.Refused { Reason: var reason })
             return (Problem(StatusCodes.Status422UnprocessableEntity, reason,
                 CardRules.Explain(reason, RecapPeriod.Of(ask.Kind, ask.At))), null, null);
@@ -221,10 +222,13 @@ public static partial class ApiEndpoints
     {
         return render switch
         {
-            CardRender.Refused { Reason: "unsupported_characters", Field: "free.title" or "free.team" or "free.label" }
+            CardRender.Refused
+                {
+                    Reason: "unsupported_characters", Field: "free.title" or "free.team" or "free.label"
+                }
                 refused => TypedResults.Json(new CardFieldProblem(UndrawableField, refused.Field["free.".Length..],
-                        ProblemCodes.CardFieldUndrawable),
-                    HubJsonContext.Default.CardFieldProblem, statusCode: StatusCodes.Status422UnprocessableEntity),
+                    ProblemCodes.CardFieldUndrawable),
+                HubJsonContext.Default.CardFieldProblem, statusCode: StatusCodes.Status422UnprocessableEntity),
             CardRender.Refused { Reason: "unsupported_characters" } =>
                 Problem(StatusCodes.Status422UnprocessableEntity, ProblemCodes.CardOrganisationUndrawable,
                     UndrawableOrganisation),
@@ -313,17 +317,6 @@ public static partial class ApiEndpoints
     {
         return DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
     }
-
-    /// <summary>The collaborators one card route hands to the steps it shares with the other.</summary>
-    private sealed record CardCall(
-        HttpRequest Request,
-        CardService Cards,
-        CardKeys Keys,
-        CardRenderer Renderer,
-        EngineProbe Engine,
-        AccessPolicy Access,
-        HubOptions Options,
-        TimeProvider Clock);
 
     /// <summary>Every signing key and the lines to publish. Never makes a key: the first card does.</summary>
     private static async Task<IResult> GetCardKeysAsync(
@@ -475,4 +468,15 @@ public static partial class ApiEndpoints
             return "The body is not valid JSON.";
         }
     }
+
+    /// <summary>The collaborators one card route hands to the steps it shares with the other.</summary>
+    private sealed record CardCall(
+        HttpRequest Request,
+        CardService Cards,
+        CardKeys Keys,
+        CardRenderer Renderer,
+        EngineProbe Engine,
+        AccessPolicy Access,
+        HubOptions Options,
+        TimeProvider Clock);
 }

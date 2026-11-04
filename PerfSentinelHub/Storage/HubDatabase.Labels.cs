@@ -8,6 +8,10 @@ namespace PerfSentinelHub.Storage;
 // The business-word label of an endpoint: one per (service, endpoint), Hub-wide, set by a person.
 public sealed partial class HubDatabase
 {
+    // One constant text for both scopes: a null $endpoint reads the whole service.
+    private const string LabelCopiesSelect =
+        CopiesSelect + "WHERE f.service = $service AND ($endpoint IS NULL OR f.endpoint = $endpoint)" + CopiesOrder;
+
     /// <summary>
     ///     Sets, replaces or, for a null label, removes the label of one endpoint. False when the
     ///     write lock stays held past the wait.
@@ -35,7 +39,8 @@ public sealed partial class HubDatabase
     ///     Sets, replaces or, for a null label, removes the business name of one service. False when
     ///     the write lock stays held past the wait.
     /// </summary>
-    public Task<bool> SetServiceLabelAsync(string service, string? label, string by, CancellationToken cancellationToken)
+    public Task<bool> SetServiceLabelAsync(string service, string? label, string by,
+        CancellationToken cancellationToken)
     {
         return WriteLabelAsync(
             label is null
@@ -108,10 +113,6 @@ public sealed partial class HubDatabase
             labels[(reader.GetString(0), reader.GetString(1))] = reader.GetString(2);
         return labels;
     }
-
-    // One constant text for both scopes: a null $endpoint reads the whole service.
-    private const string LabelCopiesSelect =
-        CopiesSelect + "WHERE f.service = $service AND ($endpoint IS NULL OR f.endpoint = $endpoint)" + CopiesOrder;
 
     /// <summary>
     ///     The Hub copies of the findings at one service and endpoint, or of the whole service for a

@@ -259,7 +259,7 @@ public sealed partial class HubDatabase
         command.Transaction = transaction;
         command.CommandText = FreezeUpdate;
         command.Parameters.AddWithValue(SignatureParameter, signature);
-        command.Parameters.AddWithValue("$sources", freezeFrom is null ? DBNull.Value : (object)JsonArray(freezeFrom));
+        command.Parameters.AddWithValue("$sources", freezeFrom is null ? DBNull.Value : JsonArray(freezeFrom));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

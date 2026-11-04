@@ -16,14 +16,6 @@ public sealed partial class CachedCount<T>(
     TimeProvider timeProvider,
     ILogger logger)
 {
-    // Read-only, so a copy per closed type holds the same value and no state.
-    // ReSharper disable StaticMemberInGenericType
-    public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(15);
-
-    // Half of Prometheus' default 10 s scrape_timeout.
-    public static readonly TimeSpan Budget = TimeSpan.FromSeconds(5);
-    // ReSharper restore StaticMemberInGenericType
-
     private readonly Lock _gate = new();
     private Task<Counted<T>?>? _counting;
     private Counted<T>? _last;
@@ -98,4 +90,12 @@ public sealed partial class CachedCount<T>(
 
     [LoggerMessage(2301, LogLevel.Warning, "A cached count failed; the previous one is still served.")]
     private static partial void LogCountFailed(ILogger logger, Exception exception);
+
+    // Read-only, so a copy per closed type holds the same value and no state.
+    // ReSharper disable StaticMemberInGenericType
+    public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(15);
+
+    // Half of Prometheus' default 10 s scrape_timeout.
+    public static readonly TimeSpan Budget = TimeSpan.FromSeconds(5);
+    // ReSharper restore StaticMemberInGenericType
 }

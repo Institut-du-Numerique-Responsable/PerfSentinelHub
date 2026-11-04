@@ -71,7 +71,7 @@ public static partial class ApiEndpoints
         pilotage = view == RecapPilotageView;
         allMoves = moves == "all";
         return HasValidUtf8(request.QueryString.Value) && request.Query.All(item => item.Value.Count == 1) &&
-               view is ("tech" or RecapPilotageView) && moves is (null or "all");
+               view is "tech" or RecapPilotageView && moves is null or "all";
     }
 
     // Today UTC when absent; a day in the future has nothing to recap.

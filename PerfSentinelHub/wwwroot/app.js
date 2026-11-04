@@ -2749,7 +2749,11 @@
         if (!handoff) return null;
         const daemon = Boolean(source && source.kind === 'daemon');
         const other = state.form.traceId === handoff.traceId ? handoff.otherTraceId : handoff.traceId;
-        const swap = other ? el('button', {type: 'button', class: 'pill-button pill-sm', text: t('new.trace_handoff.swap')})
+        const swap = other ? el('button', {
+                type: 'button',
+                class: 'pill-button pill-sm',
+                text: t('new.trace_handoff.swap')
+            })
             : null;
         if (swap) {
             swap.addEventListener('click', function () {
@@ -3200,7 +3204,11 @@
             min: '1',
             value: String(state.form.customQty)
         });
-        const units = el('div', {class: 'segmented segmented-sm', role: 'radiogroup', 'aria-label': t('new.picker.unit')});
+        const units = el('div', {
+            class: 'segmented segmented-sm',
+            role: 'radiogroup',
+            'aria-label': t('new.picker.unit')
+        });
         // The value stays the engine's own unit, only its label follows the language.
         [['m', 'unit.min'], ['h', 'unit.h'], ['d', 'unit.d']].forEach(function (entry) {
             const unit = entry[0];
@@ -3475,12 +3483,12 @@
         // Folded until the reader opens it, like every other fold in the product,
         // and remembered from then on.
         return sinkBlock(t('new.sink.head'), t('new.sink.sub'), rows, {
-                open: state.panelOpen.caps === true,
-                onToggle: function (open) {
-                    state.panelOpen.caps = open;
-                    saveFolds();
-                }
-            });
+            open: state.panelOpen.caps === true,
+            onToggle: function (open) {
+                state.panelOpen.caps = open;
+                saveFolds();
+            }
+        });
     }
 
     function bandStyle(band) {
@@ -4871,7 +4879,10 @@
             : el('td', {'data-align': 'right'}, [el('span', {class: 'table-muted', text: t('incidents.still_open')})]));
         row.appendChild(el('td', {'data-align': 'right', text: String(incident.finding_count)}));
         row.appendChild(el('td', {title: t(INCIDENT_CAPTURE[capture])}, [
-            el('span', {class: capture === 'empty' ? 'table-muted' : null, text: t('incidents.capture_word.' + capture)})
+            el('span', {
+                class: capture === 'empty' ? 'table-muted' : null,
+                text: t('incidents.capture_word.' + capture)
+            })
         ]));
         row.appendChild(el('td', {}, [
             el('span', {class: 'table-strong', text: incident.source_name || incident.source_id}),
@@ -5015,7 +5026,10 @@
                 row.hidden = !PSL.findingMatches(FINDING_ROW.get(row), input.value);
                 if (!row.hidden) shown += 1;
             });
-            count.textContent = input.value.trim() === '' ? '' : t('incidents.filter.shown', {shown: shown, total: rows.length});
+            count.textContent = input.value.trim() === '' ? '' : t('incidents.filter.shown', {
+                shown: shown,
+                total: rows.length
+            });
         };
         input.addEventListener('input', apply);
         // Once the table beside it is in the page, so a query kept across a sort applies again.
@@ -5275,7 +5289,10 @@
         };
         const range = el('select', {class: 'refresh-select', 'aria-label': t('correlations.range')},
             PSL.CORRELATION_RANGES.map(function (value) {
-                const option = el('option', {value: value, text: t('correlations.range.option', {span: PSL.humanDur(value)})});
+                const option = el('option', {
+                    value: value,
+                    text: t('correlations.range.option', {span: PSL.humanDur(value)})
+                });
                 if (value === filter.range) option.selected = true;
                 return option;
             }));
@@ -5287,7 +5304,10 @@
         });
         // Shown only on a pair link: the way back to every pair is the plain route.
         const pairOnly = filter.pair_key
-            ? el('a', {class: 'pill-button pill-sm', href: '#/correlations'}, [el('span', {text: t('correlations.every_pair')})])
+            ? el('a', {
+                class: 'pill-button pill-sm',
+                href: '#/correlations'
+            }, [el('span', {text: t('correlations.every_pair')})])
             : null;
         return el('div', {class: 'refresh'}, [
             pairOnly,
@@ -5306,7 +5326,9 @@
     function correlationsTable(pairs) {
         const head = el('tr', {}, CORRELATION_COLUMNS.map(function (name) {
             return el('th', {
-                text: t('correlations.col.' + name), scope: 'col', 'data-align': CORRELATION_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
+                text: t('correlations.col.' + name),
+                scope: 'col',
+                'data-align': CORRELATION_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
         return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, pairs.flatMap(pairRow))]);
@@ -5443,7 +5465,9 @@
         const now = Date.now();
         const head = el('tr', {}, EPISODE_COLUMNS.map(function (name) {
             return el('th', {
-                text: name ? t('correlations.col.' + name) : '', scope: 'col', 'data-align': EPISODE_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
+                text: name ? t('correlations.col.' + name) : '',
+                scope: 'col',
+                'data-align': EPISODE_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
         const rows = episodes.map(function (episode) {
@@ -5455,7 +5479,11 @@
             return el('tr', {}, [
                 episodeSpanCell(episode),
                 el('td', {'data-align': 'right', class: 'table-mono', text: PSL.dur(end - episode.started_at_ms)}),
-                el('td', {'data-align': 'right', class: 'table-mono', text: PSL.decimal(episode.peak_confidence.toFixed(2))}),
+                el('td', {
+                    'data-align': 'right',
+                    class: 'table-mono',
+                    text: PSL.decimal(episode.peak_confidence.toFixed(2))
+                }),
                 el('td', {'data-align': 'right', class: 'table-mono', text: String(episode.peak_co_occurrences)}),
                 el('td', {}, overlapped.length === 0
                     ? [el('span', {class: 'table-muted', text: t('correlations.no_incident')})]
@@ -5555,7 +5583,11 @@
             el('p', {class: 'daemon-source-note', text: t('correlations.incident.sub')})
         ]);
         if (held === undefined || held === 'loading') {
-            block.appendChild(el('p', {class: 'daemon-loading', role: 'status', text: t('correlations.incident.reading')}));
+            block.appendChild(el('p', {
+                class: 'daemon-loading',
+                role: 'status',
+                text: t('correlations.incident.reading')
+            }));
         } else if (held === 'error') {
             // Shown once: the next render of this panel, a refold or a re-read, asks again.
             delete state.incidentCorrelations[cacheKey];
@@ -5605,14 +5637,20 @@
     function incidentEpisodesTable(episodes) {
         const head = el('tr', {}, ['pair', 'episode', 'peak', ''].map(function (name) {
             return el('th', {
-                text: name ? t('correlations.col.' + name) : '', scope: 'col', 'data-align': name === 'peak' ? 'right' : null
+                text: name ? t('correlations.col.' + name) : '',
+                scope: 'col',
+                'data-align': name === 'peak' ? 'right' : null
             });
         }));
         const rows = episodes.map(function (episode) {
             return el('tr', {}, [
                 el('td', {}, [pairCell(episode)]),
                 episodeSpanCell(episode),
-                el('td', {'data-align': 'right', class: 'table-mono', text: PSL.decimal(episode.peak_confidence.toFixed(2))}),
+                el('td', {
+                    'data-align': 'right',
+                    class: 'table-mono',
+                    text: PSL.decimal(episode.peak_confidence.toFixed(2))
+                }),
                 el('td', {}, [allEpisodesLink(episode)])
             ]);
         });
@@ -6647,7 +6685,10 @@
         if (!PSL.hasAvoidableVolume(priority)) {
             return el('div', {class: 'recap-figure'}, [
                 el('span', {class: 'recap-figure-n', text: '—'}),
-                el('span', {class: 'recap-figure-u', text: t(management ? 'recap.figure.none' : 'recap.co2.no_avoidable_io')}),
+                el('span', {
+                    class: 'recap-figure-u',
+                    text: t(management ? 'recap.figure.none' : 'recap.co2.no_avoidable_io')
+                }),
                 recapTrend(priority)
             ]);
         }
@@ -7375,8 +7416,11 @@
         }).map(function (view) {
             const name = t('recap.view.' + view);
             return el('a', {
-                class: 'recap-link', href: '/recaps/' + report.id + '/' + view + '.html', download: '',
-                text: name, 'aria-label': t('recap.report.view_aria', {view: name, report: PSL.recapReportLabel(report)})
+                class: 'recap-link',
+                href: '/recaps/' + report.id + '/' + view + '.html',
+                download: '',
+                text: name,
+                'aria-label': t('recap.report.view_aria', {view: name, report: PSL.recapReportLabel(report)})
             });
         });
         return el('li', {class: 'run-card recap-report'}, [
@@ -7672,7 +7716,11 @@
                 });
                 return el('label', {class: 'choice'}, [input,
                     el('span', {class: 'choice-name', text: PSL.CARD_ANGLE_NAMES[angle]}),
-                    el('span', {class: 'choice-line', id: 'card-angle-line-' + angle, text: PSL.CARD_ANGLE_LINES[angle]})]);
+                    el('span', {
+                        class: 'choice-line',
+                        id: 'card-angle-line-' + angle,
+                        text: PSL.CARD_ANGLE_LINES[angle]
+                    })]);
             }))
         ]);
     }
@@ -7738,7 +7786,11 @@
             story.addEventListener('click', function () {
                 cardPick({angle: 'story'});
             });
-            const collective = el('button', {class: 'pill-button pill-sm', type: 'button', text: t('card.make.collective')});
+            const collective = el('button', {
+                class: 'pill-button pill-sm',
+                type: 'button',
+                text: t('card.make.collective')
+            });
             collective.addEventListener('click', function () {
                 cardPick({angle: 'collective'});
             });
@@ -7752,7 +7804,11 @@
     }
 
     function cardWarn(children) {
-        return el('div', {class: 'banner', 'data-tone': 'warn', role: 'alert'}, [warningGlyph(16), el('div', {}, children)]);
+        return el('div', {
+            class: 'banner',
+            'data-tone': 'warn',
+            role: 'alert'
+        }, [warningGlyph(16), el('div', {}, children)]);
     }
 
     /** The environment in mono, as the recap filter names it. */
@@ -7767,9 +7823,15 @@
     function cardPeriodFacts(card, options, previous) {
         const days = Math.round((Date.parse(options.period.to) - Date.parse(options.period.from)) / 86400000) + 1;
         const where = options.sources.length > 1
-            ? t('card.list', {items: options.sources.slice(0, -1).join(', '), last: options.sources[options.sources.length - 1]})
+            ? t('card.list', {
+                items: options.sources.slice(0, -1).join(', '),
+                last: options.sources[options.sources.length - 1]
+            })
             : options.sources[0];
-        const facts = [['ok', where ? t('card.facts.recorded.at', {days: days, where: where}) : t('card.facts.recorded', {days: days})]];
+        const facts = [['ok', where ? t('card.facts.recorded.at', {
+            days: days,
+            where: where
+        }) : t('card.facts.recorded', {days: days})]];
         const before = {previous: previous.charAt(0).toUpperCase() + previous.slice(1)};
         if (card.angle === 'collective' && !options.previous_whole) {
             facts.push(['info', t('card.facts.previous.not_whole', before)]);
@@ -7813,7 +7875,9 @@
         })));
         if (shown.length < options.fixes.length) {
             const more = el('button', {
-                class: 'pill-button pill-sm fix-more', type: 'button', text: t('card.fix.all', {count: options.fixes.length})
+                class: 'pill-button pill-sm fix-more',
+                type: 'button',
+                text: t('card.fix.all', {count: options.fixes.length})
             });
             more.addEventListener('click', function () {
                 card.showAllFixes = true;
@@ -7937,7 +8001,11 @@
         });
         field.appendChild(el('label', {class: 'checkbox'}, [box, el('span', {text: remember.text})]));
         if (!allowed) {
-            field.appendChild(el('p', {class: 'tfield-note', id: 'card-remember-why', text: PSL.CARD_COPY.rememberDenied}));
+            field.appendChild(el('p', {
+                class: 'tfield-note',
+                id: 'card-remember-why',
+                text: PSL.CARD_COPY.rememberDenied
+            }));
         }
         if (card.rememberError) {
             field.appendChild(el('p', {class: 'tfield-error', role: 'alert', text: card.rememberError}));
@@ -7956,11 +8024,17 @@
                             store('localStorage', CARD_LANG_KEY, lang);
                             cardPick({lang: lang});
                         })]),
-                el('div', {class: 'card-opt card-opt-format'}, [el('span', {class: 'card-opt-label', text: t('card.format_label')}),
+                el('div', {class: 'card-opt card-opt-format'}, [el('span', {
+                    class: 'card-opt-label',
+                    text: t('card.format_label')
+                }),
                     cardSegmented(t('card.format_label'), 'format', PSL.CARD_FORMATS.map(function (format) {
                         return [format, PSL.CARD_FORMAT_LABELS[format]];
                     }), card.format, cardPickFormat)]),
-                el('div', {class: 'card-opt card-opt-country'}, [el('span', {class: 'card-opt-label', text: t('card.country')}),
+                el('div', {class: 'card-opt card-opt-country'}, [el('span', {
+                    class: 'card-opt-label',
+                    text: t('card.country')
+                }),
                     cardSegmented(t('card.country'), 'country', PSL.CARD_COUNTRIES.map(function (country) {
                         return [country, t('card.country.' + country)];
                     }), country, function (picked) {
@@ -7977,13 +8051,18 @@
     function cardActions(card, route) {
         const invalid = cardInvalid(card);
         const off = cardBlocked(card) || invalid || card.busy ? 'disabled' : null;
-        const preview = el('button', {class: 'pill-button pill-primary', type: 'button', id: 'card-preview', disabled: off},
+        const preview = el('button', {
+                class: 'pill-button pill-primary',
+                type: 'button',
+                id: 'card-preview',
+                disabled: off
+            },
             [svg([['path', {d: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'}],
                 ['circle', {cx: '12', cy: '12', r: '2.8'}]], 14),
-            el('span', {
-                text: t(card.busy === 'preview' ? 'card.action.rendering'
-                    : card.stale && !cardBlocked(card) ? 'card.action.preview_again' : 'card.action.preview')
-            })]);
+                el('span', {
+                    text: t(card.busy === 'preview' ? 'card.action.rendering'
+                        : card.stale && !cardBlocked(card) ? 'card.action.preview_again' : 'card.action.preview')
+                })]);
         preview.addEventListener('click', function () {
             cardPreview(route);
         });
@@ -8082,7 +8161,10 @@
             cardCheckAttachment(route);
         });
         const box = el('div', {class: 'attach'}, [
-            el('div', {class: 'attach-head'}, [el('p', {class: 'attach-title', text: t('card.attach.title', {domain: domain})}), button]),
+            el('div', {class: 'attach-head'}, [el('p', {
+                class: 'attach-title',
+                text: t('card.attach.title', {domain: domain})
+            }), button]),
             el('p', {class: 'attach-contact', text: PSL.cardContactText(domain, management ? 'pilotage' : 'tech')}),
             cardBusyNote(card.attachNote)
         ]);
@@ -8316,8 +8398,11 @@
 
     function cardKeyRotate(card) {
         const rotate = el('button', {
-            class: 'pill-button pill-sm', type: 'button', id: 'card-rotate',
-            disabled: card.keysBusy ? 'disabled' : null, text: t(card.keysBusy ? 'card.keys.working' : 'card.keys.rotate')
+            class: 'pill-button pill-sm',
+            type: 'button',
+            id: 'card-rotate',
+            disabled: card.keysBusy ? 'disabled' : null,
+            text: t(card.keysBusy ? 'card.keys.working' : 'card.keys.rotate')
         });
         rotate.addEventListener('click', function () {
             cardKeyWrite('/api/cards/keys/rotate', {});
@@ -8391,7 +8476,10 @@
 
     function cardRevokeOpen(card, key) {
         const open = el('button', {
-            class: 'pill-button pill-sm pill-crit', type: 'button', id: 'card-revoke-' + key.fingerprint, text: t('card.revoke')
+            class: 'pill-button pill-sm pill-crit',
+            type: 'button',
+            id: 'card-revoke-' + key.fingerprint,
+            text: t('card.revoke')
         });
         open.addEventListener('click', function () {
             card.revoking = key.fingerprint;
@@ -8560,7 +8648,10 @@
 
     /** What the report declares about itself, dashed: the Hub cannot check it. */
     function levelChip(level) {
-        return el('span', {class: 'chip chip-declared disc-level', text: levelLabel(level) || t('disc.level.undeclared')});
+        return el('span', {
+            class: 'chip chip-declared disc-level',
+            text: levelLabel(level) || t('disc.level.undeclared')
+        });
     }
 
     /** What this Hub recomputed, solid. Anything it did not check reads as muted text, never a mark. */
@@ -8633,7 +8724,10 @@
             figure(t('disc.figure.energy'), fixed(f.energy_kwh, 2), 'kWh', null),
             figure(t('disc.figure.carbon'), fixed(f.carbon_kgco2eq, 2), 'kgCO₂eq',
                 f.carbon_kgco2eq == null ? null
-                    : t('disc.figure.bracket', {low: fixed(f.carbon_kgco2eq / 2, 2), high: fixed(f.carbon_kgco2eq * 2, 2)})),
+                    : t('disc.figure.bracket', {
+                        low: fixed(f.carbon_kgco2eq / 2, 2),
+                        high: fixed(f.carbon_kgco2eq * 2, 2)
+                    })),
             figure(t('disc.figure.avoidable'), f.avoidable_ratio == null ? t('unit.na') : Math.round(f.avoidable_ratio * 100),
                 t('disc.figure.avoidable.unit'), null),
             el('div', {class: 'disc-figure'}, [
@@ -8730,8 +8824,11 @@
                 ]),
                 el('span', {
                     class: 'disc-dates',
-                    text: t('disc.card.dates', {from: PSL.day(item.period.from, {withYear: true}), to: PSL.day(item.period.to, {withYear: true}),
-                        days: periodDays(item.period)})
+                    text: t('disc.card.dates', {
+                        from: PSL.day(item.period.from, {withYear: true}),
+                        to: PSL.day(item.period.to, {withYear: true}),
+                        days: periodDays(item.period)
+                    })
                 }),
                 el('span', {class: 'disc-chips'}, disclosureChips(item))
             ]),
@@ -8845,7 +8942,11 @@
             el('span', {class: 'disc-figure-label', text: t('disc.bracket.label')}),
             el('div', {
                 class: 'disc-bracket-track', role: 'img',
-                'aria-label': t('disc.bracket.aria', {value: fixed(carbon, 2), low: fixed(carbon / 2, 2), high: fixed(carbon * 2, 2)})
+                'aria-label': t('disc.bracket.aria', {
+                    value: fixed(carbon, 2),
+                    low: fixed(carbon / 2, 2),
+                    high: fixed(carbon * 2, 2)
+                })
             }, [
                 el('span', {class: 'disc-bracket-band'}),
                 el('span', {class: 'disc-bracket-dot'})
@@ -8944,7 +9045,10 @@
     function integrityPanel(detail) {
         const rows = PSL.checkRows(detail).map(function (row) {
             const outcome = row.outcome === 'checked' ? checkChip(t('disc.outcome.checked'), 'checked')
-                : row.outcome === 'declared' ? el('span', {class: 'chip chip-declared disc-level', text: t('disc.outcome.declared')})
+                : row.outcome === 'declared' ? el('span', {
+                        class: 'chip chip-declared disc-level',
+                        text: t('disc.outcome.declared')
+                    })
                     : el('span', {
                         class: 'chip disc-unchecked',
                         text: PSL.hasText('disc.outcome.' + row.outcome) ? t('disc.outcome.' + row.outcome) : row.outcome
@@ -9086,7 +9190,10 @@
         });
         return detailPanel(t('disc.method.head'), t('disc.method.sub'), [
             el('dl', {class: 'disc-defs'}, defs.flatMap(function (pair) {
-                return [el('dt', {text: t('disc.method.' + pair[0])}), el('dd', {class: 'table-mono', text: String(pair[1])})];
+                return [el('dt', {text: t('disc.method.' + pair[0])}), el('dd', {
+                    class: 'table-mono',
+                    text: String(pair[1])
+                })];
             })),
             // Copied verbatim from the report: engine text, as the engine wrote it.
             disclaimers.length ? engineText(el('ol', {class: 'disc-disclaimers'}, disclaimers.map(function (text) {
@@ -9199,11 +9306,14 @@
         [
             ruledOverline(t('disc.detail.overline', {period: PSL.periodLabel(item.period)})),
             el('h1', {
-                class: 'page-title', text: t('disc.detail.title', {organisation: item.organisation,
-                    from: PSL.day(item.period.from, {withYear: true}), to: PSL.day(item.period.to, {withYear: true})})
+                class: 'page-title', text: t('disc.detail.title', {
+                    organisation: item.organisation,
+                    from: PSL.day(item.period.from, {withYear: true}), to: PSL.day(item.period.to, {withYear: true})
+                })
             }),
             el('p', {
-                class: 'page-sub', text: t(item.pdf === 'rendered' ? 'disc.detail.sub.rendered' : 'disc.detail.sub.kept', {
+                class: 'page-sub',
+                text: t(item.pdf === 'rendered' ? 'disc.detail.sub.rendered' : 'disc.detail.sub.kept', {
                     intent: PSL.hasText(intent) ? t(intent)
                         : t('disc.detail.intent.other', {intent: item.intent.charAt(0).toUpperCase() + item.intent.slice(1)}),
                     confidentiality: enumWord('confidentiality', item.confidentiality),
@@ -9263,7 +9373,10 @@
         section.appendChild(accessCard(t('access.card.groups'), [
             access.groups.length === 0
                 ? el('p', {class: 'access-muted', text: t('access.groups.none')})
-                : el('ul', {class: 'access-chips', 'aria-label': t('access.groups.label')}, access.groups.map(function (group) {
+                : el('ul', {
+                    class: 'access-chips',
+                    'aria-label': t('access.groups.label')
+                }, access.groups.map(function (group) {
                     return el('li', {
                         class: 'chip',
                         'data-origin': group.origin,
@@ -9398,7 +9511,7 @@
                 : rows.length === 0
                     ? el('p', {class: 'access-muted', text: t('access.tokens.none')})
                     : accessTable(t('access.tokens.caption'), [t('access.col.owner'), t('access.col.requested_from'),
-                        t('access.col.created'), t('access.col.expires'), t('access.col.last_used'), ''],
+                            t('access.col.created'), t('access.col.expires'), t('access.col.last_used'), ''],
                         rows.map(function (row) {
                             return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row, headingId)];
                         }))
@@ -9407,7 +9520,12 @@
 
     function revokeButton(row, card) {
         const label = t('access.revoke.label', {owner: row.owner, created: row.created});
-        const button = el('button', {type: 'button', class: 'pill-button', text: t('ack.button.revoke'), 'aria-label': label});
+        const button = el('button', {
+            type: 'button',
+            class: 'pill-button',
+            text: t('ack.button.revoke'),
+            'aria-label': label
+        });
         let armed = false;
         const disarm = function () {
             armed = false;
@@ -9569,7 +9687,8 @@
         if (state.runs.length === 0) {
             section.appendChild(el('div', {class: 'empty-state'}, [
                 el('p', {
-                    class: 'empty-title', text: t('recent.empty.title', {hours: state.status.limits.report_retention_hours})
+                    class: 'empty-title',
+                    text: t('recent.empty.title', {hours: state.status.limits.report_retention_hours})
                 }),
                 el('p', {text: t('recent.empty.body', {hours: state.status.limits.report_retention_hours})}),
                 el('div', {class: 'outcome-actions empty-actions'}, [
@@ -9587,7 +9706,12 @@
             section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn'}, [
                 svg([['path', {d: 'M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'}],
                     ['path', {d: 'M12 9v4M12 17h.01'}]], 16),
-                el('p', {text: t('recent.binaries', {versions: binaries.join(t('recent.and')), count: binaries.length})})
+                el('p', {
+                    text: t('recent.binaries', {
+                        versions: binaries.join(t('recent.and')),
+                        count: binaries.length
+                    })
+                })
             ]));
         }
 
@@ -9610,7 +9734,11 @@
         const card = el('a', {class: 'run-card', 'data-status': key, href: '#/run/' + run.id});
 
         card.appendChild(el('span', {class: 'run-card-line'}, [
-            el('span', {class: 'status-pill', 'data-status': key, text: t(key === 'empty' ? 'recent.status.empty' : 'status.' + key)}),
+            el('span', {
+                class: 'status-pill',
+                'data-status': key,
+                text: t(key === 'empty' ? 'recent.status.empty' : 'status.' + key)
+            }),
             el('span', {class: 'run-card-name', text: run.source_name}),
             el('span', {class: 'chip', text: PSL.KIND_LABEL[run.kind] || run.kind}),
             el('span', {
@@ -9737,7 +9865,11 @@
             stage.appendChild(reportGone(run, key));
             return shell;
         }
-        const frame = el('iframe', {class: 'report-frame', src: '/reports/' + id + '.html', title: t('report.frame_title')});
+        const frame = el('iframe', {
+            class: 'report-frame',
+            src: '/reports/' + id + '.html',
+            title: t('report.frame_title')
+        });
         frame.addEventListener('load', function () {
             loading.remove();
             // A report deleted under a run that still reads succeeded comes back as

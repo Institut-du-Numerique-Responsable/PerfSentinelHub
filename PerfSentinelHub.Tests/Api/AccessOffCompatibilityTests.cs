@@ -17,7 +17,8 @@ namespace PerfSentinelHub.Tests.Api;
 
 /// <summary>
 ///     Hub:Access:Enabled off, the default, is today's Hub byte for byte: with Auth off,
-///     and with Auth on and access off but for the framing header every signed-in response carries. The fixtures were captured before enforcement
+///     and with Auth on and access off but for the framing header every signed-in response carries. The fixtures were
+///     captured before enforcement
 ///     existed, on a seeded database under a fixed clock. The Hub's own version is the
 ///     one field that moves with a release, so it is read from the build.
 /// </summary>

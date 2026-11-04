@@ -193,7 +193,7 @@ public sealed record CardRequest(
     private static bool TryReadDay(string raw, out DateOnly day)
     {
         return DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None,
-                   out day) && day >= Earliest;
+            out day) && day >= Earliest;
     }
 
     // A blank value reads as absent, as the other query routes read it.

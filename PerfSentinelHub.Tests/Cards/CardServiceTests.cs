@@ -87,7 +87,7 @@ public sealed class CardServiceTests : IAsyncLifetime
     public async Task A_period_still_running_is_refused()
     {
         await _seed.LedgerAsync("a", Sealed(October));
-        var scope = Scope(at: new DateOnly(2026, 11, 2));
+        var scope = Scope(new DateOnly(2026, 11, 2));
 
         Assert.Equal("open_period", await RefusedAsync(Ask("collective", scope)));
         var options = await _service.OptionsAsync(scope, Token);
@@ -193,7 +193,10 @@ public sealed class CardServiceTests : IAsyncLifetime
 
         static SourceOptions[] Named(int length)
         {
-            return [Sources[0] with { Name = new string('e', length) }, Sources[1] with { Name = new string('u', length) }];
+            return
+            [
+                Sources[0] with { Name = new string('e', length) }, Sources[1] with { Name = new string('u', length) }
+            ];
         }
     }
 
@@ -337,14 +340,14 @@ public sealed class CardServiceTests : IAsyncLifetime
 
         var input = await ReadyAsync(Ask("story"));
 
-        Assert.Equal(new CardFiguresBlock(CitedOps: 41), input.Figures);
+        Assert.Equal(new CardFiguresBlock(41), input.Figures);
         Assert.Null(input.BeforeFixPeriod);
     }
 
     [Fact]
     public async Task A_slow_story_compares_with_the_threshold_once_a_clean_day_shows_passes_below()
     {
-        await SlowStoryAsync(passes: 5);
+        await SlowStoryAsync(5);
 
         var input = await ReadyAsync(Ask("story", signature: S1));
 
@@ -356,7 +359,7 @@ public sealed class CardServiceTests : IAsyncLifetime
     [Fact]
     public async Task Without_passes_below_the_story_cites_no_threshold()
     {
-        await SlowStoryAsync(passes: null);
+        await SlowStoryAsync(null);
 
         var input = await ReadyAsync(Ask("story", signature: S1));
 
@@ -367,7 +370,7 @@ public sealed class CardServiceTests : IAsyncLifetime
     [Fact]
     public async Task Without_a_trace_date_the_story_cites_no_threshold()
     {
-        await SlowStoryAsync(passes: 5, firstTimestamp: "not a date");
+        await SlowStoryAsync(5, "not a date");
 
         var input = await ReadyAsync(Ask("story", signature: S1));
 
@@ -395,7 +398,7 @@ public sealed class CardServiceTests : IAsyncLifetime
     [Fact]
     public async Task The_curve_stops_at_the_first_uncovered_period()
     {
-        await CurveAsync(uncoveredAugust: true);
+        await CurveAsync(true);
 
         Assert.Equal([50L, 10L], (await ReadyAsync(Ask("curve"))).Figures.WastePermille!);
     }
@@ -403,7 +406,8 @@ public sealed class CardServiceTests : IAsyncLifetime
     [Fact]
     public async Task The_curve_holds_six_periods_at_most()
     {
-        var months = Enumerable.Range(4, 7).Select(month => RecapPeriod.Of(RecapPeriodKind.Month, new DateOnly(2026, month, 1)));
+        var months = Enumerable.Range(4, 7)
+            .Select(month => RecapPeriod.Of(RecapPeriodKind.Month, new DateOnly(2026, month, 1)));
         await _seed.LedgerAsync("a",
             [.. months.SelectMany(month => Sealed(month, day => day with { AvoidableIoOps = 1, TotalIoOps = 10 }))]);
 
@@ -506,7 +510,10 @@ public sealed class CardServiceTests : IAsyncLifetime
     public async Task The_collective_names_the_period_before_its_fixes()
     {
         await _seed.LedgerAsync("a",
-            [.. Sealed(September, day => day with { AvoidableGco2Low = 3.0, AvoidableIoOps = 1000 }), .. Sealed(October)],
+            [
+                .. Sealed(September, day => day with { AvoidableGco2Low = 3.0, AvoidableIoOps = 1000 }),
+                .. Sealed(October)
+            ],
             new DetectionCountRow(20700, N1, 2, 100), new DetectionCountRow(20701, N2, 2, 200));
         await _seed.FixAsync("a", N1, Done);
         await _seed.FixAsync("a", N2, Done + 1);

@@ -110,7 +110,8 @@ public sealed class IncidentRefreshGate() : RequestGate(MaxReads)
 ///     refused rather than queued. Sized by configuration, unlike the gates above: the cost of a
 ///     render depends on the host, its CPU count and the memory limit of its pod.
 /// </summary>
-public sealed class CardRenderGate(IOptions<HubOptions> options) : RequestGate(options.Value.Cards.MaxConcurrentRenders);
+public sealed class CardRenderGate(IOptions<HubOptions> options)
+    : RequestGate(options.Value.Cards.MaxConcurrentRenders);
 
 /// <summary>One publication at a time: each runs the engine, and two would race on the same uuid.</summary>
 public sealed class DisclosureImportGate() : RequestGate(1);

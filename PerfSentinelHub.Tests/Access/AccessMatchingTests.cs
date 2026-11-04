@@ -164,7 +164,8 @@ public sealed class AccessMatchingTests
         Assert.False(AccessPattern.Compile(new PatternOptions { Source = "tempo", Attribute = "team=shop" })
             .CoversSubject("tempo", "cart", [shopCopy]));
         // The copies' own source is not the subject's: a source part reads T alone.
-        Assert.True(AccessPattern.Compile(new PatternOptions { Source = "tempo", Service = "c*", Attribute = "team=shop" })
+        Assert.True(AccessPattern
+            .Compile(new PatternOptions { Source = "tempo", Service = "c*", Attribute = "team=shop" })
             .CoversSubject("tempo", "cart", [shopCopy]));
     }
 

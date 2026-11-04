@@ -29,7 +29,8 @@ public interface IRecapProgress
 
 /// <summary>
 ///     Who a computed recap is for: the caller's subject and that scope's patterns when their
-///     findings.read scope is narrowed, null when it is not, and the ids of the sources they see. Two callers with the same audience
+///     findings.read scope is narrowed, null when it is not, and the ids of the sources they see. Two callers with the
+///     same audience
 ///     would be computed the same recap, so they share one.
 /// </summary>
 public sealed record RecapJobAudience(string? Owner, string Sources);

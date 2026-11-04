@@ -146,7 +146,8 @@ public sealed class CardRequestTests
     public void An_equivalence_country_is_read(string country)
     {
         Assert.Equal(country,
-            Accepted(Body(("angle", "curve"), ("period", "month"), ("equivalence_country", country))).EquivalenceCountry);
+            Accepted(Body(("angle", "curve"), ("period", "month"), ("equivalence_country", country)))
+                .EquivalenceCountry);
     }
 
     [Fact]

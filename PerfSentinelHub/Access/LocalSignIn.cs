@@ -303,41 +303,41 @@ public static partial class LocalSignIn
         var other = lang == HubLang.Fr ? HubLang.En : HubLang.Fr;
         var html =
             $"""
-              <!doctype html>
-              <html lang="{lang}">
-              <head>
-              <meta charset="utf-8">
-              <meta content="width=device-width, initial-scale=1" name="viewport">
-              <title>{T("signin.title")}</title>
-              <style>{_style}</style>
-              </head>
-              <body>
-              <main>
-              <div class="top">
-              <div aria-label="Perf Sentinel Hub" class="brand" role="img">{_logos}<span aria-hidden="true" class="suffix">hub</span></div>
-              {LangLink($"{pathBase}/auth/sign-in?return_url={returnQuery}&amp;lang={other}", lang)}
-              </div>
-              <h1>{T("signin.heading")}</h1>
-              <p class="lede">{T("signin.lede")}</p>
-              <a class="sso" href="{pathBase}/auth/sign-in/sso?return_url={returnQuery}">{T("signin.sso")}</a>
-              <details{(alert is null ? "" : " open")}>
-              <summary>{T("signin.local")}</summary>
-              <p>{T("signin.local.note")}</p>
-              {(alert is null ? "" : $"<p class=\"alert\" role=\"alert\">{alert}</p>")}
-              <form action="{pathBase}/auth/sign-in/local" method="post">
-              <label for="name">{T("signin.name")}</label>
-              <input autocapitalize="none" autocomplete="username"{(alert is null ? "" : " autofocus")} id="name" maxlength="64" name="name" required spellcheck="false">
-              <label for="password">{T("signin.password")}</label>
-              <input autocomplete="current-password" id="password" maxlength="1024" name="password" required type="password">
-              <input name="return_url" type="hidden" value="{encoder.Encode(returnUrl)}">
-              <input name="lang" type="hidden" value="{lang}">
-              <button type="submit">{T("signin.submit")}</button>
-              </form>
-              </details>
-              </main>
-              </body>
-              </html>
-              """;
+             <!doctype html>
+             <html lang="{lang}">
+             <head>
+             <meta charset="utf-8">
+             <meta content="width=device-width, initial-scale=1" name="viewport">
+             <title>{T("signin.title")}</title>
+             <style>{_style}</style>
+             </head>
+             <body>
+             <main>
+             <div class="top">
+             <div aria-label="Perf Sentinel Hub" class="brand" role="img">{_logos}<span aria-hidden="true" class="suffix">hub</span></div>
+             {LangLink($"{pathBase}/auth/sign-in?return_url={returnQuery}&amp;lang={other}", lang)}
+             </div>
+             <h1>{T("signin.heading")}</h1>
+             <p class="lede">{T("signin.lede")}</p>
+             <a class="sso" href="{pathBase}/auth/sign-in/sso?return_url={returnQuery}">{T("signin.sso")}</a>
+             <details{(alert is null ? "" : " open")}>
+             <summary>{T("signin.local")}</summary>
+             <p>{T("signin.local.note")}</p>
+             {(alert is null ? "" : $"<p class=\"alert\" role=\"alert\">{alert}</p>")}
+             <form action="{pathBase}/auth/sign-in/local" method="post">
+             <label for="name">{T("signin.name")}</label>
+             <input autocapitalize="none" autocomplete="username"{(alert is null ? "" : " autofocus")} id="name" maxlength="64" name="name" required spellcheck="false">
+             <label for="password">{T("signin.password")}</label>
+             <input autocomplete="current-password" id="password" maxlength="1024" name="password" required type="password">
+             <input name="return_url" type="hidden" value="{encoder.Encode(returnUrl)}">
+             <input name="lang" type="hidden" value="{lang}">
+             <button type="submit">{T("signin.submit")}</button>
+             </form>
+             </details>
+             </main>
+             </body>
+             </html>
+             """;
         return TypedResults.Content(html, "text/html; charset=utf-8", statusCode: statusCode);
 
         string T(string key)
@@ -353,7 +353,8 @@ public static partial class LocalSignIn
     public static string LangLink(string href, string lang)
     {
         var other = lang == HubLang.Fr ? HubLang.En : HubLang.Fr;
-        return $"""<a aria-label="{HubText.Get(lang, "page.lang.switch")}" class="shell-lang" href="{href}" hreflang="{other}"><svg aria-hidden="true" class="shell-lang-globe" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9z"></path></svg><span aria-hidden="true" class="shell-lang-window"><span class="shell-lang-track"><span>FR</span><span>EN</span></span></span></a>""";
+        return
+            $"""<a aria-label="{HubText.Get(lang, "page.lang.switch")}" class="shell-lang" href="{href}" hreflang="{other}"><svg aria-hidden="true" class="shell-lang-globe" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9z"></path></svg><span aria-hidden="true" class="shell-lang-window"><span class="shell-lang-track"><span>FR</span><span>EN</span></span></span></a>""";
     }
 
     [LoggerMessage(2020, LogLevel.Warning, "Local account {Account} signed in from {ClientAddress}.")]

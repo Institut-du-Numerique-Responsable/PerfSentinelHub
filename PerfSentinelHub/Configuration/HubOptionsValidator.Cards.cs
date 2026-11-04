@@ -39,6 +39,7 @@ public sealed partial class HubOptionsValidator
     }
 
     // At most 253 characters, two labels or more, each 1 to 63 of [a-z0-9-] with no '-' at either end.
-    [GeneratedRegex(@"^(?=.{1,253}\z)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\z")]
+    [GeneratedRegex(
+        @"^(?=.{1,253}\z)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\z")]
     private static partial Regex CardDomainPattern();
 }

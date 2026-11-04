@@ -77,7 +77,8 @@ public sealed partial class RecapReportRendererTests
         var html = Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapSnapshots.Distinctive(), HubLang.Fr));
 
         Assert.StartsWith("<!doctype html>\n<html lang=\"fr\" data-theme=\"light\">", html, StringComparison.Ordinal);
-        Assert.Contains("<title>Récap Perf Sentinel, du 26 oct. 2026 au 1er nov. 2026</title>", WebUtility.HtmlDecode(html),
+        Assert.Contains("<title>Récap Perf Sentinel, du 26 oct. 2026 au 1er nov. 2026</title>",
+            WebUtility.HtmlDecode(html),
             StringComparison.Ordinal);
         Assert.Contains("<time datetime=\"2026-10-29T14:32:05Z\">29/10/2026 14:32 UTC</time>", html,
             StringComparison.Ordinal);
@@ -87,7 +88,8 @@ public sealed partial class RecapReportRendererTests
         var policy = RecapReportRenderer.ContentSecurityPolicyFor(HubLang.Fr);
         foreach (var script in ExecutableScripts(html))
             Assert.Contains(Hash(script), policy, StringComparison.Ordinal);
-        Assert.Equal(RecapReportRenderer.ContentSecurityPolicy, RecapReportRenderer.ContentSecurityPolicyFor(HubLang.En));
+        Assert.Equal(RecapReportRenderer.ContentSecurityPolicy,
+            RecapReportRenderer.ContentSecurityPolicyFor(HubLang.En));
         Assert.NotEqual(RecapReportRenderer.ContentSecurityPolicy, policy);
     }
 
@@ -104,12 +106,13 @@ public sealed partial class RecapReportRendererTests
 
         var html = RecapReportRenderer.Render(RecapViews.Frozen(old));
 
-        Assert.Equal(html, RecapReportRenderer.Render(RecapViews.Frozen(old), HubLang.En));
+        Assert.Equal(html, RecapReportRenderer.Render(RecapViews.Frozen(old)));
         Assert.Contains(stored, Visible(Encoding.UTF8.GetString(html)), StringComparison.Ordinal);
         Assert.Contains(stored,
             Visible(Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapViews.Frozen(old), HubLang.Fr))),
             StringComparison.Ordinal);
-        Assert.StartsWith("<!doctype html>\n<html lang=\"en\"", Encoding.UTF8.GetString(html), StringComparison.Ordinal);
+        Assert.StartsWith("<!doctype html>\n<html lang=\"en\"", Encoding.UTF8.GetString(html),
+            StringComparison.Ordinal);
     }
 
     [Fact]

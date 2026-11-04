@@ -13,7 +13,8 @@ namespace PerfSentinelHub.Recaps;
 ///     Sends the webhook deliveries of the recap_deliveries rows, so a restart resumes what was due.
 ///     A 2xx settles one; anything else, a redirect included, is retried with the disclosures' backoff
 ///     and given up after the same number of attempts. A webhook no longer configured, a target its
-///     subscription no longer lists or a report purged meanwhile fails without a request. An e-mail row goes through the relay: a 250 settles it,
+///     subscription no longer lists or a report purged meanwhile fails without a request. An e-mail row goes through the
+///     relay: a 250 settles it,
 ///     a 5xx fails it at once, and a 4xx or silence is retried the same way. After the first silence of a
 ///     pass the other e-mails wait for the next one, so a dead relay costs one timeout, not one per address.
 /// </summary>

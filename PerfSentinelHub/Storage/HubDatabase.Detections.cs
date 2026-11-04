@@ -230,8 +230,7 @@ public sealed partial class HubDatabase
         }
 
         if (fromPush)
-            await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken,
-                "source_imports");
+            await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

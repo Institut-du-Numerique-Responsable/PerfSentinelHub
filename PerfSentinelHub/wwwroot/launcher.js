@@ -418,8 +418,12 @@
          * @param {import('../types').WeightBand} key @param {string} tone @param {boolean} needsAck
          */
         const band = (key, tone, needsAck) => ({
-            key: key, label: t('weight.' + key + '.label'),
-            fg: 'var(--' + tone + '-fg)', bg: 'var(--' + tone + '-bg)', bd: 'var(--' + tone + '-bd)', needsAck: needsAck,
+            key: key,
+            label: t('weight.' + key + '.label'),
+            fg: 'var(--' + tone + '-fg)',
+            bg: 'var(--' + tone + '-bg)',
+            bd: 'var(--' + tone + '-bd)',
+            needsAck: needsAck,
             body: t('weight.' + key + '.body', {cap: hardCap})
         });
         if (!Number.isFinite(n) || n < 1) return band('invalid', 'crit', false);
@@ -1796,7 +1800,10 @@
      */
     function monthName(month, language = LANG) {
         if (language !== 'fr') return CARD_MONTHS[month - 1];
-        return new Intl.DateTimeFormat('fr-FR', {month: 'long', timeZone: 'UTC'}).format(new Date(Date.UTC(2000, month - 1, 1)));
+        return new Intl.DateTimeFormat('fr-FR', {
+            month: 'long',
+            timeZone: 'UTC'
+        }).format(new Date(Date.UTC(2000, month - 1, 1)));
     }
 
     /**
@@ -1807,7 +1814,10 @@
     function periodLabel(period) {
         const parts = String(period.to).split('-');
         const month = Number(parts[1]);
-        if (period.type === 'calendar-quarter') return t('period.quarter', {year: parts[0], quarter: Math.floor((month - 1) / 3) + 1});
+        if (period.type === 'calendar-quarter') return t('period.quarter', {
+            year: parts[0],
+            quarter: Math.floor((month - 1) / 3) + 1
+        });
         if (period.type === 'calendar-year') return parts[0];
         if (period.type === 'calendar-month') return monthName(month) + ' ' + parts[0];
         return t('period.range', {from: day(period.from, {withYear: true}), to: day(period.to, {withYear: true})});
@@ -2870,7 +2880,12 @@
     function cardPeriodName(kind, from, language = LANG) {
         const date = cardDate(from);
         const year = String(date.getUTCFullYear());
-        if (kind === 'week') return tIn(language, 'card.period_name.week', {day: day(from, {withYear: true, language})});
+        if (kind === 'week') return tIn(language, 'card.period_name.week', {
+            day: day(from, {
+                withYear: true,
+                language
+            })
+        });
         if (kind === 'month') {
             return tIn(language, 'card.period_name.month', {month: monthName(date.getUTCMonth() + 1, language), year});
         }

@@ -12,6 +12,9 @@ public static class CardRules
 {
     private const string PreviousPrefix = "previous_";
 
+    /// <summary>Where the engine places the card file's signature; refused in every card text.</summary>
+    public const string EnvelopeMarker = "{\"content_sig\":\"";
+
     /// <summary>Every reason a card is refused, stable: the API and the screen key on them.</summary>
     public static readonly IReadOnlyList<string> Reasons =
     [
@@ -40,9 +43,6 @@ public static class CardRules
         return rate is { } value && value < 1 ? Math.Max(0, (int)decimal.Floor((decimal)value * 1000m)) : 1000;
     }
 
-    /// <summary>Where the engine places the card file's signature; refused in every card text.</summary>
-    public const string EnvelopeMarker = "{\"content_sig\":\"";
-
     /// <summary>
     ///     The engine's text rule: trimmed, non-empty, at most maxChars, no control or format character,
     ///     and never the card file's marker.
@@ -62,7 +62,9 @@ public static class CardRules
             RecapPeriodKind.Week => $"the week of {Day(period.From)}",
             RecapPeriodKind.Month => period.From.ToString("MMMM yyyy", CultureInfo.InvariantCulture),
             RecapPeriodKind.Quarter => $"Q{(period.From.Month - 1) / 3 + 1} {year}",
-            RecapPeriodKind.Semester => period.From.Month == 1 ? $"the first half of {year}" : $"the second half of {year}",
+            RecapPeriodKind.Semester => period.From.Month == 1
+                ? $"the first half of {year}"
+                : $"the second half of {year}",
             RecapPeriodKind.Year => year,
             _ => Day(period.From)
         };

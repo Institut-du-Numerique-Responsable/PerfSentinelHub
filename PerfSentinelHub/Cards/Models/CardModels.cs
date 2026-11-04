@@ -13,7 +13,8 @@ public enum CardRevokeOutcome
 }
 
 /// <summary>The engine could not serve a card request: <c>unsupported</c>, <c>timeout</c> or <c>engine_contract</c>.</summary>
-public sealed class CardEngineException(string reason) : Exception($"The engine could not serve the card request: {reason}.")
+public sealed class CardEngineException(string reason)
+    : Exception($"The engine could not serve the card request: {reason}.")
 {
     public string Reason { get; } = reason;
 }

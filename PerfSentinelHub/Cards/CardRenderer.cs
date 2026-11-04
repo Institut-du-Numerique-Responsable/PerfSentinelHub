@@ -50,7 +50,10 @@ public sealed class CardRenderer(EngineProbe engine, IOptions<HubOptions> option
                 return new CardRender.Malformed();
 
             var result = await RunAsync(binary,
-                ["card", "render", "--input", json, "--signing-key", signingKey, "--out-dir", output, "--format", format],
+                [
+                    "card", "render", "--input", json, "--signing-key", signingKey, "--out-dir", output, "--format",
+                    format
+                ],
                 Timeout, cancellationToken);
             return result is null
                 ? new CardRender.Timeout()
