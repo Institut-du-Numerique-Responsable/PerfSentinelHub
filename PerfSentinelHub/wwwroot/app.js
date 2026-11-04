@@ -1641,7 +1641,7 @@
             // A note and a token belong to the disclosure they were made on.
             if (!state.disclosure || !id || state.disclosure.disclosure.id !== id) {
                 state.disclosureNote = null;
-                state.disclosureLink = null;
+                state.disclosureLink = /** @type {?{id: string, pdfUrl: string, reportUrl: string}} */ (null);
                 state.withdrawOpen = false;
             }
             if (id) loadDisclosure(id);
@@ -1679,7 +1679,7 @@
             const kept = state.handoff;
             const intact = kept && state.form.rangeMode === 'absolute' && state.form.fromMs === kept.fromMs
                 && state.form.toMs === kept.toMs && state.form.service === kept.service;
-            if (!intact) state.handoff = null;
+            if (!intact) state.handoff = /** @type {?Handoff} */ (null);
             return;
         }
         state.handoff = handoff;
@@ -1708,13 +1708,13 @@
         if (!handoff) {
             const kept = state.traceHandoff;
             if (kept && state.form.traceId !== kept.traceId && state.form.traceId !== kept.otherTraceId) {
-                state.traceHandoff = null;
+                state.traceHandoff = /** @type {?TraceHandoff} */ (null);
             }
             return;
         }
         state.traceHandoff = handoff;
         // A trace replaces a window handed over before it, banner included.
-        state.handoff = null;
+        state.handoff = /** @type {?Handoff} */ (null);
         state.form.mode = 'trace';
         state.form.traceId = handoff.traceId;
         state.form.service = '';
@@ -4362,8 +4362,8 @@
     function rerun(run) {
         Object.assign(state.form, PSL.formFromRequest(run.request),
             {sourceId: run.source_id, ackUnreachable: false, ackHeavy: false});
-        state.handoff = null;
-        state.traceHandoff = null;
+        state.handoff = /** @type {?Handoff} */ (null);
+        state.traceHandoff = /** @type {?TraceHandoff} */ (null);
         location.hash = '#/new';
     }
 
@@ -6878,7 +6878,7 @@
         /** @type {Promise<unknown>} */
         let released = Promise.resolve();
         if (previous && previous.status === 'running' && previous.key !== key) released = cancelRecapJob(previous.id);
-        if (previous && previous.status === 'running' && (previous.key !== key || refresh)) state.recapJob = null;
+        if (previous && previous.status === 'running' && (previous.key !== key || refresh)) state.recapJob = /** @type {?FollowedRecapJob} */ (null);
         // A start for other filters not answered yet is let go once it answers (startRecapJob): waited
         // for too, or the Hub would find this caller busy with the job it is about to give up.
         const starting = state.recapStarting;
@@ -6963,7 +6963,7 @@
             }
             landRecap(sequence, Promise.reject(error), opening);
         }).finally(function () {
-            if (state.recapStarting === start) state.recapStarting = null;
+            if (state.recapStarting === start) state.recapStarting = /** @type {?{key: string, done: ?Promise<unknown>}} */ (null);
         });
     }
 
@@ -7059,7 +7059,7 @@
      * @param {HttpError} error
      */
     function restartRecapJob(sequence, route, all, opening, error) {
-        state.recapJob = null;
+        state.recapJob = /** @type {?FollowedRecapJob} */ (null);
         if (state.recapRestarts > 0) {
             landRecap(sequence, Promise.reject(error), opening);
             return;
