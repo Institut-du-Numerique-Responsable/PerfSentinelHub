@@ -374,7 +374,7 @@
      * Presentation status. `empty` is derived here and never stored: it must not
      * become a seventh value of `analysis_runs.status`.
      * @param {import('../types').Analysis} a
-     * @returns {import('../types').DisplayStatus}
+     * @returns {import('../types').AnalysisStatus | 'empty' | 'queued'}
      */
     function statusKey(a) {
         if (a.status === 'succeeded' && a.result && a.result.empty) return 'empty';
@@ -1922,6 +1922,7 @@
      */
     function hostRows(report) {
         const aggregate = (report && report.aggregate) || {};
+        /** @type {{database_kgco2eq?: number | null, messaging_kgco2eq?: number | null}} */
         const breakdown = aggregate.carbon_breakdown || {};
         return [
             [t('disc.host.database'), aggregate.database_waste, breakdown.database_kgco2eq],
