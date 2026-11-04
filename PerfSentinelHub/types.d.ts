@@ -23,19 +23,20 @@ export type ErrorCode =
 /** What a source is read through. Mirrors the `kind` column. */
 export type SourceKind = "daemon" | "tempo" | "jaeger_query";
 
-/**
- * The six stored statuses plus the two the page derives. `empty` and `queued`
- * exist for reading only, `analysis_runs.status` never holds them.
- */
-export type DisplayStatus =
+/** The six statuses `analysis_runs.status` holds. */
+export type AnalysisStatus =
     | "pending"
     | "running"
     | "succeeded"
     | "failed"
     | "interrupted"
-    | "expired"
-    | "empty"
-    | "queued";
+    | "expired";
+
+/**
+ * The six stored statuses plus the two the page derives. `empty` and `queued`
+ * exist for reading only, `analysis_runs.status` never holds them.
+ */
+export type DisplayStatus = AnalysisStatus | "empty" | "queued";
 
 /** How a requested trace count sits against the Hub's caps. */
 export type WeightBand = "invalid" | "safe" | "heavy" | "ceiling" | "over";
@@ -79,7 +80,7 @@ export interface Source {
 /** One analysis run, as the analyses routes return it. */
 export interface Analysis {
     id: string;
-    status: Exclude<DisplayStatus, "empty" | "queued">;
+    status: AnalysisStatus;
     source_id?: string;
     source_name?: string;
     kind?: SourceKind;

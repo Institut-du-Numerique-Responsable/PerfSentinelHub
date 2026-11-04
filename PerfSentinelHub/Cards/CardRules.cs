@@ -40,7 +40,7 @@ public static class CardRules
     // Through decimal so 0.29 reads 290, not the 289 of its binary sum. No sampled day reads the whole traffic.
     public static int SampledPermille(double? rate)
     {
-        return rate is { } value && value < 1 ? Math.Max(0, (int)decimal.Floor((decimal)value * 1000m)) : 1000;
+        return rate is < 1 and var value ? Math.Max(0, (int)decimal.Floor((decimal)value * 1000m)) : 1000;
     }
 
     /// <summary>

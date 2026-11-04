@@ -27,7 +27,7 @@ public sealed class CardService(HubDatabase database, IOptions<HubOptions> optio
         var told = frame.Refusal is null ? await TellAsync(frame, previousWhole, cancellationToken) : [];
         var stories = Stories(told);
         var labels = await database.ReadEndpointLabelsAsync(
-            [.. stories.Select(told => (told.Story!.Service, told.Story.Endpoint))], cancellationToken);
+            [.. stories.Select(item => (item.Story!.Service, item.Story.Endpoint))], cancellationToken);
 
         return new CardOptions(
             PeriodOf(frame.Period),

@@ -528,7 +528,7 @@ public static class RecapReportRenderer
             InProgress => State(InProgress, page.T("recap.state.in_progress")),
             _ => DoneState(page, action.Confirmation)
         };
-        var done = action.Status == "done" && action.DoneAtMs is not null;
+        var done = action is { Status: "done", DoneAtMs: not null };
         var at = TimeTag(page, done ? action.DoneAtMs!.Value : action.UpdatedAtMs);
         return chip + OwnerHtml(owner) +
                "<span class=\"when\">" + WithTime(page.T(done ? "recap.when.done" : "recap.when.updated"), at) +

@@ -780,6 +780,8 @@ public sealed class PollingTests : IDisposable
         foreach (var (polledAtMs, storedAtMs) in polls)
         {
             clock.SetUtcNow(DateTimeOffset.FromUnixTimeMilliseconds(polledAtMs));
+            // The fake daemon's handler reads it on the poll below.
+            // ReSharper disable once RedundantAssignment
             findings = fixture.Replace(
                 $"\"stored_at_ms\": {DetectedAtMs},",
                 storedAtMs is { } ms ? $"\"stored_at_ms\": {ms.ToString(CultureInfo.InvariantCulture)}," : "",

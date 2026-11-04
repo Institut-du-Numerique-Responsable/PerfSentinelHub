@@ -44,7 +44,7 @@ public static class RecapCo2
     /// </summary>
     public static double? LowGrams(IReadOnlyList<CarbonDay> rows)
     {
-        var priced = rows.Where(row => row.ExtraIoOps > 0 && row.AvoidableGco2Low is not null && row.AvoidableIoOps > 0)
+        var priced = rows.Where(row => row is { ExtraIoOps: > 0, AvoidableGco2Low: not null, AvoidableIoOps: > 0 })
             .ToList();
         return priced.Count == 0
             ? null

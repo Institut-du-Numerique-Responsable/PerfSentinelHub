@@ -285,7 +285,7 @@ public sealed partial class RecapJobs(
         return new RecapJobState(
             job.Id,
             RecapStages.Name(job.Status),
-            job.Status == RecapJobStatus.Running && job.Current is { } current ? RecapStages.Name(current) : null,
+            job is { Status: RecapJobStatus.Running, Current: { } current } ? RecapStages.Name(current) : null,
             [
                 .. RecapStages.All.Select(stage => new RecapJobStageItem(
                     RecapStages.Name(stage), RecapStages.Name(job.States[(int)stage]), job.Ms[(int)stage]))

@@ -291,7 +291,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     {
         var named = reads.All.Concat(reads.Previous ?? []).ToList();
         var pairs = named.Select(finding => (finding.Service, finding.Endpoint)).Distinct().ToList();
-        var services = named.Select(finding => finding.Service).OfType<string>()
+        var services = named.Select(finding => finding.Service)
             .Distinct(StringComparer.Ordinal).ToList();
         return new Labels(
             await database.ReadEndpointLabelsAsync(pairs, cancellationToken),

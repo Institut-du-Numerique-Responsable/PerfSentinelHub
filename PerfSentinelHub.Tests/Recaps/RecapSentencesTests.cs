@@ -34,7 +34,7 @@ public sealed class RecapSentencesTests
     {
         // "engine" as a whole word: "engineering" names the other view, which a Management reader may meet.
         foreach (var word in TechnicalWords)
-            Assert.DoesNotMatch(@"(?i)" + (word == "engine" ? @"\bengine\b" : Regex.Escape(word)), text);
+            Assert.DoesNotMatch("(?i)" + (word == "engine" ? @"\bengine\b" : Regex.Escape(word)), text);
     }
 
     public static TheoryData<string> AllTypes()

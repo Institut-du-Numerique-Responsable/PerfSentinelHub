@@ -191,8 +191,14 @@ public sealed class CardRenderer(EngineProbe engine, IOptions<HubOptions> option
             return false;
         }
 
-        return figures is { Angle: not null, Period: { Kind: not null, From: not null, To: not null } } &&
-               figures.BeforeFixPeriod is null or { From: not null, To: not null };
+        // The engine's JSON can leave a non-nullable string null, so these checks are the refusal, not noise.
+        // ReSharper disable RedundantAlwaysMatchSubpattern
+        return figures is
+        {
+            Angle: not null, Period: { Kind: not null, From: not null, To: not null },
+            BeforeFixPeriod: null or { From: not null, To: not null }
+        };
+        // ReSharper restore RedundantAlwaysMatchSubpattern
     }
 
     private static JsonDocument? Line(byte[] output)

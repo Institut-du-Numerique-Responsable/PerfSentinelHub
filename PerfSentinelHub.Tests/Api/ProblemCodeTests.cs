@@ -52,6 +52,8 @@ public sealed partial class ProblemCodeTests(HubApplicationFactory factory) : IC
         await using var provider = await FakeProvider.StartAsync(new Dictionary<string, string>());
         await using var hub = factory.WithWebHostBuilder(builder =>
         {
+            // The host is built inside this scope, before the provider is disposed.
+            // ReSharper disable once AccessToDisposedClosure
             provider.Configure(builder);
             builder.UseSetting("Hub:Access:Enabled", "true");
             builder.UseSetting("Hub:MetricsPort", "9464");
@@ -94,6 +96,7 @@ public sealed partial class ProblemCodeTests(HubApplicationFactory factory) : IC
         return request;
     }
 
+    // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
     private static async Task AssertProblemAsync(HttpResponseMessage response, int status, string detail,
         string code)
     {
