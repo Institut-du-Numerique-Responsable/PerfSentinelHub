@@ -754,7 +754,7 @@ Aucune des routes ci-dessous n'est ouverte, comme `GET /api/recap`, et un appela
 | `POST /api/recap/jobs?{query}[&refresh=true]`  | Lance la tâche de la requête, ou rejoint celle qui tourne ou est gardée pour elle. `202` et la tâche |
 | `GET /api/recap/jobs/{id}`                     | La tâche : statut, étapes et progression                                                   |
 | `GET /api/recap/jobs/{id}/result?view=&moves=` | Le récap, tel que `GET /api/recap` le renvoie dans cette vue et avec cette coupe           |
-| `DELETE /api/recap/jobs/{id}`                  | Lâche la tâche, `204` : une tâche en cours s'arrête quand plus aucun écran qui l'a lancée ou rejointe ne la suit |
+| `DELETE /api/recap/jobs/{id}`                  | Lâche la tâche pour l'appelant, `204` : une tâche en cours s'arrête quand plus personne qui l'a lancée ou rejointe ne la suit |
 
 La requête est celle de `GET /api/recap`, sans `view` ni `moves` : une tâche calcule tout le récap,
 et chaque vue et chaque coupe s'y lit. `POST` et `DELETE` sont refusés depuis un autre site (`403`)
@@ -768,6 +768,8 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   travail attendu déjà faite : chaque étape pèse ce qu'elle a pris en moyenne dans les calculs
   précédents du Hub, les lectures de findings le plus tant qu'il n'y en a pas eu. Elle avance quand
   une étape se termine, jamais au milieu d'une étape, et vaut `1` une fois la tâche réussie.
+  `elapsed_ms` est la durée du calcul, en cours ou terminé, sur l'horloge du Hub, pour qu'un client
+  dont l'horloge diffère puisse compter à partir de là.
 - **Réutilisation.** Un récap calculé est gardé pour son audience et sa requête : 24 heures pour une
   période close, 10 minutes pour une période en cours ou dont un jour est encore compté (`open_day`),
   jusqu'à `expires_at_ms`. Entre-temps, un
@@ -781,10 +783,17 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   a lancées. Les appelants à portée entière qui voient les mêmes sources partagent leurs tâches. Tout
   autre appelant lit une tâche comme inconnue, `404`, la même réponse qu'un id que le Hub n'a jamais
   donné.
-- **Limites.** Le Hub mène 2 tâches de front ; un `POST` au-delà est un `503` avec `Retry-After: 5`
-  et le code `recap_busy`. Il garde 32 tâches en tout, et oublie la plus ancienne terminée au-delà.
-  Une tâche échouée reste lisible une minute. Une tâche lâchée se lit aussitôt comme inconnue, mais
-  garde sa place parmi les 2 jusqu'à ce que son calcul s'arrête ; une tâche terminée reste gardée.
+- **Limites.** Le Hub mène 2 tâches de front, et un appelant connecté suit au plus une tâche en
+  cours qu'il a lancée ou rejointe : un `POST` qui en lancerait une autre est un `503` avec
+  `Retry-After: 5` et le code `recap_busy`, jusqu'à ce qu'il la lâche. Un recalcul déplace le suivi
+  de l'appelant depuis la tâche qu'il remplace, si bien qu'il ne le trouve jamais occupé par
+  celle-ci. Un appelant sans identité, sur un Hub sans connexion, n'est tenu que par les 2. Le Hub
+  garde 32 tâches en tout, et oublie la plus ancienne terminée au-delà. Une tâche échouée reste
+  lisible une minute. Une tâche lâchée se lit aussitôt comme inconnue, mais garde sa place parmi les
+  2 jusqu'à ce que son calcul s'arrête ; une tâche terminée reste gardée.
+- **Lâcher.** Un `DELETE` met fin à un suivi de l'appelant qui l'envoie, une fois par lancement ou
+  ralliement : un appelant qui ne suit pas la tâche ne change rien, si bien que personne n'arrête un
+  calcul qu'un autre attend. Une tâche en cours s'arrête quand son dernier suiveur la lâche.
 - **Résultat.** `GET …/result` pendant que la tâche tourne est un `409` avec le code
   `recap_not_ready`, et pour une tâche échouée ou arrêtée avec le Hub un `409` avec le code
   `recap_failed` : il ne viendra jamais, relancez la tâche. Quitter l'écran n'arrête pas une tâche :

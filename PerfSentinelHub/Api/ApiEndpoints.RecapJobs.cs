@@ -38,12 +38,14 @@ public static partial class ApiEndpoints
         // Keyed on the period's first day, not the day named: every day of one period computes the same recap.
         var key = new RecapJobKey(audience, query.Kind, RecapPeriod.Of(query.Kind, query.At).From,
             query.Filters.Environment, query.Filters.SourceId, query.Service, query.Grouping);
-        var start = jobs.Start(key, query with { Access = Narrowing(scope) }, refresh is not null);
+        var start = jobs.Start(key, query with { Access = Narrowing(scope) }, refresh is not null,
+            AccessCaller.Of(context)?.Subject);
         if (start.Job is not { } job)
         {
             context.Response.Headers.RetryAfter = "5";
             return Problem(StatusCodes.Status503ServiceUnavailable, ProblemCodes.RecapBusy,
-                "The Hub is computing as many recaps as it runs at once. Try again in a few seconds.");
+                "The Hub is computing as many recaps as it runs at once, or one you follow is still running. "
+                + "Try again in a few seconds.");
         }
 
         return TypedResults.Accepted($"/api/recap/jobs/{job.Id}", job);
@@ -106,7 +108,9 @@ public static partial class ApiEndpoints
             return refusal;
         if (RecapJobAudienceOf(context, access, options) is not { } audience)
             return NoFindingsRead();
-        return jobs.Cancel(id, audience) ? TypedResults.NoContent() : TypedResults.NotFound();
+        return jobs.Cancel(id, audience, AccessCaller.Of(context)?.Subject)
+            ? TypedResults.NoContent()
+            : TypedResults.NotFound();
     }
 
     private static RecapJobAudience? RecapJobAudienceOf(HttpContext context, AccessPolicy access,

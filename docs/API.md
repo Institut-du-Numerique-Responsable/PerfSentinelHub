@@ -699,7 +699,7 @@ result. `GET /api/recap` stays as it is for scripts and CI. Every route below is
 | `POST /api/recap/jobs?{query}[&refresh=true]`  | Starts the job for the query, or joins the one running or kept for it. `202` and the job |
 | `GET /api/recap/jobs/{id}`                     | The job: status, stages and progress                                                     |
 | `GET /api/recap/jobs/{id}/result?view=&moves=` | The recap, as `GET /api/recap` answers it in that view and with that cut                 |
-| `DELETE /api/recap/jobs/{id}`                  | Lets go of the job, `204`: a running one stops once no screen that started or joined it follows it |
+| `DELETE /api/recap/jobs/{id}`                  | Lets go of the job for the caller, `204`: a running one stops once nobody who started or joined it follows it |
 
 The query is the one of `GET /api/recap`, `view` and `moves` aside: one job computes the whole
 recap, and each view and cut is read from it. `POST` and `DELETE` are refused from another site
@@ -712,7 +712,8 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
   to read for it, and `stage` names the one running. `progress`, from `0` to `1`, is the share of
   the expected work behind the job: each stage weighs what it took on average in the Hub's past
   computations, the findings reads most until there is one. It moves when a stage ends, never
-  inside one, and is `1` once the job succeeded.
+  inside one, and is `1` once the job succeeded. `elapsed_ms` is how long it has run, or ran, on
+  the Hub's own clock, so a client whose clock differs can still count from it.
 - **Reuse.** A finished recap is kept for its audience and query: 24 hours for a closed period, 10
   minutes for one in progress or with a day still being counted (`open_day`), until `expires_at_ms`. Meanwhile a `POST` for the same query answers
   the same job, already `succeeded`, so another view, the whole list of a group or a return to the
@@ -723,10 +724,16 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
 - **Audience.** A caller whose `findings.read` scope is narrowed reads only the jobs they started.
   Callers with a whole scope who see the same sources share their jobs. Any other caller reads a
   job as unknown, `404`, the same answer as an id the Hub never gave.
-- **Bounds.** The Hub runs 2 jobs at once; a `POST` past that is a `503` with `Retry-After: 5` and
-  the code `recap_busy`. It holds 32 jobs in all, and drops the oldest finished one past that. A
-  failed job stays readable for a minute. A job let go reads as unknown at once, yet holds its place
-  among the 2 until its computation stops; a finished one stays kept.
+- **Bounds.** The Hub runs 2 jobs at once, and a signed-in caller follows at most one running job
+  they started or joined: a `POST` that would start another is a `503` with `Retry-After: 5` and
+  the code `recap_busy`, until they let it go. A refresh moves the caller's follow from the job it
+  replaces, so it never finds them busy with that one. A caller with no identity, on a Hub without
+  sign-in, is held by the 2 alone. It holds 32 jobs in all, and drops the oldest finished one past
+  that. A failed job stays readable for a minute. A job let go reads as unknown at once, yet holds
+  its place among the 2 until its computation stops; a finished one stays kept.
+- **Letting go.** A `DELETE` ends one follow of the caller who sends it, once per time they started
+  or joined the job: a caller who does not follow it changes nothing, so nobody stops a computation
+  someone else waits on. A running job stops when its last follower lets it go.
 - **Result.** `GET …/result` while the job runs is a `409` with the code `recap_not_ready`, and for
   a job that failed or stopped with the Hub a `409` with the code `recap_failed`: it will never come,
   start the job again. Leaving the screen does not stop a job: the launcher lets go only of one whose

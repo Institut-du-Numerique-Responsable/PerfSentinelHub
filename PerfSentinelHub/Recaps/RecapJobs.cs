@@ -20,6 +20,11 @@ public sealed partial class RecapJobs(
     // The caps are a contract, not a detail, as the request gates' are.
     public const int MaxRunning = 2;
 
+    // One person computes one recap at a time, so nobody holds every place: a caller who starts
+    // another while one they follow still runs is busy until they let it go. A caller with no
+    // identity, a Hub without sign-in, is held by MaxRunning alone.
+    public const int MaxRunningPerCaller = 1;
+
     // A recap of 5,000 findings weighs a few MB, beside a Hub that runs in 1 GiB.
     public const int MaxKept = 32;
 
@@ -48,11 +53,13 @@ public sealed partial class RecapJobs(
 
     /// <summary>
     ///     The job for this key: the one running or the finished one while it is kept, else a new one,
-    ///     unless <see cref="MaxRunning" /> already run. <paramref name="refresh" /> always starts a new
+    ///     unless <see cref="MaxRunning" /> already run or <paramref name="caller" /> already follows
+    ///     <see cref="MaxRunningPerCaller" /> running. <paramref name="refresh" /> always starts a new
     ///     one: it follows a write, which a computation already running may have read before. The one it
     ///     replaces stays readable by its id for the screens that follow it, and no request joins it.
+    ///     <paramref name="caller" /> follows the job it gets, until it lets it go.
     /// </summary>
-    public RecapJobStart Start(RecapJobKey key, RecapRequest request, bool refresh)
+    public RecapJobStart Start(RecapJobKey key, RecapRequest request, bool refresh, string? caller)
     {
         Job job;
         RecapJobState view;
@@ -63,12 +70,20 @@ public sealed partial class RecapJobs(
                 known.Status is RecapJobStatus.Running or RecapJobStatus.Succeeded)
             {
                 if (known.Status == RecapJobStatus.Running)
-                    known.Followers++;
+                    known.Followers.Add(caller ?? "");
                 Count(RecapJobOutcome.Reused);
                 return new RecapJobStart(ViewOf(known), false);
             }
 
-            if (_jobs.Values.Count(item => item.Status == RecapJobStatus.Running) >= MaxRunning)
+            // A refresh replaces the caller's own follow of the job it supersedes, so it never finds
+            // the caller busy with the very computation it replaces.
+            if (refresh && _byKey.TryGetValue(key, out var replaced) && replaced.Status == RecapJobStatus.Running)
+                LetGo(replaced, caller);
+
+            if (_jobs.Values.Count(item => item.Status == RecapJobStatus.Running) >= MaxRunning ||
+                (caller is not null && _jobs.Values.Count(item =>
+                    item is { Status: RecapJobStatus.Running, Abandoned: false } &&
+                    item.Followers.Contains(caller)) >= MaxRunningPerCaller))
             {
                 Count(RecapJobOutcome.Busy);
                 return new RecapJobStart(null, true);
@@ -76,6 +91,7 @@ public sealed partial class RecapJobs(
 
             job = new Job(this, key, _clock.GetUtcNow().ToUnixTimeMilliseconds(),
                 CancellationTokenSource.CreateLinkedTokenSource(stopping));
+            job.Followers.Add(caller ?? "");
             _jobs[job.Id] = job;
             _byKey[key] = job;
             EvictOverflow();
@@ -114,25 +130,32 @@ public sealed partial class RecapJobs(
     }
 
     /// <summary>
-    ///     Lets a job go for one screen that started or joined it. A running one stops once none follows
-    ///     it, reads as unknown at once and holds its place under <see cref="MaxRunning" /> until its
-    ///     computation returns; a finished one stays kept for the others. False for an unknown one.
+    ///     Lets a job go for <paramref name="caller" />, once per time they started or joined it: a caller
+    ///     who does not follow it changes nothing, so nobody stops a computation someone else waits on. A
+    ///     running one stops once none follows it, reads as unknown at once and holds its place under
+    ///     <see cref="MaxRunning" /> until its computation returns; a finished one stays kept for the
+    ///     others. False for an unknown one.
     /// </summary>
-    public bool Cancel(string id, RecapJobAudience audience)
+    public bool Cancel(string id, RecapJobAudience audience, string? caller)
     {
         lock (_gate)
         {
             if (Visible(id, audience) is not { } job)
                 return false;
-            if (job.Status == RecapJobStatus.Running && --job.Followers == 0)
-            {
-                job.Cancellation.Cancel();
-                job.Abandoned = true;
-                Unkey(job);
-            }
-
+            if (job.Status == RecapJobStatus.Running)
+                LetGo(job, caller);
             return true;
         }
+    }
+
+    // One follow of the caller ends; the computation stops with the last one.
+    private void LetGo(Job job, string? caller)
+    {
+        if (!job.Followers.Remove(caller ?? "") || job.Followers.Count > 0)
+            return;
+        job.Cancellation.Cancel();
+        job.Abandoned = true;
+        Unkey(job);
     }
 
     /// <summary>The jobs running and the jobs held, finished or not, for the metrics.</summary>
@@ -227,7 +250,7 @@ public sealed partial class RecapJobs(
     }
 
     // The job as GET /api/recap/jobs/{id} answers it.
-    private static RecapJobState ViewOf(Job job)
+    private RecapJobState ViewOf(Job job)
     {
         var total = job.Weights.Sum();
         var reached = RecapStages.All
@@ -244,6 +267,8 @@ public sealed partial class RecapJobs(
             ],
             Math.Round(progress, 4),
             job.StartedAtMs,
+            // Measured on the Hub's clock, so a browser whose clock differs still counts from here.
+            (job.FinishedAtMs ?? _clock.GetUtcNow().ToUnixTimeMilliseconds()) - job.StartedAtMs,
             job.FinishedAtMs,
             job.ExpiresAtMs,
             job.Status == RecapJobStatus.Failed ? ProblemCodes.RecapFailed : null);
@@ -323,7 +348,8 @@ public sealed partial class RecapJobs(
         public double[] Weights { get; } = [.. owner._expectedMs];
 
         // The screens that started or joined it while it ran, and whether the last one let it go.
-        public int Followers { get; set; } = 1;
+        // Who started or joined it while it ran, once per time; "" for a caller with no identity.
+        public List<string> Followers { get; } = [];
         public bool Abandoned { get; set; }
 
         public RecapStageState[] States { get; } = new RecapStageState[RecapStages.All.Count];

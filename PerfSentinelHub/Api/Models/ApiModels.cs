@@ -307,6 +307,7 @@ public sealed record RecapJobState(
     IReadOnlyList<RecapJobStageItem> Stages,
     double Progress,
     long StartedAtMs,
+    long ElapsedMs,
     long? FinishedAtMs,
     long? ExpiresAtMs,
     string? ErrorCode);

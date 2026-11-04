@@ -6039,19 +6039,21 @@
         const sequence = ++state.recapSeq;
         const route = recapRoute();
         const key = PSL.recapJobKey(route);
+        // Carried with the read, so a job started before midnight UTC keeps the key it was started on.
+        route.jobKey = key;
         // Every move when the screen already held them all or a group is being opened whole: a write
         // that lands meanwhile takes over that read instead of racing it, so the click is kept.
         const opening = keep ? state.recapMovesLoading : null;
         const all = Boolean(opening) || (keep && state.recap && !state.recap.movements.counts);
         const previous = state.recapJob;
         clearTimeout(state.recapPollTimer);
-        // A job this screen stops following is let go, so the Hub stops it once nobody follows it: one
-        // for other filters, or the one a refresh replaces, since it may have read before the write.
+        // A job this screen stops following for other filters is let go, so the Hub stops it once nobody
+        // follows it, and the next one starts once the Hub has counted that: one person runs one recap at
+        // a time. A refresh needs no let-go, the Hub moves this caller's follow to the new computation.
         // Forgotten at once, so a second read before the next job answers does not let it go twice.
-        if (previous && previous.status === 'running' && (previous.key !== key || refresh)) {
-            cancelRecapJob(previous.id);
-            state.recapJob = null;
-        }
+        let released = Promise.resolve();
+        if (previous && previous.status === 'running' && previous.key !== key) released = cancelRecapJob(previous.id);
+        if (previous && previous.status === 'running' && (previous.key !== key || refresh)) state.recapJob = null;
         if (!keep) {
             state.recapLoadingSince = Date.now();
             state.recapMovesLoading = null;
@@ -6085,7 +6087,9 @@
             pollRecapJob(sequence, previous.id, route, all, opening);
             return;
         }
-        startRecapJob(sequence, route, Boolean(refresh), all, opening);
+        released.then(function () {
+            if (sequence === state.recapSeq) startRecapJob(sequence, route, Boolean(refresh), all, opening);
+        });
     }
 
     function startRecapJob(sequence, route, refresh, all, opening) {
@@ -6120,7 +6124,8 @@
     }
 
     function followRecapJob(sequence, job, route, all, opening) {
-        state.recapJob = Object.assign({key: PSL.recapJobKey(route)}, job);
+        // When it was read, so the time the Hub counted grows from there on the browser's own clock.
+        state.recapJob = Object.assign({key: route.jobKey || PSL.recapJobKey(route), receivedAt: Date.now()}, job);
         if (job.status === 'succeeded') {
             readRecapResult(sequence, state.recapJob, route, all, opening);
             return;
@@ -6191,9 +6196,12 @@
         startRecapJob(sequence, route, false, all, opening);
     }
 
-    /** Stops a job nobody follows any more. Fire and forget: its answer changes nothing on screen. */
+    /**
+     * Lets go of a job this screen no longer follows. Its answer changes nothing on screen; the promise
+     * settles either way, so the next job can wait for the Hub to have counted it.
+     */
     function cancelRecapJob(id) {
-        fetch('/api/recap/jobs/' + encodeURIComponent(id), {
+        return fetch('/api/recap/jobs/' + encodeURIComponent(id), {
             method: 'DELETE',
             headers: {'content-type': 'application/json'},
             keepalive: true
@@ -7173,8 +7181,12 @@
      * counted from the Hub's start so a reader who comes back sees the whole of it.
      */
     function recapProgressPanel(job) {
+        // The Hub's count when the job was read, grown on this clock since: a browser whose clock is
+        // off from the Hub's still counts right.
+        const counted = job.elapsed_ms != null ? job.elapsed_ms : Date.now() - job.started_at_ms;
+        const since = job.receivedAt || Date.now();
         const elapsed = function () {
-            return t('recap.loading_elapsed', {elapsed: PSL.durPrecise(Date.now() - job.started_at_ms)});
+            return t('recap.loading_elapsed', {elapsed: PSL.durPrecise(counted + Date.now() - since)});
         };
         const percent = PSL.recapJobPercent(job);
         const fill = el('div', {class: 'recap-progress-fill'});
