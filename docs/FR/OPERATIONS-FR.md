@@ -113,6 +113,8 @@ deux seuls paquets sont SQLite.
 | `perf_sentinel_hub_detection_reads_total{source,outcome}`              | counter | Passages du poll sur un registre de détections, par issue         |
 | `perf_sentinel_hub_detection_rows_total{source}`                       | counter | Lignes de comptes fusionnées depuis un registre interrogé         |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Les runs actuellement stockés, par statut                         |
+| `perf_sentinel_hub_recap_jobs{state}`                                  | gauge   | Les tâches de récap `running`, et `kept` en tout                  |
+| `perf_sentinel_hub_recap_jobs_total{outcome}`                          | counter | Les tâches de récap lancées, réutilisées, refusées car le Hub est plein, et leur issue |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Les signatures de findings distinctes stockées, par environnement |
 | `perf_sentinel_hub_findings_age_seconds`                               | gauge   | L'âge des comptes derrière `findings`                             |
 | `perf_sentinel_hub_database_bytes`                                     | gauge   | La taille du fichier de base et de son journal d'écriture         |

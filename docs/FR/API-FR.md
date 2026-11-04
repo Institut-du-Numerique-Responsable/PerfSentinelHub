@@ -741,6 +741,50 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
 - **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
   `truncated: true` ; resserrez la requête avec un filtre.
 
+### Calcul du récap en tâche
+
+Sur une grosse base, le récap prend plusieurs minutes, plus longtemps qu'un navigateur ne devrait
+garder une requête ouverte. Le launcher demande donc au Hub de le calculer en tâche, suit sa
+progression, puis lit le résultat. `GET /api/recap` reste tel quel pour les scripts et la CI.
+Aucune des routes ci-dessous n'est ouverte, comme `GET /api/recap`, et un appelant sans
+`findings.read` nulle part reçoit le même `403`.
+
+| Route                                          | Rôle                                                                                       |
+|------------------------------------------------|--------------------------------------------------------------------------------------------|
+| `POST /api/recap/jobs?{query}[&refresh=true]`  | Lance la tâche de la requête, ou rejoint celle qui tourne ou est gardée pour elle. `202` et la tâche |
+| `GET /api/recap/jobs/{id}`                     | La tâche : statut, étapes et progression                                                   |
+| `GET /api/recap/jobs/{id}/result?view=&moves=` | Le récap, tel que `GET /api/recap` le renvoie dans cette vue et avec cette coupe           |
+| `DELETE /api/recap/jobs/{id}`                  | Arrête une tâche en cours et l'oublie, `204`                                               |
+
+La requête est celle de `GET /api/recap`, sans `view` ni `moves` : une tâche calcule tout le récap,
+et chaque vue et chaque coupe s'y lit. `POST` et `DELETE` sont refusés depuis un autre site (`403`)
+et sans type de contenu JSON (`415`), comme un acquittement.
+
+- **La tâche.** `status` vaut `running`, `succeeded`, `failed` (avec `error_code`) ou `cancelled`.
+  `stages` liste dans l'ordre les neuf étapes d'un calcul, `findings_period`, `findings_open`,
+  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels` et
+  `assemble`, chacune `pending`, `running`, `done` (avec `ms`) ou `skipped` quand ce jour-là n'a rien
+  à lire pour elle, et `stage` nomme celle qui tourne. `progress`, de `0` à `1`, est la part du
+  travail attendu déjà faite : chaque étape pèse ce qu'elle a pris en moyenne dans les calculs
+  précédents du Hub, les lectures de findings le plus tant qu'il n'y en a pas eu. Elle avance quand
+  une étape se termine, jamais au milieu d'une étape, et vaut `1` une fois la tâche réussie.
+- **Réutilisation.** Un récap calculé est gardé pour son audience et sa requête : 24 heures pour une
+  période close, 10 minutes pour une période en cours, jusqu'à `expires_at_ms`. Entre-temps, un
+  `POST` pour la même requête renvoie la même tâche, déjà `succeeded` : une autre vue, la liste
+  entière d'un groupe ou un retour sur l'écran ne recalculent rien. `refresh=true` recalcule, comme
+  le launcher le fait après une écriture depuis l'écran du récap ou sur Recalculer. Une tâche ne vit
+  qu'en mémoire : un redémarrage l'oublie.
+- **Audience.** Un appelant dont la portée `findings.read` est restreinte ne lit que les tâches qu'il
+  a lancées. Les appelants à portée entière qui voient les mêmes sources partagent leurs tâches. Tout
+  autre appelant lit une tâche comme inconnue, `404`, la même réponse qu'un id que le Hub n'a jamais
+  donné.
+- **Limites.** Le Hub mène 2 tâches de front ; un `POST` au-delà est un `503` avec `Retry-After: 5`
+  et le code `recap_busy`. Il garde 32 tâches en tout, et oublie la plus ancienne terminée au-delà.
+  Une tâche échouée ou arrêtée reste lisible une minute.
+- **Résultat.** `GET …/result` avant la réussite de la tâche est un `409` avec le code
+  `recap_not_ready`. Quitter l'écran n'arrête pas une tâche : le launcher n'arrête que celle dont il
+  a changé les filtres.
+
 ### Webhooks du récap
 
 Chaque webhook nommé par un abonnement, déclaré dans `Hub:Recaps:Webhooks`, reçoit un `POST` à corps

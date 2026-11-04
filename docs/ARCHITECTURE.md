@@ -235,7 +235,7 @@ serves and the reasons it falls short, see
 [API.md](API.md#what-the-hub-adds-to-a-finding). Nothing is backfilled: a day before the
 upgrade has no row and reads as unknown.
 
-The recap, `GET /api/recap`, writes nothing and keeps nothing of its own. `RecapService` makes
+The recap, `GET /api/recap`, writes nothing. `RecapService` makes
 up to four windowed reads of the findings, each capped at 5,000: the period with its acknowledged
 findings, the period without them, the closed days of a period in progress, and the previous
 window, skipped on a period's first day. Then it makes a coverage read of the sources' days and a carbon
@@ -247,7 +247,10 @@ class on purpose: the reports a subscription sends reuse it as it is. `RecapGene
 each subscription into `recap_reports` once its ledgers have sealed, `RecapReportRenderer` writes
 the self-contained HTML of a stored snapshot, `RecapDeliveryWorker` sends the due rows of
 `recap_deliveries` to the webhooks and, through `RecapMailer`, to the SMTP relay, and `RecapLoop`
-runs the generator and the worker every 15 seconds.
+runs the generator and the worker every 15 seconds. `RecapJobs` runs the same computation for the
+screen off the request, on a thread of its own, told each stage as `RecapService` enters it, and keeps
+each finished recap in memory for its audience and query, a day for a closed period and 10 minutes for
+one in progress, at most 2 running and 32 held. A restart forgets them all.
 
 Each start fills in what an older build left out: the attribute rows of a copy whose newest
 observation has none, the service of a copy that has none, both from that copy's own

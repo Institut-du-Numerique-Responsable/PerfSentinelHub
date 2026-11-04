@@ -687,6 +687,46 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
 - **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
   `truncated: true`; narrow the request with a filter.
 
+### Recap jobs
+
+On a large database the recap takes minutes, longer than a browser should hold one request open.
+The launcher asks the Hub to compute it as a job instead, follows its progress, then reads the
+result. `GET /api/recap` stays as it is for scripts and CI. Every route below is never open, as
+`GET /api/recap` is, and refuses a caller with `findings.read` nowhere with the same `403`.
+
+| Route                                          | Does                                                                                     |
+|------------------------------------------------|------------------------------------------------------------------------------------------|
+| `POST /api/recap/jobs?{query}[&refresh=true]`  | Starts the job for the query, or joins the one running or kept for it. `202` and the job |
+| `GET /api/recap/jobs/{id}`                     | The job: status, stages and progress                                                     |
+| `GET /api/recap/jobs/{id}/result?view=&moves=` | The recap, as `GET /api/recap` answers it in that view and with that cut                 |
+| `DELETE /api/recap/jobs/{id}`                  | Stops a running job and forgets it, `204`                                                |
+
+The query is the one of `GET /api/recap`, `view` and `moves` aside: one job computes the whole
+recap, and each view and cut is read from it. `POST` and `DELETE` are refused from another site
+(`403`) and without a JSON content type (`415`), as an acknowledgment is.
+
+- **The job.** `status` is `running`, `succeeded`, `failed` (with `error_code`) or `cancelled`.
+  `stages` lists the nine steps of a computation in order, `findings_period`, `findings_open`,
+  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels` and
+  `assemble`, each `pending`, `running`, `done` (with `ms`) or `skipped` when that day has nothing
+  to read for it, and `stage` names the one running. `progress`, from `0` to `1`, is the share of
+  the expected work behind the job: each stage weighs what it took on average in the Hub's past
+  computations, the findings reads most until there is one. It moves when a stage ends, never
+  inside one, and is `1` once the job succeeded.
+- **Reuse.** A finished recap is kept for its audience and query: 24 hours for a closed period, 10
+  minutes for one in progress, until `expires_at_ms`. Meanwhile a `POST` for the same query answers
+  the same job, already `succeeded`, so another view, the whole list of a group or a return to the
+  screen computes nothing. `refresh=true` computes it again, as the launcher does after a write
+  from the recap screen or on Recompute. A job is in memory only: a restart forgets it.
+- **Audience.** A caller whose `findings.read` scope is narrowed reads only the jobs they started.
+  Callers with a whole scope who see the same sources share their jobs. Any other caller reads a
+  job as unknown, `404`, the same answer as an id the Hub never gave.
+- **Bounds.** The Hub runs 2 jobs at once; a `POST` past that is a `503` with `Retry-After: 5` and
+  the code `recap_busy`. It holds 32 jobs in all, and drops the oldest finished one past that. A
+  failed or cancelled job stays readable for a minute.
+- **Result.** `GET …/result` before the job succeeded is a `409` with the code `recap_not_ready`.
+  Leaving the screen does not stop a job: the launcher stops only one whose filters it changed.
+
 ### Recap webhooks
 
 Each webhook named by a subscription, declared in `Hub:Recaps:Webhooks`, receives a `POST` with a JSON

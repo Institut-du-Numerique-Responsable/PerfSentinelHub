@@ -308,6 +308,18 @@ l'adresse, `#/recap?period=day&view=pilotage`, de sorte qu'une vue s'envoie en l
 en jours UTC et le dit, alors que chaque horodatage de la page, le moment où une action a été prise ou
 terminée compris, s'affiche à votre heure avec son fuseau (`2026-10-29 14:32 CET`), l'instant UTC au survol.
 
+Sur une grosse base, le récap prend plusieurs minutes : l'écran demande donc au Hub de le calculer en
+tâche ([l'API](API-FR.md#calcul-du-récap-en-tâche)) et montre où il en est : une barre de la part du travail
+faite, les neuf étapes chacune cochée avec sa durée, marquée en cours, ou pas nécessaire ce jour-là, et
+le temps écoulé depuis le début du calcul. Vous pouvez quitter la page : le Hub poursuit, et en revenant
+vous retrouvez la même tâche, ou le résultat tout de suite si elle a fini. Une fois calculé, une ligne
+dit quand, et jusqu'à quand le Hub le réutilise (10 minutes pour une période en cours, une journée pour
+une période close), avec Recalculer à côté. Passer d'Engineering à Management, ou ouvrir tous les
+mouvements d'un groupe, relit le même récap calculé ; changer un filtre en lance un autre et arrête celui
+que plus personne ne suit. Une écriture depuis l'écran, une action ou un nom, recalcule le récap. Un Hub
+sans tâches se lit comme avant, en une requête, avec un bandeau qui dit que quitter la page relance le
+calcul.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap-dark.png">
   <img alt="L'écran du récapitulatif : la période, quatre tuiles, puis les findings à traiter d'abord avec leur tendance et leur action" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap.png">

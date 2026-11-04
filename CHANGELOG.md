@@ -4,6 +4,23 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## Unreleased
 
+### Added
+
+- The recap is computed as a job the screen follows. `POST /api/recap/jobs` starts the computation
+  for a query, or joins the one running or kept for it; `GET /api/recap/jobs/{id}` tells its stage
+  and its progress, `GET /api/recap/jobs/{id}/result` reads it in a view and a cut, and
+  `DELETE /api/recap/jobs/{id}` stops it. A finished recap is kept for its audience and query, a day
+  for a closed period and 10 minutes for one in progress, so another view, the whole list of a group
+  or a return to the screen computes nothing; `refresh=true` computes it again. A narrowed
+  `findings.read` scope reads only its own jobs. The Hub runs 2 at once (`503 recap_busy` past that)
+  and holds 32. `GET /api/recap` is unchanged.
+- The recap screen shows the computation as it goes: a progress bar, the nine steps ticked off with
+  their duration, and the time since it started, in an information banner. Leaving the page no
+  longer starts it over. Once computed, a line says when and until when it is reused, with
+  Recompute. A write from the screen computes it again; a Hub without jobs is read as before.
+- Each finished recap logs how long each step took (EventId 2507), and `/metrics` counts the jobs:
+  `perf_sentinel_hub_recap_jobs{state}` and `perf_sentinel_hub_recap_jobs_total{outcome}`.
+
 ### Fixed
 
 - A pill button keeps its label on one line. In French, "Analyser cette fenêtre" and "Expliquer la
@@ -15,12 +32,6 @@ All notable changes to PerfSentinelHub are recorded here.
   result", and an incident's correlations read "Active during this incident" under `// correlations`.
 - On a phone, a daemon's settings stack in one column instead of three, where setting names broke
   letter by letter and a card's overline ran over its count. Wider screens keep three columns.
-
-### Changed
-
-- While the recap is computed, the screen says so in an information banner rather than a line of
-  grey text: computing it can take several minutes on a large database, the reader should stay on
-  the page, and a counter shows how long it has been running.
 
 ## [0.13.0] - 2026-11-03
 
