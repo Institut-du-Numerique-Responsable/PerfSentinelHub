@@ -1703,6 +1703,38 @@ test("the recap path always names its period and view", () => {
         "/api/recap?period=day&view=pilotage&at=2026-10-29&environment=prod&service=a%20b&grouping=g");
 });
 
+test("a recap job is keyed on everything but the view and started with the same filters", () => {
+    const route = {period: "day", at: "2026-10-29", environment: "prod", service: "a b", grouping: null, view: "tech"};
+    assert.equal(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {view: "pilotage"})));
+    assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {service: "c"})));
+    assert.equal(PSL.recapJobPath(route, false),
+        "/api/recap/jobs?period=day&at=2026-10-29&environment=prod&service=a%20b");
+    assert.equal(PSL.recapJobPath(PSL.readRecapRoute("#/recap"), true), "/api/recap/jobs?period=week&refresh=true");
+    assert.equal(PSL.recapJobResultPath("0123abcd", "pilotage", false),
+        "/api/recap/jobs/0123abcd/result?view=pilotage");
+    assert.equal(PSL.recapJobResultPath("0123abcd", "tech", true),
+        "/api/recap/jobs/0123abcd/result?view=tech&moves=all");
+});
+
+test("a recap job reads 100 % only once it succeeded", () => {
+    assert.equal(PSL.recapJobPercent({status: "running", progress: 0}), 0);
+    assert.equal(PSL.recapJobPercent({status: "running", progress: 0.4211}), 42);
+    assert.equal(PSL.recapJobPercent({status: "running", progress: 1}), 99);
+    assert.equal(PSL.recapJobPercent({status: "running", progress: "x"}), 0);
+    assert.equal(PSL.recapJobPercent({status: "succeeded", progress: 1}), 100);
+});
+
+test("a recap's freshness says the time alone on the same day and the day too otherwise", () => {
+    const now = new Date(2026, 10, 4, 14, 40).getTime();
+    const at = new Date(2026, 10, 4, 14, 32).getTime();
+    assert.deepEqual(PSL.recapFreshness({finished_at_ms: at, expires_at_ms: at + 600_000}, now),
+        {at: "14:32", until: "14:42"});
+    const tomorrow = PSL.recapFreshness({finished_at_ms: at, expires_at_ms: at + 86_400_000}, now);
+    assert.equal(tomorrow.at, "14:32");
+    assert.equal(tomorrow.until, PSL.dateTime(at + 86_400_000));
+    assert.equal(PSL.recapFreshness({finished_at_ms: null, expires_at_ms: null}, now), null);
+});
+
 test("the carbon figure says it is an estimate and what it lacks", () => {
     assert.equal(PSL.co2Text(null, 0, "no_coefficient"), "— no coefficient from the engine");
     assert.equal(PSL.co2Text(null, 0, "no_avoidable_io"), "— no avoidable I/O");

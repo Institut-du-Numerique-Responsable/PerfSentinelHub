@@ -2342,6 +2342,71 @@
     }
 
     /**
+     * What one recap job computes for a route: everything but the view, which the job's result is
+     * read in. Two routes with the same key read the same job.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @returns {string}
+     */
+    function recapJobKey(route) {
+        return recapPath(Object.assign({}, route, {view: 'tech'}));
+    }
+
+    /**
+     * The route that starts, joins or reuses the job for a route, computing it again with `refresh`.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @param {boolean} refresh
+     * @returns {string}
+     */
+    function recapJobPath(route, refresh) {
+        let path = '/api/recap/jobs?period=' + encodeURIComponent(route.period);
+        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
+            if (route[key]) path += '&' + key + '=' + encodeURIComponent(route[key]);
+        });
+        return refresh ? path + '&refresh=true' : path;
+    }
+
+    /**
+     * A finished job's recap in one view, cut as GET /api/recap cuts it unless `all`.
+     * @param {string} id
+     * @param {'tech' | 'pilotage'} view
+     * @param {boolean} all
+     * @returns {string}
+     */
+    function recapJobResultPath(id, view, all) {
+        return '/api/recap/jobs/' + encodeURIComponent(id) + '/result?view=' + encodeURIComponent(view)
+            + (all ? '&moves=all' : '');
+    }
+
+    /**
+     * The share of a job's work behind it, as a whole percent: 100 once it succeeded, never 100 before.
+     * @param {{status: string, progress: number}} job
+     * @returns {number}
+     */
+    function recapJobPercent(job) {
+        if (job.status === 'succeeded') return 100;
+        const value = Math.floor((Number(job.progress) || 0) * 100);
+        return Math.max(0, Math.min(99, value));
+    }
+
+    /**
+     * When a recap was computed and until when the Hub reuses it: the time alone on the same day
+     * as `now`, the day and the time otherwise.
+     * @param {{finished_at_ms: number | null, expires_at_ms: number | null}} job
+     * @param {number} now
+     * @returns {{at: string, until: string} | null}
+     */
+    function recapFreshness(job, now) {
+        if (job.finished_at_ms == null || job.expires_at_ms == null) return null;
+        const today = new Date(now).toDateString();
+        const when = function (/** @type {number} */ ms) {
+            if (new Date(ms).toDateString() !== today) return dateTime(ms);
+            const d = new Date(ms);
+            return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        };
+        return {at: when(job.finished_at_ms), until: when(job.expires_at_ms)};
+    }
+
+    /**
      * The line that names a frozen report: its period as the recap prints it, then the
      * subscription that made it or the person who asked, and a mark when it is not whole.
      * @param {{subscription: string | null, created_by?: string | null, complete: boolean,
@@ -3561,6 +3626,11 @@
         recapPlain,
         recapFreezeText,
         recapErrorText,
+        recapJobKey,
+        recapJobPath,
+        recapJobResultPath,
+        recapJobPercent,
+        recapFreshness,
         recapTruncatedText,
         recapSourcesNote,
         recapLateNote,

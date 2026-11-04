@@ -135,6 +135,17 @@
         recapSeq: 0,
         // When the recap now being computed was asked for, which its loading banner counts from.
         recapLoadingSince: 0,
+        // The recap job the screen follows: what GET /api/recap/jobs/{id} last answered, with the key of
+        // the filters it computes (PSL.recapJobKey). True in recapDirect once the Hub has no job route,
+        // an older one or the site's replay, which reads GET /api/recap as before. The poll's timer and
+        // its failures in a row; recapHubBusy while the Hub runs as many recaps as it can at once.
+        recapJob: null,
+        recapDirect: false,
+        recapPollTimer: null,
+        recapPollFailures: 0,
+        recapHubBusy: false,
+        // Jobs started again by the current read after the Hub forgot its own, at most one.
+        recapRestarts: 0,
         // The frozen reports under the recap: the list GET /api/recap/reports answered, null when the
         // Hub refused it (403, the section stays hidden) or while it loads, 'error' when it failed
         // otherwise; whether a generate is in flight and the sentence a refused one left.
@@ -1295,6 +1306,8 @@
         const screen = currentScreen();
         if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
+        // A recap job keeps running on the Hub: only the screen stops asking, and asks again on return.
+        clearTimeout(state.recapPollTimer);
         // The note this timer restores belongs to a panel the next render replaces.
         clearTimeout(state.noteTimer);
         render();
@@ -6016,15 +6029,24 @@
     }
 
     /**
-     * Reads the recap the route names. A write on a row reads it again with `keep`, so the page
-     * stays where it was while the new figures arrive. Only the latest read lands.
+     * Reads the recap the route names, through the Hub's recap job: started, or joined when it already
+     * runs or was computed for these filters, followed to its end, then read in the view shown. A write
+     * on a row reads it again with `keep` and `refresh`, so the page stays where it was while the new
+     * figures are computed; the whole list of a group reads the same job again with moves=all. Only the
+     * latest read lands.
      */
-    function loadRecap(keep) {
+    function loadRecap(keep, refresh) {
         const sequence = ++state.recapSeq;
+        const route = recapRoute();
+        const key = PSL.recapJobKey(route);
         // Every move when the screen already held them all or a group is being opened whole: a write
         // that lands meanwhile takes over that read instead of racing it, so the click is kept.
         const opening = keep ? state.recapMovesLoading : null;
         const all = Boolean(opening) || (keep && state.recap && !state.recap.movements.counts);
+        const previous = state.recapJob;
+        clearTimeout(state.recapPollTimer);
+        // A job for other filters is nobody's any more: stopped, so it frees its place on the Hub.
+        if (previous && previous.key !== key && previous.status === 'running') cancelRecapJob(previous.id);
         if (!keep) {
             state.recapLoadingSince = Date.now();
             state.recapMovesLoading = null;
@@ -6038,10 +6060,130 @@
             state.recapMovesFailed = null;
             state.recapReports = null;
             state.recapGenerateError = null;
+            state.recapHubBusy = false;
+            state.recapPollFailures = 0;
             render();
         }
-        const path = PSL.recapPath(recapRoute()) + (all ? '&moves=all' : '');
-        Promise.all([getJson(path), readRecapReports()]).then(function (results) {
+        state.recapRestarts = 0;
+        if (state.recapDirect) {
+            landRecap(sequence, getJson(PSL.recapPath(route) + (all ? '&moves=all' : '')), opening);
+            return;
+        }
+        // The same filters computed already: another view or the whole list reads it, nothing is computed.
+        if (previous && previous.key === key && previous.status === 'succeeded' && !refresh) {
+            readRecapResult(sequence, previous, route, all, opening);
+            return;
+        }
+        startRecapJob(sequence, route, Boolean(refresh), all, opening);
+    }
+
+    function startRecapJob(sequence, route, refresh, all, opening) {
+        fetchJson(PSL.recapJobPath(route, refresh), 'POST').then(function (job) {
+            if (sequence !== state.recapSeq) return;
+            state.recapHubBusy = false;
+            followRecapJob(sequence, job, route, all, opening);
+        }).catch(function (error) {
+            if (sequence !== state.recapSeq) return;
+            if (error.status === 404 || error.status === 405) {
+                // A Hub without the route, or the site's replay of one: the single read of before.
+                state.recapDirect = true;
+                landRecap(sequence, getJson(PSL.recapPath(route) + (all ? '&moves=all' : '')), opening);
+                return;
+            }
+            if (error.status === 503) {
+                // As many recaps as the Hub runs at once are running: asked again in a few seconds.
+                state.recapHubBusy = true;
+                if (!state.recap && currentScreen() === 'recap') render();
+                state.recapPollTimer = setTimeout(function () {
+                    if (sequence === state.recapSeq && currentScreen() === 'recap')
+                        startRecapJob(sequence, route, refresh, all, opening);
+                }, RECAP_BUSY_RETRY_MS);
+                return;
+            }
+            landRecap(sequence, Promise.reject(error), opening);
+        });
+    }
+
+    function followRecapJob(sequence, job, route, all, opening) {
+        state.recapJob = Object.assign({key: PSL.recapJobKey(route)}, job);
+        if (job.status === 'succeeded') {
+            readRecapResult(sequence, state.recapJob, route, all, opening);
+            return;
+        }
+        if (job.status !== 'running') {
+            landRecap(sequence, Promise.reject(Object.assign(new Error(job.status), {status: 500})), opening);
+            return;
+        }
+        showRecapProgress();
+        state.recapPollTimer = setTimeout(function () {
+            pollRecapJob(sequence, job.id, route, all, opening);
+        }, RECAP_POLL_MS);
+    }
+
+    function pollRecapJob(sequence, id, route, all, opening) {
+        if (sequence !== state.recapSeq || currentScreen() !== 'recap') return;
+        getJson('/api/recap/jobs/' + encodeURIComponent(id)).then(function (job) {
+            if (sequence !== state.recapSeq) return;
+            state.recapPollFailures = 0;
+            followRecapJob(sequence, job, route, all, opening);
+        }).catch(function (error) {
+            if (sequence !== state.recapSeq) return;
+            if (error.status === 404) {
+                // Forgotten by a Hub that restarted: computed again, once, rather than shown as an error.
+                state.recapJob = null;
+                if (state.recapRestarts > 0) {
+                    landRecap(sequence, Promise.reject(error), opening);
+                    return;
+                }
+                state.recapRestarts += 1;
+                startRecapJob(sequence, route, false, all, opening);
+                return;
+            }
+            state.recapPollFailures += 1;
+            state.recapPollTimer = setTimeout(function () {
+                pollRecapJob(sequence, id, route, all, opening);
+            }, PSL.retryDelay(state.recapPollFailures));
+        });
+    }
+
+    function readRecapResult(sequence, job, route, all, opening) {
+        getJson(PSL.recapJobResultPath(job.id, route.view, all)).then(function (snapshot) {
+            landRecap(sequence, Promise.resolve(snapshot), opening);
+        }).catch(function (error) {
+            if (sequence !== state.recapSeq) return;
+            // Expired or forgotten since: computed again, once.
+            if ((error.status === 404 || error.status === 409) && state.recapRestarts === 0) {
+                state.recapRestarts += 1;
+                state.recapJob = null;
+                startRecapJob(sequence, route, false, all, opening);
+                return;
+            }
+            landRecap(sequence, Promise.reject(error), opening);
+        });
+    }
+
+    /** Stops a job nobody follows any more. Fire and forget: its answer changes nothing on screen. */
+    function cancelRecapJob(id) {
+        fetch('/api/recap/jobs/' + encodeURIComponent(id), {
+            method: 'DELETE',
+            headers: {'content-type': 'application/json'},
+            keepalive: true
+        }).catch(function () {
+            return null;
+        });
+    }
+
+    /** The bar and the stages follow the job in place, so the status region speaks only when the stage changes. */
+    function showRecapProgress() {
+        if (state.recap || currentScreen() !== 'recap') return;
+        const panel = document.getElementById('recap-progress');
+        if (panel && state.recapJob) patchRecapProgress(panel, state.recapJob);
+        else render();
+    }
+
+    /** Lands a recap read, with the reports list beside it. */
+    function landRecap(sequence, read, opening) {
+        Promise.all([read, readRecapReports()]).then(function (results) {
             if (sequence !== state.recapSeq) return;
             state.recap = results[0];
             state.recapReports = results[1];
@@ -6090,13 +6232,19 @@
             return section;
         }
         if (state.recap === null) {
-            section.appendChild(recapLoadingBanner());
+            const job = state.recapJob;
+            if (state.recapHubBusy) section.appendChild(recapHubBusyBanner());
+            if (job && job.status === 'running' && job.key === PSL.recapJobKey(route)) {
+                section.appendChild(recapProgressPanel(job));
+                return section;
+            }
+            if (!state.recapHubBusy) section.appendChild(recapLoadingBanner());
             section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px'}));
             return section;
         }
         const snapshot = state.recap;
         const labels = PSL.RECAP_LABELS[snapshot.view === 'pilotage' ? 'pilotage' : 'tech'];
-        [recapPeriodBlock(snapshot), recapTiles(snapshot, labels), recapPriorities(snapshot, route),
+        [recapFreshnessLine(route), recapPeriodBlock(snapshot), recapTiles(snapshot, labels), recapPriorities(snapshot, route),
             recapMoved(snapshot, labels), recapReportsPanel(route), recapCardPanel(route)].forEach(function (part) {
             if (part) section.appendChild(part);
         });
@@ -6680,7 +6828,8 @@
             delete state.recapBusy[signature];
             if (failure) state.recapRowError[signature] = failure;
             else delete state.recapRowError[signature];
-            loadRecap(true);
+            // A write that landed changes the recap: computed again. A refused one changed nothing.
+            loadRecap(true, !failure);
         });
     }
 
@@ -6775,7 +6924,7 @@
                 delete state.recapRowError[target.row];
                 state.recapNaming = null;
                 state.recapNameDraft = null;
-                loadRecap(true);
+                loadRecap(true, true);
             });
     }
 
@@ -6936,7 +7085,8 @@
                 focusFirstNewMove(key);
                 return;
             }
-            // The whole snapshot again with every move: the screen then reads one snapshot, not two.
+            // The whole snapshot again with every move, from the job already computed: the screen then
+            // reads one snapshot, not two, and nothing is computed again.
             state.recapMovesLoading = key;
             state.recapMovesFailed = null;
             renderFocus('[data-moves="' + key + '"]');
@@ -6962,10 +7112,14 @@
         return snapshot.nothing_moved ? t('recap.moves.nothing') : '';
     }
 
+    const RECAP_POLL_MS = 1000;
+    const RECAP_BUSY_RETRY_MS = 5000;
+
     /**
-     * Built from every finding of the period, so a large database takes minutes: said in a banner, lest
-     * the reader leave and come back to start the same work again, with the time spent so far so the
-     * page reads as working. The counter sits outside the status region, which would announce it every second.
+     * Built from every finding of the period, so a large database takes minutes: said in a banner
+     * while the Hub answers the job, or for as long as a Hub without jobs computes, with the time spent
+     * so far so the page reads as working. Leaving restarts that older read, not a job, and the banner
+     * says which. The counter sits outside the status region, which would announce it every second.
      */
     function recapLoadingBanner() {
         const since = state.recapLoadingSince || Date.now();
@@ -6977,10 +7131,105 @@
             el('div', {}, [
                 el('div', {role: 'status'}, [
                     el('p', {class: 'recap-loading-title', text: t('recap.loading_title')}),
-                    el('p', {text: t('recap.loading')})
+                    el('p', {text: t(state.recapDirect ? 'recap.loading' : 'recap.job.body')})
                 ]),
                 live(el('p', {class: 'recap-loading-elapsed', text: elapsed()}), elapsed)
             ])
+        ]);
+    }
+
+    /**
+     * Where the Hub's computation of this recap is: the share of the work behind it as a bar, each
+     * stage done, running, still to come or not needed on this day, and the time since it started,
+     * counted from the Hub's start so a reader who comes back sees the whole of it.
+     */
+    function recapProgressPanel(job) {
+        const elapsed = function () {
+            return t('recap.loading_elapsed', {elapsed: PSL.durPrecise(Date.now() - job.started_at_ms)});
+        };
+        const percent = PSL.recapJobPercent(job);
+        const fill = el('div', {class: 'recap-progress-fill'});
+        fill.style.width = percent + '%';
+        return el('div', {class: 'banner recap-loading', 'data-tone': 'info', id: 'recap-progress'}, [
+            infoGlyph(16),
+            el('div', {class: 'recap-progress'}, [
+                el('div', {role: 'status'}, [
+                    el('p', {class: 'recap-loading-title', text: t('recap.loading_title')}),
+                    el('p', {text: t('recap.job.body')}),
+                    el('p', {class: 'recap-progress-stage', text: recapStageLine(job)})
+                ]),
+                el('div', {
+                    class: 'recap-progress-track',
+                    role: 'progressbar',
+                    'aria-valuemin': '0',
+                    'aria-valuemax': '100',
+                    'aria-valuenow': String(percent),
+                    'aria-label': t('recap.job.progress_label')
+                }, [fill]),
+                recapStageList(job),
+                live(el('p', {class: 'recap-loading-elapsed', text: elapsed()}), elapsed)
+            ])
+        ]);
+    }
+
+    function patchRecapProgress(panel, job) {
+        const percent = PSL.recapJobPercent(job);
+        const track = panel.querySelector('.recap-progress-track');
+        const line = panel.querySelector('.recap-progress-stage');
+        const list = panel.querySelector('.recap-stages');
+        if (!track || !line || !list) {
+            render();
+            return;
+        }
+        track.setAttribute('aria-valuenow', String(percent));
+        track.firstChild.style.width = percent + '%';
+        // Rewritten only when it changes, so the status region speaks once per stage.
+        const text = recapStageLine(job);
+        if (line.textContent !== text) line.textContent = text;
+        list.replaceWith(recapStageList(job));
+    }
+
+    function recapStageLine(job) {
+        return t('recap.job.progress_text', {
+            percent: PSL.recapJobPercent(job),
+            stage: job.stage ? t('recap.job.stage.' + job.stage) : t('recap.job.starting')
+        });
+    }
+
+    function recapStageList(job) {
+        return el('ol', {class: 'recap-stages'}, (job.stages || []).map(function (stage) {
+            let time = '';
+            if (stage.state === 'done' && stage.ms != null) time = PSL.durPrecise(stage.ms);
+            else if (stage.state === 'running') time = t('recap.job.stage_running');
+            else if (stage.state === 'skipped') time = t('recap.job.stage_skipped');
+            return el('li', {class: 'recap-stage', 'data-state': stage.state}, [
+                el('span', {class: 'recap-stage-dot', 'aria-hidden': 'true'}),
+                el('span', {class: 'recap-stage-name', text: t('recap.job.stage.' + stage.name)}),
+                el('span', {class: 'recap-stage-time', text: time})
+            ]);
+        }));
+    }
+
+    function recapHubBusyBanner() {
+        return el('div', {class: 'banner recap-loading', 'data-tone': 'info', role: 'status'}, [
+            infoGlyph(16),
+            el('div', {text: t('recap.job.busy')})
+        ]);
+    }
+
+    /** When the recap on screen was computed, until when the Hub reuses it, and a way to compute it now. */
+    function recapFreshnessLine(route) {
+        const job = state.recapJob;
+        if (state.recapDirect || !job || job.status !== 'succeeded' || job.key !== PSL.recapJobKey(route)) return null;
+        const fresh = PSL.recapFreshness(job, Date.now());
+        if (!fresh) return null;
+        const again = el('button', {type: 'button', class: 'pill-button pill-sm', text: t('recap.job.recompute')});
+        again.addEventListener('click', function () {
+            loadRecap(false, true);
+        });
+        return el('div', {class: 'recap-freshness'}, [
+            el('span', {class: 'recap-freshness-text', text: t('recap.job.fresh', fresh)}),
+            again
         ]);
     }
 
