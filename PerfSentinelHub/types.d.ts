@@ -88,6 +88,8 @@ export interface Analysis {
     result?: { empty?: boolean } & Record<string, unknown> | null;
     error_code?: ErrorCode | null;
     producer_version?: string | null;
-    created_ms?: number | null;
-    finished_ms?: number | null;
+    created_at_ms?: number;
+    started_at_ms?: number | null;
+    finished_at_ms?: number | null;
+    expires_at_ms?: number | null;
 }

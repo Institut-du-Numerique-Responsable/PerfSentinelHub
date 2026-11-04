@@ -2085,7 +2085,7 @@ test("app.js declares each of its top-level functions once", () => {
     const path = require("node:path");
     const source = fs.readFileSync(
         path.join(__dirname, "..", "PerfSentinelHub", "wwwroot", "app.js"), "utf8");
-    const names = [...source.matchAll(/^ {4}function ([A-Za-z0-9_$]+)\(/gm)].map(m => m[1]);
+    const names = [...source.matchAll(/^ {4}(?:async )?function ([A-Za-z0-9_$]+)\(/gm)].map(m => m[1]);
     assert.ok(names.length > 100, "the top-level pattern no longer matches app.js");
     const twice = names.filter((name, i) => names.indexOf(name) !== i);
     assert.deepEqual(twice, []);
