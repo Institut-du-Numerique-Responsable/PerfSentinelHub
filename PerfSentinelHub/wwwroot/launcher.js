@@ -3238,7 +3238,7 @@
             return key;
         }
         if (!vars) return value;
-        return value.replace(/\{(\w+)\}/g, (whole, name) => name in vars ? String(vars[name]) : whole);
+        return value.replace(/{(\w+)}/g, (whole, name) => name in vars ? String(vars[name]) : whole);
     }
 
     /**
@@ -3483,7 +3483,7 @@
     function isProse(text) {
         if (/:\/\//.test(text) || /^[.#[]/.test(text) || /^[a-z0-9_]+(\.[a-z0-9_-]+)+$/.test(text)) return false;
         if (text.indexOf(':') >= 0 && text.indexOf(';') >= 0) return false;
-        const words = text.replace(/\$\{[^}]*\}/g, 'X').split(/\s+/).filter(Boolean);
+        const words = text.replace(/\${[^}]*}/g, 'X').split(/\s+/).filter(Boolean);
         return words.length >= 2 && words.some(word => /^[a-z]{3,}$/.test(word.replace(/[^A-Za-z]/g, '')));
     }
 

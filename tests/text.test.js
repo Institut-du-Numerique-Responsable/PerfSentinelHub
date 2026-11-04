@@ -15,7 +15,7 @@ const TEXT = globalThis.PSL_TEXT;
 
 /** Every `{name}` a value carries, sorted, so two twins compare as sets. */
 function placeholders(value) {
-    return [...new Set(value.match(/\{\w+\}/g) || [])].sort();
+    return [...new Set(value.match(/{\w+}/g) || [])].sort();
 }
 
 /** What differs between two tables: keys one side lacks, placeholders that do not match. */
@@ -648,7 +648,7 @@ test("Management_copy_carries_no_technical_word, in French", () => inLang("fr", 
             "recap.where.move.at", "recap.tile.co2", "recap.tile.actions.checked", "recap.tile.actions.open",
             "recap.state.not_taken", "recap.state.done_with", "recap.when.done", "recap.when.updated"]
             // A placeholder names a value, not a word the reader meets.
-            .map(key => PSL.t(key).replace(/\{\w+\}/g, "x"))
+            .map(key => PSL.t(key).replace(/{\w+}/g, "x"))
     ];
     assert.equal(texts.filter(text => PSL.t("recap.plain.n_plus_one_sql") === text).length, 1);
     for (const text of texts) {
