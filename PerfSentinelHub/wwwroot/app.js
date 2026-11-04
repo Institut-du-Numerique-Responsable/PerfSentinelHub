@@ -133,6 +133,8 @@
         // What was typed in the name field when the Hub refused it, so a refusal does not eat it.
         recapNameDraft: null,
         recapSeq: 0,
+        // When the recap now being computed was asked for, which its loading banner counts from.
+        recapLoadingSince: 0,
         // The frozen reports under the recap: the list GET /api/recap/reports answered, null when the
         // Hub refused it (403, the section stays hidden) or while it loads, 'error' when it failed
         // otherwise; whether a generate is in flight and the sentence a refused one left.
@@ -2229,8 +2231,7 @@
         return el('div', {class: 'settings-block'}, [button, body]);
     }
 
-    // Fixed, and not measured: the table around this sets min-width: 1090px and
-    // scrolls rather than shrink, so the room here never falls below three.
+    // Fixed, and not measured: a block narrower than three cards stacks them in one column in CSS.
     const SETTINGS_COLUMNS = 3;
 
     /**
@@ -2249,6 +2250,8 @@
         for (let index = 0; index < count; index++)
             columns.push(el('div', {class: 'settings-col'}));
         cards.forEach(function (card, index) {
+            // Stacked on a narrow screen, the columns dissolve and this order puts the cards back in reading order.
+            card.style.order = String(index);
             columns[index % count].appendChild(card);
         });
         return columns;
@@ -6023,6 +6026,7 @@
         const opening = keep ? state.recapMovesLoading : null;
         const all = Boolean(opening) || (keep && state.recap && !state.recap.movements.counts);
         if (!keep) {
+            state.recapLoadingSince = Date.now();
             state.recapMovesLoading = null;
             state.recap = null;
             state.recapError = null;
@@ -6086,9 +6090,7 @@
             return section;
         }
         if (state.recap === null) {
-            // Built from every finding of the period, so a large database takes minutes: said, lest
-            // the reader leave, and come back to start the same work again.
-            section.appendChild(el('p', {class: 'recap-loading', role: 'status', text: t('recap.loading')}));
+            section.appendChild(recapLoadingBanner());
             section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px'}));
             return section;
         }
@@ -6958,6 +6960,28 @@
     function recapMovedNote(snapshot) {
         if (snapshot.previous.truncated_to_days === 0) return t('recap.moves.none_closed');
         return snapshot.nothing_moved ? t('recap.moves.nothing') : '';
+    }
+
+    /**
+     * Built from every finding of the period, so a large database takes minutes: said in a banner, lest
+     * the reader leave and come back to start the same work again, with the time spent so far so the
+     * page reads as working. The counter sits outside the status region, which would announce it every second.
+     */
+    function recapLoadingBanner() {
+        const since = state.recapLoadingSince || Date.now();
+        const elapsed = function () {
+            return t('recap.loading_elapsed', {elapsed: PSL.durPrecise(Date.now() - since)});
+        };
+        return el('div', {class: 'banner recap-loading', 'data-tone': 'info'}, [
+            infoGlyph(16),
+            el('div', {}, [
+                el('div', {role: 'status'}, [
+                    el('p', {class: 'recap-loading-title', text: t('recap.loading_title')}),
+                    el('p', {text: t('recap.loading')})
+                ]),
+                live(el('p', {class: 'recap-loading-elapsed', text: elapsed()}), elapsed)
+            ])
+        ]);
     }
 
     // ---- the frozen reports

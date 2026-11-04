@@ -11,7 +11,16 @@ All notable changes to PerfSentinelHub are recorded here.
   the border. A row of buttons now wraps whole buttons instead.
 - The recap's reports section no longer repeats its title in its overline ("// reports" over
   "Reports"): the overline reads `// archive` (`// archives` in French), as What moved reads
-  `// movements`.
+  `// movements`. The same goes for two more: the share card section reads `// cards` over "Share a
+  result", and an incident's correlations read "Active during this incident" under `// correlations`.
+- On a phone, a daemon's settings stack in one column instead of three, where setting names broke
+  letter by letter and a card's overline ran over its count. Wider screens keep three columns.
+
+### Changed
+
+- While the recap is computed, the screen says so in an information banner rather than a line of
+  grey text: computing it can take several minutes on a large database, the reader should stay on
+  the page, and a counter shows how long it has been running.
 
 ## [0.13.0] - 2026-11-03
 
