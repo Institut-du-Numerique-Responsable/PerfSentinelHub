@@ -10,11 +10,11 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
     private const string LedgerA = "00000000-0000-4000-8000-00000000000a";
     private const string LedgerB = "00000000-0000-4000-8000-00000000000b";
 
+    private static readonly DetectionThresholds Slow500 = new(500, null, null, null, null, null);
+
     private HubDatabase Database => factory.Database;
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
-
-    private static readonly DetectionThresholds Slow500 = new(500, null, null, null, null, null);
 
     // One pushed page of one ledger: a single count on a single day.
     private Task CountAsync(

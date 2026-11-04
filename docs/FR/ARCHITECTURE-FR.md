@@ -252,7 +252,7 @@ fenêtrée de `/api/findings` les replie, par source, en un compte servi et les 
 rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding). Rien n'est
 rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.
 
-Le récap, `GET /api/recap`, n'écrit rien et ne garde rien en propre. `RecapService` fait jusqu'à
+Le récap, `GET /api/recap`, n'écrit rien. `RecapService` fait jusqu'à
 quatre lectures fenêtrées des findings, chacune plafonnée à 5 000 : la période avec ses findings
 acquittés, la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente,
 sautée le premier jour d'une période. Il fait ensuite une lecture de couverture des jours des sources et une lecture
@@ -266,7 +266,10 @@ abonnement le réutilisent tel quel.
 fois ses ledgers scellés, `RecapReportRenderer` écrit le HTML autonome d'un instantané stocké,
 `RecapDeliveryWorker` envoie les lignes dues de `recap_deliveries` aux webhooks et, par
 `RecapMailer`, au relais SMTP, et `RecapLoop` fait tourner le générateur et le worker toutes les
-15 secondes.
+15 secondes. `RecapJobs` mène le même calcul pour l'écran en dehors de la requête, sur un fil à lui, prévenu de
+chaque étape à mesure que `RecapService` y entre, et garde en mémoire chaque récap calculé pour son
+audience et sa requête, une journée pour une période close et 10 minutes pour une période en cours ou
+dont un jour est encore compté, au plus 2 en cours et 32 en tout. Un redémarrage les oublie tous.
 
 Chaque démarrage complète ce qu'un build plus ancien a laissé de côté : les lignes
 d'attributs d'une copie dont l'observation la plus récente n'en a aucune, le service d'une

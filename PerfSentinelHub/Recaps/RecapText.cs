@@ -15,6 +15,10 @@ namespace PerfSentinelHub.Recaps;
 /// </summary>
 public static class RecapText
 {
+    /// <summary>The closing sentence of the Management "What to fix first" help, as in RECAP_HELP.</summary>
+    public const string NamingHelp =
+        "A team can name its services and steps in the Hub, so this report speaks its language.";
+
     private static readonly string[] FrenchMonths =
         ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
@@ -260,10 +264,6 @@ public static class RecapText
 
         return html.ToString();
     }
-
-    /// <summary>The closing sentence of the Management "What to fix first" help, as in RECAP_HELP.</summary>
-    public const string NamingHelp =
-        "A team can name its services and steps in the Hub, so this report speaks its language.";
 
     public static string NamingHelpIn(string lang)
     {

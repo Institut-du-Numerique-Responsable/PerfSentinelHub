@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Storage;
-
 using PerfSentinelHub.Tests.Storage;
 
 namespace PerfSentinelHub.Tests.Access;
@@ -162,42 +161,42 @@ public sealed class AccessScopeParityTests : IDisposable
             await ExecuteAsync(
                 connection,
                 LegacySchema.InlineEnvelopes + """
-                INSERT INTO findings(
-                  signature, finding_json, service, finding_type, severity, endpoint, template_hash,
-                  first_seen_ms, last_seen_ms, max_confidence, max_confidence_rank)
-                SELECT value, '{}', 'fleet-wide', 'slow_sql', 'warning', 'GET /', 'h', 1, 1, 'daemon_production', 4
-                FROM json_each('["s1", "s2", "s3", "s4", "s5", "s6"]');
-                INSERT INTO finding_sources(
-                  signature, source_id, source_name, environment, producer_version, first_seen_ms, last_seen_ms,
-                  finding_json)
-                VALUES
-                  ('s1', 'daemon-a', 'A', 'prod', '0.26.2', 1, 1,
-                   '{"finding": {"service": "cart", "grouping": [{"key": "k8s.namespace.name", "value": "shop-ns"},
-                                                                  {"key": "team", "value": "shop"}]}}'),
-                  ('s1', 'daemon-b', 'B', 'prod', '0.26.2', 1, 1, '{"finding": {"service": "cart-api", "grouping": []}}'),
-                  ('s2', 'daemon-a', 'A', 'prod', '0.26.2', 1, 1,
-                   '{"finding": {"service": "invoice-api", "grouping": [{"key": "team", "value": "billing"}]}}'),
-                  ('s3', 'lab', 'Lab', 'lab', '0.26.2', 1, 1,
-                   '{"finding": {"service": "Shop", "grouping": [{"key": "team", "value": "Shop"}]}}'),
-                  ('s4', 'daemon-a', 'A', 'prod', '0.26.2', 1, 1,
-                   '{"finding": {"grouping": [{"key": "team", "value": "shop"}]}}'),
-                  ('s5', 'daemon-b', 'B', 'prod', '0.26.2', 1, 1,
-                   '{"finding": {"service": "cart", "grouping": [{"key": "team", "value": "a=b"}]}}'),
-                  ('s6', 'daemon-a', 'A', 'prod', '0.11.2', 1, 1, NULL);
-                INSERT INTO incidents(
-                  id, source_id, service, kind, at_ms, window_from_ms, window_to_ms, finding_count,
-                  incident_json, first_seen_ms, last_seen_ms, findings_json)
-                VALUES
-                  ('i1', 'daemon-a', 'cart', 'latency', 1, 0, 1, 2, '{}', 1, 7,
-                   '[{"finding": {"grouping": [{"key": "team", "value": "shop"}, {"key": "zone", "value": "eu"}]}},
-                     {"finding": {"grouping": [{"key": "team", "value": "shop"}]}}]'),
-                  ('i1', 'daemon-b', 'cart-api', 'latency', 1, 0, 1, 1, '{}', 1, 7,
-                   '[{"finding": {"grouping": [{"key": "team", "value": "a=b"}]}}]'),
-                  ('i2', 'daemon-b', 'cart', 'latency', 1, 0, 1, 2, '{}', 1, 7,
-                   '[{"finding": {"grouping": [{"key": "team", "value": "shop"}]}},
-                     {"finding": {"grouping": [{"key": "team", "value": "billing"}]}}]'),
-                  ('i3', 'lab', 'invoice-api', 'latency', 1, 0, 1, 0, '{}', 1, 7, '[]');
-                """,
+                                               INSERT INTO findings(
+                                                 signature, finding_json, service, finding_type, severity, endpoint, template_hash,
+                                                 first_seen_ms, last_seen_ms, max_confidence, max_confidence_rank)
+                                               SELECT value, '{}', 'fleet-wide', 'slow_sql', 'warning', 'GET /', 'h', 1, 1, 'daemon_production', 4
+                                               FROM json_each('["s1", "s2", "s3", "s4", "s5", "s6"]');
+                                               INSERT INTO finding_sources(
+                                                 signature, source_id, source_name, environment, producer_version, first_seen_ms, last_seen_ms,
+                                                 finding_json)
+                                               VALUES
+                                                 ('s1', 'daemon-a', 'A', 'prod', '0.26.2', 1, 1,
+                                                  '{"finding": {"service": "cart", "grouping": [{"key": "k8s.namespace.name", "value": "shop-ns"},
+                                                                                                 {"key": "team", "value": "shop"}]}}'),
+                                                 ('s1', 'daemon-b', 'B', 'prod', '0.26.2', 1, 1, '{"finding": {"service": "cart-api", "grouping": []}}'),
+                                                 ('s2', 'daemon-a', 'A', 'prod', '0.26.2', 1, 1,
+                                                  '{"finding": {"service": "invoice-api", "grouping": [{"key": "team", "value": "billing"}]}}'),
+                                                 ('s3', 'lab', 'Lab', 'lab', '0.26.2', 1, 1,
+                                                  '{"finding": {"service": "Shop", "grouping": [{"key": "team", "value": "Shop"}]}}'),
+                                                 ('s4', 'daemon-a', 'A', 'prod', '0.26.2', 1, 1,
+                                                  '{"finding": {"grouping": [{"key": "team", "value": "shop"}]}}'),
+                                                 ('s5', 'daemon-b', 'B', 'prod', '0.26.2', 1, 1,
+                                                  '{"finding": {"service": "cart", "grouping": [{"key": "team", "value": "a=b"}]}}'),
+                                                 ('s6', 'daemon-a', 'A', 'prod', '0.11.2', 1, 1, NULL);
+                                               INSERT INTO incidents(
+                                                 id, source_id, service, kind, at_ms, window_from_ms, window_to_ms, finding_count,
+                                                 incident_json, first_seen_ms, last_seen_ms, findings_json)
+                                               VALUES
+                                                 ('i1', 'daemon-a', 'cart', 'latency', 1, 0, 1, 2, '{}', 1, 7,
+                                                  '[{"finding": {"grouping": [{"key": "team", "value": "shop"}, {"key": "zone", "value": "eu"}]}},
+                                                    {"finding": {"grouping": [{"key": "team", "value": "shop"}]}}]'),
+                                                 ('i1', 'daemon-b', 'cart-api', 'latency', 1, 0, 1, 1, '{}', 1, 7,
+                                                  '[{"finding": {"grouping": [{"key": "team", "value": "a=b"}]}}]'),
+                                                 ('i2', 'daemon-b', 'cart', 'latency', 1, 0, 1, 2, '{}', 1, 7,
+                                                  '[{"finding": {"grouping": [{"key": "team", "value": "shop"}]}},
+                                                    {"finding": {"grouping": [{"key": "team", "value": "billing"}]}}]'),
+                                                 ('i3', 'lab', 'invoice-api', 'latency', 1, 0, 1, 0, '{}', 1, 7, '[]');
+                                               """,
                 cancellationToken);
         }
 

@@ -17,6 +17,7 @@ namespace PerfSentinelHub.Tests.Api;
 /// </summary>
 public sealed class AnalysisSubmissionTests : IAsyncLifetime
 {
+    private const string Valid = """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""";
     private readonly HubApplicationFactory _factory = new();
     private WebApplicationFactory<Program> _hub = null!;
 
@@ -69,7 +70,9 @@ public sealed class AnalysisSubmissionTests : IAsyncLifetime
             .RootElement.GetProperty("id").GetString()!;
 
         var run = await _hub.Services.GetRequiredService<HubDatabase>().FindRunAsync(id, cancellationToken);
-        Assert.Equal("""{"service":"checkout","lookback":"1h","detection":{"max_fanout":40,"sanitizer_aware_classification":"strict"}}""", run!.RequestJson);
+        Assert.Equal(
+            """{"service":"checkout","lookback":"1h","detection":{"max_fanout":40,"sanitizer_aware_classification":"strict"}}""",
+            run!.RequestJson);
     }
 
     [Fact]
@@ -104,8 +107,6 @@ public sealed class AnalysisSubmissionTests : IAsyncLifetime
         Assert.Equal("30", refused.Headers.RetryAfter?.ToString());
         Assert.Equal(8, await _hub.Services.GetRequiredService<HubDatabase>().CountPendingRunsAsync(cancellationToken));
     }
-
-    private const string Valid = """{"source_id":"tempo","request":{"service":"checkout","lookback":"1h"}}""";
 
     private static Task<HttpResponseMessage> PostAsync(HttpClient client, string body)
     {

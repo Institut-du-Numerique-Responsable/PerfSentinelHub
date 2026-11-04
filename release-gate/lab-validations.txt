@@ -365,3 +365,13 @@ v0.12.0	8924457	2026-11-02	PASS
 # hub-lineage-mutation, hub-detection-volume and hub-card, untouched by this
 # release. The lab ran with a local, uncommitted Hub image pin.
 v0.13.0	142b30b	2026-11-03	PASS
+# v0.14.0: full Hub pass at lab commit b71f715 on the cluster rebuilt that day
+# (make up-cni), a Release image of Hub cc578d4 against the published
+# perf-sentinel 0.42.0 image (sha256:7151cab9). The branch head adds JSDoc-only
+# commits on top (897e0fc, 40826c4, 695978a). All fourteen hub scenarios passed:
+# hub-ingestion, hub-source-reachability, hub-derived-status, hub-plugin-contract,
+# hub-incidents-mirror, hub-incidents-push, hub-correlations-push,
+# hub-access-control, hub-recap, hub-card, hub-detection-volume, hub-disclosures,
+# hub-lineage-mutation and hub-retention-purge, 193 checks with no fail and no
+# skip, first run. The lab ran with local, uncommitted Hub and daemon image pins.
+v0.14.0	b71f715	2026-11-04	PASS

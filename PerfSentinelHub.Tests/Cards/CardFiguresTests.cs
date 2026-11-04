@@ -8,7 +8,10 @@ namespace PerfSentinelHub.Tests.Cards;
 public sealed class CardFiguresTests
 {
     private const long ObservedMs = 1_791_793_800_000; // 2026-10-12T08:30:00Z
-    private static readonly long DoneMs = new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    private static readonly long DoneMs =
+        new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
     private static readonly int DoneDay = (int)(DoneMs / 86_400_000);
     private static readonly RecapPeriod October = RecapPeriod.Of(RecapPeriodKind.Month, new DateOnly(2026, 10, 1));
     private static readonly RecapPeriod September = October.Previous();
@@ -18,7 +21,8 @@ public sealed class CardFiguresTests
         return new FrozenFinding("n_plus_one_sql", "orders", "GET /orders", occurrences, null, observedAtMs);
     }
 
-    private static FrozenFinding Slow(long? p99Us = 2_345_678, long? observedAtMs = ObservedMs, string endpoint = "GET /orders")
+    private static FrozenFinding Slow(long? p99Us = 2_345_678, long? observedAtMs = ObservedMs,
+        string endpoint = "GET /orders")
     {
         return new FrozenFinding("slow_sql", "orders", endpoint, 7, p99Us, observedAtMs);
     }
@@ -40,8 +44,8 @@ public sealed class CardFiguresTests
     [Fact]
     public void A_story_without_its_figure_is_null()
     {
-        Assert.Null(CardFigures.Story(Slow(p99Us: null), DoneMs));
-        Assert.Null(CardFigures.Story(NPlusOne(occurrences: null), DoneMs));
+        Assert.Null(CardFigures.Story(Slow(null), DoneMs));
+        Assert.Null(CardFigures.Story(NPlusOne(null), DoneMs));
         Assert.NotNull(CardFigures.Story(NPlusOne(), DoneMs));
     }
 
@@ -60,7 +64,7 @@ public sealed class CardFiguresTests
         Assert.True(CardFigures.Unprintable(Slow() with { Service = new string('s', 201) }));
         Assert.NotNull(CardFigures.Story(Slow() with { Service = new string('s', 200) }, DoneMs));
         Assert.False(CardFigures.Unprintable(Slow() with { Service = new string('s', 200) }));
-        Assert.False(CardFigures.Unprintable(Slow(p99Us: null) with { Service = new string('s', 201) }));
+        Assert.False(CardFigures.Unprintable(Slow(null) with { Service = new string('s', 201) }));
     }
 
     [Fact]
@@ -87,7 +91,7 @@ public sealed class CardFiguresTests
         var (figures, period) = CardFigures.StoryFigures(
             NPlusOne(), RecapPeriodKind.Month, new CardBefore(September, null, 5_700_000), null);
 
-        Assert.Equal(new CardFiguresBlock(CitedOps: 41), figures);
+        Assert.Equal(new CardFiguresBlock(41), figures);
         Assert.Null(period);
     }
 
@@ -96,7 +100,7 @@ public sealed class CardFiguresTests
     {
         var (volume, volumePeriod) = CardFigures.StoryFigures(
             NPlusOne(), RecapPeriodKind.Month, new CardBefore(September, 1900, 5_700_000), null);
-        Assert.Equal(new CardFiguresBlock(CitedOps: 41, BeforeFixOps: 1900, Co2LowUg: 5_700_000), volume);
+        Assert.Equal(new CardFiguresBlock(41, BeforeFixOps: 1900, Co2LowUg: 5_700_000), volume);
         Assert.Equal(new CardDayRange("2026-09-01", "2026-09-30"), volumePeriod);
 
         var (threshold, thresholdPeriod) = CardFigures.StoryFigures(Slow(), RecapPeriodKind.Month, null, 500);
@@ -116,7 +120,7 @@ public sealed class CardFiguresTests
 
         var (figures, period) = CardFigures.StoryFigures(chatty, RecapPeriodKind.Quarter, null, 25);
 
-        Assert.Equal(new CardFiguresBlock(CitedOps: 30, ThresholdOps: 25), figures);
+        Assert.Equal(new CardFiguresBlock(30, ThresholdOps: 25), figures);
         Assert.Equal(new CardDayRange("2026-10-01", "2026-12-31"), period);
     }
 
@@ -152,7 +156,8 @@ public sealed class CardFiguresTests
 
         Assert.Equal(
             new CardPoint("2026-10-01", "2026-10-31", 333, 1, 3),
-            CardFigures.Point(October, [new DayTotals("a", first, 1, 3, null), new DayTotals("b", first, 4, null, null)]));
+            CardFigures.Point(October,
+                [new DayTotals("a", first, 1, 3, null), new DayTotals("b", first, 4, null, null)]));
         Assert.Null(CardFigures.Point(October, [new DayTotals("a", first, 1, null, null)]));
         Assert.Null(CardFigures.Point(October, []));
     }
@@ -195,7 +200,7 @@ public sealed class CardFiguresTests
         var input = new CardInput(
             "story", "en", "fr", new CardPeriod("month", "2026-10-01", "2026-10-31"),
             new CardScope(null, ["src"], 31, 0, 1000),
-            new CardFiguresBlock(CitedOps: 41, BeforeFixOps: 1900, Co2LowUg: 5_700_000),
+            new CardFiguresBlock(41, BeforeFixOps: 1900, Co2LowUg: 5_700_000),
             new CardStory("n_plus_one_sql", "orders", "GET /orders", null, "2026-10-20"),
             new CardDayRange("2026-09-01", "2026-09-30"),
             new CardFree(null, null, null),

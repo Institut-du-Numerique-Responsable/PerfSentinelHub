@@ -29,6 +29,36 @@ public sealed partial class HubDatabase
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
+            // What the recap reads of an ack: which signature is acked at the source, until when, and
+            // whether the mirror's state lets it count. Compared before the replace, so a poll that
+            // lists the same acks moves nothing.
+            var before = new HashSet<(string, long?)>();
+            string? stateBefore;
+            await using (var read = connection.CreateCommand())
+            {
+                read.Transaction = transaction;
+                read.CommandText = """
+                                   SELECT signature, expires_at_ms FROM source_acks WHERE source_id = $source_id;
+                                   SELECT state FROM ack_reads WHERE source_id = $source_id;
+                                   """;
+                read.Parameters.AddWithValue(SourceIdParameter, sourceId);
+                await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                    before.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetInt64(1)));
+                stateBefore = await reader.NextResultAsync(cancellationToken) &&
+                              await reader.ReadAsync(cancellationToken)
+                    ? reader.GetString(0)
+                    : null;
+            }
+
+            // A signature listed twice is one row, the last listed, as the replace below keeps it.
+            var after = new Dictionary<string, long?>(StringComparer.Ordinal);
+            foreach (var ack in acks)
+                after[ack.Signature] = ack.ExpiresAtMs;
+            var changed = stateBefore != state || !before.SetEquals(after.Select(pair => (pair.Key, pair.Value)));
+            if (changed)
+                TouchRecapInputs();
+
             await using (var delete = connection.CreateCommand())
             {
                 delete.Transaction = transaction;
@@ -47,6 +77,8 @@ public sealed partial class HubDatabase
                 new SourceRead(observedAtMs, state, null),
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            if (changed)
+                TouchRecapInputs();
         }
         finally
         {
@@ -89,14 +121,30 @@ public sealed partial class HubDatabase
     ///     the last read that succeeded stay, the state filed here says they are
     ///     no longer current, and the purge removes them once no read refreshes them.
     /// </summary>
-    public Task RecordAckReadAsync(
+    public async Task RecordAckReadAsync(
         string sourceId,
         long readAtMs,
         string state,
         string? errorCode,
         CancellationToken cancellationToken)
     {
-        return RecordReadAsync(AckReadUpsert, sourceId, new SourceRead(readAtMs, state, errorCode), cancellationToken);
+        // A read that fails, or recovers, switches what the recap counts as acked between the mirror
+        // and each finding's own envelope: a change of state is a change of what it reads.
+        var changed = await ReadAckReadStateAsync(sourceId, cancellationToken) != state;
+        if (changed)
+            TouchRecapInputs();
+        await RecordReadAsync(AckReadUpsert, sourceId, new SourceRead(readAtMs, state, errorCode), cancellationToken);
+        if (changed)
+            TouchRecapInputs();
+    }
+
+    private async Task<string?> ReadAckReadStateAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT state FROM ack_reads WHERE source_id = $source_id;";
+        command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        return await command.ExecuteScalarAsync(cancellationToken) as string;
     }
 
     /// <summary>

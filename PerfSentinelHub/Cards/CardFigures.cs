@@ -43,7 +43,7 @@ public static class CardFigures
         long? threshold)
     {
         var slow = IsSlow(frozen.FindingType);
-        var figures = slow ? new CardFiguresBlock(CitedMs: Cited(frozen)) : new CardFiguresBlock(CitedOps: Cited(frozen));
+        var figures = slow ? new CardFiguresBlock(CitedMs: Cited(frozen)) : new CardFiguresBlock(Cited(frozen));
 
         if (before is { Ops: > 0 and var ops })
             return (figures with { BeforeFixOps = ops, Co2LowUg = before.Co2LowUg }, Range(before.Period));
@@ -51,7 +51,8 @@ public static class CardFigures
         if (threshold is not { } value || frozen.ObservedAtMs is not { } observedMs)
             return (figures, null);
 
-        var period = RecapPeriod.Of(kind, DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeMilliseconds(observedMs).UtcDateTime));
+        var period = RecapPeriod.Of(kind,
+            DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeMilliseconds(observedMs).UtcDateTime));
         return (slow ? figures with { ThresholdMs = value } : figures with { ThresholdOps = value }, Range(period));
     }
 
@@ -112,7 +113,8 @@ public static class CardFigures
     // The engine bounds story.service and story.endpoint at 200 characters.
     private static bool Named(FrozenFinding frozen)
     {
-        return CardRules.Printable(frozen.Service, MaxStoryChars) && CardRules.Printable(frozen.Endpoint, MaxStoryChars);
+        return CardRules.Printable(frozen.Service, MaxStoryChars) &&
+               CardRules.Printable(frozen.Endpoint, MaxStoryChars);
     }
 
     private static long? Cited(FrozenFinding frozen)

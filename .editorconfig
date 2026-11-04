@@ -11,7 +11,15 @@ indent_style = space
 indent_size = 4
 dotnet_sort_system_directives_first = true
 # Rider indents a nested loop without braces as dotnet format does, so a Rider reformat keeps
-# `make format` green. Write a wrapped object initializer one member per line for the same reason.
+# `make format` green. Rider does not wrap long lines either, as dotnet format never does: when it
+# wraps, it moves a whole initializer under `new` with a continuation indent that dotnet format
+# removes. Write a wrapped initializer with its braces on their own lines and one member per line,
+# and keep a property pattern's designation on the line of its closing brace, for the same reason.
+resharper_csharp_wrap_lines = false
 resharper_indent_nested_foreach_stmt = true
 resharper_indent_nested_for_stmt = true
 resharper_indent_nested_while_stmt = true
+
+# A fixture is the bytes a test compares or edits as text, so Rider leaves it as it was captured.
+[PerfSentinelHub.Tests/Fixtures/**]
+ij_formatter_enabled = false

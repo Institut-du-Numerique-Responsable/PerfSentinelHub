@@ -2,6 +2,53 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.14.0] - 2026-11-04
+
+### Added
+
+- The recap is computed as a job the screen follows. `POST /api/recap/jobs` starts the computation
+  for a query, or joins the one running or kept for it; `GET /api/recap/jobs/{id}` tells its stage
+  and its progress, `GET /api/recap/jobs/{id}/result` reads it in a view and a cut, and
+  `DELETE /api/recap/jobs/{id}` lets go of it, stopping it once no screen follows it. A finished recap
+  is kept for its audience and query, a day for a closed period and 10 minutes for one in progress or with a day still being counted,
+  so another view, the whole list of a group or a return to the screen computes nothing;
+  `refresh=true` computes it again, even over a job still running. A narrowed `findings.read` scope
+  reads only its own jobs, under the scope it had. The Hub runs 2 at once and a signed-in caller
+  follows one running job at a time (`503 recap_busy` past either), and it holds 32. A `DELETE` ends
+  only the follow of the screen that sends it (`X-Recap-Screen`, drawn once per page load), so
+  neither another tab nor another person stops a computation they wait on, and a follow
+  its screen stops reading for 30 seconds no longer holds its caller. A kept recap is computed again
+  once an action, a name or a source's acknowledgments change, wherever they were written. The result of a failed job is a `409 recap_failed`. `GET /api/recap` is
+  unchanged.
+- The recap screen shows the computation as it goes: a progress bar, the nine steps ticked off with
+  their duration, and the time since it started, in an information banner. Leaving the page no
+  longer starts it over. Once computed, a line says when and until when it is reused, with
+  Recompute. A write from the screen computes it again; a Hub without jobs is read as before.
+- Each finished recap logs how long each step took (EventId 2507), and `/metrics` counts the jobs:
+  `perf_sentinel_hub_recap_jobs{state}` and `perf_sentinel_hub_recap_jobs_total{outcome}`.
+
+### Changed
+
+- The image ships perf-sentinel `0.42.0` as its analysis engine, repinned by digest from
+  `0.41.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.41.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. A daemon on `0.42.0` drops deploy and restart
+  incidents by default (`[daemon.incidents] ignored_kinds`), so the Hub no longer mirrors or
+  receives them from it; set `ignored_kinds = []` on the daemon to keep them. No detection, score
+  or report format changes, and the disclosure schema stays `perf-sentinel-report/v1.8`.
+
+### Fixed
+
+- A pill button keeps its label on one line. In French, "Analyser cette fenêtre" and "Expliquer la
+  dernière paire" wrapped inside the fixed height of a correlated episode's actions and ran over
+  the border. A row of buttons now wraps whole buttons instead.
+- The recap's reports section no longer repeats its title in its overline ("// reports" over
+  "Reports"): the overline reads `// archive` (`// archives` in French), as What moved reads
+  `// movements`. The same goes for two more: the share card section reads `// cards` over "Share a
+  result", and an incident's correlations read "Active during this incident" under `// correlations`.
+- On a phone, a daemon's settings stack in one column instead of three, where setting names broke
+  letter by letter and a card's overline ran over its count. Wider screens keep three columns.
+
 ## [0.13.0] - 2026-11-03
 
 ### Changed

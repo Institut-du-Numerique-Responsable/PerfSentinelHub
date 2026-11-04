@@ -8,7 +8,8 @@ public sealed partial class HubTextTests
     [Fact]
     public void Every_key_exists_in_both_languages_with_the_same_placeholders()
     {
-        Assert.Equal(HubText.English.Keys.Order(StringComparer.Ordinal), HubText.French.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(HubText.English.Keys.Order(StringComparer.Ordinal),
+            HubText.French.Keys.Order(StringComparer.Ordinal));
         foreach (var (key, english) in HubText.English)
             Assert.True(Placeholders(english) == Placeholders(HubText.French[key]), "placeholders differ in " + key);
     }
@@ -43,7 +44,8 @@ public sealed partial class HubTextTests
 
     private static string Placeholders(string text)
     {
-        return string.Join(',', Placeholder().Matches(text).Select(match => match.Value).Distinct().Order(StringComparer.Ordinal));
+        return string.Join(',',
+            Placeholder().Matches(text).Select(match => match.Value).Distinct().Order(StringComparer.Ordinal));
     }
 
     [GeneratedRegex(@"\{\w+\}")]

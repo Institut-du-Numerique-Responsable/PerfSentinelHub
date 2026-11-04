@@ -128,6 +128,8 @@ public sealed partial class RecapMailDeliveryTests : IAsyncLifetime
             {
                 while (true)
                 {
+                    // Stopping the listener below is what ends this loop.
+                    // ReSharper disable once AccessToDisposedClosure
                     using var _ = await dropper.AcceptTcpClientAsync(TestContext.Current.CancellationToken);
                     Interlocked.Increment(ref accepted);
                 }

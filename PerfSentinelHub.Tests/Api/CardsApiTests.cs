@@ -42,6 +42,9 @@ public sealed class CardsApiTests : IDisposable
         ["storyteller"] = """{"sub":"u-story","email":"story@example.internal","groups":["/storytellers"]}"""
     };
 
+    // The argument files the engine's card subcommands append to, in the reports directory they run in.
+    private static readonly string[] EngineRunFiles = ["card-args.txt", "card-keygen-args.txt", "verify-args.txt"];
+
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
 
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-capi-{Guid.NewGuid():N}");
@@ -135,7 +138,8 @@ public sealed class CardsApiTests : IDisposable
         await OneFixAsync(hub);
 
         using var response = await client.SendAsync(Send("POST", RenderPath,
-            $$"""{"angle":"collective","period":"month","at":"2026-10-01","equivalence_country":"{{country}}"}"""), Token);
+                $$"""{"angle":"collective","period":"month","at":"2026-10-01","equivalence_country":"{{country}}"}"""),
+            Token);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal(
@@ -263,7 +267,8 @@ public sealed class CardsApiTests : IDisposable
             Assert.Single(response.Content.Headers.GetValues("Content-Disposition")), StringComparison.Ordinal);
         Assert.Equal("nosniff", Assert.Single(response.Headers.GetValues("X-Content-Type-Options")));
         Assert.True(response.Headers.CacheControl!.NoStore);
-        Assert.Equal("default-src 'none'; sandbox", Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
+        Assert.Equal("default-src 'none'; sandbox",
+            Assert.Single(response.Headers.GetValues("Content-Security-Policy")));
         Assert.Equal(FakeEngine.CardSvg, await response.Content.ReadAsStringAsync(Token));
     }
 
@@ -351,8 +356,10 @@ public sealed class CardsApiTests : IDisposable
     }
 
     [Theory]
-    [InlineData("free.team", "team", "The card's font cannot draw a character of this field. Remove it, or write it another way.")]
-    [InlineData("free.title", "title", "The card's font cannot draw a character of this field. Remove it, or write it another way.")]
+    [InlineData("free.team", "team",
+        "The card's font cannot draw a character of this field. Remove it, or write it another way.")]
+    [InlineData("free.title", "title",
+        "The card's font cannot draw a character of this field. Remove it, or write it another way.")]
     [InlineData("org.name", null,
         "The card's font cannot draw a character of the organisation's name. Ask an administrator to change Hub:Cards:Organisation.")]
     public async Task Unsupported_characters_is_a_422_naming_its_field(string engineField, string? field, string detail)
@@ -361,7 +368,8 @@ public sealed class CardsApiTests : IDisposable
         {
             Card = true,
             CardRenderExitCode = 5,
-            CardRenderOutput = $$"""{"result":"unrenderable","reason":"unsupported_characters","field":"{{engineField}}"}"""
+            CardRenderOutput =
+                $$"""{"result":"unrenderable","reason":"unsupported_characters","field":"{{engineField}}"}"""
         });
         using var client = hub.CreateClient();
         await OneFixAsync(hub);
@@ -468,7 +476,8 @@ public sealed class CardsApiTests : IDisposable
         await OneFixAsync(hub);
 
         using var response = await client.SendAsync(
-            Send("POST", AttachmentPath, """{"angle":"collective","period":"month","at":"2026-10-01","format":"pdf"}"""),
+            Send("POST", AttachmentPath,
+                """{"angle":"collective","period":"month","at":"2026-10-01","format":"pdf"}"""),
             Token);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -623,13 +632,15 @@ public sealed class CardsApiTests : IDisposable
         using var client = hub.CreateClient();
         using var offClient = off.CreateClient();
         await new CardSeed(Database(hub)).LedgerAsync("a", Sealed(October, day => day.Day == 20730 ? null : day));
-        CardRenderGate[] gates = [.. new[] { hub, off }.Select(each => each.Services.GetRequiredService<CardRenderGate>())];
+        CardRenderGate[] gates =
+            [.. new[] { hub, off }.Select(each => each.Services.GetRequiredService<CardRenderGate>())];
 
         var entered = gates.Select(gate => Enumerable.Range(0, 2).Count(_ => gate.TryEnter())).ToList();
         try
         {
             using var figures = await client.SendAsync(
-                Send("POST", RenderPath, """{"angle":"curve","period":"month","figures":{"avoidable_ops":1}}"""), Token);
+                Send("POST", RenderPath, """{"angle":"curve","period":"month","figures":{"avoidable_ops":1}}"""),
+                Token);
             using var incomplete = await client.SendAsync(Send("POST", RenderPath, Collective), Token);
             using var cardsOff = await offClient.SendAsync(Send("POST", RenderPath, Collective), Token);
 
@@ -689,9 +700,6 @@ public sealed class CardsApiTests : IDisposable
             gate.Exit();
         return free;
     }
-
-    // The argument files the engine's card subcommands append to, in the reports directory they run in.
-    private static readonly string[] EngineRunFiles = ["card-args.txt", "card-keygen-args.txt", "verify-args.txt"];
 
     private string[] EngineRuns()
     {

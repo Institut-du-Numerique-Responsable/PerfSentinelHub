@@ -250,10 +250,10 @@ public sealed class RecapServiceTests : IAsyncLifetime
     public async Task A_source_that_started_after_the_period_is_left_out_and_named()
     {
         await _database.MergeDetectionPageAsync("a", new DetectionLedgerPage(
-            Ledger, (LastMon - 20L) * DayMs, Thu, LastMon - 7, null, [], [.. Days(LastMon - 7, 14)], null),
+                Ledger, (LastMon - 20L) * DayMs, Thu, LastMon - 7, null, [], [.. Days(LastMon - 7, 14)], null),
             true, NowMs, Token);
         await _database.MergeDetectionPageAsync("b", new DetectionLedgerPage(
-            "00000000-0000-4000-8000-000000000002", Mon * DayMs, Thu, Mon, null, [], [Sealed(Mon)], null),
+                "00000000-0000-4000-8000-000000000002", Mon * DayMs, Thu, Mon, null, [], [Sealed(Mon)], null),
             true, NowMs, Token);
 
         var snapshot = await _service.ComputeAsync(new RecapRequest(
@@ -270,7 +270,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
     public async Task A_source_that_started_during_the_period_still_leaves_the_week_before_uncovered()
     {
         await _database.MergeDetectionPageAsync("a", new DetectionLedgerPage(
-            Ledger, (LastMon - 20L) * DayMs, Thu, LastMon - 7, null, [], [.. Days(LastMon - 7, 14)], null),
+                Ledger, (LastMon - 20L) * DayMs, Thu, LastMon - 7, null, [], [.. Days(LastMon - 7, 14)], null),
             true, NowMs, Token);
         await _database.MergeDetectionPageAsync("b", new DetectionLedgerPage(
             "00000000-0000-4000-8000-000000000002", LastMon * DayMs, Thu, LastMon, null, [],
@@ -532,6 +532,51 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal("contradicted", Assert.Single(lab.Priorities).Action!.Confirmation);
     }
 
+    // ------------------------------------------------------------ progress
+
+    [Fact]
+    public async Task A_period_in_progress_reports_every_stage_in_order()
+    {
+        var progress = new RecordedProgress();
+
+        await _service.ComputeAsync(Request(), progress, Token);
+
+        Assert.Equal(
+        [
+            "enter findings_period", "enter findings_open", "enter findings_closed", "enter findings_previous",
+            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter assemble"
+        ], progress.Seen);
+    }
+
+    [Fact]
+    public async Task A_closed_period_skips_the_closed_days_read_it_does_not_make()
+    {
+        var progress = new RecordedProgress();
+
+        await _service.ComputeAsync(Request() with { At = new DateOnly(2026, 10, 20) }, progress, Token);
+
+        Assert.Equal(
+        [
+            "enter findings_period", "enter findings_open", "skip findings_closed", "enter findings_previous",
+            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter assemble"
+        ], progress.Seen);
+    }
+
+    [Fact]
+    public async Task The_first_day_of_a_period_skips_both_windows_it_cannot_read()
+    {
+        await StartAtAsync(Clock("2026-10-26T10:00:00Z"));
+        var progress = new RecordedProgress();
+
+        await _service.ComputeAsync(Request() with { At = new DateOnly(2026, 10, 26) }, progress, Token);
+
+        Assert.Equal(
+        [
+            "enter findings_period", "enter findings_open", "skip findings_closed", "skip findings_previous",
+            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter assemble"
+        ], progress.Seen);
+    }
+
     // ------------------------------------------------------------ helpers
 
     private Task<RecapSnapshot> RecapAsync(string? environment = null)
@@ -560,7 +605,8 @@ public sealed class RecapServiceTests : IAsyncLifetime
         var configured = Sources.Single(item => item.Id == source);
         return _database.UpsertBatchAsync(
             new SourceSnapshot(source, configured.Name, configured.Environment, "0.37.1"),
-            FindingJson.Batch(FindingJson.Envelope(signature, service: service, severity: severity, endpoint: endpoint)),
+            FindingJson.Batch(FindingJson.Envelope(signature, service: service, severity: severity,
+                endpoint: endpoint)),
             day * DayMs + 3_600_000, Token);
     }
 
@@ -610,5 +656,20 @@ public sealed class RecapServiceTests : IAsyncLifetime
     private Task LedgerAsync(string source, DetectionDayRow[] days, DetectionCountRow[] counts)
     {
         return _database.MergeDetectionPageAsync(source, Page(days, counts), true, NowMs, Token);
+    }
+
+    private sealed class RecordedProgress : IRecapProgress
+    {
+        public List<string> Seen { get; } = [];
+
+        public void Enter(RecapStage stage)
+        {
+            Seen.Add("enter " + RecapStages.Name(stage));
+        }
+
+        public void Skip(RecapStage stage)
+        {
+            Seen.Add("skip " + RecapStages.Name(stage));
+        }
     }
 }

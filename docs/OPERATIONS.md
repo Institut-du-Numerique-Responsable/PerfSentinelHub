@@ -104,6 +104,8 @@ not justify a dependency in a service whose only two packages are SQLite.
 | `perf_sentinel_hub_detection_rows_total{source}`                       | counter | Detection count rows merged from a polled ledger      |
 | `perf_sentinel_hub_analysis_queue_depth`                               | gauge   | Runs accepted and not yet claimed by a worker         |
 | `perf_sentinel_hub_analysis_runs{status}`                              | gauge   | Runs currently stored, per status                     |
+| `perf_sentinel_hub_recap_jobs{state}`                                  | gauge   | Recap jobs `running`, and `kept` in all               |
+| `perf_sentinel_hub_recap_jobs_total{outcome}`                          | counter | Recap jobs started, reused, refused as busy, and how they ended |
 | `perf_sentinel_hub_findings{environment,finding_type,severity,status}` | gauge   | Distinct finding signatures stored, per environment   |
 | `perf_sentinel_hub_findings_age_seconds`                               | gauge   | Age of the counts behind `findings`                   |
 | `perf_sentinel_hub_database_bytes`                                     | gauge   | Size of the database file and its write-ahead log     |
@@ -382,6 +384,8 @@ pending until retention purges them: the delivery pass only runs while a subscri
 | `2504` | Warning     | A recap delivery gave up, or the relay refused it for good                                          |
 | `2505` | Warning     | A recap pass failed as a whole. The next one retries                                                |
 | `2506` | Warning     | One subscription's report could not be generated. The others went on                                |
+| `2507` | Information | A recap job finished, with its period, its total time and the time of each step                    |
+| `2508` | Warning     | A recap job failed. The screen that follows it says so                                             |
 
 ## Share card keys
 

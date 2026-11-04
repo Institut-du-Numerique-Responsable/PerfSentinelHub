@@ -22,11 +22,19 @@ public sealed class RecapSentencesTests
     internal static readonly string[] Reasons =
         ["uncovered_days", "open_day", "restart", "sampling", "shed", "ingest_rejected", "overflow", "multi_instance"];
 
+    /// <summary>The Management ban list in French, beside the English one. "service" is in it: no French sentence names one.</summary>
+    internal static readonly string[] FrenchTechnicalWords =
+    [
+        "requête", "base de données", "endpoint", "broker", "pool", "connexion", "sql", "http", "i/o", "e/s", "finding",
+        "signature", "moteur", "daemon", "démon", "registre", "coefficient", "trace", "ingestion", "échantillon",
+        "source", "service"
+    ];
+
     internal static void AssertPlain(string text)
     {
         // "engine" as a whole word: "engineering" names the other view, which a Management reader may meet.
         foreach (var word in TechnicalWords)
-            Assert.DoesNotMatch(@"(?i)" + (word == "engine" ? @"\bengine\b" : Regex.Escape(word)), text);
+            Assert.DoesNotMatch("(?i)" + (word == "engine" ? @"\bengine\b" : Regex.Escape(word)), text);
     }
 
     public static TheoryData<string> AllTypes()
@@ -78,14 +86,6 @@ public sealed class RecapSentencesTests
         foreach (var (term, text) in RecapText.Help("pilotage"))
             AssertPlain(term + " " + text);
     }
-
-    /// <summary>The Management ban list in French, beside the English one. "service" is in it: no French sentence names one.</summary>
-    internal static readonly string[] FrenchTechnicalWords =
-    [
-        "requête", "base de données", "endpoint", "broker", "pool", "connexion", "sql", "http", "i/o", "e/s", "finding",
-        "signature", "moteur", "daemon", "démon", "registre", "coefficient", "trace", "ingestion", "échantillon",
-        "source", "service"
-    ];
 
     internal static void AssertPlainFrench(string text)
     {

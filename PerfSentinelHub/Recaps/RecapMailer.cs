@@ -15,19 +15,17 @@ public sealed class RecapMailer(IOptions<HubOptions> options)
     public async Task<int?> SendAsync(MailMessage message, CancellationToken cancellationToken)
     {
         var smtp = options.Value.Recaps.Smtp;
-        using var client = new SmtpClient(smtp.Host, smtp.Port)
-        {
-            EnableSsl = smtp.StartTls,
-            DeliveryMethod = SmtpDeliveryMethod.Network,
-            // Held for "login" alone: a plain credential is offered to GSSAPI and NTLM first, and the image,
-            // which has no libgssapi, fails on a relay that advertises them instead of falling back to LOGIN.
-            Credentials = smtp.UserName is null
-                ? null
-                : new CredentialCache
-                {
-                    { smtp.Host!, smtp.Port, "login", new NetworkCredential(smtp.UserName, smtp.Password) }
-                }
-        };
+        using var client = new SmtpClient(smtp.Host, smtp.Port);
+        client.EnableSsl = smtp.StartTls;
+        client.DeliveryMethod = SmtpDeliveryMethod.Network;
+        // Held for "login" alone: a plain credential is offered to GSSAPI and NTLM first, and the image,
+        // which has no libgssapi, fails on a relay that advertises them instead of falling back to LOGIN.
+        client.Credentials = smtp.UserName is null
+            ? null
+            : new CredentialCache
+            {
+                { smtp.Host!, smtp.Port, "login", new NetworkCredential(smtp.UserName, smtp.Password) }
+            };
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Timeout);
         try

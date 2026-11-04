@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.403-resolute-aot@sha256:a66703b1c786b77dad068cd0de51b5538b406f3febb16e8920ec9e73aee181ae AS build
 ARG TARGETARCH
-ARG VERSION=0.13.0
+ARG VERSION=0.14.0
 ARG SOURCE_DATE_EPOCH
 WORKDIR /src
 COPY . .
@@ -12,11 +12,11 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
 # The engine the Hub runs for an analysis. Pinned by digest like every other
 # image here, and copied rather than downloaded so the build reaches no host
 # outside the registry.
-FROM ghcr.io/institut-du-numerique-responsable/perf-sentinel:0.41.0@sha256:a49922bdf6b6599efee16d29fb6c88b0265c47722b4070ee44c498803f317c69 AS engine
+FROM ghcr.io/institut-du-numerique-responsable/perf-sentinel:0.42.0@sha256:7151cab91bf0c46579368120cb1deb623e1fa216687c060eea2c8713e88356ec AS engine
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.14-resolute-chiseled-extra@sha256:9e6ce44af9c4fef28620453d51e9b431f83b9889c6a6b0ce749b2fc958438aa6
 ARG SOURCE_COMMIT=unknown
-LABEL org.opencontainers.image.version="0.13.0" \
+LABEL org.opencontainers.image.version="0.14.0" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \
       org.opencontainers.image.source="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub"
 WORKDIR /app

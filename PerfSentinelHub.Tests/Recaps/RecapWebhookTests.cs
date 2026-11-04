@@ -145,7 +145,8 @@ public sealed class RecapWebhookTests : IAsyncLifetime
         var received = Assert.Single(_received);
         using var body = JsonDocument.Parse(received.Body);
         var recap = body.RootElement.GetProperty("recap");
-        foreach (var row in new[] { recap.GetProperty("priorities")[0], recap.GetProperty("movements").GetProperty("new")[0] })
+        foreach (var row in new[]
+                     { recap.GetProperty("priorities")[0], recap.GetProperty("movements").GetProperty("new")[0] })
         {
             Assert.Equal("Payment", row.GetProperty("service_label").GetString());
             Assert.Equal("checkout-api", row.GetProperty("service").GetString());

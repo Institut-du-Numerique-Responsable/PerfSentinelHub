@@ -75,11 +75,11 @@ public sealed record DetectionOverrides
     // every call for a separator set that never changes.
     private static readonly char[] VersionSuffixSeparators = ['-', '+'];
 
-    // TOML literals, formatted when read, so the file is a concatenation.
-    private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
-
     // Every knob as submitted, defaults included, so the stored run shows what the operator set.
     private readonly Dictionary<string, JsonElement> _submitted = new(StringComparer.Ordinal);
+
+    // TOML literals, formatted when read, so the file is a concatenation.
+    private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
 
     public bool IsEmpty => _values.Count == 0;
 

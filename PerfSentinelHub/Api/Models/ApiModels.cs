@@ -293,6 +293,25 @@ public sealed record RecapReportItem(
 /// <summary>A report and its snapshot, the stored text served as it was frozen.</summary>
 public sealed record RecapReportDetail(RecapReportItem Report, JsonElement Snapshot);
 
+/// <summary>One stage of a recap job: pending, running, done or skipped, and how long it took once done.</summary>
+public sealed record RecapJobStageItem(string Name, string State, long? Ms);
+
+/// <summary>
+///     A recap job as GET /api/recap/jobs/{id} answers it. Progress is the share of the expected
+///     work behind it, 1 once succeeded; expires_at_ms is when a finished recap stops being reused.
+/// </summary>
+public sealed record RecapJobState(
+    string Id,
+    string Status,
+    string? Stage,
+    IReadOnlyList<RecapJobStageItem> Stages,
+    double Progress,
+    long StartedAtMs,
+    long ElapsedMs,
+    long? FinishedAtMs,
+    long? ExpiresAtMs,
+    string? ErrorCode);
+
 /// <summary>
 ///     GET /api/access, with Hub:Access:Enabled only: who the caller is and what they
 ///     reach. Configuration, Unmatched and Conflicts are null except for an admin. Never

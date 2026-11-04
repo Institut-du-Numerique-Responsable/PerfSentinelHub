@@ -189,7 +189,9 @@ public sealed class CardKeysTests : IDisposable
     [Theory]
     [InlineData("""{"fingerprint":"abc","public_key":"x"}""", 0)]
     [InlineData("not json", 0)]
-    [InlineData("""{"fingerprint":"ps1:AAAAAAAAAAAAAAAAAAAAAA","public_key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}""", 1)]
+    [InlineData(
+        """{"fingerprint":"ps1:AAAAAAAAAAAAAAAAAAAAAA","public_key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}""",
+        1)]
     public async Task An_engine_line_out_of_contract_makes_no_key(string line, int exitCode)
     {
         var (keys, database) = await KeysAsync(

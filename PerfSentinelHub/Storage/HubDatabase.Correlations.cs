@@ -100,6 +100,10 @@ public sealed partial class HubDatabase
     // never reads it: the subquery is empty and the value it compares is NULL.
     private const string NoEpisodeAttribute = "SELECT 1 WHERE 0";
 
+    // The OR form hides ix_episodes_pair_key from the planner, so a pair link names its pair outright.
+    private const string OnePair = " AND ce.pair_key = $pair_key";
+    private const string PairEpisodeList = $"{EpisodeListWhere}{OnePair} {EpisodeListPage}";
+
     private static readonly string EpisodeAccess =
         Access("ce.source_id", "ce.source_service", NoEpisodeAttribute, "NULL") + " AND " +
         Access("ce.source_id", "ce.target_service", NoEpisodeAttribute, "NULL");
@@ -107,10 +111,6 @@ public sealed partial class HubDatabase
     // Declared after EpisodeAccess: static fields initialize in order.
     private static readonly string ScopedEpisodeList =
         $"WITH {AccessPatternsCte}\n{EpisodeListWhere} AND {EpisodeAccess}\n{EpisodeListPage}";
-
-    // The OR form hides ix_episodes_pair_key from the planner, so a pair link names its pair outright.
-    private const string OnePair = " AND ce.pair_key = $pair_key";
-    private const string PairEpisodeList = $"{EpisodeListWhere}{OnePair} {EpisodeListPage}";
 
     private static readonly string ScopedPairEpisodeList =
         $"WITH {AccessPatternsCte}\n{EpisodeListWhere} AND {EpisodeAccess}{OnePair}\n{EpisodeListPage}";

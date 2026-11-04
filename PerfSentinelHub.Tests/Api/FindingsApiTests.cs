@@ -15,6 +15,8 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
 {
     private const long DayMs = 86_400_000;
 
+    private const string VolumeLedger = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
+
     private static readonly string[] FindingStatuses = ["active", "likely_resolved", "not_observed"];
 
     private static readonly SourceSnapshot Production = new("production-a", "Production A", "production", "0.11.2");
@@ -35,12 +37,13 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     private static readonly SourceSnapshot Unwindowed = new("volume-none", "Volume None", "volume", "0.37.0");
     private static readonly SourceSnapshot VolumeCopy = new("volume-copy", "Volume Copy", "volume-copy", "0.37.0");
     private static readonly SourceSnapshot VolumeCount = new("volume-count", "Volume Count", "volume-count", "0.37.0");
-    private static readonly SourceSnapshot VolumeAdmitted = new("volume-admitted", "Volume Admitted", "volume", "0.37.0");
+
+    private static readonly SourceSnapshot VolumeAdmitted =
+        new("volume-admitted", "Volume Admitted", "volume", "0.37.0");
+
     private static readonly SourceSnapshot VolumeClamp = new("volume-clamp", "Volume Clamp", "volume", "0.37.0");
     private static readonly SourceSnapshot WatchFixed = new("watch-fixed", "Watch Fixed", "volume", "0.39.0");
     private static readonly SourceSnapshot WatchVolume = new("watch-volume", "Watch Volume", "volume", "0.39.0");
-
-    private const string VolumeLedger = "6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b";
 
     private static readonly string[] VolumeFields =
     [
@@ -771,8 +774,10 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         var cancellationToken = TestContext.Current.CancellationToken;
         // Both observed on day 2 only: the window of day 0 sees neither, but one was counted then.
         var batch = new ParsedBatch(
-            [await VariantAsync("volume-admitted:counted", "volume-admitted"),
-                await VariantAsync("volume-admitted:quiet", "volume-admitted")], 0);
+        [
+            await VariantAsync("volume-admitted:counted", "volume-admitted"),
+            await VariantAsync("volume-admitted:quiet", "volume-admitted")
+        ], 0);
         await factory.Database.UpsertBatchAsync(VolumeAdmitted, batch, 2 * DayMs + 1000, cancellationToken);
         await RecordDetectionsAsync(VolumeAdmitted, "volume-admitted:counted", 4);
 
@@ -857,7 +862,7 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
         using var client = hub.CreateClient();
 
         var finding = Assert.Single((await ListAsync(
-            $"/api/findings?service=watch-volume&from={20_744 * DayMs}&to={20_746 * DayMs}", client))
+                $"/api/findings?service=watch-volume&from={20_744 * DayMs}&to={20_746 * DayMs}", client))
             .EnumerateArray());
 
         Assert.Equal(5, finding.GetProperty("detections").GetInt64());
@@ -883,8 +888,10 @@ public sealed class FindingsApiTests(HubApplicationFactory factory) : IClassFixt
     {
         var page = new DetectionLedgerPage(
             VolumeLedger, 0, counts[^1].Day, counts[0].Day, null,
-            [.. counts.Select(count => new DetectionCountRow(
-                count.Day, count.Signature, count.Detections, count.ExtraIoOps, count.BelowThresholdPasses))],
+            [
+                .. counts.Select(count => new DetectionCountRow(
+                    count.Day, count.Signature, count.Detections, count.ExtraIoOps, count.BelowThresholdPasses))
+            ],
             [.. counts.Select(count => new DetectionDayRow(count.Day, false, false, 0, null, 0, 0, 1.0))],
             null);
         return database.MergeDetectionPageAsync(

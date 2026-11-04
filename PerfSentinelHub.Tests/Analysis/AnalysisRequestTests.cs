@@ -74,7 +74,8 @@ public sealed class AnalysisRequestTests
     {
         Assert.Null(Parse($$"""{"service":{{JsonSerializer.Serialize(service)}},"lookback":"1h"}""", SourceKinds.Tempo,
             out var error));
-        Assert.Equal("The service name must be 1 to 256 characters, with no space, control character, '\"', '=' or '\\'.",
+        Assert.Equal(
+            "The service name must be 1 to 256 characters, with no space, control character, '\"', '=' or '\\'.",
             error);
     }
 
@@ -84,7 +85,8 @@ public sealed class AnalysisRequestTests
     [InlineData("caf\u00e9")]
     public void An_ordinary_service_name_is_accepted(string service)
     {
-        Assert.NotNull(Parse($$"""{"service":{{JsonSerializer.Serialize(service)}},"lookback":"1h"}""", SourceKinds.Tempo,
+        Assert.NotNull(Parse($$"""{"service":{{JsonSerializer.Serialize(service)}},"lookback":"1h"}""",
+            SourceKinds.Tempo,
             out _));
     }
 

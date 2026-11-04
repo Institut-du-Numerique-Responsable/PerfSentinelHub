@@ -119,7 +119,7 @@ public sealed class ImportShareTests : IAsyncLifetime
     /// <summary>A first few bytes, then nothing until the test lets go.</summary>
     private sealed class StalledContent(Task release) : HttpContent
     {
-        protected override async Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
         {
             await stream.WriteAsync("{\"producer_version\""u8.ToArray());
             await stream.FlushAsync();

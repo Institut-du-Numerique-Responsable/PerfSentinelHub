@@ -42,7 +42,8 @@ public sealed class StorageTests
                 "detection_ledgers", "disclosure_deliveries", "disclosure_share_links",
                 "disclosures", "endpoint_heartbeats", "endpoint_labels", "finding_action_events",
                 "finding_actions", "finding_attributes", "finding_envelopes", "finding_groupings", "finding_lineage",
-                "finding_observations", "finding_source_envelopes", "finding_sources", "findings", "incident_attributes", "incident_reads", "incidents",
+                "finding_observations", "finding_source_envelopes", "finding_sources", "findings",
+                "incident_attributes", "incident_reads", "incidents",
                 "recap_deliveries", "recap_reports", "schema_migrations", "service_labels", "source_acks",
                 "source_finding_imports", "source_imports", "source_state", "terminal_tokens"
             ],
@@ -278,18 +279,18 @@ public sealed class StorageTests
             await using var seed = connection.CreateCommand();
             // An older build's rows: a copy with its own envelope, and one written before copies had any.
             seed.CommandText = LegacySchema.InlineEnvelopes + """
-                               INSERT INTO findings(
-                                 signature, finding_json, service, finding_type, severity, endpoint,
-                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
-                                 max_confidence, max_confidence_rank)
-                               VALUES ('signature', '{"shared":1}', 'checkout', 'slow_sql', 'warning',
-                                 'POST /checkout', 'template-hash', 'trace', 500, 900, 'daemon_production', 4);
-                               INSERT INTO finding_sources(
-                                 signature, source_id, source_name, environment, producer_version,
-                                 first_seen_ms, last_seen_ms, finding_json)
-                               VALUES ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 900, '{"own":1}'),
-                                      ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 800, NULL);
-                               """;
+                                                              INSERT INTO findings(
+                                                                signature, finding_json, service, finding_type, severity, endpoint,
+                                                                template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                                                max_confidence, max_confidence_rank)
+                                                              VALUES ('signature', '{"shared":1}', 'checkout', 'slow_sql', 'warning',
+                                                                'POST /checkout', 'template-hash', 'trace', 500, 900, 'daemon_production', 4);
+                                                              INSERT INTO finding_sources(
+                                                                signature, source_id, source_name, environment, producer_version,
+                                                                first_seen_ms, last_seen_ms, finding_json)
+                                                              VALUES ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 900, '{"own":1}'),
+                                                                     ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 800, NULL);
+                                                              """;
             await seed.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -346,25 +347,25 @@ public sealed class StorageTests
             // The shared row is another source's newer push; 'own' holds its own envelope, 'legacy'
             // none, 'broken' one that is not JSON.
             seed.CommandText = LegacySchema.InlineEnvelopes + """
-                               ALTER TABLE finding_sources DROP COLUMN finding_type;
-                               ALTER TABLE finding_sources DROP COLUMN endpoint;
-                               ALTER TABLE finding_sources DROP COLUMN sample_trace_id;
-                               DELETE FROM schema_migrations WHERE version = 23;
-                               INSERT INTO findings(
-                                 signature, finding_json, service, finding_type, severity, endpoint,
-                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
-                                 max_confidence, max_confidence_rank)
-                               VALUES ('signature', '{}', 'decoy', 'slow_http', 'warning',
-                                 'GET /decoy', 'template-hash', 'trace-decoy', 500, 900, 'daemon_production', 4);
-                               INSERT INTO finding_sources(
-                                 signature, source_id, source_name, environment, producer_version,
-                                 first_seen_ms, last_seen_ms, service, finding_json)
-                               VALUES ('signature', 'own', 'Own', 'production', '0.26.2', 500, 800, 'checkout',
-                                 '{"finding":{"service":"checkout","type":"n_plus_one_sql","source_endpoint":"GET /cart","trace_id":"trace-own"}}'),
-                                      ('signature', 'legacy', 'Legacy', 'production', '0.11.2', 500, 700, NULL, NULL),
-                                      ('signature', 'broken', 'Broken', 'production', '0.26.2', 500, 600, NULL,
-                                       'not json');
-                               """;
+                                                              ALTER TABLE finding_sources DROP COLUMN finding_type;
+                                                              ALTER TABLE finding_sources DROP COLUMN endpoint;
+                                                              ALTER TABLE finding_sources DROP COLUMN sample_trace_id;
+                                                              DELETE FROM schema_migrations WHERE version = 23;
+                                                              INSERT INTO findings(
+                                                                signature, finding_json, service, finding_type, severity, endpoint,
+                                                                template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                                                max_confidence, max_confidence_rank)
+                                                              VALUES ('signature', '{}', 'decoy', 'slow_http', 'warning',
+                                                                'GET /decoy', 'template-hash', 'trace-decoy', 500, 900, 'daemon_production', 4);
+                                                              INSERT INTO finding_sources(
+                                                                signature, source_id, source_name, environment, producer_version,
+                                                                first_seen_ms, last_seen_ms, service, finding_json)
+                                                              VALUES ('signature', 'own', 'Own', 'production', '0.26.2', 500, 800, 'checkout',
+                                                                '{"finding":{"service":"checkout","type":"n_plus_one_sql","source_endpoint":"GET /cart","trace_id":"trace-own"}}'),
+                                                                     ('signature', 'legacy', 'Legacy', 'production', '0.11.2', 500, 700, NULL, NULL),
+                                                                     ('signature', 'broken', 'Broken', 'production', '0.26.2', 500, 600, NULL,
+                                                                      'not json');
+                                                              """;
             await seed.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -378,7 +379,8 @@ public sealed class StorageTests
         Assert.True(await database.CatchUpCopyColumnsAsync(cancellationToken));
         Assert.False(await database.CatchUpCopyColumnsAsync(cancellationToken));
 
-        Assert.Single(await database.QueryFindingsAsync(own with { FindingType = "n_plus_one_sql" }, cancellationToken));
+        Assert.Single(
+            await database.QueryFindingsAsync(own with { FindingType = "n_plus_one_sql" }, cancellationToken));
         Assert.Single(await database.FindByTraceAsync("trace-own", ["own"], null, cancellationToken));
         Assert.Empty(await database.FindByTraceAsync("trace-decoy", ["own"], null, cancellationToken));
         // A copy without an envelope of its own keeps reading the shared row.
@@ -409,26 +411,26 @@ public sealed class StorageTests
         {
             await using var seed = connection.CreateCommand();
             seed.CommandText = LegacySchema.InlineEnvelopes + """
-                               INSERT INTO findings(
-                                 signature, finding_json, service, finding_type, severity, endpoint,
-                                 template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
-                                 max_confidence, max_confidence_rank)
-                               VALUES ('signature', '{"finding":{"grouping":[{"key":"k8s.namespace.name","value":"shared"}]}}',
-                                 'checkout', 'slow_sql', 'warning', 'POST /checkout', 'template-hash', 'trace',
-                                 500, 900, 'daemon_production', 4);
-                               INSERT INTO finding_sources(
-                                 signature, source_id, source_name, environment, producer_version,
-                                 first_seen_ms, last_seen_ms, finding_json)
-                               VALUES
-                                 ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
-                                  '{"finding":{"grouping":[{"key":"k8s.namespace.name","value":"test"}]}}'),
-                                 ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL),
-                                 ('signature', 'none', 'None', 'staging', '0.26.2', 500, 700,
-                                  '{"finding":{"grouping":[]}}'),
-                                 ('signature', 'garbled', 'Garbled', 'staging', '0.26.2', 500, 600, '{not json');
-                               DROP TABLE finding_groupings;
-                               DELETE FROM schema_migrations WHERE version = 8;
-                               """;
+                                                              INSERT INTO findings(
+                                                                signature, finding_json, service, finding_type, severity, endpoint,
+                                                                template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                                                max_confidence, max_confidence_rank)
+                                                              VALUES ('signature', '{"finding":{"grouping":[{"key":"k8s.namespace.name","value":"shared"}]}}',
+                                                                'checkout', 'slow_sql', 'warning', 'POST /checkout', 'template-hash', 'trace',
+                                                                500, 900, 'daemon_production', 4);
+                                                              INSERT INTO finding_sources(
+                                                                signature, source_id, source_name, environment, producer_version,
+                                                                first_seen_ms, last_seen_ms, finding_json)
+                                                              VALUES
+                                                                ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
+                                                                 '{"finding":{"grouping":[{"key":"k8s.namespace.name","value":"test"}]}}'),
+                                                                ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL),
+                                                                ('signature', 'none', 'None', 'staging', '0.26.2', 500, 700,
+                                                                 '{"finding":{"grouping":[]}}'),
+                                                                ('signature', 'garbled', 'Garbled', 'staging', '0.26.2', 500, 600, '{not json');
+                                                              DROP TABLE finding_groupings;
+                                                              DELETE FROM schema_migrations WHERE version = 8;
+                                                              """;
             await seed.ExecuteNonQueryAsync(cancellationToken);
         }
 

@@ -1,4 +1,5 @@
 using PerfSentinelHub.Storage;
+using PerfSentinelHub.Tests.Api;
 
 namespace PerfSentinelHub.Tests.Storage;
 
@@ -49,7 +50,8 @@ public sealed class LabelStorageTests(HubApplicationFactory factory) : IClassFix
     public async Task A_service_label_is_set_read_and_replaced()
     {
         Assert.True(await Database.SetServiceLabelAsync("named-svc", "Payment", "alice", Token));
-        Assert.Equal("Payment", (await Database.ReadServiceLabelsAsync(["named-svc", "other-svc"], Token))["named-svc"]);
+        Assert.Equal("Payment",
+            (await Database.ReadServiceLabelsAsync(["named-svc", "other-svc"], Token))["named-svc"]);
         Assert.True(await Database.SetServiceLabelAsync("named-svc", "Checkout", "bob", Token));
 
         var labels = await Database.ReadServiceLabelsAsync(["named-svc", "other-svc"], Token);
@@ -72,8 +74,8 @@ public sealed class LabelStorageTests(HubApplicationFactory factory) : IClassFix
     [Fact]
     public async Task Reading_the_copies_of_a_label_stops_once_one_decides()
     {
-        await Api.LabelsAccessTests.SeedAsync(Database, "copies-1", "copies-svc", "GET /a");
-        await Api.LabelsAccessTests.SeedAsync(Database, "copies-2", "copies-svc", "GET /b");
+        await LabelsAccessTests.SeedAsync(Database, "copies-1", "copies-svc", "GET /a");
+        await LabelsAccessTests.SeedAsync(Database, "copies-2", "copies-svc", "GET /b");
 
         Assert.Equal(2, (await Database.ReadLabelCopiesAsync("copies-svc", null, _ => false, Token)).Count);
         Assert.Single(await Database.ReadLabelCopiesAsync("copies-svc", null, _ => true, Token));

@@ -29,6 +29,9 @@ public sealed partial class EngineProbe(
     private const string HubRelayFlag = "--hub-relay";
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
 
+    // card.json's equivalence_country, which an older engine refuses as an unknown key.
+    private static readonly Version CardCountrySince = new(0, 40, 0);
+
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
 
     /// <summary>Null until probed, and null forever if the probe failed.</summary>
@@ -62,9 +65,6 @@ public sealed partial class EngineProbe(
     ///     renders no share card. False until probed, and whenever the probe could not answer.
     /// </summary>
     public bool SupportsCard { get; private set; }
-
-    // card.json's equivalence_country, which an older engine refuses as an unknown key.
-    private static readonly Version CardCountrySince = new(0, 40, 0);
 
     public bool SupportsCardCountry => DetectionOverrides.ParseEngineVersion(Version) is { } engine &&
                                        engine >= CardCountrySince;

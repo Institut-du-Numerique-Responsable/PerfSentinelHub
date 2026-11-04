@@ -117,7 +117,10 @@ public static partial class ApiEndpoints
 
     // What one kind of label is named on, and the sentences it refuses with.
     private sealed record LabelTarget(
-        bool WithEndpoint, LabelRefusal MayNot, LabelRefusal Unknown, LabelRefusal ReadOnly);
+        bool WithEndpoint,
+        LabelRefusal MayNot,
+        LabelRefusal Unknown,
+        LabelRefusal ReadOnly);
 
     private sealed record LabelRefusal(string Code, string Detail);
 }

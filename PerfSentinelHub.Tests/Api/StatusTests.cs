@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
-using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Api;
 
@@ -12,7 +11,9 @@ public sealed class StatusTests(HubApplicationFactory factory) : IClassFixture<H
 {
     private readonly HttpClient _client = factory.CreateClient();
     private readonly List<WebApplicationFactory<Program>> _hubs = [];
-    private readonly string _workspace = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-status-{Guid.NewGuid():N}");
+
+    private readonly string _workspace =
+        Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-status-{Guid.NewGuid():N}");
 
     public void Dispose()
     {

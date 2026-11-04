@@ -76,11 +76,9 @@ public sealed class FakeSmtp : IAsyncDisposable
             {
                 await using var stream = client.GetStream();
                 using var reader = new StreamReader(stream, Encoding.UTF8);
-                await using var writer = new StreamWriter(stream, new UTF8Encoding(false))
-                {
-                    NewLine = "\r\n",
-                    AutoFlush = true
-                };
+                await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+                writer.NewLine = "\r\n";
+                writer.AutoFlush = true;
                 await Converse(reader, writer, cancellationToken);
             }
         }

@@ -1,5 +1,5 @@
 {
-  "//": "Type-checks the launcher's JSDoc. wwwroot/ ships as plain JavaScript with no build step, so this emits nothing and only reads. app.js is out of scope on purpose: it carries three annotations against launcher.js's 122, so checking it would report noise rather than defects.",
+  "//": "Type-checks the page's JSDoc. wwwroot/ ships as plain JavaScript with no build step, so this emits nothing and only reads. launcher.js and app.js are both annotated against types.d.ts and the typedefs app.js declares, so a type that stops matching its use fails here.",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
@@ -9,5 +9,5 @@
     "moduleResolution": "node",
     "strict": false
   },
-  "files": ["PerfSentinelHub/wwwroot/launcher.js"]
+  "files": ["PerfSentinelHub/wwwroot/launcher.js", "PerfSentinelHub/wwwroot/app.js"]
 }

@@ -76,6 +76,8 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
         // The factory's clock sits in 1970, where every cookie the handlers write has already expired.
         await using var signedIn = factory.WithWebHostBuilder(builder =>
         {
+            // The host is built inside this scope, before the provider is disposed.
+            // ReSharper disable once AccessToDisposedClosure
             provider.Configure(builder);
             builder.ConfigureServices(services =>
             {

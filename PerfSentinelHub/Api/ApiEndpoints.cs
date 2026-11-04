@@ -20,10 +20,6 @@ public static partial class ApiEndpoints
     // What a body read is capped at unless its route says otherwise.
     private const int MaxBodyBytes = 2 * 1024 * 1024;
 
-    // An import slot is held across its body read: a daemon on a working link sends 8 MiB in
-    // seconds, so a read this long is a trickle, and it gives the slot back.
-    private static readonly TimeSpan ImportBodyDeadline = TimeSpan.FromSeconds(60);
-
     // One incident carries up to a thousand frozen findings: the cap of one daemon page.
     private const int IncidentImportMaxBytes = 4 * 1024 * 1024;
 
@@ -35,6 +31,10 @@ public static partial class ApiEndpoints
 
     // The engine's default max_signatures_per_day; the daemon caps again at its own value.
     private const int MaxWatchSignatures = 10_000;
+
+    // An import slot is held across its body read: a daemon on a working link sends 8 MiB in
+    // seconds, so a read this long is a trickle, and it gives the slot back.
+    private static readonly TimeSpan ImportBodyDeadline = TimeSpan.FromSeconds(60);
 
     /// <summary>
     ///     A request whose write found the lock held past WriteGateWait answers what the bounded
@@ -112,6 +112,11 @@ public static partial class ApiEndpoints
         app.MapPut("/api/labels/services", SetServiceLabelAsync);
         // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
         app.MapGet("/api/recap", GetRecapAsync);
+        // Never anonymous: a job is read only by the audience it was computed for.
+        app.MapPost("/api/recap/jobs", StartRecapJob);
+        app.MapGet("/api/recap/jobs/{id}", GetRecapJob);
+        app.MapGet("/api/recap/jobs/{id}/result", GetRecapJobResult);
+        app.MapDelete("/api/recap/jobs/{id}", CancelRecapJob);
         // Never anonymous: a frozen report is read by who made it or by a recaps.read holder, and made in a name.
         // The page sits outside /api so a browser that follows the mailed link is signed in by redirect.
         app.MapGet("/api/recap/reports", GetRecapReportsAsync);

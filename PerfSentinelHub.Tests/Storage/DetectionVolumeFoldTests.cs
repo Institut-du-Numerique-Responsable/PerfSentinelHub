@@ -6,10 +6,10 @@ public sealed class DetectionVolumeFoldTests
 {
     private const long DayMs = 86_400_000;
     private const string Signature = "n_plus_one_sql:order-svc:SELECT * FROM orders WHERE id = ?";
+    private const int Today = 20;
 
     // Days 10 to 12, judged on day 20 so no window day is the current one.
     private static readonly VolumeWindow Window = new(10, 12);
-    private const int Today = 20;
 
     private static DayCoverage Day(
         int day,
@@ -175,7 +175,7 @@ public sealed class DetectionVolumeFoldTests
     public void Reasons_are_sorted_and_counted_once()
     {
         var volume = DetectionVolumeFold.ForSource(
-            [Day(10, gap: true, shed: 1), Day(11, false, gap: true, samplingRate: 0.25)],
+            [Day(10, gap: true, shed: 1), Day(11, false, true, samplingRate: 0.25)],
             [], Window, Today, true);
 
         Assert.Equal(

@@ -49,19 +49,30 @@ public static class HubText
         ["recap.label.pilotage.findings"] = "Open problems",
         ["recap.label.pilotage.moved"] = "What changed",
         ["recap.label.pilotage.io_lower"] = "unnecessary operations",
-        ["recap.help.tech.period"] = "A week runs Monday to Sunday and a month is a calendar month, both counted in UTC days. While the period is in progress, trends compare its closed days with the same days of the previous period; today counts in the tiles only. Times elsewhere on the page are in your local time, with the zone.",
-        ["recap.help.tech.io"] = "Extra database, HTTP and messaging calls the engine counted as avoidable on this period, summed over the detections. Measured, not estimated.",
-        ["recap.help.tech.co2"] = "An order of magnitude, never a ranking key: each finding's avoidable calls times the day's grams per avoidable call the daemon reports. \"At least\" when some sources send no coefficient.",
-        ["recap.help.tech.findings"] = "Findings seen on this period and not acknowledged. Acknowledged ones are counted apart and left out of the priorities.",
-        ["recap.help.tech.actions"] = "Declared by the team, checked by the engine: confirmed after a sealed day with no detection, still detected when it shows up after the done day.",
-        ["recap.help.tech.prio"] = "Findings with avoidable calls first, by volume; then the others by severity. Trends compare closed days only.",
-        ["recap.help.tech.moved"] = "Gone means not detected this period: a presumption, not proof that the fix shipped.",
-        ["recap.help.pilotage.period"] = "A week runs Monday to Sunday, counted in UTC days. While it is not over, comparisons only use the days already finished. Times elsewhere on the page are in your local time, with the zone.",
-        ["recap.help.pilotage.io"] = "Work the application did for nothing on this period, counted by Perf Sentinel. Measured, not estimated.",
-        ["recap.help.pilotage.co2"] = "A rough estimate of the carbon this unnecessary work cost. It gives a scale, not an exact figure.",
+        ["recap.help.tech.period"] =
+            "A week runs Monday to Sunday and a month is a calendar month, both counted in UTC days. While the period is in progress, trends compare its closed days with the same days of the previous period; today counts in the tiles only. Times elsewhere on the page are in your local time, with the zone.",
+        ["recap.help.tech.io"] =
+            "Extra database, HTTP and messaging calls the engine counted as avoidable on this period, summed over the detections. Measured, not estimated.",
+        ["recap.help.tech.co2"] =
+            "An order of magnitude, never a ranking key: each finding's avoidable calls times the day's grams per avoidable call the daemon reports. \"At least\" when some sources send no coefficient.",
+        ["recap.help.tech.findings"] =
+            "Findings seen on this period and not acknowledged. Acknowledged ones are counted apart and left out of the priorities.",
+        ["recap.help.tech.actions"] =
+            "Declared by the team, checked by the engine: confirmed after a sealed day with no detection, still detected when it shows up after the done day.",
+        ["recap.help.tech.prio"] =
+            "Findings with avoidable calls first, by volume; then the others by severity. Trends compare closed days only.",
+        ["recap.help.tech.moved"] =
+            "Gone means not detected this period: a presumption, not proof that the fix shipped.",
+        ["recap.help.pilotage.period"] =
+            "A week runs Monday to Sunday, counted in UTC days. While it is not over, comparisons only use the days already finished. Times elsewhere on the page are in your local time, with the zone.",
+        ["recap.help.pilotage.io"] =
+            "Work the application did for nothing on this period, counted by Perf Sentinel. Measured, not estimated.",
+        ["recap.help.pilotage.co2"] =
+            "A rough estimate of the carbon this unnecessary work cost. It gives a scale, not an exact figure.",
         ["recap.help.pilotage.findings"] = "Problems seen on this period that the team has not set aside.",
         ["recap.help.pilotage.actions"] = "What the team said it would fix, and whether the measurements confirm it.",
-        ["recap.help.pilotage.prio"] = "The problems that cost the most come first. A team can name its services and steps in the Hub, so this report speaks its language.",
+        ["recap.help.pilotage.prio"] =
+            "The problems that cost the most come first. A team can name its services and steps in the Hub, so this report speaks its language.",
         ["recap.help.pilotage.moved"] = "\"Gone\" means it was not seen this period: probably fixed, but not proven.",
         ["recap.overline"] = "// recap",
         ["recap.title"] = "What wastes the most, and what moved",
@@ -159,27 +170,40 @@ public static class HubText
         ["recap.moves.confirmed.other"] = "{count} with a confirmed fix",
         ["recap.moves.since.day"] = "since {period}",
         ["recap.moves.since.range"] = "since {period}",
-        ["recap.moves.none_closed"] = "No day of this period has closed yet, so nothing is compared with the previous one.",
+        ["recap.moves.none_closed"] =
+            "No day of this period has closed yet, so nothing is compared with the previous one.",
         ["recap.moves.nothing"] = "Nothing moved since the previous period.",
         ["recap.moves.overline"] = "// movements",
-        ["recap.plain.n_plus_one_sql"] = "For each item on a page, the application fetches the same kind of information again, instead of fetching it all at once.",
-        ["recap.plain.n_plus_one_http"] = "For each item, the application asks another part of the system again, instead of asking once for the whole list.",
-        ["recap.plain.n_plus_one_messaging"] = "The application sends one small message per item instead of grouping them into one.",
-        ["recap.plain.redundant_sql"] = "The application fetches the same information several times for one action, when once would do.",
-        ["recap.plain.redundant_http"] = "The application asks another part of the system the same question several times for one action, when once would do.",
+        ["recap.plain.n_plus_one_sql"] =
+            "For each item on a page, the application fetches the same kind of information again, instead of fetching it all at once.",
+        ["recap.plain.n_plus_one_http"] =
+            "For each item, the application asks another part of the system again, instead of asking once for the whole list.",
+        ["recap.plain.n_plus_one_messaging"] =
+            "The application sends one small message per item instead of grouping them into one.",
+        ["recap.plain.redundant_sql"] =
+            "The application fetches the same information several times for one action, when once would do.",
+        ["recap.plain.redundant_http"] =
+            "The application asks another part of the system the same question several times for one action, when once would do.",
         ["recap.plain.slow_sql"] = "Fetching some information takes long enough to make people wait.",
         ["recap.plain.slow_http"] = "Waiting on another part of the system takes long enough to make people wait.",
         ["recap.plain.slow_messaging"] = "Sending or receiving some messages takes long enough to make people wait.",
-        ["recap.plain.excessive_fanout"] = "A single action sets a large number of other parts of the system to work at once.",
-        ["recap.plain.chatty_service"] = "Two parts of the system exchange many small messages for one action, where a few larger ones would do.",
-        ["recap.plain.pool_saturation"] = "Actions wait in line because the application can only reach its data a few at a time.",
-        ["recap.plain.serialized_calls"] = "The application does several steps one after another that could run at the same time, so people wait longer than needed.",
-        ["recap.truncated.pilotage"] = "The Hub read the first 5,000 problems and stopped there. Narrow the filters to see the others.",
-        ["recap.truncated.tech"] = "The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.",
+        ["recap.plain.excessive_fanout"] =
+            "A single action sets a large number of other parts of the system to work at once.",
+        ["recap.plain.chatty_service"] =
+            "Two parts of the system exchange many small messages for one action, where a few larger ones would do.",
+        ["recap.plain.pool_saturation"] =
+            "Actions wait in line because the application can only reach its data a few at a time.",
+        ["recap.plain.serialized_calls"] =
+            "The application does several steps one after another that could run at the same time, so people wait longer than needed.",
+        ["recap.truncated.pilotage"] =
+            "The Hub read the first 5,000 problems and stopped there. Narrow the filters to see the others.",
+        ["recap.truncated.tech"] =
+            "The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.",
         ["recap.sources_note.pilotage"] = "No figures came from: {sources}.",
         ["recap.sources_note.tech"] = "Sources without a detection volume: {sources}.",
         ["recap.late_note"] = "Left out, as they recorded nothing until after this period: {sources}.",
-        ["recap.help.naming"] = "A team can name its services and steps in the Hub, so this report speaks its language.",
+        ["recap.help.naming"] =
+            "A team can name its services and steps in the Hub, so this report speaks its language.",
         ["recap.term.period"] = "The period",
         ["recap.page.title"] = "Perf Sentinel recap, {period}",
         ["recap.scope"] = "Scope: {parts}",
@@ -276,20 +300,32 @@ public static class HubText
         ["recap.label.pilotage.findings"] = "Problèmes ouverts",
         ["recap.label.pilotage.moved"] = "Ce qui a changé",
         ["recap.label.pilotage.io_lower"] = "opérations inutiles",
-        ["recap.help.tech.period"] = "Une semaine va du lundi au dimanche et un mois est un mois civil, tous deux comptés en jours UTC. Tant que la période est en cours, les tendances comparent ses jours clos aux mêmes jours de la période précédente. Le jour en cours ne compte que dans les tuiles. Ailleurs sur la page, les heures sont à votre heure locale, avec le fuseau.",
-        ["recap.help.tech.io"] = "Les appels en trop à la base de données, en HTTP et en messagerie que le moteur a comptés comme évitables sur cette période, additionnés sur les détections. Mesuré, pas estimé.",
-        ["recap.help.tech.co2"] = "Un ordre de grandeur, jamais une clé de classement\u00a0: les appels évitables de chaque finding multipliés par les grammes par appel évitable que le daemon donne pour le jour. «\u00a0Au moins\u00a0» quand des sources n'envoient pas de coefficient.",
-        ["recap.help.tech.findings"] = "Les findings vus sur cette période et non acquittés. Les findings acquittés sont comptés à part et laissés hors des priorités.",
-        ["recap.help.tech.actions"] = "Déclarées par l'équipe, vérifiées par le moteur\u00a0: confirmées après un jour scellé sans détection, encore détectées quand le finding réapparaît après le jour où l'action a été terminée.",
-        ["recap.help.tech.prio"] = "D'abord les findings qui ont des appels évitables, par volume, puis les autres par sévérité. Les tendances ne comparent que les jours clos.",
-        ["recap.help.tech.moved"] = "«\u00a0Disparu\u00a0» veut dire non détecté sur cette période\u00a0: une présomption, pas la preuve que le correctif est en production.",
-        ["recap.help.pilotage.period"] = "Une semaine va du lundi au dimanche, en jours UTC. Tant qu'elle n'est pas finie, les comparaisons n'utilisent que les jours déjà terminés. Ailleurs sur la page, les heures sont à votre heure locale, avec le fuseau.",
-        ["recap.help.pilotage.io"] = "Le travail que l'application a fait pour rien sur cette période, compté par Perf Sentinel. Mesuré, pas estimé.",
-        ["recap.help.pilotage.co2"] = "Une estimation grossière du carbone que ce travail inutile a coûté. Elle donne un ordre de grandeur, pas un chiffre exact.",
+        ["recap.help.tech.period"] =
+            "Une semaine va du lundi au dimanche et un mois est un mois civil, tous deux comptés en jours UTC. Tant que la période est en cours, les tendances comparent ses jours clos aux mêmes jours de la période précédente. Le jour en cours ne compte que dans les tuiles. Ailleurs sur la page, les heures sont à votre heure locale, avec le fuseau.",
+        ["recap.help.tech.io"] =
+            "Les appels en trop à la base de données, en HTTP et en messagerie que le moteur a comptés comme évitables sur cette période, additionnés sur les détections. Mesuré, pas estimé.",
+        ["recap.help.tech.co2"] =
+            "Un ordre de grandeur, jamais une clé de classement\u00a0: les appels évitables de chaque finding multipliés par les grammes par appel évitable que le daemon donne pour le jour. «\u00a0Au moins\u00a0» quand des sources n'envoient pas de coefficient.",
+        ["recap.help.tech.findings"] =
+            "Les findings vus sur cette période et non acquittés. Les findings acquittés sont comptés à part et laissés hors des priorités.",
+        ["recap.help.tech.actions"] =
+            "Déclarées par l'équipe, vérifiées par le moteur\u00a0: confirmées après un jour scellé sans détection, encore détectées quand le finding réapparaît après le jour où l'action a été terminée.",
+        ["recap.help.tech.prio"] =
+            "D'abord les findings qui ont des appels évitables, par volume, puis les autres par sévérité. Les tendances ne comparent que les jours clos.",
+        ["recap.help.tech.moved"] =
+            "«\u00a0Disparu\u00a0» veut dire non détecté sur cette période\u00a0: une présomption, pas la preuve que le correctif est en production.",
+        ["recap.help.pilotage.period"] =
+            "Une semaine va du lundi au dimanche, en jours UTC. Tant qu'elle n'est pas finie, les comparaisons n'utilisent que les jours déjà terminés. Ailleurs sur la page, les heures sont à votre heure locale, avec le fuseau.",
+        ["recap.help.pilotage.io"] =
+            "Le travail que l'application a fait pour rien sur cette période, compté par Perf Sentinel. Mesuré, pas estimé.",
+        ["recap.help.pilotage.co2"] =
+            "Une estimation grossière du carbone que ce travail inutile a coûté. Elle donne un ordre de grandeur, pas un chiffre exact.",
         ["recap.help.pilotage.findings"] = "Les problèmes vus sur cette période que l'équipe n'a pas mis de côté.",
         ["recap.help.pilotage.actions"] = "Ce que l'équipe a dit qu'elle corrigerait, et si les mesures le confirment.",
-        ["recap.help.pilotage.prio"] = "Les problèmes qui coûtent le plus passent en premier. Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue.",
-        ["recap.help.pilotage.moved"] = "«\u00a0Disparu\u00a0» veut dire que le problème n'a pas été vu sur cette période\u00a0: probablement corrigé, mais sans preuve.",
+        ["recap.help.pilotage.prio"] =
+            "Les problèmes qui coûtent le plus passent en premier. Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue.",
+        ["recap.help.pilotage.moved"] =
+            "«\u00a0Disparu\u00a0» veut dire que le problème n'a pas été vu sur cette période\u00a0: probablement corrigé, mais sans preuve.",
         ["recap.overline"] = "// récap",
         ["recap.title"] = "Ce qui gaspille le plus, et ce qui a bougé",
         ["recap.view.label"] = "Public",
@@ -321,7 +357,8 @@ public static class HubText
         ["recap.tile.actions"] = "Actions",
         ["recap.tile.done.one"] = "terminée",
         ["recap.tile.done.other"] = "terminées",
-        ["recap.tile.actions.checked"] = "confirmées\u00a0: {confirmed}, encore détectées\u00a0: {contradicted}, revenues\u00a0: {came_back}",
+        ["recap.tile.actions.checked"] =
+            "confirmées\u00a0: {confirmed}, encore détectées\u00a0: {contradicted}, revenues\u00a0: {came_back}",
         ["recap.tile.actions.open"] = "en cours\u00a0: {in_progress}, à faire\u00a0: {todo}",
         ["recap.co2.lead"] = "au moins",
         ["recap.co2.na"] = "non disponible",
@@ -349,7 +386,8 @@ public static class HubText
         ["recap.prio.hint.co2"] = ", le CO2 ne sert jamais au classement",
         ["recap.prio.hint.closed"] = ", tendances sur les jours clos",
         ["recap.prio.divider.tech"] = "Plus bas, aucune I/O évitable à compter\u00a0: classés par sévérité",
-        ["recap.prio.divider.pilotage"] = "Plus bas, de la lenteur plutôt que du travail en trop\u00a0: classés par gravité",
+        ["recap.prio.divider.pilotage"] =
+            "Plus bas, de la lenteur plutôt que du travail en trop\u00a0: classés par gravité",
         ["recap.prio.empty"] = "Rien à classer sur cette période.",
         ["recap.prio.show_all"] = "Tout afficher ({count})",
         ["recap.where"] = "dans {service}",
@@ -386,27 +424,44 @@ public static class HubText
         ["recap.moves.confirmed.other"] = "{count} avec un correctif confirmé",
         ["recap.moves.since.day"] = "depuis le {period}",
         ["recap.moves.since.range"] = "depuis la période {period}",
-        ["recap.moves.none_closed"] = "Aucun jour de cette période n'est encore clos, donc rien n'est comparé à la période précédente.",
+        ["recap.moves.none_closed"] =
+            "Aucun jour de cette période n'est encore clos, donc rien n'est comparé à la période précédente.",
         ["recap.moves.nothing"] = "Rien n'a bougé depuis la période précédente.",
         ["recap.moves.overline"] = "// mouvements",
-        ["recap.plain.n_plus_one_sql"] = "Pour chaque élément d'une page, l'application va de nouveau chercher le même type d'information, au lieu de tout récupérer en une fois.",
-        ["recap.plain.n_plus_one_http"] = "Pour chaque élément, l'application interroge de nouveau une autre partie du système, au lieu de lui demander la liste entière en une fois.",
-        ["recap.plain.n_plus_one_messaging"] = "L'application envoie un petit message par élément au lieu de les regrouper en un seul.",
-        ["recap.plain.redundant_sql"] = "L'application va chercher plusieurs fois la même information pour une seule action, alors qu'une fois suffirait.",
-        ["recap.plain.redundant_http"] = "L'application pose plusieurs fois la même question à une autre partie du système pour une seule action, alors qu'une fois suffirait.",
-        ["recap.plain.slow_sql"] = "Récupérer certaines informations prend assez longtemps pour faire attendre les utilisateurs.",
-        ["recap.plain.slow_http"] = "Attendre la réponse d'une autre partie du système prend assez longtemps pour faire attendre les utilisateurs.",
-        ["recap.plain.slow_messaging"] = "Envoyer ou recevoir certains messages prend assez longtemps pour faire attendre les utilisateurs.",
-        ["recap.plain.excessive_fanout"] = "Une seule action met au travail un grand nombre d'autres parties du système en même temps.",
-        ["recap.plain.chatty_service"] = "Deux parties du système échangent beaucoup de petits messages pour une seule action, là où quelques messages plus gros suffiraient.",
-        ["recap.plain.pool_saturation"] = "Les actions font la queue, car l'application ne peut atteindre ses données que quelques-unes à la fois.",
-        ["recap.plain.serialized_calls"] = "L'application fait l'une après l'autre plusieurs étapes qui pourraient avoir lieu en même temps, et les utilisateurs attendent plus que nécessaire.",
-        ["recap.truncated.pilotage"] = "Le Hub a lu les 5\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
-        ["recap.truncated.tech"] = "Le Hub a lu les 5\u202f000 premiers findings et s'est arrêté là. Resserrez les filtres pour voir les autres.",
+        ["recap.plain.n_plus_one_sql"] =
+            "Pour chaque élément d'une page, l'application va de nouveau chercher le même type d'information, au lieu de tout récupérer en une fois.",
+        ["recap.plain.n_plus_one_http"] =
+            "Pour chaque élément, l'application interroge de nouveau une autre partie du système, au lieu de lui demander la liste entière en une fois.",
+        ["recap.plain.n_plus_one_messaging"] =
+            "L'application envoie un petit message par élément au lieu de les regrouper en un seul.",
+        ["recap.plain.redundant_sql"] =
+            "L'application va chercher plusieurs fois la même information pour une seule action, alors qu'une fois suffirait.",
+        ["recap.plain.redundant_http"] =
+            "L'application pose plusieurs fois la même question à une autre partie du système pour une seule action, alors qu'une fois suffirait.",
+        ["recap.plain.slow_sql"] =
+            "Récupérer certaines informations prend assez longtemps pour faire attendre les utilisateurs.",
+        ["recap.plain.slow_http"] =
+            "Attendre la réponse d'une autre partie du système prend assez longtemps pour faire attendre les utilisateurs.",
+        ["recap.plain.slow_messaging"] =
+            "Envoyer ou recevoir certains messages prend assez longtemps pour faire attendre les utilisateurs.",
+        ["recap.plain.excessive_fanout"] =
+            "Une seule action met au travail un grand nombre d'autres parties du système en même temps.",
+        ["recap.plain.chatty_service"] =
+            "Deux parties du système échangent beaucoup de petits messages pour une seule action, là où quelques messages plus gros suffiraient.",
+        ["recap.plain.pool_saturation"] =
+            "Les actions font la queue, car l'application ne peut atteindre ses données que quelques-unes à la fois.",
+        ["recap.plain.serialized_calls"] =
+            "L'application fait l'une après l'autre plusieurs étapes qui pourraient avoir lieu en même temps, et les utilisateurs attendent plus que nécessaire.",
+        ["recap.truncated.pilotage"] =
+            "Le Hub a lu les 5\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
+        ["recap.truncated.tech"] =
+            "Le Hub a lu les 5\u202f000 premiers findings et s'est arrêté là. Resserrez les filtres pour voir les autres.",
         ["recap.sources_note.pilotage"] = "Aucun chiffre n'est venu de\u00a0: {sources}.",
         ["recap.sources_note.tech"] = "Sources sans volume de détection\u00a0: {sources}.",
-        ["recap.late_note"] = "Laissés de côté, car rien n'y a été enregistré avant la fin de cette période\u00a0: {sources}.",
-        ["recap.help.naming"] = "Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue.",
+        ["recap.late_note"] =
+            "Laissés de côté, car rien n'y a été enregistré avant la fin de cette période\u00a0: {sources}.",
+        ["recap.help.naming"] =
+            "Une équipe peut nommer ses applications et ses étapes dans le Hub, pour que ce rapport parle sa langue.",
         ["recap.term.period"] = "La période",
         ["recap.page.title"] = "Récap Perf Sentinel, {period}",
         ["recap.scope"] = "Périmètre\u00a0: {parts}",
@@ -481,7 +536,7 @@ public static class HubText
     public static string Get(string lang, string key, params (string Name, string Value)[] values)
     {
         var text = (lang == HubLang.Fr ? French.GetValueOrDefault(key) : null) ?? English.GetValueOrDefault(key) ??
-                   throw new KeyNotFoundException("No text for " + key + ".");
+            throw new KeyNotFoundException("No text for " + key + ".");
         if (values.Length == 0)
             return text;
         var filled = new StringBuilder(text);

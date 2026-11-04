@@ -64,6 +64,7 @@ public sealed partial class HubDatabase
             return ActionWriteOutcome.Busy;
         try
         {
+            TouchRecapInputs();
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
             await using var insert = connection.CreateCommand();
@@ -91,6 +92,7 @@ public sealed partial class HubDatabase
             await InsertActionEventAsync(connection, transaction, signature,
                 new StoredActionEvent(null, status, owner, ownerDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            TouchRecapInputs();
             return ActionWriteOutcome.Written;
         }
         finally
@@ -125,6 +127,7 @@ public sealed partial class HubDatabase
             return ActionWriteOutcome.Busy;
         try
         {
+            TouchRecapInputs();
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
             string currentStatus;
@@ -177,6 +180,7 @@ public sealed partial class HubDatabase
             await InsertActionEventAsync(connection, transaction, signature,
                 new StoredActionEvent(currentStatus, newStatus, newOwner, newDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            TouchRecapInputs();
             return ActionWriteOutcome.Written;
         }
         finally
@@ -255,7 +259,7 @@ public sealed partial class HubDatabase
         command.Transaction = transaction;
         command.CommandText = FreezeUpdate;
         command.Parameters.AddWithValue(SignatureParameter, signature);
-        command.Parameters.AddWithValue("$sources", freezeFrom is null ? DBNull.Value : (object)JsonArray(freezeFrom));
+        command.Parameters.AddWithValue("$sources", freezeFrom is null ? DBNull.Value : JsonArray(freezeFrom));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

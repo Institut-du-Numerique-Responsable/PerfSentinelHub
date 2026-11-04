@@ -3,8 +3,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using PerfSentinelHub.Configuration;
 
@@ -16,7 +14,8 @@ namespace PerfSentinelHub.Tests.Api;
 /// </summary>
 public sealed partial class ProblemCodeTests(HubApplicationFactory factory) : IClassFixture<HubApplicationFactory>
 {
-    private const string CiToken = "psh_problemcodes_0123456789abcdef0123456789"; // gitleaks:allow -- synthetic test credential
+    private const string
+        CiToken = "psh_problemcodes_0123456789abcdef0123456789"; // gitleaks:allow -- synthetic test credential
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -53,6 +52,8 @@ public sealed partial class ProblemCodeTests(HubApplicationFactory factory) : IC
         await using var provider = await FakeProvider.StartAsync(new Dictionary<string, string>());
         await using var hub = factory.WithWebHostBuilder(builder =>
         {
+            // The host is built inside this scope, before the provider is disposed.
+            // ReSharper disable once AccessToDisposedClosure
             provider.Configure(builder);
             builder.UseSetting("Hub:Access:Enabled", "true");
             builder.UseSetting("Hub:MetricsPort", "9464");
@@ -95,6 +96,7 @@ public sealed partial class ProblemCodeTests(HubApplicationFactory factory) : IC
         return request;
     }
 
+    // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
     private static async Task AssertProblemAsync(HttpResponseMessage response, int status, string detail,
         string code)
     {

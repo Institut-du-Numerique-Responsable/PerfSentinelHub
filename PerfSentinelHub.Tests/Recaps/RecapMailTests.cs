@@ -178,7 +178,7 @@ public sealed class RecapMailTests
     [Fact]
     public void A_french_address_of_an_english_subscription_links_the_french_page()
     {
-        using var mail = Build(new Uri("https://hub.example/"), lang: "fr");
+        using var mail = Build(new Uri("https://hub.example/"), "fr");
 
         Assert.Contains($"https://hub.example/recaps/{Id}/tech.html?lang=fr", mail.Body, StringComparison.Ordinal);
     }

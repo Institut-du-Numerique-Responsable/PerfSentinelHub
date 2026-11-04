@@ -790,7 +790,8 @@ public sealed class FindingIngestionTests : IDisposable
             ProductionA, batch, detectedAtMs + 3_600_000, cancellationToken));
 
         await using var connection = await database.OpenConnectionAsync(cancellationToken);
-        Assert.Equal(detectedAtMs, await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
+        Assert.Equal(detectedAtMs,
+            await ScalarAsync(connection, "SELECT last_seen_ms FROM findings;", cancellationToken));
         Assert.Equal(
             detectedAtMs,
             await ScalarAsync(connection, "SELECT last_seen_ms FROM finding_sources;", cancellationToken));
@@ -1139,18 +1140,18 @@ public sealed class FindingIngestionTests : IDisposable
         await CreateDatabase().InitializeAsync(cancellationToken);
         await ExecuteAsync(
             LegacySchema.InlineEnvelopes + """
-            INSERT INTO findings(
-              signature, finding_json, service, finding_type, severity, endpoint,
-              template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
-              max_confidence, max_confidence_rank)
-            VALUES ('signature', '{}', 'checkout', 'slow_sql', 'warning', 'POST /checkout',
-              'template-hash', 'trace', 500, 800, 'daemon_production', 4);
-            INSERT INTO finding_sources(
-              signature, source_id, source_name, environment, producer_version,
-              first_seen_ms, last_seen_ms, finding_json)
-            VALUES ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
-              '{"finding":{"grouping":[{"key":"team","value":"shop"}]}}');
-            """,
+                                           INSERT INTO findings(
+                                             signature, finding_json, service, finding_type, severity, endpoint,
+                                             template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                             max_confidence, max_confidence_rank)
+                                           VALUES ('signature', '{}', 'checkout', 'slow_sql', 'warning', 'POST /checkout',
+                                             'template-hash', 'trace', 500, 800, 'daemon_production', 4);
+                                           INSERT INTO finding_sources(
+                                             signature, source_id, source_name, environment, producer_version,
+                                             first_seen_ms, last_seen_ms, finding_json)
+                                           VALUES ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
+                                             '{"finding":{"grouping":[{"key":"team","value":"shop"}]}}');
+                                           """,
             cancellationToken);
 
         // The boot runs before the Hub answers, so it no longer scans every copy.
@@ -1176,25 +1177,25 @@ public sealed class FindingIngestionTests : IDisposable
         // envelope existed, one garbled, and one this build already covered.
         await ExecuteAsync(
             LegacySchema.InlineEnvelopes + """
-            INSERT INTO findings(
-              signature, finding_json, service, finding_type, severity, endpoint,
-              template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
-              max_confidence, max_confidence_rank)
-            VALUES ('signature', '{"finding":{"grouping":[{"key":"team","value":"shared"}]}}',
-              'checkout', 'slow_sql', 'warning', 'POST /checkout', 'template-hash', 'trace',
-              500, 900, 'daemon_production', 4);
-            INSERT INTO finding_sources(
-              signature, source_id, source_name, environment, producer_version,
-              first_seen_ms, last_seen_ms, finding_json)
-            VALUES
-              ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
-               '{"finding":{"grouping":[{"key":"team","value":"shop"}]}}'),
-              ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL),
-              ('signature', 'garbled', 'Garbled', 'staging', '0.26.2', 500, 600, '{not json'),
-              ('signature', 'covered', 'Covered', 'staging', '0.26.2', 500, 700,
-               '{"finding":{"grouping":[{"key":"team","value":"ignored"}]}}');
-            INSERT INTO finding_attributes VALUES ('signature', 'covered', '', '', '', '', 700);
-            """,
+                                           INSERT INTO findings(
+                                             signature, finding_json, service, finding_type, severity, endpoint,
+                                             template_hash, sample_trace_id, first_seen_ms, last_seen_ms,
+                                             max_confidence, max_confidence_rank)
+                                           VALUES ('signature', '{"finding":{"grouping":[{"key":"team","value":"shared"}]}}',
+                                             'checkout', 'slow_sql', 'warning', 'POST /checkout', 'template-hash', 'trace',
+                                             500, 900, 'daemon_production', 4);
+                                           INSERT INTO finding_sources(
+                                             signature, source_id, source_name, environment, producer_version,
+                                             first_seen_ms, last_seen_ms, finding_json)
+                                           VALUES
+                                             ('signature', 'own', 'Own', 'staging', '0.26.2', 500, 800,
+                                              '{"finding":{"grouping":[{"key":"team","value":"shop"}]}}'),
+                                             ('signature', 'legacy', 'Legacy', 'staging', '0.11.2', 500, 900, NULL),
+                                             ('signature', 'garbled', 'Garbled', 'staging', '0.26.2', 500, 600, '{not json'),
+                                             ('signature', 'covered', 'Covered', 'staging', '0.26.2', 500, 700,
+                                              '{"finding":{"grouping":[{"key":"team","value":"ignored"}]}}');
+                                           INSERT INTO finding_attributes VALUES ('signature', 'covered', '', '', '', '', 700);
+                                           """,
             cancellationToken);
 
         await BootAsync(cancellationToken);

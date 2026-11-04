@@ -46,23 +46,23 @@ public sealed class CardKeyLinesTests
 
         Assert.Equal(
             $$"""
-              {
-                "keys": [
                   {
-                    "fingerprint": "{{Fingerprint}}",
-                    "public_key": "{{PublicKey}}",
-                    "from": "2026-10-30",
-                    "to": "2026-11-02",
-                    "revoked": "2026-11-01"
-                  },
-                  {
-                    "fingerprint": "{{Other}}",
-                    "public_key": "{{new string('B', 43)}}",
-                    "from": "2026-11-02"
+                    "keys": [
+                      {
+                        "fingerprint": "{{Fingerprint}}",
+                        "public_key": "{{PublicKey}}",
+                        "from": "2026-10-30",
+                        "to": "2026-11-02",
+                        "revoked": "2026-11-01"
+                      },
+                      {
+                        "fingerprint": "{{Other}}",
+                        "public_key": "{{new string('B', 43)}}",
+                        "from": "2026-11-02"
+                      }
+                    ]
                   }
-                ]
-              }
-              """.ReplaceLineEndings("\n"),
+                  """.ReplaceLineEndings("\n"),
             wellKnown);
     }
 

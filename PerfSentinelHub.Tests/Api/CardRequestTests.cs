@@ -67,8 +67,10 @@ public sealed class CardRequestTests
         Assert.Equal("A card covers a closed period. Pick an earlier one.",
             Refused(Body(("angle", "curve"), ("period", period), ("at", "9999-12-31"))));
 
-        var context = new DefaultHttpContext();
-        context.Request.QueryString = new QueryString($"?period={period}&at=9999-12-31");
+        var context = new DefaultHttpContext
+        {
+            Request = { QueryString = new QueryString($"?period={period}&at=9999-12-31") }
+        };
         Assert.False(CardRequest.TryParseOptionsQuery(context.Request, Today, out _));
     }
 
@@ -146,7 +148,8 @@ public sealed class CardRequestTests
     public void An_equivalence_country_is_read(string country)
     {
         Assert.Equal(country,
-            Accepted(Body(("angle", "curve"), ("period", "month"), ("equivalence_country", country))).EquivalenceCountry);
+            Accepted(Body(("angle", "curve"), ("period", "month"), ("equivalence_country", country)))
+                .EquivalenceCountry);
     }
 
     [Fact]
@@ -195,8 +198,10 @@ public sealed class CardRequestTests
     [Fact]
     public void The_options_query_reads_an_open_period_and_the_scope()
     {
-        var context = new DefaultHttpContext();
-        context.Request.QueryString = new QueryString("?period=month&at=2026-11-02&environment=prod&source_id=a");
+        var context = new DefaultHttpContext
+        {
+            Request = { QueryString = new QueryString("?period=month&at=2026-11-02&environment=prod&source_id=a") }
+        };
 
         Assert.True(CardRequest.TryParseOptionsQuery(context.Request, Today, out var query));
         Assert.Equal((RecapPeriodKind.Month, new DateOnly(2026, 11, 2), "prod", "a"), query);

@@ -687,6 +687,70 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
 - **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
   `truncated: true`; narrow the request with a filter.
 
+### Recap jobs
+
+On a large database the recap takes minutes, longer than a browser should hold one request open.
+The launcher asks the Hub to compute it as a job instead, follows its progress, then reads the
+result. `GET /api/recap` stays as it is for scripts and CI. Every route below is never open, as
+`GET /api/recap` is, and refuses a caller with `findings.read` nowhere with the same `403`.
+
+| Route                                          | Does                                                                                     |
+|------------------------------------------------|------------------------------------------------------------------------------------------|
+| `POST /api/recap/jobs?{query}[&refresh=true]`  | Starts the job for the query, or joins the one running or kept for it. `202` and the job |
+| `GET /api/recap/jobs/{id}`                     | The job: status, stages and progress                                                     |
+| `GET /api/recap/jobs/{id}/result?view=&moves=` | The recap, as `GET /api/recap` answers it in that view and with that cut                 |
+| `DELETE /api/recap/jobs/{id}`                  | Lets go of the job for the caller, `204`: a running one stops once nobody who started or joined it follows it |
+
+The query is the one of `GET /api/recap`, `view` and `moves` aside: one job computes the whole
+recap, and each view and cut is read from it. `POST` and `DELETE` are refused from another site
+(`403`) and without a JSON content type (`415`), as an acknowledgment is.
+
+- **The job.** `status` is `running`, `succeeded`, `failed` (with `error_code`) or `cancelled`.
+  `stages` lists the nine steps of a computation in order, `findings_period`, `findings_open`,
+  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels` and
+  `assemble`, each `pending`, `running`, `done` (with `ms`) or `skipped` when that day has nothing
+  to read for it, and `stage` names the one running. `progress`, from `0` to `1`, is the share of
+  the expected work behind the job: each stage weighs what it took on average in the Hub's past
+  computations, the findings reads most until there is one. It moves when a stage ends, never
+  inside one, and is `1` once the job succeeded. `elapsed_ms` is how long it has run, or ran, on
+  the Hub's own clock, so a client whose clock differs can still count from it.
+- **Reuse.** A finished recap is kept for its audience and query: 24 hours for a closed period, 10
+  minutes for one in progress or with a day still being counted (`open_day`), until
+  `expires_at_ms`. Meanwhile a `POST` for the same query answers the same job, already
+  `succeeded`, so another view, the whole list of a group or a return to the screen computes
+  nothing, as long as nothing the recap reads besides the findings has been written since it
+  started: an action, an endpoint or service name, or a change in a source's acknowledgments,
+  from any screen, the IDE or the API, makes the next `POST` compute again. A running job is not
+  joined either then, since it may have read before the write. `refresh=true` always computes it again, even over a job still running,
+  which may have read before the write that asked for it: the launcher sends it after a write from
+  the recap screen or on Recompute. The job it replaces still answers by its id to whoever follows
+  it, and no request joins it any more. A job is in memory only: a restart forgets it.
+- **Audience.** A caller whose `findings.read` scope is narrowed reads only the jobs they started.
+  Callers with a whole scope who see the same sources share their jobs. Any other caller reads a
+  job as unknown, `404`, the same answer as an id the Hub never gave.
+- **Bounds.** The Hub runs 2 jobs at once, and a signed-in caller follows at most one running job
+  they started or joined: a `POST` that would start another is a `503` with `Retry-After: 5` and
+  the code `recap_busy`, until they let it go or stop reading it, whichever of their screens
+  follows it. A follow counts for 30 seconds
+  after the caller last read the job with `GET /api/recap/jobs/{id}`, so a tab closed or reloaded
+  without letting go stops holding its caller then, while the job runs on to its end. A refresh moves the caller's follow from the job it
+  replaces, as a signed-in caller's `POST` over a running job a write made stale does, so it never finds
+  them busy with that one. A caller with no identity, on a Hub without
+  sign-in, is held by the 2 alone. It holds 32 jobs in all, and drops the oldest finished one past
+  that. A failed job stays readable for a minute. A job let go reads as unknown at once, yet holds
+  its place among the 2 until its computation stops; a finished one stays kept.
+- **Letting go.** A client names its screen in the `X-Recap-Screen` header, a token of up to 64
+  letters, digits or dashes the launcher draws once per page load, on `POST`, `GET` and `DELETE`. A
+  screen follows a job once, however often it joins it, and a `DELETE` ends that screen's follow
+  alone: two tabs of one person, or two people on a Hub without sign-in, follow a job apart. A
+  client that names no screen follows once per signed-in caller, and once per start or join without
+  an identity. A follower that does not follow the job changes nothing, so nobody stops a
+  computation another screen waits on. A running job stops when its last follower lets it go.
+- **Result.** `GET …/result` while the job runs is a `409` with the code `recap_not_ready`, and for
+  a job that failed or stopped with the Hub a `409` with the code `recap_failed`: it will never come,
+  start the job again. Leaving the screen does not stop a job: the launcher lets go only of one whose
+  filters it changed or that a refresh replaced.
+
 ### Recap webhooks
 
 Each webhook named by a subscription, declared in `Hub:Recaps:Webhooks`, receives a `POST` with a JSON
