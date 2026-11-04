@@ -792,7 +792,8 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   compte 30 secondes après la dernière lecture de la tâche par l'appelant avec
   `GET /api/recap/jobs/{id}`, si bien qu'un onglet fermé ou rechargé sans lâcher cesse alors de
   bloquer son appelant, tandis que la tâche va jusqu'au bout. Un recalcul déplace le suivi
-  de l'appelant depuis la tâche qu'il remplace, si bien qu'il ne le trouve jamais occupé par
+  de l'appelant depuis la tâche qu'il remplace, comme le `POST` d'un appelant connecté par-dessus une
+  tâche en cours qu'une écriture a rendue périmée, si bien qu'il ne le trouve jamais occupé par
   celle-ci. Un appelant sans identité, sur un Hub sans connexion, n'est tenu que par les 2. Le Hub
   garde 32 tâches en tout, et oublie la plus ancienne terminée au-delà. Une tâche échouée reste
   lisible une minute. Une tâche lâchée se lit aussitôt comme inconnue, mais garde sa place parmi les

@@ -83,9 +83,11 @@ public sealed partial class RecapJobs(
                 return new RecapJobStart(ViewOf(known));
             }
 
-            // A refresh replaces the caller's own follow of the job it supersedes, so it never finds
-            // the caller busy with the very computation it replaces.
-            if (refresh && _byKey.TryGetValue(key, out var replaced) && replaced.Status == RecapJobStatus.Running)
+            // The new job replaces the caller's own follow of the running one it supersedes, refreshed or
+            // made stale by a write, so it never finds the caller busy with the very computation it
+            // replaces. A caller with no identity lets go only on a refresh: its follow is not told apart.
+            if ((refresh || caller is not null) && _byKey.TryGetValue(key, out var replaced) &&
+                replaced.Status == RecapJobStatus.Running)
                 LetGo(replaced, caller);
 
             if (_jobs.Values.Count(item => item.Status == RecapJobStatus.Running) >= MaxRunning ||

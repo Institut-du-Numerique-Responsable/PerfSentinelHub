@@ -733,7 +733,8 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
   the code `recap_busy`, until they let it go or stop reading it. A follow counts for 30 seconds
   after the caller last read the job with `GET /api/recap/jobs/{id}`, so a tab closed or reloaded
   without letting go stops holding its caller then, while the job runs on to its end. A refresh moves the caller's follow from the job it
-  replaces, so it never finds them busy with that one. A caller with no identity, on a Hub without
+  replaces, as a signed-in caller's `POST` over a running job a write made stale does, so it never finds
+  them busy with that one. A caller with no identity, on a Hub without
   sign-in, is held by the 2 alone. It holds 32 jobs in all, and drops the oldest finished one past
   that. A failed job stays readable for a minute. A job let go reads as unknown at once, yet holds
   its place among the 2 until its computation stops; a finished one stays kept.

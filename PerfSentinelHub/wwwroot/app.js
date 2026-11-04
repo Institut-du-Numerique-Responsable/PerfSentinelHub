@@ -6082,8 +6082,9 @@
             landRecap(sequence, getJson(PSL.recapPath(route) + (all ? '&moves=all' : '')), opening);
             return;
         }
-        // The same filters computed already: another view or the whole list reads it, nothing is computed.
-        if (previous && previous.key === key && previous.status === 'succeeded' && !refresh) {
+        // The whole list of a group reads the snapshot on screen again, nothing is computed. Any other read
+        // asks the Hub, which answers the same job only while nothing the recap reads was written since.
+        if (keep && previous && previous.key === key && previous.status === 'succeeded' && !refresh) {
             readRecapResult(sequence, previous, route, all, opening);
             return;
         }
@@ -6104,7 +6105,11 @@
         start.done = postJson(PSL.recapJobPath(route, refresh)).then(function (job) {
             if (sequence !== state.recapSeq) {
                 // Started or joined for a read no longer wanted: let go, lest it hold one of the Hub's places.
-                return job.status === 'running' ? cancelRecapJob(job.id) : null;
+                // Kept when a newer read for the same filters follows it too: the Hub counts one follow per
+                // caller, so this let-go would stop the job that read waits on.
+                const wanted = (state.recapJob && state.recapJob.id === job.id) ||
+                    (state.recapStarting && state.recapStarting !== start && state.recapStarting.key === start.key);
+                return job.status === 'running' && !wanted ? cancelRecapJob(job.id) : null;
             }
             state.recapHubBusy = false;
             followRecapJob(sequence, job, route, all, opening);

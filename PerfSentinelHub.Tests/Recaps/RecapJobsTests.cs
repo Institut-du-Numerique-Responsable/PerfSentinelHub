@@ -450,6 +450,21 @@ public sealed class RecapJobsTests : IDisposable
         await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
     }
 
+    // A reload after a write: the job the caller follows is not joined, and must not find them busy either.
+    [Fact]
+    public async Task A_start_over_a_running_job_a_write_made_stale_moves_the_callers_follow()
+    {
+        var first = _jobs.Start(Key(), Request, false, "alice").Job!;
+        var computation = await NextComputationAsync();
+
+        _version++;
+        var again = _jobs.Start(Key(), Request, false, "alice");
+
+        Assert.False(again.Busy);
+        Assert.NotEqual(first.Id, again.Job!.Id);
+        await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
+    }
+
     [Fact]
     public async Task A_job_says_how_long_it_has_run_on_the_Hubs_clock()
     {
