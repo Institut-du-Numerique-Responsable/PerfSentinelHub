@@ -1753,6 +1753,7 @@
         'recap.job.stage.actions': 'Actions',
         'recap.job.stage.labels': 'Noms',
         'recap.job.stage.assemble': 'Mise en forme',
+        'recap.job.stage_pending': 'à venir',
         'recap.job.stage_running': 'en cours',
         'recap.job.stage_skipped': 'pas nécessaire',
         'recap.job.busy': 'Le Hub calcule déjà autant de récaps qu\'il en mène de front. Nouvel essai dans quelques secondes.',

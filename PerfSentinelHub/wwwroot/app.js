@@ -7164,6 +7164,7 @@
                     'aria-valuemin': '0',
                     'aria-valuemax': '100',
                     'aria-valuenow': String(percent),
+                    'aria-valuetext': recapStageLine(job),
                     'aria-label': t('recap.job.progress_label')
                 }, [fill]),
                 recapStageList(job),
@@ -7182,6 +7183,7 @@
             return;
         }
         track.setAttribute('aria-valuenow', String(percent));
+        track.setAttribute('aria-valuetext', recapStageLine(job));
         track.firstChild.style.width = percent + '%';
         // Rewritten only when it changes, so the status region speaks once per stage.
         const text = recapStageLine(job);
@@ -7205,7 +7207,10 @@
             return el('li', {class: 'recap-stage', 'data-state': stage.state}, [
                 el('span', {class: 'recap-stage-dot', 'aria-hidden': 'true'}),
                 el('span', {class: 'recap-stage-name', text: t('recap.job.stage.' + stage.name)}),
-                el('span', {class: 'recap-stage-time', text: time})
+                // A step still to come says so to a screen reader only: on screen its hollow dot does.
+                stage.state === 'pending'
+                    ? el('span', {class: 'visually-hidden', text: t('recap.job.stage_pending')})
+                    : el('span', {class: 'recap-stage-time', text: time})
             ]);
         }));
     }

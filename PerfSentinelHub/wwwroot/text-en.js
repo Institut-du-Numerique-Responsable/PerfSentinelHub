@@ -1683,6 +1683,7 @@
         'recap.job.stage.actions': 'Actions',
         'recap.job.stage.labels': 'Names',
         'recap.job.stage.assemble': 'Putting it together',
+        'recap.job.stage_pending': 'to come',
         'recap.job.stage_running': 'in progress',
         'recap.job.stage_skipped': 'not needed',
         'recap.job.busy': 'The Hub is already computing as many recaps as it can at once. Trying again in a few seconds.',
