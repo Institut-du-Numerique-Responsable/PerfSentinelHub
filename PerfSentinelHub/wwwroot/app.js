@@ -711,10 +711,10 @@
         } catch (error) {
             stored = null;
         }
-        const agent = /** @type {Navigator & {userAgentData?: {platform?: string}}} */ (navigator);
-        // navigator.platform is deprecated, but it is the only hint Firefox and Safari give.
-        // noinspection JSDeprecatedSymbols
-        const platform = (agent.userAgentData && agent.userAgentData.platform) || navigator.platform;
+        // userAgentData is Chromium's alone, and navigator.platform, though deprecated, is the only hint
+        // Firefox and Safari give: both are read through this view, which knows that.
+        const agent = /** @type {{userAgentData?: {platform?: string}, platform?: string}} */ (navigator);
+        const platform = (agent.userAgentData && agent.userAgentData.platform) || agent.platform;
         // A stored id that no longer names a shell is worth no more than no id at
         // all, so it falls back to the platform rather than to the first entry.
         state.shell = PSL.knownShell(stored) || PSL.defaultShell(platform);
@@ -1578,9 +1578,9 @@
         const selection = selectNode(code);
         let copied;
         try {
-            // Deprecated, but the only copy a page served without a secure context has.
-            // noinspection JSDeprecatedSymbols
-            copied = document.execCommand('copy');
+            // execCommand is deprecated, but it is the only copy a page served without a secure context has.
+            const legacy = /** @type {{execCommand: (command: string) => boolean}} */ (document);
+            copied = legacy.execCommand('copy');
         } catch (error) {
             copied = false;
         }
