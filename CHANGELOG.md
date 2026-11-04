@@ -27,6 +27,16 @@ All notable changes to PerfSentinelHub are recorded here.
 - Each finished recap logs how long each step took (EventId 2507), and `/metrics` counts the jobs:
   `perf_sentinel_hub_recap_jobs{state}` and `perf_sentinel_hub_recap_jobs_total{outcome}`.
 
+### Changed
+
+- The image ships perf-sentinel `0.42.0` as its analysis engine, repinned by digest from
+  `0.41.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.41.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. A daemon on `0.42.0` drops deploy and restart
+  incidents by default (`[daemon.incidents] ignored_kinds`), so the Hub no longer mirrors or
+  receives them from it; set `ignored_kinds = []` on the daemon to keep them. No detection, score
+  or report format changes, and the disclosure schema stays `perf-sentinel-report/v1.8`.
+
 ### Fixed
 
 - A pill button keeps its label on one line. In French, "Analyser cette fenêtre" and "Expliquer la
