@@ -415,7 +415,9 @@
     function weightBand(n, cap) {
         const hardCap = typeof cap === 'number' && cap > 0 ? cap : 2000;
         /**
-         * @param {import('../types').WeightBand} key @param {string} tone @param {boolean} needsAck
+         * @param {import('../types').WeightBand} key
+         * @param {string} tone
+         * @param {boolean} needsAck
          */
         const band = (key, tone, needsAck) => ({
             key: key,
@@ -573,6 +575,7 @@
      *
      * @param {import('../types').Source} source
      * @param {Record<string, unknown>} request
+     * @param {string} [shellId] the shell the command is printed for, the first one when absent
      * @returns {string | null}
      */
     function analysisCommand(source, request, shellId) {
@@ -2831,7 +2834,9 @@
 
     /**
      * The first day of the period of `kind` that holds `day`; a week starts on Monday, UTC.
-     * @param {string} kind @param {string} day @returns {string}
+     * @param {string} kind
+     * @param {string} day
+     * @returns {string}
      */
     function cardPeriodStart(kind, day) {
         const date = cardDate(day);
@@ -2846,7 +2851,10 @@
 
     /**
      * The first day of the period `delta` steps away from the one starting on `from`.
-     * @param {string} kind @param {string} from @param {number} delta @returns {string}
+     * @param {string} kind
+     * @param {string} from
+     * @param {number} delta
+     * @returns {string}
      */
     function stepPeriod(kind, from, delta) {
         const date = cardDate(from);
@@ -2857,7 +2865,9 @@
 
     /**
      * The first day of the last period of `kind` that ended before `today` (UTC).
-     * @param {string} kind @param {string} today @returns {string}
+     * @param {string} kind
+     * @param {string} today
+     * @returns {string}
      */
     function lastClosedPeriod(kind, today) {
         return stepPeriod(kind, cardPeriodStart(kind, today), -1);
@@ -2875,7 +2885,10 @@
 
     /**
      * A period in words, as CardRules.PeriodName writes it.
-     * @param {string} kind @param {string} from @returns {string}
+     * @param {string} kind
+     * @param {string} from
+     * @param {string} [language]
+     * @returns {string}
      */
     function cardPeriodName(kind, from, language = LANG) {
         const date = cardDate(from);
@@ -2902,7 +2915,9 @@
     /**
      * Why no card, from its code and its period, as CardRules.Explain writes it in English: the
      * period before is named for a curve's refusal, every other code reads its problem sentence.
-     * @param {string} code @param {string} kind @param {string} from
+     * @param {string} code
+     * @param {string} kind
+     * @param {string} from
      * @returns {string}
      */
     function cardRefusalText(code, kind, from) {
@@ -2917,7 +2932,9 @@
 
     /**
      * The country choice shown: the one a person picked, else the Hub's, else France.
-     * @param {string|null} picked @param {string|undefined} hubCountry @returns {string}
+     * @param {string|null} picked
+     * @param {string|undefined} hubCountry
+     * @returns {string}
      */
     function cardCountry(picked, hubCountry) {
         if (picked !== null && CARD_COUNTRIES.indexOf(picked) >= 0) return picked;
@@ -2936,7 +2953,9 @@
 
     /**
      * The days a period covers: `1 to 31 October 2026, UTC`, the shared month or year written once.
-     * @param {string} from @param {string} to @returns {string}
+     * @param {string} from
+     * @param {string} to
+     * @returns {string}
      */
     function cardRangeText(from, to) {
         let start = day(from, {withYear: true});
@@ -2985,7 +3004,9 @@
 
     /**
      * The remember box: it waits for a new name, or for one that differs from the remembered one.
-     * @param {string} typed @param {string|null} remembered @param {string} place
+     * @param {string} typed
+     * @param {string|null} remembered
+     * @param {string} place
      * @returns {{text: string, enabled: boolean}}
      */
     function rememberState(typed, remembered, place) {
@@ -3049,7 +3070,8 @@
 
     /**
      * The sentence under the verdict when the file is the one signed; a modified file already has its own.
-     * @param {{content: string}} result @returns {string|null}
+     * @param {{content: string}} result
+     * @returns {string|null}
      */
     function contentLine(result) {
         return result.content === 'intact' ? t('card.content.intact') : null;
@@ -3078,7 +3100,9 @@
      * The revoke confirmation. The date bounds nothing: the check page reads every card of a revoked
      * key as revoked, and names the date as the day since when the key may have been exposed.
      * The consequence is the alert; the DNS steps are what to do next, read apart from it.
-     * @param {string} date yyyy-MM-dd @param {boolean} isCurrent @param {string|null} domain
+     * @param {string} date yyyy-MM-dd
+     * @param {boolean} isCurrent
+     * @param {string|null} domain
      * @returns {{alert: string, step: string}}
      */
     function revokeText(date, isCurrent, domain) {
@@ -3114,7 +3138,8 @@
     /**
      * What a fix row says the card prints: the volume before the fix, or the figure a problem with
      * no volume cites instead. `period` names the period before the fix, the Hub's English name when omitted.
-     * @param {*} fix @param {string} [period]
+     * @param {*} fix
+     * @param {string} [period]
      * @returns {{figure: string|null, text: string}}
      */
     function cardFixLine(fix, period) {
@@ -3195,7 +3220,8 @@
     }
 
     /**
-     * @param {string} language @param {string} key
+     * @param {string} language
+     * @param {string} key
      * @returns {string | undefined}
      */
     function textIn(language, key) {
@@ -3226,7 +3252,8 @@
 
     /**
      * `t` in `language` rather than the shown one.
-     * @param {string} language @param {string} key
+     * @param {string} language
+     * @param {string} key
      * @param {Record<string, string | number>} [vars]
      * @returns {string}
      */
@@ -3447,7 +3474,8 @@
 
     /**
      * From `open`, the index of the bracket that closes it.
-     * @param {string} code @param {number} open
+     * @param {string} code
+     * @param {number} open
      * @returns {number}
      */
     function closingBracket(code, open) {
