@@ -223,9 +223,9 @@ public static partial class ApiEndpoints
         return render switch
         {
             CardRender.Refused
-                {
-                    Reason: "unsupported_characters", Field: "free.title" or "free.team" or "free.label"
-                }
+            {
+                Reason: "unsupported_characters", Field: "free.title" or "free.team" or "free.label"
+            }
                 refused => TypedResults.Json(new CardFieldProblem(UndrawableField, refused.Field["free.".Length..],
                     ProblemCodes.CardFieldUndrawable),
                 HubJsonContext.Default.CardFieldProblem, statusCode: StatusCodes.Status422UnprocessableEntity),

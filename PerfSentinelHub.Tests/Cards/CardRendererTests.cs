@@ -169,7 +169,7 @@ public sealed partial class CardRendererTests : IDisposable
     public async Task A_reason_line_is_a_refusal(int exitCode, string line, string reason, string? field)
     {
         var renderer = await RendererAsync(new FakeEngine
-            { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
+        { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
 
         var outcome = await renderer.RenderAsync(Collective(), Key, KeyFile(), "png", Token);
 
@@ -183,7 +183,7 @@ public sealed partial class CardRendererTests : IDisposable
     public async Task A_line_without_its_keys_is_out_of_contract(int exitCode, string line)
     {
         var renderer = await RendererAsync(new FakeEngine
-            { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
+        { Card = true, CardRenderExitCode = exitCode, CardRenderOutput = line });
 
         Assert.IsType<CardRender.Malformed>(await renderer.RenderAsync(Collective(), Key, KeyFile(), "png", Token));
     }
@@ -249,7 +249,7 @@ public sealed partial class CardRendererTests : IDisposable
     public async Task A_verdict_with_a_missing_or_mistyped_key_is_null(string line)
     {
         var renderer = await RendererAsync(new FakeEngine
-            { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = line });
+        { Card = true, VerifyCardExitCode = 3, VerifyCardOutput = line });
 
         Assert.Null(await renderer.VerifyAsync([1], Token));
     }
