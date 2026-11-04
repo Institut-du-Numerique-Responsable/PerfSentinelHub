@@ -266,6 +266,7 @@ public sealed class RecapJobsApiTests(HubApplicationFactory factory) : IClassFix
             services.RemoveAll<RecapJobs>();
             services.AddSingleton(new RecapJobs(
                 compute,
+                () => 0,
                 TimeProvider.System,
                 CancellationToken.None,
                 NullLogger<RecapJobs>.Instance));

@@ -772,9 +772,12 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   dont l'horloge diffère puisse compter à partir de là.
 - **Réutilisation.** Un récap calculé est gardé pour son audience et sa requête : 24 heures pour une
   période close, 10 minutes pour une période en cours ou dont un jour est encore compté (`open_day`),
-  jusqu'à `expires_at_ms`. Entre-temps, un
-  `POST` pour la même requête renvoie la même tâche, déjà `succeeded` : une autre vue, la liste
-  entière d'un groupe ou un retour sur l'écran ne recalculent rien. `refresh=true` recalcule toujours,
+  jusqu'à `expires_at_ms`. Entre-temps, un `POST` pour la même requête renvoie la même tâche, déjà
+  `succeeded` : une autre vue, la liste entière d'un groupe ou un retour sur l'écran ne recalculent
+  rien, tant que rien de ce que le récap lit en plus des findings n'a été écrit depuis son lancement :
+  une action, un nom d'endpoint ou de service, ou un changement des acquittements d'une source,
+  depuis n'importe quel écran, l'IDE ou l'API, fait recalculer au `POST` suivant. Une tâche en cours
+  n'est pas rejointe non plus dans ce cas, car elle a pu lire avant l'écriture. `refresh=true` recalcule toujours,
   même par-dessus une tâche encore en cours, qui a pu lire avant l'écriture qui le demande : le
   launcher l'envoie après une écriture depuis l'écran du récap ou sur Recalculer. La tâche remplacée
   répond encore par son id à qui la suit, et plus aucune requête ne la rejoint. Une tâche ne vit
@@ -785,15 +788,20 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   donné.
 - **Limites.** Le Hub mène 2 tâches de front, et un appelant connecté suit au plus une tâche en
   cours qu'il a lancée ou rejointe : un `POST` qui en lancerait une autre est un `503` avec
-  `Retry-After: 5` et le code `recap_busy`, jusqu'à ce qu'il la lâche. Un recalcul déplace le suivi
+  `Retry-After: 5` et le code `recap_busy`, jusqu'à ce qu'il la lâche ou cesse de la lire. Un suivi
+  compte 30 secondes après la dernière lecture de la tâche par l'appelant avec
+  `GET /api/recap/jobs/{id}`, si bien qu'un onglet fermé ou rechargé sans lâcher cesse alors de
+  bloquer son appelant, tandis que la tâche va jusqu'au bout. Un recalcul déplace le suivi
   de l'appelant depuis la tâche qu'il remplace, si bien qu'il ne le trouve jamais occupé par
   celle-ci. Un appelant sans identité, sur un Hub sans connexion, n'est tenu que par les 2. Le Hub
   garde 32 tâches en tout, et oublie la plus ancienne terminée au-delà. Une tâche échouée reste
   lisible une minute. Une tâche lâchée se lit aussitôt comme inconnue, mais garde sa place parmi les
   2 jusqu'à ce que son calcul s'arrête ; une tâche terminée reste gardée.
-- **Lâcher.** Un `DELETE` met fin à un suivi de l'appelant qui l'envoie, une fois par lancement ou
-  ralliement : un appelant qui ne suit pas la tâche ne change rien, si bien que personne n'arrête un
-  calcul qu'un autre attend. Une tâche en cours s'arrête quand son dernier suiveur la lâche.
+- **Lâcher.** Un appelant connecté suit une tâche une seule fois, quel que soit le nombre d'écrans
+  qu'il y ouvre, et un `DELETE` met fin à ce suivi ; les appelants sans identité, qu'on ne peut
+  distinguer, comptent une fois par lancement ou ralliement. Un appelant qui ne suit pas la tâche ne
+  change rien, si bien que personne n'arrête un calcul qu'un autre attend. Une tâche en cours
+  s'arrête quand son dernier suiveur la lâche.
 - **Résultat.** `GET …/result` pendant que la tâche tourne est un `409` avec le code
   `recap_not_ready`, et pour une tâche échouée ou arrêtée avec le Hub un `409` avec le code
   `recap_failed` : il ne viendra jamais, relancez la tâche. Quitter l'écran n'arrête pas une tâche :

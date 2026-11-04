@@ -27,10 +27,11 @@ public sealed class RecapJobsTests : IDisposable
     private readonly ListLogger<RecapJobs> _logger = new();
     private readonly CancellationTokenSource _stopping = new();
     private readonly RecapJobs _jobs;
+    private long _version;
 
     public RecapJobsTests()
     {
-        _jobs = new RecapJobs(ComputeAsync, _clock, _stopping.Token, _logger);
+        _jobs = new RecapJobs(ComputeAsync, () => _version, _clock, _stopping.Token, _logger);
     }
 
     public void Dispose()
@@ -232,7 +233,7 @@ public sealed class RecapJobsTests : IDisposable
     {
         var release = new TaskCompletionSource<RecapSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
         // A read that does not look at its token, as a SQLite step does not until it returns.
-        var jobs = new RecapJobs((_, _, _) => release.Task, _clock, _stopping.Token, _logger);
+        var jobs = new RecapJobs((_, _, _) => release.Task, () => _version, _clock, _stopping.Token, _logger);
         var first = jobs.Start(Key("a"), Request, false, null).Job!;
         jobs.Start(Key("b"), Request, false, null);
 
@@ -368,11 +369,57 @@ public sealed class RecapJobsTests : IDisposable
         Assert.False(bobs.Busy);
         await NextComputationAsync();
 
-        // Let go twice, as alice followed it twice: the computation stops and frees her place.
-        Assert.True(_jobs.Cancel(mine.Id, Everyone, "alice"));
+        // Joining again, as a reload or a second tab does, is still one follow: one let-go stops it.
         Assert.True(_jobs.Cancel(mine.Id, Everyone, "alice"));
         await WaitUntilAsync(() => _jobs.Sizes().Running == 1);
         Assert.False(_jobs.Start(Key("c"), Request, false, "alice").Busy);
+    }
+
+    [Fact]
+    public async Task A_follow_its_screen_stops_reading_no_longer_holds_its_caller_and_the_job_runs_on()
+    {
+        var mine = _jobs.Start(Key("a"), Request, false, "alice").Job!;
+        var computation = await NextComputationAsync();
+
+        _clock.Advance(RecapJobs.FollowLease - TimeSpan.FromSeconds(1));
+        Assert.True(_jobs.Start(Key("b"), Request, false, "alice").Busy);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.False(_jobs.Start(Key("b"), Request, false, "alice").Busy);
+        Assert.Equal("running", Find(mine.Id)!.Status);
+        Assert.False(computation.Token.IsCancellationRequested);
+    }
+
+    [Fact]
+    public async Task Reading_the_job_keeps_the_callers_follow_counting()
+    {
+        var mine = _jobs.Start(Key("a"), Request, false, "alice").Job!;
+        await NextComputationAsync();
+
+        _clock.Advance(TimeSpan.FromSeconds(20));
+        Assert.NotNull(_jobs.Find(mine.Id, Everyone, "alice"));
+        _clock.Advance(TimeSpan.FromSeconds(20));
+
+        Assert.True(_jobs.Start(Key("b"), Request, false, "alice").Busy);
+    }
+
+    [Fact]
+    public async Task A_write_a_recap_reads_makes_the_next_request_compute_again()
+    {
+        var kept = Start(Key("a")).Job!;
+        (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
+        await SettledAsync(kept.Id);
+        var running = Start(Key("b")).Job!;
+        await NextComputationAsync();
+
+        _version++;
+
+        // The running one may have read before the write: not joined, computed again beside it.
+        Assert.NotEqual(running.Id, Start(Key("b")).Job!.Id);
+        foreach (var computation in _computations.Skip(1))
+            computation.Release.TrySetResult(Snapshot(inProgress: false));
+        await WaitUntilAsync(() => _jobs.Sizes().Running == 0);
+        Assert.NotEqual(kept.Id, Start(Key("a")).Job!.Id);
     }
 
     [Fact]

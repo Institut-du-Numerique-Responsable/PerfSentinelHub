@@ -60,7 +60,7 @@ public static partial class ApiEndpoints
     {
         if (RecapJobAudienceOf(context, access, options) is not { } audience)
             return NoFindingsRead();
-        return jobs.Find(id, audience) is { } job
+        return jobs.Find(id, audience, AccessCaller.Of(context)?.Subject) is { } job
             ? TypedResults.Json(job, HubJsonContext.Default.RecapJobState)
             : TypedResults.NotFound();
     }

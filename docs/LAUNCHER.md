@@ -288,8 +288,9 @@ computation started. You can leave the page: the Hub goes on, and coming back pi
 shows the result at once if it finished. Once computed, a line says when, and until when the Hub reuses
 it (10 minutes for a period in progress or with a day still being counted, a day for a closed one), with Recompute beside it. Switching
 between Engineering and Management, or opening every move of a group, reads the same computed recap
-again; changing a filter starts another one and stops the one nobody follows any more. A write from the
-screen, an action or a name, computes the recap again. A Hub without jobs is read the way it was before,
+again; changing a filter starts another one and stops the one nobody follows any more. A write that
+changes the recap, an action, a name or an acknowledgment, from this screen or anywhere else, computes it
+again at the next visit. A Hub without jobs is read the way it was before,
 in one request, with a banner that says leaving restarts it.
 
 <picture>

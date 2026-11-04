@@ -72,8 +72,10 @@ builder.Services.AddSingleton<RecapService>();
 builder.Services.AddSingleton(services =>
 {
     var recaps = services.GetRequiredService<RecapService>();
+    var database = services.GetRequiredService<HubDatabase>();
     return new RecapJobs(
         recaps.ComputeAsync,
+        () => database.RecapInputsVersion,
         services.GetRequiredService<TimeProvider>(),
         services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
         services.GetRequiredService<ILogger<RecapJobs>>());

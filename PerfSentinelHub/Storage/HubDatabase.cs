@@ -70,6 +70,19 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     // which nothing here does, so disposing would free nothing and would arm an
     // ObjectDisposedException for any poll still in flight when the host stops.
     private readonly SemaphoreSlim _writeGate = new(1, 1);
+
+    // Moves on every write a recap reads besides the findings themselves: an action, a label, a change
+    // of a source's acknowledgments. A recap computed before it moved is not reused. In memory: a
+    // restart forgets the recaps it guards along with it.
+    private long _recapInputsVersion;
+
+    /// <summary>The version <see cref="Recaps.RecapJobs" /> reuses a computed recap under.</summary>
+    public long RecapInputsVersion => Interlocked.Read(ref _recapInputsVersion);
+
+    private void TouchRecapInputs()
+    {
+        Interlocked.Increment(ref _recapInputsVersion);
+    }
     private int _ready;
 
     public bool IsReady => Volatile.Read(ref _ready) == 1;

@@ -29,6 +29,19 @@ public sealed partial class HubDatabase
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
+            // What the recap reads of an ack: which signature is acked at the source, and until when.
+            // Compared before the replace, so a poll that lists the same acks moves nothing.
+            var before = new HashSet<(string, long?)>();
+            await using (var read = connection.CreateCommand())
+            {
+                read.Transaction = transaction;
+                read.CommandText = "SELECT signature, expires_at_ms FROM source_acks WHERE source_id = $source_id;";
+                read.Parameters.AddWithValue(SourceIdParameter, sourceId);
+                await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                    before.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetInt64(1)));
+            }
+
             await using (var delete = connection.CreateCommand())
             {
                 delete.Transaction = transaction;
@@ -47,6 +60,8 @@ public sealed partial class HubDatabase
                 new SourceRead(observedAtMs, state, null),
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            if (!before.SetEquals(acks.Select(ack => (ack.Signature, ack.ExpiresAtMs))))
+                TouchRecapInputs();
         }
         finally
         {

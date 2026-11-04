@@ -76,6 +76,7 @@ public sealed partial class HubDatabase
             }
 
             await command.ExecuteNonQueryAsync(cancellationToken);
+            TouchRecapInputs();
             return true;
         }
         finally

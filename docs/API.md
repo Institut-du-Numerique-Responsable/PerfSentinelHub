@@ -715,9 +715,13 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
   inside one, and is `1` once the job succeeded. `elapsed_ms` is how long it has run, or ran, on
   the Hub's own clock, so a client whose clock differs can still count from it.
 - **Reuse.** A finished recap is kept for its audience and query: 24 hours for a closed period, 10
-  minutes for one in progress or with a day still being counted (`open_day`), until `expires_at_ms`. Meanwhile a `POST` for the same query answers
-  the same job, already `succeeded`, so another view, the whole list of a group or a return to the
-  screen computes nothing. `refresh=true` always computes it again, even over a job still running,
+  minutes for one in progress or with a day still being counted (`open_day`), until
+  `expires_at_ms`. Meanwhile a `POST` for the same query answers the same job, already
+  `succeeded`, so another view, the whole list of a group or a return to the screen computes
+  nothing, as long as nothing the recap reads besides the findings has been written since it
+  started: an action, an endpoint or service name, or a change in a source's acknowledgments,
+  from any screen, the IDE or the API, makes the next `POST` compute again. A running job is not
+  joined either then, since it may have read before the write. `refresh=true` always computes it again, even over a job still running,
   which may have read before the write that asked for it: the launcher sends it after a write from
   the recap screen or on Recompute. The job it replaces still answers by its id to whoever follows
   it, and no request joins it any more. A job is in memory only: a restart forgets it.
@@ -726,14 +730,17 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
   job as unknown, `404`, the same answer as an id the Hub never gave.
 - **Bounds.** The Hub runs 2 jobs at once, and a signed-in caller follows at most one running job
   they started or joined: a `POST` that would start another is a `503` with `Retry-After: 5` and
-  the code `recap_busy`, until they let it go. A refresh moves the caller's follow from the job it
+  the code `recap_busy`, until they let it go or stop reading it. A follow counts for 30 seconds
+  after the caller last read the job with `GET /api/recap/jobs/{id}`, so a tab closed or reloaded
+  without letting go stops holding its caller then, while the job runs on to its end. A refresh moves the caller's follow from the job it
   replaces, so it never finds them busy with that one. A caller with no identity, on a Hub without
   sign-in, is held by the 2 alone. It holds 32 jobs in all, and drops the oldest finished one past
   that. A failed job stays readable for a minute. A job let go reads as unknown at once, yet holds
   its place among the 2 until its computation stops; a finished one stays kept.
-- **Letting go.** A `DELETE` ends one follow of the caller who sends it, once per time they started
-  or joined the job: a caller who does not follow it changes nothing, so nobody stops a computation
-  someone else waits on. A running job stops when its last follower lets it go.
+- **Letting go.** A signed-in caller follows a job once, however many screens they open on it, and a
+  `DELETE` ends that follow; callers with no identity, who cannot be told apart, count once per time
+  they started or joined it. A caller who does not follow the job changes nothing, so nobody stops a
+  computation someone else waits on. A running job stops when its last follower lets it go.
 - **Result.** `GET …/result` while the job runs is a `409` with the code `recap_not_ready`, and for
   a job that failed or stopped with the Hub a `409` with the code `recap_failed`: it will never come,
   start the job again. Leaving the screen does not stop a job: the launcher lets go only of one whose

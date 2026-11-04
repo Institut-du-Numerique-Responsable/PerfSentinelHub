@@ -13,6 +13,7 @@ namespace PerfSentinelHub.Recaps;
 /// </summary>
 public sealed partial class RecapJobs(
     Func<RecapRequest, IRecapProgress, CancellationToken, Task<RecapSnapshot>> compute,
+    Func<long> inputsVersion,
     TimeProvider timeProvider,
     CancellationToken stopping,
     ILogger<RecapJobs> logger)
@@ -24,6 +25,10 @@ public sealed partial class RecapJobs(
     // another while one they follow still runs is busy until they let it go. A caller with no
     // identity, a Hub without sign-in, is held by MaxRunning alone.
     public const int MaxRunningPerCaller = 1;
+
+    // How long a follow counts toward MaxRunningPerCaller without its screen reading the job again. A
+    // tab closed or reloaded without letting go stops holding its caller past it; the job runs on.
+    public static readonly TimeSpan FollowLease = TimeSpan.FromSeconds(30);
 
     // A recap of 5,000 findings weighs a few MB, beside a Hub that runs in 1 GiB.
     public const int MaxKept = 32;
@@ -66,11 +71,14 @@ public sealed partial class RecapJobs(
         lock (_gate)
         {
             Prune();
-            if (!refresh && _byKey.TryGetValue(key, out var known) &&
+            var version = inputsVersion();
+            // Reused or joined only while nothing it read has been written since it started: an ack,
+            // an action or a name changes the recap, wherever it was written.
+            if (!refresh && _byKey.TryGetValue(key, out var known) && known.InputsVersion == version &&
                 known.Status is RecapJobStatus.Running or RecapJobStatus.Succeeded)
             {
                 if (known.Status == RecapJobStatus.Running)
-                    known.Followers.Add(caller ?? "");
+                    known.Follow(caller);
                 Count(RecapJobOutcome.Reused);
                 return new RecapJobStart(ViewOf(known));
             }
@@ -83,15 +91,18 @@ public sealed partial class RecapJobs(
             if (_jobs.Values.Count(item => item.Status == RecapJobStatus.Running) >= MaxRunning ||
                 (caller is not null && _jobs.Values.Count(item =>
                     item is { Status: RecapJobStatus.Running, Abandoned: false } &&
-                    item.Followers.Contains(caller)) >= MaxRunningPerCaller))
+                    item.FollowedLatelyBy(caller)) >= MaxRunningPerCaller))
             {
                 Count(RecapJobOutcome.Busy);
                 return new RecapJobStart(null);
             }
 
             job = new Job(this, key, _clock.GetUtcNow().ToUnixTimeMilliseconds(),
-                CancellationTokenSource.CreateLinkedTokenSource(stopping));
-            job.Followers.Add(caller ?? "");
+                CancellationTokenSource.CreateLinkedTokenSource(stopping))
+            {
+                InputsVersion = version
+            };
+            job.Follow(caller);
             _jobs[job.Id] = job;
             _byKey[key] = job;
             EvictOverflow();
@@ -109,13 +120,19 @@ public sealed partial class RecapJobs(
         return new RecapJobStart(view);
     }
 
-    /// <summary>The job, for its audience only: any other caller reads it as unknown.</summary>
-    public RecapJobState? Find(string id, RecapJobAudience audience)
+    /// <summary>
+    ///     The job, for its audience only: any other caller reads it as unknown. A read by a caller who
+    ///     follows it renews their follow, which is how a screen keeps holding its place.
+    /// </summary>
+    public RecapJobState? Find(string id, RecapJobAudience audience, string? caller = null)
     {
         lock (_gate)
         {
             Prune();
-            return Visible(id, audience) is { } job ? ViewOf(job) : null;
+            if (Visible(id, audience) is not { } job)
+                return null;
+            job.Renew(caller);
+            return ViewOf(job);
         }
     }
 
@@ -151,7 +168,7 @@ public sealed partial class RecapJobs(
     // One follow of the caller ends; the computation stops with the last one.
     private void LetGo(Job job, string? caller)
     {
-        if (!job.Followers.Remove(caller ?? "") || job.Followers.Count > 0)
+        if (!job.Unfollow(caller) || job.Followed)
             return;
         // Marked first: Cancel runs its callbacks inline, and one that ends the computation reaches
         // RunAsync's finally, which forgets only a job already abandoned.
@@ -349,9 +366,47 @@ public sealed partial class RecapJobs(
         // The expected durations as they stood at its start, so a job finishing elsewhere never moves its bar back.
         public double[] Weights { get; } = [.. owner._expectedMs];
 
-        // Who started or joined it while it ran, once per time ("" for a caller with no identity),
-        // and whether the last one let it go.
-        public List<string> Followers { get; } = [];
+        // When each signed-in caller following it last read it, one follow per caller however many
+        // screens they open, and the follows of callers with no identity, who cannot be told apart.
+        private readonly Dictionary<string, long> _follows = new(StringComparer.Ordinal);
+        private int _anonymousFollows;
+
+        public long InputsVersion { get; init; }
+
+        public bool Followed => _follows.Count > 0 || _anonymousFollows > 0;
+
+        public void Follow(string? caller)
+        {
+            if (caller is null)
+                _anonymousFollows++;
+            else
+                _follows[caller] = owner._clock.GetTimestamp();
+        }
+
+        // A read of the job by a caller who follows it keeps that follow counting.
+        public void Renew(string? caller)
+        {
+            if (caller is not null && _follows.ContainsKey(caller))
+                _follows[caller] = owner._clock.GetTimestamp();
+        }
+
+        public bool Unfollow(string? caller)
+        {
+            if (caller is not null)
+                return _follows.Remove(caller);
+            if (_anonymousFollows == 0)
+                return false;
+            _anonymousFollows--;
+            return true;
+        }
+
+        public bool FollowedLatelyBy(string caller)
+        {
+            return _follows.TryGetValue(caller, out var seen) &&
+                   owner._clock.GetElapsedTime(seen) < FollowLease;
+        }
+
+        // Let go by its last follower: unknown to every read, though it holds its place until it returns.
         public bool Abandoned { get; set; }
 
         public RecapStageState[] States { get; } = new RecapStageState[RecapStages.All.Count];

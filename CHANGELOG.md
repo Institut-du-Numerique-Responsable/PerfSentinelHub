@@ -15,7 +15,9 @@ All notable changes to PerfSentinelHub are recorded here.
   `refresh=true` computes it again, even over a job still running. A narrowed `findings.read` scope
   reads only its own jobs, under the scope it had. The Hub runs 2 at once and a signed-in caller
   follows one running job at a time (`503 recap_busy` past either), and it holds 32. A `DELETE` ends
-  only the caller's own follow, so nobody stops a computation someone else waits on. The result of a failed job is a `409 recap_failed`. `GET /api/recap` is
+  only the caller's own follow, so nobody stops a computation someone else waits on, and a follow
+  its screen stops reading for 30 seconds no longer holds its caller. A kept recap is computed again
+  once an action, a name or a source's acknowledgments change, wherever they were written. The result of a failed job is a `409 recap_failed`. `GET /api/recap` is
   unchanged.
 - The recap screen shows the computation as it goes: a progress bar, the nine steps ticked off with
   their duration, and the time since it started, in an information banner. Leaving the page no

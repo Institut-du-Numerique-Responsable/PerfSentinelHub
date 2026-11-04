@@ -91,6 +91,7 @@ public sealed partial class HubDatabase
             await InsertActionEventAsync(connection, transaction, signature,
                 new StoredActionEvent(null, status, owner, ownerDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            TouchRecapInputs();
             return ActionWriteOutcome.Written;
         }
         finally
@@ -177,6 +178,7 @@ public sealed partial class HubDatabase
             await InsertActionEventAsync(connection, transaction, signature,
                 new StoredActionEvent(currentStatus, newStatus, newOwner, newDisplay, by, nowMs), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            TouchRecapInputs();
             return ActionWriteOutcome.Written;
         }
         finally
