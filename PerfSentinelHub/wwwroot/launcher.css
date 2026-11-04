@@ -1363,6 +1363,8 @@ a.shell-identity[aria-current="page"] {
     gap: 8px;
     height: 34px;
     padding: 0 14px;
+    /* The height is fixed, so a label that wrapped would spill over the border: the row wraps instead. */
+    white-space: nowrap;
     border: 1px solid var(--btn-bd);
     border-radius: 999px;
     background: var(--surface-2);

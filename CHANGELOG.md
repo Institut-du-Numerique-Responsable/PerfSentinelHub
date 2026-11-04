@@ -2,6 +2,14 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## Unreleased
+
+### Fixed
+
+- A pill button keeps its label on one line. In French, "Analyser cette fenêtre" and "Expliquer la
+  dernière paire" wrapped inside the fixed height of a correlated episode's actions and ran over
+  the border. A row of buttons now wraps whole buttons instead.
+
 ## [0.13.0] - 2026-11-03
 
 ### Changed
