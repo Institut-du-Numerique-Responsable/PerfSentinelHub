@@ -36,7 +36,7 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         var settings = options.Value;
-        if (CardRefusal(request, access, settings, engine, false, out _, out var reads, out var writes) is { } refused)
+        if (CardRefusal(request, access, settings, engine, false, out var reads, out var writes) is { } refused)
             return refused;
         if (!HasValidUtf8(request.QueryString.Value) ||
             !CardRequest.TryParseOptionsQuery(request, Today(timeProvider), out var query))
@@ -153,7 +153,7 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         var request = call.Request;
-        if (CardRefusal(request, call.Access, call.Options, call.Engine, true, out _, out var reads, out var writes) is
+        if (CardRefusal(request, call.Access, call.Options, call.Engine, true, out var reads, out var writes) is
             { } refused)
             return (refused, null, null);
         if (attachment && call.Options.Cards.Domain is null)
@@ -225,8 +225,7 @@ public static partial class ApiEndpoints
             CardRender.Refused
             {
                 Reason: "unsupported_characters", Field: "free.title" or "free.team" or "free.label"
-            }
-                refused => TypedResults.Json(new CardFieldProblem(UndrawableField, refused.Field["free.".Length..],
+            } refused => TypedResults.Json(new CardFieldProblem(UndrawableField, refused.Field["free.".Length..],
                     ProblemCodes.CardFieldUndrawable),
                 HubJsonContext.Default.CardFieldProblem, statusCode: StatusCodes.Status422UnprocessableEntity),
             CardRender.Refused { Reason: "unsupported_characters" } =>
@@ -246,24 +245,20 @@ public static partial class ApiEndpoints
     // Cards off is a 404, so an off Hub tells nothing; a card is made in somebody's name, a POST held to
     // the same-origin rule, by a holder of cards.write who reads findings, on an engine that has card.
     // Every out is a piece of the caller the routes need next.
-#pragma warning disable S107
     private static IResult? CardRefusal(
         HttpRequest request,
         AccessPolicy access,
         HubOptions options,
         EngineProbe engine,
         bool write,
-        out string identity,
         out AccessScope reads,
         out AccessScope writes)
-#pragma warning restore S107
     {
-        identity = null!;
         reads = AccessScope.Nothing;
         writes = AccessScope.Nothing;
         if (!options.Cards.Enabled)
             return TypedResults.NotFound();
-        if (RelayIdentity(request, options) is not { } caller)
+        if (RelayIdentity(request, options) is null)
             return Problem(StatusCodes.Status403Forbidden,
                 ProblemCodes.UnknownCaller,
                 "The Hub does not know who is asking, and a card is made in somebody's name.");
@@ -279,7 +274,6 @@ public static partial class ApiEndpoints
             return Problem(StatusCodes.Status503ServiceUnavailable,
                 ProblemCodes.CardEngineMissing,
                 "This Hub's engine cannot render cards: it needs a perf-sentinel release with the card subcommand.");
-        identity = caller;
         return null;
     }
 
