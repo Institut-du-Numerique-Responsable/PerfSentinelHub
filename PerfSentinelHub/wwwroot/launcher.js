@@ -35,13 +35,13 @@
     /**
      * A code-to-sentence table read from the text tables on each access, so it follows the
      * shown language without being rebuilt.
+     * @template {string} K
      * @param {string} prefix
-     * @param {string[]} codes
-     * @returns {Record<string, string>}
+     * @param {readonly K[]} codes
+     * @returns {Record<K, string>}
      */
     function textTable(prefix, codes) {
-        /** @type {Record<string, string>} */
-        const table = {};
+        const table = /** @type {Record<K, string>} */ ({});
         codes.forEach(function (code) {
             Object.defineProperty(table, code, {enumerable: true, get: () => t(prefix + code)});
         });
@@ -2809,7 +2809,10 @@
         'fieldWhy', 'stale', 'previewEmpty', 'previewBlocked', 'rendering', 'busy', 'pngNote', 'svgNote', 'pdfNote',
         'noDomain', 'keysTitle', 'keysOrigin', 'keysNone', 'keysPublish', 'keysFile', 'rotate', 'leaked']);
 
-    /** One plain sentence per verify-card reason the engine answers at level 1. */
+    /**
+     * One plain sentence per verify-card reason the engine answers at level 1.
+     * @type {Record<string, string>}
+     */
     const ATTACH_REASONS = textTable('card.attach.reason.', ['binding_check_failed', 'binding_partial',
         'key_not_published', 'no_domain', 'no_http_client']);
 
@@ -2817,7 +2820,10 @@
     const ATTACH_VERDICTS = textTable('card.attach.verdict.', ['key_revoked', 'public_key_mismatch',
         'signed_outside_validity']);
 
-    /** The signed figures verify-card reads back, in the order the screen lists them. */
+    /**
+     * The signed figures verify-card reads back, in the order the screen lists them.
+     * @type {Record<string, string>}
+     */
     const SIGNED_FIGURE_LABELS = textTable('card.figure.', ['period', 'before_fix_period', 'cited_ops', 'cited_ms',
         'before_fix_ops', 'threshold_ops', 'threshold_ms', 'last_waste_permille', 'previous_waste_permille',
         'confirmed_fixes_count', 'services_count']);
