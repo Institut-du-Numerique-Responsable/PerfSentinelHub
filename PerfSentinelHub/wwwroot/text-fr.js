@@ -120,6 +120,7 @@
         'problem.recap_reports_forbidden': 'Vous ne pouvez pas lire les rapports de récap.',
         'problem.recap_busy': 'Le Hub calcule déjà autant de récaps qu\'il en mène de front. Réessayez dans quelques secondes.',
         'problem.recap_not_ready': 'Ce récap n\'est pas encore calculé.',
+        'problem.recap_failed': 'Ce récap n\'a pas été calculé. Relancez-le.',
         'problem.invalid_card_query': 'Les paramètres des options de la carte sont invalides.',
         'problem.cards_forbidden': 'Vous ne pouvez pas créer de cartes.',
         'problem.card_sources_forbidden': 'Vous ne pouvez pas créer de cartes pour ces sources.',

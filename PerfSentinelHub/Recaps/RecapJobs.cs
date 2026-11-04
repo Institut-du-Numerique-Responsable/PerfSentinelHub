@@ -1,4 +1,5 @@
 using System.Globalization;
+using PerfSentinelHub.Api;
 
 namespace PerfSentinelHub.Recaps;
 
@@ -45,19 +46,23 @@ public sealed partial class RecapJobs(
     private readonly Dictionary<string, Job> _jobs = new(StringComparer.Ordinal);
 
     /// <summary>
-    ///     The job for this key: the one running, the finished one while it is kept unless
-    ///     <paramref name="refresh" />, else a new one, unless <see cref="MaxRunning" /> already run.
+    ///     The job for this key: the one running or the finished one while it is kept, else a new one,
+    ///     unless <see cref="MaxRunning" /> already run. <paramref name="refresh" /> always starts a new
+    ///     one: it follows a write, which a computation already running may have read before. The one it
+    ///     replaces stays readable by its id for the screens that follow it, and no request joins it.
     /// </summary>
     public RecapJobStart Start(RecapJobKey key, RecapRequest request, bool refresh)
     {
         Job job;
-        RecapJobView view;
+        RecapJobState view;
         lock (_gate)
         {
             Prune();
-            if (_byKey.TryGetValue(key, out var known) &&
-                (known.Status == RecapJobStatus.Running || (!refresh && known.Status == RecapJobStatus.Succeeded)))
+            if (!refresh && _byKey.TryGetValue(key, out var known) &&
+                known.Status is RecapJobStatus.Running or RecapJobStatus.Succeeded)
             {
+                if (known.Status == RecapJobStatus.Running)
+                    known.Followers++;
                 Count(RecapJobOutcome.Reused);
                 return new RecapJobStart(ViewOf(known), false);
             }
@@ -68,8 +73,6 @@ public sealed partial class RecapJobs(
                 return new RecapJobStart(null, true);
             }
 
-            if (known is not null)
-                Forget(known);
             job = new Job(this, key, _clock.GetUtcNow().ToUnixTimeMilliseconds(),
                 CancellationTokenSource.CreateLinkedTokenSource(stopping));
             _jobs[job.Id] = job;
@@ -90,7 +93,7 @@ public sealed partial class RecapJobs(
     }
 
     /// <summary>The job, for its audience only: any other caller reads it as unknown.</summary>
-    public RecapJobView? Find(string id, RecapJobAudience audience)
+    public RecapJobState? Find(string id, RecapJobAudience audience)
     {
         lock (_gate)
         {
@@ -109,16 +112,24 @@ public sealed partial class RecapJobs(
         }
     }
 
-    /// <summary>Stops a running job and forgets it, finished or not. False for an unknown one.</summary>
+    /// <summary>
+    ///     Lets a job go for one screen that started or joined it. A running one stops once none follows
+    ///     it, reads as unknown at once and holds its place under <see cref="MaxRunning" /> until its
+    ///     computation returns; a finished one stays kept for the others. False for an unknown one.
+    /// </summary>
     public bool Cancel(string id, RecapJobAudience audience)
     {
         lock (_gate)
         {
             if (Visible(id, audience) is not { } job)
                 return false;
-            if (job.Status == RecapJobStatus.Running)
+            if (job.Status == RecapJobStatus.Running && --job.Followers == 0)
+            {
                 job.Cancellation.Cancel();
-            Forget(job);
+                job.Abandoned = true;
+                Unkey(job);
+            }
+
             return true;
         }
     }
@@ -201,28 +212,35 @@ public sealed partial class RecapJobs(
             lock (_gate)
             {
                 job.Cancellation.Dispose();
+                // Unknown since its last follower let it go: its place under MaxRunning is free now.
+                if (job.Abandoned)
+                    Forget(job);
             }
         }
     }
 
     private Job? Visible(string id, RecapJobAudience audience)
     {
-        return _jobs.TryGetValue(id, out var job) && job.Key.Audience == audience ? job : null;
+        return _jobs.TryGetValue(id, out var job) && !job.Abandoned && job.Key.Audience == audience ? job : null;
     }
 
-    private RecapJobView ViewOf(Job job)
+    // The job as GET /api/recap/jobs/{id} answers it.
+    private static RecapJobState ViewOf(Job job)
     {
-        var total = _expectedMs.Sum();
+        var total = job.Weights.Sum();
         var reached = RecapStages.All
             .Where(stage => job.States[(int)stage] is RecapStageState.Done or RecapStageState.Skipped)
-            .Sum(stage => _expectedMs[(int)stage]);
+            .Sum(stage => job.Weights[(int)stage]);
         var progress = job.Status == RecapJobStatus.Succeeded ? 1 : Math.Min(1, reached / total);
-        return new RecapJobView(
+        return new RecapJobState(
             job.Id,
-            job.Status,
-            job.Status == RecapJobStatus.Running ? job.Current : null,
-            [.. RecapStages.All.Select(stage => new RecapStageView(stage, job.States[(int)stage], job.Ms[(int)stage]))],
-            progress,
+            RecapStages.Name(job.Status),
+            job.Status == RecapJobStatus.Running && job.Current is { } current ? RecapStages.Name(current) : null,
+            [
+                .. RecapStages.All.Select(stage => new RecapJobStageItem(
+                    RecapStages.Name(stage), RecapStages.Name(job.States[(int)stage]), job.Ms[(int)stage]))
+            ],
+            Math.Round(progress, 4),
             job.StartedAtMs,
             job.FinishedAtMs,
             job.ExpiresAtMs,
@@ -265,6 +283,12 @@ public sealed partial class RecapJobs(
     private void Forget(Job job)
     {
         _jobs.Remove(job.Id);
+        Unkey(job);
+    }
+
+    // No request joins or reuses it any more; a newer job for the key stays.
+    private void Unkey(Job job)
+    {
         if (_byKey.TryGetValue(job.Key, out var current) && ReferenceEquals(current, job))
             _byKey.Remove(job.Key);
     }
@@ -292,6 +316,13 @@ public sealed partial class RecapJobs(
         public CancellationTokenSource Cancellation { get; } = cancellation;
         public RecapJobStatus Status { get; private set; } = RecapJobStatus.Running;
         public RecapStage? Current { get; private set; }
+        // The expected durations as they stood at its start, so a job finishing elsewhere never moves its bar back.
+        public double[] Weights { get; } = [.. owner._expectedMs];
+
+        // The screens that started or joined it while it ran, and whether the last one let it go.
+        public int Followers { get; set; } = 1;
+        public bool Abandoned { get; set; }
+
         public RecapStageState[] States { get; } = new RecapStageState[RecapStages.All.Count];
         public long?[] Ms { get; } = new long?[RecapStages.All.Count];
         public long? FinishedAtMs { get; private set; }

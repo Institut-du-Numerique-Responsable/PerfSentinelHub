@@ -22,4 +22,28 @@ public static class RecapStages
             _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null)
         };
     }
+
+    public static string Name(RecapStageState state)
+    {
+        return state switch
+        {
+            RecapStageState.Pending => "pending",
+            RecapStageState.Running => "running",
+            RecapStageState.Done => "done",
+            RecapStageState.Skipped => "skipped",
+            _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
+        };
+    }
+
+    public static string Name(RecapJobStatus status)
+    {
+        return status switch
+        {
+            RecapJobStatus.Running => "running",
+            RecapJobStatus.Succeeded => "succeeded",
+            RecapJobStatus.Failed => "failed",
+            RecapJobStatus.Cancelled => "cancelled",
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+        };
+    }
 }

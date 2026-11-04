@@ -75,6 +75,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         ["tempo"] = """{"sub":"u-tempo","email":"tempo@example.internal","groups":["/tempo"]}""",
         // attr's e-mail under another subject, as a reassigned address would be.
         ["attrtwin"] = """{"sub":"u-attr-2","email":"attr@example.internal","groups":["/shop"]}""",
+        // attr's subject signed in again with other groups, as after a change at the provider.
+        ["attrsvc"] = """{"sub":"u-attr","email":"attr@example.internal","groups":["/svc"]}""",
         ["viewer"] = """{"sub":"u-view","email":"view@example.internal","groups":["/viewers"]}""",
         ["tracer"] = """{"sub":"u-tracer","email":"tracer@example.internal","groups":["/tracers"]}""",
         ["nogrant"] = """{"sub":"u-none","email":"none@example.internal","groups":42}""",
@@ -474,6 +476,23 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, byAdmin.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, resultByTwin.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, cancelByAdmin.StatusCode);
+    }
+
+    // The same subject under other groups reads other copies: the recap of the first scope is not theirs.
+    [Fact]
+    public async Task A_recap_job_is_not_read_by_the_same_subject_under_another_scope()
+    {
+        using var attr = await SignedInAsync("attr");
+        using var other = await SignedInAsync("attrsvc");
+        using var started = await attr.SendAsync(RecapJobsApiTests.Start("refresh=true"),
+            TestContext.Current.CancellationToken);
+        var id = await RecapJobsApiTests.IdAsync(started);
+
+        using var own = await attr.GetAsync($"/api/recap/jobs/{id}", TestContext.Current.CancellationToken);
+        using var byOther = await other.GetAsync($"/api/recap/jobs/{id}", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, own.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, byOther.StatusCode);
     }
 
     [Fact]

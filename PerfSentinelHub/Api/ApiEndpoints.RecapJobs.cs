@@ -45,7 +45,7 @@ public static partial class ApiEndpoints
                 "The Hub is computing as many recaps as it runs at once. Try again in a few seconds.");
         }
 
-        return TypedResults.Accepted($"/api/recap/jobs/{job.Id}", RecapJobStateOf(job));
+        return TypedResults.Accepted($"/api/recap/jobs/{job.Id}", job);
     }
 
     private static IResult GetRecapJob(
@@ -58,7 +58,7 @@ public static partial class ApiEndpoints
         if (RecapJobAudienceOf(context, access, options) is not { } audience)
             return NoFindingsRead();
         return jobs.Find(id, audience) is { } job
-            ? TypedResults.Json(RecapJobStateOf(job), HubJsonContext.Default.RecapJobState)
+            ? TypedResults.Json(job, HubJsonContext.Default.RecapJobState)
             : TypedResults.NotFound();
     }
 
@@ -81,14 +81,23 @@ public static partial class ApiEndpoints
                 "The recap query is invalid.");
 
         if (jobs.Result(id, audience) is not { } snapshot)
-            return jobs.Find(id, audience) is null
-                ? TypedResults.NotFound()
-                : Problem(StatusCodes.Status409Conflict, ProblemCodes.RecapNotReady, "This recap is not computed yet.");
+            return jobs.Find(id, audience) switch
+            {
+                null => TypedResults.NotFound(),
+                { Status: "running" } => Problem(StatusCodes.Status409Conflict,
+                    ProblemCodes.RecapNotReady, "This recap is not computed yet."),
+                // Failed, or stopped with the Hub: it will never be, and waiting on it would wait forever.
+                _ => Problem(StatusCodes.Status409Conflict, ProblemCodes.RecapFailed,
+                    "This recap was not computed. Start it again.")
+            };
         var shown = view == RecapPilotageView ? RecapViews.Pilotage(snapshot) : snapshot;
         return TypedResults.Json(moves == "all" ? shown : RecapViews.Listed(shown), HubJsonContext.Default.RecapSnapshot);
     }
 
-    /// <summary>Stops a recap nobody waits for any more, as the screen does when its filters change.</summary>
+    /// <summary>
+    ///     Lets go of a recap, as the screen does when its filters change: it stops once no screen that
+    ///     started or joined it follows it.
+    /// </summary>
     private static IResult CancelRecapJob(
         string id,
         HttpContext context,
@@ -111,7 +120,8 @@ public static partial class ApiEndpoints
     }
 
     // Who else would be computed the same recap: everyone with the same sources when the scope is
-    // whole, the caller alone when it is narrowed. Null for a narrowed scope with nobody behind it.
+    // whole, the caller alone under that same scope when it is narrowed, since one person's sessions
+    // can hold different groups. Null for a narrowed scope with nobody behind it.
     private static RecapJobAudience? RecapAudience(HttpContext context, AccessScope scope,
         IReadOnlyList<SourceOptions> sources)
     {
@@ -120,42 +130,9 @@ public static partial class ApiEndpoints
         {
             if (AccessCaller.Of(context)?.Subject is not { } subject)
                 return null;
-            owner = subject;
+            owner = subject + "\n" + scope.ToJson();
         }
 
         return new RecapJobAudience(owner, string.Join('\n', sources.Select(source => source.Id)));
-    }
-
-    private static RecapJobState RecapJobStateOf(RecapJobView job)
-    {
-        return new RecapJobState(
-            job.Id,
-            job.Status switch
-            {
-                RecapJobStatus.Running => "running",
-                RecapJobStatus.Succeeded => "succeeded",
-                RecapJobStatus.Failed => "failed",
-                RecapJobStatus.Cancelled => "cancelled",
-                _ => throw new ArgumentOutOfRangeException(nameof(job), job.Status, null)
-            },
-            job.Stage is { } stage ? RecapStages.Name(stage) : null,
-            [
-                .. job.Stages.Select(item => new RecapJobStageItem(
-                    RecapStages.Name(item.Stage),
-                    item.State switch
-                    {
-                        RecapStageState.Pending => "pending",
-                        RecapStageState.Running => "running",
-                        RecapStageState.Done => "done",
-                        RecapStageState.Skipped => "skipped",
-                        _ => throw new ArgumentOutOfRangeException(nameof(job), item.State, null)
-                    },
-                    item.Ms))
-            ],
-            Math.Round(job.Progress, 4),
-            job.StartedAtMs,
-            job.FinishedAtMs,
-            job.ExpiresAtMs,
-            job.ErrorCode);
     }
 }

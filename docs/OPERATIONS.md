@@ -384,6 +384,8 @@ pending until retention purges them: the delivery pass only runs while a subscri
 | `2504` | Warning     | A recap delivery gave up, or the relay refused it for good                                          |
 | `2505` | Warning     | A recap pass failed as a whole. The next one retries                                                |
 | `2506` | Warning     | One subscription's report could not be generated. The others went on                                |
+| `2507` | Information | A recap job finished, with its period, its total time and the time of each step                    |
+| `2508` | Warning     | A recap job failed. The screen that follows it says so                                             |
 
 ## Share card keys
 

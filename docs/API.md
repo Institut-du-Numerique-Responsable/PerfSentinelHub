@@ -699,7 +699,7 @@ result. `GET /api/recap` stays as it is for scripts and CI. Every route below is
 | `POST /api/recap/jobs?{query}[&refresh=true]`  | Starts the job for the query, or joins the one running or kept for it. `202` and the job |
 | `GET /api/recap/jobs/{id}`                     | The job: status, stages and progress                                                     |
 | `GET /api/recap/jobs/{id}/result?view=&moves=` | The recap, as `GET /api/recap` answers it in that view and with that cut                 |
-| `DELETE /api/recap/jobs/{id}`                  | Stops a running job and forgets it, `204`                                                |
+| `DELETE /api/recap/jobs/{id}`                  | Lets go of the job, `204`: a running one stops once no screen that started or joined it follows it |
 
 The query is the one of `GET /api/recap`, `view` and `moves` aside: one job computes the whole
 recap, and each view and cut is read from it. `POST` and `DELETE` are refused from another site
@@ -716,16 +716,21 @@ recap, and each view and cut is read from it. `POST` and `DELETE` are refused fr
 - **Reuse.** A finished recap is kept for its audience and query: 24 hours for a closed period, 10
   minutes for one in progress, until `expires_at_ms`. Meanwhile a `POST` for the same query answers
   the same job, already `succeeded`, so another view, the whole list of a group or a return to the
-  screen computes nothing. `refresh=true` computes it again, as the launcher does after a write
-  from the recap screen or on Recompute. A job is in memory only: a restart forgets it.
+  screen computes nothing. `refresh=true` always computes it again, even over a job still running,
+  which may have read before the write that asked for it: the launcher sends it after a write from
+  the recap screen or on Recompute. The job it replaces still answers by its id to whoever follows
+  it, and no request joins it any more. A job is in memory only: a restart forgets it.
 - **Audience.** A caller whose `findings.read` scope is narrowed reads only the jobs they started.
   Callers with a whole scope who see the same sources share their jobs. Any other caller reads a
   job as unknown, `404`, the same answer as an id the Hub never gave.
 - **Bounds.** The Hub runs 2 jobs at once; a `POST` past that is a `503` with `Retry-After: 5` and
   the code `recap_busy`. It holds 32 jobs in all, and drops the oldest finished one past that. A
-  failed or cancelled job stays readable for a minute.
-- **Result.** `GET …/result` before the job succeeded is a `409` with the code `recap_not_ready`.
-  Leaving the screen does not stop a job: the launcher stops only one whose filters it changed.
+  failed job stays readable for a minute. A job let go reads as unknown at once, yet holds its place
+  among the 2 until its computation stops; a finished one stays kept.
+- **Result.** `GET …/result` while the job runs is a `409` with the code `recap_not_ready`, and for
+  a job that failed or stopped with the Hub a `409` with the code `recap_failed`: it will never come,
+  start the job again. Leaving the screen does not stop a job: the launcher lets go only of one whose
+  filters it changed or that a refresh replaced.
 
 ### Recap webhooks
 

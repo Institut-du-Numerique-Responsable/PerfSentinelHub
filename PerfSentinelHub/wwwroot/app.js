@@ -6045,8 +6045,9 @@
         const all = Boolean(opening) || (keep && state.recap && !state.recap.movements.counts);
         const previous = state.recapJob;
         clearTimeout(state.recapPollTimer);
-        // A job for other filters is nobody's any more: stopped, so it frees its place on the Hub.
-        if (previous && previous.key !== key && previous.status === 'running') cancelRecapJob(previous.id);
+        // A job this screen stops following is let go, so the Hub stops it once nobody follows it: one
+        // for other filters, or the one a refresh replaces, since it may have read before the write.
+        if (previous && previous.status === 'running' && (previous.key !== key || refresh)) cancelRecapJob(previous.id);
         if (!keep) {
             state.recapLoadingSince = Date.now();
             state.recapMovesLoading = null;
@@ -6110,6 +6111,13 @@
             readRecapResult(sequence, state.recapJob, route, all, opening);
             return;
         }
+        if (job.status === 'cancelled' && state.recapRestarts === 0) {
+            // Stopped with a Hub that restarted: computed again, once, as a forgotten job is.
+            state.recapRestarts += 1;
+            state.recapJob = null;
+            startRecapJob(sequence, route, false, all, opening);
+            return;
+        }
         if (job.status !== 'running') {
             landRecap(sequence, Promise.reject(Object.assign(new Error(job.status), {status: 500})), opening);
             return;
@@ -6139,6 +6147,11 @@
                 startRecapJob(sequence, route, false, all, opening);
                 return;
             }
+            // A refusal, such as a 403 once the access changed, does not pass by asking again: said.
+            if (error.status >= 400 && error.status < 500) {
+                landRecap(sequence, Promise.reject(error), opening);
+                return;
+            }
             state.recapPollFailures += 1;
             state.recapPollTimer = setTimeout(function () {
                 pollRecapJob(sequence, id, route, all, opening);
@@ -6148,6 +6161,7 @@
 
     function readRecapResult(sequence, job, route, all, opening) {
         getJson(PSL.recapJobResultPath(job.id, route.view, all)).then(function (snapshot) {
+            if (sequence !== state.recapSeq) return;
             landRecap(sequence, Promise.resolve(snapshot), opening);
         }).catch(function (error) {
             if (sequence !== state.recapSeq) return;

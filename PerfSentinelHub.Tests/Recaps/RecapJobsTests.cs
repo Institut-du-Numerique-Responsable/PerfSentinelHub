@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Api;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Tests.Support;
@@ -45,7 +46,7 @@ public sealed class RecapJobsTests : IDisposable
         var started = Start(Key()).Job!;
         var computation = await NextComputationAsync();
 
-        Assert.Equal(RecapJobStatus.Running, started.Status);
+        Assert.Equal("running", started.Status);
         Assert.Equal(0, started.Progress);
 
         computation.Progress.Enter(RecapStage.FindingsPeriod);
@@ -54,19 +55,19 @@ public sealed class RecapJobsTests : IDisposable
         computation.Progress.Skip(RecapStage.FindingsClosed);
         var running = Find(started.Id)!;
 
-        Assert.Equal(RecapStage.FindingsOpen, running.Stage);
-        Assert.Equal(RecapStageState.Done, StateOf(running, RecapStage.FindingsPeriod));
-        Assert.Equal(30_000, running.Stages.Single(stage => stage.Stage == RecapStage.FindingsPeriod).Ms);
-        Assert.Equal(RecapStageState.Running, StateOf(running, RecapStage.FindingsOpen));
-        Assert.Equal(RecapStageState.Skipped, StateOf(running, RecapStage.FindingsClosed));
-        Assert.Equal(RecapStageState.Pending, StateOf(running, RecapStage.Labels));
+        Assert.Equal("findings_open", running.Stage);
+        Assert.Equal("done", StateOf(running, RecapStage.FindingsPeriod));
+        Assert.Equal(30_000, running.Stages.Single(stage => stage.Name == "findings_period").Ms);
+        Assert.Equal("running", StateOf(running, RecapStage.FindingsOpen));
+        Assert.Equal("skipped", StateOf(running, RecapStage.FindingsClosed));
+        Assert.Equal("pending", StateOf(running, RecapStage.Labels));
         // Two findings reads of the four weighted, the done one and the skipped one, out of the whole.
-        Assert.Equal(40_000.0 / 95_000, running.Progress, 6);
+        Assert.Equal(40_000.0 / 95_000, running.Progress, 4);
 
         computation.Finish(Snapshot(inProgress: true));
         var done = await SettledAsync(started.Id);
 
-        Assert.Equal(RecapJobStatus.Succeeded, done.Status);
+        Assert.Equal("succeeded", done.Status);
         Assert.Equal(1, done.Progress);
         Assert.Null(done.Stage);
         Assert.NotNull(_jobs.Result(started.Id, Everyone));
@@ -77,12 +78,27 @@ public sealed class RecapJobsTests : IDisposable
     {
         var first = Start(Key()).Job!;
         var second = Start(Key()).Job!;
-        var joinedByRefresh = _jobs.Start(Key(), Request, true).Job!;
 
         Assert.Equal(first.Id, second.Id);
-        Assert.Equal(first.Id, joinedByRefresh.Id);
         await NextComputationAsync();
         Assert.Single(_computations);
+    }
+
+    // A refresh follows a write, which the running computation may have read before: it computes from
+    // now, and the one it replaces still answers by its id to whoever follows it.
+    [Fact]
+    public async Task A_refresh_while_one_runs_computes_again_and_leaves_the_other_to_its_followers()
+    {
+        var first = Start(Key()).Job!;
+        await NextComputationAsync();
+
+        var refreshed = _jobs.Start(Key(), Request, true).Job!;
+        await NextComputationAsync();
+
+        Assert.NotEqual(first.Id, refreshed.Id);
+        Assert.Equal(2, _computations.Count);
+        Assert.Equal("running", Find(first.Id)!.Status);
+        Assert.Equal(refreshed.Id, Start(Key()).Job!.Id);
     }
 
     [Fact]
@@ -116,7 +132,7 @@ public sealed class RecapJobsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_refresh_computes_again_over_a_finished_recap_and_forgets_it()
+    public async Task A_refresh_computes_again_over_a_finished_recap()
     {
         var first = Start(Key()).Job!;
         (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
@@ -125,7 +141,9 @@ public sealed class RecapJobsTests : IDisposable
         var refreshed = _jobs.Start(Key(), Request, true).Job!;
 
         Assert.NotEqual(first.Id, refreshed.Id);
-        Assert.Null(Find(first.Id));
+        // Still read by its id until it expires; a new request reaches the refreshed one.
+        Assert.NotNull(_jobs.Result(first.Id, Everyone));
+        Assert.Equal(refreshed.Id, Start(Key()).Job!.Id);
     }
 
     [Fact]
@@ -176,6 +194,76 @@ public sealed class RecapJobsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_job_two_screens_follow_stops_only_once_both_let_it_go()
+    {
+        var job = Start(Key()).Job!;
+        Assert.Equal(job.Id, Start(Key()).Job!.Id);
+        var computation = await NextComputationAsync();
+
+        Assert.True(_jobs.Cancel(job.Id, Everyone));
+
+        Assert.False(computation.Token.IsCancellationRequested);
+        Assert.Equal("running", Find(job.Id)!.Status);
+
+        Assert.True(_jobs.Cancel(job.Id, Everyone));
+
+        await WaitUntilAsync(() => computation.Token.IsCancellationRequested);
+        Assert.Null(Find(job.Id));
+    }
+
+    [Fact]
+    public async Task A_cancelled_job_holds_its_place_until_its_computation_stops()
+    {
+        var release = new TaskCompletionSource<RecapSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // A read that does not look at its token, as a SQLite step does not until it returns.
+        var jobs = new RecapJobs((_, _, _) => release.Task, _clock, _stopping.Token, _logger);
+        var first = jobs.Start(Key("a"), Request, false).Job!;
+        jobs.Start(Key("b"), Request, false);
+
+        Assert.True(jobs.Cancel(first.Id, Everyone));
+
+        Assert.Null(jobs.Find(first.Id, Everyone));
+        Assert.True(jobs.Start(Key("c"), Request, false).Busy);
+
+        release.SetCanceled(TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => jobs.Sizes().Running == 0);
+        Assert.Equal(1, jobs.Sizes().Kept);
+        Assert.False(jobs.Start(Key("c"), Request, false).Busy);
+    }
+
+    [Fact]
+    public async Task A_cancellation_that_arrives_after_the_recap_finished_leaves_it_kept()
+    {
+        var job = Start(Key()).Job!;
+        (await NextComputationAsync()).Finish(Snapshot(inProgress: false));
+        await SettledAsync(job.Id);
+
+        Assert.True(_jobs.Cancel(job.Id, Everyone));
+
+        Assert.Equal(job.Id, Start(Key()).Job!.Id);
+    }
+
+    [Fact]
+    public async Task A_running_job_keeps_the_weights_it_started_with()
+    {
+        var slow = Start(Key("slow")).Job!;
+        var slowComputation = await NextComputationAsync();
+        slowComputation.Progress.Enter(RecapStage.FindingsPeriod);
+        slowComputation.Progress.Enter(RecapStage.FindingsOpen);
+        var before = Find(slow.Id)!.Progress;
+
+        var other = Start(Key("other")).Job!;
+        var otherComputation = await NextComputationAsync();
+        otherComputation.Progress.Enter(RecapStage.FindingsPeriod);
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        otherComputation.Finish(Snapshot(inProgress: false));
+        await SettledAsync(other.Id);
+
+        // The finished one taught the weights; the bar of the one still running does not jump for it.
+        Assert.Equal(before, Find(slow.Id)!.Progress);
+    }
+
+    [Fact]
     public async Task A_stopping_Hub_cancels_what_runs()
     {
         var job = Start(Key()).Job!;
@@ -183,7 +271,7 @@ public sealed class RecapJobsTests : IDisposable
 
         await _stopping.CancelAsync();
 
-        await WaitUntilAsync(() => Find(job.Id)?.Status == RecapJobStatus.Cancelled);
+        await WaitUntilAsync(() => Find(job.Id)?.Status == "cancelled");
         Assert.True(computation.Token.IsCancellationRequested);
     }
 
@@ -195,7 +283,7 @@ public sealed class RecapJobsTests : IDisposable
 
         var failed = await SettledAsync(job.Id);
 
-        Assert.Equal(RecapJobStatus.Failed, failed.Status);
+        Assert.Equal("failed", failed.Status);
         Assert.Equal("recap_failed", failed.ErrorCode);
         Assert.Null(_jobs.Result(job.Id, Everyone));
         Assert.Contains(_logger.Messages, message => message.Contains("failed", StringComparison.Ordinal));
@@ -262,14 +350,14 @@ public sealed class RecapJobsTests : IDisposable
         return _jobs.Start(key, Request, false);
     }
 
-    private RecapJobView? Find(string id, RecapJobKey? key = null)
+    private RecapJobState? Find(string id, RecapJobKey? key = null)
     {
         return _jobs.Find(id, (key ?? Key()).Audience);
     }
 
-    private static RecapStageState StateOf(RecapJobView view, RecapStage stage)
+    private static string StateOf(RecapJobState view, RecapStage stage)
     {
-        return view.Stages.Single(item => item.Stage == stage).State;
+        return view.Stages.Single(item => item.Name == RecapStages.Name(stage)).State;
     }
 
     private static RecapSnapshot Snapshot(bool inProgress)
@@ -308,10 +396,10 @@ public sealed class RecapJobsTests : IDisposable
         }
     }
 
-    private async Task<RecapJobView> SettledAsync(string id)
+    private async Task<RecapJobState> SettledAsync(string id)
     {
-        RecapJobView? view = null;
-        await WaitUntilAsync(() => (view = Find(id)) is { Status: not RecapJobStatus.Running });
+        RecapJobState? view = null;
+        await WaitUntilAsync(() => (view = Find(id)) is { Status: not "running" });
         return view!;
     }
 

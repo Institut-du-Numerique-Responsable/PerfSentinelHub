@@ -416,6 +416,8 @@ abonnement est déclaré.
 | `2504`    | Warning     | Une livraison de récap a abandonné, ou le relais l'a refusée pour de bon                                  |
 | `2505`    | Warning     | Un passage de récap a échoué en entier. Le suivant réessaie                                               |
 | `2506`    | Warning     | Le rapport d'un abonnement n'a pu être généré. Les autres ont continué                                    |
+| `2507`    | Information | Une tâche de récap a fini, avec sa période, sa durée totale et celle de chaque étape                      |
+| `2508`    | Warning     | Une tâche de récap a échoué. L'écran qui la suit le dit                                                   |
 
 ## Clés des cartes à partager
 

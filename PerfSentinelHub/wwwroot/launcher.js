@@ -2345,10 +2345,13 @@
      * What one recap job computes for a route: everything but the view, which the job's result is
      * read in. Two routes with the same key read the same job.
      * @param {ReturnType<typeof readRecapRoute>} route
+     * @param {number} [now] the moment that decides today when the route names no day, Date.now() by default
      * @returns {string}
      */
-    function recapJobKey(route) {
-        return recapPath(Object.assign({}, route, {view: 'tech'}));
+    function recapJobKey(route, now) {
+        // The Hub reads an absent day as today in UTC, so the key does too: past midnight UTC, another job.
+        const at = route.at || new Date(now === undefined ? Date.now() : now).toISOString().slice(0, 10);
+        return recapPath(Object.assign({}, route, {view: 'tech', at: at}));
     }
 
     /**

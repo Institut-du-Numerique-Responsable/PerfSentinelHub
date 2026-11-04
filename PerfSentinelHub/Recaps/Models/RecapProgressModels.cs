@@ -1,3 +1,5 @@
+using PerfSentinelHub.Api;
+
 namespace PerfSentinelHub.Recaps;
 
 /// <summary>The steps of one recap computation, in the order RecapService takes them.</summary>
@@ -26,8 +28,8 @@ public interface IRecapProgress
 }
 
 /// <summary>
-///     Who a computed recap is for: the caller's subject when their findings.read scope is narrowed,
-///     null when it is not, and the ids of the sources they see. Two callers with the same audience
+///     Who a computed recap is for: the caller's subject and that scope's patterns when their
+///     findings.read scope is narrowed, null when it is not, and the ids of the sources they see. Two callers with the same audience
 ///     would be computed the same recap, so they share one.
 /// </summary>
 public sealed record RecapJobAudience(string? Owner, string Sources);
@@ -69,18 +71,5 @@ public enum RecapJobOutcome
     Cancelled
 }
 
-public sealed record RecapStageView(RecapStage Stage, RecapStageState State, long? Ms);
-
-public sealed record RecapJobView(
-    string Id,
-    RecapJobStatus Status,
-    RecapStage? Stage,
-    IReadOnlyList<RecapStageView> Stages,
-    double Progress,
-    long StartedAtMs,
-    long? FinishedAtMs,
-    long? ExpiresAtMs,
-    string? ErrorCode);
-
 /// <summary>A job started, joined or reused, or none because as many as the Hub runs at once are running.</summary>
-public sealed record RecapJobStart(RecapJobView? Job, bool Busy);
+public sealed record RecapJobStart(RecapJobState? Job, bool Busy);

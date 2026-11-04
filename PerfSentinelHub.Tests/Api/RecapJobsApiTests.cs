@@ -133,6 +133,22 @@ public sealed class RecapJobsApiTests(HubApplicationFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task The_result_of_a_failed_job_says_it_will_never_come()
+    {
+        using var client = Failing();
+        using var started = await client.SendAsync(Start("period=day"), Token);
+        var id = await IdAsync(started);
+        var failed = await SettledAsync(client, id);
+
+        using var result = await client.GetAsync($"/api/recap/jobs/{id}/result", Token);
+
+        Assert.Equal("failed", failed.GetProperty("status").GetString());
+        Assert.Equal("recap_failed", failed.GetProperty("error_code").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
+        Assert.Equal("recap_failed", await CodeAsync(result));
+    }
+
+    [Fact]
     public async Task Past_the_running_cap_a_start_is_a_503_with_retry_after()
     {
         using var client = Stalled();
@@ -212,19 +228,30 @@ public sealed class RecapJobsApiTests(HubApplicationFactory factory) : IClassFix
         return document.RootElement.GetProperty("code").GetString();
     }
 
+    // A Hub whose recaps fail at once.
+    private HttpClient Failing()
+    {
+        return With((_, _, _) => Task.FromException<RecapSnapshot>(new InvalidOperationException("disk")));
+    }
+
     // A Hub whose recaps never end until cancelled, so a job stays running for as long as a test needs.
     private HttpClient Stalled()
+    {
+        return With((_, _, token) =>
+        {
+            var never = new TaskCompletionSource<RecapSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+            token.Register(() => never.TrySetCanceled(token));
+            return never.Task;
+        });
+    }
+
+    private HttpClient With(Func<RecapRequest, IRecapProgress, CancellationToken, Task<RecapSnapshot>> compute)
     {
         var hub = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.RemoveAll<RecapJobs>();
             services.AddSingleton(new RecapJobs(
-                (_, _, token) =>
-                {
-                    var never = new TaskCompletionSource<RecapSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    token.Register(() => never.TrySetCanceled(token));
-                    return never.Task;
-                },
+                compute,
                 TimeProvider.System,
                 CancellationToken.None,
                 NullLogger<RecapJobs>.Instance));

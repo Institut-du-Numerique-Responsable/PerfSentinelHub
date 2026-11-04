@@ -9,11 +9,13 @@ All notable changes to PerfSentinelHub are recorded here.
 - The recap is computed as a job the screen follows. `POST /api/recap/jobs` starts the computation
   for a query, or joins the one running or kept for it; `GET /api/recap/jobs/{id}` tells its stage
   and its progress, `GET /api/recap/jobs/{id}/result` reads it in a view and a cut, and
-  `DELETE /api/recap/jobs/{id}` stops it. A finished recap is kept for its audience and query, a day
-  for a closed period and 10 minutes for one in progress, so another view, the whole list of a group
-  or a return to the screen computes nothing; `refresh=true` computes it again. A narrowed
-  `findings.read` scope reads only its own jobs. The Hub runs 2 at once (`503 recap_busy` past that)
-  and holds 32. `GET /api/recap` is unchanged.
+  `DELETE /api/recap/jobs/{id}` lets go of it, stopping it once no screen follows it. A finished recap
+  is kept for its audience and query, a day for a closed period and 10 minutes for one in progress,
+  so another view, the whole list of a group or a return to the screen computes nothing;
+  `refresh=true` computes it again, even over a job still running. A narrowed `findings.read` scope
+  reads only its own jobs, under the scope it had. The Hub runs 2 at once (`503 recap_busy` past
+  that) and holds 32. The result of a failed job is a `409 recap_failed`. `GET /api/recap` is
+  unchanged.
 - The recap screen shows the computation as it goes: a progress bar, the nine steps ticked off with
   their duration, and the time since it started, in an information banner. Leaving the page no
   longer starts it over. Once computed, a line says when and until when it is reused, with

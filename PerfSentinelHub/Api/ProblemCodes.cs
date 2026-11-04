@@ -70,6 +70,7 @@ public static class ProblemCodes
     public const string RecapReportsForbidden = "recap_reports_forbidden";
     public const string RecapBusy = "recap_busy";
     public const string RecapNotReady = "recap_not_ready";
+    public const string RecapFailed = "recap_failed";
 
     // Cards.
     public const string InvalidCardQuery = "invalid_card_query";

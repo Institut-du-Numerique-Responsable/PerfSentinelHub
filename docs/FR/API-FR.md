@@ -754,7 +754,7 @@ Aucune des routes ci-dessous n'est ouverte, comme `GET /api/recap`, et un appela
 | `POST /api/recap/jobs?{query}[&refresh=true]`  | Lance la tâche de la requête, ou rejoint celle qui tourne ou est gardée pour elle. `202` et la tâche |
 | `GET /api/recap/jobs/{id}`                     | La tâche : statut, étapes et progression                                                   |
 | `GET /api/recap/jobs/{id}/result?view=&moves=` | Le récap, tel que `GET /api/recap` le renvoie dans cette vue et avec cette coupe           |
-| `DELETE /api/recap/jobs/{id}`                  | Arrête une tâche en cours et l'oublie, `204`                                               |
+| `DELETE /api/recap/jobs/{id}`                  | Lâche la tâche, `204` : une tâche en cours s'arrête quand plus aucun écran qui l'a lancée ou rejointe ne la suit |
 
 La requête est celle de `GET /api/recap`, sans `view` ni `moves` : une tâche calcule tout le récap,
 et chaque vue et chaque coupe s'y lit. `POST` et `DELETE` sont refusés depuis un autre site (`403`)
@@ -771,8 +771,10 @@ et sans type de contenu JSON (`415`), comme un acquittement.
 - **Réutilisation.** Un récap calculé est gardé pour son audience et sa requête : 24 heures pour une
   période close, 10 minutes pour une période en cours, jusqu'à `expires_at_ms`. Entre-temps, un
   `POST` pour la même requête renvoie la même tâche, déjà `succeeded` : une autre vue, la liste
-  entière d'un groupe ou un retour sur l'écran ne recalculent rien. `refresh=true` recalcule, comme
-  le launcher le fait après une écriture depuis l'écran du récap ou sur Recalculer. Une tâche ne vit
+  entière d'un groupe ou un retour sur l'écran ne recalculent rien. `refresh=true` recalcule toujours,
+  même par-dessus une tâche encore en cours, qui a pu lire avant l'écriture qui le demande : le
+  launcher l'envoie après une écriture depuis l'écran du récap ou sur Recalculer. La tâche remplacée
+  répond encore par son id à qui la suit, et plus aucune requête ne la rejoint. Une tâche ne vit
   qu'en mémoire : un redémarrage l'oublie.
 - **Audience.** Un appelant dont la portée `findings.read` est restreinte ne lit que les tâches qu'il
   a lancées. Les appelants à portée entière qui voient les mêmes sources partagent leurs tâches. Tout
@@ -780,10 +782,12 @@ et sans type de contenu JSON (`415`), comme un acquittement.
   donné.
 - **Limites.** Le Hub mène 2 tâches de front ; un `POST` au-delà est un `503` avec `Retry-After: 5`
   et le code `recap_busy`. Il garde 32 tâches en tout, et oublie la plus ancienne terminée au-delà.
-  Une tâche échouée ou arrêtée reste lisible une minute.
-- **Résultat.** `GET …/result` avant la réussite de la tâche est un `409` avec le code
-  `recap_not_ready`. Quitter l'écran n'arrête pas une tâche : le launcher n'arrête que celle dont il
-  a changé les filtres.
+  Une tâche échouée reste lisible une minute. Une tâche lâchée se lit aussitôt comme inconnue, mais
+  garde sa place parmi les 2 jusqu'à ce que son calcul s'arrête ; une tâche terminée reste gardée.
+- **Résultat.** `GET …/result` pendant que la tâche tourne est un `409` avec le code
+  `recap_not_ready`, et pour une tâche échouée ou arrêtée avec le Hub un `409` avec le code
+  `recap_failed` : il ne viendra jamais, relancez la tâche. Quitter l'écran n'arrête pas une tâche :
+  le launcher ne lâche que celle dont il a changé les filtres ou qu'un recalcul a remplacée.
 
 ### Webhooks du récap
 
