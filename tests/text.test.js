@@ -254,7 +254,7 @@ const SCREEN_FUNCTIONS = ["renderSourcesScreen", "sourcesTable", "tableGroupRow"
     "skewNotice", "upgradeLine", "unreachableNotice", "checkbox", "costBand", "submitBlocker", "submitSentence",
     "queuePhrase", "submitRow", "updateSubmit", "buildRequest", "submit", "renderRunScreen", "unknownRun", "rerun",
     "rerunAction", "backLink", "runView", "eventLog", "logRow", "logClosing", "factsRail", "ceilingRule",
-    "ceilingNote", "requestCard", "expiryText", "outcomePanel", "outcomeSpec", "trimNotice", "countStrip",
+    "ceilingNote", "requestCard", "expiryText", "outcomePanel", "outcomeSpec", "countStrip",
     "moveBadge", "actionRow", "actionButton", "resubmit", "loadRun", "scheduleRunPoll", "runUnreachableBanner",
     "detectionKnobs", "detectionCount", "setDetection", "refreshDetectionCount", "advancedPanel", "detectionRow"];
 

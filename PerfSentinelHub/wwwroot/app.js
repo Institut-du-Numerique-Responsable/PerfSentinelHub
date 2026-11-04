@@ -26,7 +26,7 @@
      * @property {string} title
      * @property {string} body
      * @property {Array<[string, string, string]>} [counts]
-     * @property {*} [warnings]
+     * @property {import('../types').ResultWarning[]} [warnings]
      * @property {OutcomeAction} primary
      * @property {OutcomeAction} [secondary]
      * @property {string | (() => string)} [note]
@@ -45,7 +45,7 @@
      * @property {string} path
      * @property {{service: string, endpoint?: string}} body
      */
-    /** @typedef {{name: string, kind: string, default: any, choices?: string[], min?: number, max?: number, reset?: string}} DetectionKnob One of status.detection_knobs. */
+    /** @typedef {import('../types').DetectionKnob} DetectionKnob One of status.detection_knobs. */
 
     /**
      * A command or file block: what it is, the text or the per-shell line it prints, and its notes.
@@ -71,7 +71,7 @@
      * @property {string} source_name
      * @property {string} [environment]
      * @property {import('../types').SourceKind} kind
-     * @property {Payload | null} [request]
+     * @property {RunRequest | null} [request]
      * @property {string | null} [requested_by]
      * @property {number} created_at_ms
      * @property {number | null} [started_at_ms]
@@ -79,7 +79,7 @@
      * @property {number | null} [expires_at_ms]
      * @property {string | null} [producer_version]
      * @property {import('../types').ErrorCode | null} [error_code]
-     * @property {Payload | null} [result]
+     * @property {RunResult | null} [result]
      */
 
     /**
@@ -88,25 +88,102 @@
      *   service: string | null, grouping: string | null, view: 'tech' | 'pilotage', jobKey?: string}} RecapRoute
      */
 
-    // Payloads read field by field, named for what they are. Their shape is the API writer's,
-    // and a copy declared here would drift from it without failing anything.
-    // Rider reports every field read off a Payload, so a payload is typed as any.
-    /** @typedef {*} Payload A JSON object the API wrote, read field by field. */
-    /** @typedef {*} Incident A row of GET /api/incidents. */
-    /** @typedef {*} Episode A correlation episode of GET /api/correlations. */
-    /** @typedef {*} CorrelationPair The episodes of one pair, as PSL.correlationPairs groups them. */
-    /** @typedef {*} DaemonView What GET /api/sources/{id}/daemon answers. */
-    /** @typedef {*} AckRow A finding of the ack page, with its daemon and its state. */
-    /** @typedef {*} RecapSnapshot What GET /api/recap answers. */
-    /** @typedef {*} RecapPriority One priority of a recap snapshot. */
-    /** @typedef {*} RecapAction The action recorded on a priority. */
-    /** @typedef {*} RecapJob A recap job, as GET /api/recap/jobs/{id} answers it. */
-    /** @typedef {*} RecapReport A frozen report of GET /api/recap/reports. */
-    /** @typedef {*} ShareCard The share card form, made by cardState. */
-    /** @typedef {*} CardOptions What the card options route answers for a period. */
-    /** @typedef {*} Disclosure A disclosure of GET /api/disclosures. */
-    /** @typedef {*} DisclosureDetail What GET /api/disclosures/{id} answers. */
-    /** @typedef {{blob?: Blob, result?: any, status?: number, field?: string | null, code?: string | null, detail?: string}} CardAnswer What cardPost settles with: a file, a JSON result, or a refusal. */
+    // Payloads read field by field, named for what they are. Their shapes are in types.d.ts, each
+    // beside the API writer or record it mirrors.
+    /** @typedef {import('../types').HubStatus} HubStatus */
+    /** @typedef {import('../types').AccessView} AccessView */
+    /** @typedef {import('../types').TerminalToken} TerminalToken */
+    /** @typedef {import('../types').RunResult} RunResult */
+    /** @typedef {import('../types').RunRequest} RunRequest */
+    /** @typedef {import('../types').DaemonGauge} DaemonGauge */
+    /** @typedef {import('../types').DaemonSettings} DaemonSettings */
+    /** @typedef {import('../types').Finding} Finding */
+    /** @typedef {import('../types').StoredFindingRow} StoredFindingRow */
+    /** @typedef {import('../types').FindingEnvelope} FindingEnvelope */
+    /** @typedef {import('../types').FindingSource} FindingSource */
+    /** @typedef {import('../types').Incident} Incident */
+    /** @typedef {import('../types').Episode} Episode */
+    /** @typedef {import('../types').CorrelationPair} CorrelationPair */
+    /** @typedef {import('../types').DaemonView} DaemonView */
+    /** @typedef {import('../types').AckRow} AckRow */
+    /** @typedef {import('../types').RecapSnapshot} RecapSnapshot */
+    /** @typedef {import('../types').RecapPeriodInfo} RecapPeriodInfo */
+    /** @typedef {import('../types').RecapMovements} RecapMovements */
+    /** @typedef {import('../types').RecapPriority} RecapPriority */
+    /** @typedef {import('../types').RecapAction} RecapAction */
+    /** @typedef {import('../types').SuggestedFix} SuggestedFix */
+    /** @typedef {import('../types').CodeLocation} CodeLocation */
+    /** @typedef {import('../types').RecapJob} RecapJob */
+    /** @typedef {RecapJob & {key: string, receivedAt: number}} FollowedRecapJob A job the screen follows, with the key of its filters and when it was read. */
+    /** @typedef {import('../types').RecapReport} RecapReport */
+    /** @typedef {import('../types').CardOptions} CardOptions */
+    /** @typedef {import('../types').CardFix} CardFix */
+    /** @typedef {import('../types').CardKeys} CardKeys */
+    /** @typedef {import('../types').CardKey} CardKey */
+    /** @typedef {import('../types').CardAttachment} CardAttachment */
+    /** @typedef {import('../types').Disclosure} Disclosure */
+    /** @typedef {import('../types').DisclosureFigures} DisclosureFigures */
+    /** @typedef {import('../types').DisclosureDetail} DisclosureDetail */
+    /** @typedef {import('../types').DisclosureReport} DisclosureReport */
+    /** @typedef {import('../types').ShareLink} ShareLink */
+    /** @typedef {Record<string, unknown> & {format?: string}} CardBody A card request, as PSL.cardBody builds it. */
+    /** @typedef {{detail?: string, code?: string, reason?: string, path?: string}} DisclosureAnswer What a disclosure write answers: a problem, a refusal's reason, or a new share link's path. */
+    /** @typedef {{ok: boolean, status: number, payload: DisclosureAnswer | null}} DisclosureOutcome What sendDisclosure settles with. */
+    /** @typedef {{blob?: Blob, result?: CardAttachment, status?: number, field?: string | null, code?: string | null, detail?: string}} CardAnswer What cardPost settles with: a file, a JSON result, or a refusal. */
+    /** @typedef {import('../types').AccessConfiguration} AccessConfiguration */
+    /** @typedef {import('../types').AccessUnmatched} AccessUnmatched */
+    /** @typedef {Incident & {error_code?: string}} IncidentDetail A single-incident read, or the stub a failed one leaves with its error_code. */
+    /** @typedef {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string, kind?: string, namespace?: string, atMs?: number}} Handoff An incident link, as PSL.readHandoff reads it, with the row's fields once found. */
+    /** @typedef {{traceId: string, otherTraceId: string}} TraceHandoff An episode's two traces, as PSL.readTraceHandoff reads them. */
+    /** @typedef {{label: string, energy_kwh: number, carbon_kgco2eq: number, partial: {windows: number, of: number} | null}} HostRow A host of a disclosure, as PSL.hostRows builds it. */
+    /**
+     * The ack page, from its link to what the last submit came to.
+     * @typedef {object} AckState
+     * @property {string} signature
+     * @property {string} reason
+     * @property {string} expiry
+     * @property {Array<{ok: boolean, text: string}>} lines
+     * @property {Record<string, {action: string, checked: boolean}>} checked
+     * @property {FindingEnvelope | null} [finding]
+     * @property {FindingEnvelope | null} [volume] the windowed read's finding, undefined when it failed
+     * @property {boolean} [error]
+     * @property {boolean} [busy]
+     */
+    /**
+     * The share card form, made by cardState.
+     * @typedef {object} ShareCard
+     * @property {boolean} open
+     * @property {string} angle
+     * @property {string} kind
+     * @property {string | null} from
+     * @property {string | null} signature
+     * @property {string | null} label
+     * @property {boolean} remember
+     * @property {string | null} rememberError
+     * @property {string} title
+     * @property {string} team
+     * @property {string | null} lang
+     * @property {string | null} country
+     * @property {string} format
+     * @property {(CardOptions & {error?: number}) | 'loading' | null} options a failed read leaves {error: status}
+     * @property {string | null} optionsPath
+     * @property {{path: string, code: string | null, text: string} | null} curveRefusal
+     * @property {boolean} showAllFixes
+     * @property {{url: string, format: string} | null} preview
+     * @property {boolean} stale
+     * @property {string | null} busy
+     * @property {string | null} renderError
+     * @property {Record<string, string>} fieldErrors
+     * @property {{result?: CardAttachment, error?: string} | null} attach
+     * @property {boolean} attachBusy
+     * @property {string | null} busyNote
+     * @property {string | null} attachNote
+     * @property {CardKeys | 'loading' | 'error' | null | undefined} keys
+     * @property {string | null} keysError
+     * @property {boolean} keysBusy
+     * @property {string | null} revoking
+     * @property {string} revokeDate
+     */
 
     /**
      * Glyph paths lifted from the dashboard's themeIcon(), not redrawn.
@@ -123,7 +200,7 @@
     const state = {
         themePosition: document.documentElement.getAttribute('data-theme-position') || 'auto',
         screen: 'new',
-        /** @type {Payload} */
+        /** @type {HubStatus | null} */
         status: null,
         // The HTTP status /api/status failed with, which tells "no grant" from "down".
         statusError: undefined,
@@ -131,12 +208,14 @@
         sources: null,
         sourcesError: false,
         // GET /api/access, null when access is off (the route answers 404) or failed.
-        /** @type {Payload} */
+        /** @type {AccessView | null} */
         access: null,
         // GET /api/tokens, read only with access on; null until it answers or when it failed.
+        /** @type {TerminalToken[] | null} */
         tokens: null,
         tokensFailed: false,
         // What the last Revoke did, {card, ok, text}, shown in the card it was pressed in.
+        /** @type {{card: string, ok: boolean, text: string} | null} */
         tokensNotice: null,
         // Set once the first screen has drawn: from then on a route change moves the focus.
         routed: false,
@@ -161,6 +240,7 @@
         // Which daemon rows are folded open, and what each one answered. Kept
         // across a render so a rebuilt table comes back the way it was left.
         daemonOpen: {},
+        /** @type {Record<string, DaemonView | 'loading'>} */
         daemonViews: {},
         daemonSettingsOpen: {},
         daemonGroupOpen: {},
@@ -185,6 +265,7 @@
         // What each gauge moved by on the read just adopted, shown once beside the
         // figure and then gone. Consumed by the render, so a rebuild for any other
         // reason does not replay a move that already had its moment.
+        /** @type {Record<string, Record<string, number | null>>} */
         daemonMoves: {},
         // Folds that belong to a screen rather than to a source. Kept in the same
         // record, since a reader does not care which of the two a fold is.
@@ -209,6 +290,7 @@
         incidentFilter: {service: '', namespace: '', kind: '', environment: '', source_id: ''},
         incidentServices: [],
         incidentNamespaces: [],
+        /** @type {Record<string, IncidentDetail | 'loading'>} */
         incidentDetails: {},
         // The correlations screen: the episodes of the range, null until read, the incidents
         // its strips draw, every service seen so the select outlives its own filter, and the
@@ -249,13 +331,14 @@
         // the filters it computes (PSL.recapJobKey). True in recapDirect once the Hub has no job route,
         // an older one or the site's replay, which reads GET /api/recap as before. The poll's timer and
         // its failures in a row; recapHubBusy while the Hub runs as many recaps as it can at once.
-        /** @type {RecapJob} */
+        /** @type {FollowedRecapJob | null} */
         recapJob: null,
         recapDirect: false,
         recapPollTimer: null,
         recapPollFailures: 0,
         recapHubBusy: false,
         // The start sent and not answered yet, with the key it computes and the promise of its end.
+        /** @type {{key: string, done: Promise<unknown> | null} | null} */
         recapStarting: null,
         // Jobs started again by the current read after the Hub forgot its own, at most one.
         recapRestarts: 0,
@@ -276,20 +359,25 @@
         // GET /api/disclosures/{id} and the report.json it serves, for the detail screen.
         /** @type {DisclosureDetail} */
         disclosure: null,
+        /** @type {DisclosureReport | null} */
         disclosureReport: null,
         disclosureError: false,
         // What the last action on the detail did, and a share link's token, shown once.
         disclosureNote: null,
+        /** @type {{id: string, pdfUrl: string, reportUrl: string} | null} */
         disclosureLink: null,
         disclosureBusy: false,
         withdrawOpen: false,
+        /** @type {Record<string, {rows: Episode[], pushes: boolean} | 'loading' | 'error'>} */
         incidentCorrelations: {},
         // The incident panels whose episodes list is shown whole, by their cache key.
         incidentCorrelationsAll: {},
         // A trace an episode handed to New analysis, with the pair's other one.
+        /** @type {TraceHandoff | null} */
         traceHandoff: null,
         // The ack page: the finding its link names, the form, and what the last
         // submit came to. Null until a link opens it.
+        /** @type {AckState | null} */
         ack: null,
         // The route an in-app Ack link was followed from, for the page's way back.
         ackReturn: null,
@@ -299,6 +387,7 @@
         // What was typed above each incident's findings, by incident key.
         findingQuery: {},
         // The incident a `#/new?from=…` link pre-filled the form from, or null.
+        /** @type {Handoff | null} */
         handoff: null,
         // Which shell every printed command is spelled for.
         shell: 'posix',
@@ -327,7 +416,7 @@
     /**
      * @template {keyof HTMLElementTagNameMap} K
      * @param {K} tag
-     * @param {Payload} [attrs]
+     * @param {Record<string, any>} [attrs]
      * @param {Child[]} [children]
      * @returns {HTMLElementTagNameMap[K]}
      */
@@ -1579,7 +1668,7 @@
      * Pre-fills the form from an incident link: its service, its window as an
      * absolute range. The row it names is added when the incidents screen still
      * holds it, for the banner's wording. Anything else on the form stays.
-     * @param {Payload} handoff
+     * @param {Handoff | null} handoff
      */
     function applyHandoff(handoff) {
         // A route without the query does not end the handoff: the tab points at
@@ -1613,7 +1702,7 @@
     /**
      * Puts a trace an episode handed over in the form. A route without one keeps the banner
      * while the form still holds one of the pair's two traces.
-     * @param {Payload} handoff
+     * @param {TraceHandoff | null} handoff
      */
     function applyTraceHandoff(handoff) {
         if (!handoff) {
@@ -1990,9 +2079,9 @@
             .catch(function (error) {
                 // The gate's 503 is the Hub being briefly full, not the Hub failing:
                 // it clears in about a second and deserves its own sentence.
-                state.daemonViews[source.id] = {
+                state.daemonViews[source.id] = /** @type {DaemonView} */ ({
                     error_code: /answered 503$/.test(String(error && error.message)) ? 'hub_busy' : 'internal'
-                };
+                });
             })
             .finally(function () {
                 // The table may have been rebuilt while this was in flight, so the
@@ -2091,7 +2180,7 @@
      * What the fold opens on: the verdict, the gauges, and the daemon's own
      * hints beside them rather than under them. The settings are the long part
      * and stay behind one more click.
-     * @param {Payload} gauge
+     * @param {DaemonGauge | null} gauge
      */
     function pct(gauge) {
         return gauge ? gauge.pct : null;
@@ -2449,7 +2538,8 @@
         }
         state.daemonInFlight[source.id] = true;
         restartCycle(source, index);
-        const previous = state.daemonViews[source.id];
+        // Never 'loading' here: a ticker only runs over a row whose first read has landed.
+        const previous = /** @type {DaemonView | undefined} */ (state.daemonViews[source.id]);
         // A light read is only ever an overlay on a full one, so a row with
         // nothing to lay it over asks the cheap question first, and only reads in
         // full once it knows there is something to read.
@@ -2462,7 +2552,7 @@
         const kept = plan === 'light' ? previous : null;
         getJson('/api/sources/' + encodeURIComponent(source.id) + '/daemon'
             + (plan === 'full' ? '' : '?refresh=status'))
-            .then(function (view) {
+            .then(function (/** @type {DaemonView} */ view) {
                 if (plan === 'probe') {
                     // The daemon answers again: only a full read renders it, and that is
                     // the same read this row started with, skeleton and all.
@@ -2510,7 +2600,7 @@
     }
 
     /**
-     * @param {Payload} gauge
+     * @param {DaemonGauge | null} gauge
      */
     function gaugeText(gauge) {
         if (!gauge || gauge.value == null) return t('daemon.unknown');
@@ -2654,8 +2744,8 @@
      * @param {string} sourceId
      * @param {string} group
      * @param {string[]} names
-     * @param {Payload} config
-     * @param {Payload | null} defaults
+     * @param {DaemonSettings} config
+     * @param {DaemonSettings | null} defaults
      */
     function settingsCard(sourceId, group, names, config, defaults) {
         const key = sourceId + '|' + group;
@@ -2704,7 +2794,7 @@
      * A value that departs from the engine's default, when one is known.
      * @param {string} name
      * @param {any} value
-     * @param {Payload | null} defaults
+     * @param {DaemonSettings | null} defaults
      */
     function isChanged(name, value, defaults) {
         if (!defaults) return false;
@@ -2715,7 +2805,7 @@
     /**
      * @param {string} name
      * @param {any} value
-     * @param {Payload | null} defaults
+     * @param {DaemonSettings | null} defaults
      */
     function settingRow(name, value, defaults) {
         const fallback = defaults ? defaults[name] : undefined;
@@ -3769,6 +3859,7 @@
         const source = selectedSource();
         if (!source || !state.runs) return null;
         const past = state.runs.filter(function (run) {
+            /** @type {Partial<RunResult>} */
             const result = run.result || {};
             // Trace-id runs are excluded: their weight says nothing about the
             // slider. A missing max_traces on a service run is the server-side
@@ -4203,7 +4294,7 @@
             body: JSON.stringify({source_id: source.id, request: buildRequest(source)})
         }).then(signInOn401).then(async function (response) {
             return {ok: response.ok, payload: await response.json()};
-        }).then(function (result) {
+        }).then(function (/** @type {{ok: boolean, payload: {id?: string, detail?: string, code?: string}}} */ result) {
             if (!result.ok) throw new Error(PSL.problemText(result.payload, undefined, t('new.submit.refused')));
             location.hash = '#/run/' + result.payload.id;
         }).catch(function (error) {
@@ -4320,6 +4411,7 @@
             };
         }
         if (key === 'succeeded') {
+            /** @type {Partial<RunResult>} */
             const result = run.result || {};
             const caveats = (result.warnings || []).length;
             return {
@@ -4550,8 +4642,6 @@
             el('p', {class: 'outcome-body', text: spec.body})
         ]);
         if (spec.counts) panel.appendChild(countStrip(spec.counts, {toned: true, filled: 1}));
-        const trimmed = trimNotice(run);
-        if (trimmed) panel.appendChild(trimmed);
         (spec.warnings || []).forEach(function (/** @type {{kind: string, message: string}} */ warning) {
             // A caveat the engine wrote, which stays in the engine's English.
             panel.appendChild(el('div', {class: 'outcome-warning'}, [
@@ -4569,6 +4659,7 @@
      * @returns {OutcomeSpec}
      */
     function outcomeSpec(run, key) {
+        /** @type {Partial<RunResult>} */
         const result = run.result || {};
         if (key === 'succeeded') {
             return {
@@ -4579,7 +4670,7 @@
                 counts: [
                     [result.quality_gate_passed ? 'PASS' : 'FAIL', t('run.count.gate'),
                         result.quality_gate_passed ? 'ok' : 'crit'],
-                    [String(result.findings), result.kept_findings == null ? t('run.count.findings') : t('run.count.found'),
+                    [String(result.findings), t('run.count.findings'),
                         result.critical > 0 ? 'crit' : result.warning > 0 ? 'warn'
                             : result.info > 0 ? 'info' : 'ok'],
                     [String(result.critical), t('run.count.critical'), 'crit'],
@@ -4643,23 +4734,6 @@
         };
     }
 
-    /**
-     * The sink drops findings to fit its budget, and the count on the card is
-     * what the engine found, not what the report holds. Said above the link,
-     * because it changes how the numbers should be read.
-     * @param {Run} run
-     */
-    function trimNotice(run) {
-        const result = run.result || {};
-        if (result.kept_findings == null || result.kept_findings >= result.findings) return null;
-        return el('div', {class: 'outcome-warning'}, [
-            el('span', {class: 'outcome-warning-kind', text: t('run.trimmed')}),
-            el('span', {
-                class: 'outcome-warning-message',
-                text: t('run.trimmed_body', {found: result.findings, kept: result.kept_findings})
-            })
-        ]);
-    }
 
     /**
      * A cell is [figure, label, tone, move]. `move` stays a number throughout, so
@@ -4671,7 +4745,7 @@
      * as a solid block of its tone, the rest take their own pastel. The daemon
      * gauges pass no options and keep a neutral strip, because their tone means
      * "near a cap", which is not a severity.
-     * @param {Array<Payload>} counts
+     * @param {Array<[string, string, (string | null)?, number?]>} counts
      * @param {{toned?: boolean, filled?: number}} [options]
      */
     function countStrip(counts, options) {
@@ -4751,7 +4825,7 @@
             body: JSON.stringify({source_id: run.source_id, request: run.request || {}})
         }).then(signInOn401).then(async function (response) {
             return {ok: response.ok, payload: await response.json()};
-        }).then(function (result) {
+        }).then(function (/** @type {{ok: boolean, payload: {id?: string, detail?: string, code?: string}}} */ result) {
             if (!result.ok || !result.payload.id) {
                 throw new Error(PSL.problemText(result.payload, undefined, t('run.resubmit_refused')));
             }
@@ -4782,6 +4856,7 @@
      */
     async function loadRun(id) {
         try {
+            /** @type {Run} */
             const run = await getJson('/api/analyses/' + id);
             state.run = run;
             state.runError = false;
@@ -5517,9 +5592,9 @@
                 state.incidentDetails[incident.id] = record;
             })
             .catch(function (error) {
-                state.incidentDetails[incident.id] = {
+                state.incidentDetails[incident.id] = /** @type {IncidentDetail} */ ({
                     error_code: /answered 404$/.test(String(error && error.message)) ? 'gone' : 'internal'
-                };
+                });
             })
             .finally(function () {
                 const target = document.getElementById('incident-detail-' + incidentKey(incident));
@@ -5620,7 +5695,7 @@
     const FINDING_ROW = new WeakMap();
 
     /**
-     * @param {Array<Payload>} findings
+     * @param {StoredFindingRow[]} findings
      * @param {Incident} incident
      */
     function incidentFindingsTable(findings, incident) {
@@ -5633,6 +5708,7 @@
             return findingHead(name, incident);
         }));
         const rows = findings.map(function (row) {
+            /** @type {Partial<Finding>} */
             const finding = row.finding || {};
             const phase = PSL.findingPhase(row, incident);
             const template = PSL.findingTemplate(row);
@@ -5747,7 +5823,7 @@
     }
 
     /**
-     * @param {Payload} finding
+     * @param {Partial<Finding>} finding
      * @param {Incident} incident
      */
     function ackLink(finding, incident) {
@@ -5798,7 +5874,7 @@
             getJson('/api/incidents?limit=' + incidentPage() + '&offset=0').catch(function () {
                 return [];
             })
-        ]).then(function (results) {
+        ]).then(function (/** @type {[Episode[], Incident[]]} */ results) {
             state.correlations = results[0];
             state.correlationIncidents = results[1];
             // A link to one pair lands on it unfolded, on every daemon that saw it.
@@ -5985,7 +6061,7 @@
     }
 
     /**
-     * @param {Payload} side
+     * @param {import('../types').EpisodeSide} side
      * @param {string | null} lead
      */
     function pairSide(side, lead) {
@@ -6180,7 +6256,7 @@
         readAllEpisodes(scope + '&from=' + incident.window_from_ms + '&to=' + incidentEnd(incident), 0)
             .then(function (rows) {
                 if (rows.length > 0) return {rows: rows, pushes: true};
-                return getJson(scope + '&limit=1').then(function (any) {
+                return getJson(scope + '&limit=1').then(function (/** @type {Episode[]} */ any) {
                     return {rows: rows, pushes: any.length > 0};
                 });
             })
@@ -6206,6 +6282,7 @@
      * @returns {Promise<Episode[]>}
      */
     async function readAllEpisodes(path, offset) {
+        /** @type {Episode[]} */
         const rows = await getJson(path + '&limit=' + EPISODE_PAGE + '&offset=' + offset);
         if (rows.length < EPISODE_PAGE) return rows;
         return rows.concat(await readAllEpisodes(path, offset + EPISODE_PAGE));
@@ -6344,7 +6421,7 @@
         // Matched again here: the page must never offer a finding its link did
         // not name, whatever the Hub made of the filter.
         /**
-         * @param {Array<Payload>} rows
+         * @param {FindingEnvelope[]} rows
          */
         const named = function (rows) {
             return rows.find(function (row) {
@@ -6420,7 +6497,7 @@
     }
 
     /**
-     * @param {Array<Payload>} lines
+     * @param {Array<{ok: boolean, text: string}>} lines
      */
     function ackResultLines(lines) {
         return el('div', {class: 'ack-stack', role: 'status'}, lines.map(function (line) {
@@ -6432,7 +6509,7 @@
      * The detections of the last seven days, from the windowed read: its
      * finding, null when the window holds no detection the Hub knows, undefined
      * when the read failed.
-     * @param {Payload} volume
+     * @param {FindingEnvelope | null | undefined} volume
      */
     function ackDetectionFacts(volume) {
         if (!volume) return [];
@@ -6446,7 +6523,7 @@
 
     /**
      * One line per source with its count, and what keeps it short.
-     * @param {Payload} volume
+     * @param {FindingEnvelope | null | undefined} volume
      */
     function ackDetectionLines(volume) {
         if (volume === undefined) {
@@ -6455,7 +6532,7 @@
         if (volume === null) {
             return [el('p', {class: 'field-note', text: t('ack.detections.none')})];
         }
-        return (volume.sources || []).map(function (/** @type {Payload} */ source) {
+        return (volume.sources || []).map(function (/** @type {FindingSource} */ source) {
             const gaps = (source.detections_gaps || []).map(PSL.gapLabel);
             const io = source.avoidable_io_ops == null ? ''
                 : t('ack.detections.io', {count: PSL.formatDetections(source.avoidable_io_ops, source.detections_complete)});
@@ -6472,10 +6549,11 @@
     }
 
     /**
-     * @param {Payload} envelope
-     * @param {Payload} volume
+     * @param {FindingEnvelope} envelope
+     * @param {FindingEnvelope | null | undefined} volume
      */
     function ackFindingCard(envelope, volume) {
+        /** @type {Partial<Finding>} */
         const finding = envelope.finding || {};
         const template = (finding.pattern || {}).template;
         const facts = [
@@ -6669,7 +6747,7 @@
 
     /**
      * `at` and `expires_at` are the daemon's own text, shown as it came.
-     * @param {Payload} ack
+     * @param {import('../types').FindingAck | null} ack
      */
     function ackCell(ack) {
         if (!ack) return el('td', {}, [el('span', {class: 'table-muted', text: t('ack.cell.none')})]);
@@ -6687,7 +6765,7 @@
     /**
      * @param {AckRow} row
      * @param {string} action
-     * @param {Payload} body
+     * @param {object} body
      */
     async function relayAck(row, action, body) {
         const path = '/api/sources/' + encodeURIComponent(row.id) + (action === 'revoke' ? '/acks/revoke' : '/acks');
@@ -6700,6 +6778,7 @@
         try {
             const response = signInOn401(await fetch(path, request));
             // A 204 has no body, and neither have the 413 and a full gate's 503.
+            /** @type {{detail?: string, code?: string} | null} */
             const payload = await response.json().catch(function () {
                 return null;
             });
@@ -6853,7 +6932,7 @@
     function startRecapJob(sequence, route, refresh, all, opening) {
         const start = {key: route.jobKey || PSL.recapJobKey(route), done: null};
         state.recapStarting = start;
-        start.done = fetchJson(PSL.recapJobPath(route, refresh), 'POST', RECAP_SCREEN_HEADERS).then(function (job) {
+        start.done = fetchJson(PSL.recapJobPath(route, refresh), 'POST', RECAP_SCREEN_HEADERS).then(function (/** @type {RecapJob} */ job) {
             if (sequence !== state.recapSeq) {
                 // Started or joined for a read no longer wanted: let go, lest it hold one of the Hub's places.
                 // Kept when a newer read for the same filters follows it too: the Hub counts one follow per
@@ -7253,7 +7332,7 @@
     /**
      * "compared with" or "since" the previous period, worded for a day or for a range of days.
      * @param {string} prefix
-     * @param {Payload} previous
+     * @param {RecapPeriodInfo} previous
      */
     function recapAgainst(prefix, previous) {
         return t(prefix + (previous.kind === 'day' ? 'day' : 'range'), {period: PSL.periodText(previous)});
@@ -7288,7 +7367,7 @@
     /**
      * "previous week 168,900", with the days it was cut to when this period is not over.
      * @param {RecapSnapshot} snapshot
-     * @param {string | null} value
+     * @param {string | number | null} value
      */
     function recapPreviousText(snapshot, value) {
         if (value === null || value === undefined) return '';
@@ -7576,7 +7655,7 @@
     }
 
     /**
-     * @param {Payload} fix
+     * @param {SuggestedFix} fix
      */
     function recapFix(fix) {
         if (!fix) return null;
@@ -7599,7 +7678,7 @@
 
     /**
      * The function on one line and `path:line` on the next, as a stack trace reads.
-     * @param {Payload} location
+     * @param {CodeLocation} location
      */
     function recapCodeLocation(location) {
         if (!location) return null;
@@ -7641,7 +7720,7 @@
         if (!action || !action.events || !action.events.length) return null;
         return el('div', {}, [
             el('div', {class: 'recap-fix-head', text: t('recap.events.title')}),
-            el('ul', {class: 'recap-events'}, action.events.map(function (/** @type {Payload} */ event) {
+            el('ul', {class: 'recap-events'}, action.events.map(function (/** @type {import('../types').RecapActionEvent} */ event) {
                 const owner = PSL.ownerLabel(event.owner, event.owner_display);
                 return el('li', {}, [
                     el('time', {
@@ -7786,7 +7865,7 @@
      * Hub's own sentence in the row: it names why (no identity, no permission).
      * @param {string} method
      * @param {string} path
-     * @param {Payload} body
+     * @param {object} body
      */
     async function recapSend(method, path, body) {
         // Built before the try: only the request and its answer fall back to the failed sentence.
@@ -7811,7 +7890,7 @@
      * @param {string} signature
      * @param {string} method
      * @param {string} path
-     * @param {Payload} body
+     * @param {object} body
      */
     function recapWrite(signature, method, path, body) {
         if (state.recapBusy[signature]) return;
@@ -8064,7 +8143,7 @@
 
     /**
      * A list's whole length: the Hub cuts each list and counts it in `counts`, absent before it did.
-     * @param {Payload} moves
+     * @param {RecapMovements} moves
      * @param {RecapPriority[]} items
      * @param {string} key
      */
@@ -8074,7 +8153,7 @@
 
     /**
      * A whole list that could not be read says so, and how much the Hub did not send.
-     * @param {Payload} moves
+     * @param {RecapMovements} moves
      * @param {RecapPriority[]} items
      * @param {string} key
      */
@@ -8101,7 +8180,7 @@
      * A long group stops at its first few lines: the whole list made the section run for screens.
      * The button opens all of it, reading it again with moves=all when the Hub cut it, so nothing a
      * reader wants to dig into stays out of reach.
-     * @param {Payload} moves
+     * @param {RecapMovements} moves
      * @param {RecapPriority[]} items
      * @param {string} key
      */
@@ -8191,7 +8270,7 @@
      * Where the Hub's computation of this recap is: the share of the work behind it as a bar, each
      * stage done, running, still to come or not needed on this day, and the time since it started,
      * counted from the Hub's start so a reader who comes back sees the whole of it.
-     * @param {RecapJob} job
+     * @param {FollowedRecapJob} job
      */
     function recapProgressPanel(job) {
         // The Hub's count when the job was read, grown on this clock since: a browser whose clock is
@@ -8264,7 +8343,7 @@
      * @param {RecapJob} job
      */
     function recapStageList(job) {
-        return el('ol', {class: 'recap-stages'}, (job.stages || []).map(function (/** @type {Payload} */ stage) {
+        return el('ol', {class: 'recap-stages'}, (job.stages || []).map(function (/** @type {import('../types').RecapJobStage} */ stage) {
             let time = '';
             if (stage.state === 'done' && stage.ms != null) time = PSL.durPrecise(stage.ms);
             else if (stage.state === 'running') time = t('recap.job.stage_running');
@@ -8412,7 +8491,7 @@
                     text: t('recap.report.generated', {time: PSL.localTime(report.generated_at_ms)})
                 }),
                 status ? el('span', {class: 'recap-report-status', text: status}) : null
-            ].concat(report.deliveries.map(function (/** @type {Payload} */ delivery) {
+            ].concat(report.deliveries.map(function (/** @type {import('../types').RecapDelivery} */ delivery) {
                 return el('span', {
                     class: 'status-pill', 'data-status': RECAP_DELIVERY_STATUS[delivery.state] || 'queued',
                     text: PSL.recapDeliveryText(delivery)
@@ -8480,9 +8559,9 @@
     function cardFix(card) {
         const options = cardOptionsReady(card);
         if (!options) return null;
-        return options.fixes.find(function (/** @type {Payload} */ fix) {
+        return options.fixes.find(function (/** @type {CardFix} */ fix) {
             return fix.signature === card.signature;
-        }) || options.fixes.find(function (/** @type {Payload} */ fix) {
+        }) || options.fixes.find(function (/** @type {CardFix} */ fix) {
             return fix.signature === options.default_signature;
         }) || options.fixes[0] || null;
     }
@@ -8618,7 +8697,7 @@
     }
 
     /**
-     * @param {Payload} change
+     * @param {Partial<ShareCard>} change
      */
     function cardPick(change) {
         const card = cardState();
@@ -8650,7 +8729,7 @@
         getJson(path).then(function (options) {
             if (card.optionsPath === path) card.options = options;
         }).catch(function (error) {
-            if (card.optionsPath === path) card.options = {error: error.status || 0};
+            if (card.optionsPath === path) card.options = /** @type {CardOptions & {error: number}} */ ({error: error.status || 0});
         }).finally(function () {
             if (card.optionsPath === path && currentScreen() === 'recap') cardRender();
         });
@@ -8958,7 +9037,7 @@
         const chosen = cardFix(card);
         const at = options.fixes.indexOf(chosen);
         const shown = card.showAllFixes || at >= CARD_FIX_PAGE ? options.fixes : options.fixes.slice(0, CARD_FIX_PAGE);
-        group.appendChild(el('ul', {class: 'fix-list'}, shown.map(function (/** @type {Payload} */ fix, /** @type {number} */ index) {
+        group.appendChild(el('ul', {class: 'fix-list'}, shown.map(function (/** @type {CardFix} */ fix, /** @type {number} */ index) {
             return el('li', {}, [cardFixRow(card, fix, index, fix === chosen, options, management)]);
         })));
         if (shown.length < options.fixes.length) {
@@ -8983,7 +9062,7 @@
 
     /**
      * @param {ShareCard} card
-     * @param {Payload} fix
+     * @param {CardFix} fix
      * @param {number} index
      * @param {boolean} checked
      * @param {CardOptions} options
@@ -9353,7 +9432,7 @@
 
     /**
      * The figures as signed, exact, for the person to hold against the preview before sharing.
-     * @param {Array<Payload>} figures
+     * @param {Array<{label: string, value: string}>} figures
      */
     function cardSignedFigures(figures) {
         return el('section', {class: 'card-signed', 'aria-labelledby': 'card-signed-title'}, [
@@ -9378,7 +9457,7 @@
      * A POST of the card form; a file comes back as a Blob, a refusal as the Hub's own detail. A busy render
      * gate is told through onWait and asked once more after its Retry-After; that second answer stands.
      * @param {string} path
-     * @param {Payload} body
+     * @param {CardBody} body
      * @param {'blob' | 'json'} read
      * @param {(text: string) => void} onWait
      * @returns {Promise<CardAnswer>}
@@ -9409,6 +9488,7 @@
             if (response.ok) {
                 return read === 'blob' ? {blob: await response.blob()} : {result: await response.json()};
             }
+            /** @type {{field?: string, code?: string, detail?: string} | null} */
             const payload = await response.json().catch(function () {
                 return null;
             });
@@ -9426,7 +9506,7 @@
     /**
      * A refusal lands where it belongs: under its field, on the curve's period, or under the buttons.
      * @param {ShareCard} card
-     * @param {Payload} failure
+     * @param {CardAnswer} failure
      */
     function cardFailure(card, failure) {
         if (failure.field) card.fieldErrors[failure.field] = failure.detail;
@@ -9456,7 +9536,7 @@
     /**
      * @param {RecapRoute} route
      * @param {string} busy
-     * @param {(card: ShareCard, blob: Blob, body: Payload) => void} then
+     * @param {(card: ShareCard, blob: Blob, body: CardBody) => void} then
      */
     function cardMake(route, busy, then) {
         const card = cardState();
@@ -9586,7 +9666,7 @@
                 cardCopyLine(card.keys.record_name, card.keys.record_name, t('card.keys.copy_record'))
             ]));
         }
-        body.appendChild(el('ul', {class: 'key-list'}, card.keys.keys.map(function (/** @type {Payload} */ key) {
+        body.appendChild(el('ul', {class: 'key-list'}, card.keys.keys.map(function (/** @type {CardKey} */ key) {
             return cardKeyRow(card, key, domain);
         })));
         if (domain) body.appendChild(cardKeysFile(card, domain));
@@ -9616,9 +9696,10 @@
      * @param {string} domain
      */
     function cardKeysFile(card, domain) {
-        let shown = card.keys.well_known;
+        // Only drawn once the keys have been read.
+        let shown = /** @type {CardKeys} */ (card.keys).well_known;
         try {
-            shown = JSON.stringify(JSON.parse(card.keys.well_known), null, 2);
+            shown = JSON.stringify(JSON.parse(/** @type {CardKeys} */ (card.keys).well_known), null, 2);
         } catch (error) {
             // Shown as served.
         }
@@ -9628,7 +9709,7 @@
             el('p', {class: 'key-p'}, [document.createTextNode(at[0]),
                 el('code', {text: 'https://' + domain + '/.well-known/perf-sentinel-key'}),
                 document.createTextNode(at[1] + ' ' + PSL.CARD_COPY.keysFile)]),
-            cardCopyLine(shown, card.keys.well_known, t('card.keys.copy_file'))
+            cardCopyLine(shown, /** @type {CardKeys} */ (card.keys).well_known, t('card.keys.copy_file'))
         ]);
     }
 
@@ -9664,7 +9745,7 @@
 
     /**
      * @param {ShareCard} card
-     * @param {Payload} key
+     * @param {CardKey} key
      * @param {string} domain
      */
     function cardKeyRow(card, key, domain) {
@@ -9690,7 +9771,7 @@
 
     /**
      * @param {ShareCard} card
-     * @param {Payload} key
+     * @param {CardKey} key
      */
     function cardRevokeOpen(card, key) {
         const open = el('button', {
@@ -9710,7 +9791,7 @@
     /**
      * No default date: it is published as the first day the key may have leaked.
      * @param {ShareCard} card
-     * @param {Payload} key
+     * @param {CardKey} key
      * @param {string} domain
      */
     function cardRevokeConfirm(card, key, domain) {
@@ -9745,7 +9826,7 @@
 
     /**
      * @param {string} path
-     * @param {Payload} body
+     * @param {object} body
      */
     function cardKeyWrite(path, body) {
         const card = cardState();
@@ -9840,7 +9921,8 @@
     /**
      * @param {string} path
      * @param {string} method
-     * @param {Payload} [body]
+     * @param {object} [body]
+     * @returns {Promise<DisclosureOutcome>}
      */
     function sendDisclosure(path, method, body) {
         return fetch(path, {
@@ -9848,6 +9930,7 @@
             headers: {'content-type': 'application/json', accept: 'application/json'},
             body: JSON.stringify(body || {})
         }).then(signInOn401).then(async function (response) {
+            /** @type {DisclosureAnswer | null} */
             const payload = await response.json().catch(function () {
                 return null;
             });
@@ -9970,7 +10053,7 @@
 
     /**
      * Runtime coverage on a track, with the official 75 % as a notch and the fill orange under it.
-     * @param {Payload} coverage
+     * @param {number | null | undefined} coverage
      */
     function coverageBar(coverage) {
         const notch = PSL.coverageNotch(coverage);
@@ -9988,9 +10071,10 @@
     }
 
     /**
-     * @param {Payload} figures
+     * @param {DisclosureFigures | null} figures
      */
     function disclosureFigures(figures) {
+        /** @type {Partial<DisclosureFigures>} */
         const f = figures || {};
         const coverage = PSL.coverageNotch(f.coverage);
         return el('div', {class: 'disc-figures'}, [
@@ -10138,7 +10222,7 @@
     function railView(list) {
         const rail = PSL.periodRail(list, Date.now());
         if (rail.length === 0) return null;
-        return el('ol', {class: 'disc-rail', 'aria-label': t('disc.rail.label')}, rail.map(function (/** @type {Payload} */ cell) {
+        return el('ol', {class: 'disc-rail', 'aria-label': t('disc.rail.label')}, rail.map(function (/** @type {{label: string, state: string, level: string | null, id: string | null, daysLeft: number | null}} */ cell) {
             const caption = cell.state === 'published' ? levelLabel(cell.level)
                 : cell.state === 'current' ? t('disc.rail.closes', {days: cell.daysLeft})
                     : t('disc.rail.' + cell.state);
@@ -10271,11 +10355,11 @@
     }
 
     /**
-     * @param {Payload} report
-     * @param {Payload} figures
+     * @param {DisclosureReport | null} report
+     * @param {DisclosureFigures | null} figures
      */
     function applicationsPanel(report, figures) {
-        /** @type {Payload[]} */
+        /** @type {import('../types').ReportApplication[]} */
         const applications = report && Array.isArray(report.applications) ? report.applications : [];
         const hosts = PSL.hostRows(report);
         if (applications.length === 0 && hosts.length === 0) return null;
@@ -10285,7 +10369,7 @@
         const reported = Number(report.aggregate && report.aggregate.total_energy_kwh);
         const total = reported > 0 ? reported : applications.reduce(function (/** @type {number} */ sum, app) {
             return sum + (Number(app.energy_kwh) || 0);
-        }, 0) + hosts.reduce(function (/** @type {number} */ sum, /** @type {Payload} */ host) {
+        }, 0) + hosts.reduce(function (/** @type {number} */ sum, /** @type {HostRow} */ host) {
             return sum + host.energy_kwh;
         }, 0);
 
@@ -10318,7 +10402,7 @@
                 })
             ]);
         });
-        hosts.forEach(function (/** @type {Payload} */ host) {
+        hosts.forEach(function (/** @type {HostRow} */ host) {
             rows.push(el('tr', {}, [
                 el('td', {class: 'table-strong'}, [document.createTextNode(host.label),
                     host.partial ? document.createTextNode(' ') : null,
@@ -10335,7 +10419,7 @@
         });
         const excluded = report.scope_manifest && Array.isArray(report.scope_manifest.applications_excluded)
             ? report.scope_manifest.applications_excluded : [];
-        excluded.forEach(function (/** @type {Payload} */ app) {
+        excluded.forEach(function (/** @type {{service_name?: string, name?: string, reason?: string}} */ app) {
             const reason = app && app.reason;
             rows.push(el('tr', {}, [
                 el('td', {}, [el('span', {
@@ -10365,7 +10449,7 @@
      * @param {DisclosureDetail} detail
      */
     function integrityPanel(detail) {
-        const rows = PSL.checkRows(detail).map(function (/** @type {Payload} */ row) {
+        const rows = PSL.checkRows(detail).map(function (/** @type {{claim: string, by: string, outcome: string}} */ row) {
             const outcome = row.outcome === 'checked' ? checkChip(t('disc.outcome.checked'), 'checked')
                 : row.outcome === 'declared' ? el('span', {
                         class: 'chip chip-declared disc-level',
@@ -10423,7 +10507,7 @@
     }
 
     /**
-     * @param {Payload} link
+     * @param {ShareLink} link
      */
     function linkState(link) {
         return link.state === 'active' ? t('disc.link.active', {duration: PSL.dur(link.expires_at_ms - Date.now())})
@@ -10437,7 +10521,7 @@
      */
     function shareLinksPanel(detail, manage) {
         const item = detail.disclosure;
-        const rows = detail.share_links.map(function (/** @type {Payload} */ link) {
+        const rows = detail.share_links.map(function (/** @type {ShareLink} */ link) {
             const revoke = manage && link.state === 'active'
                 ? disclosureActionButton(t('disc.links.revoke'), function () {
                     return sendDisclosure('/api/disclosures/' + item.id + '/share-links/' + link.id, 'DELETE');
@@ -10481,7 +10565,7 @@
     function deliveriesPanel(detail, manage) {
         if (detail.deliveries.length === 0) return null;
         const item = detail.disclosure;
-        const rows = detail.deliveries.map(function (/** @type {Payload} */ delivery) {
+        const rows = detail.deliveries.map(function (/** @type {import('../types').DisclosureDelivery} */ delivery) {
             const retry = manage && delivery.state !== 'delivered'
                 ? disclosureActionButton(t('disc.deliveries.retry'), function () {
                     return sendDisclosure('/api/disclosures/' + item.id + '/deliveries/' + delivery.id + '/retry', 'POST');
@@ -10513,7 +10597,7 @@
     }
 
     /**
-     * @param {Payload} report
+     * @param {DisclosureReport | null} report
      */
     function methodPanel(report) {
         if (!report) return null;
@@ -10544,7 +10628,7 @@
     /**
      * A button that runs one write, says what came of it, and reloads the detail.
      * @param {string} label
-     * @param {() => Promise<any>} run
+     * @param {() => Promise<DisclosureOutcome>} run
      * @param {string} done
      * @param {boolean} [primary]
      */
@@ -10752,13 +10836,13 @@
                     ? el('p', {text: PSL.ACCESS_NO_REACH})
                     : accessTable(t('access.reach.caption'),
                         [t('access.col.project'), t('access.col.group'), t('access.col.role'), t('access.col.permissions')],
-                        reach.map(function (/** @type {Payload} */ row) {
+                        reach.map(function (/** @type {{project: string, group: string, role: string, permissions: string}} */ row) {
                             return [row.project, row.group, row.role, row.permissions];
                         }))
             ]));
         }
         if (state.tokens || state.tokensFailed) {
-            section.appendChild(tokensCard((state.tokens || []).filter(function (/** @type {Payload} */ token) {
+            section.appendChild(tokensCard((state.tokens || []).filter(function (/** @type {TerminalToken} */ token) {
                 return token.subject === access.subject;
             }), t('access.card.own_tokens'), 'tokens-own'));
         }
@@ -10860,7 +10944,7 @@
      * The terminal tokens `perf-sentinel login` obtained, each with a Revoke that asks once
      * more before it acts. Revoking takes effect on the token's next request, and the
      * outcome is announced in the card, which takes the focus once the list is redrawn.
-     * @param {Array<Payload>} tokens
+     * @param {TerminalToken[]} tokens
      * @param {string} title
      * @param {string} headingId
      */
@@ -10881,14 +10965,14 @@
                     ? el('p', {class: 'access-muted', text: t('access.tokens.none')})
                     : accessTable(t('access.tokens.caption'), [t('access.col.owner'), t('access.col.requested_from'),
                             t('access.col.created'), t('access.col.expires'), t('access.col.last_used'), ''],
-                        rows.map(function (/** @type {Payload} */ row) {
+                        rows.map(function (/** @type {{id: string, owner: string, from: string, created: string, expires: string, lastUsed: string}} */ row) {
                             return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row, headingId)];
                         }))
         ], headingId);
     }
 
     /**
-     * @param {Payload} row
+     * @param {{id: string, owner: string, from: string, created: string, expires: string, lastUsed: string}} row
      * @param {string} card
      */
     function revokeButton(row, card) {
@@ -10937,7 +11021,7 @@
     }
 
     /**
-     * @param {Array<Payload>} projects
+     * @param {import('../types').AccessProject[]} projects
      */
     function projectsTable(projects) {
         return accessTable(t('access.projects.caption'), [t('access.col.project'), t('access.col.patterns')],
@@ -10963,7 +11047,7 @@
     }
 
     /**
-     * @param {Payload} configuration
+     * @param {import('../types').AccessConfiguration} configuration
      */
     function configurationCard(configuration) {
         const now = Date.now();
@@ -10984,10 +11068,10 @@
             el('p', {class: 'access-muted', text: t('access.config.loaded')}),
             configurationPart(t('access.config.projects'), configuration.projects.length,
                 projectsTable(configuration.projects)),
-            part('roles', configuration.roles.length, ['role', 'permissions'], configuration.roles.map(function (/** @type {Payload} */ role) {
+            part('roles', configuration.roles.length, ['role', 'permissions'], configuration.roles.map(function (/** @type {AccessConfiguration['roles'][number]} */ role) {
                 return [role.built_in ? role.name + ' ' + t('access.config.built_in') : role.name, role.permissions.join(', ')];
             })),
-            part('grants', configuration.grants.length, ['group', 'project', 'role'], configuration.grants.map(function (/** @type {Payload} */ grant) {
+            part('grants', configuration.grants.length, ['group', 'project', 'role'], configuration.grants.map(function (/** @type {AccessConfiguration['grants'][number]} */ grant) {
                 return [grant.group, grant.project, grant.role];
             })),
             part('internal_groups', configuration.internal_groups.length, ['internal_group', 'members'],
@@ -11002,7 +11086,7 @@
                     el('dd', {text: configuration.admin_groups.length === 0 ? none : configuration.admin_groups.join(', ')})
                 ])),
             part('machine_tokens', configuration.machine_tokens.length, ['machine_token', 'group', 'expires'],
-                configuration.machine_tokens.map(function (/** @type {Payload} */ token) {
+                configuration.machine_tokens.map(function (/** @type {AccessConfiguration['machine_tokens'][number]} */ token) {
                     return [token.name, token.group, PSL.accessExpiry(token.expires_at_ms, now)];
                 })),
             part('local_accounts', configuration.local_accounts.length, ['local_account', 'signs_in_as'],
@@ -11014,7 +11098,7 @@
 
     /**
      * What no project covers, the one part of the screen that asks for a change.
-     * @param {Payload} unmatched
+     * @param {import('../types').AccessUnmatched} unmatched
      */
     function attentionCard(unmatched) {
         const count = unmatched.services.length + unmatched.attributes.length + unmatched.sources.length;
@@ -11025,20 +11109,20 @@
         if (unmatched.services.length > 0) {
             parts.push(accessTable(t('coverage.services.caption'),
                 [t('access.col.service'), t('access.col.seen_at'), t('access.col.findings')],
-                unmatched.services.map(function (/** @type {Payload} */ row) {
+                unmatched.services.map(function (/** @type {AccessUnmatched['services'][number]} */ row) {
                     return [row.service == null ? t('coverage.no_service') : row.service,
                         row.source_ids.map(sourceName).join(', '), String(row.findings)];
                 })));
         }
         if (unmatched.attributes.length > 0) {
             parts.push(accessTable(t('coverage.attributes.caption'), [t('access.col.attribute'), t('access.col.findings')],
-                unmatched.attributes.map(function (/** @type {Payload} */ row) {
+                unmatched.attributes.map(function (/** @type {AccessUnmatched['attributes'][number]} */ row) {
                     return [row.key + '=' + row.value, String(row.findings)];
                 })));
         }
         if (unmatched.sources.length > 0) {
             parts.push(accessTable(t('coverage.sources.caption'), [t('access.col.unnamed_source'), t('access.col.findings')],
-                unmatched.sources.map(function (/** @type {Payload} */ row) {
+                unmatched.sources.map(function (/** @type {AccessUnmatched['sources'][number]} */ row) {
                     // A trace backend stores no finding of its own: its runs are read live.
                     return [sourceName(row.source_id), row.findings == null ? t('coverage.backend') : String(row.findings)];
                 })));
@@ -11050,7 +11134,7 @@
     }
 
     /**
-     * @param {Payload} conflicts
+     * @param {import('../types').AccessConflicts} conflicts
      */
     function conflictsCard(conflicts) {
         return accessCard(t('coverage.conflicts.title'), [
@@ -11061,7 +11145,7 @@
                     ['source', 'signature', 'service', 'key', 'values', 'missing_key'].map(function (heading) {
                         return t('access.col.' + heading);
                     }),
-                    conflicts.copies.map(function (/** @type {Payload} */ row) {
+                    conflicts.copies.map(function (/** @type {import('../types').AccessConflicts['copies'][number]} */ row) {
                         return [sourceName(row.source_id), row.signature, row.service || t('coverage.no_service'), row.key,
                             row.values.join(', '), String(row.identities_without_key)];
                     })),

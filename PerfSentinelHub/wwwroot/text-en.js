@@ -771,7 +771,6 @@
         'run.outcome.gate_failed': 'The quality gate did not pass. The dashboard holds the full detail.',
         'run.count.gate': 'quality gate',
         'run.count.findings': 'findings',
-        'run.count.found': 'found',
         'run.count.critical': 'critical',
         'run.count.warning': 'warning',
         'run.count.info': 'info',
@@ -799,9 +798,6 @@
         'run.outcome.expired_body': 'Retention is not configurable from here. Running the same analysis again '
             + 'produces a new report with a new clock. It will not reproduce the old one, because the source '
             + 'has moved on since then.',
-        'run.trimmed': 'trimmed',
-        'run.trimmed_body': '{found} findings were found and {kept} are in the report. The sink dropped the '
-            + 'rest to fit, critical last, so what survived is what mattered most.',
         'run.resubmit_refused': 'The Hub refused the resubmission.',
         'run.hub_down': 'The Hub is not answering. This page keeps what it last read and asks again.',
         'new.advanced.warning': 'Warning, expert settings.',

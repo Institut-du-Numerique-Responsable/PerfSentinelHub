@@ -822,7 +822,6 @@
             + 'détail.',
         'run.count.gate': 'quality gate',
         'run.count.findings': 'findings',
-        'run.count.found': 'trouvés',
         'run.count.critical': 'critiques',
         'run.count.warning': 'avertissements',
         'run.count.info': 'infos',
@@ -850,10 +849,6 @@
         'run.outcome.expired_body': 'La durée de conservation ne se règle pas ici. Relancer la même analyse '
             + 'produit un nouveau rapport avec un nouveau compte à rebours. Il ne reproduira pas l\'ancien, '
             + 'parce que la source a évolué depuis.',
-        'run.trimmed': 'élagué',
-        'run.trimmed_body': '{found} findings ont été trouvés et {kept} sont dans le rapport. Le sink a écarté '
-            + 'le reste pour tenir dans son budget, les critiques en dernier, donc ce qui reste est ce qui '
-            + 'comptait le plus.',
         'run.resubmit_refused': 'Le Hub a refusé la nouvelle soumission.',
         'run.hub_down': 'Le Hub ne répond pas. Cette page garde ce qu\'elle a lu en dernier et redemande.',
         'new.advanced.warning': 'Attention, réglages experts.',
