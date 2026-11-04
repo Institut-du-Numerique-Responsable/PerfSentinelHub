@@ -397,40 +397,46 @@ async function seedCorrelations(importKey: string): Promise<void> {
         {episodes: [episode(5, quiet, 0xa3, now - 9 * hour, now - 510 * minute, now - 510 * minute, 0.7)]});
 }
 
-// The card section previews a curve, which needs every day of the last closed month and of the one
-// before sealed with the day's avoidable and total operations. The busy daemon's ledger covers only
-// the days around now, so a ledger of its own, as a daemon restarted after those months would hold,
-// is pushed with the setup's import key: one page a month, every day sealed, a fifth of the work
-// avoidable in the earlier month and a twelfth in the later one.
-async function seedCardLedger(importKey: string): Promise<void> {
+// The Hub's history of the daemons that keep a ledger, as a source restarted today holds it: the
+// earlier ledgers, one page a month from the month before last up to yesterday, every day sealed
+// and none restarted. The daemons serve only today (fake-daemon.js), and a daemon retains 31 days
+// at most, so the recap's weeks and the card's months come from here. The card previews a curve
+// of the last closed month against the one before, so Checkout counts a fifth of its work avoidable
+// in the earlier month and a twelfth in the later one; every other day counts nothing, which is
+// what a daemon up with no traffic records, and why the findings still read as first seen today.
+async function seedLedgerHistory(importKey: string): Promise<void> {
     const dayMs = 86_400_000;
     const today = Math.floor(Date.now() / dayMs);
     const now = new Date();
-    const lastClosed = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1) / dayMs;
-    const before = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1) / dayMs;
-    const months: [number, number, number][] = [[before, lastClosed - 1, 5], [lastClosed, today - now.getUTCDate(), 12]];
-    // One page per month, each carrying its own ledger, pushed one after the other: a source
-    // holds a single import slot, so a second push while the first runs is a 503.
-    for (const [first, last, share] of months) {
-        const days = [];
-        for (let day = first; day <= last; day++) {
-            const total = 40_000_000 + (day % 7) * 1_000_000;
-            days.push({
-                day, sealed: true, gap: false, overflow_detections: 0, overflow_extra_io_ops: 0, shed_traces: 0,
-                ingest_rejected: 0, sampling_rate: 1, avoidable_io_ops: Math.floor(total / share),
-                total_io_ops: total, avoidable_gco2: 0.6, avoidable_gco2_low: 0.4
+    const monthStart = (back: number) => Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1) / dayMs;
+    const months: [number, number, number][] = [
+        [monthStart(2), monthStart(1) - 1, 5], [monthStart(1), monthStart(0) - 1, 12], [monthStart(0), today - 1, 0]
+    ];
+    for (const [index, source] of ["checkout-prod", "orders-prod", "ci-main"].entries()) {
+        // One page per month, each its own ledger, pushed one after the other: a source holds a
+        // single import slot, so a second push while the first runs is a 503.
+        for (const [first, last, share] of months) {
+            if (last < first) continue;
+            const days = [];
+            for (let day = first; day <= last; day++) {
+                const total = source === "checkout-prod" && share > 0 ? 40_000_000 + (day % 7) * 1_000_000 : 0;
+                days.push({
+                    day, sealed: true, gap: false, overflow_detections: 0, overflow_extra_io_ops: 0, shed_traces: 0,
+                    ingest_rejected: 0, sampling_rate: 1, avoidable_io_ops: total === 0 ? 0 : Math.floor(total / share),
+                    total_io_ops: total, avoidable_gco2: total === 0 ? 0 : 0.6, avoidable_gco2_low: total === 0 ? 0 : 0.4
+                });
+            }
+            const response = await fetch(`${BASE}/api/import/detections?source_id=${source}`, {
+                method: "POST",
+                headers: {"content-type": "application/json", "x-api-key": importKey},
+                body: JSON.stringify({
+                    ledger_id: `00000000-0000-4000-8000-${String(index).padStart(2, "0")}${String(first).padStart(10, "0")}`,
+                    started_ms: first * dayMs + 1_000, current_day: last + 1, oldest_day: first, sealed_through: last,
+                    counts: [], days, next_after: null
+                })
             });
+            if (!response.ok) throw new Error(`the ${source} ledger history push answered ${response.status}`);
         }
-        const response = await fetch(`${BASE}/api/import/detections?source_id=checkout-prod`, {
-            method: "POST",
-            headers: {"content-type": "application/json", "x-api-key": importKey},
-            body: JSON.stringify({
-                ledger_id: `00000000-0000-4000-8000-${String(first).padStart(12, "0")}`,
-                started_ms: first * dayMs + 1_000, current_day: last + 1, oldest_day: first, sealed_through: last,
-                counts: [], days, next_after: null
-            })
-        });
-        if (!response.ok) throw new Error(`the card ledger push answered ${response.status}`);
     }
 }
 
@@ -722,14 +728,15 @@ async function startAll(children: ChildProcess[]): Promise<void> {
                 // Production, like Checkout, so a link that names the environment and no
                 // source ticks the two of them and both buttons of the ack page apply.
                 ...source(5, "orders-prod", "Orders production", "production", "daemon", ACKED_PORT,
-                    ack("orders")),
-                ...source(6, "ci-main", "CI baseline", "ci", "daemon", BASELINE_PORT, ack("ci"))
+                    {...ack("orders"), ImportApiKey: importKey}),
+                ...source(6, "ci-main", "CI baseline", "ci", "daemon", BASELINE_PORT,
+                    {...ack("ci"), ImportApiKey: importKey})
             }
         });
     children.push(hub);
     await waitFor(`${BASE}/health/ready`, 90);
     await seedCorrelations(importKey);
-    await seedCardLedger(importKey);
+    await seedLedgerHistory(importKey);
     const disclosures = await seedDisclosures(engine);
     await startAccessHub(engine, children);
 
