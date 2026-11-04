@@ -1700,7 +1700,7 @@
         'recap.plain.chatty_service': 'Deux parties du système échangent beaucoup de petits messages pour une seule action, là où quelques messages plus gros suffiraient.',
         'recap.plain.pool_saturation': 'Les actions font la queue, car l\'application ne peut atteindre ses données que quelques-unes à la fois.',
         'recap.plain.serialized_calls': 'L\'application fait l\'une après l\'autre plusieurs étapes qui pourraient avoir lieu en même temps, et les utilisateurs attendent plus que nécessaire.',
-        'recap.reports.overline': '// rapports',
+        'recap.reports.overline': '// archives',
         'recap.reports.title': 'Rapports',
         'recap.reports.hint': 'figés à l\'écriture',
         'recap.reports.help': 'Un rapport est une copie d\'une période close qu\'aucune lecture ultérieure ne modifie. Un abonnement en écrit un à la fin de sa période. Générer un rapport fige la période et les filtres ci-dessus, en votre nom, et ne l\'envoie nulle part.',

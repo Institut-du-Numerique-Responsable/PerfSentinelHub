@@ -1630,7 +1630,7 @@
         'recap.plain.chatty_service': 'Two parts of the system exchange many small messages for one action, where a few larger ones would do.',
         'recap.plain.pool_saturation': 'Actions wait in line because the application can only reach its data a few at a time.',
         'recap.plain.serialized_calls': 'The application does several steps one after another that could run at the same time, so people wait longer than needed.',
-        'recap.reports.overline': '// reports',
+        'recap.reports.overline': '// archive',
         'recap.reports.title': 'Reports',
         'recap.reports.hint': 'frozen when written',
         'recap.reports.help': 'A report is a copy of a closed period that no later read changes. A subscription writes one when its period ends; Generate a report freezes the period and filters above, in your name, and sends it nowhere.',
