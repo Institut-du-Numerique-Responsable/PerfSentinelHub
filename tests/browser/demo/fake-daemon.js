@@ -91,38 +91,28 @@ if (acks !== null) routes["/api/acks"] = acks;
 // a ledger only under the id the status gives. A status without one, the daemon a
 // minor behind, has no such route, as a daemon below 0.37.0 has none.
 //
-// The capture's daemon started that day, so alone it would leave every closed day of
-// the recap's week and of the week before uncovered, and the recap would say it cannot
-// compare. So the daemon is served as started IDLE_DAYS earlier and idle until today:
-// each earlier day sealed with nothing counted, which is what a daemon up with no
-// traffic records, and why the findings still read as first seen today. Twenty-one days
-// cover, on a Sunday, the report frozen on the last closed week and the week before it;
-// the start day keeps the gap.
+// The capture's daemon started that day, and so does this one: its ledger holds today
+// alone, restart included, and today is an open day no view judges. The days before are
+// the Hub's own history of the source, which global-setup.ts pushes as the earlier
+// ledgers of a daemon that has since restarted: every day sealed, none restarted, so the
+// recap's weeks and the card's months read whole. A daemon retains 31 days at most, so
+// serving that history from here would not be a daemon the Hub accepts.
 const DAY_MS = 86_400_000;
-const IDLE_DAYS = 21;
 const ledger = optional("daemon-detections");
 if (ledger !== null && status.detection_ledger) {
     const page = JSON.parse(ledger);
     const shift = Math.floor(Date.now() / DAY_MS) - page.current_day;
     const day = (value) => (value === null ? null : value + shift);
-    const today = day(page.current_day);
     const header = {
-        ledger_id: page.ledger_id, started_ms: page.started_ms + (shift - IDLE_DAYS) * DAY_MS,
-        current_day: today, oldest_day: today - IDLE_DAYS, sealed_through: today - 1,
+        ledger_id: page.ledger_id, started_ms: page.started_ms + shift * DAY_MS,
+        current_day: day(page.current_day), oldest_day: day(page.oldest_day), sealed_through: day(page.sealed_through),
     };
-    const captured = page.days.map((row) => ({...row, day: day(row.day), gap: false}));
-    const idle = Array.from({length: IDLE_DAYS}, (_, i) => ({
-        ...captured[0], day: today - IDLE_DAYS + i, sealed: true, gap: i === 0,
-        avoidable_gco2: 0, avoidable_gco2_low: 0, avoidable_io_ops: 0, total_io_ops: 0,
-    }));
     routes["/api/detections"] = JSON.stringify({
         ...page, ...header, next_after: null,
         counts: page.counts.map((row) => ({...row, day: day(row.day)})),
-        days: [...idle, ...captured],
+        days: page.days.map((row) => ({...row, day: day(row.day)})),
     });
-    // A daemon that holds the whole span retains at least that many days.
-    const retained_days = Math.max(status.detection_ledger.retained_days ?? 0, IDLE_DAYS + 1);
-    routes["/api/status"] = JSON.stringify({...status, detection_ledger: {...status.detection_ledger, ...header, retained_days}});
+    routes["/api/status"] = JSON.stringify({...status, detection_ledger: {...status.detection_ledger, ...header}});
 }
 
 /** Where the Hub relays an ack, POST, or a revoke, DELETE. */

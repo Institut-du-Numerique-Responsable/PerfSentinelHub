@@ -162,6 +162,8 @@ api_enabled = true
 enabled = true
 api_key = "${INC_KEY}"
 lookback_ms = 3000
+# Since 0.42.0 deploy and restart alerts are dropped by default; the screens show every kind.
+ignored_kinds = []
 
 [detection]
 n_plus_one_min_occurrences = 5
