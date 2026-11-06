@@ -117,9 +117,10 @@ l'une de ses copies est dans le périmètre, et la réponse est construite à pa
 seules copies dans le périmètre.
 
 `GET /api/recap/filters` va plus loin pour les namespaces, car une copie dans le périmètre garde
-tous les namespaces où elle a été vue. Un motif sans `attribute` propose tous les namespaces des
-copies qu'il lit. Un motif avec `attribute` ne propose un namespace que si le Hub a enregistré la
-paire correspondante sur cette copie sous ce namespace : un périmètre sur `team=shop` propose les
+tous les namespaces où elle a été vue. Elle ne propose qu'un namespace vu pour la dernière fois à partir
+du premier jour de la période. Un motif sans `attribute` propose alors chacun de ceux-là sur les copies
+qu'il lit. Un motif avec `attribute` ne propose un namespace que si le Hub a enregistré la paire
+correspondante sur cette copie sous ce namespace : un périmètre sur `team=shop` propose les
 namespaces où la copie portait `team=shop`, et aucun autre. Un namespace pour lequel le Hub ne
 détient aucune ligne d'attributs n'est pas proposé à un tel motif, même s'il pourrait en faire
 partie.
@@ -422,6 +423,13 @@ l'activation de l'accès ne porte aucun sujet et se reconnecte.
   premier span : le projet d'un autre service ne le voit pas.
 - L'enveloppe la plus récente d'un finding peut décrire un autre regroupement du même
   service et du même endpoint que celui qu'un projet a reconnu.
+- Une copie garde tous les regroupements où elle a été vue, et `grouping` sur `GET /api/findings` et
+  `GET /api/recap` demande si une copie y a été vue, pas si le périmètre de l'appelant le couvre. Un
+  lecteur limité à `namespace=x` qui passe `grouping=y` récupère une ligne quand une copie qu'il lit a
+  aussi été vue sous `y`, ce qui confirme que `y` existe. Le récap accepte jusqu'à 50 valeurs de
+  `grouping` par lecture : une lecture teste donc jusqu'à 50 essais là où elle en testait un, et aucun
+  nom ne devient apprenable qu'un essai à la fois n'aurait pas révélé. `GET /api/recap/filters`
+  n'ajoute aucune divulgation.
 - Quiconque peut envoyer de l'OTLP à un démon peut fixer un attribut ou un nom de service.
   La comparaison se fait par copie : une valeur plantée n'expose que les copies de la
   source où elle a été plantée, mais des spans sous le nom de service d'une autre équipe

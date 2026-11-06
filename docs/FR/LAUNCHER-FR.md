@@ -37,6 +37,20 @@ s'ouvre sur un backend de traces, puisqu'un daemon ne prend aucune fenêtre, sel
 donnée sous L'écran des incidents. Là où le Hub n'a aucun backend de traces, la sélection
 reste, et sous un daemon le bandeau le dit et en demande un.
 
+Une source Tempo ajoute un bloc Lectures simultanées sous Traces max. : combien de corps de traces le
+moteur lit à la fois dans Tempo, transmis au moteur sous la forme `--fetch-concurrency`. C'est un champ,
+une puce et un curseur de 1 au maximum du Hub, vert jusqu'à son seuil et rouge au-delà, qui part du 16
+du moteur, abaissé au seuil ou au maximum quand l'un des deux est plus bas. Au-dessus du seuil, la puce
+passe au rouge et une alerte dit que Tempo consomme de la mémoire pour chaque lecture en vol et qu'un
+querier trop petit peut s'arrêter en pleine analyse. Lancer l'analyse reste éteint tant que sa case n'est
+pas cochée, et la case se décoche quand le nombre redescend. Au-dessus du maximum, il n'y a pas de case et
+le bouton reste éteint. Le seuil et le maximum sont `Hub:Analysis:FetchConcurrencyWarn` et
+`Hub:Analysis:FetchConcurrencyMax`, voir [CONFIGURATION-FR.md](CONFIGURATION-FR.md), et le Hub refuse un
+nombre au-delà du maximum quoi que l'écran ait fait. Le bloc est absent pour une source Jaeger, un daemon,
+un ID de trace et un moteur antérieur à 0.43.0, qui n'a pas cette option. Sur ce moteur, avec un maximum
+sous 16, un run Tempo ne peut pas être tenu au maximum : le bouton reste éteint et le dit. La commande
+imprimée et le résumé du run portent le nombre.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
   <img alt="L'écran de santé de la flotte avec une ligne daemon dépliée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
@@ -310,8 +324,8 @@ Le récapitulatif sert d'appui à la revue d'équipe : ce qui gaspille le plus, 
 période précédente de même durée. Aucun modèle de langage ne le rédige : chaque phrase est fixée à
 l'avance et chaque chiffre vient des registres de détections des daemons. Il lit `GET /api/recap` ([l'API](API-FR.md#recap)), donc son
 périmètre, ses filtres et son volume de détections sont ceux de la liste des findings. Une période
-(jour, semaine ou mois, la semaine par défaut), un jour quelconque de cette période, un environnement, un
-service, un namespace et la bascule Engineering ou Management la resserrent, et chaque choix s'écrit dans
+(jour, semaine ou mois, la semaine par défaut), un jour quelconque de cette période, un environnement,
+des services, des namespaces et la bascule Engineering ou Management la resserrent, et chaque choix s'écrit dans
 l'adresse, `#/recap?period=day&view=pilotage`, de sorte qu'une vue s'envoie en lien. La période se compte
 en jours UTC et le dit, alors que chaque horodatage de la page, le moment où une action a été prise ou
 terminée compris, s'affiche à votre heure avec son fuseau (`2026-10-29 14:32 CET`), l'instant UTC au survol.
@@ -334,6 +348,19 @@ calcul.
   <img alt="L'écran du récapitulatif : la période, quatre tuiles, puis les findings à traiter d'abord avec leur tendance et leur action" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap.png">
 </picture>
 
+Les services et les namespaces sont des listes à cocher. Un bouton affiche tous les services, ou le
+premier nom coché et +N pour les autres, et ouvre une liste avec un champ de recherche, une case par nom,
+le nombre de noms cochés et tout retirer. Cocher plusieurs services garde les findings de n'importe lequel,
+et un service avec un namespace garde ce qui correspond aux deux. Les noms sont ceux de la période et de
+l'environnement affichés, lus sur `GET /api/recap/filters` ([l'API](API-FR.md#filtres-du-récap)) à la
+première ouverture d'une liste, dans le même périmètre que le récap et sans compte. Le récap n'est calculé
+qu'une fois, à la fermeture de la liste (Échap, un clic à l'extérieur ou le bouton), pas à chaque case. Un
+nom coché mais absent de la période reste dans la liste, marqué absent de la période, pour pouvoir être
+décoché, et une liste contient 50 noms au plus. L'adresse répète la clé,
+`#/recap?service=cart&service=checkout`, et un lien écrit avec une seule valeur continue de filtrer sur
+elle. Quand le Hub ne renvoie pas les noms, la liste le dit et propose Réessayer, et ce qui est coché est
+conservé.
+
 La page se lit comme un ordre du jour. Sous la ligne de période, les notes (traces échantillonnées,
 traces délestées sous pression mémoire) et, quand un daemon a redémarré ou qu'un jour n'est pas encore
 scellé, un bandeau qui dit que la comparaison n'est pas exacte. Quatre tuiles suivent : les I/O évitables,
@@ -348,7 +375,12 @@ autres par sévérité sous un séparateur, dix au départ et tous derrière Sho
 service, l'endpoint, la suggestion, une barre d'ampleur relative à la première ligne et la tendance. Replié
 dessous, ouvert sur la première carte : la requête ou l'appel, le correctif suggéré avec son framework et son
 lien de référence (seule une adresse http ou https devient un lien), l'endroit dans le code, la confiance, la
-signature et l'historique de l'action. Take déclare l'action au nom sous lequel le Hub vous connaît, le
+signature et l'historique de l'action. Un template SQL est mis en page pour la lecture : chaque clause
+(`select`, `from`, chaque `join`, `where`, `group by`, `having`, `order by`, `limit`, `union`) commence une
+ligne, et les colonnes restent groupées et reviennent à la ligne avec le bloc. Les mots-clés, les tables, les
+paramètres et les colonnes prennent quatre couleurs du thème, chacune au contraste AA en clair et en sombre.
+Seuls les blancs bougent, aucun jeton ne change, donc ce qu'on copie est la même requête. Une requête de plus
+de 600 caractères est colorée sans être coupée en lignes, et une route ou un topic s'affiche tel quel. Take déclare l'action au nom sous lequel le Hub vous connaît, le
 sélecteur à côté la fait passer entre to do, in progress et done, et le verdict du moteur sur une action
 terminée (confirmed, still detected, came back, waiting for a sealed day) apparaît à côté. Acknowledge ouvre
 la page d'acquittement. Name this, ou Rename, donne à l'endpoint un nom métier qui titre la ligne, en

@@ -32,6 +32,21 @@ since a daemon takes no window, by the rule given under The incidents screen. Wh
 has no trace backend the selection stays, and under a daemon the banner says so and asks for
 one.
 
+A Tempo source adds a Simultaneous reads block under Max traces: how many trace bodies the
+engine reads from Tempo at once, passed to it as `--fetch-concurrency`. It is a field, a chip
+and a slider from 1 to the Hub's maximum, green up to its threshold and red above, and it
+starts at the engine's own 16, lowered to the threshold or the maximum when either is lower.
+Above the threshold the chip turns red and an alert says that Tempo spends memory on every
+read in flight and that an undersized querier can stop in the middle of the analysis. Run
+analysis stays off until its box is ticked, and the box clears when the count drops back.
+Above the maximum there is no box and the button stays off. The threshold and the maximum
+are `Hub:Analysis:FetchConcurrencyWarn` and `Hub:Analysis:FetchConcurrencyMax`, see
+[CONFIGURATION.md](CONFIGURATION.md), and the Hub refuses a count past the maximum whatever
+the screen did. The block is absent for a Jaeger source, a daemon, a trace ID, and an engine
+older than 0.43.0, which has no such flag. On that engine, with a maximum under 16, a Tempo
+run cannot be held to the maximum, so the button stays off and says so. The printed command
+and the run's summary carry the count.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
   <img alt="The fleet health screen with a daemon row unfolded" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">
@@ -283,7 +298,7 @@ The recap is the support for a team review: what wastes the most, and what moved
 period of the same length. No language model writes it: every sentence is fixed copy and every figure
 comes from the daemons' detection ledgers. It reads `GET /api/recap` ([the API](API.md#recap)), so its scope, its
 filters and its detection volume are the ones of the findings list. A period (day, week or month, the
-week by default), any day inside it, an environment, a service, a namespace and an Engineering or
+week by default), any day inside it, an environment, services, namespaces and an Engineering or
 Management switch narrow it, and each choice is written in the address, `#/recap?period=day&view=pilotage`,
 so a view can be sent as a link. The period is counted in UTC days and says so, while every timestamp
 on the page, the moment an action was taken or finished included, shows in your own time with its zone
@@ -306,6 +321,18 @@ in one request, with a banner that says leaving restarts it.
   <img alt="The recap screen: the period, four tiles, then the findings to fix first with their trend and their action" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-recap.png">
 </picture>
 
+Services and namespaces are checkbox lists. A button reads All services, or the first name ticked
+and +N for the others, and opens a list with a search field, a box per name, the number ticked and
+Clear all. Ticking several services keeps the findings of any of them, and a service with a
+namespace keeps what matches both. The names are those of the period and the environment on screen,
+read from `GET /api/recap/filters` ([the API](API.md#recap-filters)) the first time a list opens,
+within the same scope as the recap and without a count. The recap is computed once, when the list
+closes (Escape, a click outside or the button), not at every tick. A name ticked but absent from the
+period stays in the list, marked not in this period, so it can be unticked, and a list holds at most
+50 names. The address repeats the key, `#/recap?service=cart&service=checkout`, and a link written
+with one value keeps filtering on it. When the Hub does not return the names, the list says so and
+offers Try again, and what is ticked is kept.
+
 The page reads like an agenda. Under the period line, the notes (sampled traces, traces shed under
 memory pressure) and, when a daemon restarted or a day is not sealed yet, a banner saying the
 comparison is not exact. Four tiles follow: the avoidable I/O, the carbon estimate (an order of
@@ -319,7 +346,12 @@ others by severity below a separator, ten at first and every one behind Show all
 type, the service, the endpoint, the suggestion, a magnitude bar relative to the first row and the
 trend. Folded under it, open on the first card: the query or call, the suggested fix with its
 framework and its reference link (only an http or https address becomes a link), the place in the
-code, the confidence, the signature and the history of the action. Take declares the action in the
+code, the confidence, the signature and the history of the action. A SQL template is laid out for reading: each clause
+(`select`, `from`, every `join`, `where`, `group by`, `having`, `order by`, `limit`, `union`) starts a
+line, and the columns stay grouped and wrap with the block. Keywords, tables, parameters and columns
+take four theme colors, each at AA contrast in light and dark. Only blanks move, no token changes, so
+what is copied is the same query. A statement over 600 characters is colored but not cut into lines,
+and a route or a topic prints as it is. Take declares the action in the
 name the Hub knows you by, the select beside it moves it between to do, in progress and done, and
 the engine's verdict on a done action (confirmed, still detected, came back, waiting for a sealed
 day) appears beside it. Acknowledge opens the ack page. Name this, or Rename, gives the endpoint a

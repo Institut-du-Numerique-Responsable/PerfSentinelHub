@@ -604,10 +604,13 @@ nowhere gets the `403` the findings list gives.
 
 `service=a&service=b` keeps the findings of `a` or `b`, and a service and a grouping together keep
 the findings that match both. A value that is blank is ignored, as it is on `/api/findings`. A list
-holds at most 50 values of 256 characters, with no control character: more is a `400` with the code
-`invalid_recap_query`. A repeated parameter other than `service` and `grouping`, a value the list
-does not know or invalid UTF-8 is a `400` too. The same values in another order, or repeated, are
-the same recap.
+holds at most 50 values of 256 characters, with no control character, a single value included: more
+is a `400` with the code `invalid_recap_query`. A repeated parameter other than `service` and
+`grouping`, a value the list does not know or invalid UTF-8 is a `400` too. The same values in
+another order, or repeated, are the same recap. The full 50 by 256 cannot be sent on a `GET`: that
+is 12,800 characters before any percent-encoding, and Kestrel stops a request line at 8 KB with a
+`414` before the Hub reads it. A query carries fewer, and only a body, `POST /api/recap/reports`,
+reaches the cap.
 
 The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, `period` and
 `previous` (each `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
@@ -704,7 +707,8 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
 `GET /api/recap/filters` lists the names a reader may filter the recap on, for one period. It takes
 `period`, `at`, `environment` and `source_id` as `GET /api/recap` does, with the same `400`, and it
 is never open: a caller with `findings.read` nowhere gets the same `403`. A `service` or a `grouping`
-in the query is ignored, so a choice already made does not narrow the list.
+in the query does not narrow the list, so a choice already made leaves it whole. It is still checked
+against the caps above, since a value past them is a `400` here as on `GET /api/recap`.
 
 ```json
 {"services":["cart","checkout"],"groupings":["shop-eu","shop-us"]}

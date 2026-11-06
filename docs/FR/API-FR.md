@@ -653,10 +653,13 @@ liste des findings.
 
 `service=a&service=b` garde les findings de `a` ou de `b`, et un service avec un grouping gardent
 les findings qui correspondent aux deux. Une valeur vide est ignorée, comme sur `/api/findings`. Une
-liste compte au plus 50 valeurs de 256 caractères, sans caractère de contrôle : au-delà, c'est un
-`400` de code `invalid_recap_query`. Un paramètre répété autre que `service` et `grouping`, une
-valeur que la liste ne connaît pas ou de l'UTF-8 invalide est aussi un `400`. Les mêmes valeurs dans
-un autre ordre, ou répétées, donnent le même récap.
+liste compte au plus 50 valeurs de 256 caractères, sans caractère de contrôle, une valeur unique
+comprise : au-delà, c'est un `400` de code `invalid_recap_query`. Un paramètre répété autre que
+`service` et `grouping`, une valeur que la liste ne connaît pas ou de l'UTF-8 invalide est aussi un
+`400`. Les mêmes valeurs dans un autre ordre, ou répétées, donnent le même récap. Les 50 fois 256 au
+complet ne tiennent pas dans un `GET` : cela fait 12 800 caractères avant tout encodage, et Kestrel
+arrête une ligne de requête à 8 Ko avec un `414` avant que le Hub la lise. Une requête en porte moins,
+et seul un corps, `POST /api/recap/reports`, atteint le plafond.
 
 La réponse est un instantané, `schema_version` `1`, avec `view`, `generated_at_ms`, `period`
 et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
@@ -757,8 +760,9 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
 `GET /api/recap/filters` liste les noms sur lesquels un lecteur peut filtrer le récap, pour une
 période. La route prend `period`, `at`, `environment` et `source_id` comme `GET /api/recap`, avec le
 même `400`, et n'est jamais ouverte : un appelant sans `findings.read` reçoit le même `403`. Un
-`service` ou un `grouping` dans la requête est ignoré, pour qu'un choix déjà fait ne réduise pas la
-liste.
+`service` ou un `grouping` dans la requête ne réduit pas la liste, de sorte qu'un choix déjà fait la
+laisse entière. Il est quand même contrôlé par les plafonds ci-dessus, car une valeur qui les dépasse
+donne ici un `400`, comme sur `GET /api/recap`.
 
 ```json
 {"services":["cart","checkout"],"groupings":["shop-eu","shop-us"]}

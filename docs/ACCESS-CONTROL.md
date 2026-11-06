@@ -107,9 +107,10 @@ and the attributes that source reported. A finding is listed when one of its cop
 scope, and the answer is built from in-scope copies only.
 
 `GET /api/recap/filters` goes further for namespaces, since a copy in scope keeps every namespace
-it was seen in. A pattern with no `attribute` offers all the namespaces of the copies it reads. A
-pattern with an `attribute` offers a namespace only when the Hub recorded the matching pair on that
-copy under that namespace: a scope on `team=shop` offers the namespaces where the copy carried
+it was seen in. It offers only a namespace last seen on or after the first day of the period. A
+pattern with no `attribute` then offers each of those on the copies it reads. A pattern with an
+`attribute` offers a namespace only when the Hub recorded the matching pair on that copy under that
+namespace: a scope on `team=shop` offers the namespaces where the copy carried
 `team=shop`, and no other. A namespace the Hub holds no attribute row for is not offered to such a
 pattern, even when it could belong.
 
@@ -392,6 +393,13 @@ before access was turned on carries no subject and signs in again.
   another service's project does not see it.
 - A finding's newest envelope may describe another grouping of the same service and
   endpoint than the one a project matched.
+- A copy keeps every grouping it was seen in, and `grouping` on `GET /api/findings` and
+  `GET /api/recap` asks whether a copy was seen in it, not whether the caller's scope covers it. A
+  reader limited to `namespace=x` who passes `grouping=y` gets a row back when a copy they read
+  was also seen under `y`, which confirms that `y` exists. The recap takes up to 50 values of
+  `grouping` per read, so a read tests up to 50 guesses where it tested one, and no name
+  becomes learnable that one guess at a time was not. `GET /api/recap/filters` adds no
+  disclosure.
 - Anyone who can send OTLP to a daemon can set an attribute or a service name. Matching
   is per copy, so a planted value exposes only copies at the source it was planted on,
   but spans under another team's service name with another value deny that team's
