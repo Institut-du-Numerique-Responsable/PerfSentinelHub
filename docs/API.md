@@ -699,6 +699,26 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
 - **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
   `truncated: true`; narrow the request with a filter.
 
+### Recap filters
+
+`GET /api/recap/filters` lists the names a reader may filter the recap on, for one period. It takes
+`period`, `at`, `environment` and `source_id` as `GET /api/recap` does, with the same `400`, and it
+is never open: a caller with `findings.read` nowhere gets the same `403`. A `service` or a `grouping`
+in the query is ignored, so a choice already made does not narrow the list.
+
+```json
+{"services":["cart","checkout"],"groupings":["shop-eu","shop-us"]}
+```
+
+- **Names.** Those of the finding copies present in the period, acknowledged ones included, each list
+  sorted by name. A copy absent from the period offers nothing, even when another copy of the same
+  finding is present.
+- **No count.** A name carries no volume. Adding up a service's avoidable I/O takes the findings read
+  of the recap, which takes seconds under a narrowed scope, and a namespace could not carry one anyway:
+  volumes are stored per finding, and a finding seen in two namespaces would count whole in both.
+- **Scope.** No name outside the caller's `findings.read` scope, see
+  [ACCESS-CONTROL.md](ACCESS-CONTROL.md#projects).
+
 ### Recap jobs
 
 On a large database the recap takes minutes, longer than a browser should hold one request open.

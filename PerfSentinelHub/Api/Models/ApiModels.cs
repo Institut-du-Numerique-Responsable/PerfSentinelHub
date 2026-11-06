@@ -426,3 +426,6 @@ public sealed record TerminalTokenResponse(
     long CreatedAtMs,
     long ExpiresAtMs,
     long? LastUsedAtMs);
+
+// GET /api/recap/filters: the names a reader may filter the recap on, each list sorted by name.
+public sealed record RecapFilterOptions(IReadOnlyList<string> Services, IReadOnlyList<string> Groupings);

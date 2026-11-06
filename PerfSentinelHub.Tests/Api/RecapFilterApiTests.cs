@@ -106,6 +106,23 @@ public sealed class RecapFilterApiTests(HubApplicationFactory factory) : IClassF
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // The wire shape the screen reads. A choice already made does not narrow the list it is made from.
+    [Fact]
+    public async Task The_filters_list_every_name_of_the_period_whatever_is_already_chosen()
+    {
+        await SeedFilteredAsync();
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/recap/filters?period=day&service=rcp-a&grouping=rcp-ns-y", Token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Token));
+        Assert.Equal(["rcp-a", "rcp-b", "rcp-c"],
+            document.RootElement.GetProperty("services").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal(["rcp-ns-x", "rcp-ns-y"],
+            document.RootElement.GetProperty("groupings").EnumerateArray().Select(item => item.GetString()));
+    }
+
     private static string Repeated(string name, int count, string stem)
     {
         return string.Join('&', Enumerable.Range(0, count).Select(index => $"{name}={stem}{index}"));

@@ -75,6 +75,21 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             NamesOf(request, coverage.Late));
     }
 
+    /// <summary>
+    ///     The names a reader may filter this recap on, for the period and sources of
+    ///     <paramref name="request" />, whatever it has already chosen: the list never narrows itself.
+    ///     No count: the findings read behind one takes seconds under a narrowed scope.
+    /// </summary>
+    public async Task<RecapFilterOptions> FilterOptionsAsync(
+        RecapRequest request,
+        CancellationToken cancellationToken)
+    {
+        var window = RecapPeriod.Of(request.Kind, request.At);
+        return new RecapFilterOptions(
+            await database.QueryRecapServicesAsync(window, request.SourceIds, request.Access, cancellationToken),
+            await database.QueryRecapGroupingsAsync(window, request.SourceIds, request.Access, cancellationToken));
+    }
+
     // ------------------------------------------------------------ reads
 
     private async Task<Reads> ReadFindingsAsync(

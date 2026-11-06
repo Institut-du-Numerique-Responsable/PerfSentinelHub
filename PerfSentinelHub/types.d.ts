@@ -504,6 +504,12 @@ export interface RecapTiles {
     };
 }
 
+/** GET /api/recap/filters, `RecapFilterOptions`. Each list is sorted by name. */
+export interface RecapFilterOptions {
+    services: string[];
+    groupings: string[];
+}
+
 /** GET /api/recap, `RecapSnapshot`. */
 export interface RecapSnapshot {
     schema_version: number;

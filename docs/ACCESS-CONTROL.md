@@ -106,6 +106,13 @@ A finding is matched per source: its copy at each source has that source's own s
 and the attributes that source reported. A finding is listed when one of its copies is in
 scope, and the answer is built from in-scope copies only.
 
+`GET /api/recap/filters` goes further for namespaces, since a copy in scope keeps every namespace
+it was seen in. A pattern with no `attribute` offers all the namespaces of the copies it reads. A
+pattern with an `attribute` offers a namespace only when the Hub recorded the matching pair on that
+copy under that namespace: a scope on `team=shop` offers the namespaces where the copy carried
+`team=shop`, and no other. A namespace the Hub holds no attribute row for is not offered to such a
+pattern, even when it could belong.
+
 ### Roles and permissions
 
 | Permission      | Allows                                                                          |
@@ -155,6 +162,7 @@ does not depend on the provider at all.
 | `GET /api/status`, `GET /api/sources`                                  | any permission anywhere                                         | `403`                   |
 | `GET /api/findings`, `GET /api/findings/{traceId}`                     | `findings.read`, filtered                                       | `403` when held nowhere |
 | `GET /api/recap`                                                       | `findings.read`, filtered                                       | `403` when held nowhere |
+| `GET /api/recap/filters`                                               | `findings.read`, filtered per name                              | `403` when held nowhere |
 | `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html` | `recaps.read` on `*`, or the creator of an on-demand report with `findings.read` | `403` (list), `404` (one report) |
 | `POST /api/recap/reports`                                              | `findings.read`, filtered, and somebody to name                 | `403`                   |
 | `GET /api/cards/keys`, `POST /api/cards/keys/rotate` and `/revoke`    | `access.admin`, and somebody to name                            | `403`                   |

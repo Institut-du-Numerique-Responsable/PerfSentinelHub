@@ -752,6 +752,28 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
 - **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
   `truncated: true` ; resserrez la requête avec un filtre.
 
+### Filtres du récap
+
+`GET /api/recap/filters` liste les noms sur lesquels un lecteur peut filtrer le récap, pour une
+période. La route prend `period`, `at`, `environment` et `source_id` comme `GET /api/recap`, avec le
+même `400`, et n'est jamais ouverte : un appelant sans `findings.read` reçoit le même `403`. Un
+`service` ou un `grouping` dans la requête est ignoré, pour qu'un choix déjà fait ne réduise pas la
+liste.
+
+```json
+{"services":["cart","checkout"],"groupings":["shop-eu","shop-us"]}
+```
+
+- **Noms.** Ceux des copies de findings présentes dans la période, acquittées comprises, chaque liste
+  triée par nom. Une copie absente de la période ne propose rien, même si une autre copie du même
+  finding est présente.
+- **Aucun compte.** Un nom ne porte aucun volume. Additionner les I/O évitables d'un service demande la
+  lecture des findings du récap, qui prend plusieurs secondes sous un périmètre réduit, et un namespace
+  ne pourrait de toute façon pas en porter : les volumes sont stockés par finding, et un finding vu dans
+  deux namespaces compterait en entier dans les deux.
+- **Périmètre.** Aucun nom hors du périmètre `findings.read` de l'appelant, voir
+  [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#projets).
+
 ### Calcul du récap en tâche
 
 Sur une grosse base, le récap prend plusieurs minutes, plus longtemps qu'un navigateur ne devrait

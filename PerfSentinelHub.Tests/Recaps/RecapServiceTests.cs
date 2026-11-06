@@ -443,6 +443,75 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal("one", Assert.Single(snapshot.Priorities).Signature);
     }
 
+    // ------------------------------------------------------------ filter options
+
+    [Fact]
+    public async Task The_filter_names_keep_to_the_period_and_the_environment()
+    {
+        await SeedAsync("a", "now", Thu, service: "svc-now", grouping: "ns-now");
+        await SeedAsync("a", "old", LastMon, service: "svc-old", grouping: "ns-old");
+        await SeedAsync("b", "lab", Thu, service: "svc-lab", grouping: "ns-lab");
+
+        var options = await _service.FilterOptionsAsync(Request("prod"), Token);
+
+        Assert.Equal(["svc-now"], options.Services);
+        Assert.Equal(["ns-now"], options.Groupings);
+    }
+
+    // The period is judged copy by copy: a sibling seen this week does not bring back last week's names.
+    [Fact]
+    public async Task A_copy_out_of_the_period_offers_no_name_through_a_sibling_in_it()
+    {
+        await SeedAsync("a", "f", LastMon, service: "svc-old", grouping: "ns-old");
+        await SeedAsync("b", "f", Thu, service: "svc-now", grouping: "ns-now");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-now"], options.Services);
+        Assert.Equal(["ns-now"], options.Groupings);
+    }
+
+    [Fact]
+    public async Task The_filter_names_are_sorted_and_each_appears_once()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-b", grouping: "ns-b");
+        await SeedAsync("a", "two", Thu, service: "svc-a", grouping: "ns-c");
+        await SeedAsync("b", "three", Thu, service: "svc-a", grouping: "ns-a");
+        await SeedAsync("b", "four", Thu, service: "svc-c", grouping: "ns-b");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-a", "svc-b", "svc-c"], options.Services);
+        Assert.Equal(["ns-a", "ns-b", "ns-c"], options.Groupings);
+    }
+
+    // The recap still counts an acked finding, and can be filtered down to it.
+    [Fact]
+    public async Task An_acked_finding_keeps_its_names_on_offer()
+    {
+        await SeedAsync("a", "acked", Thu, service: "svc-1", grouping: "ns-x");
+        await _database.ReplaceSourceAcksAsync(
+            "a", [new ParsedAck("acked", "daemon", "robin", "known", "2026-09-20T10:00:00Z", null, null)],
+            AckReadStates.Ok, NowMs, Token);
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-1"], options.Services);
+        Assert.Equal(["ns-x"], options.Groupings);
+    }
+
+    [Fact]
+    public async Task A_choice_already_made_does_not_narrow_the_filter_options()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-1", grouping: "ns-x");
+        await SeedAsync("a", "two", Thu, service: "svc-2", grouping: "ns-y");
+
+        var options = await _service.FilterOptionsAsync(Request(services: ["svc-1"], groupings: ["ns-x"]), Token);
+
+        Assert.Equal(["svc-1", "svc-2"], options.Services);
+        Assert.Equal(["ns-x", "ns-y"], options.Groupings);
+    }
+
     [Fact]
     public async Task Up_and_down_follow_the_configured_threshold()
     {

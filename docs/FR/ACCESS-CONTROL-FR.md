@@ -116,6 +116,14 @@ Un finding est comparé source par source : sa copie dans chaque source a le ser
 l'une de ses copies est dans le périmètre, et la réponse est construite à partir des
 seules copies dans le périmètre.
 
+`GET /api/recap/filters` va plus loin pour les namespaces, car une copie dans le périmètre garde
+tous les namespaces où elle a été vue. Un motif sans `attribute` propose tous les namespaces des
+copies qu'il lit. Un motif avec `attribute` ne propose un namespace que si le Hub a enregistré la
+paire correspondante sur cette copie sous ce namespace : un périmètre sur `team=shop` propose les
+namespaces où la copie portait `team=shop`, et aucun autre. Un namespace pour lequel le Hub ne
+détient aucune ligne d'attributs n'est pas proposé à un tel motif, même s'il pourrait en faire
+partie.
+
 ### Rôles et permissions
 
 | Permission      | Permet                                                                                 |
@@ -166,6 +174,7 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `GET /api/status`, `GET /api/sources`                                                                                                                                  | une permission quelque part                                                                       | `403`                              |
 | `GET /api/findings`, `GET /api/findings/{traceId}`                                                                                                                     | `findings.read`, filtré                                                                           | `403` si détenue nulle part        |
 | `GET /api/recap`                                                                                                                                                       | `findings.read`, filtré                                                                           | `403` si détenue nulle part        |
+| `GET /api/recap/filters`                                                                                                                                               | `findings.read`, filtré par nom                                                                   | `403` si détenue nulle part        |
 | `GET /api/recap/reports`, `GET /api/recap/reports/{id}`, `GET /recaps/{id}/{view}.html`                                                                                | `recaps.read` sur `*`, ou le créateur d'un rapport à la demande avec `findings.read`              | `403` (liste), `404` (un rapport)  |
 | `POST /api/recap/reports`                                                                                                                                              | `findings.read`, filtré, et quelqu'un à nommer                                                    | `403`                              |
 | `GET /api/cards/keys`, `POST /api/cards/keys/rotate` et `/revoke`                                                                                                      | `access.admin`, et quelqu'un à nommer                                                             | `403`                              |
