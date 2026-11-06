@@ -328,8 +328,8 @@ namespace keeps what matches both. The names are those of the period and the env
 read from `GET /api/recap/filters` ([the API](API.md#recap-filters)) the first time a list opens,
 within the same scope as the recap and without a count. The recap is computed once, when the list
 closes (Escape, a click outside or the button), not at every tick. A name ticked but absent from the
-period stays in the list, marked not in this period, so it can be unticked, and a list holds at most
-50 names. The address repeats the key, `#/recap?service=cart&service=checkout`, and a link written
+period stays in the list, marked not in this period, so it can be unticked, and a list shows every name the Hub returns but lets at most
+50 be ticked. The address repeats the key, `#/recap?service=cart&service=checkout`, and a link written
 with one value keeps filtering on it. When the Hub does not return the names, the list says so and
 offers Try again, and what is ticked is kept.
 

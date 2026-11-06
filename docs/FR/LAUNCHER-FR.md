@@ -356,7 +356,8 @@ l'environnement affichés, lus sur `GET /api/recap/filters` ([l'API](API-FR.md#f
 première ouverture d'une liste, dans le même périmètre que le récap et sans compte. Le récap n'est calculé
 qu'une fois, à la fermeture de la liste (Échap, un clic à l'extérieur ou le bouton), pas à chaque case. Un
 nom coché mais absent de la période reste dans la liste, marqué absent de la période, pour pouvoir être
-décoché, et une liste contient 50 noms au plus. L'adresse répète la clé,
+décoché, et une liste montre tous les noms que le Hub renvoie mais n'en laisse cocher que
+50 au plus. L'adresse répète la clé,
 `#/recap?service=cart&service=checkout`, et un lien écrit avec une seule valeur continue de filtrer sur
 elle. Quand le Hub ne renvoie pas les noms, la liste le dit et propose Réessayer, et ce qui est coché est
 conservé.
