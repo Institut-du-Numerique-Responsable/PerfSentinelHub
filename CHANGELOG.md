@@ -2,6 +2,18 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.43.0` as its analysis engine, repinned by digest from
+  `0.42.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.42.1` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. A Tempo analysis whose trace reads all fail now
+  reports `the search matched N trace(s) but every fetch failed` instead of `no traces found`.
+  No detection, score or report format changes, and the disclosure schema stays
+  `perf-sentinel-report/v1.8`.
+
 ## [0.14.0] - 2026-11-04
 
 ### Added
