@@ -64,11 +64,11 @@ test("the window handed to a new analysis", async ({page}, info) => {
     await page.locator("button.row-toggle", {hasText: "checkout-svc"}).click();
     await expect(page.locator(".daemon-panel .table").first()).toBeVisible({timeout: 15_000});
     await page.getByRole("link", {name: "Analyse this window"}).first().click();
-    await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=[^&]+&incident=[0-9a-f]{32}$/);
+    await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=[^&]+&incident=[0-9a-f]{32}&source=[^&]+$/);
     await expect(page.locator(".banner", {hasText: "from the incidents screen"})).toBeVisible();
-    // A daemon takes no window, so the shot is the form that can run it. The
-    // service the link carried has to survive the source switch, which is the
-    // half of the prefill a still cannot show on its own.
+    // The link already opened on a trace backend, a daemon taking no window. Naming
+    // one makes the shot the same on every run, and the service the link carried
+    // has to survive the source switch, which a still cannot show on its own.
     await page.locator("button.source-row", {hasText: "Tempo EU"}).click();
     await expect(page.locator('input[placeholder="order-service"]')).toHaveValue(/\S/);
     await page.screenshot({
@@ -148,14 +148,14 @@ test("correlations", async ({page}, info) => {
 test("correlations hand an episode's window to a new analysis", async ({page}) => {
     await openPair(page);
     await page.getByRole("link", {name: "Analyse this window"}).first().click();
-    await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=order-svc&pair=[0-9a-f]{32}$/);
+    await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=order-svc&pair=[0-9a-f]{32}&source=[^&]+$/);
     await expect(page.locator(".banner", {hasText: "from the correlations screen"})).toBeVisible();
 });
 
 test("correlations hand the last pair's traces to a new analysis", async ({page}) => {
     await openPair(page);
     await page.getByRole("link", {name: "Explain the last pair"}).first().click();
-    await expect(page).toHaveURL(/#\/new\?trace=[0-9a-f]{32}&other=[0-9a-f]{32}$/);
+    await expect(page).toHaveURL(/#\/new\?trace=[0-9a-f]{32}&other=[0-9a-f]{32}&source=[^&]+$/);
     await page.locator("button.source-row", {hasText: "Tempo EU"}).click();
     const trace = page.locator('input[placeholder="4bf92f3577b34da6a3ce929d0e0e4736"]');
     const first = await trace.inputValue();

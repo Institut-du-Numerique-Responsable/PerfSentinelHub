@@ -146,8 +146,8 @@
     /** @typedef {import('../types').AccessConfiguration} AccessConfiguration */
     /** @typedef {import('../types').AccessUnmatched} AccessUnmatched */
     /** @typedef {Incident & {error_code?: string}} IncidentDetail A single-incident read, or the stub a failed one leaves with its error_code. */
-    /** @typedef {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string, kind?: string, namespace?: string, atMs?: number}} Handoff An incident link, as PSL.readHandoff reads it, with the row's fields once found. */
-    /** @typedef {{traceId: string, otherTraceId: string}} TraceHandoff An episode's two traces, as PSL.readTraceHandoff reads them. */
+    /** @typedef {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string, sourceId: string | null, kind?: string, namespace?: string, atMs?: number}} Handoff An incident link, as PSL.readHandoff reads it, with the row's fields once found. */
+    /** @typedef {{traceId: string, otherTraceId: string, sourceId: string | null}} TraceHandoff An episode's two traces, as PSL.readTraceHandoff reads them. */
     /** @typedef {{label: string, energy_kwh: number, carbon_kgco2eq: number, partial: {windows: number, of: number} | null}} HostRow A host of a disclosure, as PSL.hostRows builds it. */
     /**
      * The ack page, from its link to what the last submit came to.
@@ -1722,6 +1722,7 @@
         state.form.fromMs = handoff.fromMs;
         state.form.toMs = handoff.toMs;
         state.form.pickerOpen = false;
+        openHandoffSource(handoff.sourceId);
         const row = (state.incidents || []).find(function (incident) {
             return incident.id === handoff.incidentId;
         });
@@ -1751,6 +1752,7 @@
         state.form.traceId = handoff.traceId;
         state.form.service = '';
         state.form.pickerOpen = false;
+        openHandoffSource(handoff.sourceId);
     }
 
     // -------------------------------------------------------- screen: sources
@@ -2939,14 +2941,33 @@
      * @param {string} id
      */
     function selectSource(id) {
-        state.form.sourceId = id;
         saveSource(id);
+        switchSource(id);
+        render();
+    }
+
+    /**
+     * Puts the form on another source: what was acknowledged or typed for the last one goes.
+     * @param {string} id
+     */
+    function switchSource(id) {
+        state.form.sourceId = id;
         state.form.ackUnreachable = false;
         state.form.ackHeavy = false;
         state.form.ackFetch = false;
         state.form.pickerOpen = false;
         state.form.detection = {};
-        render();
+    }
+
+    /**
+     * Opens a handed-over window or trace on a trace backend, a daemon taking neither. Never
+     * saved: the source the reader chose stays what the next visit opens on. Sources that
+     * arrive after the route find the form here again, through loadShell's own onRoute.
+     * @param {string | null} originId the daemon the link came from
+     */
+    function openHandoffSource(originId) {
+        const id = PSL.handoffSourceId(state.sources || [], state.form.sourceId, originId);
+        if (id !== null && id !== state.form.sourceId) switchSource(id);
     }
 
     /**

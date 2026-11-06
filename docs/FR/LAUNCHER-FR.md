@@ -32,9 +32,10 @@ Un lien depuis l'écran des incidents arrive ici avec le formulaire rempli : le 
 l'incident, et sa fenêtre en plage absolue dont la fin est retenue à maintenant. Un bandeau
 au-dessus des paramètres nomme l'incident, sous la forme `ns/service` quand il portait un
 namespace, et dit qu'une analyse prend un service et aucun namespace, donc qu'elle couvre
-ce service dans chacun d'eux. La source ne fait pas partie du lien, puisqu'un
-daemon ne prend aucune fenêtre : sous un daemon le bandeau le dit et demande un backend de
-traces.
+ce service dans chacun d'eux. Le lien nomme le daemon d'où il vient, et le formulaire
+s'ouvre sur un backend de traces, puisqu'un daemon ne prend aucune fenêtre, selon la règle
+donnée sous L'écran des incidents. Là où le Hub n'a aucun backend de traces, la sélection
+reste, et sous un daemon le bandeau le dit et en demande un.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
@@ -245,10 +246,17 @@ nommant le réglage à corriger, et ses findings restent collectés.
 
 Une ligne dépliée porte un bouton Analyse this window sous la note qui décrit la fenêtre,
 qui ouvre New analysis sur le service et la fenêtre de l'incident, décrit sous Le
-formulaire suit la source. La source reste au choix de l'exploitant, parce qu'un daemon ne
-prend aucune fenêtre et que le daemon de l'incident lui-même analyserait son instantané en
-mémoire plutôt que la fenêtre. Le lien garde ses paramètres, donc il se partage et se
-recharge, et l'onglet New lui-même n'en porte aucun. Quand une source du Hub détient un
+formulaire suit la source. Il s'ouvre sur un backend de traces, parce qu'un daemon ne prend
+aucune fenêtre et que le daemon de l'incident lui-même analyserait son instantané en mémoire
+plutôt que la fenêtre. Le choix est la source sélectionnée si c'est un backend de traces de
+l'environnement de l'incident, sinon le premier de cet environnement, sinon la source
+sélectionnée si c'est un backend de traces, sinon le premier de la liste. Les liens de
+l'écran des corrélations suivent la même règle. Le lien porte le daemon de l'incident en
+`source=<id>`, et un ancien lien qui n'en a pas se lit comme un environnement inconnu. Le
+choix n'est jamais enregistré : la source que l'exploitant a choisie reste celle sur laquelle
+la prochaine visite s'ouvre, et un Hub sans backend de traces garde la sélection sous un
+bandeau qui dit qu'un daemon ne prend aucune fenêtre. Le lien garde ses paramètres, donc il
+se partage et se recharge, et l'onglet New lui-même n'en porte aucun. Quand une source du Hub détient un
 identifiant d'acquittement, chaque finding de la ligne dépliée se termine par un lien Ack, qui ouvre
 [La page d'acquittement](#la-page-dacquittement) sur ce finding, le daemon de l'incident
 coché. Sans identifiant, une ligne sous le tableau dit que les findings s'acquittent dans chaque

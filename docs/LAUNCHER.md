@@ -27,8 +27,10 @@ A link from the incidents screen arrives here with the form filled in: the incid
 service, and its window as an absolute range with its end held at now. A banner above the
 parameters names the incident, as `ns/service` when it carried a namespace, and says that
 an analysis takes a service and no namespace, so the run covers that service in every one
-of them. The source is not part of the link, since a daemon takes no window: under a
-daemon the banner says so and asks for a trace backend.
+of them. The link names the daemon it came from, and the form opens on a trace backend,
+since a daemon takes no window, by the rule given under The incidents screen. Where the Hub
+has no trace backend the selection stays, and under a daemon the banner says so and asks for
+one.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
@@ -220,10 +222,16 @@ findings stay collected.
 
 An unfolded row carries an Analyse this window button under the note describing the
 window, which opens New analysis on the incident's service and window, described under The
-form follows the source. The source stays the operator's choice, because a daemon takes no
-window and the incident's own daemon would run its in-memory snapshot rather than the
-window. The link keeps its parameters, so it can be shared or reloaded, and the New tab
-itself carries none. When a source in the Hub holds an ack credential, each finding of the
+form follows the source. It opens on a trace backend, because a daemon takes no window and
+the incident's own daemon would run its in-memory snapshot rather than the window. The pick
+is the selected source if it is a trace backend of the incident's environment, otherwise the
+first one of that environment, otherwise the selected source if it is a trace backend,
+otherwise the first of the list. The correlations screen's links follow the same rule. The
+link carries the incident's daemon as `source=<id>`, and an older link without it reads as
+an unknown environment. The pick is never saved, so the source the operator chose stays what
+the next visit opens on, and a Hub with no trace backend keeps the selection under a banner
+saying a daemon takes no window. The link keeps its parameters, so it can be shared or
+reloaded, and the New tab itself carries none. When a source in the Hub holds an ack credential, each finding of the
 unfolded row ends with an Ack link, which opens [The ack page](#the-ack-page) on that
 finding with the incident's daemon checked. Without one, a line under the table says the
 findings are acknowledged in each daemon instead.

@@ -510,14 +510,27 @@ test("every incidents read state the Hub files has words, bar the one the age al
 test("an incident's window travels to New analysis as a hash and back", () => {
     const incident = {
         id: "d650edad80ac5c2d99b8d1dde07100c2",
+        source_id: "shop prod",
         service: "shop svc",
         window_from_ms: 1000,
         window_to_ms: 5000
     };
     const hash = PSL.incidentHandoffHash(incident, 9000);
-    assert.equal(hash, "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2");
-    assert.deepEqual(PSL.readHandoff(hash, 9000),
-        {fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2", pairKey: ""});
+    assert.equal(hash,
+        "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2&source=shop%20prod");
+    assert.deepEqual(PSL.readHandoff(hash, 9000), {
+        fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2", pairKey: "",
+        sourceId: "shop prod"
+    });
+});
+
+test("a handoff link from before the source rode along still reads, with no source", () => {
+    const old = "#/new?from=1000&to=5000&service=svc&incident=abc";
+    assert.deepEqual(PSL.readHandoff(old, 9000),
+        {fromMs: 1000, toMs: 5000, service: "svc", incidentId: "abc", pairKey: "", sourceId: null});
+    assert.doesNotMatch(PSL.incidentHandoffHash({id: "abc", service: "svc", window_from_ms: 1000, window_to_ms: 5000}, 9000),
+        /source=/, "an incident that names no source writes none");
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc&source=", 9000).sourceId, null, "blank source");
 });
 
 test("the window's end is held at now, in the hash and again when it is read", () => {
@@ -1352,11 +1365,26 @@ function appFunction(name) {
 test("choosing another source or another mode withdraws the confirmation of the reads count", () => {
     // The tick belongs to one run's one count. app.js cannot run under Node, so this reads it:
     // both paths that change what the block shows reset the box in the same breath as ackHeavy.
-    assert.match(appFunction("selectSource"), /state\.form\.ackFetch = false/);
+    assert.match(appFunction("switchSource"), /state\.form\.ackFetch = false/);
     assert.match(appFunction("setMode"), /state\.form\.ackFetch = false/);
     assert.match(appFunction("rerun"), /ackFetch: false/);
     // And the request takes the count from the one function the block itself reads.
     assert.match(appFunction("buildRequest"), /PSL\.fetchRequested\(/);
+});
+
+test("a link moves the form to a trace backend through the same switch as a click, and saves nothing", () => {
+    // The reader's saved source is a preference: only their own click writes it. Same reading of app.js as above.
+    const click = appFunction("selectSource");
+    assert.match(click, /saveSource\(id\)/);
+    assert.match(click, /switchSource\(id\)/);
+    const link = appFunction("openHandoffSource");
+    assert.match(link, /PSL\.handoffSourceId\(/);
+    assert.match(link, /switchSource\(id\)/);
+    assert.doesNotMatch(link, /saveSource/);
+    assert.doesNotMatch(appFunction("switchSource"), /saveSource/);
+    // Both ways a link reaches the form, a window and a trace.
+    assert.match(appFunction("applyHandoff"), /openHandoffSource\(handoff\.sourceId\)/);
+    assert.match(appFunction("applyTraceHandoff"), /openHandoffSource\(handoff\.sourceId\)/);
 });
 
 test("a light read keeps the verdict calm over hints that only describe the daemon", () => {
@@ -1488,9 +1516,13 @@ test("two spans share a moment on their bounds, and a running one reaches every 
 
 test("an episode's window travels to New analysis a minute wider on each side, with its pair", () => {
     const hash = PSL.episodeHandoffHash(episode({}), 9_000_000);
-    assert.equal(hash, "#/new?from=940000&to=1120000&service=order%20svc&pair=" + "a".repeat(32));
-    assert.deepEqual(PSL.readHandoff(hash, 9_000_000),
-        {fromMs: 940000, toMs: 1120000, service: "order svc", incidentId: "", pairKey: "a".repeat(32)});
+    assert.equal(hash,
+        "#/new?from=940000&to=1120000&service=order%20svc&pair=" + "a".repeat(32) + "&source=checkout-prod");
+    assert.deepEqual(PSL.readHandoff(hash, 9_000_000), {
+        fromMs: 940000, toMs: 1120000, service: "order svc", incidentId: "", pairKey: "a".repeat(32),
+        sourceId: "checkout-prod"
+    });
+    assert.doesNotMatch(PSL.episodeHandoffHash(episode({source_id: undefined}), 9_000_000), /source=/);
 });
 
 test("a running episode's window ends now, never in a future the form refuses", () => {
@@ -1499,14 +1531,73 @@ test("a running episode's window ends now, never in a future the form refuses", 
 });
 
 test("the last pair's traces open New analysis on the first one, the other carried along", () => {
-    assert.equal(PSL.pairTraceHash(episode({})), "#/new?trace=" + "c".repeat(32) + "&other=" + "b".repeat(32));
-    assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null})), "#/new?trace=" + "b".repeat(32));
+    assert.equal(PSL.pairTraceHash(episode({})),
+        "#/new?trace=" + "c".repeat(32) + "&other=" + "b".repeat(32) + "&source=checkout-prod");
+    assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null})),
+        "#/new?trace=" + "b".repeat(32) + "&source=checkout-prod");
     assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null, sample_trace_id: null})), null);
-    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1&other=y2"), {traceId: "x1", otherTraceId: "y2"});
-    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1"), {traceId: "x1", otherTraceId: ""});
+    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1&other=y2&source=s1"),
+        {traceId: "x1", otherTraceId: "y2", sourceId: "s1"});
+    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1"), {traceId: "x1", otherTraceId: "", sourceId: null},
+        "a link from before the source rode along");
     assert.equal(PSL.readTraceHandoff("#/new?from=1&to=2&service=s"), null);
     assert.equal(PSL.readTraceHandoff("#/correlations?trace=x1"), null);
     assert.equal(PSL.readTraceHandoff(null), null);
+});
+
+// -------------------------------------------------- the source a handoff opens on
+
+const handoffSource = (id, kind, environment, extra) => Object.assign({id: id, kind: kind, environment: environment}, extra);
+const dProd = handoffSource("d-prod", "daemon", "production");
+const dStaging = handoffSource("d-staging", "daemon", "staging");
+const tProd = handoffSource("t-prod", "tempo", "production");
+const tProd2 = handoffSource("t-prod-2", "jaeger_query", "production");
+const tStaging = handoffSource("t-staging", "tempo", "staging");
+
+test("a handed-over window leaves a daemon for the trace backend of the environment it came from", () => {
+    const sources = [dProd, dStaging, tStaging, tProd];
+    assert.equal(PSL.handoffSourceId(sources, "d-prod", "d-prod"), "t-prod");
+    // A staging backend that happened to be selected is not where a production window belongs.
+    assert.equal(PSL.handoffSourceId(sources, "t-staging", "d-prod"), "t-prod");
+});
+
+test("a selection that is already a backend of that environment stays", () => {
+    assert.equal(PSL.handoffSourceId([dProd, tProd, tProd2], "t-prod-2", "d-prod"), "t-prod-2");
+    assert.equal(PSL.handoffSourceId([dProd, tProd, tProd2], "t-prod", "d-prod"), "t-prod");
+    // Not the one selected, so the first of the environment, in the list's order.
+    assert.equal(PSL.handoffSourceId([dProd, tProd2, tProd], "d-prod", "d-prod"), "t-prod-2");
+});
+
+test("an unknown origin keeps a backend selection and leaves a daemon for the first backend", () => {
+    const sources = [dProd, tStaging, tProd];
+    assert.equal(PSL.handoffSourceId(sources, "t-prod", null), "t-prod");
+    assert.equal(PSL.handoffSourceId(sources, "d-prod", null), "t-staging");
+    // An id the list does not hold is no more known than none.
+    assert.equal(PSL.handoffSourceId(sources, "t-prod", "gone"), "t-prod");
+    assert.equal(PSL.handoffSourceId(sources, null, "gone"), "t-staging", "nothing selected yet");
+});
+
+test("an environment with no backend falls back to the selection, then to the first backend", () => {
+    const sources = [dProd, dStaging, tStaging];
+    assert.equal(PSL.handoffSourceId(sources, "t-staging", "d-prod"), "t-staging");
+    assert.equal(PSL.handoffSourceId(sources, "d-prod", "d-prod"), "t-staging");
+});
+
+test("with no backend there is nothing to pick, and the selection stays", () => {
+    assert.equal(PSL.handoffSourceId([dProd, dStaging], "d-prod", "d-prod"), null);
+    assert.equal(PSL.handoffSourceId([], "d-prod", "d-prod"), null);
+});
+
+test("a source the caller may not run an analysis on is never the pick", () => {
+    const readOnly = handoffSource("t-ro", "tempo", "production", {permissions: ["findings.read"]});
+    const allowed = handoffSource("t-ok", "tempo", "production", {permissions: ["analyses.run"]});
+    assert.equal(PSL.handoffSourceId([dProd, readOnly], "d-prod", "d-prod"), null);
+    assert.equal(PSL.handoffSourceId([dProd, readOnly, allowed], "d-prod", "d-prod"), "t-ok");
+    // Nor is it kept for being selected.
+    assert.equal(PSL.handoffSourceId([readOnly, allowed], "t-ro", null), "t-ok");
+    // The origin is still known from a daemon the caller cannot run on.
+    const quietDaemon = handoffSource("d-prod", "daemon", "production", {permissions: ["findings.read"]});
+    assert.equal(PSL.handoffSourceId([quietDaemon, tStaging, tProd], "t-staging", "d-prod"), "t-prod");
 });
 
 test("a strip places each span on its range, clipped, and never thinner than three", () => {

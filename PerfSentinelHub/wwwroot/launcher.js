@@ -1201,10 +1201,20 @@
     }
 
     /**
+     * The daemon a handoff came from, for the link to carry: New analysis opens on a trace
+     * backend of its environment. Nothing when the row names none.
+     * @param {string | undefined} sourceId
+     * @returns {string}
+     */
+    function handoffOrigin(sourceId) {
+        return sourceId ? '&source=' + encodeURIComponent(sourceId) : '';
+    }
+
+    /**
      * The route that opens New analysis on an incident's window. The end is held
      * at now: an incident younger than two TTLs still has a `window_to_ms` in the
      * future, and the Hub refuses a window that ends there.
-     * @param {{id: string, service: string, window_from_ms: number, window_to_ms: number}} incident
+     * @param {{id: string, source_id?: string, service: string, window_from_ms: number, window_to_ms: number}} incident
      * @param {number} nowMs
      * @returns {string}
      */
@@ -1212,7 +1222,8 @@
         return '#/new?from=' + incident.window_from_ms
             + '&to=' + Math.min(incident.window_to_ms, nowMs)
             + '&service=' + encodeURIComponent(incident.service)
-            + '&incident=' + encodeURIComponent(incident.id);
+            + '&incident=' + encodeURIComponent(incident.id)
+            + handoffOrigin(incident.source_id);
     }
 
     /**
@@ -1223,7 +1234,8 @@
      * the bare `#/new` the tab points at, read as null.
      * @param {string | null | undefined} hash
      * @param {number} nowMs
-     * @returns {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string} | null}
+     * @returns {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string,
+     *     sourceId: string | null} | null}
      */
     function readHandoff(hash, nowMs) {
         const text = String(hash || '');
@@ -1242,8 +1254,40 @@
             toMs: toMs,
             service: service,
             incidentId: params.get('incident') || '',
-            pairKey: params.get('pair') || ''
+            pairKey: params.get('pair') || '',
+            sourceId: params.get('source') || null
         };
+    }
+
+    /**
+     * The source a handed-over window or trace opens New analysis on. A daemon takes neither, so
+     * it is a trace backend, chosen in this order: one of the environment the daemon it came from
+     * sits in, the current pick kept if it is one; else the current pick if it is a backend; else
+     * the first backend. Null with no backend at all, the pick stays and the screen's banner says
+     * why. Only a source the caller may run an analysis on is ever returned.
+     * @param {Array<{id: string, kind: string, environment: string, permissions?: string[] | null}>} sources
+     *     every source the caller sees, so the origin is known even where they cannot run one
+     * @param {string | null} currentId the pick the form holds
+     * @param {string | null} sourceOfOrigin the daemon the incident or episode came from, or null
+     * @returns {string | null}
+     */
+    function handoffSourceId(sources, currentId, sourceOfOrigin) {
+        const backends = sources.filter(function (source) {
+            return source.kind !== 'daemon' && permits(source, 'analyses.run');
+        });
+        const origin = sources.find(function (source) {
+            return source.id === sourceOfOrigin;
+        });
+        const local = origin ? backends.filter(function (source) {
+            return source.environment === origin.environment;
+        }) : [];
+        const keep = function (/** @type {typeof backends} */ list) {
+            return list.find(function (source) {
+                return source.id === currentId;
+            });
+        };
+        const picked = keep(local) || local[0] || keep(backends) || backends[0];
+        return picked ? picked.id : null;
     }
 
     /**
@@ -1313,7 +1357,8 @@
      * New analysis on an episode's window, a minute wider on each side and held at now, on
      * the service of the side that fires first, the way an incident hands over its own. The
      * pair rides along for the banner's wording.
-     * @param {{started_at_ms: number, ended_at_ms: number | null, pair_key: string, source: {service: string}}} episode
+     * @param {{started_at_ms: number, ended_at_ms: number | null, pair_key: string, source_id?: string,
+     *     source: {service: string}}} episode
      * @param {number} nowMs
      * @returns {string}
      */
@@ -1322,33 +1367,39 @@
         return '#/new?from=' + (episode.started_at_ms - EPISODE_MARGIN_MS)
             + '&to=' + Math.min(end, nowMs)
             + '&service=' + encodeURIComponent(episode.source.service)
-            + '&pair=' + encodeURIComponent(episode.pair_key);
+            + '&pair=' + encodeURIComponent(episode.pair_key)
+            + handoffOrigin(episode.source_id);
     }
 
     /**
      * New analysis on a trace of the episode's last co-occurrence: the first finding's, the
      * second's carried for the banner, or the second's alone. Null when the daemon kept neither.
-     * @param {{sample_trace_id: string | null, source_sample_trace_id: string | null}} episode
+     * @param {{sample_trace_id: string | null, source_sample_trace_id: string | null, source_id?: string}} episode
      * @returns {string | null}
      */
     function pairTraceHash(episode) {
         const first = episode.source_sample_trace_id || episode.sample_trace_id;
         if (!first) return null;
         const other = episode.source_sample_trace_id && episode.sample_trace_id;
-        return '#/new?trace=' + encodeURIComponent(first) + (other ? '&other=' + encodeURIComponent(other) : '');
+        return '#/new?trace=' + encodeURIComponent(first) + (other ? '&other=' + encodeURIComponent(other) : '')
+            + handoffOrigin(episode.source_id);
     }
 
     /**
      * What a `#/new?trace=…&other=…` hash carries, or null for any other route.
      * @param {string | null | undefined} hash
-     * @returns {{traceId: string, otherTraceId: string} | null}
+     * @returns {{traceId: string, otherTraceId: string, sourceId: string | null} | null}
      */
     function readTraceHandoff(hash) {
         const text = String(hash || '');
         if (text.indexOf('#/new?') !== 0) return null;
         const params = new URLSearchParams(text.slice('#/new?'.length));
         const traceId = (params.get('trace') || '').trim();
-        return traceId === '' ? null : {traceId: traceId, otherTraceId: (params.get('other') || '').trim()};
+        return traceId === '' ? null : {
+            traceId: traceId,
+            otherTraceId: (params.get('other') || '').trim(),
+            sourceId: params.get('source') || null
+        };
     }
 
     /**
@@ -4100,6 +4151,7 @@
         correlationPairs,
         spansOverlap,
         episodeHandoffHash,
+        handoffSourceId,
         pairTraceHash,
         readTraceHandoff,
         timelineMarks,
