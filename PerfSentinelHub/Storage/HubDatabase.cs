@@ -702,39 +702,46 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         var bySignature = new Dictionary<string, StoredFinding>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-        {
-            var signature = reader.GetString(0);
-            if (!bySignature.TryGetValue(signature, out var finding))
-            {
-                var sources = new List<FindingSourceObservation>();
-                finding = new StoredFinding(
-                    signature,
-                    reader.GetString(1),
-                    reader.GetInt64(2),
-                    reader.GetInt64(3),
-                    reader.GetString(4),
-                    reader.GetString(11),
-                    sources);
-                if (!reader.IsDBNull(12))
-                    finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
-                bySignature.Add(signature, finding);
-                rows.Add(finding);
-            }
-
-            if (!reader.IsDBNull(5))
-                finding.Sources.Add(new FindingSourceObservation(
-                    reader.GetString(5),
-                    reader.GetString(6),
-                    reader.GetString(7),
-                    reader.GetString(8),
-                    reader.GetInt64(9),
-                    reader.IsDBNull(10) ? null : reader.GetInt64(10),
-                    ReadAck(reader)));
-        }
+            FoldFindingRow(reader, rows, bySignature);
 
         // The page's reader is drained, and SQLite runs the next statement on the same connection.
         await AttachVolumesAsync(connection, rows, query, volumeWindow, today, cancellationToken);
         return rows;
+    }
+
+    // A finding comes back as one row per source: the first creates it, each adds its source.
+    private static void FoldFindingRow(
+        SqliteDataReader reader,
+        List<StoredFinding> rows,
+        Dictionary<string, StoredFinding> bySignature)
+    {
+        var signature = reader.GetString(0);
+        if (!bySignature.TryGetValue(signature, out var finding))
+        {
+            var sources = new List<FindingSourceObservation>();
+            finding = new StoredFinding(
+                signature,
+                reader.GetString(1),
+                reader.GetInt64(2),
+                reader.GetInt64(3),
+                reader.GetString(4),
+                reader.GetString(11),
+                sources);
+            if (!reader.IsDBNull(12))
+                finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
+            bySignature.Add(signature, finding);
+            rows.Add(finding);
+        }
+
+        if (!reader.IsDBNull(5))
+            finding.Sources.Add(new FindingSourceObservation(
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.GetString(8),
+                reader.GetInt64(9),
+                reader.IsDBNull(10) ? null : reader.GetInt64(10),
+                ReadAck(reader)));
     }
 
     // Only a windowed read has volumes to count, and the window reaches back by the retention.

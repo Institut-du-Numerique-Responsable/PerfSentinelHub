@@ -13,6 +13,8 @@ namespace PerfSentinelHub.Tests.Storage;
 public sealed class RecapFilterStorageTests(HubApplicationFactory factory)
     : IClassFixture<HubApplicationFactory>, IAsyncLifetime
 {
+    private static readonly string[] FourFindings = ["rf-AX", "rf-AY", "rf-BX", "rf-CY"];
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     public async ValueTask InitializeAsync()
@@ -32,15 +34,13 @@ public sealed class RecapFilterStorageTests(HubApplicationFactory factory)
     public async Task Several_services_read_as_their_union()
     {
         Assert.Equal(["rf-AX", "rf-AY", "rf-BX"], await ReadAsync(Query() with { Services = ["rf-a", "rf-b"] }));
-        Assert.Equal(new[] { "rf-AX", "rf-AY", "rf-CY", "rf-BX" }.Order(StringComparer.Ordinal),
-            await ReadAsync(Query() with { Services = ["rf-c", "rf-b", "rf-a"] }));
+        Assert.Equal(FourFindings, await ReadAsync(Query() with { Services = ["rf-c", "rf-b", "rf-a"] }));
     }
 
     [Fact]
     public async Task Several_namespaces_read_as_their_union()
     {
-        Assert.Equal(new[] { "rf-AX", "rf-BX", "rf-AY", "rf-CY" }.Order(StringComparer.Ordinal),
-            await ReadAsync(Query() with { Groupings = ["rf-ns-x", "rf-ns-y"] }));
+        Assert.Equal(FourFindings, await ReadAsync(Query() with { Groupings = ["rf-ns-x", "rf-ns-y"] }));
     }
 
     // /api/findings sends one value; the recap sends a list of one. Both must read the same.
