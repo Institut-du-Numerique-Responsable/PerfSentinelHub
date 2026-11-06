@@ -85,7 +85,20 @@
     /**
      * What a `#/recap?…` hash names, as PSL.readRecapRoute reads it.
      * @typedef {{period: 'day' | 'week' | 'month', at: string | null, environment: string | null,
-     *   service: string | null, grouping: string | null, view: 'tech' | 'pilotage', jobKey?: string}} RecapRoute
+     *   services: string[], groupings: string[], view: 'tech' | 'pilotage', jobKey?: string}} RecapRoute
+     */
+
+    /**
+     * The names the checkbox lists of the recap offer for the period on screen, read from the Hub on the
+     * first opening: `path` is the read they answer, as PSL.recapFiltersPath writes it.
+     * @typedef {{path: ?string, status: 'idle' | 'loading' | 'ready' | 'error', services: string[],
+     *   groupings: string[]}} RecapNames
+     */
+
+    /**
+     * The list open on the recap's filter line, what was typed in its search and the boxes ticked so far,
+     * which the route takes when the list closes.
+     * @typedef {{open: ?('services' | 'groupings'), query: string, draft: string[]}} RecapPick
      */
 
     // Payloads read field by field, named for what they are. Their shapes are in types.d.ts, each
@@ -349,6 +362,14 @@
         recapReports: null,
         recapGenerating: false,
         recapGenerateError: null,
+        // The checkbox lists of the filter line: the one open with its search and boxes, the names the Hub
+        // offers for the period, and the button to give the focus back to once a closed list has moved the route.
+        /** @type {RecapPick} */
+        recapPick: {open: null, query: '', draft: []},
+        /** @type {RecapNames} */
+        recapNames: {path: null, status: 'idle', services: [], groupings: []},
+        /** @type {?string} */
+        recapRefocus: null,
         // The share card form, made on first use (cardState).
         /** @type {?ShareCard} */
         card: null,
@@ -1084,7 +1105,7 @@
         else if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
         else if (state.screen === 'incidents') main.replaceChildren(renderIncidentsScreen());
         else if (state.screen === 'correlations') main.replaceChildren(renderCorrelationsScreen());
-        else if (state.screen === 'recap') replaceKeepingPdf(main, renderRecapScreen());
+        else if (state.screen === 'recap') drawRecapScreen(main);
         else if (state.screen === 'disclosures') main.replaceChildren(renderDisclosuresScreen());
         else if (state.screen === 'disclosure') main.replaceChildren(renderDisclosureScreen());
         else if (state.screen === 'ack') main.replaceChildren(renderAckScreen());
@@ -1618,6 +1639,11 @@
         // onRoute has to apply it again, and loadRuns never re-renders New.
         applyHandoff(PSL.readHandoff(location.hash, Date.now()));
         applyTraceHandoff(PSL.readTraceHandoff(location.hash));
+        // A list open on the recap's filter line goes with the route it was opened on. One that moved the
+        // route closed itself first, and left the button to give the focus back to.
+        state.recapPick = {open: null, query: '', draft: []};
+        const refocus = state.recapRefocus;
+        state.recapRefocus = null;
         const screen = currentScreen();
         if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
@@ -1628,6 +1654,8 @@
         render();
         if (state.loading) return;
         announceRoute();
+        const returned = refocus ? document.getElementById(refocus) : null;
+        if (returned) returned.focus();
         // Both screens read the runs list: recent renders it, the launcher
         // shows what past runs weighed. Reloaded on every entry, not once, so
         // coming back from a run that just finished shows its weight.
@@ -7056,7 +7084,7 @@
 
     /**
      * Writes the route the filters name; the hash change reads the recap again.
-     * @param {Record<string, string | null>} change
+     * @param {Record<string, string | string[] | null>} change
      */
     function goRecap(change) {
         location.hash = PSL.recapHash(Object.assign({}, recapRoute(), change));
@@ -7430,27 +7458,311 @@
             }), function (value) {
                 goRecap({environment: value || null});
             }),
-            recapTextFilter(t('recap.filter.service'), route.service, 'service'),
-            recapTextFilter(t('recap.filter.namespace'), route.grouping, 'grouping'),
+            recapMultiFilter(t('recap.filter.service'), PSL.RECAP_PICK_COPY['all.service'], 'services', route.services,
+                recapPickOptions('services')),
+            recapMultiFilter(t('recap.filter.namespace'), PSL.RECAP_PICK_COPY['all.grouping'], 'groupings',
+                route.groupings, recapPickOptions('groupings')),
             recapViewSwitch(route)
         ]);
     }
 
+    // ---- the service and namespace lists of the filter line
+
     /**
-     * Applied on change, so a name is not searched for a letter at a time.
-     * @param {string} label
-     * @param {string | null} value
-     * @param {string} key
+     * Draws the recap screen. The screen is drawn again as the recap loads and lands, so a list's button,
+     * or the control of an open list, that held the focus gets it back.
+     * @param {HTMLElement} main
      */
-    function recapTextFilter(label, value, key) {
-        const input = el('input', {
-            class: 'recap-input', type: 'text', placeholder: label, value: value || '', 'aria-label': label,
-            spellcheck: 'false'
+    function drawRecapScreen(main) {
+        const held = document.activeElement;
+        const button = held && held.classList.contains('recap-pick-button') ? held.id : null;
+        const inside = held && held.closest('.recap-pick-pop');
+        const was = inside ? {pick: held.getAttribute('data-pick'), name: held.getAttribute('data-name')} : null;
+        replaceKeepingPdf(main, renderRecapScreen());
+        const pop = was && state.recapPick.open ? document.querySelector('.recap-pick-pop') : null;
+        if (pop) {
+            const stops = /** @type {HTMLElement[]} */ (Array.from(pop.querySelectorAll('[data-pick]')));
+            const back = stops.find(function (node) {
+                return node.getAttribute('data-pick') === was.pick && node.getAttribute('data-name') === was.name;
+            });
+            (back || /** @type {HTMLElement} */ (pop)).focus();
+        }
+        const returned = button ? document.getElementById(button) : null;
+        if (returned) returned.focus();
+        fitRecapPick(document.querySelector('.recap-pick-pop'));
+    }
+
+    /**
+     * A list opened from a button near the right edge would run past the window and widen the page: it
+     * then hangs from the button's right edge instead.
+     * @param {Element | null} pop
+     */
+    function fitRecapPick(pop) {
+        if (!pop) return;
+        pop.classList.remove('recap-pick-pop-end');
+        if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 16) {
+            pop.classList.add('recap-pick-pop-end');
+        }
+    }
+
+    /**
+     * What a list can show of the names read for the period on screen, `idle` for any other period.
+     * @param {'services' | 'groupings'} key
+     * @returns {{status: RecapNames['status'], names: string[]}}
+     */
+    function recapPickOptions(key) {
+        const read = state.recapNames;
+        const current = read.path === PSL.recapFiltersPath(recapRoute());
+        return {status: current ? read.status : 'idle', names: current ? read[key] : []};
+    }
+
+    /**
+     * Reads the names the lists offer for the period on screen, once: a read already made, or in flight,
+     * for this period is kept. A failed one is made again. Only the latest read lands, and a list open
+     * meanwhile is drawn again with what it brought.
+     */
+    function loadRecapNames() {
+        const path = PSL.recapFiltersPath(recapRoute());
+        if (state.recapNames.path === path && state.recapNames.status !== 'error') return;
+        state.recapNames = {path: path, status: 'loading', services: [], groupings: []};
+        /**
+         * @param {RecapNames['status']} status
+         * @param {string[]} services
+         * @param {string[]} groupings
+         */
+        const settle = function (status, services, groupings) {
+            if (state.recapNames.path !== path) return;
+            state.recapNames = {path: path, status: status, services: services, groupings: groupings};
+            if (state.recapPick.open && currentScreen() === 'recap') render();
+        };
+        getJson(path).then(function (/** @type {import('../types').RecapFilterOptions} */ answer) {
+            settle('ready', Array.isArray(answer.services) ? answer.services : [],
+                Array.isArray(answer.groupings) ? answer.groupings : []);
+        }, function () {
+            settle('error', [], []);
         });
-        input.addEventListener('change', function () {
-            goRecap({[key]: input.value.trim() || null});
+    }
+
+    /**
+     * A list of names to tick on the filter line: a button saying what is chosen, which opens a list with
+     * a search. The route takes the boxes once, when the list closes, so ticking five names starts one
+     * recap and not five. Written from the state, so a render keeps it open.
+     * @param {string} label what the list is named
+     * @param {string} allLabel what the button says while nothing is chosen
+     * @param {'services' | 'groupings'} key the route field it writes
+     * @param {string[]} selected the names the route chooses
+     * @param {{status: RecapNames['status'], names: string[]}} options the names the Hub offers
+     * @returns {HTMLElement}
+     */
+    function recapMultiFilter(label, allLabel, key, selected, options) {
+        const pick = state.recapPick;
+        const open = pick.open === key;
+        const host = el('div', {class: 'recap-pick', id: 'recap-pick-' + key});
+        // This list alone is drawn again, so a focus that moved on to another control stays there.
+        const again = function () {
+            const fresh = recapMultiFilter(label, allLabel, key, selected, recapPickOptions(key));
+            host.replaceWith(fresh);
+            return fresh;
+        };
+        const button = el('button', {
+            type: 'button', class: 'recap-pick-button', id: 'recap-pick-' + key + '-button',
+            'aria-expanded': open ? 'true' : 'false', 'aria-controls': open ? 'recap-pick-' + key + '-pop' : null
         });
-        return input;
+        const paint = function () {
+            paintRecapPickButton(button, label, allLabel, open ? pick.draft : selected);
+        };
+        paint();
+        button.addEventListener('click', function () {
+            if (open) {
+                closeRecapPick(key, again, true);
+                return;
+            }
+            state.recapPick = {open: key, query: '', draft: selected.slice()};
+            loadRecapNames();
+            const fresh = again();
+            // A phone would raise its keyboard over a short list: there the group takes the focus instead.
+            const first = globalThis.matchMedia('(pointer: coarse)').matches ? '.recap-pick-pop' : '.recap-pick-search';
+            fitRecapPick(fresh.querySelector('.recap-pick-pop'));
+            /** @type {HTMLElement} */ (fresh.querySelector(first)).focus();
+        });
+        host.appendChild(button);
+        if (!open) return host;
+        const backdrop = el('div', {class: 'picker-backdrop'});
+        backdrop.addEventListener('click', function () {
+            closeRecapPick(key, again, true);
+        });
+        host.appendChild(backdrop);
+        host.appendChild(recapPickPopover(label, key, options, paint));
+        // Tabbing on past the list closes it where it is, without taking the focus back.
+        host.addEventListener('focusout', function (event) {
+            const to = event.relatedTarget;
+            if (to instanceof Node && !host.contains(to)) closeRecapPick(key, again, false);
+        });
+        return host;
+    }
+
+    /**
+     * The button's words: the list's name, then what is chosen: the first name and how many more, or
+     * `allLabel` for none. A long name is cut short by the style, and the label keeps it whole.
+     * @param {HTMLElement} button
+     * @param {string} label
+     * @param {string} allLabel
+     * @param {string[]} names
+     */
+    function paintRecapPickButton(button, label, allLabel, names) {
+        const more = names.length > 1 ? '+' + (names.length - 1) : '';
+        button.setAttribute('aria-label', label + ': ' + (names[0] || allLabel) + (more ? ' ' + more : ''));
+        button.replaceChildren(
+            el('span', {class: 'recap-pick-name', text: names[0] || allLabel}),
+            ...(more ? [el('span', {class: 'recap-pick-more', text: more})] : []),
+            svg([['path', {d: 'M6 9l6 6 6-6'}]], 11));
+    }
+
+    /**
+     * Closes the open list. When its boxes differ from the route the route takes them, and the hash
+     * change that follows draws the screen again; otherwise this list alone is drawn closed.
+     * @param {'services' | 'groupings'} key
+     * @param {() => HTMLElement} again
+     * @param {boolean} refocus whether the button gets the focus back: not when the focus moved on by itself
+     */
+    function closeRecapPick(key, again, refocus) {
+        if (state.recapPick.open !== key) return;
+        const draft = state.recapPick.draft.slice().sort();
+        state.recapPick = {open: null, query: '', draft: []};
+        if (JSON.stringify(draft) !== JSON.stringify(recapRoute()[key])) {
+            state.recapRefocus = refocus ? 'recap-pick-' + key + '-button' : null;
+            goRecap({[key]: draft});
+            return;
+        }
+        const closed = again();
+        if (refocus) /** @type {HTMLElement} */ (closed.querySelector('.recap-pick-button')).focus();
+    }
+
+    /**
+     * The open list: a search, the names with a box each, the count of boxes ticked and a way to clear them.
+     * Ticking and searching change the list in place; nothing here moves the route.
+     * @param {string} label
+     * @param {'services' | 'groupings'} key
+     * @param {{status: RecapNames['status'], names: string[]}} options
+     * @param {() => void} paintButton
+     * @returns {HTMLElement}
+     */
+    function recapPickPopover(label, key, options, paintButton) {
+        const pick = state.recapPick;
+        const copy = PSL.RECAP_PICK_COPY;
+        const search = el('input', {
+            type: 'text', class: 'recap-pick-search', 'data-pick': 'search', value: pick.query, spellcheck: 'false',
+            autocomplete: 'off', placeholder: copy.search, 'aria-label': copy.search
+        });
+        const body = el('div', {class: 'recap-pick-list'});
+        const limit = el('p', {class: 'recap-pick-note', text: t('recap.pick.limit', {max: PSL.RECAP_FILTER_MAX_VALUES})});
+        const count = el('span', {class: 'recap-pick-count'});
+        const clear = el('button', {type: 'button', class: 'recap-pick-clear', 'data-pick': 'clear', text: copy.clear});
+        // After each box: the count, the limit, which boxes can still be ticked, and the button's words.
+        const ticked = function () {
+            const full = pick.draft.length >= PSL.RECAP_FILTER_MAX_VALUES;
+            count.textContent = t('recap.pick.count.' + PSL.plural(pick.draft.length), {count: pick.draft.length});
+            limit.hidden = !full;
+            clear.disabled = pick.draft.length === 0;
+            body.querySelectorAll('input[data-pick="box"]').forEach(function (/** @type {HTMLInputElement} */ box) {
+                box.disabled = !box.checked && full;
+            });
+            paintButton();
+        };
+        const rows = function () {
+            body.replaceChildren(...recapPickBody(options, pick, ticked));
+            ticked();
+        };
+        search.addEventListener('input', function () {
+            pick.query = search.value;
+            rows();
+        });
+        clear.addEventListener('click', function () {
+            pick.draft = [];
+            rows();
+            search.focus();
+        });
+        const pop = el('div', {
+            class: 'recap-pick-pop', id: 'recap-pick-' + key + '-pop', role: 'group', 'aria-label': label, tabindex: '-1'
+        }, [search, body, limit, el('div', {class: 'recap-pick-foot'}, [count, clear])]);
+        pop.addEventListener('keydown', function (event) {
+            const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+            if (step === 0) return;
+            const stops = /** @type {HTMLElement[]} */ ([search].concat(
+                Array.from(body.querySelectorAll('input[data-pick="box"]:not(:disabled)'))));
+            const at = stops.indexOf(/** @type {HTMLElement} */ (event.target));
+            if (at < 0) return;
+            event.preventDefault();
+            stops[Math.max(0, Math.min(stops.length - 1, at + step))].focus();
+        });
+        rows();
+        return pop;
+    }
+
+    /**
+     * What fills the list: a line while the names are read, the failure with a way to read them again,
+     * a box for each name, or the line that says there is none. A name already ticked stays in a list
+     * that failed, and in one that lacks it, so it can be unticked.
+     * @param {{status: RecapNames['status'], names: string[]}} options
+     * @param {RecapPick} pick
+     * @param {() => void} ticked
+     * @returns {HTMLElement[]}
+     */
+    function recapPickBody(options, pick, ticked) {
+        const copy = PSL.RECAP_PICK_COPY;
+        const ready = options.status === 'ready';
+        const rows = PSL.recapPickRows(ready ? options.names : [], pick.draft, pick.query);
+        /** @type {HTMLElement[]} */
+        const nodes = [];
+        if (!ready && options.status !== 'error') {
+            nodes.push(el('p', {class: 'recap-pick-note', role: 'status', text: copy.loading}));
+        }
+        if (options.status === 'error') nodes.push(recapPickFailure());
+        rows.forEach(function (row) {
+            nodes.push(recapPickRow(row, ready, pick, ticked));
+        });
+        if (ready && rows.length === 0) {
+            nodes.push(el('p', {class: 'recap-pick-note', text: pick.query.trim() === '' ? copy.empty : copy.nomatch}));
+        }
+        return nodes;
+    }
+
+    function recapPickFailure() {
+        const retry = el('button', {
+            type: 'button', class: 'recap-pick-clear', 'data-pick': 'retry', text: PSL.RECAP_PICK_COPY.retry
+        });
+        retry.addEventListener('click', function () {
+            loadRecapNames();
+            render();
+        });
+        return el('div', {class: 'recap-pick-note', role: 'status'}, [
+            el('span', {text: PSL.RECAP_PICK_COPY.error}), retry
+        ]);
+    }
+
+    /**
+     * One name and its box. The name is the Hub's text, set as text.
+     * @param {{name: string, checked: boolean, absent: boolean}} row
+     * @param {boolean} known whether the Hub offered the names, so one it lacks can be said to be absent
+     * @param {RecapPick} pick
+     * @param {() => void} ticked
+     */
+    function recapPickRow(row, known, pick, ticked) {
+        const box = el('input', {type: 'checkbox', 'data-pick': 'box', 'data-name': row.name});
+        box.checked = row.checked;
+        box.disabled = !row.checked && pick.draft.length >= PSL.RECAP_FILTER_MAX_VALUES;
+        box.addEventListener('change', function () {
+            const rest = pick.draft.filter(function (name) {
+                return name !== row.name;
+            });
+            pick.draft = (box.checked ? rest.concat(row.name) : rest).sort();
+            ticked();
+        });
+        return el('label', {class: 'recap-pick-opt'}, [
+            box,
+            el('span', {class: 'recap-pick-name', text: row.name}),
+            row.absent && known ? el('span', {class: 'recap-pick-absent', text: PSL.RECAP_PICK_COPY.absent}) : null
+        ]);
     }
 
     /**
@@ -11673,6 +11985,9 @@
             return;
         }
         if (state.form.pickerOpen) closePicker();
+        // The open list of the recap's filter line closes as its button does, and takes the focus back.
+        const pickButton = state.recapPick.open ? document.querySelector('.recap-pick-button[aria-expanded="true"]') : null;
+        if (pickButton instanceof HTMLElement) pickButton.click();
     });
     render();
     void loadShell();

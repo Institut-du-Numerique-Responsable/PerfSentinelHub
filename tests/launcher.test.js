@@ -1745,19 +1745,39 @@ test("an action owner reads as a name", () => {
 });
 
 test("the recap route reads its defaults and drops what it does not know", () => {
-    assert.deepEqual(PSL.readRecapRoute("#/recap"), {
-        period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"
-    });
+    const none = {period: "week", at: null, environment: null, services: [], groupings: [], view: "tech"};
+    assert.deepEqual(PSL.readRecapRoute("#/recap"), none);
     assert.deepEqual(PSL.readRecapRoute("#/recap?period=month&at=2026-10-29&environment=prod&service=a%2Fb&grouping=pay&view=pilotage"), {
-        period: "month", at: "2026-10-29", environment: "prod", service: "a/b", grouping: "pay", view: "pilotage"
+        period: "month", at: "2026-10-29", environment: "prod", services: ["a/b"], groupings: ["pay"], view: "pilotage"
     });
     // An unknown value reads as its default, a blank filter as none.
-    assert.deepEqual(PSL.readRecapRoute("#/recap?period=year&at=yesterday&view=ceo&service=%20"), {
-        period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"
-    });
-    assert.equal(PSL.readRecapRoute("#/recap?service=a%0Ab").service, null, "control character");
-    assert.equal(PSL.readRecapRoute("#/recap?service=" + "a".repeat(257)).service, null, "too long");
+    assert.deepEqual(PSL.readRecapRoute("#/recap?period=year&at=yesterday&view=ceo&service=%20"), none);
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=a%0Ab").services, [], "control character");
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=" + "a".repeat(257)).services, [], "too long");
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=" + "a".repeat(256)).services, ["a".repeat(256)], "just short enough");
     assert.equal(PSL.readRecapRoute("#/new").period, "week", "another route reads as the defaults");
+});
+
+test("an old recap link with one service and one namespace still reads as one value each", () => {
+    const route = PSL.readRecapRoute("#/recap?service=a&grouping=b");
+    assert.deepEqual(route.services, ["a"]);
+    assert.deepEqual(route.groupings, ["b"]);
+    assert.equal(PSL.recapPath(route), "/api/recap?period=week&view=tech&service=a&grouping=b");
+});
+
+test("a repeated key reads every value, each once, in the order the Hub keys a job on", () => {
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=a&service=b").services, ["a", "b"]);
+    assert.deepEqual(PSL.readRecapRoute("#/recap?grouping=y&grouping=x&grouping=y").groupings, ["x", "y"]);
+    // One bad value costs only itself, and the others keep their place.
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=a%0Ab&service=ok&service=%20&service=" + "a".repeat(257)).services,
+        ["ok"]);
+    // The same choices in another order are one job, as the Hub's canonical list makes them.
+    const forward = PSL.readRecapRoute("#/recap?service=a&service=b");
+    const backward = PSL.readRecapRoute("#/recap?service=b&service=a");
+    assert.deepEqual(forward, backward);
+    assert.equal(PSL.recapJobKey(forward), PSL.recapJobKey(backward));
+    // A name is matched whole by the Hub: a space around it is part of it.
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=%20a%20").services, [" a "]);
 });
 
 test("the recap hash carries only what differs from the defaults", () => {
@@ -1766,8 +1786,8 @@ test("the recap hash carries only what differs from the defaults", () => {
         period: "day",
         at: "2026-10-29",
         environment: "pre prod",
-        service: "a/b",
-        grouping: null,
+        services: ["a/b"],
+        groupings: [],
         view: "pilotage"
     };
     assert.equal(PSL.recapHash(route),
@@ -1777,11 +1797,25 @@ test("the recap hash carries only what differs from the defaults", () => {
             period: "week",
             at: null,
             environment: null,
-            service: null,
-            grouping: null,
+            services: [],
+            groupings: [],
             view: "tech"
         }),
         "#/recap");
+    assert.equal(PSL.recapHash(PSL.readRecapRoute("#/recap?grouping=x&service=b&service=a")),
+        "#/recap?service=a&service=b&grouping=x");
+});
+
+test("a name with an ampersand, a comma or an accent survives the recap hash", () => {
+    const names = ["R&D", "a,b", "caf\u00e9-\u00c9quipe", "x=y+z%", "100 % #1", "o'reilly \"q\"", "\u65e5\u672c"];
+    const route = {period: "week", at: null, environment: null, services: names.slice().sort(), groupings: ["a&b,c"], view: "tech"};
+    const hash = PSL.recapHash(route);
+    assert.deepEqual(PSL.readRecapRoute(hash), route);
+    // Each is one value of the key, none split on the characters a query uses.
+    assert.equal(new URLSearchParams(hash.slice("#/recap?".length)).getAll("service").length, names.length);
+    // The browser's address bar may re-encode the fragment, and the name must still read back whole.
+    const url = new URL("http://hub.test/" + hash);
+    assert.deepEqual(PSL.readRecapRoute(url.hash), route);
 });
 
 test("a long name breaks at its separators and word boundaries, never inside a parameter", () => {
@@ -1803,17 +1837,21 @@ test("the recap path always names its period and view", () => {
             period: "day",
             at: "2026-10-29",
             environment: "prod",
-            service: "a b",
-            grouping: "g",
+            services: ["a b"],
+            groupings: ["g"],
             view: "pilotage"
         }),
         "/api/recap?period=day&view=pilotage&at=2026-10-29&environment=prod&service=a%20b&grouping=g");
+    // Several names repeat the key, which is how the Hub reads a list.
+    assert.equal(PSL.recapPath(PSL.readRecapRoute("#/recap?service=a%26b&service=c%2Cd&grouping=x&grouping=y")),
+        "/api/recap?period=week&view=tech&service=a%26b&service=c%2Cd&grouping=x&grouping=y");
 });
 
 test("a recap job is keyed on everything but the view and started with the same filters", () => {
-    const route = {period: "day", at: "2026-10-29", environment: "prod", service: "a b", grouping: null, view: "tech"};
+    const route = {period: "day", at: "2026-10-29", environment: "prod", services: ["a b"], groupings: [], view: "tech"};
     assert.equal(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {view: "pilotage"})));
-    assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {service: "c"})));
+    assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {services: ["c"]})));
+    assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {services: ["a b", "c"]})));
     // No day named reads as today in UTC, as the Hub does: past midnight UTC it is another day's job.
     const today = PSL.readRecapRoute("#/recap?period=day");
     const beforeMidnight = Date.UTC(2026, 10, 3, 23, 59);
@@ -1831,11 +1869,69 @@ test("a recap job is keyed on everything but the view and started with the same 
     assert.equal(PSL.recapJobKey(month), PSL.recapJobKey(Object.assign({}, month, {at: "2026-10-31"})));
     assert.equal(PSL.recapJobPath(route, false),
         "/api/recap/jobs?period=day&at=2026-10-29&environment=prod&service=a%20b");
+    // A job takes every name as a repeated key, none squeezed into one value.
+    assert.equal(PSL.recapJobPath(Object.assign({}, route, {services: ["a", "b&c"], groupings: ["x", "y"]}), true),
+        "/api/recap/jobs?period=day&at=2026-10-29&environment=prod&service=a&service=b%26c&grouping=x&grouping=y&refresh=true");
     assert.equal(PSL.recapJobPath(PSL.readRecapRoute("#/recap"), true), "/api/recap/jobs?period=week&refresh=true");
     assert.equal(PSL.recapJobResultPath("0123abcd", "pilotage", false),
         "/api/recap/jobs/0123abcd/result?view=pilotage");
     assert.equal(PSL.recapJobResultPath("0123abcd", "tech", true),
         "/api/recap/jobs/0123abcd/result?view=tech&moves=all");
+});
+
+test("the names a list offers are read for the period and the environment, never for the names chosen", () => {
+    const route = PSL.readRecapRoute("#/recap?period=month&at=2026-10-17&environment=pre%20prod&service=a&grouping=b&view=pilotage");
+    assert.equal(PSL.recapFiltersPath(route), "/api/recap/filters?period=month&at=2026-10-01&environment=pre%20prod");
+    assert.equal(PSL.recapFiltersPath(PSL.readRecapRoute("#/recap?period=day&at=2026-10-17")),
+        "/api/recap/filters?period=day&at=2026-10-17");
+    // No day named is today in UTC, and the path names the period's first day, so it holds for the whole period.
+    const week = PSL.readRecapRoute("#/recap?service=a");
+    const wednesday = Date.UTC(2026, 10, 4, 10);
+    assert.equal(PSL.recapFiltersPath(week, wednesday), "/api/recap/filters?period=week&at=2026-11-02");
+    assert.equal(PSL.recapFiltersPath(week, wednesday + 86_400_000), PSL.recapFiltersPath(week, wednesday));
+    assert.notEqual(PSL.recapFiltersPath(week, wednesday + 5 * 86_400_000), PSL.recapFiltersPath(week, wednesday));
+    // Fifty long names would push the request line past what the server accepts: none goes in.
+    const many = {...week, services: Array.from({length: 50}, (_, index) => String(index).padEnd(256, "x"))};
+    assert.equal(PSL.recapFiltersPath(many, wednesday), PSL.recapFiltersPath(week, wednesday));
+});
+
+test("a checkbox list holds the names offered, then the chosen ones the period lacks, and a search keeps some", () => {
+    const row = (name, checked, absent) => ({name, checked, absent});
+    assert.deepEqual(PSL.recapPickRows(["a", "b", "c"], ["b", "z"], ""),
+        [row("a", false, false), row("b", true, false), row("c", false, false), row("z", true, true)]);
+    assert.deepEqual(PSL.recapPickRows([], [], ""), []);
+    // The Hub's order is kept, not sorted again.
+    assert.deepEqual(PSL.recapPickRows(["b", "a"], [], "").map((entry) => entry.name), ["b", "a"]);
+    // A name chosen and offered is one row.
+    assert.equal(PSL.recapPickRows(["a"], ["a"], "").length, 1);
+});
+
+test("a search in a checkbox list is a plain, case-blind part of the name", () => {
+    const names = (query, offered, ticked) => PSL.recapPickRows(offered, ticked || [], query).map((entry) => entry.name);
+    assert.deepEqual(names("WEB", ["web-shop", "api", "Webhook"]), ["web-shop", "Webhook"]);
+    assert.deepEqual(names("  api ", ["web-shop", "api"]), ["api"]);
+    // Not a pattern: a dot or a star is itself.
+    assert.deepEqual(names(".", ["a.b", "ab"]), ["a.b"]);
+    assert.deepEqual(names("a*", ["a*b", "aab"]), ["a*b"]);
+    assert.deepEqual(names("\u00e9quipe", ["\u00c9quipe-A", "team"]), ["\u00c9quipe-A"]);
+    // A chosen name the period lacks is searched like the others, and nothing is left when nothing matches.
+    assert.deepEqual(names("old", ["new"], ["old-name"]), ["old-name"]);
+    assert.deepEqual(names("zzz", ["new"], ["old-name"]), []);
+});
+
+test("a recap that the Hub could not read for its filters says so, whether it refused or the request was too long", () => {
+    // Fifty long names make a request line the server refuses before any route reads it.
+    [400, 414, 431].forEach((status) => assert.equal(PSL.recapErrorText(status, "tech"), PSL.recapErrorText(400, "tech")));
+    assert.match(PSL.recapErrorText(414, "tech"), /filters/);
+    assert.match(PSL.recapErrorText(500, "tech"), /not any daemon/);
+    assert.equal(PSL.RECAP_FILTER_MAX_VALUES, 50, "the Hub's cap on the names of one filter");
+});
+
+test("what a frozen report says it freezes names the filters whichever way they were set", () => {
+    const several = PSL.readRecapRoute("#/recap?service=a&service=b");
+    assert.match(PSL.recapFreezeText(several), /with the filters above/);
+    assert.match(PSL.recapFreezeText(PSL.readRecapRoute("#/recap?grouping=g")), /with the filters above/);
+    assert.doesNotMatch(PSL.recapFreezeText(PSL.readRecapRoute("#/recap")), /filters/);
 });
 
 test("a screen id is 32 hex characters, drawn anew each time", () => {
@@ -2020,12 +2116,13 @@ test("Management_copy_carries_no_technical_word", () => {
         ...["confirmed", "contradicted", "came_back", "awaiting"].map((state) => PSL.confirmationLabel(state, "pilotage")),
         PSL.recapTruncatedText("pilotage"),
         PSL.recapSourcesNote(["svc-quiet"], "pilotage"),
-        ...[403, 400, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
+        ...[403, 400, 414, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
         ...Object.values(PSL.RECAP_LABELS.pilotage),
         ...Object.values(PSL.RECAP_HELP.pilotage),
         ...Object.values(PSL.RECAP_REPORTS_COPY),
         PSL.recapFreezeText(route),
         PSL.recapFreezeText(PSL.readRecapRoute("#/recap")),
+        ...Object.values(PSL.RECAP_PICK_COPY),
         PSL.recapReportLabel(report),
         PSL.recapReportLabel({...report, subscription: "weekly-shop"}),
         PSL.recapReportStatus(report),
@@ -2167,6 +2264,18 @@ test("a generate request carries the screen's period and filters, and a date onl
     assert.deepEqual(
         PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?at=2026-10-14&environment=prod&namespace=x&grouping=checkout")),
         {period: "week", at: "2026-10-14", environment: "prod", service: null, grouping: "checkout"});
+});
+
+test("a generate request sends one name as a text and several as a list, each filter on its own", () => {
+    const several = PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?service=b&service=a&grouping=x"));
+    assert.deepEqual(several, {period: "week", environment: null, services: ["a", "b"], grouping: "x"});
+    // Never both forms of one filter: the Hub refuses that with a 400.
+    assert.ok(!("service" in several));
+    assert.ok(!("groupings" in several));
+    const grouped = PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?grouping=x&grouping=y"));
+    assert.deepEqual(grouped, {period: "week", environment: null, service: null, groupings: ["x", "y"]});
+    assert.ok(!("services" in grouped));
+    assert.ok(!("grouping" in grouped));
 });
 
 test("a timestamp reads in the browser's zone, in a fixed order", () => {

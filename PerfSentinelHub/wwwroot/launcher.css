@@ -5113,6 +5113,188 @@ a.chip {
     margin-left: auto;
 }
 
+/* The service and namespace lists of the filter line. The button is a .recap-input in a button's
+   clothes; the list opens under it over the page, above the .picker-backdrop that closes it. */
+.recap-pick {
+    position: relative;
+}
+
+.recap-pick-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    max-width: 220px;
+    padding: 0 8px;
+    border: 1px solid var(--border-2);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.recap-pick-button:hover,
+.recap-pick-button[aria-expanded="true"] {
+    border-color: var(--brand);
+}
+
+/* The chevron the house selects draw as their picker icon: --text-3, turned over while open. */
+.recap-pick-button svg {
+    flex: none;
+    margin-left: auto;
+    color: var(--text-3);
+    transition: transform .15s ease;
+}
+
+.recap-pick-button[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+}
+
+/* A long name is cut short on the button, which is named whole by its label. */
+.recap-pick-button .recap-pick-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recap-pick-more {
+    flex: none;
+    color: var(--brand-text);
+}
+
+.recap-pick-pop {
+    position: absolute;
+    z-index: 31;
+    top: calc(100% + 5px);
+    left: 0;
+    width: 290px;
+    max-width: calc(100vw - 32px);
+    padding: 8px;
+    border: 1px solid var(--border-2);
+    border-radius: 10px;
+    background: var(--surface-3);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+}
+
+.recap-pick-pop-end {
+    left: auto;
+    right: 0;
+}
+
+.recap-pick-pop:focus {
+    outline: none;
+}
+
+.recap-pick-search {
+    width: 100%;
+    height: 28px;
+    margin-bottom: 6px;
+    padding: 0 8px;
+    border: 1px solid var(--border-2);
+    border-radius: 6px;
+    background: var(--inset-bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.recap-pick-search::placeholder {
+    color: var(--text-3);
+}
+
+.recap-pick-list {
+    max-height: 260px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.recap-pick-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.recap-pick-opt:hover,
+.recap-pick-opt:has(input:focus-visible) {
+    background: var(--surface-2);
+}
+
+.recap-pick-opt:has(input:disabled) {
+    color: var(--text-3);
+    cursor: default;
+}
+
+.recap-pick-opt input {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--brand);
+}
+
+.recap-pick-opt .recap-pick-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.recap-pick-absent {
+    margin-left: auto;
+    flex: none;
+    color: var(--text-3);
+    font-size: 11px;
+}
+
+.recap-pick-note {
+    margin: 6px 6px 2px;
+    color: var(--text-3);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.recap-pick-note[hidden] {
+    display: none;
+}
+
+.recap-pick-note .recap-pick-clear {
+    margin-left: 8px;
+}
+
+.recap-pick-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
+    padding: 6px 6px 0;
+    border-top: 1px solid var(--border-2);
+    color: var(--text-3);
+    font-size: 12px;
+}
+
+.recap-pick-clear {
+    padding: 2px 4px;
+    border: 0;
+    background: none;
+    color: var(--brand-text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.recap-pick-clear:disabled {
+    color: var(--text-3);
+    cursor: default;
+}
+
 .recap-section {
     margin-top: 30px;
 }
@@ -5926,10 +6108,44 @@ a.chip {
     .recap-filter .segmented {
         margin-left: 0;
     }
+
+    /* Two to a row like the fields beside them, and the list as wide as the filter line, whose left
+       edge it can always reach: a 290px list opened from the second button would run off a phone. */
+    .recap-filter {
+        position: relative;
+    }
+
+    .recap-pick {
+        position: static;
+        flex: 1 1 calc(50% - 5px);
+        min-width: 0;
+    }
+
+    .recap-pick-button {
+        width: 100%;
+        max-width: none;
+    }
+
+    .recap-pick-pop,
+    .recap-pick-pop-end {
+        left: 0;
+        right: 0;
+        width: auto;
+        max-width: none;
+    }
+
+    .recap-pick-list {
+        max-height: min(260px, 45vh);
+    }
+
+    .recap-pick-opt {
+        min-height: 40px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .recap-detail summary svg {
+    .recap-detail summary svg,
+    .recap-pick-button svg {
         transition: none;
     }
 }

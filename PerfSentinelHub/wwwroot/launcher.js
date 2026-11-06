@@ -2406,28 +2406,38 @@
     }
 
     /**
-     * What a `#/recap?…` hash names. Anything it does not know reads as the default, and a filter
-     * that is blank, past 256 characters or carries a control character as none.
+     * The most names one recap filter takes, as RecapFilterValues.MaxValues: past it the Hub answers 400.
+     */
+    const RECAP_FILTER_MAX_VALUES = 50;
+
+    /**
+     * What a `#/recap?…` hash names. Anything it does not know reads as the default. A service or a
+     * namespace is a repeated key (`service=a&service=b`), each name read once and in the order the Hub
+     * keys a job on, so the same choices in another order are one job; a name that is blank, past 256
+     * characters or carries a control character is left out. A name is kept whole, as the Hub matches it.
      * @param {string | null | undefined} hash
      * @returns {{period: 'day' | 'week' | 'month', at: string | null, environment: string | null,
-     *   service: string | null, grouping: string | null, view: 'tech' | 'pilotage'}}
+     *   services: string[], groupings: string[], view: 'tech' | 'pilotage'}}
      */
     function readRecapRoute(hash) {
         const text = String(hash || '');
         const query = text.indexOf('#/recap?') === 0 ? text.slice('#/recap?'.length) : '';
         const params = new URLSearchParams(query);
-        const filter = function (/** @type {string} */ key) {
-            const value = (params.get(key) || '').trim();
-            return value === '' || value.length > 256 || /\p{Cc}/u.test(value) ? null : value;
+        const sound = function (/** @type {string} */ value) {
+            return value.trim() !== '' && value.length <= 256 && !/\p{Cc}/u.test(value);
+        };
+        const names = function (/** @type {string} */ key) {
+            return Array.from(new Set(params.getAll(key).filter(sound))).sort();
         };
         const period = params.get('period') || '';
         const at = params.get('at') || '';
+        const environment = (params.get('environment') || '').trim();
         return {
             period: RECAP_PERIODS.indexOf(period) >= 0 ? /** @type {'day' | 'week' | 'month'} */ (period) : 'week',
             at: /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : null,
-            environment: filter('environment'),
-            service: filter('service'),
-            grouping: filter('grouping'),
+            environment: sound(environment) ? environment : null,
+            services: names('service'),
+            groupings: names('grouping'),
             view: params.get('view') === 'pilotage' ? 'pilotage' : 'tech'
         };
     }
@@ -2440,11 +2450,26 @@
     function recapHash(route) {
         const parts = [];
         if (route.period !== 'week') parts.push('period=' + encodeURIComponent(route.period));
-        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
-            if (route[key]) parts.push(key + '=' + encodeURIComponent(route[key]));
+        if (route.at) parts.push('at=' + encodeURIComponent(route.at));
+        if (route.environment) parts.push('environment=' + encodeURIComponent(route.environment));
+        recapNameQuery(route).forEach(function (pair) {
+            parts.push(pair);
         });
         if (route.view !== 'tech') parts.push('view=' + encodeURIComponent(route.view));
         return parts.length ? '#/recap?' + parts.join('&') : '#/recap';
+    }
+
+    /**
+     * The `key=value` pairs of the names a route chooses, one pair for each: a repeated key.
+     * @param {{services: string[], groupings: string[]}} route
+     * @returns {string[]}
+     */
+    function recapNameQuery(route) {
+        return route.services.map(function (name) {
+            return 'service=' + encodeURIComponent(name);
+        }).concat(route.groupings.map(function (name) {
+            return 'grouping=' + encodeURIComponent(name);
+        }));
     }
 
     /**
@@ -2483,16 +2508,66 @@
     }
 
     /**
-     * The day and the filters a route names, each as `&key=value`, in the order the Hub reads them.
+     * The day, the environment and the names a route chooses, each as `&key=value`, in the order the Hub
+     * reads them.
      * @param {ReturnType<typeof readRecapRoute>} route
      * @returns {string}
      */
     function recapFilterQuery(route) {
+        return recapScopeQuery(route) + recapNameQuery(route).map(function (pair) {
+            return '&' + pair;
+        }).join('');
+    }
+
+    /**
+     * The day and the environment a route names, each as `&key=value`: what the names a list offers depend on.
+     * @param {{at: string | null, environment: string | null}} route
+     * @returns {string}
+     */
+    function recapScopeQuery(route) {
         let query = '';
-        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
-            if (route[key]) query += '&' + key + '=' + encodeURIComponent(route[key]);
-        });
+        if (route.at) query += '&at=' + encodeURIComponent(route.at);
+        if (route.environment) query += '&environment=' + encodeURIComponent(route.environment);
         return query;
+    }
+
+    /**
+     * The read of the names a list offers for a route's period and environment. It names the period's
+     * first day, as recapJobKey does, so it is the same path all period long and serves as the key of
+     * what was read. The names already chosen are not in it: the Hub ignores them, and fifty long ones
+     * would make a request line it refuses.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @param {number} [now] the moment that decides today when the route names no day, Date.now() by default
+     * @returns {string}
+     */
+    function recapFiltersPath(route, now) {
+        const day = route.at || cardIso(new Date(now === undefined ? Date.now() : now));
+        const at = route.period === 'day' ? day : cardPeriodStart(route.period, day);
+        return '/api/recap/filters?period=' + encodeURIComponent(route.period)
+            + recapScopeQuery({at: at, environment: route.environment});
+    }
+
+    /**
+     * The rows of a checkbox list: the names the Hub offers in its order, then the chosen ones it does
+     * not offer for this period, flagged `absent` so they can still be unticked. `query` keeps the rows
+     * whose name holds it, as plain text and whatever the case.
+     * @param {string[]} offered
+     * @param {string[]} chosen
+     * @param {string} query
+     * @returns {Array<{name: string, checked: boolean, absent: boolean}>}
+     */
+    function recapPickRows(offered, chosen, query) {
+        const rows = offered.map(function (name) {
+            return {name: name, checked: chosen.indexOf(name) >= 0, absent: false};
+        }).concat(chosen.filter(function (name) {
+            return offered.indexOf(name) < 0;
+        }).map(function (name) {
+            return {name: name, checked: true, absent: true};
+        }));
+        const wanted = query.trim().toLowerCase();
+        return wanted === '' ? rows : rows.filter(function (row) {
+            return row.name.toLowerCase().includes(wanted);
+        });
     }
 
     /**
@@ -2595,13 +2670,18 @@
     const RECAP_REPORTS_COPY = textTable('recap.reports.', ['title', 'hint', 'help', 'generate', 'generating', 'none',
         'failed', 'refused']);
 
+    /** The fixed copy of the checkbox lists on the filter line, pinned with the Management words test. */
+    const RECAP_PICK_COPY = textTable('recap.pick.', ['all.service', 'all.grouping', 'search', 'loading', 'error',
+        'retry', 'empty', 'nomatch', 'absent', 'clear']);
+
     /**
      * What Generate a report would freeze for a route.
      * @param {ReturnType<typeof readRecapRoute>} route
      * @returns {string}
      */
     function recapFreezeText(route) {
-        const filters = route.environment || route.service || route.grouping ? t('recap.freeze.filters') : '';
+        const filters = route.environment || route.services.length > 0 || route.groupings.length > 0
+            ? t('recap.freeze.filters') : '';
         return route.at
             ? t('recap.freeze.at.' + route.period, {at: recapDay(route.at), filters: filters})
             : t('recap.freeze.last.' + route.period, {filters: filters});
@@ -2616,7 +2696,8 @@
     function recapErrorText(status, view) {
         const audience = view === 'pilotage' ? 'pilotage' : 'tech';
         if (status === 403) return t('recap.error.forbidden.' + audience);
-        if (status === 400) return t('recap.error.invalid');
+        // A request line the server finds too long, as fifty long names make, is a filter it cannot read.
+        if (status === 400 || status === 414 || status === 431) return t('recap.error.invalid');
         return t('recap.error.other.' + audience);
     }
 
@@ -2677,18 +2758,19 @@
 
     /**
      * The body of a generate request: the screen's period and filters, and the date only when
-     * the route names one (the Hub then takes the last closed period).
+     * the route names one (the Hub then takes the last closed period). A filter with one name is sent
+     * as that text and one with several as a list, never both, which the Hub refuses.
      * @param {ReturnType<typeof readRecapRoute>} route
-     * @returns {{period: string, at?: string, environment: string | null, service: string | null,
-     *   grouping: string | null}}
+     * @returns {{period: string, at?: string, environment: string | null, service?: string | null,
+     *   services?: string[], grouping?: string | null, groupings?: string[]}}
      */
     function recapOnDemandBody(route) {
         return {
             period: route.period,
             ...(route.at ? {at: route.at} : {}),
             environment: route.environment,
-            service: route.service,
-            grouping: route.grouping
+            ...(route.services.length > 1 ? {services: route.services} : {service: route.services[0] || null}),
+            ...(route.groupings.length > 1 ? {groupings: route.groupings} : {grouping: route.groupings[0] || null})
         };
     }
 
@@ -4075,10 +4157,14 @@
         namesService,
         readRecapRoute,
         recapHash,
+        recapFiltersPath,
+        recapPickRows,
+        RECAP_FILTER_MAX_VALUES,
         breakParts,
         recapPath,
         recapReportLabel,
         RECAP_REPORTS_COPY,
+        RECAP_PICK_COPY,
         recapPlain,
         recapFreezeText,
         recapErrorText,
