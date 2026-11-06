@@ -766,7 +766,8 @@ liste.
 
 - **Noms.** Ceux des copies de findings présentes dans la période, acquittées comprises, chaque liste
   triée par nom. Une copie absente de la période ne propose rien, même si une autre copie du même
-  finding est présente.
+  finding est présente. Une copie présente ne propose aucun namespace où elle a été vue pour la dernière
+  fois avant la période.
 - **Aucun compte.** Un nom ne porte aucun volume. Additionner les I/O évitables d'un service demande la
   lecture des findings du récap, qui prend plusieurs secondes sous un périmètre réduit, et un namespace
   ne pourrait de toute façon pas en porter : les volumes sont stockés par finding, et un finding vu dans

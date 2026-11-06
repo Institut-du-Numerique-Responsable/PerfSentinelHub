@@ -471,6 +471,19 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal(["ns-now"], options.Groupings);
     }
 
+    // The signature is grouping-blind: a service moved between namespaces stays one copy, in both.
+    [Fact]
+    public async Task A_namespace_last_seen_before_the_period_is_not_offered_by_a_copy_still_in_it()
+    {
+        await SeedAsync("a", "f", LastMon, grouping: "ns-old");
+        await SeedAsync("a", "f", Mon, grouping: "ns-first-day");
+        await SeedAsync("a", "f", Thu, grouping: "ns-now");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["ns-first-day", "ns-now"], options.Groupings);
+    }
+
     [Fact]
     public async Task The_filter_names_are_sorted_and_each_appears_once()
     {

@@ -96,7 +96,7 @@ public sealed partial class HubDatabase
                 {RecapNamesWith(access)}
                 SELECT DISTINCT g.grouping FROM finding_groupings AS g
                 JOIN finding_sources AS fs ON fs.signature = g.signature AND fs.source_id = g.source_id
-                WHERE {Copies(access, "g")}{(access ? $" AND {GroupingAccess}" : "")}
+                WHERE g.last_seen_ms >= $from_ms AND {Copies(access, "g")}{(access ? $" AND {GroupingAccess}" : "")}
                   {InWindow("g", "p.source_id = g.source_id", "dc.source_id = g.source_id")}
                 ORDER BY g.grouping;
                 """;

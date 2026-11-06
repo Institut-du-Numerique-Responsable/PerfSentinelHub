@@ -712,7 +712,7 @@ in the query is ignored, so a choice already made does not narrow the list.
 
 - **Names.** Those of the finding copies present in the period, acknowledged ones included, each list
   sorted by name. A copy absent from the period offers nothing, even when another copy of the same
-  finding is present.
+  finding is present. A copy that is present offers no namespace it was last seen in before the period.
 - **No count.** A name carries no volume. Adding up a service's avoidable I/O takes the findings read
   of the recap, which takes seconds under a narrowed scope, and a namespace could not carry one anyway:
   volumes are stored per finding, and a finding seen in two namespaces would count whole in both.
