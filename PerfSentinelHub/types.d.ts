@@ -444,6 +444,12 @@ export interface RecapPriority {
     confidence?: string;
 }
 
+/** One coloured piece of a recap priority's SQL, as `PSL.sqlTokens` cuts it. Joined, the texts are the statement. */
+export interface SqlToken {
+    kind: 'keyword' | 'table' | 'param' | 'column' | 'text';
+    text: string;
+}
+
 /** One finding that moved, `RecapMove`. */
 export interface RecapMove {
     finding_type: string;

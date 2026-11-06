@@ -7852,7 +7852,7 @@
         const details = el('details', {class: 'recap-detail'}, [
             el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12), document.createTextNode(t('recap.fix.summary'))]),
             el('div', {class: 'recap-detail-body'}, [
-                priority.template ? el('pre', {class: 'recap-code', text: priority.template}) : null,
+                priority.template ? recapTemplate(priority) : null,
                 recapFix(priority.suggested_fix),
                 recapCodeLocation(priority.code_location),
                 recapFacts(priority),
@@ -7864,6 +7864,18 @@
             state.panelOpen[key] = details.open;
         });
         return details;
+    }
+
+    /**
+     * The template as the engine saw it. SQL is laid out and coloured, one span per piece set with
+     * `textContent` since the text comes from observed traffic. Anything else is printed as it is.
+     * @param {RecapPriority} priority
+     */
+    function recapTemplate(priority) {
+        if (!PSL.isSqlFinding(priority.finding_type)) return el('pre', {class: 'recap-code', text: priority.template});
+        return el('pre', {class: 'recap-code'}, PSL.sqlTokens(priority.template).map(function (token) {
+            return el('span', {class: 'sql-' + token.kind, text: token.text});
+        }));
     }
 
     /**

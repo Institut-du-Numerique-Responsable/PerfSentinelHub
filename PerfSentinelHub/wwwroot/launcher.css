@@ -5626,6 +5626,25 @@ a.chip {
     color: var(--text);
 }
 
+/* The SQL of a priority, in four theme tokens, each at AA on --inset-bg in both themes
+   (tests/launcher.test.js measures it). */
+.sql-keyword {
+    color: var(--brand-text);
+    font-weight: 600;
+}
+
+.sql-table {
+    color: var(--info-fg);
+}
+
+.sql-param {
+    color: var(--warn-fg);
+}
+
+.sql-column {
+    color: var(--text-2);
+}
+
 .recap-kv {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr);

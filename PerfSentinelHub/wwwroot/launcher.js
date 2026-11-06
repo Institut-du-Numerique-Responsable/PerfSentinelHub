@@ -2773,6 +2773,212 @@
     }
 
     /**
+     * The longest statement that is laid out. Past it the text stays as it came and only the
+     * colours apply: a long template is read as a block, and breaking it adds length to a screen
+     * that already has too much.
+     */
+    const RECAP_SQL_LAYOUT_MAX = 600;
+    /** Where the grouped columns wrap, indent included. */
+    const RECAP_SQL_LINE_WIDTH = 100;
+
+    // Each alternative eats the whole of what it names, so no clause word inside a string, a
+    // comment or a quoted name is ever read as one. An unterminated one runs to the end. The last
+    // alternative takes any character left, so the pieces always add back to the input.
+    // shortcut: no dollar-quoted strings, the engine rewrites literals to `?` before a template
+    // reaches the Hub, add one if a template ever carries one.
+    const SQL_LEXEME = new RegExp([
+        /--[^\n]*/, // line comment
+        /\/\*[\s\S]*?(?:\*\/|$)/, // block comment
+        /'(?:[^']|'')*(?:'|$)/, // string
+        /"(?:[^"]|"")*(?:"|$)/, // quoted name
+        /`[^`]*(?:`|$)/, // quoted name, MySQL
+        /\s+/,
+        /\$\d+|\?/, // parameter
+        /[\p{L}\p{N}_$.]+/u, // name, number, keyword
+        /[=<>!]+/, // comparison, or the start of a longer operator
+        /[\s\S]/u // anything else, one character
+    ].map(function (part) {
+        return part.source;
+    }).join('|'), 'gu');
+    const SQL_KEYWORDS = new Set(['select', 'from', 'where', 'join', 'inner', 'left', 'right', 'full', 'outer', 'cross',
+        'natural', 'on', 'using', 'and', 'or', 'not', 'in', 'is', 'null', 'true', 'false', 'like', 'ilike', 'between',
+        'exists', 'as', 'distinct', 'group', 'by', 'having', 'order', 'asc', 'desc', 'limit', 'offset', 'union', 'all',
+        'intersect', 'except', 'case', 'when', 'then', 'else', 'end', 'insert', 'into', 'values', 'update', 'set',
+        'delete', 'returning', 'with', 'any', 'some']);
+    // A clause keyword, the word that names the part of the statement being read.
+    const SQL_CLAUSES = new Set(['select', 'from', 'join', 'where', 'group', 'order', 'having', 'limit', 'offset',
+        'union', 'intersect', 'except']);
+    const SQL_JOIN_PREFIXES = new Set(['left', 'right', 'inner', 'full', 'cross', 'natural', 'outer']);
+    // The comparisons that get a blank on each side. `<=>` or `->` are another operator, left whole.
+    const SQL_COMPARISONS = new Set(['=', '<>', '!=', '<', '>', '<=', '>=']);
+    const SQL_TABLE_AFTER = new Set(['from', 'join', 'into', 'update']);
+    // A blank goes beside a comparison only where the neighbour is a name, a value or a bracket, so
+    // that `@>` or `<-` is never pulled apart.
+    const SQL_BEFORE_COMPARISON = /[\p{L}\p{N}_$?'"`)]$/u;
+    const SQL_AFTER_COMPARISON = /^[\p{L}\p{N}_$?'"`(]/u;
+
+    /**
+     * Whether a finding is about SQL, which is what its template is then.
+     * @param {string} findingType
+     * @returns {boolean}
+     */
+    function isSqlFinding(findingType) {
+        return typeof findingType === 'string' && findingType.endsWith('_sql');
+    }
+
+    /**
+     * Each piece of the text with the blanks that came before it. Blanks at the end are returned
+     * as a last piece with no text.
+     * @param {string} text
+     * @returns {Array<{gap: string, text: string}>}
+     */
+    function sqlItems(text) {
+        const items = [];
+        let gap = '';
+        for (const [piece] of text.matchAll(SQL_LEXEME)) {
+            if (/^\s/.test(piece)) gap = piece;
+            else {
+                items.push({gap, text: piece});
+                gap = '';
+            }
+        }
+        items.push({gap, text: ''});
+        return items;
+    }
+
+    /**
+     * Whether the piece at `index` opens a line: a clause keyword, a join with its qualifier,
+     * `group by`, `order by`. `from` after `delete` or `distinct` belongs to the line before it.
+     * @param {Array<{text: string}>} items
+     * @param {number} index
+     * @param {string} before the lower-cased piece before it
+     * @returns {boolean}
+     */
+    function sqlOpensLine(items, index, before) {
+        const word = items[index].text.toLowerCase();
+        const after = items[index + 1] ? items[index + 1].text.toLowerCase() : '';
+        if (word === 'join') return !SQL_JOIN_PREFIXES.has(before);
+        if (SQL_JOIN_PREFIXES.has(word)) return !SQL_JOIN_PREFIXES.has(before) && (after === 'join' || SQL_JOIN_PREFIXES.has(after));
+        if (word === 'group' || word === 'order') return after === 'by';
+        if (word === 'from') return before !== 'delete' && before !== 'distinct';
+        return SQL_CLAUSES.has(word);
+    }
+
+    /**
+     * @typedef {{tidy: boolean, out: import('../types').SqlToken[], clauses: string[], before: string,
+     *   table: boolean, indent: boolean, comma: boolean, compare: boolean, width: number}} SqlScan
+     */
+
+    /**
+     * @param {SqlScan} scan
+     * @param {import('../types').SqlToken['kind']} kind
+     * @param {string} text
+     */
+    function sqlEmit(scan, kind, text) {
+        if (!text) return;
+        const last = scan.out[scan.out.length - 1];
+        if (last && last.kind === kind) last.text += text;
+        else scan.out.push({kind, text});
+        const lineStart = text.lastIndexOf('\n');
+        scan.width = lineStart < 0 ? scan.width + text.length : text.length - lineStart - 1;
+    }
+
+    /**
+     * @param {SqlScan} scan
+     * @param {string} text
+     * @param {string} lower
+     * @returns {import('../types').SqlToken['kind']}
+     */
+    function sqlKind(scan, text, lower) {
+        if (text === '?' || /^\$\d/.test(text)) return 'param';
+        if (SQL_KEYWORDS.has(lower) || SQL_COMPARISONS.has(text)) return 'keyword';
+        if (/^(--|\/\*)/.test(text)) return 'text';
+        if (scan.table && /^[\p{L}_"`]/u.test(text)) return 'table';
+        return scan.clauses[scan.clauses.length - 1] === 'select' ? 'column' : 'text';
+    }
+
+    /**
+     * What goes between the last piece and this one. Laid out, a clause opens a line, the
+     * columns follow `select` indented and grouped, a comparison has a blank on each side. Not
+     * laid out, the blanks that came with the text.
+     * @param {SqlScan} scan
+     * @param {Array<{gap: string, text: string}>} items
+     * @param {number} index
+     * @param {boolean} opens
+     * @returns {string}
+     */
+    function sqlSeparator(scan, items, index, opens) {
+        const {gap, text} = items[index];
+        if (!scan.tidy) return gap;
+        if (scan.out.length === 0) return '';
+        if (opens) return '\n';
+        if (scan.indent) return '\n  ';
+        if (scan.comma) return scan.width + 1 + text.length + 1 > RECAP_SQL_LINE_WIDTH ? '\n  ' : ' ';
+        if (gap) return gap;
+        const beside = SQL_COMPARISONS.has(text)
+            ? SQL_BEFORE_COMPARISON.test(items[index - 1].text)
+            : scan.compare && SQL_AFTER_COMPARISON.test(text);
+        return beside ? ' ' : '';
+    }
+
+    /**
+     * Moves the scan past one piece: the brackets, the clause being read, what the next piece
+     * expects.
+     * @param {SqlScan} scan
+     * @param {string} text
+     * @param {string} lower
+     */
+    function sqlAdvance(scan, text, lower) {
+        const clauses = scan.clauses;
+        const top = clauses.length - 1;
+        scan.indent = scan.tidy && top === 0 && lower === 'select';
+        if (text === '(') clauses.push(clauses[top]);
+        else if (text === ')' && top > 0) clauses.pop();
+        else if (SQL_CLAUSES.has(lower)) clauses[top] = lower;
+        const now = clauses.length - 1;
+        scan.table = SQL_TABLE_AFTER.has(lower) || (text === ',' && clauses[now] === 'from');
+        scan.comma = scan.tidy && now === 0 && text === ',' && clauses[0] === 'select';
+        scan.compare = scan.tidy && SQL_COMPARISONS.has(text);
+        scan.before = lower;
+    }
+
+    /**
+     * @param {SqlScan} scan
+     * @param {Array<{gap: string, text: string}>} items
+     * @param {number} index
+     */
+    function sqlStep(scan, items, index) {
+        const text = items[index].text;
+        const lower = text.toLowerCase();
+        const opens = scan.tidy && scan.clauses.length === 1 && sqlOpensLine(items, index, scan.before);
+        const gap = sqlSeparator(scan, items, index, opens);
+        const inColumns = scan.clauses[scan.clauses.length - 1] === 'select';
+        sqlEmit(scan, inColumns && !gap.includes('\n') ? 'column' : 'text', gap);
+        sqlEmit(scan, sqlKind(scan, text, lower), text);
+        sqlAdvance(scan, text, lower);
+    }
+
+    /**
+     * A statement as the coloured pieces the recap prints. Only blanks are added, removed or
+     * moved, and only up to {@link RECAP_SQL_LAYOUT_MAX} characters: no piece of the text is ever
+     * changed, so what is copied from the screen is still the same query. Whatever sits inside a
+     * string, a comment or a quoted name keeps its blanks too.
+     * @param {string} text
+     * @returns {import('../types').SqlToken[]}
+     */
+    function sqlTokens(text) {
+        /** @type {SqlScan} */
+        const scan = {tidy: text.length <= RECAP_SQL_LAYOUT_MAX, out: [], clauses: [''], before: '', table: false,
+            indent: false, comma: false, compare: false, width: 0};
+        const items = sqlItems(text);
+        items.forEach(function (item, index) {
+            if (item.text) sqlStep(scan, items, index);
+            else if (!scan.tidy) sqlEmit(scan, 'text', item.gap);
+        });
+        return scan.out;
+    }
+
+    /**
      * A row's trend as a person reads it: a word, or the relative change as a signed percentage.
      * @param {string} trend `new`, `up`, `down`, `flat`, `gone` or `unknown`
      * @param {number | null | undefined} change
@@ -3894,6 +4100,9 @@
         trendText,
         hasAvoidableVolume,
         dividesBefore,
+        isSqlFinding,
+        sqlTokens,
+        RECAP_SQL_LAYOUT_MAX,
         confirmationLabel,
         periodText,
         incompleteText,

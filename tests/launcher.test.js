@@ -2540,3 +2540,146 @@ test("the language button rests on the active language and slides to the other o
     assert.match(rule(".shell-lang:hover .shell-lang-track") || "", /transform: none/);
     assert.match(rule(':root[lang="fr"] .shell-lang:hover .shell-lang-track') || "", /translateX\(-19px\)/);
 });
+
+// ---- the SQL of a recap priority, laid out and coloured
+
+const SCREENSHOT_SQL = "select md1_0.id,md1_0.code,md1_0.created_by,md1_0.creation_date,md1_0.dossier_id,"
+    + "md1_0.libelle,md1_0.modification_date,md1_0.modified_by,md1_0.trace_id,md1_0.type,md1_0.valeur "
+    + "from mykinexo.meta_dossier md1_0 where md1_0.dossier_id=?";
+const sqlText = tokens => tokens.map(token => token.text).join("");
+const noBlanks = text => text.replace(/\s/g, "");
+
+test("the query of the screenshot reads select, grouped indented columns, from, where", () => {
+    const tokens = PSL.sqlTokens(SCREENSHOT_SQL);
+
+    assert.equal(sqlText(tokens), [
+        "select",
+        "  md1_0.id, md1_0.code, md1_0.created_by, md1_0.creation_date, md1_0.dossier_id, md1_0.libelle,",
+        "  md1_0.modification_date, md1_0.modified_by, md1_0.trace_id, md1_0.type, md1_0.valeur",
+        "from mykinexo.meta_dossier md1_0",
+        "where md1_0.dossier_id = ?"
+    ].join("\n"));
+    const word = (kind, text) => tokens.find(token => token.kind === kind && token.text.includes(text));
+    assert.ok(word("keyword", "select") && word("keyword", "from") && word("keyword", "where"));
+    assert.equal(word("keyword", "=").text, "=");
+    assert.equal(word("table", "mykinexo.meta_dossier").text, "mykinexo.meta_dossier");
+    assert.equal(word("param", "?").text, "?");
+    assert.ok(word("column", "md1_0.valeur"));
+    assert.ok(tokens.some(token => token.kind === "text" && token.text.includes("\n")),
+        "a line break is a text token, never part of a coloured one");
+});
+
+test("a clause opens a line, whatever its case", () => {
+    for (const clause of ["join", "left join", "left outer join", "where", "group by", "having", "order by", "limit",
+        "union"]) {
+        for (const written of [clause, clause.toUpperCase()]) {
+            const lines = sqlText(PSL.sqlTokens("select a from t " + written + " x")).split("\n");
+            assert.ok(lines.includes(written + " x"), written + " should open a line: " + JSON.stringify(lines));
+        }
+    }
+    assert.deepEqual(sqlText(PSL.sqlTokens("SELECT a FROM t")).split("\n"), ["SELECT", "  a", "FROM t"]);
+});
+
+test("a clause inside parentheses, a function and a delete stay on their line", () => {
+    const sub = sqlText(PSL.sqlTokens("select a from t where b in (select c from u where d=?)"));
+    assert.equal(sub, "select\n  a\nfrom t\nwhere b in (select c from u where d = ?)");
+    assert.equal(sqlText(PSL.sqlTokens("select left(a, 2), count(*) from t")), "select\n  left(a, 2), count(*)\nfrom t");
+    assert.equal(sqlText(PSL.sqlTokens("delete from t where a=?")), "delete from t\nwhere a = ?");
+});
+
+test("laying a query out never changes a token", () => {
+    const inputs = [
+        "select a from t where b = 'select from x' and c=?",
+        "select a from t -- from here\nwhere b=1",
+        "select a /* where */ from t where b=1 /* order by */ order by a",
+        'select "from", "a b" from "where" where "x"=?',
+        "select café, 名前, 😀 from täble where naïve='ñ ü' and 日本=?",
+        "select a from t where j@>b and c<@d and e<-1 and f->>g=? and h<=>i and k!=l and m<>n and o>=p",
+        "select a from t where b='unterminated",
+        "select a from t where b=1 /* unterminated",
+        "select a from t where b=$1 and c=$2",
+        "",
+        "   "
+    ];
+    for (const input of inputs) {
+        for (const padded of [input, input + " ".repeat(601)]) {
+            assert.equal(noBlanks(sqlText(PSL.sqlTokens(padded))), noBlanks(padded), JSON.stringify(padded.slice(0, 80)));
+        }
+    }
+});
+
+test("the inside of a string, a comment and a quoted name keeps its blanks and its operators", () => {
+    const text = sqlText(PSL.sqlTokens("select a from t where b='x=y  from z' and \"c=d  e\"=? -- g=h  from\n"));
+    assert.ok(text.includes("'x=y  from z'"));
+    assert.ok(text.includes('"c=d  e" = ?'));
+    assert.ok(text.includes("-- g=h  from"));
+    assert.ok(!/\nfrom z/.test(text));
+});
+
+test("an operator that is part of a longer one is not split by its blanks", () => {
+    const text = sqlText(PSL.sqlTokens("select a from t where j@>b and c<@d and e<-1 and f->>g=? and x=-1"));
+    for (const whole of ["@>", "<@", "<-", "->>", "=-"]) assert.ok(text.includes(whole), whole + " in " + text);
+});
+
+test("past 600 characters the layout stops and only the colours stay", () => {
+    const query = length => "select " + "c".repeat(length - "select  from t where x=?".length) + " from t where x=?";
+    const long = query(601);
+    assert.equal(long.length, 601);
+    const tokens = PSL.sqlTokens(long);
+
+    assert.equal(sqlText(tokens), long, "not one blank changes, not even around the =");
+    assert.ok(!sqlText(tokens).includes("\n"));
+    assert.deepEqual([...new Set(tokens.map(token => token.kind))].sort(),
+        ["column", "keyword", "param", "table", "text"]);
+
+    const exactly = query(600);
+    assert.equal(exactly.length, 600);
+    assert.ok(sqlText(PSL.sqlTokens(exactly)).includes("\nfrom t\nwhere x = ?"), "600 is still laid out");
+    assert.equal(PSL.RECAP_SQL_LAYOUT_MAX, 600);
+});
+
+test("only a finding on SQL gets the coloured block", () => {
+    assert.equal(PSL.isSqlFinding("redundant_sql"), true);
+    assert.equal(PSL.isSqlFinding("n_plus_one_sql"), true);
+    assert.equal(PSL.isSqlFinding("slow_sql"), true);
+    assert.equal(PSL.isSqlFinding("redundant_http"), false);
+    assert.equal(PSL.isSqlFinding("slow_messaging"), false);
+    assert.equal(PSL.isSqlFinding(undefined), false);
+    assert.match(wwwroot("app.js"), /PSL\.isSqlFinding\(priority\.finding_type\)/);
+});
+
+test("the SQL colours stay readable on the inset, in both themes", () => {
+    // WCAG 2.x contrast. The inset is --inset-bg laid over the card ground, --surface.
+    const tokens = wwwroot("tokens.css");
+    const rgba = value => {
+        const hex = value.match(/^#([0-9a-f]{6})$/i);
+        if (hex) return [0, 2, 4].map(at => parseInt(hex[1].substr(at, 2), 16)).concat(1);
+        const parts = value.match(/^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/);
+        return [1, 2, 3].map(at => Number(parts[at])).concat(Number(parts[4]));
+    };
+    const luminance = rgb => {
+        const [r, g, b] = rgb.slice(0, 3).map(channel => {
+            const c = channel / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a, b) => {
+        const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+        return (high + 0.05) / (low + 0.05);
+    };
+    const css = wwwroot("launcher.css");
+    const used = {keyword: "brand-text", table: "info-fg", param: "warn-fg", column: "text-2"};
+    for (const [kind, name] of Object.entries(used)) {
+        assert.match(css, new RegExp("\\.sql-" + kind + " \\{[^}]*color: var\\(--" + name + "\\);"));
+    }
+    for (const theme of ["dark", "light"]) {
+        const block = tokens.match(new RegExp(':root\\[data-theme="' + theme + '"\\] \\{([^}]*)\\}'))[1];
+        const token = name => rgba(block.match(new RegExp("--" + name + ":\\s*([^;]+);"))[1].trim());
+        const [ground, inset] = [token("surface"), token("inset-bg")];
+        const floor = ground.slice(0, 3).map((channel, at) => channel * (1 - inset[3]) + inset[at] * inset[3]);
+        for (const name of ["text", ...Object.values(used)]) {
+            assert.ok(ratio(token(name), floor) >= 4.5, theme + " --" + name + " on the inset: " + ratio(token(name), floor));
+        }
+    }
+});
