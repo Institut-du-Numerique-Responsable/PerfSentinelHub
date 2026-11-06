@@ -80,6 +80,48 @@ public sealed class RecapJobsApiTests(HubApplicationFactory factory) : IClassFix
         Assert.Equal(id, await IdAsync(again));
     }
 
+    // The same choices in another order are the same recap: one job, not two.
+    [Fact]
+    public async Task The_same_services_and_namespaces_in_any_order_share_a_job()
+    {
+        using var client = factory.CreateClient();
+        using var first = await client.SendAsync(
+            Start("period=day&service=jb-a&service=jb-b&grouping=jb-x&grouping=jb-y&refresh=true"), Token);
+        var id = await IdAsync(first);
+        await SettledAsync(client, id);
+
+        using var swapped = await client.SendAsync(
+            Start("period=day&service=jb-b&service=jb-a&grouping=jb-y&grouping=jb-x"), Token);
+        using var repeated = await client.SendAsync(
+            Start("period=day&service=jb-a&service=jb-b&service=jb-a&grouping=jb-x&grouping=jb-y"), Token);
+        using var fewer = await client.SendAsync(
+            Start("period=day&service=jb-a&grouping=jb-x&grouping=jb-y"), Token);
+        using var another = await client.SendAsync(
+            Start("period=day&service=jb-a&service=jb-c&grouping=jb-x&grouping=jb-y"), Token);
+
+        Assert.Equal(id, await IdAsync(swapped));
+        Assert.Equal(id, await IdAsync(repeated));
+        Assert.NotEqual(id, await IdAsync(fewer));
+        Assert.NotEqual(id, await IdAsync(another));
+        // The job's recap is the one GET /api/recap computes for the same choices.
+        const string query = "period=day&service=jb-b&service=jb-a&grouping=jb-y&grouping=jb-x";
+        Assert.Equal(await client.GetStringAsync("/api/recap?" + query, Token),
+            await client.GetStringAsync($"/api/recap/jobs/{id}/result", Token));
+    }
+
+    [Fact]
+    public async Task A_filter_list_past_its_cap_is_a_400()
+    {
+        using var client = factory.CreateClient();
+        var fifty = string.Join('&', Enumerable.Range(0, 51).Select(index => $"service=s{index}"));
+
+        using var response = await client.SendAsync(Start("period=day&" + fifty), Token);
+        using var long257 = await client.SendAsync(Start($"period=day&grouping={new string('a', 257)}"), Token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, long257.StatusCode);
+    }
+
     [Fact]
     public async Task A_job_is_started_from_this_site_with_a_JSON_request_only()
     {

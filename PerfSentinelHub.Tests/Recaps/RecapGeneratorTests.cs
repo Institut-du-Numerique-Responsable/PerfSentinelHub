@@ -181,6 +181,41 @@ public sealed partial class RecapGeneratorTests : IAsyncLifetime
         Assert.Equal("2026-10-19", Assert.Single(await ReportsAsync()).PeriodFrom);
     }
 
+    // A subscription keeps its one service and one grouping: the report carries them as strings, as ever.
+    [Fact]
+    public async Task A_subscription_filters_on_its_single_service_and_grouping()
+    {
+        await StartAsync(new RecapSubscriptionOptions
+        {
+            Name = "weekly",
+            Cadences = ["week"],
+            Views = [RecapViewNames.Pilotage],
+            Service = "cart-svc",
+            Grouping = "shop"
+        });
+        const string shop = """[{"key":"k8s.namespace.name","value":"shop"}]""";
+        foreach (var (signature, service, grouping) in new[]
+                 {
+                     ("kept", "cart-svc", shop), ("wrong-service", "order-svc", shop),
+                     ("wrong-grouping", "cart-svc", """[{"key":"k8s.namespace.name","value":"lab"}]""")
+                 })
+            await _database.UpsertBatchAsync(
+                new SourceSnapshot("a", "Shop", "prod", "0.37.1"),
+                FindingJson.Batch(FindingJson.Envelope(signature, service: service, grouping: grouping)),
+                (LastMon + 1) * DayMs + 3_600_000, Token);
+        await LedgerAsync("a", [.. Days(LastMon, 7)]);
+        await LedgerAsync("b", [.. Days(LastMon, 7)]);
+
+        await _generator.RunOnceAsync(Token);
+
+        var snapshot = await SnapshotAsync(Assert.Single(await ReportsAsync()));
+        Assert.Equal("kept", Assert.Single(snapshot.Priorities).Signature);
+        Assert.Equal("cart-svc", snapshot.Filters.Service);
+        Assert.Equal("shop", snapshot.Filters.Grouping);
+        Assert.Null(snapshot.Filters.Services);
+        Assert.Null(snapshot.Filters.Groupings);
+    }
+
     // ------------------------------------------------------------ once
 
     [Fact]

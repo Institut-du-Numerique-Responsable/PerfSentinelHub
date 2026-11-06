@@ -648,18 +648,28 @@ liste des findings.
 | `at`                        | aujourd'hui, UTC  | N'importe quel jour de la période, `yyyy-MM-dd` ; un jour après aujourd'hui est un `400` |
 | `view`                      | `tech`            | `tech` (Engineering) ou `pilotage` (Management)                   |
 | `environment`, `source_id`  | toute la flotte   | Comme sur `/api/findings`                                         |
-| `service`, `grouping`       | aucun             | Comme sur `/api/findings`                                         |
+| `service`, `grouping`       | aucun             | Une valeur comme sur `/api/findings`, ou la clé répétée pour plusieurs |
 | `moves`                     | coupé à 50        | `all` liste tous les mouvements de chaque groupe, sans `counts`   |
 
-Un paramètre répété, une valeur que la liste ne connaît pas ou de l'UTF-8 invalide est un
-`400`.
+`service=a&service=b` garde les findings de `a` ou de `b`, et un service avec un grouping gardent
+les findings qui correspondent aux deux. Une valeur vide est ignorée, comme sur `/api/findings`. Une
+liste compte au plus 50 valeurs de 256 caractères, sans caractère de contrôle : au-delà, c'est un
+`400` de code `invalid_recap_query`. Un paramètre répété autre que `service` et `grouping`, une
+valeur que la liste ne connaît pas ou de l'UTF-8 invalide est aussi un `400`. Les mêmes valeurs dans
+un autre ordre, ou répétées, donnent le même récap.
 
 La réponse est un instantané, `schema_version` `1`, avec `view`, `generated_at_ms`, `period`
 et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
-`sampling_rate`, `truncated_to_days`), `filters` (tels que demandés), `comparison_exact`,
+`sampling_rate`, `truncated_to_days`), `filters`, `comparison_exact`,
 `tiles`, `priorities[]`, `more_priorities`, `movements`, `nothing_moved`,
 `sources_without_volume[]`, `truncated` et `late_sources[]`.
 
+- **Filtres.** `filters` reprend la requête : `environment`, `source_id`, `service`, `grouping` et
+  `service_label`. Avec un seul service, `service` est cette chaîne, comme avant, et de même
+  `grouping`. Avec plusieurs, `service` vaut `null` et `services[]` les liste, triés et sans
+  doublon, et de même `grouping` et `groupings[]`. Les deux clés de liste sont absentes, pas
+  `null`, tant qu'une valeur ou aucune n'est choisie : un script qui lit `filters` et un rapport
+  stocké avant les listes se lisent exactement comme avant.
 - **Comparer.** Une période en cours se compare sur ses jours clos : du premier jour à hier
   contre le même nombre de premiers jours de la période précédente, indiqué dans
   `previous.truncated_to_days`. Aujourd'hui est partiel et se lirait comme une baisse face à
@@ -730,7 +740,8 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   peut toujours regrouper par service technique. `filters.service_label` est le nom du filtre de
   service, ou `null`, et `null` aussi quand l'appelant ne lit aucun finding de ce service sur
   l'une ou l'autre période : un filtre saisi ne révèle jamais le nom d'un service hors de son
-  périmètre.
+  périmètre. Il vaut aussi `null` quand plusieurs services sont choisis, puisqu'un nom appartient
+  à un seul service.
 - **Deux vues.** `pilotage` est l'instantané `tech` avec `view: "pilotage"`, les cinq premières
   priorités, une phrase en langage courant fixe par type de finding dans `plain`, et aucune
   clé technique : `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
@@ -757,7 +768,8 @@ Aucune des routes ci-dessous n'est ouverte, comme `GET /api/recap`, et un appela
 | `DELETE /api/recap/jobs/{id}`                  | Lâche la tâche pour l'appelant, `204` : une tâche en cours s'arrête quand plus personne qui l'a lancée ou rejointe ne la suit |
 
 La requête est celle de `GET /api/recap`, sans `view` ni `moves` : une tâche calcule tout le récap,
-et chaque vue et chaque coupe s'y lit. `POST` et `DELETE` sont refusés depuis un autre site (`403`)
+et chaque vue et chaque coupe s'y lit. Les mêmes services et groupings dans un autre ordre, ou
+répétés, rejoignent la même tâche. `POST` et `DELETE` sont refusés depuis un autre site (`403`)
 et sans type de contenu JSON (`415`), comme un acquittement.
 
 - **La tâche.** `status` vaut `running`, `succeeded`, `failed` (avec `error_code`) ou `cancelled`.
@@ -872,7 +884,7 @@ un rapport à la demande), `period` (`kind`, `from`, `to`), `views[]`, `complete
 HTML est hors de `/api` : un navigateur qui suit un lien reçu par e-mail sans session est envoyé se
 connecter.
 
-**À la demande.** Le corps est un objet JSON de 4 Kio au plus, avec la règle de même origine et le
+**À la demande.** Le corps est un objet JSON de 32 Kio au plus, avec la règle de même origine et le
 type de contenu JSON des autres écritures :
 
 | Champ                       | Fait                                                                                   |
@@ -880,15 +892,19 @@ type de contenu JSON des autres écritures :
 | `period`                    | Obligatoire : `day`, `week` ou `month`                                                 |
 | `at`                        | Un jour quelconque de la période, `yyyy-MM-dd`, à partir de 1900 ; par défaut la dernière période close |
 | `environment`, `source_id`  | Comme sur `/api/recap` ; un inconnu est `400 Unknown environment or source_id.`        |
-| `service`, `grouping`       | Comme sur `/api/recap`                                                                 |
+| `service`, `grouping`       | Une valeur, une chaîne, comme sur `/api/recap`                                         |
+| `services`, `groupings`     | Plusieurs valeurs, un tableau de chaînes, 50 au plus                                   |
 | `lang`                      | `en` (par défaut) ou `fr`, la langue des pages du rapport ; sinon `400 lang must be en or fr.` |
 
-Chaque chaîne fait de 1 à 256 caractères sans caractère de contrôle. Une période qui n'est pas
-terminée avant aujourd'hui est `400 A report covers a closed period; pick a date in an earlier one.`
+Chaque chaîne fait de 1 à 256 caractères sans caractère de contrôle. Un filtre se donne sous une
+seule forme : `service` à côté de `services`, ou `grouping` à côté de `groupings`, est un `400`, tout
+comme un tableau qui contient autre chose que des chaînes ou plus de 50 valeurs. Absent et `null`
+veulent dire aucun filtre. Les `filters` du rapport se lisent alors comme `GET /api/recap` les
+renvoie. Une période qui n'est pas terminée avant aujourd'hui est `400 A report covers a closed period; pick a date in an earlier one.`
 Le rapport est construit avec les copies que l'appelant lit sous `findings.read`, comme
 `GET /api/recap`, et stocké au nom de l'appelant avec les deux vues et sans livraison. Un appelant que
 le Hub ne sait pas nommer reçoit `403`, une requête d'un autre site `403`, un mauvais type de
-contenu `415`, un corps de plus de 4 Kio `413`.
+contenu `415`, un corps de plus de 32 Kio `413`.
 
 **Qui lit quoi.** Un détenteur de `recaps.read` lit tous les rapports. Tout autre appelant avec
 `findings.read` lit ceux qu'il a générés, reconnus au sujet immuable du compte

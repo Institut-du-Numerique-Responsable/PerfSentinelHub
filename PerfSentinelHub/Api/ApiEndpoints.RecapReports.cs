@@ -12,7 +12,8 @@ namespace PerfSentinelHub.Api;
 public static partial class ApiEndpoints
 {
     private const int RecapReportListLimit = 200;
-    private const int MaxRecapBodyBytes = 4 * 1024;
+    // Both lists at their cap, 50 values of 256 characters each, and the other fields fit.
+    private const int MaxRecapBodyBytes = 32 * 1024;
 
     /// <summary>
     ///     Every report to a recaps.read holder, else the ones the caller generated while findings.read
@@ -66,8 +67,8 @@ public static partial class ApiEndpoints
 
         var snapshot = await recaps.ComputeAsync(
             new RecapRequest(
-                ask.Kind, ask.At, sourceIds, ask.Service, ask.Grouping, Narrowing(scope), sources,
-                new RecapFilters(ask.Environment, ask.SourceId, ask.Service, ask.Grouping)),
+                ask.Kind, ask.At, sourceIds, ask.Services, ask.Groupings, Narrowing(scope), sources,
+                RecapFilters.Of(ask.Environment, ask.SourceId, ask.Services, ask.Groupings)),
             cancellationToken);
         var period = RecapPeriod.Of(ask.Kind, ask.At);
         var report = new RecapReportRecord(

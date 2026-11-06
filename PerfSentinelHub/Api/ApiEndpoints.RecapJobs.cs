@@ -39,7 +39,8 @@ public static partial class ApiEndpoints
 
         // Keyed on the period's first day, not the day named: every day of one period computes the same recap.
         var key = new RecapJobKey(audience, query.Kind, RecapPeriod.Of(query.Kind, query.At).From,
-            query.Filters.Environment, query.Filters.SourceId, query.Service, query.Grouping);
+            query.Filters.Environment, query.Filters.SourceId, RecapFilterValues.KeyOf(query.Services),
+            RecapFilterValues.KeyOf(query.Groupings));
         var start = jobs.Start(key, query with { Access = Narrowing(scope) }, refresh is not null,
             RecapFollowerOf(context));
         if (start.Job is not { } job)

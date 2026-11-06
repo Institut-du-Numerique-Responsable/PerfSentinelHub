@@ -517,6 +517,10 @@ export interface RecapSnapshot {
         service: string | null;
         grouping: string | null;
         service_label: string | null;
+        /** Several services chosen, sorted; `service` is then null. Absent while one or none is chosen. */
+        services?: string[];
+        /** Several namespaces chosen, sorted; `grouping` is then null. Absent while one or none is chosen. */
+        groupings?: string[];
     };
     comparison_exact: boolean;
     tiles: RecapTiles;

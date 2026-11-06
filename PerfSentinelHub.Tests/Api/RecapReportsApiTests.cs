@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -185,6 +186,16 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
     [InlineData("""{"period":"month","at":"0001-01-01"}""")]
     [InlineData("""{"period":"week","environment":"nowhere"}""")]
     [InlineData("""{"period":"week","service":"bad\u0001"}""")]
+    [InlineData("""{"period":"week","service":"a","services":["a"]}""")]
+    [InlineData("""{"period":"week","grouping":"g","groupings":["g"]}""")]
+    [InlineData("""{"period":"week","services":[1]}""")]
+    [InlineData("""{"period":"week","services":["a",null]}""")]
+    [InlineData("""{"period":"week","services":[["a"]]}""")]
+    [InlineData("""{"period":"week","services":"a"}""")]
+    [InlineData("""{"period":"week","groupings":{"a":1}}""")]
+    [InlineData("""{"period":"week","service":["a"]}""")]
+    [InlineData("""{"period":"week","services":[""]}""")]
+    [InlineData("""{"period":"week","groupings":["bad\u0001"]}""")]
     public async Task A_bad_body_is_a_400(string body)
     {
         using var client = Client(7);
@@ -195,14 +206,104 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
     }
 
     [Fact]
-    public async Task A_body_over_4_KiB_is_a_413()
+    public async Task A_body_over_32_KiB_is_a_413()
     {
         using var client = Client(7);
 
         using var response =
-            await PostAsync(client, $$"""{"period":"week","service":"{{new string('a', 5 * 1024)}}"}""");
+            await PostAsync(client, $$"""{"period":"week","service":"{{new string('a', 33 * 1024)}}"}""");
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+    }
+
+    // Both lists at their cap, 50 values of 256 characters each, are a body the Hub reads.
+    [Fact]
+    public async Task Both_lists_at_their_cap_fit_the_body_limit()
+    {
+        using var client = Client(7);
+        var names = string.Join(',', Enumerable.Range(0, 50).Select(index => $"\"{index:D3}{new string('a', 253)}\""));
+
+        using var response = await PostAsync(
+            client, $$"""{"period":"day","at":"1970-01-01","services":[{{names}}],"groupings":[{{names}}]}""");
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("services", 51, 5)]
+    [InlineData("groupings", 51, 5)]
+    [InlineData("services", 1, 257)]
+    [InlineData("groupings", 2, 257)]
+    public async Task A_list_past_its_cap_is_a_400(string name, int count, int length)
+    {
+        using var client = Client(7);
+        var values = string.Join(',', Enumerable.Range(0, count).Select(index =>
+            $"\"{index:D3}{new string('a', Math.Max(length - 3, 0))}\""));
+
+        using var response = await PostAsync(client, $$"""{"period":"week","{{name}}":[{{values}}]}""");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_report_takes_one_service_as_a_string_or_a_list_and_several_as_a_list()
+    {
+        using var client = Client(7);
+        const string day = "\"period\":\"day\",\"at\":\"1970-01-01\"";
+
+        using var text = await PostAsync(client, $$"""{ {{day}},"service":"rep-a","grouping":"rep-x"}""");
+        using var listOfOne = await PostAsync(client, $$"""{ {{day}},"services":["rep-a"],"groupings":["rep-x"]}""");
+        using var several = await PostAsync(client,
+            $$"""{ {{day}},"service":null,"services":["rep-b","rep-a","rep-a"],"groupings":["rep-y","rep-x"]}""");
+        var one = await FiltersAsync(client, text);
+        var alsoOne = await FiltersAsync(client, listOfOne);
+        var many = await FiltersAsync(client, several);
+
+        // One value reads as it did before the lists: strings, and no key for the lists.
+        Assert.Equal("rep-a", one.GetProperty("service").GetString());
+        Assert.Equal("rep-x", one.GetProperty("grouping").GetString());
+        Assert.False(one.TryGetProperty("services", out _));
+        Assert.False(one.TryGetProperty("groupings", out _));
+        Assert.Equal(one.GetRawText(), alsoOne.GetRawText());
+        Assert.Equal(JsonValueKind.Null, many.GetProperty("service").ValueKind);
+        Assert.Equal(JsonValueKind.Null, many.GetProperty("grouping").ValueKind);
+        Assert.Equal(["rep-a", "rep-b"], many.GetProperty("services").EnumerateArray().Select(v => v.GetString()));
+        Assert.Equal(["rep-x", "rep-y"], many.GetProperty("groupings").EnumerateArray().Select(v => v.GetString()));
+    }
+
+    // Stored before the lists, a report has five keys in its filters. It reads through the Hub's own
+    // serializer and renders the same words as one written now with the same choices.
+    [Fact]
+    public async Task A_report_stored_in_the_old_shape_reads_and_renders_as_it_did()
+    {
+        using var client = Client(7);
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Filters = new RecapFilters("prod", null, "checkout-api", null, "Payment")
+        };
+        var current = JsonSerializer.Serialize(snapshot, Wire);
+        var root = JsonNode.Parse(current)!;
+        root["filters"] = JsonNode.Parse(
+            """{"environment":"prod","source_id":null,"service":"checkout-api","grouping":null,"service_label":"Payment"}""");
+        var old = root.ToJsonString();
+        Assert.DoesNotContain("services", old, StringComparison.Ordinal);
+        var oldId = await StoreAsync(Summary([RecapViewNames.Pilotage, RecapViewNames.Tech]), old);
+        var currentId = await StoreAsync(Summary([RecapViewNames.Pilotage, RecapViewNames.Tech]), current);
+
+        foreach (var view in new[] { "tech", "pilotage" })
+        {
+            using var oldPage = await client.SendAsync(Get($"/recaps/{oldId}/{view}.html"), Token);
+            using var currentPage = await client.SendAsync(Get($"/recaps/{currentId}/{view}.html"), Token);
+            Assert.Equal(HttpStatusCode.OK, oldPage.StatusCode);
+            Assert.Equal(await currentPage.Content.ReadAsStringAsync(Token),
+                await oldPage.Content.ReadAsStringAsync(Token));
+        }
+
+        using var tech = await client.SendAsync(Get($"/recaps/{oldId}/tech.html"), Token);
+        Assert.Contains("Scope: environment prod, service checkout-api",
+            await tech.Content.ReadAsStringAsync(Token), StringComparison.Ordinal);
+        using var detail = await client.SendAsync(Get($"/api/recap/reports/{oldId}"), Token);
+        Assert.Equal(old, (await JsonAsync(detail)).RootElement.GetProperty("snapshot").GetRawText());
     }
 
     [Fact]
@@ -312,6 +413,14 @@ public sealed partial class RecapReportsApiTests(HubApplicationFactory factory)
             deliveries.EnumerateArray().Select(delivery =>
                 $"{delivery.GetProperty("channel").GetString()} {delivery.GetProperty("target").GetString()} " +
                 delivery.GetProperty("state").GetString()));
+    }
+
+    private static async Task<JsonElement> FiltersAsync(HttpClient client, HttpResponseMessage created)
+    {
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await JsonAsync(created)).RootElement.GetProperty("id").GetString()!;
+        using var detail = await client.SendAsync(Get($"/api/recap/reports/{id}"), Token);
+        return (await JsonAsync(detail)).RootElement.GetProperty("snapshot").GetProperty("filters").Clone();
     }
 
     private HttpClient Client(int daysAfterEpoch)

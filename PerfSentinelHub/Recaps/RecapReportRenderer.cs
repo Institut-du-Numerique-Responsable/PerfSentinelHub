@@ -131,15 +131,22 @@ public static class RecapReportRenderer
     {
         var filters = page.Snapshot.Filters;
         var parts = page.Management
-            ? new[] { filters.Environment, filters.ServiceLabel ?? filters.Service }.Where(value => value is not null)
-                .Select(value => value!)
+            ? new[] { filters.Environment, filters.ServiceLabel ?? Joined(filters.Service, filters.Services) }
+                .Where(value => value is not null).Select(value => value!)
             : new[]
             {
                 Named(page, "environment", filters.Environment), Named(page, "source", filters.SourceId),
-                Named(page, "service", filters.Service), Named(page, "grouping", filters.Grouping)
+                Named(page, "service", Joined(filters.Service, filters.Services)),
+                Named(page, "grouping", Joined(filters.Grouping, filters.Groupings))
             }.Where(value => value.Length > 0);
         var list = parts.ToList();
         return list.Count > 0 ? page.T("recap.scope", ("parts", string.Join(", ", list))) : "";
+    }
+
+    // The one value, or the several named side by side.
+    private static string? Joined(string? one, IReadOnlyList<string>? many)
+    {
+        return many is null ? one : string.Join(", ", many);
     }
 
     private static string Named(Page page, string name, string? value)

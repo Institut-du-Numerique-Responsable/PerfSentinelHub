@@ -664,7 +664,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     {
         var where = new StringBuilder("WHERE 1 = 1");
         var parameters = new List<(string Name, object Value)>();
-        AddFilter(where, parameters, "service", ServiceParameter, query.Service);
+        if (query.ServiceValues is { } services)
+        {
+            where.Append(" AND service IN (SELECT value FROM json_each($services))");
+            parameters.Add(("$services", JsonArray(services)));
+        }
+
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
@@ -672,8 +677,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         var windowed = AddWindow(parameters, query);
         var (volumeWindow, today) = AddVolumeWindow(parameters, query, windowed);
 
-        if (query.Grouping is not null)
-            parameters.Add(("$grouping", query.Grouping));
+        if (query.GroupingValues is { } groupings)
+            parameters.Add(("$groupings", JsonArray(groupings)));
         if (OneSource(query) is { } sourceId)
             parameters.Add(("$scope_source_id", sourceId));
 
@@ -786,7 +791,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
             : SharedEnvelope("f.signature");
         var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
-        var grouped = query.Grouping is null ? "" : InGrouping(row, Copies(access, "g"));
+        var grouped = query.GroupingValues is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));
 #pragma warning disable S2077
         return $"""
@@ -917,7 +922,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         return $"""
                  AND EXISTS (
                     SELECT 1 FROM finding_groupings AS g
-                    WHERE g.signature = {row}.signature AND g.grouping = $grouping
+                    WHERE g.signature = {row}.signature
+                      AND g.grouping IN (SELECT value FROM json_each($groupings))
                       AND {copies})
                 """;
     }

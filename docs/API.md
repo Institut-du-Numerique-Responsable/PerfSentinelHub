@@ -599,17 +599,28 @@ nowhere gets the `403` the findings list gives.
 | `at`                        | today, UTC        | Any day of the period, `yyyy-MM-dd`; a day after today is a `400` |
 | `view`                      | `tech`            | `tech` (Engineering) or `pilotage` (Management)                  |
 | `environment`, `source_id`  | the whole fleet   | As on `/api/findings`                                            |
-| `service`, `grouping`       | none              | As on `/api/findings`                                            |
+| `service`, `grouping`       | none              | One value as on `/api/findings`, or the key repeated for several |
 | `moves`                     | cut at 50         | `all` lists every move of each group, without `counts`           |
 
-A repeated parameter, a value the list does not know or invalid UTF-8 is a `400`.
+`service=a&service=b` keeps the findings of `a` or `b`, and a service and a grouping together keep
+the findings that match both. A value that is blank is ignored, as it is on `/api/findings`. A list
+holds at most 50 values of 256 characters, with no control character: more is a `400` with the code
+`invalid_recap_query`. A repeated parameter other than `service` and `grouping`, a value the list
+does not know or invalid UTF-8 is a `400` too. The same values in another order, or repeated, are
+the same recap.
 
 The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, `period` and
 `previous` (each `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
-`sampling_rate`, `truncated_to_days`), `filters` (as asked), `comparison_exact`, `tiles`,
+`sampling_rate`, `truncated_to_days`), `filters`, `comparison_exact`, `tiles`,
 `priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`,
 `truncated` and `late_sources[]`.
 
+- **Filters.** `filters` echoes the request: `environment`, `source_id`, `service`, `grouping` and
+  `service_label`. With one service, `service` is that string, as it always was, and likewise
+  `grouping`. With several, `service` is `null` and `services[]` lists them, sorted and without
+  repeats, and likewise `grouping` and `groupings[]`. The two list keys are absent, not `null`,
+  while one value or none is chosen, so a script that reads `filters` and a report stored before
+  the lists read exactly as they did.
 - **Comparing.** A period in progress is compared on its closed days: `FromDay` to
   yesterday against the same number of first days of the previous period, reported in
   `previous.truncated_to_days`. Today is partial and would read as a drop against a full
@@ -676,7 +687,8 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   in every view, and `service` stays beside `service_label`, so a receiver can still group by
   the technical service. `filters.service_label` is the name of the service filter, or `null`,
   and `null` too when the caller reads no finding of that service in either period: a typed
-  filter never reveals the name of a service outside the caller's scope.
+  filter never reveals the name of a service outside the caller's scope. It is `null` as well
+  when several services are chosen, since a name belongs to one service.
 - **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
   priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
   technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
@@ -702,7 +714,8 @@ result. `GET /api/recap` stays as it is for scripts and CI. Every route below is
 | `DELETE /api/recap/jobs/{id}`                  | Lets go of the job for the caller, `204`: a running one stops once nobody who started or joined it follows it |
 
 The query is the one of `GET /api/recap`, `view` and `moves` aside: one job computes the whole
-recap, and each view and cut is read from it. `POST` and `DELETE` are refused from another site
+recap, and each view and cut is read from it. The same services and groupings in another order
+or repeated join the same job. `POST` and `DELETE` are refused from another site
 (`403`) and without a JSON content type (`415`), as an acknowledgment is.
 
 - **The job.** `status` is `running`, `succeeded`, `failed` (with `error_code`) or `cancelled`.
@@ -807,7 +820,7 @@ A report item holds `id` (32 lowercase hex), `subscription` (`null` for an on-de
 `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` and `last_status`. The HTML page lives
 outside `/api`, so a browser that follows a mailed link and holds no session is sent to sign in.
 
-**On demand.** The body is a JSON object, at most 4 KiB, with the same-origin rule and the
+**On demand.** The body is a JSON object, at most 32 KiB, with the same-origin rule and the
 JSON content type of the other writes:
 
 | Field                       | Does                                                                                   |
@@ -815,14 +828,18 @@ JSON content type of the other writes:
 | `period`                    | Required: `day`, `week` or `month`                                                     |
 | `at`                        | Any day of the period, `yyyy-MM-dd`, from 1900; default: the last closed period        |
 | `environment`, `source_id`  | As on `/api/recap`; an unknown one is `400 Unknown environment or source_id.`          |
-| `service`, `grouping`       | As on `/api/recap`                                                                     |
+| `service`, `grouping`       | One value, a string, as on `/api/recap`                                                |
+| `services`, `groupings`     | Several values, an array of strings, at most 50                                        |
 | `lang`                      | `en` (default) or `fr`, the language of the report's pages; else `400 lang must be en or fr.` |
 
-Each string is 1 to 256 characters with no control character. A period that has not ended before
+Each string is 1 to 256 characters with no control character. Give a filter in one form or the
+other: `service` beside `services`, or `grouping` beside `groupings`, is a `400`, and so is an
+array that holds anything but strings or more than 50 of them. Absent and `null` mean no filter.
+The report's `filters` then read as `GET /api/recap` echoes them. A period that has not ended before
 today is `400 A report covers a closed period; pick a date in an earlier one.` The report is built
 from the copies the caller reads under `findings.read`, as `GET /api/recap` is, stored in the
 caller's name with both views and no delivery. A caller the Hub cannot name gets `403`, a
-cross-site request `403`, a wrong content type `415`, a body over 4 KiB `413`.
+cross-site request `403`, a wrong content type `415`, a body over 32 KiB `413`.
 
 **Who reads what.** A holder of `recaps.read` reads every report. Anyone else with `findings.read`
 reads the reports they generated, matched on the account's immutable subject

@@ -50,27 +50,45 @@ public static partial class ApiEndpoints
         if (!TryReadRecapView(request, out pilotage, out allMoves) ||
             !RecapPeriod.TryParseKind(ReadOptional(request, "period") ?? "week", out var kind) ||
             !TryReadRecapDate(request, today, out var at) ||
-            !TryReadSourceScope(request, sources, out var sourceIds))
+            !TryReadSourceScope(request, sources, out var sourceIds) ||
+            !ReadRecapValues(request, "service", out var services) ||
+            !ReadRecapValues(request, "grouping", out var groupings))
             return false;
 
-        var service = ReadOptional(request, "service");
-        var grouping = ReadOptional(request, "grouping");
         query = new RecapRequest(
-            kind, at, sourceIds, service, grouping, null, sources,
-            new RecapFilters(
-                ReadOptional(request, "environment"), ReadOptional(request, "source_id"), service, grouping));
+            kind, at, sourceIds, services, groupings, null, sources,
+            RecapFilters.Of(ReadOptional(request, "environment"), ReadOptional(request, "source_id"), services,
+                groupings));
         return true;
     }
 
-    // The view and the cut of a recap read, a job's result included, on a query with one value per key.
-    // moves=all lifts the cut of Listed, for a reader who opens a whole group.
+    // Every value of a repeated key (service=a&service=b), blanks left out as ReadOptional leaves them,
+    // in the canonical order. False past the caps of RecapFilterValues.
+    private static bool ReadRecapValues(HttpRequest request, string name, out IReadOnlyList<string>? values)
+    {
+        string[] given = request.Query.TryGetValue(name, out var raw)
+            ? [.. raw.OfType<string>().Where(value => !string.IsNullOrWhiteSpace(value))]
+            : [];
+        return RecapFilterValues.TryCanonical(given, out values);
+    }
+
+    private static bool IsRecapFilterList(string key)
+    {
+        return key.Equals("service", StringComparison.OrdinalIgnoreCase) ||
+               key.Equals("grouping", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The view and the cut of a recap read, a job's result included, on a query with one value per key,
+    // service and grouping excepted, which may repeat. moves=all lifts the cut of Listed, for a reader
+    // who opens a whole group.
     private static bool TryReadRecapView(HttpRequest request, out bool pilotage, out bool allMoves)
     {
         var view = ReadOptional(request, "view") ?? "tech";
         var moves = ReadOptional(request, "moves");
         pilotage = view == RecapPilotageView;
         allMoves = moves == "all";
-        return HasValidUtf8(request.QueryString.Value) && request.Query.All(item => item.Value.Count == 1) &&
+        return HasValidUtf8(request.QueryString.Value) &&
+               request.Query.All(item => item.Value.Count == 1 || IsRecapFilterList(item.Key)) &&
                view is "tech" or RecapPilotageView && moves is null or "all";
     }
 

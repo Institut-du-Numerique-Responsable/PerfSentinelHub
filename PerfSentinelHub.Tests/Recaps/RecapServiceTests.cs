@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
@@ -393,6 +394,56 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Several_services_widen_the_recap_and_are_echoed_as_a_list()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-1");
+        await SeedAsync("a", "two", Thu, service: "svc-2");
+        await SeedAsync("a", "three", Thu, service: "svc-3");
+        await _database.SetServiceLabelAsync("svc-1", "First", "alice", Token);
+
+        var snapshot = await _service.ComputeAsync(Request(services: ["svc-1", "svc-2"]), Token);
+
+        Assert.Equal(["one", "two"], snapshot.Priorities.Select(priority => priority.Signature).Order());
+        Assert.Null(snapshot.Filters.Service);
+        Assert.Equal(["svc-1", "svc-2"], snapshot.Filters.Services);
+        // A name belongs to one service: a list of two carries none.
+        Assert.Null(snapshot.Filters.ServiceLabel);
+        var single = await _service.ComputeAsync(Request(services: ["svc-1"]), Token);
+        Assert.Equal("svc-1", single.Filters.Service);
+        Assert.Null(single.Filters.Services);
+        Assert.Equal("First", single.Filters.ServiceLabel);
+    }
+
+    [Fact]
+    public async Task A_service_list_and_a_namespace_list_combine_with_and()
+    {
+        await SeedAsync("a", "one-x", Thu, service: "svc-1", grouping: "ns-x");
+        await SeedAsync("a", "one-y", Thu, service: "svc-1", grouping: "ns-y");
+        await SeedAsync("a", "two-x", Thu, service: "svc-2", grouping: "ns-x");
+        await SeedAsync("a", "three-x", Thu, service: "svc-3", grouping: "ns-x");
+
+        var snapshot = await _service.ComputeAsync(
+            Request(services: ["svc-1", "svc-2"], groupings: ["ns-x", "ns-z"]), Token);
+
+        Assert.Equal(["one-x", "two-x"], snapshot.Priorities.Select(priority => priority.Signature).Order());
+        Assert.Equal(["ns-x", "ns-z"], snapshot.Filters.Groupings);
+        Assert.Null(snapshot.Filters.Grouping);
+    }
+
+    // The lists ride the same access-scoped read as the single values: a list never reaches past the scope.
+    [Fact]
+    public async Task A_narrowed_scope_holds_when_the_recap_asks_for_several_services()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-1");
+        await SeedAsync("a", "two", Thu, service: "svc-2");
+        var onlyOne = AccessScope.Of([AccessPattern.Compile(new PatternOptions { Service = "svc-1" })]);
+
+        var snapshot = await _service.ComputeAsync(Request(services: ["svc-1", "svc-2"], access: onlyOne), Token);
+
+        Assert.Equal("one", Assert.Single(snapshot.Priorities).Signature);
+    }
+
+    [Fact]
     public async Task Up_and_down_follow_the_configured_threshold()
     {
         await SeedAsync("a", S, Thu);
@@ -584,14 +635,20 @@ public sealed class RecapServiceTests : IAsyncLifetime
         return _service.ComputeAsync(Request(environment), Token);
     }
 
-    private static RecapRequest Request(string? environment = null, string? service = null)
+    private static RecapRequest Request(
+        string? environment = null,
+        string? service = null,
+        IReadOnlyList<string>? services = null,
+        IReadOnlyList<string>? groupings = null,
+        AccessScope? access = null)
     {
         var ids = environment is null
             ? null
             : (IReadOnlyList<string>)[.. Sources.Where(source => source.Environment == environment).Select(s => s.Id)];
+        var chosen = services ?? (service is null ? null : [service]);
         return new RecapRequest(
-            RecapPeriodKind.Week, new DateOnly(2026, 10, 29), ids, service, null, null, Sources,
-            new RecapFilters(environment, null, service, null));
+            RecapPeriodKind.Week, new DateOnly(2026, 10, 29), ids, chosen, groupings, access, Sources,
+            RecapFilters.Of(environment, null, chosen, groupings));
     }
 
     private Task SeedAsync(
@@ -600,13 +657,17 @@ public sealed class RecapServiceTests : IAsyncLifetime
         int day,
         string severity = "warning",
         string endpoint = "GET /orders",
-        string service = "order-svc")
+        string service = "order-svc",
+        string? grouping = null)
     {
         var configured = Sources.Single(item => item.Id == source);
         return _database.UpsertBatchAsync(
             new SourceSnapshot(source, configured.Name, configured.Environment, "0.37.1"),
             FindingJson.Batch(FindingJson.Envelope(signature, service: service, severity: severity,
-                endpoint: endpoint)),
+                endpoint: endpoint,
+                grouping: grouping is null
+                    ? null
+                    : $$"""[{"key":"k8s.namespace.name","value":"{{grouping}}"}]""")),
             day * DayMs + 3_600_000, Token);
     }
 
