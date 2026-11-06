@@ -48,8 +48,9 @@ le bouton reste éteint. Le seuil et le maximum sont `Hub:Analysis:FetchConcurre
 `Hub:Analysis:FetchConcurrencyMax`, voir [CONFIGURATION-FR.md](CONFIGURATION-FR.md), et le Hub refuse un
 nombre au-delà du maximum quoi que l'écran ait fait. Le bloc est absent pour une source Jaeger, un daemon,
 un ID de trace et un moteur antérieur à 0.43.0, qui n'a pas cette option. Sur ce moteur, avec un maximum
-sous 16, un run Tempo ne peut pas être tenu au maximum : le bouton reste éteint et le dit. La commande
-imprimée et le résumé du run portent le nombre.
+sous 16, un run Tempo ne peut pas être tenu au maximum : le bouton reste éteint et le dit. Le résumé du run
+porte le nombre, et la commande imprimée aussi sauf s'il vaut le 16 du moteur, que le moteur prend
+de toute façon.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">

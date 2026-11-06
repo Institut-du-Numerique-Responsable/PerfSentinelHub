@@ -157,7 +157,7 @@ test("the engine's parser takes --fetch-concurrency up to the ceiling the Hub ho
   assert.ok(ceiling, "HubOptions.cs no longer declares EngineMaxFetchConcurrency");
   const max = Number(ceiling[1]);
 
-  [1, 16, max].forEach(function (value) {
+  [1, 8, max].forEach(function (value) {
     const run = tempoRun(value);
     assert.notEqual(run.status, 2, "the engine's parser refused " + value + ": " + run.stderr);
   });

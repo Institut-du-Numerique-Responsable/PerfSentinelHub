@@ -44,8 +44,9 @@ are `Hub:Analysis:FetchConcurrencyWarn` and `Hub:Analysis:FetchConcurrencyMax`, 
 [CONFIGURATION.md](CONFIGURATION.md), and the Hub refuses a count past the maximum whatever
 the screen did. The block is absent for a Jaeger source, a daemon, a trace ID, and an engine
 older than 0.43.0, which has no such flag. On that engine, with a maximum under 16, a Tempo
-run cannot be held to the maximum, so the button stays off and says so. The printed command
-and the run's summary carry the count.
+run cannot be held to the maximum, so the button stays off and says so. The run's summary
+carries the count, and the printed command too unless it is the engine's 16, which the engine
+takes anyway.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">

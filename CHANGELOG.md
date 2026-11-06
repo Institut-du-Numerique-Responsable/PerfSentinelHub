@@ -12,9 +12,10 @@ All notable changes to PerfSentinelHub are recorded here.
   not for Jaeger, a daemon or a trace ID. A field, a chip and a slider run from 1 to the maximum,
   green up to the threshold and red above, starting at the engine's 16 or at the threshold or the
   maximum when either is lower. Above the threshold an alert asks for a confirmation before the run
-  can start, and above the maximum the button stays off. The printed command and the run's summary
-  carry the count. `Hub:Analysis:FetchConcurrencyWarn` (default 16) and
-  `Hub:Analysis:FetchConcurrencyMax` (default 64, the engine's own limit) set the two limits, and
+  can start, and above the maximum the button stays off. The run's summary carries the count, and the
+  printed command too unless it is the engine's 16, which the engine takes anyway.
+  `Hub:Analysis:FetchConcurrencyWarn` (default 16) and `Hub:Analysis:FetchConcurrencyMax` (default
+  64, the engine's own limit) set the two limits, and
   `hub.analysis.fetchConcurrencyWarn` and `fetchConcurrencyMax` do in the Helm chart.
   `POST /api/analyses` takes `fetch_concurrency` and answers `400` for a value outside 1 to the
   maximum, on a Jaeger source, on a daemon or in trace ID mode, so a direct call is held to the

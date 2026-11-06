@@ -673,8 +673,11 @@
                 tail.push('--lookback ' + shq(String(request['lookback'])));
             }
             tail.push('--max-traces ' + String(request['max_traces']));
-            // Tempo's alone: `jaeger-query` has no such flag and would stop on it.
-            if (request['fetch_concurrency'] != null && source.kind === 'tempo') {
+            // Tempo's alone: `jaeger-query` has no such flag and would stop on it. The engine's own
+            // default is left unprinted: the run is the same, and a binary older than 0.43.0 would
+            // refuse a flag the reader never set.
+            if (request['fetch_concurrency'] != null && request['fetch_concurrency'] !== ENGINE_FETCH_DEFAULT
+                && source.kind === 'tempo') {
                 tail.push('--fetch-concurrency ' + String(request['fetch_concurrency']));
             }
         }

@@ -81,6 +81,16 @@ test("a Tempo source carries its reads count after the cap, a Jaeger source neve
         .includes("--fetch-concurrency"));
 });
 
+test("a count that is the engine's own default is left out of the printed command, any other is printed", () => {
+    const withCount = count => PSL.analysisCommand(tempo,
+        {service: "orders", max_traces: 100, lookback: "1h", fetch_concurrency: count});
+
+    // The run is the same, and a binary older than 0.43.0 would refuse a flag nobody set.
+    assert.ok(!withCount(16).includes("--fetch-concurrency"));
+    assert.ok(withCount(4).endsWith("--fetch-concurrency 4"));
+    assert.ok(withCount(17).endsWith("--fetch-concurrency 17"));
+});
+
 test("an authenticated source reads its header from the environment", () => {
     const command = PSL.analysisCommand(
         {...tempo, auth_header_name: "Authorization"},
