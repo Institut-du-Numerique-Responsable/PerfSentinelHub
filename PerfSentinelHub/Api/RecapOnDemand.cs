@@ -23,7 +23,7 @@ public sealed record RecapOnDemand(
     private const int MaxChars = RecapFilterValues.MaxChars;
 
     // The recap reads the period before the one asked for, which the calendar cannot give year 1.
-    private static readonly DateOnly Earliest = new(1900, 1, 1);
+    internal static readonly DateOnly Earliest = new(1900, 1, 1);
 
     private static readonly string[] Filters = ["environment", "source_id"];
 

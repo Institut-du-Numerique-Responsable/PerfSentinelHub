@@ -596,7 +596,7 @@ nowhere gets the `403` the findings list gives.
 | Parameter                   | Default           | Does                                                             |
 |-----------------------------|-------------------|------------------------------------------------------------------|
 | `period`                    | `week`            | `day`, `week` (ISO, Monday to Sunday, UTC) or `month` (calendar) |
-| `at`                        | today, UTC        | Any day of the period, `yyyy-MM-dd`; a day after today is a `400` |
+| `at`                        | today, UTC        | Any day of the period, `yyyy-MM-dd`, from 1900 to today, else a `400` |
 | `view`                      | `tech`            | `tech` (Engineering) or `pilotage` (Management)                  |
 | `environment`, `source_id`  | the whole fleet   | As on `/api/findings`                                            |
 | `service`, `grouping`       | none              | One value as on `/api/findings`, or the key repeated for several |
@@ -717,6 +717,7 @@ against the caps above, since a value past them is a `400` here as on `GET /api/
 - **Names.** Those of the finding copies present in the period, acknowledged ones included, each list
   sorted by name. A copy absent from the period offers nothing, even when another copy of the same
   finding is present. A copy that is present offers no namespace it was last seen in before the period.
+  A name the recap would refuse is left out: blank, over 256 characters or with a control character.
 - **No count.** A name carries no volume. Adding up a service's avoidable I/O takes the findings read
   of the recap, which takes seconds under a narrowed scope, and a namespace could not carry one anyway:
   volumes are stored per finding, and a finding seen in two namespaces would count whole in both.

@@ -71,6 +71,11 @@ All notable changes to PerfSentinelHub are recorded here.
   selected source if it is a backend, else the first backend. A link without `source` still opens,
   with the environment unknown, and a Hub with no trace backend keeps the selection under its
   banner. The pick is never saved: the source the reader chose stays the one the next visit opens on.
+- `GET /api/recap` and `POST /api/recap/jobs` answer `400` for a day before 1900, as
+  `POST /api/recap/reports` does. `GET /api/recap` answered `500` on the first period of the calendar,
+  which has none before it.
+- A recap address with a day the calendar does not hold, such as `at=2026-13-45`, reads as no day.
+  The recap never loaded on one.
 
 ## [0.14.0] - 2026-11-04
 

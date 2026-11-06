@@ -363,7 +363,7 @@
         recapGenerating: false,
         recapGenerateError: null,
         // The checkbox lists of the filter line: the one open with its search and boxes, the names the Hub
-        // offers for the period, and the button to give the focus back to once a closed list has moved the route.
+        // offers for the period, and the control to give the focus to once a closed list has moved the route.
         /** @type {RecapPick} */
         recapPick: {open: null, query: '', draft: []},
         /** @type {RecapNames} */
@@ -1640,7 +1640,7 @@
         applyHandoff(PSL.readHandoff(location.hash, Date.now()));
         applyTraceHandoff(PSL.readTraceHandoff(location.hash));
         // A list open on the recap's filter line goes with the route it was opened on. One that moved the
-        // route closed itself first, and left the button to give the focus back to.
+        // route closed itself first, and left the control to give the focus to.
         state.recapPick = {open: null, query: '', draft: []};
         const refocus = state.recapRefocus;
         state.recapRefocus = null;
@@ -7617,7 +7617,7 @@
         // Tabbing on past the list closes it where it is, without taking the focus back.
         host.addEventListener('focusout', function (event) {
             const to = event.relatedTarget;
-            if (to instanceof Node && !host.contains(to)) closeRecapPick(key, again, false);
+            if (to instanceof Element && !host.contains(to)) closeRecapPick(key, again, false, to.id);
         });
         return host;
     }
@@ -7645,13 +7645,14 @@
      * @param {'services' | 'groupings'} key
      * @param {() => HTMLElement} again
      * @param {boolean} refocus whether the button gets the focus back: not when the focus moved on by itself
+     * @param {string} [movedTo] the id of the control it moved on to, which a route change would draw anew
      */
-    function closeRecapPick(key, again, refocus) {
+    function closeRecapPick(key, again, refocus, movedTo) {
         if (state.recapPick.open !== key) return;
         const draft = state.recapPick.draft.slice().sort();
         state.recapPick = {open: null, query: '', draft: []};
         if (JSON.stringify(draft) !== JSON.stringify(recapRoute()[key])) {
-            state.recapRefocus = refocus ? 'recap-pick-' + key + '-button' : null;
+            state.recapRefocus = refocus ? 'recap-pick-' + key + '-button' : movedTo || null;
             goRecap({[key]: draft});
             return;
         }

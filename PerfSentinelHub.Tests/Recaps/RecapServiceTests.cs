@@ -498,6 +498,23 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal(["ns-a", "ns-b", "ns-c"], options.Groupings);
     }
 
+    // The recap answers 400 on each of these and the screen's route drops them: a box that filters on
+    // nothing is no offer. Only a push can store one, the engine sends neither.
+    [Fact]
+    public async Task A_name_the_recap_would_refuse_is_not_offered()
+    {
+        var tooLong = new string('l', RecapFilterValues.MaxChars + 1);
+        await SeedAsync("a", "long", Thu, service: tooLong, grouping: tooLong);
+        await SeedAsync("a", "control", Thu, service: "svc\u0001", grouping: "ns\\u0001");
+        await SeedAsync("a", "blank", Thu, service: "   ", grouping: "   ");
+        await SeedAsync("a", "fine", Thu, service: "svc-ok", grouping: "ns-ok");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-ok"], options.Services);
+        Assert.Equal(["ns-ok"], options.Groupings);
+    }
+
     // The recap still counts an acked finding, and can be filtered down to it.
     [Fact]
     public async Task An_acked_finding_keeps_its_names_on_offer()

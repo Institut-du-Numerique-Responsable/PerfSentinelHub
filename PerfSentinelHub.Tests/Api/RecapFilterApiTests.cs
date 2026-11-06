@@ -123,6 +123,20 @@ public sealed class RecapFilterApiTests(HubApplicationFactory factory) : IClassF
             document.RootElement.GetProperty("groupings").EnumerateArray().Select(item => item.GetString()));
     }
 
+    // As POST /api/recap/reports refuses it: the recap reads the period before, which year 1 does not have.
+    [Theory]
+    [InlineData("/api/recap?period=month&at=0001-01-01")]
+    [InlineData("/api/recap?period=day&at=1899-12-31")]
+    [InlineData("/api/recap/filters?period=month&at=0001-01-01")]
+    public async Task A_day_before_1900_is_a_400(string path)
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(path, Token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private static string Repeated(string name, int count, string stem)
     {
         return string.Join('&', Enumerable.Range(0, count).Select(index => $"{name}={stem}{index}"));

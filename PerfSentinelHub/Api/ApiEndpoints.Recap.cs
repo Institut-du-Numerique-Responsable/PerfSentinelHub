@@ -92,12 +92,12 @@ public static partial class ApiEndpoints
                view is "tech" or RecapPilotageView && moves is null or "all";
     }
 
-    // Today UTC when absent; a day in the future has nothing to recap.
+    // Today UTC when absent; a day in the future has nothing to recap, nor one with no period before it.
     private static bool TryReadRecapDate(HttpRequest request, DateOnly today, out DateOnly at)
     {
         at = today;
         return ReadOptional(request, "at") is not { } raw ||
                (DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out at) &&
-                at <= today);
+                at >= RecapOnDemand.Earliest && at <= today);
     }
 }

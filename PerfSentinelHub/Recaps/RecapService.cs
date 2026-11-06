@@ -85,9 +85,12 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         CancellationToken cancellationToken)
     {
         var window = RecapPeriod.Of(request.Kind, request.At);
+        var services =
+            await database.QueryRecapServicesAsync(window, request.SourceIds, request.Access, cancellationToken);
+        var groupings =
+            await database.QueryRecapGroupingsAsync(window, request.SourceIds, request.Access, cancellationToken);
         return new RecapFilterOptions(
-            await database.QueryRecapServicesAsync(window, request.SourceIds, request.Access, cancellationToken),
-            await database.QueryRecapGroupingsAsync(window, request.SourceIds, request.Access, cancellationToken));
+            [.. services.Where(RecapFilterValues.CanOffer)], [.. groupings.Where(RecapFilterValues.CanOffer)]);
     }
 
     // ------------------------------------------------------------ reads

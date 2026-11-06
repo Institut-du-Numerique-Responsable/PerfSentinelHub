@@ -645,7 +645,7 @@ liste des findings.
 | Paramètre                   | Défaut            | Effet                                                             |
 |-----------------------------|-------------------|-------------------------------------------------------------------|
 | `period`                    | `week`            | `day`, `week` (ISO, du lundi au dimanche, UTC) ou `month` (civil) |
-| `at`                        | aujourd'hui, UTC  | N'importe quel jour de la période, `yyyy-MM-dd` ; un jour après aujourd'hui est un `400` |
+| `at`                        | aujourd'hui, UTC  | N'importe quel jour de la période, `yyyy-MM-dd`, de 1900 à aujourd'hui, sinon un `400` |
 | `view`                      | `tech`            | `tech` (Engineering) ou `pilotage` (Management)                   |
 | `environment`, `source_id`  | toute la flotte   | Comme sur `/api/findings`                                         |
 | `service`, `grouping`       | aucun             | Une valeur comme sur `/api/findings`, ou la clé répétée pour plusieurs |
@@ -771,7 +771,8 @@ donne ici un `400`, comme sur `GET /api/recap`.
 - **Noms.** Ceux des copies de findings présentes dans la période, acquittées comprises, chaque liste
   triée par nom. Une copie absente de la période ne propose rien, même si une autre copie du même
   finding est présente. Une copie présente ne propose aucun namespace où elle a été vue pour la dernière
-  fois avant la période.
+  fois avant la période. Un nom que le récap refuserait est écarté : vide, de plus de 256 caractères ou
+  avec un caractère de contrôle.
 - **Aucun compte.** Un nom ne porte aucun volume. Additionner les I/O évitables d'un service demande la
   lecture des findings du récap, qui prend plusieurs secondes sous un périmètre réduit, et un namespace
   ne pourrait de toute façon pas en porter : les volumes sont stockés par finding, et un finding vu dans

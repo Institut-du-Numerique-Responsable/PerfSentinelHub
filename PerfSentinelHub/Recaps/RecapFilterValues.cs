@@ -20,11 +20,25 @@ public static class RecapFilterValues
     public static bool TryCanonical(IReadOnlyCollection<string> given, out IReadOnlyList<string>? values)
     {
         values = null;
-        if (given.Count > MaxValues || given.Any(value => value.Length is 0 or > MaxChars || value.Any(char.IsControl)))
+        if (given.Count > MaxValues || !given.All(IsValue))
             return false;
         if (given.Count > 0)
             values = [.. given.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
         return true;
+    }
+
+    /// <summary>
+    ///     Whether a list may offer <paramref name="name" />: a filter takes it, and a query and the
+    ///     screen's route do not leave it out as blank. A push can store a name that fails this.
+    /// </summary>
+    public static bool CanOffer(string name)
+    {
+        return !string.IsNullOrWhiteSpace(name) && IsValue(name);
+    }
+
+    private static bool IsValue(string value)
+    {
+        return value.Length is > 0 and <= MaxChars && !value.Any(char.IsControl);
     }
 
     /// <summary>The key of a canonical list: its values joined, null for none.</summary>

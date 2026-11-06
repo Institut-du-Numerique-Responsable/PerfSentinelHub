@@ -1872,6 +1872,12 @@ test("the recap route reads its defaults and drops what it does not know", () =>
     assert.deepEqual(PSL.readRecapRoute("#/recap?service=" + "a".repeat(257)).services, [], "too long");
     assert.deepEqual(PSL.readRecapRoute("#/recap?service=" + "a".repeat(256)).services, ["a".repeat(256)], "just short enough");
     assert.equal(PSL.readRecapRoute("#/new").period, "week", "another route reads as the defaults");
+    // Well formed but no day of the calendar: the Hub refuses it, and no period can be worked out from it.
+    assert.equal(PSL.readRecapRoute("#/recap?at=2026-13-45").at, null);
+    assert.equal(PSL.readRecapRoute("#/recap?at=2026-02-31").at, null);
+    assert.equal(PSL.readRecapRoute("#/recap?at=2026-02-28").at, "2026-02-28");
+    assert.doesNotThrow(() => PSL.recapFiltersPath(PSL.readRecapRoute("#/recap?at=2026-13-45")));
+    assert.doesNotThrow(() => PSL.recapJobKey(PSL.readRecapRoute("#/recap?at=2026-13-45")));
 });
 
 test("an old recap link with one service and one namespace still reads as one value each", () => {

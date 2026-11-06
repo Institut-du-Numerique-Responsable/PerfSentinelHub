@@ -12,7 +12,8 @@ namespace PerfSentinelHub.Api;
 public static partial class ApiEndpoints
 {
     private const int RecapReportListLimit = 200;
-    // Both lists at their cap, 50 values of 256 characters each, and the other fields fit.
+    // Both lists at their cap, 50 values of 256 ASCII characters each, and the other fields fit. The caps
+    // count characters, so names that take more bytes can reach this first: a 413, never a wrong recap.
     private const int MaxRecapBodyBytes = 32 * 1024;
 
     /// <summary>

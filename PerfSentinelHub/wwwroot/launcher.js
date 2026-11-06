@@ -2465,6 +2465,18 @@
     const RECAP_FILTER_MAX_VALUES = 50;
 
     /**
+     * Whether `text` is a day of the calendar, as the Hub's own yyyy-MM-dd parse asks. A date past it,
+     * `2026-13-45`, has no period to work out and `toISOString` throws on it.
+     * @param {string} text
+     * @returns {boolean}
+     */
+    function isCalendarDay(text) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+        const date = cardDate(text);
+        return !Number.isNaN(date.getTime()) && cardIso(date) === text;
+    }
+
+    /**
      * What a `#/recap?…` hash names. Anything it does not know reads as the default. A service or a
      * namespace is a repeated key (`service=a&service=b`), each name read once and in the order the Hub
      * keys a job on, so the same choices in another order are one job; a name that is blank, past 256
@@ -2488,7 +2500,7 @@
         const environment = (params.get('environment') || '').trim();
         return {
             period: RECAP_PERIODS.indexOf(period) >= 0 ? /** @type {'day' | 'week' | 'month'} */ (period) : 'week',
-            at: /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : null,
+            at: isCalendarDay(at) ? at : null,
             environment: sound(environment) ? environment : null,
             services: names('service'),
             groupings: names('grouping'),
@@ -2595,10 +2607,19 @@
      * @returns {string}
      */
     function recapFiltersPath(route, now) {
-        const day = route.at || cardIso(new Date(now === undefined ? Date.now() : now));
-        const at = route.period === 'day' ? day : cardPeriodStart(route.period, day);
         return '/api/recap/filters?period=' + encodeURIComponent(route.period)
-            + recapScopeQuery({at: at, environment: route.environment});
+            + recapScopeQuery({at: recapPeriodDay(route, now), environment: route.environment});
+    }
+
+    /**
+     * The first day of the period a route names. The Hub reads an absent day as today in UTC.
+     * @param {{period: string, at: string | null}} route
+     * @param {number} [now] the moment that decides today when the route names no day, Date.now() by default
+     * @returns {string}
+     */
+    function recapPeriodDay(route, now) {
+        const day = route.at || cardIso(new Date(now === undefined ? Date.now() : now));
+        return route.period === 'day' ? day : cardPeriodStart(route.period, day);
     }
 
     /**
@@ -2632,11 +2653,9 @@
      * @returns {string}
      */
     function recapJobKey(route, now) {
-        // The Hub reads an absent day as today in UTC and keys a job on its period's first day, so the
-        // key does too: another day of the same period is the same job, past its end another one.
-        const day = route.at || cardIso(new Date(now === undefined ? Date.now() : now));
-        const at = route.period === 'day' ? day : cardPeriodStart(route.period, day);
-        return recapPath(Object.assign({}, route, {view: 'tech', at: at}));
+        // The Hub keys a job on its period's first day, so the key does too: another day of the same
+        // period is the same job, past its end another one.
+        return recapPath(Object.assign({}, route, {view: 'tech', at: recapPeriodDay(route, now)}));
     }
 
     /**
