@@ -53,11 +53,13 @@ All notable changes to PerfSentinelHub are recorded here.
 - On the recap routes that read a query, a single `service` or `grouping` over 256 characters or
   holding a control character is now a `400` (`invalid_recap_query`), where it filtered and matched
   nothing before. A repeated `service` or `grouping` is read as several values, and no longer a `400`.
-- The image ships perf-sentinel `0.43.0` as its analysis engine, repinned by digest from
+- The image ships perf-sentinel `0.43.1` as its analysis engine, repinned by digest from
   `0.42.0`. It is also the version the launcher compares a polled daemon's `producer_version`
-  against, so a daemon still on `0.42.1` or earlier now reads behind. `config/supply-chain.json`
-  carries the same digest as the `Dockerfile`. A Tempo analysis whose trace reads all fail now
-  reports `the search matched N trace(s) but every fetch failed` instead of `no traces found`.
+  against, so a daemon still on `0.43.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. A Tempo analysis whose failed reads outnumber the
+  traces that answered now reports `the search matched N trace(s) but most fetches failed` instead
+  of `no traces found`, and a querier that stalls in the middle of a response fails the read as a
+  timeout instead of hanging the analysis.
   No detection, score or report format changes, and the disclosure schema stays
   `perf-sentinel-report/v1.8`.
 
