@@ -36,9 +36,9 @@ A Tempo source adds a Simultaneous reads block under Max traces: how many trace 
 engine reads from Tempo at once, passed to it as `--fetch-concurrency`. It is a field, a chip
 and a slider from 1 to the Hub's maximum, green up to its threshold and red above, and it
 starts at the engine's own 16, lowered to the threshold or the maximum when either is lower.
-Above the threshold the chip turns red and an alert says that Tempo spends memory on every
-read in flight and that an undersized querier can stop in the middle of the analysis. Run
-analysis stays off until its box is ticked, and the box clears when the count drops back.
+Above the threshold the field and the chip turn red and an alert says that Tempo spends memory
+on every read in flight and that an undersized querier can stop in the middle of the analysis.
+Run analysis stays off until its box is ticked, and the box clears when the count drops back.
 Above the maximum there is no box and the button stays off. The threshold and the maximum
 are `Hub:Analysis:FetchConcurrencyWarn` and `Hub:Analysis:FetchConcurrencyMax`, see
 [CONFIGURATION.md](CONFIGURATION.md), and the Hub refuses a count past the maximum whatever

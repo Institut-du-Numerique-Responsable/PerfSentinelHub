@@ -40,10 +40,10 @@ reste, et sous un daemon le bandeau le dit et en demande un.
 Une source Tempo ajoute un bloc Lectures simultanées sous Traces max. : combien de corps de traces le
 moteur lit à la fois dans Tempo, transmis au moteur sous la forme `--fetch-concurrency`. C'est un champ,
 une puce et un curseur de 1 au maximum du Hub, vert jusqu'à son seuil et rouge au-delà, qui part du 16
-du moteur, abaissé au seuil ou au maximum quand l'un des deux est plus bas. Au-dessus du seuil, la puce
-passe au rouge et une alerte dit que Tempo consomme de la mémoire pour chaque lecture en vol et qu'un
-querier trop petit peut s'arrêter en pleine analyse. Lancer l'analyse reste éteint tant que sa case n'est
-pas cochée, et la case se décoche quand le nombre redescend. Au-dessus du maximum, il n'y a pas de case et
+du moteur, abaissé au seuil ou au maximum quand l'un des deux est plus bas. Au-dessus du seuil, le champ et
+la puce passent au rouge et une alerte dit que Tempo consomme de la mémoire pour chaque lecture en vol
+et qu'un querier trop petit peut s'arrêter en pleine analyse. Lancer l'analyse reste éteint tant que sa
+case n'est pas cochée, et la case se décoche quand le nombre redescend. Au-dessus du maximum, il n'y a pas de case et
 le bouton reste éteint. Le seuil et le maximum sont `Hub:Analysis:FetchConcurrencyWarn` et
 `Hub:Analysis:FetchConcurrencyMax`, voir [CONFIGURATION-FR.md](CONFIGURATION-FR.md), et le Hub refuse un
 nombre au-delà du maximum quoi que l'écran ait fait. Le bloc est absent pour une source Jaeger, un daemon,

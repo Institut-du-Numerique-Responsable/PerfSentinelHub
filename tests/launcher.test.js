@@ -81,6 +81,21 @@ test("a Tempo source carries its reads count after the cap, a Jaeger source neve
         .includes("--fetch-concurrency"));
 });
 
+test("data-over is written as the string the stylesheet matches, never as a bare presence", () => {
+    const read = file => require("node:fs").readFileSync(
+        require("node:path").join(__dirname, "..", "PerfSentinelHub", "wwwroot", file), "utf8");
+    const app = read("app.js");
+    const css = read("launcher.css");
+
+    // toggleAttribute writes data-over="", which `[data-over="true"]` never matches.
+    assert.ok(!/toggleAttribute\(\s*'data-over'/.test(app));
+    assert.ok(app.includes("number.setAttribute('data-over', bad ? 'true' : 'false')"), "the reads field");
+    assert.ok(app.includes("number.setAttribute('data-over', over ? 'true' : 'false')"), "the traces field");
+    const selectors = [...css.matchAll(/\[data-over[^\]]*\]/g)].map(match => match[0]);
+    assert.ok(selectors.length > 0);
+    assert.deepEqual(selectors.filter(selector => selector !== '[data-over="true"]'), []);
+});
+
 test("a count that is the engine's own default is left out of the printed command, any other is printed", () => {
     const withCount = count => PSL.analysisCommand(tempo,
         {service: "orders", max_traces: 100, lookback: "1h", fetch_concurrency: count});

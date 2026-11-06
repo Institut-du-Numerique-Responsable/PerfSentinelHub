@@ -3017,7 +3017,7 @@
         // typing into is left alone.
         if (number && number.value !== value) number.value = value;
         if (number) {
-            number.toggleAttribute('data-over', over);
+            number.setAttribute('data-over', over ? 'true' : 'false');
             number.setAttribute('data-band', band.key);
         }
         if (slider) {
@@ -3091,7 +3091,7 @@
         const slider = /** @type {HTMLInputElement} */ (root.querySelector('#fetch-slider'));
         // Assigned only when it differs, so the element being dragged or typed into is left alone.
         if (number.value !== String(value)) number.value = String(value);
-        number.toggleAttribute('data-over', bad);
+        number.setAttribute('data-over', bad ? 'true' : 'false');
         number.setAttribute('data-band', band.key);
         const clamped = String(Math.min(Math.max(value, 1), limits.fetch_concurrency_max));
         if (slider.value !== clamped) slider.value = clamped;
