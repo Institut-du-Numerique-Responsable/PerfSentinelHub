@@ -2926,7 +2926,7 @@
         /"(?:[^"]|"")*(?:"|$)/, // quoted name
         /`[^`]*(?:`|$)/, // quoted name, MySQL
         /\s+/,
-        /\$\d+|\?/, // parameter
+        /\$\d+|\$\?|\?/, // parameter, `$?` being what the engine writes for `$1`
         /[\p{L}\p{N}_$.]+/u, // name, number, keyword
         /[=<>!]+/, // comparison, or the start of a longer operator
         /[\s\S]/u // anything else, one character
@@ -3023,7 +3023,7 @@
      * @returns {import('../types').SqlToken['kind']}
      */
     function sqlKind(scan, text, lower) {
-        if (text === '?' || /^\$\d/.test(text)) return 'param';
+        if (text === '?' || /^\$[\d?]/.test(text)) return 'param';
         if (SQL_KEYWORDS.has(lower) || SQL_COMPARISONS.has(text)) return 'keyword';
         if (/^(--|\/\*)/.test(text)) return 'text';
         if (scan.table && /^[\p{L}_"`]/u.test(text)) return 'table';

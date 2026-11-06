@@ -2798,6 +2798,7 @@ test("laying a query out never changes a token", () => {
         "select a from t where b='unterminated",
         "select a from t where b=1 /* unterminated",
         "select a from t where b=$1 and c=$2",
+        "select a from t where x=$? and y=$?",
         "",
         "   "
     ];
@@ -2806,6 +2807,14 @@ test("laying a query out never changes a token", () => {
             assert.equal(noBlanks(sqlText(PSL.sqlTokens(padded))), noBlanks(padded), JSON.stringify(padded.slice(0, 80)));
         }
     }
+});
+
+test("a Postgres parameter is one parameter token, as the engine writes it with `$?` or as `$1`", () => {
+    const params = sql => PSL.sqlTokens(sql).filter(token => token.kind === "param").map(token => token.text);
+
+    assert.deepEqual(params("select a from t where x=$? and y=$?"), ["$?", "$?"]);
+    assert.deepEqual(params("select a from t where x=$1 and y=$12"), ["$1", "$12"]);
+    assert.deepEqual(params("select a from t where x=?"), ["?"]);
 });
 
 test("the inside of a string, a comment and a quoted name keeps its blanks and its operators", () => {
