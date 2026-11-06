@@ -1127,12 +1127,22 @@ the self-contained HTML dashboard the engine renders.
 | `GET /reports/{id}.html` | Serves a succeeded run's report, from the same origin as the rest             |
 
 The request shape follows the source's kind: `{}` for a daemon, which takes no parameters
-at all, `{service, lookback | from_ms + to_ms, max_traces}` for a trace backend, or
+at all, `{service, lookback | from_ms + to_ms, max_traces, fetch_concurrency}` for a trace backend, or
 `{trace_id}`. The engine's own exclusions are enforced before anything is queued, so an
 impossible pair is refused rather than discovered as a failed run three minutes later.
 A `service` is 1 to 256 characters with no whitespace, no control character and none of
 `"`, `=` and `\`: a `service.name` never needs them, and a trace backend's tag search would
 read them as syntax, so one is a `400`.
+`fetch_concurrency` is how many trace bodies the engine fetches at once after a Tempo search,
+passed to it as `--fetch-concurrency`. It is a whole number from 1 to
+`Hub:Analysis:FetchConcurrencyMax`, and a `400` on a Jaeger source, on a daemon, in trace ID
+mode, outside that range, or when it is a decimal or a string. A Tempo request that names none
+is given `min(16, FetchConcurrencyMax)` when the engine is 0.43.0 or later, and the stored
+request carries it, since the worker replays that request without knowing the engine's version.
+An older engine refuses the flag, so a value is a `400` (`fetch_concurrency_unsupported`)
+naming both versions. So is a Tempo request without one when `FetchConcurrencyMax` is under 16,
+because that engine would read 16 at once whatever the limit. At 16 and above it is queued as
+before and nothing is stored.
 A run starts work in the caller's name, so before the body is read a submission is held to
 the rule an ack is: a `Sec-Fetch-Site` other than `same-origin` is a `403` and a content type
 that is not JSON a `415`.
@@ -1661,7 +1671,7 @@ its `{"reason":"…"}` with no `detail`. A response with no body (`413`, `415`, 
 
 - The request itself: `invalid_json`, `invalid_request`, `unknown_source`, `unknown_scope`.
 - Who asks, and from where: `unknown_caller`, `foreign_origin`, `machine_token_read_only`, `no_grant`, `no_findings_read`.
-- Analyses: `analysis_engine_missing`, `detection_knob_unsupported`, `analysis_forbidden`.
+- Analyses: `analysis_engine_missing`, `detection_knob_unsupported`, `fetch_concurrency_unsupported`, `analysis_forbidden`.
 - Terminal sign-in and tokens: `browser_session_required`, `browser_not_allowed`, `unknown_token`, `session_ending`, `invalid_user_code`, `no_pending_sign_in`, `too_many_user_codes`.
 - Findings, actions and labels: `actions_forbidden`, `action_read_only`, `unknown_finding`, `action_exists`, `no_action`, `endpoint_labels_forbidden`, `service_labels_forbidden`, `unknown_endpoint`, `unknown_service`, `endpoint_label_read_only`, `service_label_read_only`.
 - Acknowledgments and their relay to a daemon: `acks_not_relayed`, `acks_forbidden`, `ack_read_only`, `unknown_finding_at_source`, `unknown_ack_at_source`, `daemon_unreachable`, `daemon_timeout`, `daemon_refused_signature`, `daemon_refused_credential`, `daemon_ack_not_found`, `daemon_already_acked`, `daemon_acks_disabled`, `daemon_ack_store_full`, `daemon_unexpected_answer`, `not_a_daemon`.

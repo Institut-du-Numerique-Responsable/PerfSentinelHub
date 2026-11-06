@@ -359,6 +359,10 @@ public sealed record AnalysisOptions
     // its arguments, like EngineMaxTraces above.
     public const int EngineMaxFetchConcurrency = 64;
 
+    // What an engine reads when `--fetch-concurrency` is not given, and the only
+    // value an engine that predates the flag can run at.
+    public const int EngineDefaultFetchConcurrency = 16;
+
     // Absent means the Hub keeps collecting findings but cannot run an
     // analysis: the launcher reads a null engine version and says so.
     public string? EngineBinaryPath { get; set; }
@@ -383,7 +387,7 @@ public sealed record AnalysisOptions
 
     // What a Tempo run reads when the request names no value: the engine's own
     // default of 16, held under the ceiling when the operator set one below it.
-    public int DefaultFetchConcurrency => Math.Min(16, FetchConcurrencyMax);
+    public int DefaultFetchConcurrency => Math.Min(EngineDefaultFetchConcurrency, FetchConcurrencyMax);
 
     // Span trees embedded in the rendered report. Passing this at all opts the
     // sink out of size targeting, which is why it is set: without it a wide

@@ -76,6 +76,8 @@
         'problem.analysis_engine_missing': 'Aucun moteur d\'analyse n\'est configuré sur ce Hub.',
         'problem.detection_knob_unsupported': 'Un réglage de détection de cette requête demande un moteur '
             + 'plus récent que celui de ce Hub.',
+        'problem.fetch_concurrency_unsupported': 'Les lectures simultanées de cette requête demandent un moteur '
+            + 'plus récent que celui de ce Hub.',
         'problem.analysis_forbidden': 'Vous ne pouvez pas lancer cette analyse.',
         'problem.browser_session_required': 'Approuver une connexion ou gérer des jetons demande une session '
             + 'de navigateur.',

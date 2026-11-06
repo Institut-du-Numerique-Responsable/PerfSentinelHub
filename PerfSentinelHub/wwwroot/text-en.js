@@ -78,6 +78,8 @@
         'problem.analysis_engine_missing': 'No analysis engine is configured on this Hub.',
         'problem.detection_knob_unsupported': 'A detection setting of this request needs a newer engine than '
             + 'the one this Hub runs.',
+        'problem.fetch_concurrency_unsupported': 'The simultaneous reads of this request need a newer engine '
+            + 'than the one this Hub runs.',
         'problem.analysis_forbidden': 'You may not start this analysis.',
         'problem.browser_session_required': 'Approving a sign-in or managing tokens needs a browser session.',
         'problem.browser_not_allowed': 'A browser never calls this route.',

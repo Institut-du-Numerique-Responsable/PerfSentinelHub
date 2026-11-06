@@ -1210,13 +1210,24 @@ le dashboard HTML autonome que rend le moteur.
 | `GET /reports/{id}.html` | Sert le rapport d'un run réussi, depuis la même origine que le reste                   |
 
 La forme de la requête suit le kind de la source : `{}` pour un daemon, qui ne prend aucun
-paramètre, `{service, lookback | from_ms + to_ms, max_traces}` pour un backend de traces,
+paramètre, `{service, lookback | from_ms + to_ms, max_traces, fetch_concurrency}` pour un backend de traces,
 ou `{trace_id}`. Les exclusions propres au moteur sont appliquées avant toute mise en
 file, donc une combinaison impossible est refusée plutôt que découverte trois minutes plus
 tard sous la forme d'un run échoué. Un `service` fait 1 à 256 caractères sans espace, sans
 caractère de contrôle et sans `"`, `=` ni `\` : un `service.name` n'en a jamais besoin, et la
 recherche par tags d'un backend de traces les lirait comme de la syntaxe, donc un tel nom vaut
-un `400`. Un run lance du travail au nom de l'appelant, donc
+un `400`.
+`fetch_concurrency` est le nombre de corps de traces que le moteur lit en même temps après une
+recherche Tempo, transmis sous la forme `--fetch-concurrency`. C'est un entier de 1 à
+`Hub:Analysis:FetchConcurrencyMax`, et un `400` sur une source Jaeger, sur un daemon, en mode ID
+de trace, hors de cet intervalle, ou quand c'est un décimal ou une chaîne. Une requête Tempo qui
+n'en nomme aucun reçoit `min(16, FetchConcurrencyMax)` quand le moteur est en 0.43.0 ou plus
+récent, et la requête stockée le porte, puisque le worker la rejoue sans connaître la version du
+moteur. Un moteur plus ancien refuse le drapeau, donc une valeur vaut un `400`
+(`fetch_concurrency_unsupported`) qui nomme les deux versions. Une requête Tempo sans valeur en
+vaut un aussi quand `FetchConcurrencyMax` est sous 16, parce que ce moteur lirait 16 à la fois
+quelle que soit la limite. À partir de 16 elle est mise en file comme avant et rien n'est stocké.
+Un run lance du travail au nom de l'appelant, donc
 avant la lecture du corps une soumission est tenue à la règle d'un acquittement : un
 `Sec-Fetch-Site` autre que `same-origin` vaut un `403` et un type de contenu qui n'est pas
 JSON un `415`.
@@ -1777,7 +1788,7 @@ divulgation garde son `{"reason":"…"}` sans `detail`. Une réponse sans corps 
 
 - La requête elle-même : `invalid_json`, `invalid_request`, `unknown_source`, `unknown_scope`.
 - Qui demande, et d'où : `unknown_caller`, `foreign_origin`, `machine_token_read_only`, `no_grant`, `no_findings_read`.
-- Analyses : `analysis_engine_missing`, `detection_knob_unsupported`, `analysis_forbidden`.
+- Analyses : `analysis_engine_missing`, `detection_knob_unsupported`, `fetch_concurrency_unsupported`, `analysis_forbidden`.
 - Connexion du terminal et jetons : `browser_session_required`, `browser_not_allowed`, `unknown_token`, `session_ending`, `invalid_user_code`, `no_pending_sign_in`, `too_many_user_codes`.
 - Findings, actions et libellés : `actions_forbidden`, `action_read_only`, `unknown_finding`, `action_exists`, `no_action`, `endpoint_labels_forbidden`, `service_labels_forbidden`, `unknown_endpoint`, `unknown_service`, `endpoint_label_read_only`, `service_label_read_only`.
 - Acquittements et leur relais vers un daemon : `acks_not_relayed`, `acks_forbidden`, `ack_read_only`, `unknown_finding_at_source`, `unknown_ack_at_source`, `daemon_unreachable`, `daemon_timeout`, `daemon_refused_signature`, `daemon_refused_credential`, `daemon_ack_not_found`, `daemon_already_acked`, `daemon_acks_disabled`, `daemon_ack_store_full`, `daemon_unexpected_answer`, `not_a_daemon`.

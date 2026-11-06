@@ -32,6 +32,7 @@ public sealed record AnalysisRequest
     private long? FromMs { get; init; }
     private long? ToMs { get; init; }
     private int? MaxTraces { get; init; }
+    private int? FetchConcurrency { get; init; }
 
     /// <summary>
     ///     Thresholds the operator moved for this run. Never set on a daemon: a
@@ -76,12 +77,16 @@ public sealed record AnalysisRequest
             Lookback = ReadString(payload, "lookback"),
             FromMs = ReadLong(payload, "from_ms"),
             ToMs = ReadLong(payload, "to_ms"),
-            MaxTraces = ReadInt(payload, "max_traces")
+            MaxTraces = ReadInt(payload, "max_traces"),
+            // A value that is present but not a whole number reads as 0, which the range check
+            // refuses in the same words: a decimal or a string is wrong, never silently absent.
+            FetchConcurrency = ReadInt(payload, "fetch_concurrency")
+                               ?? (IsGiven(payload, "fetch_concurrency") ? 0 : null)
         };
 
         error = source.Kind == SourceKinds.Daemon
             ? ValidateDaemon(request)
-            : ValidateBackend(request, analysis, nowMs);
+            : ValidateBackend(request, source, analysis, nowMs);
         return error is null ? request : null;
     }
 
@@ -107,6 +112,8 @@ public sealed record AnalysisRequest
                 writer.WriteNumber("to_ms", toMs);
             if (MaxTraces is { } maxTraces)
                 writer.WriteNumber("max_traces", maxTraces);
+            if (FetchConcurrency is { } fetchConcurrency)
+                writer.WriteNumber("fetch_concurrency", fetchConcurrency);
             Detection.WriteSubmitted(writer);
             writer.WriteEndObject();
         }
@@ -169,7 +176,56 @@ public sealed record AnalysisRequest
 
         arguments.Add("--max-traces");
         arguments.Add((MaxTraces ?? DefaultMaxTraces).ToString(CultureInfo.InvariantCulture));
+        // Passed as read: the default is written into the stored request at submission, where the
+        // engine's version is known, and the worker replays that request without it.
+        if (FetchConcurrency is { } fetchConcurrency)
+        {
+            arguments.Add("--fetch-concurrency");
+            arguments.Add(fetchConcurrency.ToString(CultureInfo.InvariantCulture));
+        }
+
         return arguments;
+    }
+
+    /// <summary>
+    ///     The reason this run must not be queued for an engine of that version, or null. A value is refused
+    ///     where the engine predates the flag, and so is a Tempo run with none when the configured max sits under
+    ///     the 16 reads an engine of that age would still do: nothing it is given could hold it to the max.
+    ///     Checked at submission, never in <see cref="TryParse" />, which the worker replays on a run already
+    ///     accepted.
+    /// </summary>
+    public string? RefusedBy(SourceOptions source, AnalysisOptions analysis, string? engineVersion)
+    {
+        if (!TakesFetchConcurrency(source) || DetectionOverrides.ReadsFetchConcurrency(engineVersion))
+            return null;
+        var runs = DetectionOverrides.Runs(engineVersion, DetectionOverrides.ParseEngineVersion(engineVersion));
+        if (FetchConcurrency is not null)
+            return $"fetch_concurrency needs engine {DetectionOverrides.FetchConcurrencySince} or later, {runs}.";
+        return analysis.FetchConcurrencyMax < AnalysisOptions.EngineDefaultFetchConcurrency
+            ? $"Hub:Analysis:FetchConcurrencyMax is {analysis.FetchConcurrencyMax}, under the "
+              + $"{AnalysisOptions.EngineDefaultFetchConcurrency} reads at once an engine before "
+              + $"{DetectionOverrides.FetchConcurrencySince} runs at, and {runs}."
+            : null;
+    }
+
+    /// <summary>
+    ///     This request with the read concurrency a Tempo run would otherwise leave to the engine, when the
+    ///     engine takes the flag and the request names none. Written into the stored request so that what a run
+    ///     read is on record, and so the worker needs no version to pass it.
+    /// </summary>
+    public AnalysisRequest WithDefaultFetchConcurrency(
+        SourceOptions source, AnalysisOptions analysis, string? engineVersion)
+    {
+        return FetchConcurrency is null && TakesFetchConcurrency(source) &&
+               DetectionOverrides.ReadsFetchConcurrency(engineVersion)
+            ? this with { FetchConcurrency = analysis.DefaultFetchConcurrency }
+            : this;
+    }
+
+    // Only a Tempo search fetches trace bodies in parallel: a trace ID reads one, and Jaeger has no such setting.
+    private bool TakesFetchConcurrency(SourceOptions source)
+    {
+        return source.Kind == SourceKinds.Tempo && TraceId is null;
     }
 
     private static string? ValidateDaemon(AnalysisRequest request)
@@ -180,14 +236,16 @@ public sealed record AnalysisRequest
                request.Lookback is null &&
                request.FromMs is null &&
                request.ToMs is null &&
-               request.MaxTraces is null
+               request.MaxTraces is null &&
+               request.FetchConcurrency is null
             ? null
             // A daemon snapshot is whatever it holds in memory right now.
             // Asking for a window would be a request the source cannot answer.
             : "A daemon snapshot takes no parameters, and detects with its own configuration.";
     }
 
-    private static string? ValidateBackend(AnalysisRequest request, AnalysisOptions analysis, long nowMs)
+    private static string? ValidateBackend(
+        AnalysisRequest request, SourceOptions source, AnalysisOptions analysis, long nowMs)
     {
         if (request.TraceId is { } traceId)
             return ValidateTraceRequest(request, traceId);
@@ -200,7 +258,9 @@ public sealed record AnalysisRequest
             return $"The service name must be 1 to {MaxServiceLength} characters, with no space, control character, "
                    + "'\"', '=' or '\\'.";
 
-        return ValidateWindow(request, nowMs) ?? ValidateMaxTraces(request, analysis);
+        return ValidateWindow(request, nowMs) ??
+               ValidateMaxTraces(request, analysis) ??
+               ValidateFetchConcurrency(request, source, analysis);
     }
 
     private static string? ValidateTraceRequest(AnalysisRequest request, string traceId)
@@ -208,6 +268,8 @@ public sealed record AnalysisRequest
         if (traceId.Length is 0 or > MaxTraceIdLength ||
             !traceId.All(char.IsAsciiLetterOrDigit))
             return $"A trace ID must be 1 to {MaxTraceIdLength} letters or digits.";
+        if (request.FetchConcurrency is not null)
+            return "A trace ID resolves to exactly one trace, so no read concurrency applies to it.";
         // The engine refuses the combination outright, and the launcher hides
         // the whole window block in trace mode.
         return request.Service is null &&
@@ -249,6 +311,18 @@ public sealed record AnalysisRequest
             : $"max_traces must be between 1 and {analysis.MaxTracesCap}.";
     }
 
+    private static string? ValidateFetchConcurrency(
+        AnalysisRequest request, SourceOptions source, AnalysisOptions analysis)
+    {
+        if (request.FetchConcurrency is not { } concurrency)
+            return null;
+        if (source.Kind != SourceKinds.Tempo)
+            return "fetch_concurrency applies to a Tempo source only.";
+        return concurrency >= 1 && concurrency <= analysis.FetchConcurrencyMax
+            ? null
+            : $"fetch_concurrency must be a whole number between 1 and {analysis.FetchConcurrencyMax}.";
+    }
+
     private static bool IsLookback(string value)
     {
         return value.Length is >= 2 and <= 8 &&
@@ -280,6 +354,12 @@ public sealed record AnalysisRequest
                value.TryGetInt64(out var parsed)
             ? parsed
             : null;
+    }
+
+    private static bool IsGiven(JsonElement payload, string name)
+    {
+        return payload.TryGetProperty(name, out var value) &&
+               value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);
     }
 
     private static int? ReadInt(JsonElement payload, string name)

@@ -139,6 +139,36 @@ test("every threshold the Hub can write reaches the engine under its own name", 
     "DetectionOverrides.cs declares " + KNOB_COUNT + " knobs");
 });
 
+// A Tempo service run as AnalysisRequest.ToEngineArguments spells it, the flag after
+// --max-traces, which the C# tests pin. The engine parses its arguments before it opens
+// a connection: a refused value exits 2 with clap's usage error, and an accepted one
+// reaches the search, which finds nothing at the discard port and exits on its own code.
+function tempoRun(fetchConcurrency) {
+  return spawnSync(engine, [
+    "tempo", "--endpoint", "http://127.0.0.1:1", "--format", "json",
+    "--service", "order-svc", "--lookback", "1h", "--max-traces", "100",
+    "--fetch-concurrency", String(fetchConcurrency)
+  ], { encoding: "utf8" });
+}
+
+test("the engine's parser takes --fetch-concurrency up to the ceiling the Hub holds", { skip }, () => {
+  const options = path.join(__dirname, "..", "PerfSentinelHub", "Configuration", "HubOptions.cs");
+  const ceiling = fs.readFileSync(options, "utf8").match(/EngineMaxFetchConcurrency = (\d+);/);
+  assert.ok(ceiling, "HubOptions.cs no longer declares EngineMaxFetchConcurrency");
+  const max = Number(ceiling[1]);
+
+  [1, 16, max].forEach(function (value) {
+    const run = tempoRun(value);
+    assert.notEqual(run.status, 2, "the engine's parser refused " + value + ": " + run.stderr);
+  });
+  // Both ends: a ceiling the Hub raised past the engine's would pass its own checks and fail the run.
+  [0, max + 1].forEach(function (value) {
+    const run = tempoRun(value);
+    assert.equal(run.status, 2, "the engine's parser took " + value + ": " + run.stderr);
+    assert.match(run.stderr, /fetch-concurrency/);
+  });
+});
+
 // ------------------------------------------------- the tables the JS copies
 //
 // The knob table lives in C#, and the map above and DETECTION_COPY in app.js

@@ -122,6 +122,7 @@ export interface RunRequest {
     from_ms?: number;
     to_ms?: number;
     max_traces?: number;
+    fetch_concurrency?: number;
     detection?: Record<string, number | string>;
 }
 

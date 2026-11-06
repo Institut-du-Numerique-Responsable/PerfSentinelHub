@@ -83,6 +83,12 @@ public static partial class ApiEndpoints
             // here, with both versions named, not by the engine at run time.
             if (parsed.Detection.RefusedBy(engine.Version) is { } refused)
                 return Problem(StatusCodes.Status400BadRequest, ProblemCodes.DetectionKnobUnsupported, refused);
+            // The same gate for the Tempo read concurrency, then the default written into what is
+            // stored: the worker replays that request without knowing the engine's version.
+            if (parsed.RefusedBy(source, hubOptions.Analysis, engine.Version) is { } concurrencyRefused)
+                return Problem(StatusCodes.Status400BadRequest, ProblemCodes.FetchConcurrencyUnsupported,
+                    concurrencyRefused);
+            var stored = parsed.WithDefaultFetchConcurrency(source, hubOptions.Analysis, engine.Version);
             // Starting needs R and analyses.run, so a requester reads their own run while
             // their grant stands, with no requester clause.
             var rule = new RunRule(request.HttpContext, access, database);
@@ -100,7 +106,7 @@ public static partial class ApiEndpoints
                 return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
             }
 
-            var run = NewRun(source, parsed.ToJson(), Identity(request, hubOptions.Analysis), nowMs);
+            var run = NewRun(source, stored.ToJson(), Identity(request, hubOptions.Analysis), nowMs);
             if (await database.TryInsertRunAsync(run, maxPending, cancellationToken))
                 return TypedResults.Accepted($"/api/analyses/{run.Id}", new SubmittedAnalysis(run.Id, run.Status));
 

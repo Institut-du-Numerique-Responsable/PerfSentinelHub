@@ -71,7 +71,7 @@ public sealed record DetectionOverrides
     private static readonly (DetectionKnob Knob, Version? Since)[] All = BuildAll();
 
     // The engine minor that first read `tempo --fetch-concurrency`.
-    private static readonly Version FetchConcurrencySince = new(0, 43, 0);
+    internal static readonly Version FetchConcurrencySince = new(0, 43, 0);
 
     // A named array rather than either inline form: `Split('-', '+')` reads as a
     // partial match for `Split(char, int)`, and `Split(['-', '+'])` allocates on
@@ -190,7 +190,7 @@ public sealed record DetectionOverrides
     }
 
     /// <summary>What the Hub knows of its engine's version, saying so when it could not read it.</summary>
-    private static string Runs(string? engineVersion, Version? engine)
+    internal static string Runs(string? engineVersion, Version? engine)
     {
         if (engineVersion is null)
             return "this Hub has not read its engine's version";
