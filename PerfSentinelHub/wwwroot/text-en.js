@@ -644,7 +644,7 @@
         'new.fetch.chip.invalid': 'not a whole number',
         'new.fetch.cap': 'threshold {warn} · maximum {max}',
         'new.fetch.at_least': 'whole number, at least 1',
-        'new.fetch.scale.warn': 'warning',
+        'new.fetch.scale.warn': 'threshold',
         'new.fetch.scale.max': 'maximum',
         'new.fetch.body.one': 'The engine reads at most {count} trace at a time. A low value spreads the same '
             + 'reads over more time.',

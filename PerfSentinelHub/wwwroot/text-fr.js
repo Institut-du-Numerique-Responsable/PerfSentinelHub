@@ -690,7 +690,7 @@
         'new.fetch.chip.invalid': 'pas un nombre entier',
         'new.fetch.cap': 'seuil {warn} · maximum {max}',
         'new.fetch.at_least': 'entier, au moins 1',
-        'new.fetch.scale.warn': 'alerte',
+        'new.fetch.scale.warn': 'seuil',
         'new.fetch.scale.max': 'maximum',
         'new.fetch.body.one': 'Le moteur lit au plus {count} trace à la fois. Une valeur basse étale les mêmes '
             + 'lectures sur plus de temps.',
