@@ -34,7 +34,7 @@ public sealed record StatusResponse(
 
 /// <summary>
 ///     What a run costs, reported rather than assumed: the launcher shows these
-///     four figures next to the button instead of guessing them. The read
+///     figures next to the button instead of guessing them. The read
 ///     limit is the operator's ceiling on a listing page, so the launcher sizes
 ///     its pages under it instead of learning it from a 400.
 /// </summary>
