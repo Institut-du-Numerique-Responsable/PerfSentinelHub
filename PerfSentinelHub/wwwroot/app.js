@@ -406,8 +406,12 @@
             detection: {},
             pickerOpen: false,
             maxTraces: 100,
+            // Null until someone types one: the Hub's own limits decide the start, and
+            // they are only known once the status has arrived.
+            fetchConcurrency: null,
             ackUnreachable: false,
-            ackHeavy: false
+            ackHeavy: false,
+            ackFetch: false
         }
     };
 
@@ -2911,6 +2915,7 @@
         saveSource(id);
         state.form.ackUnreachable = false;
         state.form.ackHeavy = false;
+        state.form.ackFetch = false;
         state.form.pickerOpen = false;
         state.form.detection = {};
         render();
@@ -2921,6 +2926,9 @@
      */
     function setMode(mode) {
         state.form.mode = mode;
+        // A trace ID reads one trace, so the reads count leaves with the block, and a
+        // tick given for it does not wait behind the field to count for the next service run.
+        state.form.ackFetch = false;
         // Switching clears the other field, and a trace ID takes no window at all,
         // so the picker cannot stay open behind a hidden control.
         if (mode === 'trace') {
@@ -2990,6 +2998,96 @@
         if (!slot) return;
         if (band.needsAck) slot.replaceChildren(heavyAck());
         else slot.replaceChildren();
+    }
+
+    /** The reads count on screen against this Hub's limits, or null while the block is not on screen. */
+    function fetchBandNow() {
+        const value = fetchValue();
+        if (value === undefined) return null;
+        const limits = state.status.limits;
+        return PSL.fetchBand(value, limits.fetch_concurrency_warn, limits.fetch_concurrency_max);
+    }
+
+    /** The reads count the form carries, undefined while the block is not on screen. */
+    function fetchValue() {
+        return PSL.fetchRequested(state.form, selectedSource(), state.status.limits);
+    }
+
+    /**
+     * Updated in place, like setMaxTraces, for the same reason.
+     * @param {number} value
+     */
+    function setFetchConcurrency(value) {
+        state.form.fetchConcurrency = value;
+        // Dropping back to the warning or under withdraws the question that was asked above it.
+        if (!fetchBandNow().needsAck) state.form.ackFetch = false;
+        paintFetch(document);
+        updateSubmit();
+    }
+
+    /**
+     * Everything on screen that reads the reads count. Builds the block and refreshes it
+     * with the same code, so the two cannot drift.
+     * @param {ParentNode} root
+     */
+    function paintFetch(root) {
+        const band = fetchBandNow();
+        if (!band) return;
+        const limits = state.status.limits;
+        const value = fetchValue();
+        const bad = band.key !== 'ok';
+        const tone = bad ? 'crit' : 'ok';
+
+        const number = /** @type {HTMLInputElement} */ (root.querySelector('#fetch-number'));
+        const slider = /** @type {HTMLInputElement} */ (root.querySelector('#fetch-slider'));
+        // Assigned only when it differs, so the element being dragged or typed into is left alone.
+        if (number.value !== String(value)) number.value = String(value);
+        number.toggleAttribute('data-over', bad);
+        number.setAttribute('data-band', band.key);
+        const clamped = String(Math.min(Math.max(value, 1), limits.fetch_concurrency_max));
+        if (slider.value !== clamped) slider.value = clamped;
+
+        const chip = root.querySelector('#fetch-band');
+        chip.textContent = t('new.fetch.chip.' + band.key);
+        chip.setAttribute('style', bandStyle({fg: 'var(--' + tone + '-fg)', bg: 'var(--' + tone + '-bg)'}));
+
+        const cap = root.querySelector('#fetch-cap');
+        cap.textContent = band.key === 'invalid'
+            ? t('new.fetch.at_least')
+            : t('new.fetch.cap', {warn: limits.fetch_concurrency_warn, max: limits.fetch_concurrency_max});
+        cap.setAttribute('data-over', bad ? 'true' : 'false');
+
+        // The comfortable reading is said once the alert has nothing to say.
+        root.querySelector('#fetch-body').textContent =
+            bad ? '' : t('new.fetch.body.' + PSL.plural(value), {count: value});
+
+        // Rebuilt only when the band changes: a slider drag inside one band leaves the
+        // alert, its checkbox and the screen reader's last announcement alone.
+        const slot = root.querySelector('#fetch-alert');
+        if (slot.getAttribute('data-band') === band.key) return;
+        slot.setAttribute('data-band', band.key);
+        slot.replaceChildren.apply(slot, fetchAlert(band));
+    }
+
+    /**
+     * Past the warning, the reason and the box that lets it through; past the max, the
+     * reason alone, since nothing lets that through.
+     * @param {{key: string, needsAck: boolean}} band
+     * @returns {HTMLElement[]}
+     */
+    function fetchAlert(band) {
+        if (band.key !== 'over' && band.key !== 'blocked') return [];
+        const limits = state.status.limits;
+        const text = el('div', {class: 'notice-block-text'}, [
+            el('p', {
+                class: 'notice-block-body',
+                text: band.key === 'blocked'
+                    ? t('new.fetch.blocked', {max: limits.fetch_concurrency_max})
+                    : t('new.fetch.over', {warn: limits.fetch_concurrency_warn})
+            })
+        ]);
+        if (band.needsAck) text.appendChild(ackPill('ackFetch', 'new.fetch.ack'));
+        return [el('section', {class: 'notice-block', 'data-tone': 'crit'}, [warningGlyph(16), text])];
     }
 
     function renderNewScreen() {
@@ -3378,6 +3476,8 @@
             ? t('new.field.range_absolute')
             : t('new.field.range_relative')));
         nodes.push(maxTracesBlock());
+        const reads = fetchConcurrencyBlock();
+        if (reads) nodes.push(reads);
         return nodes;
     }
 
@@ -3803,6 +3903,83 @@
     }
 
     /**
+     * How many traces the engine reads from Tempo at once. Only where the request can
+     * carry it: a Tempo source, a service run and an engine that reads the flag. It takes
+     * the field, the chip and the band rule of the trace count above, in two bands: the
+     * Hub's warning and its max.
+     */
+    function fetchConcurrencyBlock() {
+        if (!fetchBandNow()) return null;
+        const limits = state.status.limits;
+        const warn = limits.fetch_concurrency_warn;
+        const max = limits.fetch_concurrency_max;
+
+        const number = el('input', {
+            type: 'number',
+            id: 'fetch-number',
+            class: 'input input-traces',
+            min: '1',
+            max: String(max)
+        });
+        number.addEventListener('input', function () {
+            setFetchConcurrency(Number(number.value));
+        });
+        const slider = el('input', {
+            type: 'range',
+            id: 'fetch-slider',
+            min: '1',
+            max: String(max),
+            step: '1',
+            'aria-label': t('new.fetch.label')
+        });
+        slider.addEventListener('input', function () {
+            setFetchConcurrency(Number(slider.value));
+        });
+
+        // The handle sits at (n - 1) / (max - 1) of the track, so that is where the warning
+        // falls. A warning at the max leaves no red part, and a max of 1 no track at all.
+        const okShare = max > 1 ? (warn - 1) / (max - 1) : 1;
+        const stretches = /** @type {Array<[string, number, string]>} */ ([
+            ['ok', okShare, warn + ' ' + t('new.fetch.scale.warn')],
+            ['crit', 1 - okShare, max + ' ' + t('new.fetch.scale.max')]
+        ]).filter(function (stretch) {
+            return stretch[1] > 0;
+        });
+        const segments = el('div', {class: 'band-segs', 'aria-hidden': 'true'},
+            stretches.map(function (stretch) {
+                const segment = el('span', {class: 'band-seg', 'data-seg': stretch[0]});
+                segment.style.width = (stretch[1] * 100).toFixed(2) + '%';
+                return segment;
+            }));
+        const grid = el('div', {class: 'band-scale-grid'}, stretches.map(function (stretch) {
+            return el('span', {text: stretch[2]});
+        }));
+        grid.style.gridTemplateColumns = stretches.map(function (stretch) {
+            return (stretch[1] * 100).toFixed(2) + '%';
+        }).join(' ');
+        const scale = el('div', {class: 'band-scale'}, [el('span', {class: 'band-scale-start', text: '1'}), grid]);
+
+        const block = el('div', {class: 'field'}, [
+            el('div', {class: 'field-label'}, [
+                el('label', {for: 'fetch-number', text: t('new.fetch.label')}),
+                el('span', {class: 'field-gloss', text: t('new.fetch.gloss')})
+            ]),
+            el('div', {class: 'traces-head'}, [
+                number,
+                el('span', {id: 'fetch-band', class: 'band-chip'}),
+                el('span', {id: 'fetch-cap', class: 'traces-cap'})
+            ]),
+            el('div', {class: 'band-track'}, [segments, slider]),
+            scale,
+            el('p', {id: 'fetch-body', class: 'band-body', style: 'color:var(--ok-fg)'}),
+            // A slot, like traces-ack: the alert comes and goes as the count crosses a limit.
+            el('div', {id: 'fetch-alert', class: 'fetch-alert', 'aria-live': 'polite'})
+        ]);
+        paintFetch(block);
+        return block;
+    }
+
+    /**
      * The sink-panel scaffold both info blocks share: head, subtitle, rows.
      * @param {string} head
      * @param {string} sub
@@ -3996,11 +4173,21 @@
     }
 
     function heavyAck() {
+        return ackPill('ackHeavy', 'new.traces.ack');
+    }
+
+    /**
+     * The box that lets a run through past a limit it was warned about. Lives on the
+     * form only, never in the request: the server has no such thing to remember.
+     * @param {'ackHeavy' | 'ackFetch'} field
+     * @param {string} textKey
+     */
+    function ackPill(field, textKey) {
         const node = checkbox(
-            state.form.ackHeavy,
-            t('new.traces.ack'),
+            state.form[field],
+            t(textKey),
             function (checked) {
-                state.form.ackHeavy = checked;
+                state.form[field] = checked;
                 updateSubmit();
             });
         node.classList.add('checkbox-pill');
@@ -4192,7 +4379,26 @@
         const band = PSL.weightBand(state.form.maxTraces, tracesCap());
         if (band.key === 'over') return t('new.block.over');
         if (band.key === 'invalid') return t('new.block.invalid');
-        return band.needsAck && !state.form.ackHeavy ? t('new.block.heavy') : null;
+        if (band.needsAck && !state.form.ackHeavy) return t('new.block.heavy');
+        return fetchBlocker();
+    }
+
+    /**
+     * What the reads count blocks, or null. The server refuses each of these too (an
+     * unreadable or too high count, and a max under the engine's default with an engine
+     * that cannot be told), so this only spares the round trip.
+     */
+    function fetchBlocker() {
+        const limits = state.status.limits;
+        const max = limits.fetch_concurrency_max;
+        if (PSL.fetchAccess(selectedSource(), state.form.mode, limits) === 'refused') {
+            return t('new.fetch.unsupported', {max: max});
+        }
+        const band = fetchBandNow();
+        if (!band) return null;
+        if (band.key === 'blocked') return t('new.fetch.blocked', {max: max});
+        if (band.key === 'invalid') return t('new.fetch.invalid');
+        return band.needsAck && !state.form.ackFetch ? t('new.fetch.confirm') : null;
     }
 
     /** Restates the request in a sentence, so the button is not a leap of faith. */
@@ -4272,6 +4478,10 @@
             return trace;
         }
         const request = {service: state.form.service.trim(), max_traces: state.form.maxTraces};
+        // Only while its block is on screen: a Jaeger source, an engine that cannot read
+        // the flag or a trace ID run sends none, whatever was typed before.
+        const reads = PSL.fetchRequested(state.form, source, state.status.limits);
+        if (reads !== undefined) request.fetch_concurrency = reads;
         if (Object.keys(state.form.detection).length > 0) request.detection = state.form.detection;
         if (state.form.rangeMode === 'absolute') {
             request.from_ms = state.form.fromMs;
@@ -4360,8 +4570,10 @@
      * @param {Run} run
      */
     function rerun(run) {
-        Object.assign(state.form, PSL.formFromRequest(run.request),
-            {sourceId: run.source_id, ackUnreachable: false, ackHeavy: false});
+        // The count first, so a run that carried none starts from the default rather
+        // than from whatever was typed since.
+        Object.assign(state.form, {fetchConcurrency: null}, PSL.formFromRequest(run.request),
+            {sourceId: run.source_id, ackUnreachable: false, ackHeavy: false, ackFetch: false});
         state.handoff = /** @type {?Handoff} */ (null);
         state.traceHandoff = /** @type {?TraceHandoff} */ (null);
         location.hash = '#/new';
@@ -4583,7 +4795,7 @@
             [t('run.fact.type'), PSL.KIND_LABEL[run.kind] || run.kind, 'mono']
         ];
         // The engine's own argument names, kept as they are sent.
-        ['service', 'trace_id', 'lookback', 'max_traces'].forEach(function (name) {
+        ['service', 'trace_id', 'lookback', 'max_traces', 'fetch_concurrency'].forEach(function (name) {
             if (request[name] != null) facts.push([name, String(request[name]), 'mono']);
         });
         if (request.from_ms) {

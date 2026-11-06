@@ -139,16 +139,16 @@ test("every threshold the Hub can write reaches the engine under its own name", 
     "DetectionOverrides.cs declares " + KNOB_COUNT + " knobs");
 });
 
-// A Tempo service run as AnalysisRequest.ToEngineArguments spells it, the flag after
-// --max-traces, which the C# tests pin. The engine parses its arguments before it opens
-// a connection: a refused value exits 2 with clap's usage error, and an accepted one
-// reaches the search, which finds nothing at the discard port and exits on its own code.
+// A Tempo service run as the page prints it, which AnalysisRequest.ToEngineArguments spells the
+// same way (the flag after --max-traces, pinned by the C# tests). The engine parses its
+// arguments before it opens a connection: a refused value exits 2 with clap's usage error, and
+// an accepted one reaches the search, which finds nothing at the discard port and exits on its
+// own code. Only the endpoint is swapped for that port.
 function tempoRun(fetchConcurrency) {
-  return spawnSync(engine, [
-    "tempo", "--endpoint", "http://127.0.0.1:1", "--format", "json",
-    "--service", "order-svc", "--lookback", "1h", "--max-traces", "100",
-    "--fetch-concurrency", String(fetchConcurrency)
-  ], { encoding: "utf8" });
+  const printed = PSL.analysisCommand(source, Object.assign({ fetch_concurrency: fetchConcurrency }, request));
+  const words = printed.replace(/\\\n/g, " ").split(/\s+/).slice(1);
+  words[words.indexOf(source.base_url)] = "http://127.0.0.1:1";
+  return spawnSync(engine, words.concat(["--format", "json"]), { encoding: "utf8" });
 }
 
 test("the engine's parser takes --fetch-concurrency up to the ceiling the Hub holds", { skip }, () => {

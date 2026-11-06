@@ -1687,6 +1687,7 @@ a.shell-identity[aria-current="page"] {
 
 .input-traces[data-band="ceiling"],
 .input-traces[data-band="over"],
+.input-traces[data-band="blocked"],
 .input-traces[data-band="invalid"] {
     color: var(--crit-fg);
 }
@@ -1940,6 +1941,18 @@ a.shell-identity[aria-current="page"] {
     background: var(--info-bg);
     border-color: var(--info-bd);
     color: var(--info-fg);
+}
+
+.notice-block[data-tone="crit"] {
+    background: var(--crit-bg);
+    border-color: var(--crit-bd);
+    color: var(--crit-fg);
+}
+
+/* Inside a field the alert is a line under the control, not a section of its own. */
+.fetch-alert > .notice-block {
+    margin-top: 10px;
+    padding: 10px 13px;
 }
 
 /* The block already carries a tone, and a link inside it keeps that tone rather

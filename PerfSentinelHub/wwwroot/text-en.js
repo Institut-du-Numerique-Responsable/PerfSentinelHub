@@ -636,6 +636,28 @@
         'new.sink.head': '// what comes back, and what it caps',
         'new.sink.sub': 'From the sink and this Hub\'s settings, not predictions.',
         'new.traces.ack': 'I accept a long run and a heavy report.',
+        'new.fetch.label': 'Simultaneous reads',
+        'new.fetch.gloss': 'how many traces the engine reads from Tempo at once',
+        'new.fetch.chip.ok': 'within the threshold',
+        'new.fetch.chip.over': 'above the threshold',
+        'new.fetch.chip.blocked': 'blocked',
+        'new.fetch.chip.invalid': 'not a whole number',
+        'new.fetch.cap': 'threshold {warn} · maximum {max}',
+        'new.fetch.at_least': 'whole number, at least 1',
+        'new.fetch.scale.warn': 'warning',
+        'new.fetch.scale.max': 'maximum',
+        'new.fetch.body.one': 'The engine reads at most {count} trace at a time. A low value spreads the same '
+            + 'reads over more time.',
+        'new.fetch.body.other': 'The engine reads at most {count} traces at a time. A low value spreads the same '
+            + 'reads over more time.',
+        'new.fetch.over': 'This Hub recommends at most {warn} reads at once. Above that, Tempo uses more memory, '
+            + 'and an undersized querier can stop in the middle of the analysis.',
+        'new.fetch.ack': 'Run it anyway, knowing the risk.',
+        'new.fetch.blocked': 'This Hub allows at most {max} reads at once. Lower the value to start the analysis.',
+        'new.fetch.unsupported': 'This Hub limits reads to {max}, but its engine cannot apply that limit, so the '
+            + 'analysis is refused.',
+        'new.fetch.invalid': 'Simultaneous reads need a whole number, at least 1.',
+        'new.fetch.confirm': 'Confirm the reads above the threshold.',
         'new.skew.title': '{name} runs {version}, {gap} the {engine} binary embedded in the Hub.',
         'new.skew.behind': 'perf-sentinel is pre-1.0, so detectors change between minors. A detector added in '
             + '{engine} does not run on this producer at all, and its absence looks exactly like a clean '

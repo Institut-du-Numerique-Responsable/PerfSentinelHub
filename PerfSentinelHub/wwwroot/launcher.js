@@ -397,6 +397,7 @@
             if (r[name]) parts.push(name + ' = ' + r[name]);
         });
         if (r['max_traces'] != null) parts.push(['max_traces', r['max_traces']].join(' = '));
+        if (r['fetch_concurrency'] != null) parts.push(['fetch_concurrency', r['fetch_concurrency']].join(' = '));
         const detection = /** @type {Record<string, number|string>} */ (r['detection'] || {});
         Object.keys(detection).forEach(function (name) {
             parts.push(name + ' = ' + detection[name]);
@@ -444,6 +445,68 @@
         if (n <= Math.min(1200, hardCap)) return band('heavy', 'warn', false);
         if (n <= hardCap) return band('ceiling', 'crit', true);
         return band('over', 'crit', false);
+    }
+
+    /** What the engine reads at once when nobody chose, `AnalysisOptions.EngineDefaultFetchConcurrency`. */
+    const ENGINE_FETCH_DEFAULT = 16;
+
+    /**
+     * The count a form starts from: the engine's own default, lowered to what this Hub
+     * warns at or allows.
+     * @param {number} warn
+     * @param {number} max
+     * @returns {number}
+     */
+    function fetchDefault(warn, max) {
+        return Math.min(ENGINE_FETCH_DEFAULT, warn, max);
+    }
+
+    /**
+     * Where a simultaneous-reads count falls against this Hub's two limits. Above `warn` the
+     * run needs a confirmation, above `max` it is refused. Anything that is not a whole number
+     * of at least 1 is a third case: the server refuses it in the same words as a count past
+     * the max, so the screen stops it first and says what is wrong.
+     * @param {number} n
+     * @param {number} warn
+     * @param {number} max
+     * @returns {{key: 'ok' | 'over' | 'blocked' | 'invalid', needsAck: boolean}}
+     */
+    function fetchBand(n, warn, max) {
+        if (!Number.isInteger(n) || n < 1) return {key: 'invalid', needsAck: false};
+        if (n > max) return {key: 'blocked', needsAck: false};
+        return n > warn ? {key: 'over', needsAck: true} : {key: 'ok', needsAck: false};
+    }
+
+    /**
+     * Whether the form carries a reads count. `shown`: a Tempo source, a service run and an
+     * engine that reads the flag. `refused`: the same run on an engine that does not, under a
+     * max below the engine's default, which the server cannot run at all (it would have to
+     * pass a flag the engine does not know). A status without the fields, an older Hub or
+     * capture, reads as an engine that does not read the flag.
+     * @param {import('../types').Source | null | undefined} source
+     * @param {string} mode
+     * @param {Partial<import('../types').StatusLimits>} limits
+     * @returns {'shown' | 'refused' | 'hidden'}
+     */
+    function fetchAccess(source, mode, limits) {
+        if (!source || source.kind !== 'tempo' || mode !== 'service') return 'hidden';
+        if (limits.fetch_concurrency_supported === true) return 'shown';
+        return limits.fetch_concurrency_max < ENGINE_FETCH_DEFAULT ? 'refused' : 'hidden';
+    }
+
+    /**
+     * The count the request carries: what was typed, else the default. Undefined whenever the
+     * block is not on screen, so a source or a mode that takes none sends none.
+     * @param {{mode: string, fetchConcurrency: number | null}} form
+     * @param {import('../types').Source | null | undefined} source
+     * @param {import('../types').StatusLimits} limits
+     * @returns {number | undefined}
+     */
+    function fetchRequested(form, source, limits) {
+        if (fetchAccess(source, form.mode, limits) !== 'shown') return undefined;
+        return form.fetchConcurrency == null
+            ? fetchDefault(limits.fetch_concurrency_warn, limits.fetch_concurrency_max)
+            : form.fetchConcurrency;
     }
 
     /**
@@ -610,6 +673,10 @@
                 tail.push('--lookback ' + shq(String(request['lookback'])));
             }
             tail.push('--max-traces ' + String(request['max_traces']));
+            // Tempo's alone: `jaeger-query` has no such flag and would stop on it.
+            if (request['fetch_concurrency'] != null && source.kind === 'tempo') {
+                tail.push('--fetch-concurrency ' + String(request['fetch_concurrency']));
+            }
         }
         if (source.auth_header_name) tail.push('--auth-header-env PERF_SENTINEL_SOURCE_TOKEN');
         // Undotted, and named rather than left to the engine's discovery of
@@ -2068,6 +2135,7 @@
         if (r['trace_id']) return Object.assign(form, {mode: 'trace', traceId: String(r['trace_id'])});
         Object.assign(form, {mode: 'service', service: String(r['service'] || ''), traceId: ''});
         if (typeof r['max_traces'] === 'number') form.maxTraces = r['max_traces'];
+        if (typeof r['fetch_concurrency'] === 'number') form.fetchConcurrency = r['fetch_concurrency'];
         if (typeof r['from_ms'] === 'number' && typeof r['to_ms'] === 'number') {
             return Object.assign(form, {rangeMode: 'absolute', fromMs: r['from_ms'], toMs: r['to_ms']});
         }
@@ -3691,6 +3759,10 @@
         statusKey,
         argsLine,
         weightBand,
+        fetchDefault,
+        fetchBand,
+        fetchAccess,
+        fetchRequested,
         shq,
         psq,
         SHELLS,

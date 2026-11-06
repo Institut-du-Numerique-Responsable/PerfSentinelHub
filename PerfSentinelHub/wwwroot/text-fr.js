@@ -682,6 +682,29 @@
         'new.sink.head': '// ce qui revient, et ce qui le plafonne',
         'new.sink.sub': 'D\'après le sink et les réglages de ce Hub, pas des prédictions.',
         'new.traces.ack': 'J\'accepte une analyse longue et un rapport lourd.',
+        'new.fetch.label': 'Lectures simultanées',
+        'new.fetch.gloss': 'combien de traces le moteur lit en même temps dans Tempo',
+        'new.fetch.chip.ok': 'dans le seuil',
+        'new.fetch.chip.over': 'au-dessus du seuil',
+        'new.fetch.chip.blocked': 'bloqué',
+        'new.fetch.chip.invalid': 'pas un nombre entier',
+        'new.fetch.cap': 'seuil {warn} · maximum {max}',
+        'new.fetch.at_least': 'entier, au moins 1',
+        'new.fetch.scale.warn': 'alerte',
+        'new.fetch.scale.max': 'maximum',
+        'new.fetch.body.one': 'Le moteur lit au plus {count} trace à la fois. Une valeur basse étale les mêmes '
+            + 'lectures sur plus de temps.',
+        'new.fetch.body.other': 'Le moteur lit au plus {count} traces à la fois. Une valeur basse étale les mêmes '
+            + 'lectures sur plus de temps.',
+        'new.fetch.over': 'Ce Hub recommande au plus {warn} lectures à la fois. Au-delà, Tempo consomme plus de '
+            + 'mémoire, et un querier trop petit peut s\'arrêter en pleine analyse.',
+        'new.fetch.ack': 'Je lance quand même, en connaissance de cause.',
+        'new.fetch.blocked': 'Ce Hub n\'autorise pas plus de {max} lectures à la fois. Baissez la valeur pour '
+            + 'lancer l\'analyse.',
+        'new.fetch.unsupported': 'Ce Hub limite les lectures à {max}, mais son moteur ne sait pas appliquer '
+            + 'cette limite : l\'analyse est refusée.',
+        'new.fetch.invalid': 'Les lectures simultanées demandent un nombre entier, au moins 1.',
+        'new.fetch.confirm': 'Confirmez les lectures au-dessus du seuil.',
         'new.skew.title': '{name} exécute {version}, {gap} sur le binaire {engine} embarqué dans le Hub.',
         'new.skew.behind': 'perf-sentinel n\'a pas encore atteint la version 1.0, les détecteurs changent donc '
             + 'd\'une mineure à l\'autre. Un détecteur ajouté dans {engine} ne tourne pas du tout sur ce '

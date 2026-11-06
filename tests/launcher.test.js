@@ -66,6 +66,21 @@ test("a trace id carries neither a window nor a cap", () => {
     assert.ok(!command.includes("--max-traces"));
 });
 
+test("a Tempo source carries its reads count after the cap, a Jaeger source never does", () => {
+    const request = {service: "orders", max_traces: 100, lookback: "1h", fetch_concurrency: 4};
+
+    assert.equal(
+        PSL.analysisCommand(tempo, request),
+        "perf-sentinel tempo --endpoint http://tempo.obs.svc:3200 --service orders \\\n"
+        + "  --lookback 1h --max-traces 100 --fetch-concurrency 4");
+    // `jaeger-query` has no such flag: the engine would stop on it.
+    const jaeger = {kind: "jaeger_query", engine_subcommand: "jaeger-query", base_url: "http://jaeger:16686"};
+    assert.ok(!PSL.analysisCommand(jaeger, request).includes("--fetch-concurrency"));
+    // A request without the field, a trace run or an older Hub, prints none either.
+    assert.ok(!PSL.analysisCommand(tempo, {service: "orders", max_traces: 100, lookback: "1h"})
+        .includes("--fetch-concurrency"));
+});
+
 test("an authenticated source reads its header from the environment", () => {
     const command = PSL.analysisCommand(
         {...tempo, auth_header_name: "Authorization"},
@@ -1235,6 +1250,8 @@ test("running a past analysis again fills the form back from its request", () =>
     assert.equal(window.fromMs, 10);
     assert.equal(window.toMs, 20);
     assert.equal(window.maxTraces, 300);
+    assert.equal(window.fetchConcurrency, undefined, "a request without the count leaves the form's own");
+    assert.equal(PSL.formFromRequest({service: "orders", fetch_concurrency: 4}).fetchConcurrency, 4);
     assert.deepEqual(window.detection, {n_plus_one_threshold: 4});
     const relative = PSL.formFromRequest({service: "orders", lookback: "6h"});
     assert.equal(relative.rangeMode, "relative");
@@ -1250,6 +1267,96 @@ test("running a past analysis again fills the form back from its request", () =>
         service: "",
         traceId: ""
     });
+});
+
+test("a reads count is comfortable up to the warning, confirmed above it and refused above the max", () => {
+    assert.deepEqual(PSL.fetchBand(16, 16, 64), {key: "ok", needsAck: false});
+    assert.deepEqual(PSL.fetchBand(17, 16, 64), {key: "over", needsAck: true});
+    assert.deepEqual(PSL.fetchBand(64, 16, 64), {key: "over", needsAck: true});
+    assert.deepEqual(PSL.fetchBand(8, 4, 8), {key: "over", needsAck: true});
+    // Past the max there is nothing to confirm: the run is refused, not risked.
+    assert.deepEqual(PSL.fetchBand(9, 4, 8), {key: "blocked", needsAck: false});
+    assert.deepEqual(PSL.fetchBand(1, 1, 1), {key: "ok", needsAck: false});
+});
+
+test("an empty, negative, decimal or unreadable reads count is invalid, and nothing to confirm", () => {
+    // Number("") is 0, which is what an emptied number field reports.
+    for (const typed of [0, -3, 3.5, NaN, Infinity, Number("")]) {
+        assert.deepEqual(PSL.fetchBand(typed, 16, 64), {key: "invalid", needsAck: false}, String(typed));
+    }
+});
+
+test("the reads count starts at the engine's 16, lowered to the warning or the max", () => {
+    assert.equal(PSL.fetchDefault(16, 64), 16);
+    assert.equal(PSL.fetchDefault(4, 8), 4);
+    assert.equal(PSL.fetchDefault(32, 8), 8);
+    assert.equal(PSL.fetchDefault(64, 64), 16);
+});
+
+const fetchLimits = {fetch_concurrency_warn: 4, fetch_concurrency_max: 8, fetch_concurrency_supported: true};
+const jaegerSource = {kind: "jaeger_query", engine_subcommand: "jaeger-query"};
+
+test("the reads count is on screen for a Tempo service run on an engine that reads it, nowhere else", () => {
+    assert.equal(PSL.fetchAccess(tempo, "service", fetchLimits), "shown");
+    assert.equal(PSL.fetchAccess(jaegerSource, "service", fetchLimits), "hidden");
+    assert.equal(PSL.fetchAccess(tempo, "trace", fetchLimits), "hidden");
+    assert.equal(PSL.fetchAccess({kind: "daemon"}, "service", fetchLimits), "hidden");
+    assert.equal(PSL.fetchAccess(null, "service", fetchLimits), "hidden");
+});
+
+test("an engine that cannot apply the count leaves it out, and refuses only a max under its default", () => {
+    const old = {fetch_concurrency_warn: 4, fetch_concurrency_max: 8, fetch_concurrency_supported: false};
+    assert.equal(PSL.fetchAccess(tempo, "service", old), "refused");
+    assert.equal(PSL.fetchAccess(tempo, "service", {...old, fetch_concurrency_max: 16}), "hidden");
+    assert.equal(PSL.fetchAccess(tempo, "service", {...old, fetch_concurrency_max: 64}), "hidden");
+    // Nothing is refused on a run that reads no count: Jaeger, or one trace by ID.
+    assert.equal(PSL.fetchAccess(jaegerSource, "service", old), "hidden");
+    assert.equal(PSL.fetchAccess(tempo, "trace", old), "hidden");
+});
+
+test("a status without the fields, an older Hub or capture, reads as not supported and does not throw", () => {
+    const limits = {max_traces_cap: 2000, analysis_timeout_seconds: 300};
+    assert.equal(PSL.fetchAccess(tempo, "service", limits), "hidden");
+    assert.equal(PSL.fetchRequested({mode: "service", fetchConcurrency: null}, tempo, limits), undefined);
+    assert.equal(PSL.fetchAccess(tempo, "service", {}), "hidden");
+});
+
+test("the request carries the reads count only while the block is on screen", () => {
+    const form = {mode: "service", fetchConcurrency: null};
+    // Untouched: the default, lowered to the warning.
+    assert.equal(PSL.fetchRequested(form, tempo, fetchLimits), 4);
+    assert.equal(PSL.fetchRequested(form, tempo, {...fetchLimits, fetch_concurrency_warn: 16, fetch_concurrency_max: 64}), 16);
+    // Typed: what was typed, even a value that will be refused, so the screen can say so.
+    assert.equal(PSL.fetchRequested({...form, fetchConcurrency: 40}, tempo, fetchLimits), 40);
+    assert.equal(PSL.fetchRequested({...form, fetchConcurrency: 0}, tempo, fetchLimits), 0);
+    // Moving to a Jaeger source, or to a trace ID, takes the field off the request, typed value or not.
+    const typed = {mode: "service", fetchConcurrency: 6};
+    assert.equal(PSL.fetchRequested(typed, jaegerSource, fetchLimits), undefined);
+    assert.equal(PSL.fetchRequested({...typed, mode: "trace"}, tempo, fetchLimits), undefined);
+});
+
+test("the summary line of a run restates its reads count", () => {
+    assert.match(PSL.argsLine({request: {service: "orders", max_traces: 100, fetch_concurrency: 4}}),
+        /max_traces = 100 {3}· {3}fetch_concurrency = 4/);
+    assert.ok(!PSL.argsLine({request: {service: "orders", max_traces: 100}}).includes("fetch_concurrency"));
+});
+
+/** The text of a top-level function of app.js, to its closing brace. */
+function appFunction(name) {
+    const source = wwwroot("app.js");
+    const start = source.indexOf("\n    function " + name + "(");
+    assert.ok(start >= 0, "app.js has no " + name);
+    return source.slice(start, source.indexOf("\n    }\n", start));
+}
+
+test("choosing another source or another mode withdraws the confirmation of the reads count", () => {
+    // The tick belongs to one run's one count. app.js cannot run under Node, so this reads it:
+    // both paths that change what the block shows reset the box in the same breath as ackHeavy.
+    assert.match(appFunction("selectSource"), /state\.form\.ackFetch = false/);
+    assert.match(appFunction("setMode"), /state\.form\.ackFetch = false/);
+    assert.match(appFunction("rerun"), /ackFetch: false/);
+    // And the request takes the count from the one function the block itself reads.
+    assert.match(appFunction("buildRequest"), /PSL\.fetchRequested\(/);
 });
 
 test("a light read keeps the verdict calm over hints that only describe the daemon", () => {
