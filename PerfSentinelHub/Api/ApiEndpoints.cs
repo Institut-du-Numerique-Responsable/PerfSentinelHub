@@ -87,7 +87,10 @@ public static partial class ApiEndpoints
                     (int)analysis.Timeout.TotalSeconds,
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded,
-                    hubOptions.Value.MaxReadLimit),
+                    hubOptions.Value.MaxReadLimit,
+                    analysis.FetchConcurrencyWarn,
+                    analysis.FetchConcurrencyMax,
+                    DetectionOverrides.ReadsFetchConcurrency(engine.Version)),
                 [.. DetectionOverrides.SchemaFor(engine.Version)],
                 hubOptions.Value.Disclosures.Enabled &&
                 !access.Scope(request.HttpContext, AccessPermissions.DisclosuresRead).IsNothing

@@ -34,6 +34,10 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
         Assert.Equal(24, limits.GetProperty("report_retention_hours").GetInt32());
         // The launcher sizes its incident pages under this rather than meeting a 400.
         Assert.Equal(10_000, limits.GetProperty("max_read_limit").GetInt32());
+        Assert.Equal(16, limits.GetProperty("fetch_concurrency_warn").GetInt32());
+        Assert.Equal(64, limits.GetProperty("fetch_concurrency_max").GetInt32());
+        // No engine binary, so no version to read the flag from.
+        Assert.False(limits.GetProperty("fetch_concurrency_supported").GetBoolean());
     }
 
     [Fact]

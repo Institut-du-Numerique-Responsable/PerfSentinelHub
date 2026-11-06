@@ -43,7 +43,10 @@ public sealed record StatusLimits(
     int AnalysisTimeoutSeconds,
     int ReportRetentionHours,
     int MaxTracesEmbedded,
-    int MaxReadLimit);
+    int MaxReadLimit,
+    int FetchConcurrencyWarn,
+    int FetchConcurrencyMax,
+    bool FetchConcurrencySupported);
 
 /// <summary>
 ///     One detection threshold a run may override. `Kind` is `integer`, `decimal`

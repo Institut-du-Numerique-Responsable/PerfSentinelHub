@@ -132,6 +132,9 @@ export interface StatusLimits {
     report_retention_hours: number;
     max_traces_embedded: number;
     max_read_limit: number;
+    fetch_concurrency_warn: number;
+    fetch_concurrency_max: number;
+    fetch_concurrency_supported: boolean;
 }
 
 /** One detection threshold a run may override, `DetectionKnob`. */

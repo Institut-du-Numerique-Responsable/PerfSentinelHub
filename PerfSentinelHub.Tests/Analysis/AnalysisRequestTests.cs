@@ -342,6 +342,18 @@ public sealed class AnalysisRequestTests
         Assert.Contains("n_plus_one_min_occurrences", names);
     }
 
+    [Theory]
+    [InlineData("0.42.1", false)]
+    [InlineData("0.43.0", true)]
+    [InlineData("0.43.0-rc.1", true)]
+    [InlineData("0.44.2", true)]
+    [InlineData(null, false)]
+    [InlineData("illisible", false)]
+    public void Fetch_concurrency_is_read_from_engine_0_43_0(string? engine, bool reads)
+    {
+        Assert.Equal(reads, DetectionOverrides.ReadsFetchConcurrency(engine));
+    }
+
     [Fact]
     public void A_knob_the_engine_cannot_read_is_refused_at_submission_not_at_run_time()
     {

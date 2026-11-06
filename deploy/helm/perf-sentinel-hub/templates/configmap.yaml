@@ -17,6 +17,11 @@ data:
     {{- $sources = append $sources $source }}
     {{- end }}
     {{- $analysis := dict "EngineBinaryPath" .Values.hub.analysis.engineBinaryPath "ReportDirectory" "/data/reports" "IdentityHeader" .Values.hub.analysis.identityHeader "Workers" .Values.hub.analysis.workers "MaxTracesCap" .Values.hub.analysis.maxTracesCap "Timeout" .Values.hub.analysis.timeout "MinFreeMemoryMiB" .Values.hub.analysis.minFreeMemoryMiB "ReportRetention" .Values.hub.analysis.reportRetention "RunRetention" .Values.hub.analysis.runRetention }}
+    {{- /* Nil-safe for --reuse-values: a release that predates these keys sets
+           nothing, so the Hub keeps its own defaults. */}}
+    {{- range $key, $setting := dict "fetchConcurrencyWarn" "FetchConcurrencyWarn" "fetchConcurrencyMax" "FetchConcurrencyMax" }}
+    {{- if hasKey $.Values.hub.analysis $key }}{{- $_ := set $analysis $setting (index $.Values.hub.analysis $key) }}{{- end }}
+    {{- end }}
     {{- /* Nil-safe and false-safe. An upgrade with --reuse-values carries values
            that predate this key, so a bare lookup is a nil pointer; and `default
            true` would read an explicit false as absent and turn the check back
