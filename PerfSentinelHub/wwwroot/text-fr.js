@@ -1669,7 +1669,7 @@
         'recap.prio.hint.co2': ', le CO2 ne sert jamais au classement',
         'recap.prio.hint.closed': ', tendances sur les jours clos',
         'recap.prio.divider.tech': 'Plus bas, aucune I/O évitable à compter : classés par sévérité',
-        'recap.prio.divider.pilotage': 'Plus bas, de la lenteur plutôt que du travail en trop : classés par gravité',
+        'recap.prio.divider.pilotage': 'Plus bas, aucune opération inutile comptée\u00a0: classés par gravité',
         'recap.prio.empty': 'Rien à classer sur cette période.',
         'recap.prio.show_all': 'Tout afficher ({count})',
         'recap.prio.more.one': '{count} autre priorité, plus bas, dans la vue Technique.',

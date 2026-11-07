@@ -1598,7 +1598,7 @@
         'recap.prio.hint.co2': ', CO2 never ranks',
         'recap.prio.hint.closed': ', trends on closed days',
         'recap.prio.divider.tech': 'Below, no avoidable I/O to count: ranked by severity',
-        'recap.prio.divider.pilotage': 'Below, slowness rather than extra work: ranked by severity',
+        'recap.prio.divider.pilotage': 'Below, no unnecessary operations counted: ranked by severity',
         'recap.prio.empty': 'Nothing ranks in this period.',
         'recap.prio.show_all': 'Show all {count}',
         'recap.prio.more.one': '{count} more priorities, lower down, in the Engineering view.',

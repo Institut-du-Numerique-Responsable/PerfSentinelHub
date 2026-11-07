@@ -67,6 +67,8 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
+- The recap's Management view says of the rows under the divider that no unnecessary operation was counted for them, where it said they were slowness rather than extra work. Rows land there whenever nothing was counted, including a chatty exchange or a fan-out, and a source that sends no volume.
+
 - `RecapFilters`, the `filters` of a recap in `GET /api/recap`, a job's result and a stored report,
   gains `services` and `groupings`, written only when several values are chosen. With one value,
   `service` and `grouping` hold it as they always did and the lists are absent, so a script and a
