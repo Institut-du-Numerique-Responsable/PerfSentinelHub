@@ -626,7 +626,9 @@ const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapH
     "recapFreezeText", "recapErrorText", "recapTruncatedText", "recapSourcesNote", "recapLateNote", "recapReportStatus",
     "recapDeliveryText", "recapOnDemandBody", "recapCount", "guideIdFor", "guideText", "guideStep", "hasItems",
     "recapPilotageSteps", "guidePeriodStep", "guideIoStep", "guideCo2Step", "guideOpenStep", "guideTableStep",
-    "guideRowStep", "guideMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain"];
+    "guideRowStep", "guideMovedStep", "recapFiltered", "techText", "techStep", "recapTechSteps", "techPeriodStep",
+    "techIoStep", "techCo2Step", "techActionsStep", "techTableStep", "techRowStep", "techFixStep", "techActStep",
+    "techMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain"];
 
 test("the recap screen holds no prose literal", () => {
     const app = wwwrootFile("app.js");

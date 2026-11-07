@@ -3023,19 +3023,19 @@ const SAYS = {
 };
 
 /** Each guide test runs in both languages, with the phrases that language says. */
-function guideTest(name, body) {
+function guideTest(name, body, says = SAYS) {
     for (const lang of ["fr", "en"]) {
         test(name + " (" + lang + ")", () => {
-            inLang(lang, () => body(SAYS[lang]));
+            inLang(lang, () => body(says[lang]));
             // The run leaves no language behind it, so the next test starts in English as it expects.
             assert.equal(PSL.lang(), "en");
         });
     }
 }
 
-test("the guide offers pilotage only on the pilotage recap", () => {
+test("the recap guide follows the view on screen", () => {
     assert.equal(PSL.guideIdFor("recap", "pilotage"), "recap.pilotage");
-    assert.equal(PSL.guideIdFor("recap", "tech"), null);
+    assert.equal(PSL.guideIdFor("recap", "tech"), "recap.tech");
     assert.equal(PSL.guideIdFor("recap", null), null);
     assert.equal(PSL.guideIdFor("ack", null), null);
 });
@@ -3234,3 +3234,231 @@ test("French pilotage text addresses the reader as vous", () => inLang("fr", () 
     assert.doesNotMatch(text, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
     assert.match(text, /(?<!\p{L})vous(?!\p{L})/iu);
 }));
+
+// ---- the guide of the technical recap
+
+const techRow = (over) => pilotageRow(Object.assign({
+    signature: "sig-1", endpoint: "GET /orders/{id}", template: "SELECT * FROM order_line WHERE order_id = ?",
+    suggestion: "Batch the order lines.", confidence: "ci"
+}, over));
+
+function techSnapshot(over) {
+    return pilotageSnapshot(overlay({view: "tech", priorities: [techRow(), techRow({rank: 2, avoidable_io_ops: 300})]},
+        over));
+}
+
+/** The technical steps of a snapshot, by id, read with `ctx`. */
+function techSteps(over, ctx) {
+    return Object.fromEntries(PSL.recapTechSteps(techSnapshot(over), ctx || {}).map((step) => [step.id, step]));
+}
+
+const text = (step) => [step.title, ...step.body, ...(step.marks || []).map((mark) => mark.text)].join(" ");
+
+const TECH_SAYS = {
+    fr: {
+        banner: "Le bandeau nomme", closedDays: "jours clos", ranking: "dans le classement", note: "La note sous la période",
+        filtered: "que les filtres retiennent", noVolume: "le tiret ne veut pas dire zéro", wholePeriod: "toute la période",
+        truncated: "5 000 premiers", ioOne: "1 I/O évitable", ioNone: "I/O évitables", atLeastOne: "1 source n'envoie",
+        atLeastMany: "3 sources n'envoient", noIo: "Aucune I/O évitable à valoriser", noCoefficient: "Aucune source n'a envoyé",
+        magnitude: "ordre de grandeur", findingOne: "1 finding actif", findingMany: "4 findings actifs",
+        actionOne: "1 action terminée", actionMany: "2 actions terminées", actionsNone: "Actions",
+        tenFirst: "Les dix premières", showAll: "Tout afficher (12)", emptyTable: "Rien à classer sur cette période",
+        label: "nom métier", dash: "Un tiret", sql: "Une requête SQL est mise en page", long: "Au-delà de 600 caractères",
+        events: "l'historique de l'action", take: "« Prendre »", ack: "« Acquitter »", taken: "Le responsable",
+        verdict: "verdict du moteur : ", contradicted: "la contredit", name: "« Nommer »", denied: "rien n'est écrit",
+        noClosed: "Aucun jour de cette période", nothing: "Rien n'a bougé", groups: "Seuls les groupes",
+        confirmed: "« Avec un correctif confirmé »", longGroup: "cinq premiers", sources: "sources sans volume"
+    },
+    en: {
+        banner: "The banner names", closedDays: "finished days", ranking: "in the ranking", note: "The note under the period",
+        filtered: "only what the filters keep", noVolume: "the dash does not mean zero", wholePeriod: "whole period",
+        truncated: "first 5,000", ioOne: "1 avoidable I/O", ioNone: "Avoidable I/O", atLeastOne: "1 source sends",
+        atLeastMany: "3 sources send", noIo: "No avoidable I/O to put a figure on", noCoefficient: "No source sent",
+        magnitude: "order of magnitude", findingOne: "1 active finding", findingMany: "4 active findings",
+        actionOne: "1 action done", actionMany: "2 actions done", actionsNone: "Actions",
+        tenFirst: "The first ten", showAll: "Show all 12", emptyTable: "Nothing to rank in this period",
+        label: "business name", dash: "A dash", sql: "A SQL query is laid out", long: "Past 600 characters",
+        events: "history of the action", take: "\"Take\"", ack: "\"Acknowledge\"", taken: "The owner",
+        verdict: "engine's verdict: ", contradicted: "contradicts it", name: "\"Name this\"", denied: "nothing is written",
+        noClosed: "No day of this period", nothing: "Nothing has moved", groups: "Only the groups",
+        confirmed: "\"With a confirmed fix\"", longGroup: "first five", sources: "sources with no detection volume"
+    }
+};
+
+/** A technical guide test, in both languages. */
+const techTest = (name, body) => guideTest(name, body, TECH_SAYS);
+
+const moved = (over) => Object.assign({
+    finding_type: "n_plus_one_sql", service: "shop-svc", plain: "x", trend: "new", change: null, label: null,
+    service_label: null
+}, over);
+
+test("the technical steps come in the screen's order, each on its anchors", () => {
+    const list = PSL.recapTechSteps(techSnapshot(), {});
+    assert.deepEqual(list.map((step) => [step.id, step.anchors]), [
+        ["view", ["recap.view"]], ["filters", ["recap.filters"]], ["pick", ["recap.pick.services", "recap.pick.groupings"]],
+        ["fresh", ["recap.fresh"]], ["period", ["recap.period"]], ["io", ["recap.io"]], ["co2", ["recap.co2"]],
+        ["findings", ["recap.findings"]], ["actions", ["recap.actions"]], ["table", ["recap.table"]],
+        ["row", ["recap.row"]], ["fix", ["recap.row.detail"]], ["act", ["recap.row.facts", "recap.row.state"]],
+        ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
+        ["card", ["recap.card"]], ["end", []]]);
+    const row = list.find((step) => step.id === "row");
+    assert.deepEqual(row.body, []);
+    assert.deepEqual(row.marks.map((mark) => mark.anchor),
+        ["recap.row.rank", "recap.row.what", "recap.row.suggest", "recap.row.figure", "recap.row.trend"]);
+    assert.ok(list.every((step) => step.title && Array.isArray(step.body)));
+    assert.ok(list.filter((step) => step.id !== "row").every((step) => step.body.length && !step.marks));
+    // The card is the pilotage card, word for word.
+    const card = list.find((step) => step.id === "card");
+    assert.deepEqual([card.title, card.body], [PSL.t("guide.pilotage.card.title"), [PSL.t("guide.pilotage.card.body")]]);
+});
+
+test("no priority drops the row, its fix and its action", () => {
+    const ids = PSL.recapTechSteps(techSnapshot({priorities: []}), {}).map((step) => step.id);
+    for (const id of ["row", "fix", "act"]) assert.ok(!ids.includes(id), id);
+});
+
+test("the pick step says the most names a list takes", () => {
+    assert.ok(techSteps().pick.body.join(" ").includes(String(PSL.RECAP_FILTER_MAX_VALUES)));
+});
+
+techTest("the technical period names its banner, its running days and its notes", (says) => {
+    const closed = text(techSteps().period);
+    assert.ok(closed.includes(PSL.periodText(techSnapshot().period)));
+    for (const phrase of [says.banner, says.closedDays, says.note, says.filtered]) assert.ok(!closed.includes(phrase), phrase);
+    const open = text(techSteps({period: {in_progress: true}}).period);
+    assert.ok(open.includes(says.closedDays) && open.includes(says.ranking) && !open.includes(says.banner));
+    for (const gap of [{period: {in_progress: true, incomplete: ["restart"]}}, {previous: {incomplete: ["sampling"]}}]) {
+        const body = text(techSteps(gap).period);
+        assert.ok(body.includes(says.banner) && !body.includes(says.closedDays), JSON.stringify(gap));
+    }
+    assert.ok(text(techSteps({period: {notes: ["sampling"]}}).period).includes(says.note));
+    assert.ok(text(techSteps({previous: {notes: ["sampling"]}}).period).includes(says.note));
+    assert.ok(text(techSteps({filters: {services: ["a", "b"]}}).period).includes(says.filtered));
+});
+
+techTest("the avoidable I/O step carries the tile's figure, its dash and its gaps", (says) => {
+    assert.ok(techSteps({tiles: {avoidable_io_ops: 168900}}).io.title.startsWith(PSL.recapCount(168900) + " "));
+    assert.equal(techSteps({tiles: {avoidable_io_ops: 1}}).io.title, says.ioOne);
+    const none = techSteps({tiles: {avoidable_io_ops: null}}).io;
+    assert.equal(none.title, says.ioNone);
+    assert.equal(none.body.length, 1);
+    assert.ok(none.body[0].includes(says.noVolume));
+    assert.ok(!text(techSteps().io).includes(says.noVolume));
+    assert.ok(text(techSteps({period: {incomplete: ["restart"]}}).io).includes(says.wholePeriod));
+    assert.ok(!text(techSteps({previous: {incomplete: ["restart"]}}).io).includes(says.wholePeriod));
+    assert.ok(text(techSteps({truncated: true}).io).includes(says.truncated));
+    assert.ok(!text(techSteps().io).includes(says.truncated));
+});
+
+techTest("the CO2 step counts the sources without a coefficient, or gives the reason there is none", (says) => {
+    const whole = text(techSteps().co2);
+    assert.ok(whole.includes(says.magnitude) && !whole.includes(says.atLeastOne) && !whole.includes(says.atLeastMany));
+    assert.ok(text(techSteps({tiles: {co2_sources_without_coefficient: 1}}).co2).includes(says.atLeastOne));
+    assert.ok(text(techSteps({tiles: {co2_sources_without_coefficient: 3}}).co2).includes(says.atLeastMany));
+    // Under a gram the tile shows no "at least".
+    assert.ok(!text(techSteps({tiles: {co2_grams: 0.4, co2_sources_without_coefficient: 3}}).co2).includes(says.atLeastMany));
+    const idle = techSteps({tiles: {co2_grams: null, co2_missing_reason: "no_avoidable_io"}}).co2;
+    assert.deepEqual(idle.body.length, 1);
+    assert.ok(idle.body[0].includes(says.noIo));
+    const missing = techSteps({tiles: {co2_grams: null, co2_missing_reason: "no_coefficient"}}).co2;
+    assert.ok(missing.body[0].includes(says.noCoefficient) && !text(missing).includes(says.magnitude));
+});
+
+techTest("findings and actions are counted as their tiles count them", (says) => {
+    assert.equal(techSteps({tiles: {active_findings: 1}}).findings.title, says.findingOne);
+    assert.equal(techSteps({tiles: {active_findings: 4}}).findings.title, says.findingMany);
+    assert.equal(techSteps({tiles: {actions: {done: 1}}}).actions.title, says.actionOne);
+    assert.equal(techSteps({tiles: {actions: {done: 2}}}).actions.title, says.actionMany);
+    assert.equal(techSteps({tiles: {actions: {done: 0}}}).actions.title, says.actionsNone);
+});
+
+techTest("a long ranking says where the rest is until it is shown, an empty one says there is none", (says) => {
+    const twelve = Array.from({length: 12}, (_, index) => techRow({rank: index + 1}));
+    const cut = text(techSteps({priorities: twelve}).table);
+    assert.ok(cut.includes(says.tenFirst) && cut.includes(says.showAll), cut);
+    assert.ok(!text(techSteps({priorities: twelve}, {showAll: true}).table).includes(says.tenFirst));
+    assert.ok(!text(techSteps().table).includes(says.tenFirst));
+    const empty = techSteps({priorities: []}).table;
+    assert.equal(empty.title, says.emptyTable);
+    assert.deepEqual(empty.anchors, ["recap.table"]);
+    assert.equal(empty.body.length, 1);
+});
+
+techTest("the row names the business label when there is one and reads its dash", (says) => {
+    const what = (over) => techSteps({priorities: [techRow(over)]}).row.marks[1].text;
+    assert.ok(what({label: "Order lines"}).includes(says.label));
+    assert.ok(!what({}).includes(says.label));
+    const figure = (over) => techSteps({priorities: [techRow(over)]}).row.marks[3].text;
+    assert.ok(figure({avoidable_io_ops: null}).startsWith(says.dash));
+    assert.ok(figure({avoidable_io_ops: 0}).startsWith(says.dash));
+    assert.ok(!figure({}).startsWith(says.dash));
+});
+
+techTest("the fix step describes SQL layout, its limit and the action history only when they are there", (says) => {
+    const fix = (over) => text(techSteps({priorities: [techRow(over)]}).fix);
+    assert.ok(fix({}).includes(says.sql) && !fix({}).includes(says.long));
+    assert.ok(!fix({finding_type: "n_plus_one_http", template: "GET /orders/{id}"}).includes(says.sql));
+    assert.ok(!fix({template: undefined}).includes(says.sql));
+    const long = fix({template: "SELECT a FROM b WHERE c = ? " + "AND d = ? ".repeat(70)});
+    assert.ok(long.includes(says.sql) && long.includes(says.long));
+    assert.ok(!fix({}).includes(says.events));
+    assert.ok(fix({action: {status: "todo", events: [{from: null, to: "todo", by: "alice", at_ms: 1}]}}).includes(says.events));
+    assert.ok(!fix({action: {status: "todo", events: []}}).includes(says.events));
+});
+
+techTest("the act step tells taking from changing, and reads the engine's verdict", (says) => {
+    const act = (action) => text(techSteps({priorities: [techRow({action})]}).act);
+    const free = act(null);
+    assert.ok(free.includes(says.take) && free.includes(says.ack) && !free.includes(says.taken));
+    const taken = act({status: "in_progress", confirmation: null});
+    assert.ok(taken.includes(says.taken) && !taken.includes(says.take) && !taken.includes(says.verdict));
+    const confirmed = act({status: "done", confirmation: "confirmed"});
+    assert.ok(confirmed.includes(says.verdict + PSL.confirmationLabel("confirmed")), confirmed);
+    assert.ok(!confirmed.includes(says.contradicted));
+    for (const state of ["contradicted", "came_back"]) {
+        const told = act({status: "done", confirmation: state});
+        assert.ok(told.includes(says.verdict + PSL.confirmationLabel(state)) && told.includes(says.contradicted), state);
+    }
+    assert.ok(!act({status: "done", confirmation: null}).includes(says.verdict));
+    for (const body of [free, taken, confirmed]) assert.ok(body.includes(says.name) && body.includes(says.denied));
+});
+
+techTest("what moved follows the screen's note, its confirmed fixes, its long groups and its sources", (says) => {
+    const base = text(techSteps().moved);
+    assert.ok(base.includes(says.groups));
+    for (const phrase of [says.noClosed, says.nothing, says.confirmed, says.longGroup, says.sources]) {
+        assert.ok(!base.includes(phrase), phrase);
+    }
+    const none = techSteps({nothing_moved: true, previous: {truncated_to_days: 0}}).moved;
+    assert.ok(none.body[0].includes(says.noClosed) && !text(none).includes(says.nothing) && !text(none).includes(says.groups));
+    const nothing = techSteps({nothing_moved: true}).moved;
+    assert.ok(nothing.body[0].includes(says.nothing) && !text(nothing).includes(says.groups));
+    assert.ok(text(techSteps({movements: {gone_with_confirmed_action: 1}}).moved).includes(says.confirmed));
+    const six = Array.from({length: 6}, () => moved());
+    assert.ok(text(techSteps({movements: {new: six}}).moved).includes(says.longGroup));
+    assert.ok(!text(techSteps({movements: {new: six}}, {movesOpen: {new: true}}).moved).includes(says.longGroup));
+    // A list the Hub cut counts its whole length.
+    const counts = {new: 40, gone: 0, up: 0, down: 0, came_back: 0, done_still_detected: 0};
+    assert.ok(text(techSteps({movements: {new: [moved()], counts}}).moved).includes(says.longGroup));
+    assert.ok(!text(techSteps({movements: {new: Array.from({length: 5}, () => moved())}}).moved).includes(says.longGroup));
+    assert.ok(text(techSteps({sources_without_volume: ["daemon-b"]}).moved).includes(says.sources));
+});
+
+test("technical text has no em dash, and French addresses the reader as vous", () => {
+    const variants = [{}, {period: {in_progress: true, notes: ["sampling"]}}, {period: {incomplete: ["restart"]}},
+        {tiles: {avoidable_io_ops: null, co2_grams: null, co2_missing_reason: "no_coefficient"}, truncated: true},
+        {tiles: {co2_sources_without_coefficient: 2}}, {priorities: []},
+        {priorities: [techRow({label: "x", action: {status: "done", confirmation: "came_back",
+            events: [{from: null, to: "done", by: "a", at_ms: 1}]}})]},
+        {nothing_moved: true}, {previous: {truncated_to_days: 0}}, {sources_without_volume: ["b"]}];
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = variants.flatMap((over) => PSL.recapTechSteps(techSnapshot(over), {})).map(text).join("\n");
+        assert.ok(all.length > 3000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});

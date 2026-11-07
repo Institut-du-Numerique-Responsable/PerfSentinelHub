@@ -383,3 +383,76 @@ test("under reduced motion the scroll a frame after each move is already its fin
     // Some of those moves had to scroll, or the check above proved nothing.
     expect(scrolled).toBeGreaterThan(0);
 });
+
+const TECH = "/#/recap?view=tech";
+
+/** The recap in its technical view, drawn; `before` runs on the drawn page, then the guide opens. */
+async function openTechGuide(page: Page, before?: () => Promise<void>): Promise<void> {
+    await page.goto(TECH);
+    await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 60_000});
+    if (before) await before();
+    await page.locator("#guide-open").click();
+    await expect(card(page)).toBeVisible();
+}
+
+test("the technical walk reaches the priority, its fix and its action", async ({page}) => {
+    await openTechGuide(page);
+    const total = await totalSteps(page);
+    const titles: string[] = [];
+    await eachStep(page, async (index) => {
+        titles.push(await title(page).textContent() ?? "");
+        await expect(next(page)).toHaveText(index === total - 1 ? "Close" : "Next");
+    });
+    expect(titles[0]).toBe("You are in the Engineering view");
+    for (const wanted of ["What the page counts", "Lists to tick", "The period", "What to fix first",
+        "How to read a priority", "How to fix", "Take an action", "What moved"]) expect(titles).toContain(wanted);
+    expect(titles[total - 1]).toBe("You can now choose what to take");
+    await next(page).click();
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await expect(page.locator("#guide-open")).toBeFocused();
+});
+
+test("the technical row numbers its marks, and the fix and the action frame their parts", async ({page}) => {
+    await openTechGuide(page);
+    await goTo(page, "How to read a priority");
+    const legend = await card(page).locator(".guide-legend li").count();
+    expect(legend).toBeGreaterThanOrEqual(4);
+    await expect(page.locator(".guide-marks .guide-mark")).toHaveCount(legend);
+    await next(page).click();
+    await expect(title(page)).toHaveText("How to fix");
+    expect(await framed(page, ["recap.row.detail"])).toBe(true);
+    await next(page).click();
+    await expect(title(page)).toHaveText("Take an action");
+    expect(await framed(page, ["recap.row.facts", "recap.row.state"])).toBe(true);
+});
+
+test("a folded fix is skipped, as the guide never unfolds it", async ({page}) => {
+    await openTechGuide(page, async () => {
+        await page.locator('[data-guide="recap.row"] .recap-detail > summary').click();
+        await expect(page.locator('[data-guide="recap.row.detail"]')).toHaveCount(0);
+    });
+    const titles: string[] = [];
+    await eachStep(page, async () => {
+        titles.push(await title(page).textContent() ?? "");
+    });
+    expect(titles).toContain("Take an action");
+    expect(titles).not.toContain("How to fix");
+});
+
+test("a guide reads its own wait text, else the shared one", async ({page}) => {
+    await page.goto(TECH);
+    await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 60_000});
+    type Guide = { PSL_GUIDE: { start(source: () => unknown, guide?: string): void }, PSL_TEXT: Record<string, Record<string, string>> };
+    await page.evaluate(() => {
+        const guide = window as unknown as Guide;
+        guide.PSL_TEXT.en["guide.probe.wait.title"] = "The probe waits";
+        guide.PSL_GUIDE.start(() => ({status: "wait", steps: []}), "screen.probe");
+    });
+    await expect(title(page)).toHaveText("The probe waits");
+    // No body of its own: the shared one.
+    await expect(card(page).locator("#guide-body")).toHaveText(/^The guide will start/);
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => (window as unknown as Guide).PSL_GUIDE.start(() => ({status: "wait", steps: []}), "recap.tech"));
+    await expect(title(page)).toHaveText("The recap is being computed");
+    await page.keyboard.press("Escape");
+});

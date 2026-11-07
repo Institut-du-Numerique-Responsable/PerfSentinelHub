@@ -3251,14 +3251,19 @@
 
     // ---- the guide of the manager's recap
 
+    /** The rows the technical ranking shows before its Show all button. */
+    const RECAP_FIRST_PAGE = 10;
+    /** The lines a group of What moved shows before its Show all button. */
+    const RECAP_MOVES_FIRST = 5;
+
     /**
-     * The guide that walks through a screen, or null where there is none: the recap in its management view.
+     * The guide that walks through a screen, or null where there is none: the recap in either view.
      * @param {string} screen
      * @param {string | null} recapView `pilotage` or `tech` on the recap, null elsewhere
      * @returns {string | null}
      */
     function guideIdFor(screen, recapView) {
-        return screen === 'recap' && recapView === 'pilotage' ? 'recap.pilotage' : null;
+        return screen === 'recap' && (recapView === 'pilotage' || recapView === 'tech') ? 'recap.' + recapView : null;
     }
 
     /**
@@ -3275,13 +3280,12 @@
      * @param {string} id
      * @param {string[]} anchors
      * @param {{title?: string, body?: string[], marks?: Array<{anchor: string, text: string}>}} [over]
+     * @param {(key: string, vars?: Record<string, string | number>) => string} [text] the guide's texts
      * @returns {import('../types').GuideStep}
      */
-    function guideStep(id, anchors, over) {
+    function guideStep(id, anchors, over, text = guideText) {
         const given = over || {};
-        const step = {
-            id, anchors, title: given.title ?? guideText(id + '.title'), body: given.body ?? [guideText(id + '.body')]
-        };
+        const step = {id, anchors, title: given.title ?? text(id + '.title'), body: given.body ?? [text(id + '.body')]};
         return given.marks ? {...step, marks: given.marks} : step;
     }
 
@@ -3332,11 +3336,19 @@
         } else if (snapshot.period.in_progress) {
             body.push(guideText('period.open'));
         }
-        const filters = snapshot.filters;
-        const chosen = [filters.environment, filters.source_id, filters.service, filters.grouping,
-            ...(filters.services || []), ...(filters.groupings || [])];
-        if (chosen.some(Boolean)) body.push(guideText('period.filtered'));
+        if (recapFiltered(snapshot)) body.push(guideText('period.filtered'));
         return guideStep('period', ['recap.period'], {body});
+    }
+
+    /**
+     * Whether a filter narrows the snapshot. A service's display label is not one of its own.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {boolean}
+     */
+    function recapFiltered(snapshot) {
+        const filters = snapshot.filters;
+        return [filters.environment, filters.source_id, filters.service, filters.grouping,
+            ...(filters.services || []), ...(filters.groupings || [])].some(Boolean);
     }
 
     /**
@@ -3441,6 +3453,231 @@
         return guideStep('moved', ['recap.moved'], {
             body: confirmed ? [guideText('moved.body'), guideText('moved.confirmed')] : [guideText('moved.body')]
         });
+    }
+
+    // ---- the guide of the technical recap
+
+    /**
+     * @param {string} key under `guide.tech.`
+     * @param {Record<string, string | number>} [vars]
+     * @returns {string}
+     */
+    function techText(key, vars) {
+        return t('guide.tech.' + key, vars);
+    }
+
+    /**
+     * {@link guideStep} on the technical texts.
+     * @param {string} id
+     * @param {string[]} anchors
+     * @param {{title?: string, body?: string[], marks?: Array<{anchor: string, text: string}>}} [over]
+     * @returns {import('../types').GuideStep}
+     */
+    function techStep(id, anchors, over) {
+        return guideStep(id, anchors, over, techText);
+    }
+
+    /**
+     * The steps of the guide over the technical recap. Besides the snapshot, `ctx` brings what the screen
+     * has unfolded: the whole ranking shown, and the groups of What moved opened. A step whose element
+     * the screen does not draw (the freshness line, the reports, the card, the fix folded) is dropped by
+     * the controller.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @param {{showAll?: boolean, movesOpen?: Record<string, boolean>}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function recapTechSteps(snapshot, ctx) {
+        const first = snapshot.priorities[0];
+        const steps = [
+            techStep('view', ['recap.view'], {body: [techText('view.body'), techText('view.other')]}),
+            techStep('filters', ['recap.filters'], {body: [techText('filters.body'), techText('filters.link')]}),
+            techStep('pick', ['recap.pick.services', 'recap.pick.groupings'], {
+                body: [techText('pick.button'), techText('pick.once'),
+                    techText('pick.many', {max: String(RECAP_FILTER_MAX_VALUES)}), techText('pick.absent')]
+            }),
+            techStep('fresh', ['recap.fresh'], {body: [techText('fresh.body'), techText('fresh.again')]}),
+            techPeriodStep(snapshot),
+            techIoStep(snapshot),
+            techCo2Step(snapshot),
+            techStep('findings', ['recap.findings'], {
+                title: techText('findings.title.' + plural(snapshot.tiles.active_findings),
+                    {count: String(snapshot.tiles.active_findings)})
+            }),
+            techActionsStep(snapshot),
+            techTableStep(snapshot, Boolean(ctx && ctx.showAll))
+        ];
+        if (first) steps.push(techRowStep(first), techFixStep(first), techActStep(first));
+        steps.push(
+            techStep('below', ['recap.below']),
+            techMovedStep(snapshot, (ctx && ctx.movesOpen) || {}),
+            techStep('reports', ['recap.reports']),
+            guideStep('card', ['recap.card']),
+            techStep('end', []));
+        return steps;
+    }
+
+    /**
+     * The period, then the one of the banner's gaps or the running days, the notes and the filters,
+     * in the order of {@link guidePeriodStep}.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techPeriodStep(snapshot) {
+        const body = [techText('period.body', {period: periodText(snapshot.period)})];
+        if (hasItems(snapshot.period.incomplete) || hasItems(snapshot.previous.incomplete)) {
+            body.push(techText('period.incomplete'));
+        } else if (snapshot.period.in_progress) {
+            body.push(techText('period.open'));
+        }
+        if (hasItems(snapshot.period.notes) || hasItems(snapshot.previous.notes)) body.push(techText('period.notes'));
+        if (recapFiltered(snapshot)) body.push(guideText('period.filtered'));
+        return techStep('period', ['recap.period'], {body});
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techIoStep(snapshot) {
+        const value = snapshot.tiles.avoidable_io_ops;
+        const count = recapCount(value);
+        const body = [techText(count === null ? 'io.none' : 'io.body')];
+        if (hasItems(snapshot.period.incomplete)) body.push(techText('io.incomplete'));
+        if (snapshot.truncated) body.push(techText('io.truncated'));
+        return techStep('io', ['recap.io'], {
+            title: count === null ? techText('io.title.none') : techText('io.title.' + plural(value), {count: count}),
+            body
+        });
+    }
+
+    /**
+     * As {@link guideCo2Step}, with the count of sources the technical tile gives.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techCo2Step(snapshot) {
+        const tiles = snapshot.tiles;
+        if (tiles.co2_grams === null || tiles.co2_grams === undefined) {
+            return techStep('co2', ['recap.co2'], {
+                body: [techText(tiles.co2_missing_reason === 'no_avoidable_io' ? 'co2.no_io' : 'co2.none')]
+            });
+        }
+        const without = tiles.co2_sources_without_coefficient;
+        const body = [techText('co2.body')];
+        if (co2Parts(tiles.co2_grams, without, tiles.co2_missing_reason, 'tech').lead) {
+            body.push(techText('co2.least.' + plural(without), {count: String(without)}));
+        }
+        return techStep('co2', ['recap.co2'], {body});
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techActionsStep(snapshot) {
+        const done = snapshot.tiles.actions.done;
+        return techStep('actions', ['recap.actions'], {
+            title: done === 0 ? techText('actions.title.none') : techText('actions.title.' + plural(done), {count: String(done)}),
+            body: [techText('actions.body'), techText('actions.states')]
+        });
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @param {boolean} showAll the whole ranking is shown
+     * @returns {import('../types').GuideStep}
+     */
+    function techTableStep(snapshot, showAll) {
+        const all = snapshot.priorities;
+        if (!all.length) {
+            return techStep('table', ['recap.table'], {
+                title: techText('table.empty.title'), body: [techText('table.empty.body')]
+            });
+        }
+        const body = [techText('table.body'), techText('table.co2')];
+        if (all.length > RECAP_FIRST_PAGE && !showAll) {
+            body.push(techText('table.more', {button: t('recap.prio.show_all', {count: all.length})}));
+        }
+        return techStep('table', ['recap.table'], {body});
+    }
+
+    /**
+     * How to read the first row. A mark whose part the row does not draw (no suggestion, no trend) is
+     * dropped by the controller.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techRowStep(first) {
+        const mark = (/** @type {string} */ part, /** @type {string} */ key) =>
+            ({anchor: 'recap.row.' + part, text: techText('row.' + key)});
+        return techStep('row', ['recap.row'], {
+            body: [],
+            marks: [
+                mark('rank', 'rank'),
+                mark('what', first.label ? 'what.label' : 'what'),
+                mark('suggest', 'suggest'),
+                mark('figure', hasAvoidableVolume(first) ? 'figure' : 'figure.none'),
+                mark('trend', 'trend')
+            ]
+        });
+    }
+
+    /**
+     * The folded detail of the first row; the controller drops the step while the fold is closed.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techFixStep(first) {
+        const body = [techText('fix.body')];
+        if (first.template && isSqlFinding(first.finding_type)) {
+            body.push(techText('fix.sql'));
+            if (first.template.length > RECAP_SQL_LAYOUT_MAX) {
+                body.push(techText('fix.long', {max: num(RECAP_SQL_LAYOUT_MAX)}));
+            }
+        }
+        if (first.action && first.action.events && first.action.events.length) body.push(techText('fix.events'));
+        return techStep('fix', ['recap.row.detail'], {body});
+    }
+
+    /**
+     * Taking a finding or changing its action, the engine's verdict once it is done, then naming and
+     * the refusal every write can meet.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techActStep(first) {
+        const action = first.action;
+        const body = action ? [techText('act.taken')] : [techText('act.take'), techText('act.ack')];
+        const label = action && action.status === 'done' ? confirmationLabel(action.confirmation) : '';
+        if (label) body.push(techText('act.verdict', {label: label}));
+        if (action && (action.confirmation === 'contradicted' || action.confirmation === 'came_back')) {
+            body.push(techText('act.contradicted'));
+        }
+        body.push(techText('act.name'), techText('act.denied'));
+        return techStep('act', ['recap.row.facts', 'recap.row.state'], {body});
+    }
+
+    /**
+     * What moved, in the order of the screen's note: no closed day, nothing moved, then what the
+     * groups hold. A group is long while the screen shows its Show all button, which an opened group
+     * no longer does.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @param {Record<string, boolean>} opened the groups the reader opened
+     * @returns {import('../types').GuideStep}
+     */
+    function techMovedStep(snapshot, opened) {
+        const moves = snapshot.movements;
+        let body = [techText('moved.body'), techText('moved.gone')];
+        if (snapshot.previous.truncated_to_days === 0) body = [techText('moved.none_closed')];
+        else if (snapshot.nothing_moved) body = [techText('moved.nothing')];
+        if (moves.gone_with_confirmed_action > 0) body.push(techText('moved.confirmed'));
+        const long = ['new', 'gone', 'up', 'down', 'came_back', 'done_still_detected'].some(function (key) {
+            const total = moves.counts ? moves.counts[key] : moves[key].length;
+            return total > RECAP_MOVES_FIRST && !opened[key];
+        });
+        if (long) body.push(techText('moved.long'));
+        if (hasItems(snapshot.sources_without_volume)) body.push(techText('moved.sources'));
+        return techStep('moved', ['recap.moved'], {body});
     }
 
     /**
@@ -4486,6 +4723,9 @@
         recapCount,
         guideIdFor,
         recapPilotageSteps,
+        recapTechSteps,
+        RECAP_FIRST_PAGE,
+        RECAP_MOVES_FIRST,
         notesText,
         httpUrl,
         localTime,

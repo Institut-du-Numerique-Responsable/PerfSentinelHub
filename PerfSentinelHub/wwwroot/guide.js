@@ -18,7 +18,7 @@
     const NARROW = matchMedia('(max-width: 760px)');
     const STILL = matchMedia('(prefers-reduced-motion: reduce)');
 
-    /** @type {{source: () => import('../types').GuideSource, status: string, id: string | null, at: number,
+    /** @type {{source: () => import('../types').GuideSource, guide: string, status: string, id: string | null, at: number,
      *  steps: import('../types').GuideStep[], all: import('../types').GuideStep[], frame: number, from: number,
      *  painted: string} | null} */
     let open = null;
@@ -182,9 +182,19 @@
         say(dom.next, PSL.t(open.at === open.steps.length - 1 ? 'guide.close' : 'guide.next'));
     }
 
+    /**
+     * The guide's own wait or failed text, `guide.<id>.wait.title` for instance, else the shared one. The
+     * texts are keyed on the id's last part, `tech` for `recap.tech`.
+     * @param {string} part `title` or `body`
+     */
+    function stateText(part) {
+        const own = 'guide.' + open.guide.split('.').pop() + '.' + open.status + '.' + part;
+        return PSL.t(PSL.hasText(own) ? own : 'guide.' + open.status + '.' + part);
+    }
+
     function paintState() {
-        dom.title.textContent = PSL.t('guide.' + open.status + '.title');
-        dom.body.replaceChildren(node('p', {}, PSL.t('guide.' + open.status + '.body')));
+        dom.title.textContent = stateText('title');
+        dom.body.replaceChildren(node('p', {}, stateText('body')));
         dom.count.hidden = true;
         dom.prev.hidden = true;
         // A failed guide has one way out, the button that closes it.
@@ -364,11 +374,14 @@
         stops[(index + by + stops.length) % stops.length].focus();
     }
 
-    /** @param {() => import('../types').GuideSource} source */
-    function start(source) {
+    /**
+     * @param {() => import('../types').GuideSource} source
+     * @param {string} [guide] the guide's PSL.guideIdFor id, which picks its wait and failed texts
+     */
+    function start(source, guide = '') {
         if (open) stop();
         if (!dom) dom = build();
-        open = {source, status: 'wait', id: null, at: 0, steps: [], all: [], frame: 0, from: 0, painted: ''};
+        open = {source, guide, status: 'wait', id: null, at: 0, steps: [], all: [], frame: 0, from: 0, painted: ''};
         SHELL.forEach(function (selector) {
             const part = document.querySelector(selector);
             if (part) part.setAttribute('inert', '');

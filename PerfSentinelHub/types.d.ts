@@ -563,7 +563,8 @@ export interface GuideSource {
 
 /** `window.PSL_GUIDE`, the controller guide.js defines. */
 export interface GuideController {
-    start(source: () => GuideSource): void;
+    /** `guide`, the PSL.guideIdFor id, picks `guide.<last part>.wait.*` and `.failed.*` when they exist. */
+    start(source: () => GuideSource, guide?: string): void;
     refresh(): void;
     stop(): void;
     isOpen(): boolean;

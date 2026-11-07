@@ -1141,20 +1141,33 @@
     }
 
     /**
-     * What the pilotage guide reads: the recap the screen holds. While it is computed the guide waits,
-     * and starts no computation of its own.
+     * What the recap guides read: the recap the screen holds, in the view it was computed for. While it
+     * is computed the guide waits, and starts no computation of its own.
      * @returns {import('../types').GuideSource}
      */
     function recapGuideSource() {
         if (state.recapError !== null) return {status: 'failed', steps: []};
         if (state.recap === null) return {status: 'wait', steps: []};
-        return {status: 'ready', steps: PSL.recapPilotageSteps(state.recap)};
+        if (state.recap.view === 'pilotage') return {status: 'ready', steps: PSL.recapPilotageSteps(state.recap)};
+        return {
+            status: 'ready',
+            steps: PSL.recapTechSteps(state.recap, {showAll: state.recapShowAll, movesOpen: state.recapMovesOpen})
+        };
     }
+
+    /**
+     * The source of steps of each guide, by its PSL.guideIdFor id.
+     * @type {Record<string, () => import('../types').GuideSource>}
+     */
+    const GUIDE_SOURCES = {
+        'recap.pilotage': recapGuideSource,
+        'recap.tech': recapGuideSource
+    };
 
     function initGuide() {
         document.getElementById('guide-open').addEventListener('click', function () {
             state.guide = guideId(state.screen);
-            GUIDE.start(recapGuideSource);
+            GUIDE.start(GUIDE_SOURCES[state.guide], state.guide);
         });
     }
 
@@ -7120,8 +7133,8 @@
 
     // -------------------------------------------------------- screen: recap
 
-    const RECAP_FIRST_PAGE = 10;
-    const RECAP_MOVES_FIRST = 5;
+    const RECAP_FIRST_PAGE = PSL.RECAP_FIRST_PAGE;
+    const RECAP_MOVES_FIRST = PSL.RECAP_MOVES_FIRST;
     const RECAP_PERIOD_CHOICES = ['day', 'week', 'month'];
     /** @type {Record<string, GlyphPaths>} */
     const RECAP_STATE_GLYPH = {
@@ -7511,7 +7524,7 @@
         const environments = Array.from(new Set((state.sources || []).map(function (source) {
             return source.environment;
         }).filter(Boolean))).sort();
-        return el('div', {class: 'refresh recap-filter'}, [
+        return el('div', {class: 'refresh recap-filter', 'data-guide': 'recap.filters'}, [
             el('span', {class: 'refresh-label', text: t('recap.filter.period')}),
             period,
             day,
@@ -7619,7 +7632,7 @@
     function recapMultiFilter(label, allLabel, key, selected, options) {
         const pick = state.recapPick;
         const open = pick.open === key;
-        const host = el('div', {class: 'recap-pick', id: 'recap-pick-' + key});
+        const host = el('div', {class: 'recap-pick', id: 'recap-pick-' + key, 'data-guide': 'recap.pick.' + key});
         // This list alone is drawn again, so a focus that moved on to another control stays there.
         const again = function () {
             const fresh = recapMultiFilter(label, allLabel, key, selected, recapPickOptions(key));
@@ -8045,7 +8058,7 @@
                 list.appendChild(el('li', {
                     class: 'recap-divider',
                     text: t('recap.prio.divider.' + (management ? 'pilotage' : 'tech')),
-                    'data-guide': management ? 'recap.below' : null
+                    'data-guide': 'recap.below'
                 }));
             }
             const row = recapRow(priority, max, snapshot, route, PSL.namesService(shown, index));
@@ -8076,13 +8089,22 @@
     function guideRowAnchors(row) {
         row.setAttribute('data-guide', 'recap.row');
         const parts = {
-            rank: '.recap-rank', what: '.recap-what', where: '.recap-where', figure: '.recap-figure',
-            trend: '.recap-trend', state: '.recap-action'
+            rank: '.recap-rank', what: '.recap-what', where: '.recap-where', suggest: '.recap-suggest',
+            figure: '.recap-figure', trend: '.recap-trend', facts: '.facts', state: '.recap-action'
         };
         Object.keys(parts).forEach(function (part) {
             const found = row.querySelector(parts[part]);
             if (found) found.setAttribute('data-guide', 'recap.row.' + part);
         });
+        // A folded fix is no anchor: the guide never opens a fold, so its step waits for the reader to.
+        const detail = /** @type {HTMLDetailsElement | null} */ (row.querySelector('.recap-detail'));
+        if (!detail) return;
+        const name = function () {
+            if (detail.open) detail.setAttribute('data-guide', 'recap.row.detail');
+            else detail.removeAttribute('data-guide');
+        };
+        name();
+        detail.addEventListener('toggle', name);
     }
 
     /**
@@ -8996,7 +9018,7 @@
         again.addEventListener('click', function () {
             loadRecap(false, true);
         });
-        return el('div', {class: 'recap-freshness'}, [
+        return el('div', {class: 'recap-freshness', 'data-guide': 'recap.fresh'}, [
             el('span', {class: 'recap-freshness-text', text: t('recap.job.fresh', fresh)}),
             again
         ]);
