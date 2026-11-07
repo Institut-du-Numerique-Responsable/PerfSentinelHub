@@ -159,9 +159,13 @@ public sealed partial class EngineProbe(
         if (!MemoryLimitApplies || HeapHardLimitBytes() is not { } heap || _memory.LimitBytes() is not { } limit)
             return;
         var engines = (long)_analysis.Workers * _analysis.EngineMemoryLimitMiB * Mebibyte;
-        if (heap + engines > limit)
+        // The margin a run needs free before it starts: without it the heap and the caps fit
+        // the limit while every run is refused hub_memory_low.
+        var headroom = (long)_analysis.MinFreeMemoryMiB * Mebibyte;
+        if (heap + engines + headroom > limit)
             LogMemoryBudgetExceeded(
-                logger, heap / Mebibyte, _analysis.Workers, _analysis.EngineMemoryLimitMiB, limit / Mebibyte);
+                logger, heap / Mebibyte, _analysis.Workers, _analysis.EngineMemoryLimitMiB,
+                _analysis.MinFreeMemoryMiB, limit / Mebibyte);
     }
 
     // Bare hexadecimal digits, the way the NativeAOT runtime reads it: it ignores a value with a
@@ -250,13 +254,15 @@ public sealed partial class EngineProbe(
     private static partial void LogMemoryLimitIgnored(ILogger logger, int limitMib, string? version);
 
     [LoggerMessage(1407, LogLevel.Warning,
-        "The Hub's heap of {HeapMib} MiB and {Workers} runs of {EngineMib} MiB exceed the container's "
-        + "{LimitMib} MiB: an analysis can get the Hub OOM-killed. Lower Hub:Analysis:Workers or "
-        + "Hub:Analysis:EngineMemoryLimitMiB, or raise the memory limit.")]
+        "The Hub's heap of {HeapMib} MiB, {Workers} runs of {EngineMib} MiB and {HeadroomMib} MiB of "
+        + "Hub:Analysis:MinFreeMemoryMiB exceed the container's {LimitMib} MiB: an analysis can get the Hub "
+        + "OOM-killed or be refused. Lower Hub:Analysis:Workers or Hub:Analysis:EngineMemoryLimitMiB, or raise "
+        + "the memory limit.")]
     private static partial void LogMemoryBudgetExceeded(
         ILogger logger,
         long heapMib,
         int workers,
         int engineMib,
+        int headroomMib,
         long limitMib);
 }

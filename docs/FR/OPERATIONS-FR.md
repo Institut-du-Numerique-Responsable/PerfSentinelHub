@@ -119,8 +119,9 @@ moteur : 0,75 x L + 2 x 448 Mio dépasse L pour toute limite sous 3 584 Mio.
 La limite doit tenir la somme : le tas, `Workers` runs au plafond du moteur, et
 `Hub:Analysis:MinFreeMemoryMiB` de marge. Les défauts du chart donnent
 832 + 2 x 448 + 256 = 1 984 Mio, sous sa limite de 2Gi. Au démarrage, le Hub lit le
-`memory.max` de sa cgroup, et quand le tas plus `Workers` plafonds du moteur le
-dépassent, il écrit un avertissement (événement 1407) avec les quatre nombres. Il
+`memory.max` de sa cgroup, et quand le tas, `Workers` plafonds du moteur et la marge
+`MinFreeMemoryMiB` le dépassent ensemble, il écrit un avertissement (événement 1407)
+avec les cinq nombres. Il
 démarre quand même : la collecte et l'API de lecture ne dépendent pas d'une
 analyse. Sans `DOTNET_GCHeapHardLimit`, sans plafond du moteur appliqué ou sans
 limite du conteneur, aucune somme n'est faite : le tas par défaut du runtime n'est

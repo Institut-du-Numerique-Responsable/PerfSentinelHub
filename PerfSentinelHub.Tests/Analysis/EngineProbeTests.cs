@@ -192,8 +192,10 @@ public sealed class EngineProbeTests : IDisposable
     }
 
     [Theory]
-    // 384 MiB of heap and two runs of 448 MiB: 1,280 MiB, over a 1 GiB limit and under 1.5 GiB.
+    // 384 MiB of heap, two runs of 448 MiB and the 256 MiB of MinFreeMemoryMiB: 1,536 MiB, over a
+    // 1 GiB limit, over 1.5 GiB less 64 MiB, and exactly within 1.5 GiB.
     [InlineData("18000000", "1073741824", true)]
+    [InlineData("18000000", "1543503872", true)]
     [InlineData("18000000", "1610612736", false)]
     // Without the variable the runtime takes its default heap, 75% of the limit, which the
     // probe does not sum. The NativeAOT runtime ignores a 0x prefix, so that value counts as none.
@@ -229,7 +231,8 @@ public sealed class EngineProbeTests : IDisposable
         var warning = Assert.Single(logger.Warnings);
         Assert.Contains("384 MiB", warning, StringComparison.Ordinal);
         Assert.Contains("2 runs of 448 MiB", warning, StringComparison.Ordinal);
-        Assert.Contains("1024 MiB", warning, StringComparison.Ordinal);
+        Assert.Contains("256 MiB of Hub:Analysis:MinFreeMemoryMiB", warning, StringComparison.Ordinal);
+        Assert.Contains((long.Parse(memoryMax) / (1024 * 1024)) + " MiB", warning, StringComparison.Ordinal);
     }
 
     private EngineProbe Probe(

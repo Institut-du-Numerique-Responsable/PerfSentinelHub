@@ -110,8 +110,9 @@ MiB under 2 GiB, read on the image. That default leaves no room for the engine:
 The limit has to hold the sum: the heap, `Workers` runs at the engine's cap, and
 `Hub:Analysis:MinFreeMemoryMiB` of margin. The chart's defaults give
 832 + 2 x 448 + 256 = 1,984 MiB, under its 2Gi limit. At startup the Hub reads the
-cgroup's `memory.max`, and when the heap plus `Workers` engine caps pass it, it logs
-a warning (event 1407) with the four numbers. It starts anyway: collection and the
+cgroup's `memory.max`, and when the heap, `Workers` engine caps and the
+`MinFreeMemoryMiB` margin together pass it, it logs a warning (event 1407) with the five
+numbers. It starts anyway: collection and the
 read API do not depend on an analysis. Without `DOTNET_GCHeapHardLimit`, an applied
 engine cap or a container limit, no sum is made: the runtime's default heap is not
 summed.
