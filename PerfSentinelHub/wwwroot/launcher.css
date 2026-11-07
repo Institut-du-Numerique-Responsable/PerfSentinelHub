@@ -204,6 +204,13 @@ button {
         padding: 0 8px;
     }
 
+    /* The chip leads the cluster here, so a long one (the fleet-skew warning) takes a row of
+       its own and the guide's "?" joins theme and language below it rather than standing
+       alone. Only while it holds no link: moved, the release link would break the tab order. */
+    .shell-cluster .shell-version:not(:has(a)) {
+        order: -1;
+    }
+
     #identity-name {
         max-width: 8ch;
         overflow: hidden;

@@ -439,6 +439,29 @@ l'abonnement pour un rapport planifié. Ses deux téléchargements s'ouvrent dan
 envoyé par mail arrive à chaque adresse dans la langue de cette adresse, voir
 [la configuration](CONFIGURATION-FR.md).
 
+### Le guide
+
+En vue Management, Comprendre cet écran dans la barre du haut, un « ? » seul sur un téléphone, parcourt le récapitulatif sur les chiffres qu'il affiche. Une découpe
+éclaire une partie de la page à la fois et assombrit le reste, et une carte dit ce que cette partie
+veut dire, avec `4 sur 11`, Précédent, Suivant et Quitter. L'étape de la première ligne pose des
+pastilles numérotées sur ses parties, et la carte les nomme sous les mêmes numéros. Une partie que la
+page n'affiche pas, comme Reports pour un appelant qui ne peut pas les lire, ou la séparation quand
+aucune ligne n'est dessous, est sautée et ne compte pas. La dernière carte, sans découpe, rappelle les
+trois questions auxquelles la page répond. La vue Engineering n'a pas de guide, et le bouton n'y
+apparaît pas.
+
+Tant que le guide est ouvert, la page derrière lui ne prend ni clic ni touche, mais elle défile
+toujours : aucune vue, action ou rapport ne peut changer derrière le guide. Échap quitte, les flèches
+gauche et droite passent d'une étape à l'autre, Tab reste dans la carte, et le focus revient au bouton
+à la sortie. Un autre écran ou l'autre vue, y compris par le bouton retour du navigateur, ferme le
+guide. Avec le mouvement réduit, la page saute à chaque partie au lieu d'y défiler.
+
+Le guide ne lit que ce que l'écran a déjà chargé et ne lance aucun calcul. Ouvert pendant que le
+récapitulatif se calcule, il le dit et démarre à l'arrivée du résultat ; quand le récapitulatif n'a
+pas pu être lu, il le dit et propose seulement de fermer. Il n'envoie aucune requête et n'enregistre
+rien. Les chiffres de ses titres sont écrits par les mêmes fonctions que les tuiles, ils se lisent
+donc pareil.
+
 ## Cartes à partager
 
 Sous les rapports, quand le Hub signe des cartes (`Hub:Cards:Organisation` est réglé et vous pouvez en
