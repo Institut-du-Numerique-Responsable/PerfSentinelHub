@@ -561,6 +561,36 @@ export interface GuideSource {
     steps: GuideStep[];
 }
 
+/** What the New screen's guide reads off the form and the Hub's status. */
+export interface NewGuideContext {
+    /** Every configured source, and those the caller may run on. */
+    sources: number;
+    runnable: number;
+    windowHandoff: boolean;
+    traceHandoff: boolean;
+    /** The chosen source is a daemon. */
+    daemon: boolean;
+    /** A runnable source's row carries a version pill. */
+    skewPill: boolean;
+    mode: string;
+    rangeMode: string;
+    spanMs: number;
+    retentionHours: number | null;
+    maxTraces: number;
+    /** The source has a weight history under the trace count. */
+    weighed: boolean;
+    fetchBand: "ok" | "over" | "blocked" | "invalid" | null;
+    queue: number;
+    limits: StatusLimits;
+    /** The sentence beside the button when something blocks it. */
+    blocker: string | null;
+    unreachable: boolean;
+    /** The chosen source's engine is behind the Hub's. */
+    skewBehind: boolean;
+    /** The form spells a terminal command. */
+    command: boolean;
+}
+
 /** `window.PSL_GUIDE`, the controller guide.js defines. */
 export interface GuideController {
     /** `guide`, the PSL.guideIdFor id, picks `guide.<last part>.wait.*` and `.failed.*` when they exist. */

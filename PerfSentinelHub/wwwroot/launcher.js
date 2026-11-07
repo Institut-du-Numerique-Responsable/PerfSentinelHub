@@ -3257,13 +3257,15 @@
     const RECAP_MOVES_FIRST = 5;
 
     /**
-     * The guide that walks through a screen, or null where there is none: the recap in either view.
+     * The guide that walks through a screen, or null where there is none: the recap in either view and
+     * the analysis screens.
      * @param {string} screen
      * @param {string | null} recapView `pilotage` or `tech` on the recap, null elsewhere
      * @returns {string | null}
      */
     function guideIdFor(screen, recapView) {
-        return screen === 'recap' && (recapView === 'pilotage' || recapView === 'tech') ? 'recap.' + recapView : null;
+        if (screen === 'recap') return recapView === 'pilotage' || recapView === 'tech' ? 'recap.' + recapView : null;
+        return ['new', 'recent', 'run', 'report'].indexOf(screen) >= 0 ? screen : null;
     }
 
     /**
@@ -3290,7 +3292,7 @@
     }
 
     /**
-     * @param {string[] | null | undefined} list
+     * @param {unknown[] | null | undefined} list
      * @returns {boolean}
      */
     function hasItems(list) {
@@ -3679,6 +3681,250 @@
         if (long) body.push(techText('moved.long'));
         if (hasItems(snapshot.sources_without_volume)) body.push(techText('moved.sources'));
         return techStep('moved', ['recap.moved'], {body});
+    }
+
+    // ---- the guides of the analysis screens: New, Recent, one run and its report
+
+    /**
+     * The texts of one guide, `guide.<guide>.<key>`.
+     * @param {string} guide
+     * @returns {(key: string, vars?: Record<string, string | number>) => string}
+     */
+    function screenText(guide) {
+        return function (key, vars) {
+            return t('guide.' + guide + '.' + key, vars);
+        };
+    }
+
+    /**
+     * What a window carries, in the order the New screen lists it under the range: wider than a day,
+     * past the week a scan rarely finishes in, then past the retention the source declares or with none
+     * declared.
+     * @param {number} spanMs
+     * @param {number | null | undefined} retentionHours
+     * @returns {Array<'wide' | 'timeout' | 'retention' | 'undeclared'>}
+     */
+    function rangeNotes(spanMs, retentionHours) {
+        /** @type {Array<'wide' | 'timeout' | 'retention' | 'undeclared'>} */
+        const notes = [];
+        if (spanMs > DAY_MS) notes.push('wide');
+        if (spanMs > 7 * DAY_MS) notes.push('timeout');
+        if (retentionHours != null && spanMs > retentionHours * 3600000) notes.push('retention');
+        else if (retentionHours == null && spanMs > DAY_MS) notes.push('undeclared');
+        return notes;
+    }
+
+    /**
+     * The steps of the guide over New. `ctx` is what the form holds, read off the screen's state. A step
+     * whose element the form does not draw (the daemon notice under a backend, the range under a trace ID,
+     * the reads block off Tempo) is dropped by the controller; an empty screen draws none but its own.
+     * @param {import('../types').NewGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function newSteps(ctx) {
+        const text = screenText('new');
+        const steps = [guideStep('empty', ['new.empty'], {body: [text(ctx.sources === 0 ? 'empty.none' : 'empty.grant')]}, text)];
+        const handoff = [];
+        if (ctx.windowHandoff) handoff.push(text('handoff.window'));
+        if (ctx.traceHandoff) handoff.push(text('handoff.trace'));
+        if (handoff.length && ctx.daemon) handoff.push(text('handoff.daemon'));
+        if (handoff.length) steps.push(guideStep('handoff', ['new.handoff'], {body: handoff}, text));
+        const source = [text('source.body'), text('source.rows'), text('source.note')];
+        if (ctx.runnable < ctx.sources) source.push(text('source.missing'));
+        if (ctx.skewPill) source.push(text('source.skew'));
+        steps.push(
+            guideStep('source', ['new.source'], {body: source}, text),
+            guideStep('daemon', ['new.daemon'], {body: [text('daemon.body'), text('daemon.sub')]}, text),
+            guideStep('mode', ['new.mode'], {
+                body: ctx.mode === 'trace' ? [text('mode.body'), text('mode.trace')] : [text('mode.body')]
+            }, text),
+            newRangeStep(ctx, text),
+            newTracesStep(ctx, text),
+            newFetchStep(ctx, text),
+            newCostStep(ctx, text),
+            guideStep('advanced', ['new.advanced'], {
+                body: [text('advanced.body'), text('advanced.doubt'), text('advanced.compare')]
+            }, text),
+            newSubmitStep(ctx, text));
+        if (ctx.command) steps.push(guideStep('terminal', ['new.terminal'], undefined, text));
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newRangeStep(ctx, text) {
+        const body = [text('range.body'), text(ctx.rangeMode === 'absolute' ? 'range.absolute' : 'range.relative')];
+        rangeNotes(ctx.spanMs, ctx.retentionHours).forEach(function (note) {
+            if (note === 'timeout') body.push(text('range.timeout', {seconds: ctx.limits.analysis_timeout_seconds}));
+            if (note === 'retention') body.push(text('range.retention', {duration: dur(ctx.retentionHours * 3600000)}));
+            if (note === 'undeclared') body.push(text('range.undeclared'));
+        });
+        return guideStep('range', ['new.range'], {body}, text);
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newTracesStep(ctx, text) {
+        const cap = ctx.limits.max_traces_cap;
+        const band = weightBand(ctx.maxTraces, cap).key;
+        const body = [text('traces.body'), text('traces.cap')];
+        if (band !== 'safe') body.push(text('traces.' + band, {cap: cap}));
+        if (ctx.weighed) body.push(text('traces.weighed'));
+        return guideStep('traces', ['new.traces'], {body}, text);
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newFetchStep(ctx, text) {
+        const limits = ctx.limits;
+        const body = [text('fetch.body'),
+            text('fetch.limits', {warn: limits.fetch_concurrency_warn, max: limits.fetch_concurrency_max}),
+            text('fetch.failed')];
+        if (ctx.fetchBand === 'over' || ctx.fetchBand === 'blocked') body.push(text('fetch.' + ctx.fetchBand));
+        return guideStep('fetch', ['new.fetch'], {body}, text);
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newCostStep(ctx, text) {
+        const body = [text('cost.body'), text('cost.retention', {hours: ctx.limits.report_retention_hours})];
+        if (ctx.queue > 0) body.push(text('cost.queue.' + plural(ctx.queue), {count: ctx.queue}));
+        return guideStep('cost', ['new.cost'], {body}, text);
+    }
+
+    /**
+     * The button, with the screen's own blocker quoted when there is one.
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newSubmitStep(ctx, text) {
+        const body = [ctx.blocker ? text('submit.blocked', {blocker: ctx.blocker}) : text('submit.ready')];
+        if (ctx.unreachable) body.push(text('submit.unreachable'));
+        if (ctx.skewBehind) body.push(text('submit.skew'));
+        return guideStep('submit', ['new.submit'], {body}, text);
+    }
+
+    /**
+     * The steps of the guide over Recent. A banner the list does not draw is dropped by the controller;
+     * the card step needs a first run to read.
+     * @param {{hours: number, first: import('../types').Analysis | null}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function recentSteps(ctx) {
+        const text = screenText('recent');
+        const steps = [
+            guideStep('intro', ['recent.sub'], {body: [text('intro.body', {hours: ctx.hours}), text('intro.access')]}, text),
+            guideStep('empty', ['recent.empty'], {body: [text('empty.body', {hours: ctx.hours})]}, text),
+            guideStep('binaries', ['recent.binaries'], undefined, text),
+            guideStep('tuned', ['recent.tuned'], undefined, text)
+        ];
+        const first = ctx.first;
+        if (first) {
+            const body = [text('card.body'), text('card.facts'), text('card.open')];
+            if (Object.keys((first.request || {})['detection'] || {}).length) body.push(text('card.thresholds'));
+            if (first.error_code) body.push(text('card.error'));
+            steps.push(guideStep('card', ['recent.card'], {body}, text));
+        }
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over one run, by its state. The outcome panel exists once the run is over.
+     * @param {{run: import('../types').Analysis, now: number, limits: import('../types').StatusLimits}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function runSteps(ctx) {
+        const text = screenText('run');
+        const run = ctx.run;
+        const key = statusKey(run);
+        const live = key === 'queued' || key === 'running';
+        const seconds = ctx.limits.analysis_timeout_seconds;
+        let elapsed = 'elapsed.total';
+        if (key === 'running') elapsed = 'elapsed.running';
+        else if (key === 'queued') elapsed = 'elapsed.queued';
+        const request = [text('request.body')];
+        if (Object.keys((run.request || {})['detection'] || {}).length) request.push(text('request.tuned'));
+        const steps = [
+            guideStep('head', ['run.head', 'run.headline'], {
+                title: text('head.' + key + '.title'),
+                body: [text('head.' + key + '.body', {hours: ctx.limits.report_retention_hours})]
+            }, text),
+            guideStep('log', ['run.log'], {body: live ? [text('log.body'), text('log.live')] : [text('log.body')]}, text),
+            guideStep('elapsed', ['run.elapsed'], {body: [text(elapsed, {seconds: seconds})]}, text),
+            guideStep('request', ['run.request'], {body: request}, text)
+        ];
+        if (!live) steps.push(runOutcomeStep(ctx, key, text));
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * What the outcome panel says for a run that is over. A link is promised only while it lives.
+     * @param {{run: import('../types').Analysis, now: number}} ctx
+     * @param {string} key the run's PSL.statusKey
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function runOutcomeStep(ctx, key, text) {
+        const run = ctx.run;
+        const body = [text('outcome.' + key + '.body')];
+        if (key === 'succeeded') {
+            if (run.expires_at_ms && run.expires_at_ms > ctx.now) {
+                body.push(text('outcome.succeeded.open', {duration: durPrecise(run.expires_at_ms - ctx.now)}));
+            }
+            if (hasItems(/** @type {unknown[]} */ ((run.result || {})['warnings']))) body.push(text('outcome.succeeded.caveats'));
+        }
+        return guideStep('outcome', ['run.outcome'], {title: text('outcome.' + key + '.title'), body}, text);
+    }
+
+    /**
+     * Which `report.gone.<view>` notice a report link shows for a run in this state.
+     * @param {string} key the run's PSL.statusKey
+     * @returns {string}
+     */
+    function reportGoneView(key) {
+        return ['queued', 'running', 'failed', 'interrupted', 'expired'].indexOf(key) >= 0 ? key : 'other';
+    }
+
+    /**
+     * The steps of the guide over a report. It stops at the frame: the document inside is the engine's.
+     * A frame that finds its report deleted gives way, in place, to the expired notice, so a shown report
+     * also carries that notice's step, which the controller drops while the frame stands.
+     * @param {{run: import('../types').Analysis}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function reportSteps(ctx) {
+        const text = screenText('report');
+        const key = statusKey(ctx.run);
+        const shown = key === 'succeeded' || key === 'empty';
+        const steps = [guideStep('bar', ['report.bar'], undefined, text)];
+        if (shown) {
+            steps.push(guideStep('frame', ['report.frame'], {
+                body: key === 'empty' ? [text('frame.body'), text('frame.empty')] : [text('frame.body')]
+            }, text));
+        }
+        steps.push(
+            guideStep('gone', ['report.gone'], {
+                title: t('report.gone.' + reportGoneView(shown ? 'expired' : key) + '.title'),
+                body: [text(key === 'queued' || key === 'running' ? 'gone.pending' : 'gone.finished')]
+            }, text),
+            guideStep('end', [], undefined, text));
+        return steps;
     }
 
     /**
@@ -4723,6 +4969,12 @@
         incompleteText,
         recapCount,
         guideIdFor,
+        rangeNotes,
+        newSteps,
+        recentSteps,
+        runSteps,
+        reportGoneView,
+        reportSteps,
         recapPilotageSteps,
         recapTechSteps,
         RECAP_FIRST_PAGE,

@@ -3464,3 +3464,263 @@ test("technical text has no em dash, and French addresses the reader as vous", (
         }
     });
 });
+
+// ---- the guides of the analysis screens: New, Recent, one run and its report
+
+const GUIDE_LIMITS = {
+    max_traces_cap: 2000, analysis_timeout_seconds: 300, report_retention_hours: 72, max_traces_embedded: 50,
+    max_read_limit: 1000, fetch_concurrency_warn: 16, fetch_concurrency_max: 64, fetch_concurrency_supported: true,
+    engine_memory_limit_mib: 0
+};
+const HOUR_MS = 3600000;
+
+/** What the New screen's source reads off `state`, a Tempo source on a service run by default. */
+const newCtx = (over) => Object.assign({
+    sources: 3, runnable: 3, windowHandoff: false, traceHandoff: false, daemon: false, skewPill: false,
+    mode: "service", rangeMode: "relative", spanMs: HOUR_MS, retentionHours: 168, maxTraces: 100, weighed: false,
+    fetchBand: "ok", queue: 0, limits: GUIDE_LIMITS, blocker: null, unreachable: false, skewBehind: false, command: true
+}, over);
+const newBy = (over) => Object.fromEntries(PSL.newSteps(newCtx(over)).map((step) => [step.id, step]));
+
+const guideRun = (over) => Object.assign({
+    id: "0000000000000001", status: "succeeded", source_id: "tempo-eu", source_name: "Tempo EU", kind: "tempo",
+    request: {service: "order-svc", lookback: "1h", max_traces: 100}, error_code: null, producer_version: "0.43.2",
+    created_at_ms: 1000, started_at_ms: 2000, finished_at_ms: 9000, expires_at_ms: 1000 + 72 * HOUR_MS,
+    result: {findings: 3, critical: 0, warning: 3, info: 0, traces_analyzed: 100, quality_gate_passed: true, warnings: []}
+}, over);
+const runBy = (over, now = 5000) =>
+    Object.fromEntries(PSL.runSteps({run: guideRun(over), now, limits: GUIDE_LIMITS}).map((step) => [step.id, step]));
+const reportBy = (over) => Object.fromEntries(PSL.reportSteps({run: guideRun(over)}).map((step) => [step.id, step]));
+const recentBy = (first) =>
+    Object.fromEntries(PSL.recentSteps({hours: 72, first}).map((step) => [step.id, step]));
+
+const ANALYSIS_SAYS = {
+    fr: {
+        noSource: "aucune source configurée", noGrant: "Aucune autorisation", window: "d'où vient la fenêtre",
+        trace: "« Utiliser l'autre trace »", daemon: "choisissez un backend", missing: "analyses.run",
+        skewPill: "« de retard »", traceMode: "Un identifiant désigne", absolute: "Elle est absolue",
+        relative: "Elle est relative", timeout: "300 secondes", retention: "Elle dépasse ce que la source",
+        undeclared: "Personne n'a déclaré", heavy: "« Lourd »", ceiling: "« Au plafond »", over: "plafond strict de 2000",
+        invalid: "au moins une trace", weighed: "mesuré, pas prédit", fetchLimits: "au plus 16 lectures",
+        fetchMax: "pas plus de 64", fetchOver: "cocher la case de l'alerte", fetchBlocked: "rien ne permet de lancer",
+        retentionHours: "Passé 72 h", queueOne: "derrière 1 tâche.", queueMany: "derrière 3 tâches.",
+        ready: "redit ce que l'analyse va faire", blocked: "dit pourquoi : ", unreachable: "Cette source ne répond pas",
+        skew: "Le bloc au-dessus nomme l'écart", intro: "supprimés 72 heures", emptyList: "après 72 heures",
+        thresholds: "« Seuils »", error: "« Erreur »", logLive: "pas un flux", elapsedRunning: "La barre mesure",
+        elapsedQueued: "démarre quand un worker", elapsedTotal: "Le temps total", tuned: "couleur d'avertissement",
+        expires: "Le lien expire dans", caveats: "en anglais", frameEmpty: "Un rapport vide est attendu",
+        pending: "pas encore prêt", finished: "« La relancer avec les mêmes paramètres »", expiredHours: "vivent 72 heures"
+    },
+    en: {
+        noSource: "no configured source", noGrant: "No grant", window: "where the window comes from",
+        trace: "\"Use the other trace\"", daemon: "pick a trace backend", missing: "analyses.run",
+        skewPill: "\"behind\"", traceMode: "An ID names", absolute: "It is absolute", relative: "It is relative",
+        timeout: "300 seconds", retention: "It goes past what the source", undeclared: "Nobody declared",
+        heavy: "\"Heavy\"", ceiling: "\"At the ceiling\"", over: "hard cap of 2000", invalid: "at least one trace",
+        weighed: "measured, not predicted", fetchLimits: "at most 16 reads", fetchMax: "no more than 64",
+        fetchOver: "tick the alert's box", fetchBlocked: "nothing lets you run", retentionHours: "After 72 h",
+        queueOne: "behind 1 job.", queueMany: "behind 3 jobs.", ready: "restates what the analysis will do",
+        blocked: "says why: ", unreachable: "This source is not answering", skew: "The block above names the gap",
+        intro: "deleted 72 hours", emptyList: "after 72 hours", thresholds: "\"Thresholds\"", error: "\"Error\"",
+        logLive: "not a stream", elapsedRunning: "The bar measures", elapsedQueued: "starts when a worker",
+        elapsedTotal: "The total time", tuned: "warning colour", expires: "The link expires in", caveats: "in English",
+        frameEmpty: "An empty report is expected", pending: "not ready yet",
+        finished: "\"Run it again with the same parameters\"", expiredHours: "live 72 hours"
+    }
+};
+const analysisTest = (name, body) => guideTest(name, body, ANALYSIS_SAYS);
+
+test("each analysis screen has its own guide, and the others none yet", () => {
+    for (const screen of ["new", "recent", "run", "report"]) assert.equal(PSL.guideIdFor(screen, null), screen);
+    assert.equal(PSL.guideIdFor("recap", "tech"), "recap.tech");
+    for (const screen of ["sources", "ack", "missing", "access"]) assert.equal(PSL.guideIdFor(screen, null), null);
+});
+
+test("a window's consequences keep the screen's thresholds", () => {
+    const DAY = 24 * HOUR_MS;
+    assert.deepEqual(PSL.rangeNotes(DAY, 168), []);
+    assert.deepEqual(PSL.rangeNotes(DAY + 1, 168), ["wide"]);
+    assert.deepEqual(PSL.rangeNotes(7 * DAY + 1, 168), ["wide", "timeout", "retention"]);
+    assert.deepEqual(PSL.rangeNotes(2 * HOUR_MS, 1), ["retention"]);
+    assert.deepEqual(PSL.rangeNotes(DAY + 1, null), ["wide", "undeclared"]);
+    assert.deepEqual(PSL.rangeNotes(DAY, null), []);
+});
+
+test("the New steps come in the screen's order, each on its anchors", () => {
+    const list = PSL.newSteps(newCtx({windowHandoff: true}));
+    assert.deepEqual(list.map((step) => [step.id, step.anchors]), [
+        ["empty", ["new.empty"]], ["handoff", ["new.handoff"]], ["source", ["new.source"]], ["daemon", ["new.daemon"]],
+        ["mode", ["new.mode"]], ["range", ["new.range"]], ["traces", ["new.traces"]], ["fetch", ["new.fetch"]],
+        ["cost", ["new.cost"]], ["advanced", ["new.advanced"]], ["submit", ["new.submit"]],
+        ["terminal", ["new.terminal"]], ["end", []]]);
+    assert.ok(list.every((step) => step.title && step.body.length && !step.marks));
+});
+
+test("no handoff drops its step, no command drops the terminal", () => {
+    const ids = PSL.newSteps(newCtx({command: false})).map((step) => step.id);
+    assert.ok(!ids.includes("handoff") && !ids.includes("terminal"));
+});
+
+analysisTest("an empty New screen says whether no source exists or none is yours", (says) => {
+    assert.ok(text(newBy({sources: 0, runnable: 0}).empty).includes(says.noSource));
+    assert.ok(text(newBy({sources: 2, runnable: 0}).empty).includes(says.noGrant));
+});
+
+analysisTest("a handoff says where it comes from, and a daemon that cannot take it", (says) => {
+    const window = text(newBy({windowHandoff: true}).handoff);
+    assert.ok(window.includes(says.window) && !window.includes(says.trace) && !window.includes(says.daemon));
+    const trace = text(newBy({traceHandoff: true, daemon: true}).handoff);
+    assert.ok(trace.includes(says.trace) && trace.includes(says.daemon) && !trace.includes(says.window));
+});
+
+analysisTest("the source step counts the sources left out and the version pills only when there are some", (says) => {
+    const plain = text(newBy().source);
+    assert.ok(!plain.includes(says.missing) && !plain.includes(says.skewPill));
+    assert.ok(text(newBy({runnable: 2}).source).includes(says.missing));
+    assert.ok(text(newBy({skewPill: true}).source).includes(says.skewPill));
+});
+
+analysisTest("a trace ID run says the window and the cap do not apply", (says) => {
+    assert.ok(!text(newBy().mode).includes(says.traceMode));
+    assert.ok(text(newBy({mode: "trace"}).mode).includes(says.traceMode));
+});
+
+analysisTest("the range says its mode and the consequences the screen lists under it", (says) => {
+    const short = text(newBy().range);
+    assert.ok(short.includes(says.relative) && !short.includes(says.absolute));
+    for (const phrase of [says.timeout, says.retention, says.undeclared]) assert.ok(!short.includes(phrase), phrase);
+    assert.ok(text(newBy({rangeMode: "absolute"}).range).includes(says.absolute));
+    const long = text(newBy({spanMs: 8 * 24 * HOUR_MS}).range);
+    assert.ok(long.includes(says.timeout) && long.includes(says.retention) && long.includes(PSL.dur(168 * HOUR_MS)));
+    assert.ok(text(newBy({spanMs: 2 * 24 * HOUR_MS, retentionHours: null}).range).includes(says.undeclared));
+});
+
+analysisTest("the trace count reads its band, and the history only when there is one", (says) => {
+    const safe = text(newBy().traces);
+    for (const phrase of [says.heavy, says.ceiling, says.over, says.invalid, says.weighed]) assert.ok(!safe.includes(phrase), phrase);
+    assert.ok(text(newBy({maxTraces: 800}).traces).includes(says.heavy));
+    assert.ok(text(newBy({maxTraces: 1500}).traces).includes(says.ceiling));
+    assert.ok(text(newBy({maxTraces: 2500}).traces).includes(says.over));
+    assert.ok(text(newBy({maxTraces: 0}).traces).includes(says.invalid));
+    assert.ok(text(newBy({weighed: true}).traces).includes(says.weighed));
+});
+
+analysisTest("the reads step gives the Hub's limits and what its alert asks", (says) => {
+    const ok = text(newBy().fetch);
+    assert.ok(ok.includes(says.fetchLimits) && ok.includes(says.fetchMax));
+    assert.ok(!ok.includes(says.fetchOver) && !ok.includes(says.fetchBlocked));
+    assert.ok(text(newBy({fetchBand: "over"}).fetch).includes(says.fetchOver));
+    assert.ok(text(newBy({fetchBand: "blocked"}).fetch).includes(says.fetchBlocked));
+});
+
+analysisTest("the cost step gives the retention and the queue ahead, singular and plural", (says) => {
+    const none = text(newBy().cost);
+    assert.ok(none.includes(says.retentionHours) && !none.includes(says.queueOne) && !none.includes(says.queueMany));
+    assert.ok(text(newBy({queue: 1}).cost).includes(says.queueOne));
+    assert.ok(text(newBy({queue: 3}).cost).includes(says.queueMany));
+});
+
+analysisTest("the submit step says what blocks it, an unreachable source and an engine behind", (says) => {
+    const ready = text(newBy().submit);
+    assert.ok(ready.includes(says.ready) && !ready.includes(says.blocked));
+    assert.ok(!ready.includes(says.unreachable) && !ready.includes(says.skew));
+    const blocked = text(newBy({blocker: "Pick a service.", unreachable: true, skewBehind: true}).submit);
+    assert.ok(blocked.includes(says.blocked + "Pick a service.") && !blocked.includes(says.ready));
+    assert.ok(blocked.includes(says.unreachable) && blocked.includes(says.skew));
+});
+
+test("the Recent steps come in the screen's order, and no run drops the card", () => {
+    assert.deepEqual(PSL.recentSteps({hours: 72, first: guideRun()}).map((step) => [step.id, step.anchors]), [
+        ["intro", ["recent.sub"]], ["empty", ["recent.empty"]], ["binaries", ["recent.binaries"]],
+        ["tuned", ["recent.tuned"]], ["card", ["recent.card"]], ["end", []]]);
+    assert.ok(!PSL.recentSteps({hours: 72, first: null}).some((step) => step.id === "card"));
+});
+
+analysisTest("Recent gives the retention, and the card its thresholds and its error when it has them", (says) => {
+    const steps = recentBy(guideRun());
+    assert.ok(text(steps.intro).includes(says.intro) && text(steps.empty).includes(says.emptyList));
+    assert.ok(!text(steps.card).includes(says.thresholds) && !text(steps.card).includes(says.error));
+    assert.ok(text(recentBy(guideRun({request: {service: "x", detection: {n_plus_one_threshold: 9}}})).card)
+        .includes(says.thresholds));
+    assert.ok(text(recentBy(guideRun({status: "failed", error_code: "timeout"})).card).includes(says.error));
+});
+
+test("the run steps come in the screen's order, the outcome only once the run is over", () => {
+    assert.deepEqual(PSL.runSteps({run: guideRun(), now: 5000, limits: GUIDE_LIMITS}).map((step) => [step.id, step.anchors]), [
+        ["head", ["run.head", "run.headline"]], ["log", ["run.log"]], ["elapsed", ["run.elapsed"]],
+        ["request", ["run.request"]], ["outcome", ["run.outcome"]], ["end", []]]);
+    for (const status of ["pending", "running"]) assert.ok(!("outcome" in runBy({status})), status);
+});
+
+analysisTest("the head and the outcome name the run's state", () => {
+    const states = {
+        queued: {status: "pending"}, running: {status: "running"}, succeeded: {}, empty: {result: {empty: true}},
+        failed: {status: "failed", error_code: "timeout"}, interrupted: {status: "interrupted"}, expired: {status: "expired"}
+    };
+    for (const [key, over] of Object.entries(states)) {
+        const steps = runBy(over);
+        assert.equal(steps.head.title, PSL.t("guide.run.head." + key + ".title"), key);
+        assert.ok(steps.head.body[0] && !steps.head.body[0].includes("{"), key);
+        if (steps.outcome) assert.equal(steps.outcome.title, PSL.t("guide.run.outcome." + key + ".title"), key);
+    }
+});
+
+analysisTest("the run's log, elapsed time, request and outcome read what the run holds", (says) => {
+    assert.ok(text(runBy({status: "running"}).log).includes(says.logLive));
+    assert.ok(!text(runBy().log).includes(says.logLive));
+    assert.ok(text(runBy({status: "running"}).elapsed).includes(says.elapsedRunning));
+    assert.ok(text(runBy({status: "pending"}).elapsed).includes(says.elapsedQueued));
+    assert.ok(text(runBy().elapsed).includes(says.elapsedTotal));
+    assert.ok(text(runBy({status: "running"}).elapsed).includes("300"));
+    assert.ok(!text(runBy().request).includes(says.tuned));
+    assert.ok(text(runBy({request: {service: "x", detection: {slow_ms: 9}}}).request).includes(says.tuned));
+    assert.ok(text(runBy({status: "expired"}).head).includes(says.expiredHours));
+    const outcome = text(runBy().outcome);
+    assert.ok(outcome.includes(says.expires + " " + PSL.durPrecise(72 * HOUR_MS - 4000)) && !outcome.includes(says.caveats));
+    assert.ok(text(runBy({result: {warnings: [{kind: "sampling", message: "x"}]}}).outcome).includes(says.caveats));
+    // Past its expiry no link is promised.
+    assert.ok(!text(runBy({}, 1000 + 73 * HOUR_MS).outcome).includes(says.expires));
+});
+
+analysisTest("the report shows its frame, or says why there is none", (says) => {
+    const shown = reportBy();
+    assert.deepEqual(Object.keys(shown), ["bar", "frame", "gone", "end"]);
+    assert.deepEqual(shown.frame.anchors, ["report.frame"]);
+    assert.ok(!text(shown.frame).includes(says.frameEmpty));
+    assert.ok(text(reportBy({result: {empty: true}}).frame).includes(says.frameEmpty));
+    // A report deleted under a run that still reads succeeded is replaced in place by the expired notice.
+    assert.equal(shown.gone.title, PSL.t("report.gone.expired.title"));
+    for (const [over, view, phrase] of [[{status: "running"}, "running", says.pending], [{status: "pending"}, "queued", says.pending],
+        [{status: "failed"}, "failed", says.finished], [{status: "expired"}, "expired", says.finished]]) {
+        const steps = reportBy(over);
+        assert.ok(!("frame" in steps), view);
+        assert.equal(steps.gone.title, PSL.t("report.gone." + view + ".title"), view);
+        assert.ok(text(steps.gone).includes(phrase), view);
+    }
+});
+
+test("the analysis guides have no em dash, and French addresses the reader as vous", () => {
+    const news = [newCtx({windowHandoff: true, traceHandoff: true, daemon: true, runnable: 2, skewPill: true,
+        mode: "trace", spanMs: 8 * 24 * HOUR_MS, weighed: true, fetchBand: "over", queue: 2, blocker: "x.",
+        unreachable: true, skewBehind: true}), newCtx({sources: 0, runnable: 0, retentionHours: null, spanMs: 2 * 24 * HOUR_MS,
+        maxTraces: 1500, fetchBand: "blocked", rangeMode: "absolute"}), newCtx({maxTraces: 800}), newCtx({maxTraces: 2500}),
+        newCtx({maxTraces: 0, runnable: 0})];
+    const runs = [{}, {status: "pending"}, {status: "running"}, {result: {empty: true}}, {status: "failed"},
+        {status: "interrupted"}, {status: "expired"}, {result: {warnings: [{kind: "k", message: "m"}]}}];
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = [
+            ...news.flatMap((ctx) => PSL.newSteps(ctx)),
+            ...PSL.recentSteps({hours: 72, first: guideRun({status: "failed", error_code: "timeout",
+                request: {detection: {a: 1}}})}),
+            ...runs.flatMap((over) => PSL.runSteps({run: guideRun(over), now: 5000, limits: GUIDE_LIMITS})),
+            ...runs.flatMap((over) => PSL.reportSteps({run: guideRun(over)}))
+        ].map(text).join("\n");
+        assert.ok(all.length > 6000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        assert.doesNotMatch(all, /guide\.(new|recent|run|report)\./, "every key has a text");
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});

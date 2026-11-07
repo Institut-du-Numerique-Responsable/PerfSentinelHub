@@ -1156,12 +1156,80 @@
     }
 
     /**
+     * What the New guide reads: the form as it stands, and what the screen would say about it.
+     * @returns {import('../types').GuideSource}
+     */
+    function newGuideSource() {
+        if (state.loading) return {status: 'wait', steps: []};
+        if (state.sourcesError) return {status: 'failed', steps: []};
+        if (!state.status) return {status: 'wait', steps: []};
+        const source = selectedSource();
+        const skew = source && PSL.skew(source.producer_version);
+        const band = fetchBandNow();
+        return {
+            status: 'ready', steps: PSL.newSteps({
+                sources: (state.sources || []).length,
+                runnable: runSources().length,
+                windowHandoff: Boolean(state.handoff),
+                traceHandoff: Boolean(state.traceHandoff),
+                daemon: Boolean(source && source.kind === 'daemon'),
+                skewPill: runSources().some(function (row) {
+                    return Boolean(PSL.skew(row.producer_version));
+                }),
+                mode: state.form.mode,
+                rangeMode: state.form.rangeMode,
+                spanMs: windowSpanMs(),
+                retentionHours: source ? source.retention_hours : null,
+                maxTraces: state.form.maxTraces,
+                weighed: Boolean(weightHistory()),
+                fetchBand: band ? band.key : null,
+                queue: state.status.queue_depth,
+                limits: state.status.limits,
+                blocker: submitBlocker(),
+                unreachable: Boolean(source && !source.reachable),
+                skewBehind: Boolean(skew && skew.dir === 'behind'),
+                command: Boolean(source && PSL.analysisCommand(source, buildRequest(source), state.shell))
+            })
+        };
+    }
+
+    /**
+     * What the Recent guide reads: the list, once it has loaded.
+     * @returns {import('../types').GuideSource}
+     */
+    function recentGuideSource() {
+        if (!state.runs || !state.status) return {status: 'wait', steps: []};
+        return {
+            status: 'ready',
+            steps: PSL.recentSteps({hours: state.status.limits.report_retention_hours, first: state.runs[0] || null})
+        };
+    }
+
+    /**
+     * The source of the run guide or the report guide: both read the run the route names.
+     * @param {(ctx: {run: Run, now: number, limits: import('../types').StatusLimits}) => import('../types').GuideStep[]} steps
+     * @returns {() => import('../types').GuideSource}
+     */
+    function runGuideSource(steps) {
+        return function () {
+            const id = currentRunId();
+            if (state.runError === id) return {status: 'failed', steps: []};
+            if (!state.run || state.run.id !== id || !state.status) return {status: 'wait', steps: []};
+            return {status: 'ready', steps: steps({run: state.run, now: Date.now(), limits: state.status.limits})};
+        };
+    }
+
+    /**
      * The source of steps of each guide, by its PSL.guideIdFor id.
      * @type {Record<string, () => import('../types').GuideSource>}
      */
     const GUIDE_SOURCES = {
         'recap.pilotage': recapGuideSource,
-        'recap.tech': recapGuideSource
+        'recap.tech': recapGuideSource,
+        'new': newGuideSource,
+        'recent': recentGuideSource,
+        'run': runGuideSource(PSL.runSteps),
+        'report': runGuideSource(PSL.reportSteps)
     };
 
     function initGuide() {
@@ -3210,11 +3278,11 @@
             return section;
         }
         if (!state.sources || state.sources.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state', text: t('new.no_source')}));
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'new.empty', text: t('new.no_source')}));
             return section;
         }
         if (runSources().length === 0) {
-            section.appendChild(el('div', {class: 'empty-state', text: t('new.no_grant')}));
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'new.empty', text: t('new.no_grant')}));
             return section;
         }
 
@@ -3243,7 +3311,7 @@
         // No build queued here: submitRow's updateSubmit runs after the same
         // render and builds the panels, so a second build would be thrown away.
         state.terminalSig = null;
-        return el('div', {id: 'terminal-panels', class: 'terminal-stack'});
+        return el('div', {id: 'terminal-panels', class: 'terminal-stack', 'data-guide': 'new.terminal'});
     }
 
     /**
@@ -3370,7 +3438,7 @@
         const origin = handoff.pairKey
             ? t('new.handoff.episode', {name: name})
             : t('new.handoff.incident', {kind: kind || t('new.handoff.incident_kind'), name: name});
-        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info'}, [
+        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info', 'data-guide': 'new.handoff'}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el('div', {
                 text: t('new.handoff.window', {origin: origin, span: span})
@@ -3401,7 +3469,7 @@
                 render();
             });
         }
-        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info'}, [
+        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info', 'data-guide': 'new.handoff'}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el('div', {}, [
                 el('p', {
@@ -3415,7 +3483,7 @@
     }
 
     function sourcePanel() {
-        return el('div', {class: 'card source-panel'}, [
+        return el('div', {class: 'card source-panel', 'data-guide': 'new.source'}, [
             el('div', {class: 'panel-head'}, [
                 el('h2', {class: 'overline', text: t('new.source.head')}),
                 el('span', {
@@ -3538,7 +3606,7 @@
     }
 
     function daemonNotice() {
-        return el('div', {class: 'notice'}, [
+        return el('div', {class: 'notice', 'data-guide': 'new.daemon'}, [
             svg([['circle', {cx: '12', cy: '12', r: '9'}], ['path', {d: 'M12 11v5M12 8.2v.2'}]], 16),
             el('div', {}, [
                 el('p', {text: t('new.daemon.none')}),
@@ -3597,7 +3665,9 @@
             });
             group.appendChild(button);
         });
-        return field(t('new.mode.field'), radioKeys(group, 'mode'), t('new.mode.gloss'));
+        const row = field(t('new.mode.field'), radioKeys(group, 'mode'), t('new.mode.gloss'));
+        row.setAttribute('data-guide', 'new.mode');
+        return row;
     }
 
     function serviceInput() {
@@ -3727,7 +3797,7 @@
             button,
             el('span', {class: 'range-wire', text: rangeWire()})
         ]);
-        const wrap = el('div', {class: 'range'}, [row]);
+        const wrap = el('div', {class: 'range', 'data-guide': 'new.range'}, [row]);
         button.addEventListener('click', function () {
             if (state.form.pickerOpen) {
                 closePicker();
@@ -3752,21 +3822,13 @@
      * @param {Source} source
      */
     function rangeConsequences(source) {
-        const notes = [];
-        const spanMs = windowSpanMs();
-        if (spanMs > 86400000) {
-            notes.push(consequence(t('new.range.wide')));
-        }
-        if (spanMs > 7 * 86400000) {
-            notes.push(consequence(t('new.range.timeout', {seconds: state.status.limits.analysis_timeout_seconds})));
-        }
-        if (source.retention_hours != null && spanMs > source.retention_hours * 3600000) {
-            notes.push(consequence(t('new.range.retention', {duration: PSL.dur(source.retention_hours * 3600000)}),
-                'warn'));
-        } else if (source.retention_hours == null && spanMs > 86400000) {
-            notes.push(consequence(t('new.range.undeclared')));
-        }
-        return notes;
+        // The thresholds are PSL.rangeNotes', which the guide reads too.
+        return PSL.rangeNotes(windowSpanMs(), source.retention_hours).map(function (note) {
+            if (note === 'retention') {
+                return consequence(t('new.range.retention', {duration: PSL.dur(source.retention_hours * 3600000)}), 'warn');
+            }
+            return consequence(t('new.range.' + note, {seconds: state.status.limits.analysis_timeout_seconds}));
+        });
     }
 
     /**
@@ -3977,7 +4039,7 @@
                 return segment;
             }));
 
-        const block = el('div', {class: 'field'}, [
+        const block = el('div', {class: 'field', 'data-guide': 'new.traces'}, [
             // A div and not a label: the "?" is a button, which a label may not
             // contain, and the real binding is the `for` on the name beside it.
             el('div', {class: 'field-label'}, [
@@ -4061,7 +4123,7 @@
         }).join(' ');
         const scale = el('div', {class: 'band-scale'}, [el('span', {class: 'band-scale-start', text: '1'}), grid]);
 
-        const block = el('div', {class: 'field'}, [
+        const block = el('div', {class: 'field', 'data-guide': 'new.fetch'}, [
             el('div', {class: 'field-label'}, [
                 el('label', {for: 'fetch-number', text: t('new.fetch.label')}),
                 el('span', {class: 'field-gloss', text: t('new.fetch.gloss')})
@@ -4446,7 +4508,7 @@
                 t('new.cost.workers_note')],
             [String(limits.report_retention_hours), t('unit.h'), t('new.cost.retention'), t('new.cost.retention_note')]
         ];
-        return el('section', {class: 'card cost'}, [
+        return el('section', {class: 'card cost', 'data-guide': 'new.cost'}, [
             el('div', {class: 'cost-head'}, [
                 el('h2', {class: 'overline', text: t('new.cost.head')}),
                 el('span', {class: 'cost-sub', text: t('new.cost.sub')})
@@ -4536,7 +4598,7 @@
             el('span', {text: t('new.submit.button')})
         ]);
         button.addEventListener('click', submit);
-        const row = el('div', {class: 'submit-row'}, [
+        const row = el('div', {class: 'submit-row', 'data-guide': 'new.submit'}, [
             button,
             el('p', {class: 'submit-sentence', id: 'submit-sentence'})
         ]);
@@ -4640,11 +4702,11 @@
 
         const key = PSL.statusKey(run);
         const view = runView(run, key);
-        section.appendChild(el('div', {class: 'run-head'}, [
+        section.appendChild(el('div', {class: 'run-head', 'data-guide': 'run.head'}, [
             el('span', {class: 'status-pill', 'data-status': key, text: t('status.' + key)}),
             el('span', {class: 'run-id', text: run.id})
         ]));
-        section.appendChild(el('h1', {class: 'page-title', text: view.headline}));
+        section.appendChild(el('h1', {class: 'page-title', 'data-guide': 'run.headline', text: view.headline}));
         const sub = typeof view.sub === 'function' ? view.sub : null;
         section.appendChild(live(el('p', {class: 'page-sub', text: sub ? sub() : view.sub}), sub));
 
@@ -4797,7 +4859,7 @@
             rows.push(logRow(run.expires_at_ms, t('run.log.deleted'), t('run.log.deleted_detail'), 'muted'));
         }
 
-        return el('section', {class: 'card log-card', 'aria-label': t('run.log.label')}, [
+        return el('section', {class: 'card log-card', 'aria-label': t('run.log.label'), 'data-guide': 'run.log'}, [
             el('div', {class: 'log-head'}, [
                 el('h2', {class: 'overline', text: t('run.log.head')}),
                 el('span', {class: 'log-head-note', text: t('run.log.note')})
@@ -4850,7 +4912,7 @@
             ]));
         });
 
-        const elapsed = el('section', {class: 'card rail-card'}, [
+        const elapsed = el('section', {class: 'card rail-card', 'data-guide': 'run.elapsed'}, [
             el('h2', {class: 'overline overline-p', text: t('run.elapsed')}),
             figure
         ]);
@@ -4917,7 +4979,7 @@
                 return expiryText(run);
             }]);
 
-        return el('section', {class: 'request'}, [
+        return el('section', {class: 'request', 'data-guide': 'run.request'}, [
             el('h2', {class: 'overline overline-p', text: t('run.request')}),
             el('div', {class: 'request-grid'}, facts.map(function (fact) {
                 return el('div', {class: 'fact-card'}, [
@@ -4951,7 +5013,7 @@
     function outcomePanel(run, key) {
         if (key === 'running' || key === 'queued') return null;
         const spec = outcomeSpec(run, key);
-        const panel = el('section', {class: 'outcome', 'data-tone': spec.tone}, [
+        const panel = el('section', {class: 'outcome', 'data-tone': spec.tone, 'data-guide': 'run.outcome'}, [
             el('h2', {class: 'overline overline-p', text: '// ' + spec.title}),
             proseInto(el('p', {class: 'outcome-body'}), spec.body)
         ]);
@@ -5323,7 +5385,7 @@
             body.appendChild(detectionRow(knob));
         });
 
-        const panel = el('details', {class: 'advanced'}, [summary, body]);
+        const panel = el('details', {class: 'advanced', 'data-guide': 'new.advanced'}, [summary, body]);
         // Open because the reader left it open, or because a threshold in it is
         // set and hiding that would hide what the run is about to do.
         panel.open = state.panelOpen.advanced === true || detectionCount() > 0;
@@ -11801,7 +11863,10 @@
         const section = el('section', {}, [
             ruledOverline(t('recent.overline')),
             el('h1', {class: 'page-title', text: t('recent.title')}),
-            el('p', {class: 'page-sub', text: t('recent.sub', {hours: state.status.limits.report_retention_hours})})
+            el('p', {
+                class: 'page-sub', 'data-guide': 'recent.sub',
+                text: t('recent.sub', {hours: state.status.limits.report_retention_hours})
+            })
         ]);
 
         if (!state.runs) {
@@ -11809,7 +11874,7 @@
             return section;
         }
         if (state.runs.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'recent.empty'}, [
                 el('p', {
                     class: 'empty-title',
                     text: t('recent.empty.title', {hours: state.status.limits.report_retention_hours})
@@ -11827,7 +11892,7 @@
                 return run.producer_version;
             }).filter(Boolean))).sort(PSL.vcmp);
         if (binaries.length > 1) {
-            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn'}, [
+            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn', 'data-guide': 'recent.binaries'}, [
                 svg([['path', {d: 'M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'}],
                     ['path', {d: 'M12 9v4M12 17h.01'}]], 16),
                 el('p', {
@@ -11843,7 +11908,7 @@
             return Object.keys((run.request || {}).detection || {}).length > 0;
         });
         if (tuned.length > 0 && tuned.length < state.runs.length) {
-            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn'}, [
+            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn', 'data-guide': 'recent.tuned'}, [
                 warningGlyph(16),
                 el('p', {text: t('recent.tuned.' + PSL.plural(tuned.length), {count: tuned.length})})
             ]));
@@ -11855,10 +11920,13 @@
 
     /**
      * @param {Run} run
+     * @param {number} index its place in the list: the first is the one the guide reads
      */
-    function runCard(run) {
+    function runCard(run, index) {
         const key = PSL.statusKey(run);
-        const card = el('a', {class: 'run-card', 'data-status': key, href: '#/run/' + run.id});
+        const card = el('a', {
+            class: 'run-card', 'data-status': key, href: '#/run/' + run.id, 'data-guide': index === 0 ? 'recent.card' : null
+        });
 
         card.appendChild(el('span', {class: 'run-card-line'}, [
             el('span', {
@@ -11999,6 +12067,7 @@
         }
         const frame = el('iframe', {
             class: 'report-frame',
+            'data-guide': 'report.frame',
             src: '/reports/' + id + '.html',
             title: t('report.frame_title')
         });
@@ -12025,7 +12094,7 @@
                 return reportLifetime(id);
             });
         // Without a run, the page under the bar carries the ways out, so the bar does not repeat one.
-        return el('div', {class: 'report-bar'}, [
+        return el('div', {class: 'report-bar', 'data-guide': 'report.bar'}, [
             run ? el('a', {class: 'pill-button', href: '#/run/' + id}, [
                 svg([['path', {d: 'M14 6l-6 6 6 6'}]], 14),
                 el('span', {text: t('report.back')})
@@ -12042,9 +12111,9 @@
      * @param {string} key
      */
     function reportGone(run, key) {
-        const view = ['queued', 'running', 'failed', 'interrupted', 'expired'].indexOf(key) >= 0 ? key : 'other';
+        const view = PSL.reportGoneView(key);
         const finished = key !== 'queued' && key !== 'running';
-        return el('div', {class: 'gone report-gone'}, [
+        return el('div', {class: 'gone report-gone', 'data-guide': 'report.gone'}, [
             el('h1', {class: 'page-title', text: t('report.gone.' + view + '.title')}),
             el('p', {class: 'page-sub', text: t('report.gone.' + view + '.body', {name: run.source_name})}),
             el('div', {class: 'outcome-actions'}, [

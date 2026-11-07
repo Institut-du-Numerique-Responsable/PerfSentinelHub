@@ -1,4 +1,5 @@
 import {expect, Page, Request, Route, test} from "@playwright/test";
+import {state} from "./capture";
 
 // The pilotage guide walked on the real recap of the demo Hub. Assertions, not captures: nothing
 // here writes to docs/img, and `npm run demo` does not run it (see README).
@@ -471,4 +472,111 @@ test("a fix folded between two openings of the guide is skipped the second time"
     });
     expect(titles).toContain("Take an action");
     expect(titles).not.toContain("How to fix");
+});
+
+// ---- the analysis screens: New, Recent, one run and its report
+
+/** The guide opened once the screen has drawn `ready`. */
+async function openHere(page: Page, ready: string): Promise<void> {
+    await expect(page.locator(ready).first()).toBeVisible({timeout: 60_000});
+    await page.locator("#guide-open").click();
+    await expect(card(page)).toBeVisible();
+}
+
+async function openOn(page: Page, route: string, ready: string): Promise<void> {
+    await page.goto(route);
+    await openHere(page, ready);
+}
+
+/** Every title of the walk, from the first card to the last, then Close. */
+async function walkTitles(page: Page): Promise<string[]> {
+    const total = await totalSteps(page);
+    const titles: string[] = [];
+    await eachStep(page, async (index) => {
+        titles.push(await title(page).textContent() ?? "");
+        await expect(next(page)).toHaveText(index === total - 1 ? "Close" : "Next");
+    });
+    await next(page).click();
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await expect(page.locator("#guide-open")).toBeFocused();
+    return titles;
+}
+
+test("the entry shows on the analysis screens and not on Sources", async ({page}) => {
+    for (const route of ["/#/new", "/#/recent", `/#/run/${state.succeeded}`, `/#/report/${state.succeeded}`]) {
+        await page.goto(route);
+        await expect(page.locator("#guide-open"), route).toBeVisible({timeout: 30_000});
+    }
+    await page.goto("/#/sources");
+    await expect(page.locator("#main h1")).toBeVisible();
+    await expect(page.locator("#guide-open")).toBeHidden();
+});
+
+test("the New walk on a daemon skips the backend's fields", async ({page}) => {
+    await page.goto("/#/new");
+    await page.locator("button.source-row", {hasText: "Checkout production"}).click();
+    await openHere(page, '[data-guide="new.daemon"]');
+    const titles = await walkTitles(page);
+    expect(titles[0]).toBe("The source");
+    for (const wanted of ["A daemon takes no parameter", "What this analysis costs", "Run the analysis"]) {
+        expect(titles).toContain(wanted);
+    }
+    for (const absent of ["Service or trace ID", "Max traces", "Simultaneous reads", "Prefer your terminal?",
+        "Nothing to run here"]) expect(titles).not.toContain(absent);
+    expect(titles[titles.length - 1]).toBe("You can now run a measured analysis");
+});
+
+test("the New walk on Tempo reads the form, its reads and its command", async ({page}) => {
+    await page.goto("/#/new");
+    await page.locator("button.source-row", {hasText: "Tempo EU"}).click();
+    await openHere(page, '[data-guide="new.traces"]');
+    await goTo(page, "Max traces");
+    expect(await framed(page, ["new.traces"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    const titles = await walkTitles(page);
+    for (const wanted of ["Service or trace ID", "The period", "Max traces", "Simultaneous reads",
+        "For advanced users only", "Run the analysis", "Prefer your terminal?"]) expect(titles).toContain(wanted);
+    expect(titles).not.toContain("A daemon takes no parameter");
+});
+
+test("the Recent walk reads the first card", async ({page}) => {
+    await openOn(page, "/#/recent", ".run-card");
+    await goTo(page, "One analysis");
+    expect(await framed(page, ["recent.card"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    const titles = await walkTitles(page);
+    expect(titles[0]).toBe("Analyses this Hub still holds");
+    expect(titles).not.toContain("No recent analysis");
+    expect(titles[titles.length - 1]).toBe("You can find an analysis again");
+});
+
+test("the run walk names its state and frames its outcome", async ({page}) => {
+    await openOn(page, `/#/run/${state.succeeded}`, ".outcome");
+    await expect(title(page)).toHaveText("It succeeded");
+    expect(await framed(page, ["run.head", "run.headline"])).toBe(true);
+    await goTo(page, "The result");
+    expect(await framed(page, ["run.outcome"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("The link expires in");
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    expect(await walkTitles(page)).toEqual(["It succeeded", "Service events", "Elapsed time", "What it asked for",
+        "The result", "You can read this analysis"]);
+});
+
+test("an unknown run offers only to close", async ({page}) => {
+    await openOn(page, "/#/run/ffffffffffffffff", ".gone");
+    await expect(title(page)).toHaveText("No analysis with this ID");
+    await expect(card(page).locator(".guide-quit")).toBeHidden();
+    await expect(next(page)).toHaveText("Close");
+});
+
+test("the report walk stops at the frame", async ({page}) => {
+    await openOn(page, `/#/report/${state.succeeded}`, "iframe.report-frame");
+    await goTo(page, "The engine's report");
+    expect(await framed(page, ["report.frame"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    expect(await walkTitles(page)).toEqual(["You are in the report", "The engine's report", "You can open a report"]);
 });

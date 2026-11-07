@@ -256,7 +256,8 @@ const SCREEN_FUNCTIONS = ["renderSourcesScreen", "sourcesTable", "tableGroupRow"
     "rerunAction", "backLink", "runView", "eventLog", "logRow", "logClosing", "factsRail", "ceilingRule",
     "ceilingNote", "requestCard", "expiryText", "outcomePanel", "outcomeSpec", "countStrip",
     "moveBadge", "actionRow", "actionButton", "resubmit", "loadRun", "scheduleRunPoll", "runUnreachableBanner",
-    "detectionKnobs", "detectionCount", "setDetection", "refreshDetectionCount", "advancedPanel", "detectionRow"];
+    "detectionKnobs", "detectionCount", "setDetection", "refreshDetectionCount", "advancedPanel", "detectionRow",
+    "newGuideSource", "recentGuideSource", "runGuideSource"];
 
 const SCREEN_HELPERS = ["sourceHealth", "dur", "durDown", "durParts", "humanDur", "versionGap", "skew", "argsLine",
     "weightBand", "bytes", "hostKwh", "sourceCountLabel", "monitorKeyHint"];
@@ -628,7 +629,9 @@ const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapH
     "recapPilotageSteps", "guidePeriodStep", "guideIoStep", "guideCo2Step", "guideOpenStep", "guideTableStep",
     "guideRowStep", "guideMovedStep", "recapFiltered", "techText", "techStep", "recapTechSteps", "techPeriodStep",
     "techIoStep", "techCo2Step", "techActionsStep", "techTableStep", "techRowStep", "techFixStep", "techActStep",
-    "techMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain"];
+    "techMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain",
+    "screenText", "rangeNotes", "newSteps", "newRangeStep", "newTracesStep", "newFetchStep", "newCostStep",
+    "newSubmitStep", "recentSteps", "runSteps", "runOutcomeStep", "reportGoneView", "reportSteps"];
 
 test("the recap screen holds no prose literal", () => {
     const app = wwwrootFile("app.js");
