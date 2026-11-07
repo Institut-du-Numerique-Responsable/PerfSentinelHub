@@ -87,7 +87,10 @@ All notable changes to PerfSentinelHub are recorded here.
 - The Helm chart's `resources.limits.memory` goes from 1Gi to 2Gi, so each pod may use up to 1 GiB
   more: 832 MiB of heap, two runs at 448 MiB and 256 MiB of margin, from measurements in
   docs/OPERATIONS.md. `requests.memory` stays 64Mi, but a LimitRange or a ResourceQuota on memory
-  limits may now reject the pod.
+  limits may now reject the pod. An operator who sets `resources.limits.memory` themselves (without
+  `--reuse-values`) keeps their value but picks up `hub.gcHeapLimitMiB: 832` and
+  `hub.analysis.engineMemoryLimitMiB: 448`; the new defaults assume 2Gi, so raise the limit or lower
+  `hub.gcHeapLimitMiB` or `hub.analysis.workers`, and event 1407 says at startup when they do not fit.
 
 ### Fixed
 
