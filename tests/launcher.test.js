@@ -2662,7 +2662,7 @@ test("a card downloads as a PNG, an SVG, a JPEG XL or a PDF, each with its label
     assert.ok(!PSL.CARD_COPY.svgNote.includes("pixels"));
     // Only the JPEG XL carries a note under the choice: where it does not go.
     assert.deepEqual(Object.keys(PSL.CARD_FORMAT_NOTES), ["jxl"]);
-    assert.ok(PSL.CARD_FORMAT_NOTES.jxl.includes("LinkedIn"));
+    assert.ok(PSL.CARD_FORMAT_NOTES.jxl.includes("Social networks"));
 });
 
 test("the preview of a JPEG XL choice renders a PNG", () => {
