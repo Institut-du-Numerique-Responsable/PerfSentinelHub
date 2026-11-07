@@ -748,8 +748,7 @@
         'run.expired.headline': 'This report was deleted.',
         'run.expired.sub': 'Reports live {hours} hours. This one expired {duration} ago and the file is gone.',
         'run.failed.headline': 'Failed: {code}.',
-        'run.failed.sub': 'The Hub does not expose the process\'s error output by design. It gives one code out '
-            + 'of eight, and this is what that code means.',
+        'run.failed.sub': 'The Hub does not expose the process\'s error output by design. It gives one short code, and this is what that code means.',
         'run.log.accepted': 'accepted',
         'run.log.accepted_detail': 'the request was validated and queued',
         'run.log.started': 'started',
@@ -1499,7 +1498,7 @@
         'recap.label.pilotage.findings': 'Open problems',
         'recap.label.pilotage.moved': 'What changed',
         'recap.label.pilotage.io_lower': 'unnecessary operations',
-        'recap.help.tech.period': 'A week runs Monday to Sunday and a month is a calendar month, both counted in UTC days. While the period is in progress, trends compare its closed days with the same days of the previous period; today counts in the tiles only. Times elsewhere on the page are in your local time, with the zone.',
+        'recap.help.tech.period': 'A week runs Monday to Sunday and a month is a calendar month, both counted in UTC days. While the period is in progress, trends compare its closed days with the same days of the previous period; today counts in the tiles and the ranking, not in the trends. Times elsewhere on the page are in your local time, with the zone.',
         'recap.help.tech.io': 'Extra database, HTTP and messaging calls the engine counted as avoidable on this period, summed over the detections. Measured, not estimated.',
         'recap.help.tech.co2': 'An order of magnitude, never a ranking key: each finding\'s avoidable calls times the day\'s grams per avoidable call the daemon reports. "At least" when some sources send no coefficient.',
         'recap.help.tech.findings': 'Findings seen on this period and not acknowledged. Acknowledged ones are counted apart and left out of the priorities.',

@@ -248,8 +248,8 @@ copie stockée servie à la place.
 </picture>
 
 Une ligne se déplie sur les findings que le daemon a gelés pour cet incident, chacun placé
-avant l'incident ou après le redémarrage d'après son propre horodatage face à celui de
-l'incident. La colonne capture porte la lecture du daemon de jusqu'où son anneau
+avant l'incident ou après, d'après son propre horodatage face à celui de l'incident ; le
+« après » nomme le redémarrage, le déploiement ou l'incident lui-même selon son genre. La colonne capture porte la lecture du daemon de jusqu'où son anneau
 remontait encore : complete, partial ou empty. Les durées sont relatives, jamais des
 dates, et l'horodatage exact est dans l'infobulle. Chaque finding montre la requête
 normalisée sur laquelle il a été levé, entière et repliée sur plusieurs lignes, puisqu'un

@@ -797,8 +797,7 @@
         'run.expired.sub': 'Les rapports vivent {hours} heures. Celui-ci a expiré il y a {duration} et le '
             + 'fichier n\'existe plus.',
         'run.failed.headline': 'Échec\u00a0: {code}.',
-        'run.failed.sub': 'Par conception, le Hub n\'expose pas la sortie d\'erreur du processus. Il donne un '
-            + 'code parmi huit, et voici ce que ce code signifie.',
+        'run.failed.sub': 'Par conception, le Hub n\'expose pas la sortie d\'erreur du processus. Il donne un code court, et voici ce que ce code signifie.',
         'run.log.accepted': 'acceptée',
         'run.log.accepted_detail': 'la requête a été validée et mise en file',
         'run.log.started': 'démarrée',
@@ -1570,7 +1569,7 @@
         'recap.label.pilotage.findings': 'Problèmes ouverts',
         'recap.label.pilotage.moved': 'Ce qui a changé',
         'recap.label.pilotage.io_lower': 'opérations inutiles',
-        'recap.help.tech.period': 'Une semaine va du lundi au dimanche et un mois est un mois civil, tous deux comptés en jours UTC. Tant que la période est en cours, les tendances comparent ses jours clos aux mêmes jours de la période précédente. Le jour en cours ne compte que dans les tuiles. Ailleurs sur la page, les heures sont à votre heure locale, avec le fuseau.',
+        'recap.help.tech.period': 'Une semaine va du lundi au dimanche et un mois est un mois civil, tous deux comptés en jours UTC. Tant que la période est en cours, les tendances comparent ses jours clos aux mêmes jours de la période précédente. Le jour en cours compte dans les tuiles et le classement, pas dans les tendances. Ailleurs sur la page, les heures sont à votre heure locale, avec le fuseau.',
         'recap.help.tech.io': 'Les appels en trop à la base de données, en HTTP et en messagerie que le moteur a comptés comme évitables sur cette période, additionnés sur les détections. Mesuré, pas estimé.',
         'recap.help.tech.co2': 'Un ordre de grandeur, jamais une clé de classement : les appels évitables de chaque finding multipliés par les grammes par appel évitable que le daemon donne pour le jour. « Au moins » quand des sources n\'envoient pas de coefficient.',
         'recap.help.tech.findings': 'Les findings vus sur cette période et non acquittés. Les findings acquittés sont comptés à part et laissés hors des priorités.',
