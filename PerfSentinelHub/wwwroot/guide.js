@@ -65,10 +65,13 @@
         card.setAttribute('role', 'dialog');
         card.setAttribute('aria-modal', 'true');
         card.setAttribute('aria-labelledby', 'guide-title');
+        // The live region only speaks changes, so the first card's text is read from here on focus.
+        card.setAttribute('aria-describedby', 'guide-body');
         card.tabIndex = -1;
         const title = node('h2', {class: 'guide-title'});
         title.id = 'guide-title';
         const body = node('div', {class: 'guide-body'});
+        body.id = 'guide-body';
         const count = node('span', {class: 'guide-count'});
         const quit = node('button', {class: 'guide-quit'});
         const prev = node('button', {class: 'pill-button'});
@@ -128,6 +131,15 @@
         return kept.id !== lastId;
     }
 
+    /**
+     * A live region reads out a node it rewrites, even with the same text.
+     * @param {HTMLElement} button
+     * @param {string} text
+     */
+    function say(button, text) {
+        if (button.textContent !== text) button.textContent = text;
+    }
+
     /** @param {import('../types').GuideStep} step */
     function paintStep(step) {
         dom.title.textContent = step.title;
@@ -153,7 +165,7 @@
         dom.quit.hidden = false;
         dom.prev.hidden = open.at === 0;
         dom.next.hidden = false;
-        dom.next.textContent = PSL.t(open.at === open.steps.length - 1 ? 'guide.close' : 'guide.next');
+        say(dom.next, PSL.t(open.at === open.steps.length - 1 ? 'guide.close' : 'guide.next'));
     }
 
     function paintState() {
@@ -164,7 +176,7 @@
         // A failed guide has one way out, the button that closes it.
         dom.quit.hidden = open.status === 'failed';
         dom.next.hidden = open.status !== 'failed';
-        dom.next.textContent = PSL.t('guide.close');
+        say(dom.next, PSL.t('guide.close'));
     }
 
     /** Writes the card, unless a render left it saying the same: the live body would read it out again. */
@@ -177,7 +189,7 @@
         if (painted === open.painted) return;
         open.painted = painted;
         dom.quit.textContent = PSL.t('guide.quit');
-        dom.prev.textContent = PSL.t('guide.prev');
+        say(dom.prev, PSL.t('guide.prev'));
         if (step) paintStep(step);
         else paintState();
     }
@@ -230,7 +242,8 @@
         if (rect.bottom + PAD + GAP + tall <= height - EDGE) top = rect.bottom + PAD + GAP;
         else if (rect.top - PAD - GAP - tall >= EDGE) top = rect.top - PAD - GAP - tall;
         const left = Math.min(Math.max(EDGE, rect.left), width - card.offsetWidth - EDGE);
-        at(card, left, Math.max(EDGE, top));
+        // Both ends: scrolled up past the element, the card above it would sit under the window's foot.
+        at(card, left, Math.min(Math.max(EDGE, top), height - EDGE - tall));
         placeMarks(rect);
     }
 

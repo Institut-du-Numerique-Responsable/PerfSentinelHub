@@ -75,7 +75,7 @@ async function eachStep(page: Page, check: (index: number) => Promise<void>): Pr
     const total = await totalSteps(page);
     for (let index = 0; index < total; index += 1) {
         if (index > 0) await next(page).click();
-        await expect(count(page)).toHaveText(`${index + 1} of ${total}`);
+        await expect(count(page)).toHaveText(new RegExp(`^${index + 1} \\D+ ${total}$`));
         await check(index);
     }
 }
@@ -251,6 +251,36 @@ test("the card stays on screen beside a tall row", async ({page}) => {
         expect(await page.evaluate(() => window.scrollY)).not.toBe(before);
         await expectInWindow(page, ".guide-card");
     }
+});
+
+test("the card stays on screen when the page is scrolled up past its row", async ({page}) => {
+    await openGuide(page);
+    // The row sits more than a window below the top, so the top of the page leaves it under the fold.
+    await page.addStyleTag({content: '[data-guide="recap.row"] { margin-top: 150vh; }'});
+    await goTo(page, "How to read a row");
+    await settle(page);
+    await page.evaluate(() => window.scrollTo({top: 0, behavior: "instant"}));
+    await settle(page);
+    expect(await page.locator('[data-guide="recap.row"]').evaluate((row) =>
+        row.getBoundingClientRect().top > window.innerHeight)).toBe(true);
+    await expectInWindow(page, ".guide-card");
+});
+
+test("Quit never sits over the title's text, in French", async ({page}) => {
+    await useLang(page, "fr");
+    await openGuide(page);
+    await eachStep(page, async () => {
+        const [quit, lines] = await page.evaluate(() => {
+            const heading = document.querySelector("#guide-title")!;
+            const range = document.createRange();
+            range.selectNodeContents(heading);
+            return [
+                document.querySelector(".guide-quit")!.getBoundingClientRect().toJSON(),
+                Array.from(range.getClientRects()).map((line) => line.toJSON())
+            ];
+        });
+        for (const line of lines) expect(line.right).toBeLessThanOrEqual(quit.left);
+    });
 });
 
 test("the entry shares its row with the theme and language", async ({page}) => {
