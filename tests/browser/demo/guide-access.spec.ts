@@ -10,6 +10,12 @@ const title = (page: Page) => page.locator("#guide-title");
 const next = (page: Page) => card(page).locator(".guide-nav .pill-primary");
 const count = (page: Page) => card(page).locator(".guide-count");
 
+/** The entry opens its menu, whose first choice is the guide of the screen on view. */
+async function screenGuide(page: Page): Promise<void> {
+    await page.locator("#guide-open").click();
+    await page.locator("#guide-menu-screen").click();
+}
+
 async function signIn(page: Page, email: string): Promise<void> {
     await page.goto("/");
     await page.getByRole("link", {name: "Sign in with single sign-on"}).click();
@@ -20,7 +26,7 @@ async function signIn(page: Page, email: string): Promise<void> {
 async function openOn(page: Page, route: string, ready: string): Promise<void> {
     await page.goto(route);
     await expect(page.locator(ready).first()).toBeVisible({timeout: 30_000});
-    await page.locator("#guide-open").click();
+    await screenGuide(page);
     await expect(card(page)).toBeVisible();
 }
 
@@ -70,4 +76,21 @@ test("a caller no grant reaches gets the guide of their access, without the reac
     await openOn(page, "/#/sources", '[data-guide="access.tokens"]');
     expect(await walkTitles(page)).toEqual(["Your access", "Who you are", "Your groups", "Your terminal tokens",
         "You know what you see here"]);
+});
+
+test("a member's CTO path skips Disclosures, which the last card names", async ({page}) => {
+    await signIn(page, "sam@example.com");
+    await page.goto("/#/sources");
+    await expect(page.locator("#guide-open")).toBeVisible({timeout: 30_000});
+    await expect(page.locator('.shell-tab[data-screen="disclosures"]')).toBeHidden();
+    await page.locator("#guide-open").click();
+    await page.locator("#guide-menu-role").click();
+    await page.locator('#guide-menu [data-role="cto"]').click();
+    await expect(page).toHaveURL(/#\/recap\?view=pilotage$/);
+    // One screen left: the count has no screen part.
+    await expect(count(page)).toHaveText(/^1 of \d+$/, {timeout: 60_000});
+    const total = Number((await count(page).textContent() ?? "").match(/of (\d+)$/)?.[1]);
+    for (let index = 1; index < total; index += 1) await next(page).click();
+    await expect(next(page)).toHaveText("Close");
+    await expect(card(page).locator("#guide-body")).toContainText("Skipped, because it does not show for you: Disclosures.");
 });

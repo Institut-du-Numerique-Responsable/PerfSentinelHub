@@ -3040,6 +3040,33 @@ test("the recap guide follows the view on screen", () => {
     assert.equal(PSL.guideIdFor("ack", null), null);
 });
 
+test("a role's path lists its screens in order", () => {
+    assert.deepEqual(PSL.guidePath("cto", () => true).stops,
+        [{screen: "recap", view: "pilotage"}, {screen: "disclosures", view: null}]);
+    assert.deepEqual(PSL.guidePath("lead", () => true).stops,
+        [{screen: "recap", view: "tech"}, {screen: "new", view: null}]);
+    assert.deepEqual(PSL.guidePath("architect", () => true).stops.map((stop) => stop.screen),
+        ["correlations", "incidents", "sources"]);
+    assert.deepEqual(PSL.guidePath("dev", () => true).stops, [{screen: "recap", view: "tech"}]);
+    assert.deepEqual(PSL.guidePath("pm", () => true).stops, [{screen: "recap", view: "pilotage"}]);
+    assert.deepEqual(PSL.GUIDE_ROLES, ["dev", "lead", "architect", "pm", "cto"]);
+    // Every stop is a screen with a guide, and every role has its texts in both languages.
+    for (const role of PSL.GUIDE_ROLES) {
+        for (const stop of PSL.guidePath(role, () => true).stops) assert.ok(PSL.guideIdFor(stop.screen, stop.view), role);
+        for (const key of ["guide.role." + role, "guide.role." + role + ".ask", "guide.path." + role + ".promise"]) {
+            assert.ok(PSL.hasText(key), key);
+        }
+    }
+});
+
+test("a hidden screen is skipped and named", () => {
+    const path = PSL.guidePath("cto", (s) => s !== "disclosures");
+    assert.deepEqual(path.skipped, ["disclosures"]);
+    assert.equal(path.stops.length, 1);
+    assert.deepEqual(PSL.guidePath("cto", () => true).skipped, []);
+    assert.deepEqual(PSL.guidePath("nobody", () => true), {stops: [], skipped: []});
+});
+
 test("the recap count is the tile's: separated thousands, nothing without a value", () => {
     assert.equal(PSL.recapCount(1234), PSL.num(1234));
     assert.equal(PSL.recapCount(0), "0");

@@ -3269,6 +3269,33 @@
             'coverage'].indexOf(screen) >= 0 ? screen : null;
     }
 
+    /** The roles « Je suis… » offers, in the menu's order. */
+    const GUIDE_ROLES = ['dev', 'lead', 'architect', 'pm', 'cto'];
+
+    /** @type {Record<string, import('../types').GuideStop[]>} */
+    const GUIDE_PATHS = {
+        dev: [{screen: 'recap', view: 'tech'}],
+        lead: [{screen: 'recap', view: 'tech'}, {screen: 'new', view: null}],
+        architect: [{screen: 'correlations', view: null}, {screen: 'incidents', view: null}, {screen: 'sources', view: null}],
+        pm: [{screen: 'recap', view: 'pilotage'}],
+        cto: [{screen: 'recap', view: 'pilotage'}, {screen: 'disclosures', view: null}]
+    };
+
+    /**
+     * The screens a role's path walks, in order, and those it skips because their tab is not shown.
+     * @param {string} role
+     * @param {(screen: string) => boolean} visible whether the screen's tab is shown for this caller
+     * @returns {{stops: import('../types').GuideStop[], skipped: string[]}}
+     */
+    function guidePath(role, visible) {
+        const path = {stops: [], skipped: []};
+        (GUIDE_PATHS[role] || []).forEach(function (stop) {
+            if (visible(stop.screen)) path.stops.push(Object.assign({}, stop));
+            else path.skipped.push(stop.screen);
+        });
+        return path;
+    }
+
     /**
      * @param {string} key under `guide.pilotage.`
      * @param {Record<string, string | number>} [vars]
@@ -5264,6 +5291,8 @@
         incompleteText,
         recapCount,
         guideIdFor,
+        GUIDE_ROLES,
+        guidePath,
         rangeNotes,
         newSteps,
         recentSteps,

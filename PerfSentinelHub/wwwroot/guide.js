@@ -4,7 +4,8 @@
  * Classic script, loaded after launcher.js and before app.js. It reads `PSL` and never app.js:
  * app.js hands `start` a source of steps and calls `refresh` after each render, since a render
  * replaces `#main` and every element a step points at. The guide finds them again by their
- * `data-guide` attribute. It reads only what the screen already loaded: no request, no storage.
+ * `data-guide` attribute. It reads only what the screen already loaded and sends no request. It stores
+ * one thing, the role last chosen under I am…, in this browser, to tick it in the menu next time.
  */
 (function (global) {
     'use strict';
@@ -17,11 +18,13 @@
     // Live lists, made once: placeMarks runs on every scroll frame.
     const NARROW = matchMedia('(max-width: 760px)');
     const STILL = matchMedia('(prefers-reduced-motion: reduce)');
+    const ROLE_KEY = 'perf-sentinel:guide-role';
 
     /** @type {{source: () => import('../types').GuideSource, guide: string, status: string, variant: string,
      *  id: string | null, at: number,
      *  steps: import('../types').GuideStep[], all: import('../types').GuideStep[], frame: number, from: number,
-     *  painted: string} | null} */
+     *  painted: string, path: {stops: import('../types').GuidePathStop[], skipped: string[], at: number} | null,
+     *  heading: string | null} | null} */
     let open = null;
     /** @type {{root: HTMLElement, hole: HTMLElement, marks: HTMLElement, card: HTMLElement, title: HTMLElement,
      *  body: HTMLElement, count: HTMLElement, quit: HTMLButtonElement, prev: HTMLButtonElement,
@@ -100,8 +103,9 @@
             move(-1);
         });
         next.addEventListener('click', function () {
-            if (open.status !== 'ready' || open.at === open.steps.length - 1) stop();
-            else move(1);
+            if (open.status === 'ready' && open.at < open.steps.length - 1) move(1);
+            else if (moreStops()) enter(open.path.at + 1);
+            else stop();
         });
         const nav = node('div', {class: 'guide-nav'});
         nav.append(count, prev, next);
@@ -120,6 +124,14 @@
      * that is still there.
      */
     function read() {
+        // On its way to a path's next screen the guide reads nothing until the route is there.
+        if (open.heading !== null) {
+            if (global.location.hash !== open.heading) {
+                open.status = 'wait';
+                return false;
+            }
+            open.heading = null;
+        }
         const given = open.source();
         const was = open.steps[open.at];
         const lastId = was ? was.id : open.id;
@@ -157,6 +169,20 @@
         if (button.textContent !== text) button.textContent = text;
     }
 
+    /** Whether a path runs and has a screen after this one. */
+    function moreStops() {
+        return Boolean(open.path) && open.path.at < open.path.stops.length - 1;
+    }
+
+    /** The sentence naming the screens a path skipped, for its very last card, or null. */
+    function skippedText() {
+        if (!open.path || moreStops() || !open.path.skipped.length) return null;
+        const screens = open.path.skipped.map(function (screen) {
+            return PSL.t('shell.tab.' + screen);
+        }).join(', ');
+        return PSL.t(open.path.skipped.length === 1 ? 'guide.path.skipped.one' : 'guide.path.skipped.other', {screens});
+    }
+
     /** @param {import('../types').GuideStep} step */
     function paintStep(step) {
         dom.title.textContent = step.title;
@@ -176,13 +202,23 @@
             });
             parts.push(legend);
         }
+        const last = open.at === open.steps.length - 1;
+        const skipped = last ? skippedText() : null;
+        if (skipped) parts.push(node('p', {}, skipped));
         dom.body.replaceChildren(...parts);
-        dom.count.textContent = PSL.t('guide.count', {at: open.at + 1, total: open.steps.length});
+        let count = PSL.t('guide.count', {at: open.at + 1, total: open.steps.length});
+        if (open.path && open.path.stops.length > 1) {
+            count += ' · ' + PSL.t('guide.path.count', {at: open.path.at + 1, total: open.path.stops.length});
+        }
+        dom.count.textContent = count;
         dom.count.hidden = false;
         dom.quit.hidden = false;
+        // Previous stays in the screen: a path's first card on a screen has none.
         dom.prev.hidden = open.at === 0;
         dom.next.hidden = false;
-        say(dom.next, PSL.t(open.at === open.steps.length - 1 ? 'guide.close' : 'guide.next'));
+        let action = 'guide.next';
+        if (last) action = moreStops() ? 'guide.path.next' : 'guide.close';
+        say(dom.next, PSL.t(action));
     }
 
     /**
@@ -200,14 +236,20 @@
     }
 
     function paintState() {
-        dom.title.textContent = stateText('title');
-        dom.body.replaceChildren(node('p', {}, stateText('body')));
+        const failed = open.status === 'failed';
+        // A screen of a path that shows an error or a refusal hands over to the next screen.
+        const refused = failed && moreStops();
+        dom.title.textContent = refused ? PSL.t('guide.path.refused.title') : stateText('title');
+        const parts = [node('p', {}, refused ? PSL.t('guide.path.refused.body') : stateText('body'))];
+        const skipped = failed ? skippedText() : null;
+        if (skipped) parts.push(node('p', {}, skipped));
+        dom.body.replaceChildren(...parts);
         dom.count.hidden = true;
         dom.prev.hidden = true;
-        // A failed guide has one way out, the button that closes it.
-        dom.quit.hidden = open.status === 'failed';
-        dom.next.hidden = open.status !== 'failed';
-        say(dom.next, PSL.t('guide.close'));
+        // A failed guide has one way out, the button that closes it or goes on to the next screen.
+        dom.quit.hidden = failed;
+        dom.next.hidden = !failed;
+        say(dom.next, PSL.t(refused ? 'guide.path.next' : 'guide.close'));
     }
 
     /** Writes the card, unless a render left it saying the same: the live body would read it out again. */
@@ -382,13 +424,15 @@
     }
 
     /**
+     * Opens the guide over the page, before it reads anything.
      * @param {() => import('../types').GuideSource} source
-     * @param {string} [guide] the guide's PSL.guideIdFor id, which picks its wait and failed texts
+     * @param {string} guide
      */
-    function start(source, guide = '') {
+    function begin(source, guide) {
         if (open) stop();
         if (!dom) dom = build();
-        open = {source, guide, status: 'wait', variant: '', id: null, at: 0, steps: [], all: [], frame: 0, from: 0, painted: ''};
+        open = {source, guide, status: 'wait', variant: '', id: null, at: 0, steps: [], all: [], frame: 0, from: 0, painted: '',
+            path: null, heading: null};
         SHELL.forEach(function (selector) {
             const part = document.querySelector(selector);
             if (part) part.setAttribute('inert', '');
@@ -398,8 +442,61 @@
         // Captured, so a scroll inside a nested scroller moves the cutout too.
         global.addEventListener('scroll', schedule, {capture: true, passive: true});
         global.addEventListener('resize', schedule);
+    }
+
+    /**
+     * @param {() => import('../types').GuideSource} source
+     * @param {string} [guide] the guide's PSL.guideIdFor id, which picks its wait and failed texts
+     */
+    function start(source, guide = '') {
+        begin(source, guide);
         read();
         show(open.status === 'ready');
+    }
+
+    /**
+     * Walks a path's screen: read at once when the route is already there, else waited on until the hash
+     * change has drawn it. The recap's stop carries its view in the route, as the view switch writes it.
+     * @param {number} index
+     */
+    function enter(index) {
+        const to = open.path.stops[index];
+        Object.assign(open, {source: to.source, guide: to.guide, status: 'wait', variant: '', id: null, at: 0, steps: [],
+            all: [], from: 0, painted: '', heading: null});
+        open.path.at = index;
+        if (global.location.hash === to.hash) {
+            read();
+            show(open.status === 'ready');
+            return;
+        }
+        open.heading = to.hash;
+        show(false);
+        global.location.hash = to.hash;
+    }
+
+    /** @param {import('../types').GuidePath} path */
+    function startPath(path) {
+        if (!path.stops.length) return;
+        try {
+            global.localStorage.setItem(ROLE_KEY, path.role);
+        } catch (error) {
+            // A browser that keeps nothing still walks the path, and ticks no role next time.
+        }
+        begin(path.stops[0].source, path.stops[0].guide);
+        open.path = {stops: path.stops, skipped: path.skipped, at: 0};
+        enter(0);
+    }
+
+    function pathStop() {
+        return open && open.path ? open.path.stops[open.path.at] : null;
+    }
+
+    function role() {
+        try {
+            return global.localStorage.getItem(ROLE_KEY);
+        } catch (error) {
+            return null;
+        }
     }
 
     function refresh() {
@@ -430,5 +527,5 @@
         return open !== null;
     }
 
-    global.PSL_GUIDE = {start, refresh, stop, isOpen};
+    global.PSL_GUIDE = {start, startPath, pathStop, role, refresh, stop, isOpen};
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1158,7 +1158,8 @@
      */
     function recapGuideSource() {
         if (state.recapError !== null) return {status: 'failed', steps: []};
-        if (state.recap === null) return {status: 'wait', steps: []};
+        // The recap of the other view, which a path's move to this one finds before the read starts again.
+        if (state.recap === null || state.recap.view !== recapRoute().view) return {status: 'wait', steps: []};
         if (state.recap.view === 'pilotage') return {status: 'ready', steps: PSL.recapPilotageSteps(state.recap)};
         return {
             status: 'ready',
@@ -1431,9 +1432,148 @@
     };
 
     function initGuide() {
-        document.getElementById('guide-open').addEventListener('click', function () {
-            state.guide = guideId(state.screen);
-            GUIDE.start(GUIDE_SOURCES[state.guide], state.guide);
+        const entry = document.getElementById('guide-open');
+        entry.setAttribute('aria-haspopup', 'menu');
+        entry.setAttribute('aria-expanded', 'false');
+        entry.addEventListener('click', function () {
+            if (document.getElementById('guide-menu')) closeGuideMenu(true);
+            else openGuideMenu(false);
+        });
+    }
+
+    /**
+     * The entry's menu: Understand this screen and I am…, or, once I am… is chosen, the roles, the one
+     * this browser remembers ticked. A list in the style of the recap's filters, over a backdrop.
+     * @param {boolean} roles
+     */
+    function openGuideMenu(roles) {
+        closeGuideMenu(false);
+        const entry = document.getElementById('guide-open');
+        const host = entry.parentElement;
+        const items = roles ? guideRoleItems() : guideMenuItems();
+        const list = el('div', {
+            role: 'menu', class: 'guide-menu-list', 'aria-labelledby': roles ? 'guide-menu-title' : 'guide-open',
+            'aria-describedby': roles ? 'guide-menu-sub' : null
+        }, items);
+        const pop = el('div', {class: 'guide-menu', id: 'guide-menu'}, [
+            roles && el('p', {class: 'guide-menu-title', id: 'guide-menu-title', text: t('guide.role.title')}),
+            roles && el('p', {class: 'guide-menu-sub', id: 'guide-menu-sub', text: t('guide.role.sub')}),
+            list
+        ]);
+        pop.addEventListener('keydown', function (event) {
+            guideMenuKey(event, items);
+        });
+        // Tabbing on past the menu closes it where it is, as the recap's lists do.
+        pop.addEventListener('focusout', function (event) {
+            const to = event.relatedTarget;
+            if (to instanceof Element && !host.contains(to)) closeGuideMenu(false);
+        });
+        const backdrop = el('div', {class: 'picker-backdrop', id: 'guide-menu-backdrop'});
+        backdrop.addEventListener('click', function () {
+            closeGuideMenu(false);
+        });
+        host.append(backdrop, pop);
+        // On a phone the entry can sit mid-row: the menu slides right to stay in the window.
+        const left = pop.getBoundingClientRect().left;
+        if (left < 16) pop.style.right = left - 16 + 'px';
+        entry.setAttribute('aria-expanded', 'true');
+        (items.find(function (item) {
+            return item.getAttribute('aria-checked') === 'true';
+        }) || items[0]).focus();
+    }
+
+    /** The menu's two doors: the screen's own guide, and the roles. */
+    function guideMenuItems() {
+        const screen = el('button', {type: 'button', class: 'guide-menu-item', role: 'menuitem', id: 'guide-menu-screen',
+            text: t('guide.menu.screen')});
+        screen.addEventListener('click', function () {
+            closeGuideMenu(false);
+            startScreenGuide();
+        });
+        const role = el('button', {type: 'button', class: 'guide-menu-item', role: 'menuitem', id: 'guide-menu-role',
+            text: t('guide.menu.role')});
+        role.addEventListener('click', function () {
+            openGuideMenu(true);
+        });
+        return [screen, role];
+    }
+
+    /** Each role with its question and what its path brings; the one this browser remembers is ticked. */
+    function guideRoleItems() {
+        const remembered = GUIDE.role();
+        return PSL.GUIDE_ROLES.map(function (role) {
+            const item = el('button', {
+                type: 'button', class: 'guide-menu-item', role: 'menuitemradio', 'data-role': role,
+                'aria-checked': role === remembered ? 'true' : 'false'
+            }, [
+                el('span', {class: 'guide-menu-name', text: t('guide.role.' + role)}),
+                el('span', {class: 'guide-menu-ask', text: t('guide.role.' + role + '.ask')}),
+                el('span', {class: 'guide-menu-promise', text: t('guide.path.' + role + '.promise')})
+            ]);
+            item.addEventListener('click', function () {
+                closeGuideMenu(false);
+                startRolePath(role);
+            });
+            return item;
+        });
+    }
+
+    /**
+     * Escape closes the menu and gives the focus back to the entry; the arrows, Home and End move in it.
+     * @param {KeyboardEvent} event
+     * @param {HTMLElement[]} items
+     */
+    function guideMenuKey(event, items) {
+        const at = items.indexOf(/** @type {HTMLElement} */ (document.activeElement));
+        /** @type {Record<string, number>} */
+        const moves = {ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1};
+        if (event.key === 'Escape') closeGuideMenu(true);
+        else if (event.key in moves) items[(moves[event.key] + items.length) % items.length].focus();
+        else return;
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    /** @param {boolean} refocus whether the entry takes the focus back */
+    function closeGuideMenu(refocus) {
+        const menu = document.getElementById('guide-menu');
+        if (!menu) return;
+        menu.remove();
+        document.getElementById('guide-menu-backdrop').remove();
+        const entry = document.getElementById('guide-open');
+        entry.setAttribute('aria-expanded', 'false');
+        if (refocus) entry.focus();
+    }
+
+    function startScreenGuide() {
+        state.guide = guideId(state.screen);
+        GUIDE.start(GUIDE_SOURCES[state.guide], state.guide);
+    }
+
+    /**
+     * Walks a role's screens, those whose tab this caller sees. The recap is entered in the path's view,
+     * by the route the view switch would write.
+     * @param {string} role
+     */
+    function startRolePath(role) {
+        const path = PSL.guidePath(role, function (screen) {
+            const tab = /** @type {HTMLElement | null} */ (document.querySelector('.shell-tab[data-screen="' + screen + '"]'));
+            return Boolean(tab) && !tab.hidden;
+        });
+        GUIDE.startPath({
+            role, skipped: path.skipped, stops: path.stops.map(function (stop) {
+                const guide = PSL.guideIdFor(stop.screen, stop.view);
+                return Object.assign({}, stop, {
+                    guide,
+                    hash: stop.screen === 'recap'
+                        ? PSL.recapHash(Object.assign(PSL.readRecapRoute(location.hash), {view: stop.view}))
+                        : '#/' + stop.screen,
+                    // Without a status every route draws the same banner, a refusal to this screen's guide.
+                    source: function () {
+                        return state.status ? GUIDE_SOURCES[guide]() : {status: 'failed', steps: []};
+                    }
+                });
+            })
         });
     }
 
@@ -1962,8 +2102,13 @@
         const refocus = state.recapRefocus;
         state.recapRefocus = null;
         const screen = currentScreen();
-        // A guide walks the screen it was opened on: another screen, or the other view, ends it.
-        if (GUIDE.isOpen() && guideId(screen) !== state.guide) GUIDE.stop();
+        closeGuideMenu(false);
+        // A guide walks the screen it was opened on, a path the stop it is on or heads to: another screen,
+        // or the other view, ends it.
+        const stop = GUIDE.pathStop();
+        const kept = stop ? stop.screen === screen && (stop.view === null || stop.view === recapRoute().view)
+            : guideId(screen) === state.guide;
+        if (GUIDE.isOpen() && !kept) GUIDE.stop();
         if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
         // A recap job keeps running on the Hub: only the screen stops asking, and asks again on return.

@@ -654,10 +654,37 @@ export interface NewGuideContext {
     command: boolean;
 }
 
+/** One screen of a role's path, as `PSL.guidePath` lists it: the recap names its view, other screens null. */
+export interface GuideStop {
+    screen: string;
+    view: string | null;
+}
+
+/** A stop as app.js hands it to the controller: the route that reaches it and its guide's source. */
+export interface GuidePathStop extends GuideStop {
+    /** The PSL.guideIdFor id. */
+    guide: string;
+    hash: string;
+    source: () => GuideSource;
+}
+
+/** A role's path, ready to walk: `skipped` holds the screens left out, whose `shell.tab.*` the last card names. */
+export interface GuidePath {
+    role: string;
+    stops: GuidePathStop[];
+    skipped: string[];
+}
+
 /** `window.PSL_GUIDE`, the controller guide.js defines. */
 export interface GuideController {
     /** `guide`, the PSL.guideIdFor id, picks `guide.<last part>.wait.*` and `.failed.*` when they exist. */
     start(source: () => GuideSource, guide?: string): void;
+    /** Walks each stop in turn, and remembers the role in this browser. */
+    startPath(path: GuidePath): void;
+    /** The stop a running path walks or heads to, null outside a path. */
+    pathStop(): GuidePathStop | null;
+    /** The role last chosen in this browser, or null. */
+    role(): string | null;
     refresh(): void;
     stop(): void;
     isOpen(): boolean;
