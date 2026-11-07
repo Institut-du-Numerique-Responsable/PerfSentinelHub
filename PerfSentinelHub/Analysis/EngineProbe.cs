@@ -127,9 +127,6 @@ public sealed partial class EngineProbe(
             SupportsCard = card.Result.Succeeded;
             if (!SupportsDaemonUrl)
                 LogNoDaemonUrl(logger, path);
-            if (_analysis.EngineMemoryLimitMiB > 0 && !MemoryLimitApplies)
-                LogMemoryLimitIgnored(logger, _analysis.EngineMemoryLimitMiB, Version);
-            CheckMemoryBudget();
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -139,6 +136,12 @@ public sealed partial class EngineProbe(
         {
             LogProbeFailed(logger, exception, path);
         }
+
+        // After the probe whatever its outcome: a binary that did not answer leaves the
+        // version unknown, and the cap is withheld from it just the same.
+        if (_analysis.EngineMemoryLimitMiB > 0 && !MemoryLimitApplies)
+            LogMemoryLimitIgnored(logger, _analysis.EngineMemoryLimitMiB, Version);
+        CheckMemoryBudget();
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

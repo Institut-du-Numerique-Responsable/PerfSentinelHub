@@ -81,7 +81,9 @@ All notable changes to PerfSentinelHub are recorded here.
   No detection, score or report format changes, and the disclosure schema stays
   `perf-sentinel-report/v1.8`.
 - A failed engine run is classified on its diagnostic lines, its tracing lines set aside, so a log
-  line that quotes an HTTP status no longer decides the code. The last 4,096 characters of its
+  line that quotes an HTTP status no longer decides the code. A 5xx the backend returned is
+  `source_unreachable` and a 4xx `source_rejected_request`, as a daemon's status is; a thread the
+  engine's memory cap refused a stack is `engine_out_of_memory`. The last 4,096 characters of its
   stderr go to the Hub's log with the exit code and the code chosen, for the query and the render
   alike; no response and no screen carries them.
 - The Helm chart's `resources.limits.memory` goes from 1Gi to 2Gi, so each pod may use up to 1 GiB

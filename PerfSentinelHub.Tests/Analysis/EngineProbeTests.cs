@@ -139,6 +139,18 @@ public sealed class EngineProbeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_cap_is_said_withheld_even_when_the_binary_could_not_be_run()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(Path.Combine(Path.GetTempPath(), $"absent-{Guid.NewGuid():N}"), 448, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(probe.MemoryLimitArguments);
+        Assert.Contains(logger.Warnings, warning => warning.Contains("not capped", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_cap_is_handed_to_an_engine_that_reads_it()
     {
         var logger = new ListLogger<EngineProbe>();

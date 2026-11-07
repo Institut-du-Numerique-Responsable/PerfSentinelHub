@@ -15,7 +15,10 @@ public static partial class EngineFailure
     private static readonly (string[] Needles, string Code)[] Rules =
     [
         (["HTTP 401", "HTTP 403", "unauthorized", "forbidden"], AnalysisErrorCodes.SourceAuthFailed),
-        (["memory allocation of"], AnalysisErrorCodes.EngineOutOfMemory),
+        // Under --memory-limit-mib an allocation fails ("memory allocation of N bytes failed"),
+        // or a thread cannot map its stack, which the Rust runtime reports as a spawn failure.
+        (["memory allocation of", "failed to spawn thread", "spawn worker thread", "Cannot allocate memory"],
+            AnalysisErrorCodes.EngineOutOfMemory),
         (["most fetches failed", "every fetch failed"], AnalysisErrorCodes.FetchesFailed),
         // A timed-out query is a window too wide for the engine's own request deadline,
         // not a backend that is down.
@@ -25,9 +28,12 @@ public static partial class EngineFailure
         (["byte cap perf-sentinel applies"], AnalysisErrorCodes.OutputTooLarge),
         // "transport error" is what engine 0.43.2 prints for a refused connection and for a DNS
         // failure alike: "HTTP transport error: client error (Connect)".
-        (["connection refused", "dns error", "error sending request", "transport error"],
+        // "returned HTTP" is the engine's wording for a status it refused, Tempo and Jaeger alike.
+        // A 5xx is the backend down behind an answering ingress, a 4xx is the request refused:
+        // the same split as a daemon's status in AnalysisRunner.ClassifyHttp.
+        (["connection refused", "dns error", "error sending request", "transport error", "returned HTTP 5"],
             AnalysisErrorCodes.SourceUnreachable),
-        (["HTTP 400", "bad request"], AnalysisErrorCodes.SourceRejectedRequest)
+        (["HTTP 400", "bad request", "returned HTTP 4"], AnalysisErrorCodes.SourceRejectedRequest)
     ];
 
     public static string Classify(string standardError)
