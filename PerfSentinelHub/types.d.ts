@@ -586,6 +586,8 @@ export interface IncidentsGuideContext {
     filtered: boolean;
     /** The first unfolded incident whose detail was read: with findings, none, or gone. */
     panel: "findings" | "none" | "gone" | null;
+    /** A row is unfolded, whatever its detail says: one that failed to read is not asked to unfold. */
+    unfolded: boolean;
 }
 
 /** What the Correlations guide reads off the listing. */
@@ -630,6 +632,8 @@ export interface NewGuideContext {
     sources: number;
     runnable: number;
     windowHandoff: boolean;
+    /** The window handoff came from a namespaced row, as the banner's namespace sentence says. */
+    namespaced: boolean;
     traceHandoff: boolean;
     /** The chosen source is a daemon. */
     daemon: boolean;

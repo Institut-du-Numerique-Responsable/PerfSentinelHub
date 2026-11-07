@@ -214,7 +214,7 @@
     const state = {
         themePosition: document.documentElement.getAttribute('data-theme-position') || 'auto',
         screen: 'new',
-        // The guide open, by PSL.guideIdFor, or null.
+        // The screen guide open, by guideId (the no-grant page reads as access), or null.
         /** @type {string | null} */
         guide: null,
         /** @type {HubStatus | null} */
@@ -1183,6 +1183,7 @@
                 sources: (state.sources || []).length,
                 runnable: runSources().length,
                 windowHandoff: Boolean(state.handoff),
+                namespaced: Boolean(state.handoff && state.handoff.namespace),
                 traceHandoff: Boolean(state.traceHandoff),
                 daemon: Boolean(source && source.kind === 'daemon'),
                 skewPill: runSources().some(function (row) {
@@ -1294,7 +1295,10 @@
                 stale: state.incidentsError === 'stale',
                 unauthorized: refused ? refused.name : null,
                 filtered: Object.values(state.incidentFilter).some(Boolean),
-                panel: panels[0] || null
+                panel: panels[0] || null,
+                unfolded: state.incidents.some(function (incident) {
+                    return state.panelOpen[foldKey(incident)] === true;
+                })
             })
         };
     }
@@ -1412,7 +1416,7 @@
     }
 
     /**
-     * The source of steps of each guide, by its PSL.guideIdFor id.
+     * The source of steps of each guide, keyed by the id guideId returns.
      * @type {Record<string, () => import('../types').GuideSource>}
      */
     const GUIDE_SOURCES = {
@@ -1438,6 +1442,13 @@
         entry.addEventListener('click', function () {
             if (document.getElementById('guide-menu')) closeGuideMenu(true);
             else openGuideMenu(false);
+        });
+        // Shift+Tab out of the menu lands on the entry with the menu still open.
+        entry.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape' || !document.getElementById('guide-menu')) return;
+            closeGuideMenu(true);
+            event.preventDefault();
+            event.stopPropagation();
         });
     }
 
@@ -1470,7 +1481,7 @@
         });
         const backdrop = el('div', {class: 'picker-backdrop', id: 'guide-menu-backdrop'});
         backdrop.addEventListener('click', function () {
-            closeGuideMenu(false);
+            closeGuideMenu(true);
         });
         host.append(backdrop, pop);
         // On a phone the entry can sit mid-row: the menu slides right to stay in the window.

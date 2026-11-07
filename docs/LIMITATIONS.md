@@ -73,6 +73,8 @@ reach the Hub, not that the Hub can reach it, and only a successful poll clears
 `unreachable_since_ms`. A source whose push arrives while its poll fails still
 reports `unreachable_since`. See [OPERATIONS.md](OPERATIONS.md).
 
+## What a correlation claims
+
 A correlation is a repeated co-occurrence, not a cause: two findings that keep
 firing within the daemon's configured lag of each other, which does not say
 that one provokes the other.

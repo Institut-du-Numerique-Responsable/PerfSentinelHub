@@ -3503,7 +3503,7 @@ const HOUR_MS = 3600000;
 
 /** What the New screen's source reads off `state`, a Tempo source on a service run by default. */
 const newCtx = (over) => Object.assign({
-    sources: 3, runnable: 3, windowHandoff: false, traceHandoff: false, daemon: false, skewPill: false,
+    sources: 3, runnable: 3, windowHandoff: false, namespaced: false, traceHandoff: false, daemon: false, skewPill: false,
     mode: "service", rangeMode: "relative", spanMs: HOUR_MS, retentionHours: 168, maxTraces: 100, weighed: false,
     fetchBand: "ok", queue: 0, limits: GUIDE_LIMITS, blocker: null, unreachable: false, skewBehind: false, command: true
 }, over);
@@ -3524,6 +3524,7 @@ const recentBy = (first) =>
 const ANALYSIS_SAYS = {
     fr: {
         noSource: "aucune source configurée", noGrant: "Aucune autorisation", window: "d'où vient la fenêtre",
+        namespace: "aucun namespace",
         trace: "« Utiliser l'autre trace »", daemon: "choisissez un backend", missing: "analyses.run",
         skewPill: "« de retard »", traceMode: "Un identifiant désigne", absolute: "Elle est absolue",
         relative: "Elle est relative", timeout: "300 secondes", retention: "Elle dépasse ce que la source",
@@ -3540,6 +3541,7 @@ const ANALYSIS_SAYS = {
     },
     en: {
         noSource: "no configured source", noGrant: "No grant", window: "where the window comes from",
+        namespace: "and no namespace",
         trace: "\"Use the other trace\"", daemon: "pick a trace backend", missing: "analyses.run",
         skewPill: "\"behind\"", traceMode: "An ID names", absolute: "It is absolute", relative: "It is relative",
         timeout: "300 seconds", retention: "It goes past what the source", undeclared: "Nobody declared",
@@ -3596,6 +3598,10 @@ analysisTest("an empty New screen says whether no source exists or none is yours
 analysisTest("a handoff says where it comes from, and a daemon that cannot take it", (says) => {
     const window = text(newBy({windowHandoff: true}).handoff);
     assert.ok(window.includes(says.window) && !window.includes(says.trace) && !window.includes(says.daemon));
+    // The banner says the namespace's reach only for a namespaced row.
+    assert.ok(!window.includes(says.namespace));
+    assert.ok(text(newBy({windowHandoff: true, namespaced: true}).handoff).includes(says.namespace));
+    assert.ok(!text(newBy({traceHandoff: true, namespaced: true}).handoff).includes(says.namespace));
     const trace = text(newBy({traceHandoff: true, daemon: true}).handoff);
     assert.ok(trace.includes(says.trace) && trace.includes(says.daemon) && !trace.includes(says.window));
 });
@@ -3705,6 +3711,10 @@ analysisTest("the run's log, elapsed time, request and outcome read what the run
     const outcome = text(runBy().outcome);
     assert.ok(outcome.includes(says.expires + " " + PSL.durPrecise(72 * HOUR_MS - 4000)) && !outcome.includes(says.caveats));
     assert.ok(text(runBy({result: {warnings: [{kind: "sampling", message: "x"}]}}).outcome).includes(says.caveats));
+    // The empty panel lists the engine's warnings too.
+    assert.ok(text(runBy({result: {empty: true, warnings: [{kind: "sampling", message: "x"}]}}).outcome).includes(says.caveats));
+    assert.ok(!text(runBy({result: {empty: true, warnings: []}}).outcome).includes(says.caveats));
+    assert.ok(!text(runBy({status: "failed", result: {warnings: [{kind: "sampling", message: "x"}]}}).outcome).includes(says.caveats));
     // Past its expiry no link is promised.
     assert.ok(!text(runBy({}, 1000 + 73 * HOUR_MS).outcome).includes(says.expires));
 });
@@ -3727,7 +3737,7 @@ analysisTest("the report shows its frame, or says why there is none", (says) => 
 });
 
 test("the analysis guides have no em dash, and French addresses the reader as vous", () => {
-    const news = [newCtx({windowHandoff: true, traceHandoff: true, daemon: true, runnable: 2, skewPill: true,
+    const news = [newCtx({windowHandoff: true, namespaced: true, traceHandoff: true, daemon: true, runnable: 2, skewPill: true,
         mode: "trace", spanMs: 8 * 24 * HOUR_MS, weighed: true, fetchBand: "over", queue: 2, blocker: "x.",
         unreachable: true, skewBehind: true}), newCtx({sources: 0, runnable: 0, retentionHours: null, spanMs: 2 * 24 * HOUR_MS,
         maxTraces: 1500, fetchBand: "blocked", rangeMode: "absolute"}), newCtx({maxTraces: 800}), newCtx({maxTraces: 2500}),
@@ -3758,7 +3768,7 @@ const sourcesBy = (over) => Object.fromEntries(PSL.sourcesSteps(Object.assign({
     unreachable: 0, behind: false, unknownProducer: false, lockedDaemon: false, gauges: null
 }, over)).map((step) => [step.id, step]));
 const incidentsBy = (over) => Object.fromEntries(PSL.incidentsSteps(Object.assign({
-    stale: false, unauthorized: null, filtered: false, panel: null
+    stale: false, unauthorized: null, filtered: false, panel: null, unfolded: false
 }, over)).map((step) => [step.id, step]));
 const correlationsBy = (over) => Object.fromEntries(PSL.correlationsSteps(Object.assign({
     pairOnly: false, limit: null, opened: false, traceable: false
@@ -3823,7 +3833,7 @@ fleetTest("Sources names an unread producer, a locked daemon and a failed read",
 });
 
 test("the Incidents steps come in the screen's order, the stale copy, a refusal and a panel only when there", () => {
-    const steps = PSL.incidentsSteps({stale: true, unauthorized: "Daemon B", filtered: false, panel: "findings"});
+    const steps = PSL.incidentsSteps({stale: true, unauthorized: "Daemon B", filtered: false, panel: "findings", unfolded: true});
     assert.deepEqual(steps.map((step) => [step.id, step.anchors]), [
         ["intro", ["incidents.sub"]], ["stale", ["incidents.stale"]], ["unauthorized", ["incidents.unauthorized"]],
         ["filters", ["incidents.filters"]], ["empty", ["incidents.empty"]], ["table", ["incidents.table"]],
@@ -3839,7 +3849,10 @@ fleetTest("Incidents names the daemon that refused, a filtered empty list, and a
     assert.ok(!text(incidentsBy().empty).includes(says.filtered));
     assert.ok(text(incidentsBy({filtered: true}).empty).includes(says.filtered));
     assert.ok(text(incidentsBy().row).includes(says.unfold));
-    assert.ok(!text(incidentsBy({panel: "findings"}).row).includes(says.unfold));
+    assert.ok(!text(incidentsBy({panel: "findings", unfolded: true}).row).includes(says.unfold));
+    // A row unfolded on a detail that failed to read has no panel step, and is not asked to unfold again.
+    const failed = incidentsBy({unfolded: true});
+    assert.ok(!text(failed.row).includes(says.unfold) && !("panel" in failed));
 });
 
 fleetTest("an unfolded incident says what was already firing, nothing frozen, or gone", (says) => {
@@ -3938,7 +3951,7 @@ const PUBLIC_SAYS = {
         pdf: "« Télécharger le PDF »", newLink: "« Nouveau lien de partage »", render: "« Rendre à nouveau »",
         withdraw: "« Retirer » demande une raison", noWithdraw: "n'offre plus ni lien", neverLink: "n'a jamais de lien",
         carbonBar: "La barre du carbone", measured: "2 des 3 applications déclarées", both: "« Hôtes de broker »",
-        database: "La ligne « Hôtes de base de données »", excluded: "par l'opérateur", hashChecked: "n'ont pas changé depuis",
+        database: "La ligne « Hôtes de base de données »", broker: "La ligne « Hôtes de broker »", excluded: "par l'opérateur", hashChecked: "n'ont pas changé depuis",
         hashNot: "n'a pas vérifié l'empreinte", signature: "sur votre ordinateur", audited: "Le niveau audité",
         neverShared: "n'est jamais partagé", locked: "votre accès ne comprend pas", groupChange: "prochaine connexion",
         noGroup: "aucun groupe", noReach: "Aucune autorisation ne concerne", everything: "« Tout » veut dire",
@@ -3953,7 +3966,7 @@ const PUBLIC_SAYS = {
         pdf: "\"Download the PDF\"", newLink: "\"New share link\"", render: "\"Render again\"",
         withdraw: "\"Withdraw\" asks for a reason", noWithdraw: "offers neither a share link", neverLink: "never has a share link",
         carbonBar: "The carbon bar", measured: "2 of the 3 declared applications", both: "\"Broker hosts\"",
-        database: "The \"Database hosts\" row", excluded: "by the operator", hashChecked: "have not changed since",
+        database: "The \"Database hosts\" row", broker: "The \"Broker hosts\" row", excluded: "by the operator", hashChecked: "have not changed since",
         hashNot: "did not check the content hash", signature: "on your computer", audited: "The audited level",
         neverShared: "is never shared", locked: "your access does not include", groupChange: "next sign-in",
         noGroup: "in no group", noReach: "No grant concerns", everything: "\"Everything\" means",
@@ -4031,13 +4044,15 @@ publicTest("a disclosure's figures, applications and integrity say what the scre
     assert.ok(text(disclosureBy().glance).includes(says.carbonBar));
     assert.ok(!text(disclosureBy({figures: Object.assign({}, DISCLOSURE.figures, {carbon_kgco2eq: 0})}).glance).includes(says.carbonBar));
     const plain = text(disclosureBy().apps);
-    for (const variant of ["measured", "both", "database", "excluded"]) assert.ok(!plain.includes(says[variant]), variant);
+    for (const variant of ["measured", "both", "database", "broker", "excluded"]) assert.ok(!plain.includes(says[variant]), variant);
     const figures = Object.assign({}, DISCLOSURE.figures, {applications_declared: 3, applications_measured: 2});
     assert.ok(text(disclosureBy({figures}).apps).includes(says.measured));
     const database = text(disclosureBy({}, {}, HOSTS).apps);
     assert.ok(database.includes(says.database) && !database.includes(says.both));
     const both = Object.assign({}, HOSTS.aggregate, {messaging_waste: HOSTS.aggregate.database_waste});
     assert.ok(text(disclosureBy({}, {}, {aggregate: both}).apps).includes(says.both));
+    const broker = text(disclosureBy({}, {}, {aggregate: {total_energy_kwh: 10, messaging_waste: HOSTS.aggregate.database_waste}}).apps);
+    assert.ok(broker.includes(says.broker) && !broker.includes(says.database));
     const excluded = {scope_manifest: {applications_excluded: [{service_name: "batch"}]}};
     assert.ok(text(disclosureBy({}, {}, excluded).apps).includes(says.excluded));
     const checked = text(disclosureBy().integrity);

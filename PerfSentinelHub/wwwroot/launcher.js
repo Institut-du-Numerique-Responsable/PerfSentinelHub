@@ -3754,6 +3754,7 @@
         const steps = [guideStep('empty', ['new.empty'], {body: [text(ctx.sources === 0 ? 'empty.none' : 'empty.grant')]}, text)];
         const handoff = [];
         if (ctx.windowHandoff) handoff.push(text('handoff.window'));
+        if (ctx.windowHandoff && ctx.namespaced) handoff.push(text('handoff.namespace'));
         if (ctx.traceHandoff) handoff.push(text('handoff.trace'));
         if (handoff.length && ctx.daemon) handoff.push(text('handoff.daemon'));
         if (handoff.length) steps.push(guideStep('handoff', ['new.handoff'], {body: handoff}, text));
@@ -3915,7 +3916,10 @@
             if (run.expires_at_ms && run.expires_at_ms > ctx.now) {
                 body.push(text('outcome.succeeded.open', {duration: durPrecise(run.expires_at_ms - ctx.now)}));
             }
-            if (hasItems(/** @type {unknown[]} */ ((run.result || {})['warnings']))) body.push(text('outcome.succeeded.caveats'));
+        }
+        // The empty panel lists the engine's warnings too (outcomeSpec).
+        if ((key === 'succeeded' || key === 'empty') && hasItems(/** @type {unknown[]} */ ((run.result || {})['warnings']))) {
+            body.push(text('outcome.caveats'));
         }
         return guideStep('outcome', ['run.outcome'], {title: text('outcome.' + key + '.title'), body}, text);
     }
@@ -4007,7 +4011,7 @@
             }, text));
         }
         const row = [text('row.body'), text('row.window')];
-        if (!ctx.panel) row.push(t('guide.unfold'));
+        if (!ctx.panel && !ctx.unfolded) row.push(t('guide.unfold'));
         steps.push(
             guideStep('filters', ['incidents.filters'], {body: [text('filters.body'), text('filters.read')]}, text),
             guideStep('empty', ['incidents.empty'], {body: [text(ctx.filtered ? 'empty.filtered' : 'empty.body')]}, text),

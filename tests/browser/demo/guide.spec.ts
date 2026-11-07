@@ -792,6 +792,19 @@ test("the menu opens on the keyboard, Escape closes it and gives the focus back"
     await expect(page.locator("#guide-menu")).toHaveCount(0);
     await expect(page.locator("#guide-open")).toBeFocused();
     await expect(page.locator("#guide-open")).toHaveAttribute("aria-expanded", "false");
+    // Shift+Tab back onto the entry leaves the menu open, and Escape there still closes it.
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator("#guide-open")).toBeFocused();
+    await expect(page.locator("#guide-menu")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#guide-menu")).toHaveCount(0);
+    await expect(page.locator("#guide-open")).toBeFocused();
+    // A click on the backdrop closes it too, and the focus goes back to the entry.
+    await page.keyboard.press("Enter");
+    await page.locator("#guide-menu-backdrop").click({position: {x: 2, y: 2}});
+    await expect(page.locator("#guide-menu")).toHaveCount(0);
+    await expect(page.locator("#guide-open")).toBeFocused();
     await page.keyboard.press("Enter");
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");

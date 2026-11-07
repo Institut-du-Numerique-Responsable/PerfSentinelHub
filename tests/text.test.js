@@ -281,11 +281,11 @@ test("the guide calls no route and stores only the role", () => {
     const code = wwwrootFile("guide.js");
     assert.ok(code.includes("const ROLE_KEY = 'perf-sentinel:guide-role';"));
     // Its two accesses, each under a try: a browser that refuses storage must not break the menu.
-    const allowed = ["try {\n            global.localStorage.setItem(ROLE_KEY, path.role);",
-        "try {\n            return global.localStorage.getItem(ROLE_KEY);"];
+    const allowed = [/try \{\s*global\.localStorage\.setItem\(ROLE_KEY, path\.role\);/,
+        /try \{\s*return global\.localStorage\.getItem\(ROLE_KEY\);/];
     let rest = code;
     for (const access of allowed) {
-        assert.ok(rest.includes(access), access);
+        assert.match(rest, access);
         rest = rest.replace(access, "");
     }
     for (const banned of ["fetch(", "XMLHttpRequest", "localStorage", "sessionStorage", "indexedDB", "WebSocket", "EventSource",
