@@ -209,11 +209,11 @@ only rotated out keeps vouching for the cards dated inside its window, a window 
 could also date a card into.
 
 An original file the Hub downloaded is checked byte for byte, so any edit reads as modified.
-LinkedIn strips a file's metadata, an editor that saves an SVG again usually drops its
+Social networks strip a file's metadata when it is posted, an editor that saves an SVG again usually drops its
 `<metadata>`, and a converter that re-saves a JPEG XL usually drops its `pscd` box, so a reposted
 or edited image keeps only its QR code. The QR code proves the figures, not the pixels around it:
-the check page shows those figures, to compare with the image. LinkedIn does not accept JPEG XL
-at all, so the PNG is the file to post.
+the check page shows those figures, to compare with the image. Social networks do not accept
+JPEG XL, so the PNG is the file to post.
 
 The figures are as the Hub held them. A story cites the last sample the Hub held before the
 action was marked done, the newest copy winning. Its fanout counts calls, not systems, its slow

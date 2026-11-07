@@ -498,8 +498,8 @@ et le refus du moteur arrive au même endroit.
 
 La carte se télécharge en image (PNG), en image à imprimer ou agrandir (SVG), nette à toute taille,
 en image plus légère à archiver (JPEG XL), ou en carrousel (PDF). Le JPEG XL garde les pixels du
-PNG, sans perte : gardez-le pour archiver ou envoyer, et publiez le PNG, car
-[LinkedIn n'accepte pas le JPEG XL](https://www.linkedin.com/help/linkedin/answer/a564109). Preview
+PNG, sans perte : gardez-le pour archiver ou envoyer, et publiez le PNG, car les réseaux sociaux
+n'acceptent pas le JPEG XL. Preview
 rend la carte : l'image dans un cadre clair, quel que soit le thème du Hub, le PNG pour un choix
 JPEG XL, le carrousel dans la visionneuse PDF du navigateur. Un choix modifié après un aperçu le
 grise et le dit, sauf un passage entre PNG et JPEG XL, qui montre la même image. Download fait
