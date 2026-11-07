@@ -809,8 +809,10 @@ langue du formulaire d'où elle vient. Une langue choisie sur ces pages n'est pa
 
 ## Le guide
 
-Comprendre cet écran, dans la barre du haut, un « ? » seul sur un téléphone, ouvre un menu de deux
-choix : Comprendre cet écran parcourt l'écran affiché, et Je suis… enchaîne les écrans d'un rôle.
+Guide, dans la barre du haut, un « ? » seul sur un téléphone, ouvre un menu de deux choix :
+Comprendre cet écran parcourt l'écran affiché, et Je suis… enchaîne les écrans d'un rôle. La page
+d'un appelant qu'aucune autorisation ne concerne ne propose que le premier, puisque chaque écran
+d'un parcours y montrerait le même refus.
 
 Chaque écran a son guide : Nouvelle analyse, Récentes, un run et son rapport, Sources, Incidents,
 Corrélations, les deux vues du récapitulatif, Divulgations et une divulgation, Votre accès et
@@ -849,7 +851,8 @@ Je suis… liste cinq rôles, chacun avec sa question et ce que son parcours app
 Un parcours passe de lui-même d'un écran à l'autre, avec `écran 1 sur 2` à côté du compte des
 étapes et Écran suivant sur la dernière carte d'un écran. Un écran qui ne s'affiche pas pour vous,
 comme Divulgations pour un appelant sans cet onglet, est sauté et nommé sur la dernière carte. Un
-écran qui montre une erreur ou un refus le dit et propose Écran suivant. Quitter reste où vous êtes.
+écran qui montre une erreur ou un refus le dit et propose Écran suivant, ou Fermer sur le dernier
+écran du parcours. Quitter reste où vous êtes.
 Le navigateur retient le dernier rôle choisi, sous `perf-sentinel:guide-role` dans `localStorage`,
 pour que le menu le coche la fois suivante. Il n'est gardé nulle part ailleurs, et un navigateur
 qui refuse le stockage ne coche rien.
@@ -866,7 +869,8 @@ Le guide ne lit que ce que l'écran a déjà chargé et ne lance aucun calcul. O
 écran se charge, il le dit et démarre à l'arrivée des données ; quand l'écran n'a pas pu être lu, il
 le dit et propose seulement de fermer. Il n'envoie aucune requête, ne change rien dans le Hub et ne
 déplie rien. Un parcours ne fait que changer l'adresse, et chaque écran lit alors ce qu'il lit quand
-vous l'ouvrez vous-même. Les chiffres que le guide cite sont écrits par les mêmes fonctions que ceux
+vous l'ouvrez vous-même : un parcours qui entre dans le récapitulatif le calcule comme le ferait
+l'onglet, et le guide lui-même ne lance jamais de calcul. Les chiffres que le guide cite sont écrits par les mêmes fonctions que ceux
 de l'écran, ils se lisent donc pareil.
 
 ## Sûreté

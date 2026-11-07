@@ -6,8 +6,8 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Added
 
-- The recap's Management view gets a guide. Understand this screen (Comprendre cet écran in French),
-  in the top bar and a "?" alone on a phone, walks the page on its own figures: a cutout lights one
+- The recap's Management view gets a guide. Guide, in the top bar and a "?" alone on a phone, then
+  Understand this screen (Comprendre cet écran in French), walks the page on its own figures: a cutout lights one
   part at a time, the rest is dimmed, and a card says what the part means, with the step count,
   Previous, Next and Quit. The first row gets numbered marks that the card names, a part the page
   does not show is skipped, and a last card recalls the three questions the page answers. The page
@@ -25,12 +25,14 @@ All notable changes to PerfSentinelHub are recorded here.
   episodes or a daemon's gauges, is read only if it was unfolded before the guide opened: the guide
   never unfolds one. The page a signed-in caller no grant reaches gets the guide of Your access.
   LIMITATIONS.md gains a section saying a correlation is a repeated co-occurrence, not a cause.
-- The guide's button opens a menu: Understand this screen, and I am… (Je suis… in French), five
+- The Guide button opens a menu: Understand this screen, and I am… (Je suis… in French), five
   roles each with its question and what its path brings. Dev walks the Engineering recap, Tech lead
   the Engineering recap then New analysis, Architect Correlations, Incidents then Sources, Project
   manager the Management recap, and CTO the Management recap then Disclosures. A path moves from
   screen to screen with `screen 1 of 2` and Next screen, a screen hidden for the caller is skipped
-  and named on the last card, and one that shows an error says so and offers the next. The role
+  and named on the last card, and one that shows an error says so and offers the next screen, or
+  Close on the last one. A path that enters the recap computes it as the tab would; the guide itself
+  starts no computation. The page a caller no grant reaches offers no path. The role
   chosen last is kept in that browser's `localStorage` under `perf-sentinel:guide-role`, nowhere
   else, and the menu ticks it next time.
 - New analysis gets a Simultaneous reads block (Lectures simultanées in French) under Max traces,

@@ -73,6 +73,11 @@ test("a caller no grant reaches gets the guide of their access, without the reac
     await page.goto("/#/sources");
     await expect(page.locator("#main")).toContainText("No grant on this Hub reaches you", {timeout: 15_000});
     await expect(page.locator("#guide-open")).toBeVisible();
+    await page.locator("#guide-open").click();
+    // No status to read, so no role path: its screens would only say the refusal.
+    await expect(page.locator("#guide-menu-screen")).toBeVisible();
+    await expect(page.locator("#guide-menu-role")).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await openOn(page, "/#/sources", '[data-guide="access.tokens"]');
     expect(await walkTitles(page)).toEqual(["Your access", "Who you are", "Your groups", "Your terminal tokens",
         "You know what you see here"]);

@@ -262,7 +262,9 @@ const SCREEN_FUNCTIONS = ["renderSourcesScreen", "sourcesTable", "tableGroupRow"
     "renderIncidentsScreen", "unauthorizedBanners", "incidentFilterLine", "incidentCopyNote", "incidentsTable",
     "incidentRow", "incidentNameCell", "toggleIncident", "loadIncident", "incidentPanel", "renderCorrelationsScreen",
     "correlationFilterLine", "correlationsTable", "pairRow", "pairPanel", "renderFleetSkew", "disclosuresGuideSource",
-    "disclosureGuideSource", "ownTokens", "accessGuideSource", "coverageGuideSource", "guideId", "render"];
+    "disclosureGuideSource", "ownTokens", "accessGuideSource", "coverageGuideSource", "guideId", "initGuide",
+    "openGuideMenu", "guideMenuItems", "guideRoleItems", "guideMenuKey", "closeGuideMenu", "startScreenGuide",
+    "startRolePath", "recapGuideSource", "render"];
 
 const SCREEN_HELPERS = ["sourceHealth", "dur", "durDown", "durParts", "humanDur", "versionGap", "skew", "argsLine",
     "weightBand", "bytes", "hostKwh", "sourceCountLabel", "monitorKeyHint"];
@@ -642,7 +644,7 @@ const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapH
     "recapDeliveryText", "recapOnDemandBody", "recapCount", "guideIdFor", "guideText", "guideStep", "hasItems",
     "recapPilotageSteps", "guidePeriodStep", "guideIoStep", "guideCo2Step", "guideOpenStep", "guideTableStep",
     "guideRowStep", "guideMovedStep", "recapFiltered", "techText", "techStep", "recapTechSteps", "techPeriodStep",
-    "techIoStep", "techCo2Step", "techActionsStep", "techTableStep", "techRowStep", "techFixStep", "techActStep",
+    "techIoStep", "techCo2Step", "techActionsStep", "techTableStep", "techRowStep", "techFixStep", "techSqlStep", "techActStep",
     "techMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain",
     "screenText", "rangeNotes", "newSteps", "newRangeStep", "newTracesStep", "newFetchStep", "newCostStep",
     "newSubmitStep", "recentSteps", "runSteps", "runOutcomeStep", "reportGoneView", "reportSteps", "sourcesSteps",

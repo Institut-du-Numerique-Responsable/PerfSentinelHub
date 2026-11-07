@@ -1463,7 +1463,8 @@
         const host = entry.parentElement;
         const items = roles ? guideRoleItems() : guideMenuItems();
         const list = el('div', {
-            role: 'menu', class: 'guide-menu-list', 'aria-labelledby': roles ? 'guide-menu-title' : 'guide-open',
+            role: 'menu', class: 'guide-menu-list', 'aria-labelledby': roles ? 'guide-menu-title' : null,
+            'aria-label': roles ? null : t('guide.menu.label'),
             'aria-describedby': roles ? 'guide-menu-sub' : null
         }, items);
         const pop = el('div', {class: 'guide-menu', id: 'guide-menu'}, [
@@ -1493,7 +1494,7 @@
         }) || items[0]).focus();
     }
 
-    /** The menu's two doors: the screen's own guide, and the roles. */
+    /** The menu's two doors: the screen's own guide, and the roles, which need the status the paths read. */
     function guideMenuItems() {
         const screen = el('button', {type: 'button', class: 'guide-menu-item', role: 'menuitem', id: 'guide-menu-screen',
             text: t('guide.menu.screen')});
@@ -1506,7 +1507,7 @@
         role.addEventListener('click', function () {
             openGuideMenu(true);
         });
-        return [screen, role];
+        return state.status ? [screen, role] : [screen];
     }
 
     /** Each role with its question and what its path brings; the one this browser remembers is ticked. */
@@ -1569,7 +1570,8 @@
     function startRolePath(role) {
         const path = PSL.guidePath(role, function (screen) {
             const tab = /** @type {HTMLElement | null} */ (document.querySelector('.shell-tab[data-screen="' + screen + '"]'));
-            return Boolean(tab) && !tab.hidden;
+            // The tab bar is hidden whole on a page without a grant, so a hidden ancestor counts too.
+            return Boolean(tab) && !tab.closest('[hidden]');
         });
         GUIDE.startPath({
             role, skipped: path.skipped, stops: path.stops.map(function (stop) {
@@ -8556,9 +8558,12 @@
         // A folded fix is no anchor: the guide never opens a fold, so its step waits for the reader to.
         const detail = /** @type {HTMLDetailsElement | null} */ (row.querySelector('.recap-detail'));
         if (!detail) return;
+        const sql = detail.querySelector('.recap-sql');
         const name = function () {
             if (detail.open) detail.setAttribute('data-guide', 'recap.row.detail');
             else detail.removeAttribute('data-guide');
+            if (sql && detail.open) sql.setAttribute('data-guide', 'recap.row.sql');
+            else if (sql) sql.removeAttribute('data-guide');
         };
         name();
         detail.addEventListener('toggle', name);
@@ -8743,7 +8748,7 @@
      */
     function recapTemplate(priority) {
         if (!PSL.isSqlFinding(priority.finding_type)) return el('pre', {class: 'recap-code', text: priority.template});
-        return el('pre', {class: 'recap-code'}, PSL.sqlTokens(priority.template).map(function (token) {
+        return el('pre', {class: 'recap-code recap-sql'}, PSL.sqlTokens(priority.template).map(function (token) {
             return el('span', {class: 'sql-' + token.kind, text: token.text});
         }));
     }

@@ -229,10 +229,11 @@
      */
     function stateText(part) {
         const own = 'guide.' + open.guide.split('.').pop() + '.' + open.status;
-        const keys = [own + '.' + open.variant + '.' + part, own + '.' + part, 'guide.' + open.status + '.' + part];
+        const generic = 'guide.' + open.status + '.' + part;
+        const keys = [open.variant && own + '.' + open.variant + '.' + part, own + '.' + part].filter(Boolean);
         return PSL.t(keys.find(function (key) {
             return PSL.hasText(key);
-        }) || keys[2]);
+        }) || generic);
     }
 
     function paintState() {

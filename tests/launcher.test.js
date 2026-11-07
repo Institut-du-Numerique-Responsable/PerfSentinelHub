@@ -3232,13 +3232,15 @@ guideTest("nothing moved and no closed day replace the comparison", (says) => {
 });
 
 test("the guide's shell texts are set in both languages", () => {
-    const keys = ["open", "quit", "prev", "next", "close", "count", "wait.title", "wait.body", "failed.title", "failed.body"];
+    const keys = ["open", "menu.label", "quit", "prev", "next", "close", "count", "wait.title", "wait.body", "failed.title",
+        "failed.body"];
     for (const lang of ["fr", "en"]) inLang(lang, () => {
         for (const key of keys) assert.ok(PSL.hasText("guide." + key), lang + " guide." + key);
         assert.equal(PSL.t("guide.count", {at: 2, total: 9}), lang === "fr" ? "2 sur 9" : "2 of 9");
     });
     inLang("fr", () => {
-        assert.equal(PSL.t("guide.open"), "Comprendre cet écran");
+        assert.equal(PSL.t("guide.open"), "Guide");
+        assert.equal(PSL.t("guide.menu.screen"), "Comprendre cet écran");
         assert.equal(PSL.t("guide.wait.title"), "Le récap se calcule");
         assert.equal(PSL.t("guide.failed.title"), "Le récap n'a pas pu être lu");
     });
@@ -3326,7 +3328,8 @@ test("the technical steps come in the screen's order, each on its anchors", () =
         ["view", ["recap.view"]], ["filters", ["recap.filters"]], ["pick", ["recap.pick.services", "recap.pick.groupings"]],
         ["fresh", ["recap.fresh"]], ["period", ["recap.period"]], ["io", ["recap.io"]], ["co2", ["recap.co2"]],
         ["findings", ["recap.findings"]], ["actions", ["recap.actions"]], ["table", ["recap.table"]],
-        ["row", ["recap.row"]], ["fix", ["recap.row.detail"]], ["act", ["recap.row.facts", "recap.row.state"]],
+        ["row", ["recap.row"]], ["fix", ["recap.row.detail"]], ["sql", ["recap.row.sql"]],
+        ["act", ["recap.row.facts", "recap.row.state"]],
         ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
         ["card", ["recap.card"]], ["end", []]]);
     const row = list.find((step) => step.id === "row");
@@ -3342,7 +3345,7 @@ test("the technical steps come in the screen's order, each on its anchors", () =
 
 test("no priority drops the row, its fix and its action", () => {
     const ids = PSL.recapTechSteps(techSnapshot({priorities: []}), {}).map((step) => step.id);
-    for (const id of ["row", "fix", "act"]) assert.ok(!ids.includes(id), id);
+    for (const id of ["row", "fix", "sql", "act"]) assert.ok(!ids.includes(id), id);
 });
 
 test("the pick step says the most names a list takes", () => {
@@ -3422,13 +3425,18 @@ techTest("the row names the business label when there is one and reads its dash"
     assert.ok(!figure({}).startsWith(says.dash));
 });
 
-techTest("the fix step describes SQL layout, its limit and the action history only when they are there", (says) => {
-    const fix = (over) => text(techSteps({priorities: [techRow(over)]}).fix);
-    assert.ok(fix({}).includes(says.sql) && !fix({}).includes(says.long));
-    assert.ok(!fix({finding_type: "n_plus_one_http", template: "GET /orders/{id}"}).includes(says.sql));
-    assert.ok(!fix({template: undefined}).includes(says.sql));
-    const long = fix({template: "SELECT a FROM b WHERE c = ? " + "AND d = ? ".repeat(70)});
+techTest("the sql step comes with a SQL query only, and names its limit past it", (says) => {
+    const sql = (over) => techSteps({priorities: [techRow(over)]}).sql;
+    assert.ok(text(sql({})).includes(says.sql) && !text(sql({})).includes(says.long));
+    assert.equal(sql({finding_type: "n_plus_one_http", template: "GET /orders/{id}"}), undefined);
+    assert.equal(sql({template: undefined}), undefined);
+    const long = text(sql({template: "SELECT a FROM b WHERE c = ? " + "AND d = ? ".repeat(70)}));
     assert.ok(long.includes(says.sql) && long.includes(says.long));
+});
+
+techTest("the fix step leaves the SQL to its own step and names the action history only when it is there", (says) => {
+    const fix = (over) => text(techSteps({priorities: [techRow(over)]}).fix);
+    assert.ok(!fix({}).includes(says.sql));
     assert.ok(!fix({}).includes(says.events));
     assert.ok(fix({action: {status: "todo", events: [{from: null, to: "todo", by: "alice", at_ms: 1}]}}).includes(says.events));
     assert.ok(!fix({action: {status: "todo", events: []}}).includes(says.events));

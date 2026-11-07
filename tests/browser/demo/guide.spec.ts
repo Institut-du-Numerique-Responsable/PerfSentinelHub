@@ -413,7 +413,9 @@ test("the technical walk reaches the priority, its fix and its action", async ({
     });
     expect(titles[0]).toBe("You are in the Engineering view");
     for (const wanted of ["What the page counts", "Lists to tick", "The period", "What to fix first",
-        "How to read a priority", "How to fix", "Take an action", "What moved"]) expect(titles).toContain(wanted);
+        "How to read a priority", "How to fix", "The query, laid out", "Take an action", "What moved"]) {
+        expect(titles).toContain(wanted);
+    }
     expect(titles[total - 1]).toBe("You can now choose what to take");
     await next(page).click();
     await expect(page.locator("#guide-root")).toBeHidden();
@@ -427,8 +429,15 @@ test("the technical row numbers its marks, and the fix and the action frame thei
     expect(legend).toBeGreaterThanOrEqual(4);
     await expect(page.locator(".guide-marks .guide-mark")).toHaveCount(legend);
     await next(page).click();
+    // Split in two so that neither card takes more than half a phone's screen.
+    const half = async () => ((await card(page).boundingBox())?.height ?? 0) <= page.viewportSize()!.height / 2;
     await expect(title(page)).toHaveText("How to fix");
     expect(await framed(page, ["recap.row.detail"])).toBe(true);
+    expect(await half()).toBe(true);
+    await next(page).click();
+    await expect(title(page)).toHaveText("The query, laid out");
+    expect(await framed(page, ["recap.row.sql"])).toBe(true);
+    expect(await half()).toBe(true);
     await next(page).click();
     await expect(title(page)).toHaveText("Take an action");
     expect(await framed(page, ["recap.row.facts", "recap.row.state"])).toBe(true);
@@ -445,6 +454,7 @@ test("a folded fix is skipped, as the guide never unfolds it", async ({page}) =>
     });
     expect(titles).toContain("Take an action");
     expect(titles).not.toContain("How to fix");
+    expect(titles).not.toContain("The query, laid out");
 });
 
 test("a guide reads its own wait text, else the shared one", async ({page}) => {
@@ -479,6 +489,7 @@ test("a fix folded between two openings of the guide is skipped the second time"
     });
     expect(titles).toContain("Take an action");
     expect(titles).not.toContain("How to fix");
+    expect(titles).not.toContain("The query, laid out");
 });
 
 // ---- the analysis screens: New, Recent, one run and its report
@@ -783,6 +794,8 @@ test("the menu opens on the keyboard, Escape closes it and gives the focus back"
     await page.locator("#guide-open").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#guide-open")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", {name: "Guide", exact: true})).toHaveAttribute("aria-haspopup", "menu");
+    await expect(page.getByRole("menu", {name: "Guide", exact: true})).toBeVisible();
     await expect(page.locator("#guide-menu-screen")).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(page.locator("#guide-menu-role")).toBeFocused();

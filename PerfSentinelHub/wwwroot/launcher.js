@@ -3536,7 +3536,9 @@
             techActionsStep(snapshot),
             techTableStep(snapshot, Boolean(ctx && ctx.showAll))
         ];
-        if (first) steps.push(techRowStep(first), techFixStep(first), techActStep(first));
+        if (first) steps.push(techRowStep(first), techFixStep(first));
+        if (first && first.template && isSqlFinding(first.finding_type)) steps.push(techSqlStep(first));
+        if (first) steps.push(techActStep(first));
         steps.push(
             techStep('below', ['recap.below']),
             techMovedStep(snapshot, (ctx && ctx.movesOpen) || {}),
@@ -3659,14 +3661,20 @@
      */
     function techFixStep(first) {
         const body = [techText('fix.body')];
-        if (first.template && isSqlFinding(first.finding_type)) {
-            body.push(techText('fix.sql'));
-            if (first.template.length > RECAP_SQL_LAYOUT_MAX) {
-                body.push(techText('fix.long', {max: num(RECAP_SQL_LAYOUT_MAX)}));
-            }
-        }
         if (first.action && first.action.events && first.action.events.length) body.push(techText('fix.events'));
         return techStep('fix', ['recap.row.detail'], {body});
+    }
+
+    /**
+     * The first row's SQL query, laid out in the open fold: a step of its own, so that neither card
+     * outgrows half a phone's screen.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techSqlStep(first) {
+        const body = [techText('sql.body')];
+        if (first.template.length > RECAP_SQL_LAYOUT_MAX) body.push(techText('sql.long', {max: num(RECAP_SQL_LAYOUT_MAX)}));
+        return techStep('sql', ['recap.row.sql'], {body});
     }
 
     /**

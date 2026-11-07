@@ -747,8 +747,9 @@ language of the form it came from. A language picked on these pages is not store
 
 ## The guide
 
-Understand this screen, in the top bar and a "?" alone on a phone, opens a menu of two choices:
-Understand this screen walks the screen on show, and I am… chains the screens of a role.
+Guide, in the top bar and a "?" alone on a phone, opens a menu of two choices: Understand this
+screen walks the screen on show, and I am… chains the screens of a role. The page a caller no grant
+reaches offers only the first, since every screen of a path would show the same refusal.
 
 Every screen has its guide: New analysis, Recent, a run and its report, Sources, Incidents,
 Correlations, both views of the recap, Disclosures and one disclosure, Your access and Coverage. The
@@ -784,7 +785,8 @@ I am… lists five roles, each with its question and what its path brings:
 A path moves from screen to screen itself, with `screen 1 of 2` beside the step count and Next
 screen on a screen's last card. A screen that does not show for you, such as Disclosures for a
 caller without that tab, is skipped and named on the last card. A screen that shows an error or a
-refusal says so and offers Next screen. Quit stays where you are. The browser remembers the role
+refusal says so and offers Next screen, or Close on the path's last screen. Quit stays where you
+are. The browser remembers the role
 last chosen, under `perf-sentinel:guide-role` in `localStorage`, so the menu ticks it next time. It
 is kept nowhere else, and a browser that refuses storage ticks nothing.
 
@@ -798,7 +800,9 @@ path. With reduced motion set, the page jumps to each part instead of scrolling 
 The guide reads only what the screen already loaded and starts no computation. Opened while a screen
 loads, it says so and starts when the data arrives; when the screen could not be read, it says so
 and only offers to close. It sends no request, changes nothing on the Hub and unfolds nothing. A
-path only moves the address, and each screen then reads what it reads when you open it yourself.
+path only moves the address, and each screen then reads what it reads when you open it yourself: a
+path that enters the recap computes it as the tab would, and the guide itself never starts a
+computation.
 The figures the guide quotes are written by the same functions as the screen's, so they read the
 same.
 
