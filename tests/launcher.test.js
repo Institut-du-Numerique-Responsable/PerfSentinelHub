@@ -3104,11 +3104,19 @@ guideTest("the title carries the figure the tile shows", (says) => {
     assert.ok(steps({tiles: {avoidable_io_ops: 2}}).io.title.endsWith(says.ioOther));
 });
 
-guideTest("no figure of unnecessary operations is a title without a count, and says nothing was counted", (says) => {
+guideTest("no figure of unnecessary operations is a title without a count, and a body that says nothing was counted", (says) => {
     const none = steps({tiles: {avoidable_io_ops: null}}).io;
+    const counted = steps({tiles: {avoidable_io_ops: 5}}).io;
     assert.equal(none.title, says.ioNone);
-    assert.ok(none.body.join(" ").includes(says.nothingCounted));
-    assert.ok(!steps({tiles: {avoidable_io_ops: 5}}).io.body.join(" ").includes(says.nothingCounted));
+    assert.deepEqual(none.body.length, 1);
+    assert.ok(none.body[0].includes(says.nothingCounted));
+    // The body is replaced, not added to: the definition is for a tile that has a figure.
+    assert.ok(!none.body.join(" ").includes(counted.body[0]));
+    assert.ok(!counted.body.join(" ").includes(says.nothingCounted));
+    // The period's own gaps still come on top.
+    const partial = steps({tiles: {avoidable_io_ops: null}, period: {incomplete: ["restart"]}}).io.body;
+    assert.equal(partial.length, 2);
+    assert.ok(partial[0].includes(says.nothingCounted) && partial[1].includes(says.wholePeriod));
 });
 
 guideTest("a known carbon figure is an order of magnitude, at least when sources send no coefficient", (says) => {

@@ -3346,8 +3346,8 @@
     function guideIoStep(snapshot) {
         const value = snapshot.tiles.avoidable_io_ops;
         const count = recapCount(value);
-        const body = [guideText('io.body')];
-        if (count === null) body.push(guideText('io.none'));
+        // With no figure the body is the one sentence that says so: the definition explains a tile that has a figure.
+        const body = [guideText(count === null ? 'io.none' : 'io.body')];
         // Only this period's own gaps make this figure partial: the previous period is not in it.
         if (hasItems(snapshot.period.incomplete)) body.push(guideText('io.incomplete'));
         return guideStep('io', ['recap.io'], {
