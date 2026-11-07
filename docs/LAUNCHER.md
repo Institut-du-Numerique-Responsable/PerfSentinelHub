@@ -406,6 +406,27 @@ A report keeps one language: the language on screen for a report generated here,
 `Language` for a scheduled one. Its two downloads open in that language. A mailed report reaches each
 address in that address's own language, see [the configuration](CONFIGURATION.md).
 
+### The guide
+
+In the Management view, Understand this screen in the top bar, a "?" alone on a phone, walks the
+recap on the figures it shows. A cutout lights one part of the page at a time and dims the rest, and a
+card says what that part means, with `4 of 11`, Previous, Next and Quit. The step on the first row
+puts numbered marks on its parts, and the card names them under the same numbers. A part the page
+does not show, such as Reports for a caller who cannot read them or the separator when no row sits
+under it, is skipped and left out of the count. The last card, with no cutout, recalls the three
+questions the page answers. The Engineering view has no guide, and the button is absent there.
+
+While the guide is open, the page behind it takes no click and no key, but it still scrolls: no view,
+action or report can change behind the guide. Escape quits, the left and right arrows move from step
+to step, Tab stays in the card, and the focus goes back to the button on exit. Another screen or the
+other view, reached by the browser's back button too, closes the guide. With reduced motion set, the
+page jumps to each part instead of scrolling to it.
+
+The guide reads only what the screen already loaded and starts no computation. Opened while the recap
+is computed, it says so and starts when the result arrives; when the recap could not be read, it says
+so and only offers to close. It sends no request and stores nothing. The figures in its titles are
+written by the same functions as the tiles, so they read the same.
+
 ## Share cards
 
 Under the reports, when the Hub signs cards (`Hub:Cards:Organisation` is set and you may create cards),

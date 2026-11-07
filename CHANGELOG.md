@@ -6,6 +6,17 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Added
 
+- The recap's Management view gets a guide. Understand this screen (Comprendre cet écran in French),
+  in the top bar and a "?" alone on a phone, walks the page on its own figures: a cutout lights one
+  part at a time, the rest is dimmed, and a card says what the part means, with the step count,
+  Previous, Next and Quit. The first row gets numbered marks that the card names, a part the page
+  does not show is skipped, and a last card recalls the three questions the page answers. The page
+  behind takes no click or key while the guide is open, Escape quits, the arrows move, Tab stays in
+  the card and the focus returns to the button. Leaving the screen or the view, the browser's back
+  button included, closes it. The guide reads only what the screen loaded: opened while the recap is
+  computed it waits for the result, and it starts no computation, sends no request and stores
+  nothing. `tests/browser/demo/guide.spec.ts` walks it in a browser at 1280 and 390 px, light and
+  dark, outside `npm run demo`.
 - New analysis gets a Simultaneous reads block (Lectures simultanées in French) under Max traces,
   to choose how many trace bodies the engine reads from Tempo at once. It is passed as
   `--fetch-concurrency` and shows for a Tempo source in service mode on an engine from `0.43.0`,

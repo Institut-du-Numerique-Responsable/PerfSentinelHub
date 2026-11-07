@@ -42,6 +42,25 @@ captured the same way, light and dark, from a second Hub (`demo/access.spec.ts`)
 - `hub-device.png`, the terminal approval page with a pending code entered and
   verified, before Approve or Deny.
 
+## The guide's walk
+
+`demo/guide.spec.ts` is the one spec here that asserts rather than captures. It walks the
+Management recap's guide on the Hub global-setup stands up, at 1280 and 390 px, light and dark:
+every step and the focus on exit, a redraw during a step, the wait card while the recap job is
+held running (and no request added), the failed card, a row taller than the window, the browser's
+back button, the page behind left inert, the figures of the titles against the tiles in English and
+French, the entry on the same row as the theme and language buttons, no sideways scroll
+and reduced motion. It writes nothing to `docs/img/`, and `npm run demo`
+leaves it out, since it runs the capture projects only. Run it by its projects:
+
+```bash
+npx playwright test -c playwright.demo.config.ts --project 'guide-*'
+```
+
+The setup is the whole demo's, engine binary included. Like the stills, it refreshes
+`demo/fixtures/hub-embed.json` on the way, so restore that file afterwards unless the capture was
+meant.
+
 ## What global-setup has to build first
 
 The Hub has no seeder, no fixture loader and no demo mode. Its validation

@@ -3241,6 +3241,209 @@
     }
 
     /**
+     * A count with thousands separators, or null when the Hub has none.
+     * @param {number | null} value
+     * @returns {string | null}
+     */
+    function recapCount(value) {
+        return value === null || value === undefined ? null : num(value);
+    }
+
+    // ---- the guide of the manager's recap
+
+    /**
+     * The guide that walks through a screen, or null where there is none: the recap in its management view.
+     * @param {string} screen
+     * @param {string | null} recapView `pilotage` or `tech` on the recap, null elsewhere
+     * @returns {string | null}
+     */
+    function guideIdFor(screen, recapView) {
+        return screen === 'recap' && recapView === 'pilotage' ? 'recap.pilotage' : null;
+    }
+
+    /**
+     * @param {string} key under `guide.pilotage.`
+     * @param {Record<string, string | number>} [vars]
+     * @returns {string}
+     */
+    function guideText(key, vars) {
+        return t('guide.pilotage.' + key, vars);
+    }
+
+    /**
+     * A step whose title and body are the texts of its id, unless `over` brings the variant the data calls for.
+     * @param {string} id
+     * @param {string[]} anchors
+     * @param {{title?: string, body?: string[], marks?: Array<{anchor: string, text: string}>}} [over]
+     * @returns {import('../types').GuideStep}
+     */
+    function guideStep(id, anchors, over) {
+        const given = over || {};
+        const step = {
+            id, anchors, title: given.title ?? guideText(id + '.title'), body: given.body ?? [guideText(id + '.body')]
+        };
+        return given.marks ? {...step, marks: given.marks} : step;
+    }
+
+    /**
+     * @param {string[] | null | undefined} list
+     * @returns {boolean}
+     */
+    function hasItems(list) {
+        return Boolean(list && list.length);
+    }
+
+    /**
+     * The steps of the guide over the manager's recap, worked out from the snapshot the screen has loaded:
+     * the sentences the data calls for, the figures as the screen writes them. The controller drops a step
+     * whose anchors are not on the page.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep[]}
+     */
+    function recapPilotageSteps(snapshot) {
+        const steps = [
+            guideStep('view', ['recap.view']),
+            guidePeriodStep(snapshot),
+            guideIoStep(snapshot),
+            guideCo2Step(snapshot),
+            guideOpenStep(snapshot),
+            guideTableStep(snapshot)
+        ];
+        if (snapshot.priorities.length) steps.push(guideRowStep(snapshot.priorities[0]));
+        steps.push(
+            guideStep('below', ['recap.below']),
+            guideMovedStep(snapshot),
+            guideStep('reports', ['recap.reports']),
+            guideStep('card', ['recap.card']),
+            guideStep('end', []));
+        return steps;
+    }
+
+    /**
+     * What the figures cover. Gaps in the data, the banner's own condition, replace the claim that only
+     * the finished days are compared: that claim would hide the gap.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function guidePeriodStep(snapshot) {
+        const body = [guideText('period.body', {period: periodText(snapshot.period)})];
+        if (hasItems(snapshot.period.incomplete) || hasItems(snapshot.previous.incomplete)) {
+            body.push(guideText('period.incomplete'));
+        } else if (snapshot.period.in_progress) {
+            body.push(guideText('period.open'));
+        }
+        const filters = snapshot.filters;
+        const chosen = [filters.environment, filters.source_id, filters.service, filters.grouping,
+            ...(filters.services || []), ...(filters.groupings || [])];
+        if (chosen.some(Boolean)) body.push(guideText('period.filtered'));
+        return guideStep('period', ['recap.period'], {body});
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function guideIoStep(snapshot) {
+        const value = snapshot.tiles.avoidable_io_ops;
+        const count = recapCount(value);
+        // With no figure the body is the one sentence that says so: the definition explains a tile that has a figure.
+        const body = [guideText(count === null ? 'io.none' : 'io.body')];
+        // Only this period's own gaps make this figure partial: the previous period is not in it.
+        if (hasItems(snapshot.period.incomplete)) body.push(guideText('io.incomplete'));
+        return guideStep('io', ['recap.io'], {
+            title: count === null ? guideText('io.title.none') : guideText('io.title.' + plural(value), {count: count}),
+            body
+        });
+    }
+
+    /**
+     * An order of magnitude to quote with care when there is a figure, the reason when there is none.
+     * "At least" is said only where the tile shows it, which it does not under a gram.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function guideCo2Step(snapshot) {
+        const tiles = snapshot.tiles;
+        if (tiles.co2_grams === null || tiles.co2_grams === undefined) {
+            return guideStep('co2', ['recap.co2'], {
+                body: [guideText(tiles.co2_missing_reason === 'no_avoidable_io' ? 'co2.no_io' : 'co2.none')]
+            });
+        }
+        const parts = co2Parts(
+            tiles.co2_grams, tiles.co2_sources_without_coefficient, tiles.co2_missing_reason, 'pilotage');
+        const body = [guideText('co2.body')];
+        if (parts.lead) body.push(guideText('co2.least'));
+        return guideStep('co2', ['recap.co2'], {body});
+    }
+
+    /**
+     * The two tiles that count problems and actions, counted as they are.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function guideOpenStep(snapshot) {
+        const open = snapshot.tiles.active_findings;
+        const done = snapshot.tiles.actions.done;
+        return guideStep('open', ['recap.findings', 'recap.actions'], {
+            title: guideText('open.title', {
+                findings: guideText('open.findings.' + plural(open), {count: String(open)}),
+                actions: guideText('open.actions.' + plural(done), {count: String(done)})
+            })
+        });
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function guideTableStep(snapshot) {
+        if (snapshot.priorities.length) return guideStep('table', ['recap.table']);
+        return guideStep('table', ['recap.table'], {
+            title: guideText('table.empty.title'), body: [guideText('table.empty.body')]
+        });
+    }
+
+    /**
+     * How to read the first line, one mark per piece of it. A line without a volume reads a dash, and a
+     * line nobody has taken says so.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function guideRowStep(first) {
+        const mark = (/** @type {string} */ part, /** @type {string} */ key) =>
+            ({anchor: 'recap.row.' + part, text: guideText('row.' + key)});
+        return guideStep('row', ['recap.row'], {
+            body: [],
+            marks: [
+                mark('rank', 'rank'),
+                mark('what', 'what'),
+                mark('where', 'where'),
+                mark('figure', hasAvoidableVolume(first) ? 'figure' : 'figure.none'),
+                mark('trend', 'trend'),
+                mark('state', first.action ? 'state.taken' : 'state.free')
+            ]
+        });
+    }
+
+    /**
+     * What moved. With no closed day, or nothing moved, the screen shows only its note and no list, so
+     * the step says that and nothing about lists. Closed days first, as the screen: nothing moved is true
+     * there only because nothing was compared.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function guideMovedStep(snapshot) {
+        if (snapshot.previous.truncated_to_days === 0) {
+            return guideStep('moved', ['recap.moved'], {body: [guideText('moved.none_closed')]});
+        }
+        if (snapshot.nothing_moved) return guideStep('moved', ['recap.moved'], {body: [guideText('moved.nothing')]});
+        const confirmed = snapshot.movements.gone_with_confirmed_action > 0;
+        return guideStep('moved', ['recap.moved'], {
+            body: confirmed ? [guideText('moved.body'), guideText('moved.confirmed')] : [guideText('moved.body')]
+        });
+    }
+
+    /**
      * The address when it is an http or https one, else null. A `reference_url` comes from a daemon,
      * so a `javascript:` address must never reach an href.
      * @param {string | null | undefined} value
@@ -4280,6 +4483,9 @@
         confirmationLabel,
         periodText,
         incompleteText,
+        recapCount,
+        guideIdFor,
+        recapPilotageSteps,
         notesText,
         httpUrl,
         localTime,

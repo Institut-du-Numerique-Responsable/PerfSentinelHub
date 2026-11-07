@@ -2,6 +2,7 @@
   {"file": "app.js", "texts": ["use strict"], "why": "the module's strict-mode directive, read by the engine, never shown"},
   {"file": "launcher.js", "texts": ["use strict"], "why": "the module's strict-mode directive, read by the engine, never shown"},
   {"file": "device.js", "texts": ["use strict"], "why": "the module's strict-mode directive, read by the engine, never shown"},
+  {"file": "guide.js", "texts": ["use strict"], "why": "the module's strict-mode directive, read by the engine, never shown"},
   {"file": "app.js", "texts": ["M7 4.5v15l13-7.5z"], "why": "SVG path data of the play icon"},
   {"file": "app.js", "texts": ["application/json, image/png, image/svg+xml, image/jxl, application/pdf"],
     "why": "the Accept header of the card render request"},

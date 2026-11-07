@@ -62,6 +62,14 @@ export default defineConfig({
             testMatch: "stills.spec.ts",
             use: {...devices["Desktop Chrome"], viewport: VIEWPORT, colorScheme: "light", video: "off"}
         },
+        // The guide's walk, asserted on the desktop and a phone, in both themes. Left out of
+        // `npm run demo`, which runs the capture projects only.
+        ...[{width: 1280, height: 900}, {width: 390, height: 844}].flatMap((viewport) =>
+            (["light", "dark"] as const).map((colorScheme) => ({
+                name: `guide-${viewport.width}-${colorScheme}`,
+                testMatch: "guide.spec.ts",
+                use: {...devices["Desktop Chrome"], viewport, colorScheme, video: "off" as const}
+            }))),
         {
             name: "access-stills-dark",
             testMatch: "access.spec.ts",

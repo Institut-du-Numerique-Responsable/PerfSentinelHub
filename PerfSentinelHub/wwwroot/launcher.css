@@ -204,6 +204,13 @@ button {
         padding: 0 8px;
     }
 
+    /* The chip leads the cluster here, so a long one (the fleet-skew warning) takes a row of
+       its own and the guide's "?" joins theme and language below it rather than standing
+       alone. Only while it holds no link: moved, the release link would break the tab order. */
+    .shell-cluster .shell-version:not(:has(a)) {
+        order: -1;
+    }
+
     #identity-name {
         max-width: 8ch;
         overflow: hidden;
@@ -218,6 +225,16 @@ button {
     }
 
     .shell-cluster .shell-lang-globe {
+        display: none;
+    }
+
+    .shell-cluster .shell-guide {
+        justify-content: center;
+        width: 34px;
+        padding: 0;
+    }
+
+    .shell-guide-label {
         display: none;
     }
 
@@ -382,6 +399,42 @@ a.shell-identity[href]:hover {
 a.shell-identity[aria-current="page"] {
     background: var(--accent-bg);
     color: var(--brand-text);
+}
+
+/* The guide's entry: a "?" in a filled dot and its label, the dot alone on a phone. */
+.shell-guide {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 34px;
+    padding: 0 13px 0 8px;
+    border: 1px solid var(--btn-bd);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--btn-fg);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.shell-guide:hover {
+    border-color: var(--brand);
+    background: var(--accent-bg);
+}
+
+.shell-guide-mark,
+.guide-num {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: var(--fill);
+    color: var(--on-fill);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
 }
 
 .shell-theme {
@@ -7129,4 +7182,115 @@ a.chip {
     .fix {
         transition: none;
     }
+}
+
+/* ------------------------------------------------------------- the guide */
+
+/* Out of #main, which every render replaces: fixed to the window and placed by guide.js
+   on each scroll and resize, with no transition, which would trail behind the scroll. The
+   page behind is inert, so the veil needs no pointer catch. */
+.guide-root {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    pointer-events: none;
+}
+
+.guide-hole {
+    position: fixed;
+    border-radius: 12px;
+    box-shadow: 0 0 0 2px var(--brand), 0 0 0 9999px var(--veil);
+}
+
+.guide-mark {
+    position: fixed;
+    box-shadow: 0 0 0 2px var(--surface);
+}
+
+.guide-card {
+    position: fixed;
+    width: min(390px, 100% - 32px);
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    padding: 16px 18px 14px;
+    border: 1px solid var(--border-2);
+    border-radius: 14px;
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, .28);
+    pointer-events: auto;
+}
+
+/* Room for Quit, which sits in the corner over it. */
+.guide-title {
+    margin: 0 0 6px;
+    padding-right: 60px;
+    font-size: 16px;
+    line-height: 1.3;
+}
+
+.guide-body {
+    line-height: 1.5;
+}
+
+.guide-body p {
+    margin: 0 0 8px;
+    font-size: 14px;
+}
+
+.guide-legend {
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+    font-size: 14px;
+}
+
+.guide-legend li {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: start;
+    margin-bottom: 5px;
+}
+
+.guide-legend .guide-num {
+    margin-top: 1px;
+}
+
+.guide-quit {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    min-height: 32px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-2);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.guide-quit:hover {
+    color: var(--brand-text);
+}
+
+/* The card's edge against the veil, which --border-2 leaves faint. */
+:root[data-theme="dark"] .guide-card {
+    border-color: var(--btn-bd);
+}
+
+.guide-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.guide-count {
+    margin-right: auto;
+    font-size: 13px;
+    color: var(--text-2);
 }
