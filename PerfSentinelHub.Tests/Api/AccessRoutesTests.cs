@@ -145,6 +145,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
     [InlineData("PUT", "/api/labels")]
     [InlineData("PUT", "/api/labels/services")]
     [InlineData("GET", "/api/recap")]
+    [InlineData("GET", "/api/recap/filters")]
     [InlineData("POST", "/api/recap/jobs")]
     [InlineData("GET", "/api/recap/jobs/0123456789abcdef0123456789abcdef")]
     [InlineData("GET", "/api/recap/jobs/0123456789abcdef0123456789abcdef/result")]
@@ -503,6 +504,34 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         using var response = await client.SendAsync(RecapJobsApiTests.Start(""), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // attr reads team=shop: F2's service stays out, and billing, where F5 was seen at shop-d too.
+    [Fact]
+    public async Task The_recap_filters_offer_only_the_names_in_scope()
+    {
+        await SeedFindingAsync("shop-d", "prod", F5, "checkout", """[{"key":"team","value":"billing"}]""");
+        using var attr = await SignedInAsync("attr");
+
+        using var response = await attr.GetAsync("/api/recap/filters", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document =
+            JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var root = document.RootElement;
+        Assert.Equal(["cart", "checkout"], root.GetProperty("services").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal(["shop"], root.GetProperty("groupings").EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public async Task A_caller_without_findings_read_gets_403_on_the_recap_filters()
+    {
+        using var client = await SignedInAsync("tracer");
+
+        using var response = await client.GetAsync("/api/recap/filters", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("No grant gives you findings.read on this Hub.", await DetailAsync(response));
     }
 
     [Fact]

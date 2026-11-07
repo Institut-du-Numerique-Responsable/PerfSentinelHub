@@ -78,6 +78,8 @@
         'problem.analysis_engine_missing': 'No analysis engine is configured on this Hub.',
         'problem.detection_knob_unsupported': 'A detection setting of this request needs a newer engine than '
             + 'the one this Hub runs.',
+        'problem.fetch_concurrency_unsupported': 'The simultaneous reads of this request need a newer engine '
+            + 'than the one this Hub runs.',
         'problem.analysis_forbidden': 'You may not start this analysis.',
         'problem.browser_session_required': 'Approving a sign-in or managing tokens needs a browser session.',
         'problem.browser_not_allowed': 'A browser never calls this route.',
@@ -634,6 +636,28 @@
         'new.sink.head': '// what comes back, and what it caps',
         'new.sink.sub': 'From the sink and this Hub\'s settings, not predictions.',
         'new.traces.ack': 'I accept a long run and a heavy report.',
+        'new.fetch.label': 'Simultaneous reads',
+        'new.fetch.gloss': 'how many traces the engine reads from Tempo at once',
+        'new.fetch.chip.ok': 'within the threshold',
+        'new.fetch.chip.over': 'above the threshold',
+        'new.fetch.chip.blocked': 'blocked',
+        'new.fetch.chip.invalid': 'not a whole number',
+        'new.fetch.cap': 'threshold {warn} · maximum {max}',
+        'new.fetch.at_least': 'whole number, at least 1',
+        'new.fetch.scale.warn': 'threshold',
+        'new.fetch.scale.max': 'maximum',
+        'new.fetch.body.one': 'The engine reads at most {count} trace at a time. A low value spreads the same '
+            + 'reads over more time.',
+        'new.fetch.body.other': 'The engine reads at most {count} traces at a time. A low value spreads the same '
+            + 'reads over more time.',
+        'new.fetch.over': 'This Hub recommends at most {warn} reads at once. Above that, Tempo uses more memory, '
+            + 'and an undersized querier can stop in the middle of the analysis.',
+        'new.fetch.ack': 'Run it anyway, knowing the risk.',
+        'new.fetch.blocked': 'This Hub allows at most {max} reads at once. Lower the value to start the analysis.',
+        'new.fetch.unsupported': 'This Hub limits reads to {max}, but its engine cannot apply that limit, so the '
+            + 'analysis is refused.',
+        'new.fetch.invalid': 'Simultaneous reads need a whole number, at least 1.',
+        'new.fetch.confirm': 'Confirm the reads above the threshold.',
         'new.skew.title': '{name} runs {version}, {gap} the {engine} binary embedded in the Hub.',
         'new.skew.behind': 'perf-sentinel is pre-1.0, so detectors change between minors. A detector added in '
             + '{engine} does not run on this producer at all, and its absence looks exactly like a clean '
@@ -1497,6 +1521,19 @@
         'recap.filter.day': 'a day in the period',
         'recap.filter.service': 'service',
         'recap.filter.namespace': 'namespace',
+        'recap.pick.all.service': 'all services',
+        'recap.pick.all.grouping': 'all namespaces',
+        'recap.pick.search': 'search in the list',
+        'recap.pick.loading': 'Reading the names of this period…',
+        'recap.pick.error': 'The Hub did not return the names of this period. Your choice is kept.',
+        'recap.pick.retry': 'Try again',
+        'recap.pick.empty': 'No name in this period.',
+        'recap.pick.nomatch': 'No name matches.',
+        'recap.pick.absent': 'not in this period',
+        'recap.pick.clear': 'clear all',
+        'recap.pick.count.one': '{count} selected',
+        'recap.pick.count.other': '{count} selected',
+        'recap.pick.limit': 'At most {max} names.',
         'recap.view.label': 'Audience',
         'recap.view.tech': 'Engineering',
         'recap.view.pilotage': 'Management',

@@ -24,6 +24,7 @@ public static class ProblemCodes
     // Analyses.
     public const string AnalysisEngineMissing = "analysis_engine_missing";
     public const string DetectionKnobUnsupported = "detection_knob_unsupported";
+    public const string FetchConcurrencyUnsupported = "fetch_concurrency_unsupported";
     public const string AnalysisForbidden = "analysis_forbidden";
 
     // Terminal sign-in and tokens.

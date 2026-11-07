@@ -2,6 +2,84 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- New analysis gets a Simultaneous reads block (Lectures simultanées in French) under Max traces,
+  to choose how many trace bodies the engine reads from Tempo at once. It is passed as
+  `--fetch-concurrency` and shows for a Tempo source in service mode on an engine from `0.43.0`,
+  not for Jaeger, a daemon or a trace ID. A field, a chip and a slider run from 1 to the maximum,
+  green up to the threshold and red above, starting at the engine's 16 or at the threshold or the
+  maximum when either is lower. Above the threshold an alert asks for a confirmation before the run
+  can start, and above the maximum the button stays off. The run's summary carries the count, and the
+  printed command too unless it is the engine's 16, which the engine takes anyway.
+  `Hub:Analysis:FetchConcurrencyWarn` (default 16) and `Hub:Analysis:FetchConcurrencyMax` (default
+  64, the engine's own limit) set the two limits, and
+  `hub.analysis.fetchConcurrencyWarn` and `fetchConcurrencyMax` do in the Helm chart.
+  `POST /api/analyses` takes `fetch_concurrency` and answers `400` for a value outside 1 to the
+  maximum, on a Jaeger source, on a daemon or in trace ID mode, so a direct call is held to the
+  maximum as the screen is. A Tempo run that names none is given `min(16, FetchConcurrencyMax)`, and
+  the stored request records it. An engine older than `0.43.0` refuses the flag: the Hub answers
+  `400 fetch_concurrency_unsupported` for a value, and for a Tempo run with none when the maximum
+  is under 16, since that engine would read 16 at once whatever the limit.
+- The recap's service and namespace filters are checkbox lists, with a search field, the number
+  ticked and Clear all, where they were text fields. Ticking several services keeps the findings of
+  any of them, and a service with a namespace keeps what matches both. The recap is computed once,
+  when a list closes. The names come from the new `GET /api/recap/filters`, which lists the services
+  and namespaces of the copies present in a period and an environment, within the caller's
+  `findings.read` scope: a narrowed reader is offered no name outside it, and a namespace only when
+  the scope covers it. A name carries no count. The address, `GET /api/recap` and
+  `POST /api/recap/jobs` take the key repeated (`service=a&service=b`), up to 50 values of 256
+  characters, and a link written with one value filters on it as before.
+- The SQL of a priority under How to fix (Comment corriger) is laid out and colored. Each clause
+  starts a line, the columns wrap together, and keywords, tables, parameters and columns take four
+  theme colors, at AA contrast in both themes. Only blanks move, so what is copied is the same
+  query. A statement over 600 characters is colored but not cut into lines.
+
+### Changed
+
+- `RecapFilters`, the `filters` of a recap in `GET /api/recap`, a job's result and a stored report,
+  gains `services` and `groupings`, written only when several values are chosen. With one value,
+  `service` and `grouping` hold it as they always did and the lists are absent, so a script and a
+  report stored before read as they did. `filters.service_label` is `null` when several services
+  are chosen.
+- `StatusLimits`, the `limits` of `GET /api/status`, gains `fetch_concurrency_warn`,
+  `fetch_concurrency_max` and `fetch_concurrency_supported`, the last being whether the engine
+  reads the flag.
+- `POST /api/recap/reports` accepts `services` and `groupings` as arrays beside `service` and
+  `grouping`, and a filter given in both forms is a `400`. Its body limit goes from 4 KiB to 32 KiB,
+  so that two lists at their cap are not a `413`.
+- On the recap routes that read a query, a single `service` or `grouping` over 256 characters or
+  holding a control character is now a `400` (`invalid_recap_query`), where it filtered and matched
+  nothing before. A repeated `service` or `grouping` is read as several values, and no longer a `400`.
+- The image ships perf-sentinel `0.43.2` as its analysis engine, repinned by digest from
+  `0.42.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.43.1` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. A Tempo analysis whose failed reads outnumber the
+  traces that answered now reports `the search matched N trace(s) but most fetches failed` instead
+  of `no traces found`, and a querier that stalls in the middle of a response fails the read as a
+  timeout instead of hanging the analysis. A run that reads only part of its traces carries a
+  `partial_fetch` warning, which the run's screen shows with the others.
+  No detection, score or report format changes, and the disclosure schema stays
+  `perf-sentinel-report/v1.8`.
+
+### Fixed
+
+- A link to a window or a trace opens New analysis on a trace backend of the incident's
+  environment, not on a daemon. Analyse this window, from an incident and from a correlated pair,
+  and Explain the last pair kept whichever source was selected, often a daemon, which takes no
+  window. The link now carries the daemon it came from as `source=<id>`. The form takes the
+  selected source if it is a trace backend of that environment, else the first one of it, else the
+  selected source if it is a backend, else the first backend. A link without `source` still opens,
+  with the environment unknown, and a Hub with no trace backend keeps the selection under its
+  banner. The pick is never saved: the source the reader chose stays the one the next visit opens on.
+- `GET /api/recap` and `POST /api/recap/jobs` answer `400` for a day before 1900, as
+  `POST /api/recap/reports` does. `GET /api/recap` answered `500` on the first period of the calendar,
+  which has none before it.
+- A recap address with a day the calendar does not hold, such as `at=2026-13-45`, reads as no day.
+  The recap never loaded on one.
+
 ## [0.14.0] - 2026-11-04
 
 ### Added

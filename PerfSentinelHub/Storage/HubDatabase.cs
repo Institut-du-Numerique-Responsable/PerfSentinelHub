@@ -664,7 +664,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
     {
         var where = new StringBuilder("WHERE 1 = 1");
         var parameters = new List<(string Name, object Value)>();
-        AddFilter(where, parameters, "service", ServiceParameter, query.Service);
+        if (query.ServiceValues is { } services)
+        {
+            where.Append(" AND service IN (SELECT value FROM json_each($services))");
+            parameters.Add(("$services", JsonArray(services)));
+        }
+
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
@@ -672,8 +677,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         var windowed = AddWindow(parameters, query);
         var (volumeWindow, today) = AddVolumeWindow(parameters, query, windowed);
 
-        if (query.Grouping is not null)
-            parameters.Add(("$grouping", query.Grouping));
+        if (query.GroupingValues is { } groupings)
+            parameters.Add(("$groupings", JsonArray(groupings)));
         if (OneSource(query) is { } sourceId)
             parameters.Add(("$scope_source_id", sourceId));
 
@@ -697,39 +702,46 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         var bySignature = new Dictionary<string, StoredFinding>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
-        {
-            var signature = reader.GetString(0);
-            if (!bySignature.TryGetValue(signature, out var finding))
-            {
-                var sources = new List<FindingSourceObservation>();
-                finding = new StoredFinding(
-                    signature,
-                    reader.GetString(1),
-                    reader.GetInt64(2),
-                    reader.GetInt64(3),
-                    reader.GetString(4),
-                    reader.GetString(11),
-                    sources);
-                if (!reader.IsDBNull(12))
-                    finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
-                bySignature.Add(signature, finding);
-                rows.Add(finding);
-            }
-
-            if (!reader.IsDBNull(5))
-                finding.Sources.Add(new FindingSourceObservation(
-                    reader.GetString(5),
-                    reader.GetString(6),
-                    reader.GetString(7),
-                    reader.GetString(8),
-                    reader.GetInt64(9),
-                    reader.IsDBNull(10) ? null : reader.GetInt64(10),
-                    ReadAck(reader)));
-        }
+            FoldFindingRow(reader, rows, bySignature);
 
         // The page's reader is drained, and SQLite runs the next statement on the same connection.
         await AttachVolumesAsync(connection, rows, query, volumeWindow, today, cancellationToken);
         return rows;
+    }
+
+    // A finding comes back as one row per source: the first creates it, each adds its source.
+    private static void FoldFindingRow(
+        SqliteDataReader reader,
+        List<StoredFinding> rows,
+        Dictionary<string, StoredFinding> bySignature)
+    {
+        var signature = reader.GetString(0);
+        if (!bySignature.TryGetValue(signature, out var finding))
+        {
+            var sources = new List<FindingSourceObservation>();
+            finding = new StoredFinding(
+                signature,
+                reader.GetString(1),
+                reader.GetInt64(2),
+                reader.GetInt64(3),
+                reader.GetString(4),
+                reader.GetString(11),
+                sources);
+            if (!reader.IsDBNull(12))
+                finding.Lineage = new LineageInfo(reader.GetInt64(12), reader.GetInt32(13));
+            bySignature.Add(signature, finding);
+            rows.Add(finding);
+        }
+
+        if (!reader.IsDBNull(5))
+            finding.Sources.Add(new FindingSourceObservation(
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.GetString(8),
+                reader.GetInt64(9),
+                reader.IsDBNull(10) ? null : reader.GetInt64(10),
+                ReadAck(reader)));
     }
 
     // Only a windowed read has volumes to count, and the window reaches back by the retention.
@@ -786,7 +798,7 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
             : SharedEnvelope("f.signature");
         var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
-        var grouped = query.Grouping is null ? "" : InGrouping(row, Copies(access, "g"));
+        var grouped = query.GroupingValues is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));
 #pragma warning disable S2077
         return $"""
@@ -917,7 +929,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         return $"""
                  AND EXISTS (
                     SELECT 1 FROM finding_groupings AS g
-                    WHERE g.signature = {row}.signature AND g.grouping = $grouping
+                    WHERE g.signature = {row}.signature
+                      AND g.grouping IN (SELECT value FROM json_each($groupings))
                       AND {copies})
                 """;
     }

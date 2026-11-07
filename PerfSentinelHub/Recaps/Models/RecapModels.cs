@@ -39,12 +39,41 @@ public sealed record RecapPeriodInfo(
     int? TruncatedToDays);
 
 // service_label is the business name of the service filter, so a Management scope line reads by it.
+// Service and Grouping hold the value when exactly one is chosen, Services and Groupings the list
+// when several are. The lists are absent from the JSON otherwise, so a recap of one value, and a
+// report stored before the lists, read and write as they always did.
 public sealed record RecapFilters(
     string? Environment,
     string? SourceId,
     string? Service,
     string? Grouping,
-    string? ServiceLabel = null);
+    string? ServiceLabel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? Services = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? Groupings = null)
+{
+    /// <summary>The filters of a request that chose these lists: a lone value goes to the string, else the list.</summary>
+    public static RecapFilters Of(
+        string? environment,
+        string? sourceId,
+        IReadOnlyList<string>? services,
+        IReadOnlyList<string>? groupings)
+    {
+        return new RecapFilters(
+            environment, sourceId, LoneOf(services), LoneOf(groupings), null, ManyOf(services), ManyOf(groupings));
+    }
+
+    private static string? LoneOf(IReadOnlyList<string>? values)
+    {
+        return values is [var one] ? one : null;
+    }
+
+    private static IReadOnlyList<string>? ManyOf(IReadOnlyList<string>? values)
+    {
+        return values is { Count: > 1 } ? values : null;
+    }
+}
 
 public sealed record RecapTiles(
     long? AvoidableIoOps,

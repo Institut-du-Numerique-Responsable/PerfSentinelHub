@@ -244,13 +244,14 @@ public sealed class AnalysisRequestTests
         Assert.Null(Source(SourceKinds.Daemon).EngineSubcommand);
     }
 
-    private static AnalysisRequest? Parse(string payload, string kind, out string? error)
+    private static AnalysisRequest? Parse(string payload, string kind, out string? error,
+        AnalysisOptions? analysis = null)
     {
         using var document = JsonDocument.Parse(payload);
         return AnalysisRequest.TryParse(
             document.RootElement,
             Source(kind),
-            new AnalysisOptions(),
+            analysis ?? new AnalysisOptions(),
             Now,
             out error);
     }
@@ -342,6 +343,18 @@ public sealed class AnalysisRequestTests
         Assert.Contains("n_plus_one_min_occurrences", names);
     }
 
+    [Theory]
+    [InlineData("0.42.1", false)]
+    [InlineData("0.43.0", true)]
+    [InlineData("0.43.0-rc.1", true)]
+    [InlineData("0.44.2", true)]
+    [InlineData(null, false)]
+    [InlineData("illisible", false)]
+    public void Fetch_concurrency_is_read_from_engine_0_43_0(string? engine, bool reads)
+    {
+        Assert.Equal(reads, DetectionOverrides.ReadsFetchConcurrency(engine));
+    }
+
     [Fact]
     public void A_knob_the_engine_cannot_read_is_refused_at_submission_not_at_run_time()
     {
@@ -400,6 +413,160 @@ public sealed class AnalysisRequestTests
         Assert.Equal(
             "A daemon snapshot takes no parameters, and detects with its own configuration.",
             error);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(16)]
+    [InlineData(64)]
+    public void A_tempo_service_request_takes_a_fetch_concurrency_and_keeps_it(int value)
+    {
+        var stored = $$"""{"service":"orders","lookback":"1h","fetch_concurrency":{{value}}}""";
+
+        var request = Parse(stored, SourceKinds.Tempo, out var error);
+
+        Assert.Null(error);
+        Assert.Equal(stored, request!.ToJson());
+        Assert.Equal(stored, Parse(stored, SourceKinds.Tempo, out _)!.ToJson());
+    }
+
+    [Fact]
+    public void A_fetch_concurrency_is_bounded_by_the_configured_max()
+    {
+        var options = new AnalysisOptions { FetchConcurrencyWarn = 8, FetchConcurrencyMax = 8 };
+
+        Assert.NotNull(Parse("""{"service":"orders","lookback":"1h","fetch_concurrency":8}""",
+            SourceKinds.Tempo, out _, options));
+        Assert.Null(Parse("""{"service":"orders","lookback":"1h","fetch_concurrency":9}""",
+            SourceKinds.Tempo, out var error, options));
+        Assert.Equal("fetch_concurrency must be a whole number between 1 and 8.", error);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-3")]
+    [InlineData("65")]
+    // A decimal and a string are present and wrong, not absent: nothing is dropped silently.
+    [InlineData("4.5")]
+    [InlineData("4.0")]
+    [InlineData("\"8\"")]
+    [InlineData("true")]
+    [InlineData("12345678901")]
+    public void A_fetch_concurrency_outside_the_range_or_not_a_whole_number_is_refused(string value)
+    {
+        Assert.Null(Parse($$"""{"service":"orders","lookback":"1h","fetch_concurrency":{{value}}}""",
+            SourceKinds.Tempo, out var error));
+        Assert.Equal("fetch_concurrency must be a whole number between 1 and 64.", error);
+    }
+
+    [Fact]
+    public void A_null_fetch_concurrency_is_an_absent_one()
+    {
+        var request = Parse("""{"service":"orders","lookback":"1h","fetch_concurrency":null}""",
+            SourceKinds.Tempo, out var error);
+
+        Assert.Null(error);
+        Assert.Equal("""{"service":"orders","lookback":"1h"}""", request!.ToJson());
+    }
+
+    [Theory]
+    [InlineData("""{"service":"orders","lookback":"1h","fetch_concurrency":4}""", SourceKinds.JaegerQuery)]
+    [InlineData("""{"fetch_concurrency":4}""", SourceKinds.Daemon)]
+    [InlineData("""{"trace_id":"abc123","fetch_concurrency":4}""", SourceKinds.Tempo)]
+    [InlineData("""{"trace_id":"abc123","fetch_concurrency":4}""", SourceKinds.JaegerQuery)]
+    public void A_fetch_concurrency_is_refused_where_the_engine_has_no_such_setting(string payload, string kind)
+    {
+        Assert.Null(Parse(payload, kind, out var error));
+        Assert.False(string.IsNullOrWhiteSpace(error));
+    }
+
+    [Fact]
+    public void A_fetch_concurrency_follows_max_traces_on_the_command_line()
+    {
+        var request = Parse("""{"service":"orders","lookback":"90m","max_traces":250,"fetch_concurrency":4}""",
+            SourceKinds.Tempo, out _);
+
+        Assert.Equal(
+            [
+                "tempo", "--endpoint", "http://tempo.example:3200", "--format", "json",
+                "--service", "orders", "--lookback", "90m", "--max-traces", "250", "--fetch-concurrency", "4"
+            ],
+            request!.ToEngineArguments(Source(SourceKinds.Tempo), null));
+    }
+
+    [Theory]
+    [InlineData("0.43.0", 64, 16)]
+    [InlineData("0.43.0", 8, 8)]
+    [InlineData("0.44.1", 16, 16)]
+    public void A_request_without_a_value_is_given_the_engine_default_held_under_the_max(
+        string engine, int max, int expected)
+    {
+        var options = new AnalysisOptions { FetchConcurrencyWarn = Math.Min(16, max), FetchConcurrencyMax = max };
+        var request = Parse("""{"service":"orders","lookback":"1h"}""", SourceKinds.Tempo, out _, options)!;
+
+        var written = request.WithDefaultFetchConcurrency(Source(SourceKinds.Tempo), options, engine);
+
+        Assert.Null(request.RefusedBy(Source(SourceKinds.Tempo), options, engine));
+        Assert.Equal($$"""{"service":"orders","lookback":"1h","fetch_concurrency":{{expected}}}""",
+            written.ToJson());
+    }
+
+    [Theory]
+    // An explicit value is kept, and no engine older than 0.43.0 gets one it would refuse.
+    [InlineData("""{"service":"orders","lookback":"1h","fetch_concurrency":4}""", "0.43.0", SourceKinds.Tempo)]
+    [InlineData("""{"service":"orders","lookback":"1h"}""", "0.42.1", SourceKinds.Tempo)]
+    [InlineData("""{"service":"orders","lookback":"1h"}""", null, SourceKinds.Tempo)]
+    // A source and a mode the engine has no setting for.
+    [InlineData("""{"service":"orders","lookback":"1h"}""", "0.43.0", SourceKinds.JaegerQuery)]
+    [InlineData("""{"trace_id":"abc123"}""", "0.43.0", SourceKinds.Tempo)]
+    [InlineData("""{}""", "0.43.0", SourceKinds.Daemon)]
+    public void A_default_is_written_only_where_a_tempo_service_run_would_read_it(
+        string payload, string? engine, string kind)
+    {
+        var options = new AnalysisOptions { FetchConcurrencyWarn = 8, FetchConcurrencyMax = 8 };
+        var request = Parse(payload, kind, out _, new AnalysisOptions())!;
+
+        var written = request.WithDefaultFetchConcurrency(Source(kind), options, engine);
+
+        Assert.Equal(request.ToJson(), written.ToJson());
+    }
+
+    [Fact]
+    public void An_engine_that_cannot_read_fetch_concurrency_refuses_a_value_naming_both_versions()
+    {
+        var request = Parse("""{"service":"orders","lookback":"1h","fetch_concurrency":4}""",
+            SourceKinds.Tempo, out _)!;
+        var source = Source(SourceKinds.Tempo);
+        var options = new AnalysisOptions();
+
+        Assert.Equal("fetch_concurrency needs engine 0.43.0 or later, this Hub runs 0.42.1.",
+            request.RefusedBy(source, options, "0.42.1"));
+        Assert.Equal("fetch_concurrency needs engine 0.43.0 or later, this Hub has not read its engine's version.",
+            request.RefusedBy(source, options, null));
+        Assert.Null(request.RefusedBy(source, options, "0.43.0"));
+        // Not a Tempo run: no flag to refuse.
+        Assert.Null(Parse("""{"service":"orders","lookback":"1h"}""", SourceKinds.JaegerQuery, out _)!
+            .RefusedBy(Source(SourceKinds.JaegerQuery), options, "0.42.1"));
+    }
+
+    [Theory]
+    [InlineData("0.42.1", "this Hub runs 0.42.1")]
+    [InlineData(null, "this Hub has not read its engine's version")]
+    [InlineData("0.43.0.rc1", "this Hub could not read its engine's version (0.43.0.rc1)")]
+    public void A_max_under_the_old_default_is_refused_on_an_engine_that_cannot_be_told_to_stay_under_it(
+        string? engine, string named)
+    {
+        var options = new AnalysisOptions { FetchConcurrencyWarn = 8, FetchConcurrencyMax = 8 };
+        var request = Parse("""{"service":"orders","lookback":"1h"}""", SourceKinds.Tempo, out _, options)!;
+
+        var refused = request.RefusedBy(Source(SourceKinds.Tempo), options, engine);
+
+        Assert.NotNull(refused);
+        Assert.Contains("8", refused, StringComparison.Ordinal);
+        Assert.Contains(named, refused, StringComparison.Ordinal);
+        // At 16 and above the old engine's own default already fits.
+        Assert.Null(request.RefusedBy(Source(SourceKinds.Tempo),
+            new AnalysisOptions { FetchConcurrencyMax = 16 }, engine));
     }
 
     private static SourceOptions Source(string kind)

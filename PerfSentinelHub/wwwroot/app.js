@@ -85,7 +85,20 @@
     /**
      * What a `#/recap?…` hash names, as PSL.readRecapRoute reads it.
      * @typedef {{period: 'day' | 'week' | 'month', at: string | null, environment: string | null,
-     *   service: string | null, grouping: string | null, view: 'tech' | 'pilotage', jobKey?: string}} RecapRoute
+     *   services: string[], groupings: string[], view: 'tech' | 'pilotage', jobKey?: string}} RecapRoute
+     */
+
+    /**
+     * The names the checkbox lists of the recap offer for the period on screen, read from the Hub on the
+     * first opening: `path` is the read they answer, as PSL.recapFiltersPath writes it.
+     * @typedef {{path: ?string, status: 'idle' | 'loading' | 'ready' | 'error', services: string[],
+     *   groupings: string[]}} RecapNames
+     */
+
+    /**
+     * The list open on the recap's filter line, what was typed in its search and the boxes ticked so far,
+     * which the route takes when the list closes.
+     * @typedef {{open: ?('services' | 'groupings'), query: string, draft: string[]}} RecapPick
      */
 
     // Payloads read field by field, named for what they are. Their shapes are in types.d.ts, each
@@ -133,8 +146,8 @@
     /** @typedef {import('../types').AccessConfiguration} AccessConfiguration */
     /** @typedef {import('../types').AccessUnmatched} AccessUnmatched */
     /** @typedef {Incident & {error_code?: string}} IncidentDetail A single-incident read, or the stub a failed one leaves with its error_code. */
-    /** @typedef {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string, kind?: string, namespace?: string, atMs?: number}} Handoff An incident link, as PSL.readHandoff reads it, with the row's fields once found. */
-    /** @typedef {{traceId: string, otherTraceId: string}} TraceHandoff An episode's two traces, as PSL.readTraceHandoff reads them. */
+    /** @typedef {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string, sourceId: string | null, kind?: string, namespace?: string, atMs?: number}} Handoff An incident link, as PSL.readHandoff reads it, with the row's fields once found. */
+    /** @typedef {{traceId: string, otherTraceId: string, sourceId: string | null}} TraceHandoff An episode's two traces, as PSL.readTraceHandoff reads them. */
     /** @typedef {{label: string, energy_kwh: number, carbon_kgco2eq: number, partial: {windows: number, of: number} | null}} HostRow A host of a disclosure, as PSL.hostRows builds it. */
     /**
      * The ack page, from its link to what the last submit came to.
@@ -349,6 +362,14 @@
         recapReports: null,
         recapGenerating: false,
         recapGenerateError: null,
+        // The checkbox lists of the filter line: the one open with its search and boxes, the names the Hub
+        // offers for the period, and the control to give the focus to once a closed list has moved the route.
+        /** @type {RecapPick} */
+        recapPick: {open: null, query: '', draft: []},
+        /** @type {RecapNames} */
+        recapNames: {path: null, status: 'idle', services: [], groupings: []},
+        /** @type {?string} */
+        recapRefocus: null,
         // The share card form, made on first use (cardState).
         /** @type {?ShareCard} */
         card: null,
@@ -406,8 +427,12 @@
             detection: {},
             pickerOpen: false,
             maxTraces: 100,
+            // Null until someone types one: the Hub's own limits decide the start, and
+            // they are only known once the status has arrived.
+            fetchConcurrency: null,
             ackUnreachable: false,
-            ackHeavy: false
+            ackHeavy: false,
+            ackFetch: false
         }
     };
 
@@ -1080,7 +1105,7 @@
         else if (state.screen === 'sources') main.replaceChildren(renderSourcesScreen());
         else if (state.screen === 'incidents') main.replaceChildren(renderIncidentsScreen());
         else if (state.screen === 'correlations') main.replaceChildren(renderCorrelationsScreen());
-        else if (state.screen === 'recap') replaceKeepingPdf(main, renderRecapScreen());
+        else if (state.screen === 'recap') drawRecapScreen(main);
         else if (state.screen === 'disclosures') main.replaceChildren(renderDisclosuresScreen());
         else if (state.screen === 'disclosure') main.replaceChildren(renderDisclosureScreen());
         else if (state.screen === 'ack') main.replaceChildren(renderAckScreen());
@@ -1614,6 +1639,11 @@
         // onRoute has to apply it again, and loadRuns never re-renders New.
         applyHandoff(PSL.readHandoff(location.hash, Date.now()));
         applyTraceHandoff(PSL.readTraceHandoff(location.hash));
+        // A list open on the recap's filter line goes with the route it was opened on. One that moved the
+        // route closed itself first, and left the control to give the focus to.
+        state.recapPick = {open: null, query: '', draft: []};
+        const refocus = state.recapRefocus;
+        state.recapRefocus = null;
         const screen = currentScreen();
         if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
@@ -1624,6 +1654,8 @@
         render();
         if (state.loading) return;
         announceRoute();
+        const returned = refocus ? document.getElementById(refocus) : null;
+        if (returned) returned.focus();
         // Both screens read the runs list: recent renders it, the launcher
         // shows what past runs weighed. Reloaded on every entry, not once, so
         // coming back from a run that just finished shows its weight.
@@ -1690,6 +1722,7 @@
         state.form.fromMs = handoff.fromMs;
         state.form.toMs = handoff.toMs;
         state.form.pickerOpen = false;
+        openHandoffSource(handoff.sourceId);
         const row = (state.incidents || []).find(function (incident) {
             return incident.id === handoff.incidentId;
         });
@@ -1719,6 +1752,7 @@
         state.form.traceId = handoff.traceId;
         state.form.service = '';
         state.form.pickerOpen = false;
+        openHandoffSource(handoff.sourceId);
     }
 
     // -------------------------------------------------------- screen: sources
@@ -2907,13 +2941,33 @@
      * @param {string} id
      */
     function selectSource(id) {
-        state.form.sourceId = id;
         saveSource(id);
+        switchSource(id);
+        render();
+    }
+
+    /**
+     * Puts the form on another source: what was acknowledged or typed for the last one goes.
+     * @param {string} id
+     */
+    function switchSource(id) {
+        state.form.sourceId = id;
         state.form.ackUnreachable = false;
         state.form.ackHeavy = false;
+        state.form.ackFetch = false;
         state.form.pickerOpen = false;
         state.form.detection = {};
-        render();
+    }
+
+    /**
+     * Opens a handed-over window or trace on a trace backend, a daemon taking neither. Never
+     * saved: the source the reader chose stays what the next visit opens on. Sources that
+     * arrive after the route find the form here again, through loadShell's own onRoute.
+     * @param {string | null} originId the daemon the link came from
+     */
+    function openHandoffSource(originId) {
+        const id = PSL.handoffSourceId(state.sources || [], state.form.sourceId, originId);
+        if (id !== null && id !== state.form.sourceId) switchSource(id);
     }
 
     /**
@@ -2921,6 +2975,9 @@
      */
     function setMode(mode) {
         state.form.mode = mode;
+        // A trace ID reads one trace, so the reads count leaves with the block, and a
+        // tick given for it does not wait behind the field to count for the next service run.
+        state.form.ackFetch = false;
         // Switching clears the other field, and a trace ID takes no window at all,
         // so the picker cannot stay open behind a hidden control.
         if (mode === 'trace') {
@@ -2960,7 +3017,7 @@
         // typing into is left alone.
         if (number && number.value !== value) number.value = value;
         if (number) {
-            number.toggleAttribute('data-over', over);
+            number.setAttribute('data-over', over ? 'true' : 'false');
             number.setAttribute('data-band', band.key);
         }
         if (slider) {
@@ -2990,6 +3047,96 @@
         if (!slot) return;
         if (band.needsAck) slot.replaceChildren(heavyAck());
         else slot.replaceChildren();
+    }
+
+    /** The reads count on screen against this Hub's limits, or null while the block is not on screen. */
+    function fetchBandNow() {
+        const value = fetchValue();
+        if (value === undefined) return null;
+        const limits = state.status.limits;
+        return PSL.fetchBand(value, limits.fetch_concurrency_warn, limits.fetch_concurrency_max);
+    }
+
+    /** The reads count the form carries, undefined while the block is not on screen. */
+    function fetchValue() {
+        return PSL.fetchRequested(state.form, selectedSource(), state.status.limits);
+    }
+
+    /**
+     * Updated in place, like setMaxTraces, for the same reason.
+     * @param {number} value
+     */
+    function setFetchConcurrency(value) {
+        state.form.fetchConcurrency = value;
+        // Dropping back to the warning or under withdraws the question that was asked above it.
+        if (!fetchBandNow().needsAck) state.form.ackFetch = false;
+        paintFetch(document);
+        updateSubmit();
+    }
+
+    /**
+     * Everything on screen that reads the reads count. Builds the block and refreshes it
+     * with the same code, so the two cannot drift.
+     * @param {ParentNode} root
+     */
+    function paintFetch(root) {
+        const band = fetchBandNow();
+        if (!band) return;
+        const limits = state.status.limits;
+        const value = fetchValue();
+        const bad = band.key !== 'ok';
+        const tone = bad ? 'crit' : 'ok';
+
+        const number = /** @type {HTMLInputElement} */ (root.querySelector('#fetch-number'));
+        const slider = /** @type {HTMLInputElement} */ (root.querySelector('#fetch-slider'));
+        // Assigned only when it differs, so the element being dragged or typed into is left alone.
+        if (number.value !== String(value)) number.value = String(value);
+        number.setAttribute('data-over', bad ? 'true' : 'false');
+        number.setAttribute('data-band', band.key);
+        const clamped = String(Math.min(Math.max(value, 1), limits.fetch_concurrency_max));
+        if (slider.value !== clamped) slider.value = clamped;
+
+        const chip = root.querySelector('#fetch-band');
+        chip.textContent = t('new.fetch.chip.' + band.key);
+        chip.setAttribute('style', bandStyle({fg: 'var(--' + tone + '-fg)', bg: 'var(--' + tone + '-bg)'}));
+
+        const cap = root.querySelector('#fetch-cap');
+        cap.textContent = band.key === 'invalid'
+            ? t('new.fetch.at_least')
+            : t('new.fetch.cap', {warn: limits.fetch_concurrency_warn, max: limits.fetch_concurrency_max});
+        cap.setAttribute('data-over', bad ? 'true' : 'false');
+
+        // The comfortable reading is said once the alert has nothing to say.
+        root.querySelector('#fetch-body').textContent =
+            bad ? '' : t('new.fetch.body.' + PSL.plural(value), {count: value});
+
+        // Rebuilt only when the band changes: a slider drag inside one band leaves the
+        // alert, its checkbox and the screen reader's last announcement alone.
+        const slot = root.querySelector('#fetch-alert');
+        if (slot.getAttribute('data-band') === band.key) return;
+        slot.setAttribute('data-band', band.key);
+        slot.replaceChildren.apply(slot, fetchAlert(band));
+    }
+
+    /**
+     * Past the warning, the reason and the box that lets it through; past the max, the
+     * reason alone, since nothing lets that through.
+     * @param {{key: string, needsAck: boolean}} band
+     * @returns {HTMLElement[]}
+     */
+    function fetchAlert(band) {
+        if (band.key !== 'over' && band.key !== 'blocked') return [];
+        const limits = state.status.limits;
+        const text = el('div', {class: 'notice-block-text'}, [
+            el('p', {
+                class: 'notice-block-body',
+                text: band.key === 'blocked'
+                    ? t('new.fetch.blocked', {max: limits.fetch_concurrency_max})
+                    : t('new.fetch.over', {warn: limits.fetch_concurrency_warn})
+            })
+        ]);
+        if (band.needsAck) text.appendChild(ackPill('ackFetch', 'new.fetch.ack'));
+        return [el('section', {class: 'notice-block', 'data-tone': 'crit'}, [warningGlyph(16), text])];
     }
 
     function renderNewScreen() {
@@ -3378,6 +3525,8 @@
             ? t('new.field.range_absolute')
             : t('new.field.range_relative')));
         nodes.push(maxTracesBlock());
+        const reads = fetchConcurrencyBlock();
+        if (reads) nodes.push(reads);
         return nodes;
     }
 
@@ -3803,6 +3952,83 @@
     }
 
     /**
+     * How many traces the engine reads from Tempo at once. Only where the request can
+     * carry it: a Tempo source, a service run and an engine that reads the flag. It takes
+     * the field, the chip and the band rule of the trace count above, in two bands: the
+     * Hub's warning and its max.
+     */
+    function fetchConcurrencyBlock() {
+        if (!fetchBandNow()) return null;
+        const limits = state.status.limits;
+        const warn = limits.fetch_concurrency_warn;
+        const max = limits.fetch_concurrency_max;
+
+        const number = el('input', {
+            type: 'number',
+            id: 'fetch-number',
+            class: 'input input-traces',
+            min: '1',
+            max: String(max)
+        });
+        number.addEventListener('input', function () {
+            setFetchConcurrency(Number(number.value));
+        });
+        const slider = el('input', {
+            type: 'range',
+            id: 'fetch-slider',
+            min: '1',
+            max: String(max),
+            step: '1',
+            'aria-label': t('new.fetch.label')
+        });
+        slider.addEventListener('input', function () {
+            setFetchConcurrency(Number(slider.value));
+        });
+
+        // The handle sits at (n - 1) / (max - 1) of the track, so that is where the warning
+        // falls. A warning at the max leaves no red part, and a max of 1 no track at all.
+        const okShare = max > 1 ? (warn - 1) / (max - 1) : 1;
+        const stretches = /** @type {Array<[string, number, string]>} */ ([
+            ['ok', okShare, warn + ' ' + t('new.fetch.scale.warn')],
+            ['crit', 1 - okShare, max + ' ' + t('new.fetch.scale.max')]
+        ]).filter(function (stretch) {
+            return stretch[1] > 0;
+        });
+        const segments = el('div', {class: 'band-segs', 'aria-hidden': 'true'},
+            stretches.map(function (stretch) {
+                const segment = el('span', {class: 'band-seg', 'data-seg': stretch[0]});
+                segment.style.width = (stretch[1] * 100).toFixed(2) + '%';
+                return segment;
+            }));
+        const grid = el('div', {class: 'band-scale-grid'}, stretches.map(function (stretch) {
+            return el('span', {text: stretch[2]});
+        }));
+        grid.style.gridTemplateColumns = stretches.map(function (stretch) {
+            return (stretch[1] * 100).toFixed(2) + '%';
+        }).join(' ');
+        const scale = el('div', {class: 'band-scale'}, [el('span', {class: 'band-scale-start', text: '1'}), grid]);
+
+        const block = el('div', {class: 'field'}, [
+            el('div', {class: 'field-label'}, [
+                el('label', {for: 'fetch-number', text: t('new.fetch.label')}),
+                el('span', {class: 'field-gloss', text: t('new.fetch.gloss')})
+            ]),
+            el('div', {class: 'traces-head'}, [
+                number,
+                el('span', {id: 'fetch-band', class: 'band-chip'}),
+                el('span', {id: 'fetch-cap', class: 'traces-cap'})
+            ]),
+            el('div', {class: 'band-track'}, [segments, slider]),
+            scale,
+            el('p', {id: 'fetch-body', class: 'band-body', style: 'color:var(--ok-fg)'}),
+            // A slot, like traces-ack: the alert comes and goes as the count crosses a limit.
+            el('div', {id: 'fetch-alert', class: 'fetch-alert', 'aria-live': 'polite'})
+        ]);
+        paintFetch(block);
+        return block;
+    }
+
+    /**
      * The sink-panel scaffold both info blocks share: head, subtitle, rows.
      * @param {string} head
      * @param {string} sub
@@ -3996,11 +4222,21 @@
     }
 
     function heavyAck() {
+        return ackPill('ackHeavy', 'new.traces.ack');
+    }
+
+    /**
+     * The box that lets a run through past a limit it was warned about. Lives on the
+     * form only, never in the request: the server has no such thing to remember.
+     * @param {'ackHeavy' | 'ackFetch'} field
+     * @param {string} textKey
+     */
+    function ackPill(field, textKey) {
         const node = checkbox(
-            state.form.ackHeavy,
-            t('new.traces.ack'),
+            state.form[field],
+            t(textKey),
             function (checked) {
-                state.form.ackHeavy = checked;
+                state.form[field] = checked;
                 updateSubmit();
             });
         node.classList.add('checkbox-pill');
@@ -4192,7 +4428,26 @@
         const band = PSL.weightBand(state.form.maxTraces, tracesCap());
         if (band.key === 'over') return t('new.block.over');
         if (band.key === 'invalid') return t('new.block.invalid');
-        return band.needsAck && !state.form.ackHeavy ? t('new.block.heavy') : null;
+        if (band.needsAck && !state.form.ackHeavy) return t('new.block.heavy');
+        return fetchBlocker();
+    }
+
+    /**
+     * What the reads count blocks, or null. The server refuses each of these too (an
+     * unreadable or too high count, and a max under the engine's default with an engine
+     * that cannot be told), so this only spares the round trip.
+     */
+    function fetchBlocker() {
+        const limits = state.status.limits;
+        const max = limits.fetch_concurrency_max;
+        if (PSL.fetchAccess(selectedSource(), state.form.mode, limits) === 'refused') {
+            return t('new.fetch.unsupported', {max: max});
+        }
+        const band = fetchBandNow();
+        if (!band) return null;
+        if (band.key === 'blocked') return t('new.fetch.blocked', {max: max});
+        if (band.key === 'invalid') return t('new.fetch.invalid');
+        return band.needsAck && !state.form.ackFetch ? t('new.fetch.confirm') : null;
     }
 
     /** Restates the request in a sentence, so the button is not a leap of faith. */
@@ -4272,6 +4527,10 @@
             return trace;
         }
         const request = {service: state.form.service.trim(), max_traces: state.form.maxTraces};
+        // Only while its block is on screen: a Jaeger source, an engine that cannot read
+        // the flag or a trace ID run sends none, whatever was typed before.
+        const reads = PSL.fetchRequested(state.form, source, state.status.limits);
+        if (reads !== undefined) request.fetch_concurrency = reads;
         if (Object.keys(state.form.detection).length > 0) request.detection = state.form.detection;
         if (state.form.rangeMode === 'absolute') {
             request.from_ms = state.form.fromMs;
@@ -4360,8 +4619,10 @@
      * @param {Run} run
      */
     function rerun(run) {
-        Object.assign(state.form, PSL.formFromRequest(run.request),
-            {sourceId: run.source_id, ackUnreachable: false, ackHeavy: false});
+        // The count first, so a run that carried none starts from the default rather
+        // than from whatever was typed since.
+        Object.assign(state.form, {fetchConcurrency: null}, PSL.formFromRequest(run.request),
+            {sourceId: run.source_id, ackUnreachable: false, ackHeavy: false, ackFetch: false});
         state.handoff = /** @type {?Handoff} */ (null);
         state.traceHandoff = /** @type {?TraceHandoff} */ (null);
         location.hash = '#/new';
@@ -4583,7 +4844,7 @@
             [t('run.fact.type'), PSL.KIND_LABEL[run.kind] || run.kind, 'mono']
         ];
         // The engine's own argument names, kept as they are sent.
-        ['service', 'trace_id', 'lookback', 'max_traces'].forEach(function (name) {
+        ['service', 'trace_id', 'lookback', 'max_traces', 'fetch_concurrency'].forEach(function (name) {
             if (request[name] != null) facts.push([name, String(request[name]), 'mono']);
         });
         if (request.from_ms) {
@@ -6844,7 +7105,7 @@
 
     /**
      * Writes the route the filters name; the hash change reads the recap again.
-     * @param {Record<string, string | null>} change
+     * @param {Record<string, string | string[] | null>} change
      */
     function goRecap(change) {
         location.hash = PSL.recapHash(Object.assign({}, recapRoute(), change));
@@ -7218,27 +7479,312 @@
             }), function (value) {
                 goRecap({environment: value || null});
             }),
-            recapTextFilter(t('recap.filter.service'), route.service, 'service'),
-            recapTextFilter(t('recap.filter.namespace'), route.grouping, 'grouping'),
+            recapMultiFilter(t('recap.filter.service'), PSL.RECAP_PICK_COPY['all.service'], 'services', route.services,
+                recapPickOptions('services')),
+            recapMultiFilter(t('recap.filter.namespace'), PSL.RECAP_PICK_COPY['all.grouping'], 'groupings',
+                route.groupings, recapPickOptions('groupings')),
             recapViewSwitch(route)
         ]);
     }
 
+    // ---- the service and namespace lists of the filter line
+
     /**
-     * Applied on change, so a name is not searched for a letter at a time.
-     * @param {string} label
-     * @param {string | null} value
-     * @param {string} key
+     * Draws the recap screen. The screen is drawn again as the recap loads and lands, so a list's button,
+     * or the control of an open list, that held the focus gets it back.
+     * @param {HTMLElement} main
      */
-    function recapTextFilter(label, value, key) {
-        const input = el('input', {
-            class: 'recap-input', type: 'text', placeholder: label, value: value || '', 'aria-label': label,
-            spellcheck: 'false'
+    function drawRecapScreen(main) {
+        const held = document.activeElement;
+        const button = held && held.classList.contains('recap-pick-button') ? held.id : null;
+        const inside = held && held.closest('.recap-pick-pop');
+        const was = inside ? {pick: held.getAttribute('data-pick'), name: held.getAttribute('data-name')} : null;
+        replaceKeepingPdf(main, renderRecapScreen());
+        const pop = was && state.recapPick.open ? document.querySelector('.recap-pick-pop') : null;
+        if (pop) {
+            const stops = /** @type {HTMLElement[]} */ (Array.from(pop.querySelectorAll('[data-pick]')));
+            const back = stops.find(function (node) {
+                return node.getAttribute('data-pick') === was.pick && node.getAttribute('data-name') === was.name;
+            });
+            (back || /** @type {HTMLElement} */ (pop)).focus();
+        }
+        const returned = button ? document.getElementById(button) : null;
+        if (returned) returned.focus();
+        fitRecapPick(document.querySelector('.recap-pick-pop'));
+    }
+
+    /**
+     * A list opened from a button near the right edge would run past the window and widen the page: it
+     * then hangs from the button's right edge instead.
+     * @param {Element | null} pop
+     */
+    function fitRecapPick(pop) {
+        if (!pop) return;
+        pop.classList.remove('recap-pick-pop-end');
+        if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 16) {
+            pop.classList.add('recap-pick-pop-end');
+        }
+    }
+
+    /**
+     * What a list can show of the names read for the period on screen, `idle` for any other period.
+     * @param {'services' | 'groupings'} key
+     * @returns {{status: RecapNames['status'], names: string[]}}
+     */
+    function recapPickOptions(key) {
+        const read = state.recapNames;
+        const current = read.path === PSL.recapFiltersPath(recapRoute());
+        return {status: current ? read.status : 'idle', names: current ? read[key] : []};
+    }
+
+    /**
+     * Reads the names the lists offer for the period on screen, once: a read already made, or in flight,
+     * for this period is kept. A failed one is made again. Only the latest read lands, and a list open
+     * meanwhile is drawn again with what it brought.
+     */
+    function loadRecapNames() {
+        const path = PSL.recapFiltersPath(recapRoute());
+        if (state.recapNames.path === path && state.recapNames.status !== 'error') return;
+        state.recapNames = {path: path, status: 'loading', services: [], groupings: []};
+        /**
+         * @param {RecapNames['status']} status
+         * @param {string[]} services
+         * @param {string[]} groupings
+         */
+        const settle = function (status, services, groupings) {
+            if (state.recapNames.path !== path) return;
+            state.recapNames = {path: path, status: status, services: services, groupings: groupings};
+            if (state.recapPick.open && currentScreen() === 'recap') render();
+        };
+        getJson(path).then(function (/** @type {import('../types').RecapFilterOptions} */ answer) {
+            settle('ready', Array.isArray(answer.services) ? answer.services : [],
+                Array.isArray(answer.groupings) ? answer.groupings : []);
+        }, function () {
+            settle('error', [], []);
         });
-        input.addEventListener('change', function () {
-            goRecap({[key]: input.value.trim() || null});
+    }
+
+    /**
+     * A list of names to tick on the filter line: a button saying what is chosen, which opens a list with
+     * a search. The route takes the boxes once, when the list closes, so ticking five names starts one
+     * recap and not five. Written from the state, so a render keeps it open.
+     * @param {string} label what the list is named
+     * @param {string} allLabel what the button says while nothing is chosen
+     * @param {'services' | 'groupings'} key the route field it writes
+     * @param {string[]} selected the names the route chooses
+     * @param {{status: RecapNames['status'], names: string[]}} options the names the Hub offers
+     * @returns {HTMLElement}
+     */
+    function recapMultiFilter(label, allLabel, key, selected, options) {
+        const pick = state.recapPick;
+        const open = pick.open === key;
+        const host = el('div', {class: 'recap-pick', id: 'recap-pick-' + key});
+        // This list alone is drawn again, so a focus that moved on to another control stays there.
+        const again = function () {
+            const fresh = recapMultiFilter(label, allLabel, key, selected, recapPickOptions(key));
+            host.replaceWith(fresh);
+            return fresh;
+        };
+        const button = el('button', {
+            type: 'button', class: 'recap-pick-button', id: 'recap-pick-' + key + '-button',
+            'aria-expanded': open ? 'true' : 'false', 'aria-controls': open ? 'recap-pick-' + key + '-pop' : null
         });
-        return input;
+        const paint = function () {
+            paintRecapPickButton(button, label, allLabel, open ? pick.draft : selected);
+        };
+        paint();
+        button.addEventListener('click', function () {
+            if (open) {
+                closeRecapPick(key, again, true);
+                return;
+            }
+            state.recapPick = {open: key, query: '', draft: selected.slice()};
+            loadRecapNames();
+            const fresh = again();
+            // A phone would raise its keyboard over a short list: there the group takes the focus instead.
+            const first = globalThis.matchMedia('(pointer: coarse)').matches ? '.recap-pick-pop' : '.recap-pick-search';
+            fitRecapPick(fresh.querySelector('.recap-pick-pop'));
+            /** @type {HTMLElement} */ (fresh.querySelector(first)).focus();
+        });
+        host.appendChild(button);
+        if (!open) return host;
+        const backdrop = el('div', {class: 'picker-backdrop'});
+        backdrop.addEventListener('click', function () {
+            closeRecapPick(key, again, true);
+        });
+        host.appendChild(backdrop);
+        host.appendChild(recapPickPopover(label, key, options, paint));
+        // Tabbing on past the list closes it where it is, without taking the focus back.
+        host.addEventListener('focusout', function (event) {
+            const to = event.relatedTarget;
+            if (to instanceof Element && !host.contains(to)) closeRecapPick(key, again, false, to.id);
+        });
+        return host;
+    }
+
+    /**
+     * The button's words: the list's name, then what is chosen: the first name and how many more, or
+     * `allLabel` for none. A long name is cut short by the style, and the label keeps it whole.
+     * @param {HTMLElement} button
+     * @param {string} label
+     * @param {string} allLabel
+     * @param {string[]} names
+     */
+    function paintRecapPickButton(button, label, allLabel, names) {
+        const more = names.length > 1 ? '+' + (names.length - 1) : '';
+        button.setAttribute('aria-label', label + ': ' + (names[0] || allLabel) + (more ? ' ' + more : ''));
+        button.replaceChildren(
+            el('span', {class: 'recap-pick-name', text: names[0] || allLabel}),
+            ...(more ? [el('span', {class: 'recap-pick-more', text: more})] : []),
+            svg([['path', {d: 'M6 9l6 6 6-6'}]], 11));
+    }
+
+    /**
+     * Closes the open list. When its boxes differ from the route the route takes them, and the hash
+     * change that follows draws the screen again; otherwise this list alone is drawn closed.
+     * @param {'services' | 'groupings'} key
+     * @param {() => HTMLElement} again
+     * @param {boolean} refocus whether the button gets the focus back: not when the focus moved on by itself
+     * @param {string} [movedTo] the id of the control it moved on to, which a route change would draw anew
+     */
+    function closeRecapPick(key, again, refocus, movedTo) {
+        if (state.recapPick.open !== key) return;
+        const draft = state.recapPick.draft.slice().sort();
+        state.recapPick = {open: null, query: '', draft: []};
+        if (JSON.stringify(draft) !== JSON.stringify(recapRoute()[key])) {
+            state.recapRefocus = refocus ? 'recap-pick-' + key + '-button' : movedTo || null;
+            goRecap({[key]: draft});
+            return;
+        }
+        const closed = again();
+        if (refocus) /** @type {HTMLElement} */ (closed.querySelector('.recap-pick-button')).focus();
+    }
+
+    /**
+     * The open list: a search, the names with a box each, the count of boxes ticked and a way to clear them.
+     * Ticking and searching change the list in place; nothing here moves the route.
+     * @param {string} label
+     * @param {'services' | 'groupings'} key
+     * @param {{status: RecapNames['status'], names: string[]}} options
+     * @param {() => void} paintButton
+     * @returns {HTMLElement}
+     */
+    function recapPickPopover(label, key, options, paintButton) {
+        const pick = state.recapPick;
+        const copy = PSL.RECAP_PICK_COPY;
+        const search = el('input', {
+            type: 'text', class: 'recap-pick-search', 'data-pick': 'search', value: pick.query, spellcheck: 'false',
+            autocomplete: 'off', placeholder: copy.search, 'aria-label': copy.search
+        });
+        const body = el('div', {class: 'recap-pick-list'});
+        const limit = el('p', {class: 'recap-pick-note', text: t('recap.pick.limit', {max: PSL.RECAP_FILTER_MAX_VALUES})});
+        const count = el('span', {class: 'recap-pick-count'});
+        const clear = el('button', {type: 'button', class: 'recap-pick-clear', 'data-pick': 'clear', text: copy.clear});
+        // After each box: the count, the limit, which boxes can still be ticked, and the button's words.
+        const ticked = function () {
+            const full = pick.draft.length >= PSL.RECAP_FILTER_MAX_VALUES;
+            count.textContent = t('recap.pick.count.' + PSL.plural(pick.draft.length), {count: pick.draft.length});
+            limit.hidden = !full;
+            clear.disabled = pick.draft.length === 0;
+            body.querySelectorAll('input[data-pick="box"]').forEach(function (/** @type {HTMLInputElement} */ box) {
+                box.disabled = !box.checked && full;
+            });
+            paintButton();
+        };
+        const rows = function () {
+            body.replaceChildren(...recapPickBody(options, pick, ticked));
+            ticked();
+        };
+        search.addEventListener('input', function () {
+            pick.query = search.value;
+            rows();
+        });
+        clear.addEventListener('click', function () {
+            pick.draft = [];
+            rows();
+            search.focus();
+        });
+        const pop = el('div', {
+            class: 'recap-pick-pop', id: 'recap-pick-' + key + '-pop', role: 'group', 'aria-label': label, tabindex: '-1'
+        }, [search, body, limit, el('div', {class: 'recap-pick-foot'}, [count, clear])]);
+        pop.addEventListener('keydown', function (event) {
+            const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+            if (step === 0) return;
+            const stops = /** @type {HTMLElement[]} */ ([search].concat(
+                Array.from(body.querySelectorAll('input[data-pick="box"]:not(:disabled)'))));
+            const at = stops.indexOf(/** @type {HTMLElement} */ (event.target));
+            if (at < 0) return;
+            event.preventDefault();
+            stops[Math.max(0, Math.min(stops.length - 1, at + step))].focus();
+        });
+        rows();
+        return pop;
+    }
+
+    /**
+     * What fills the list: a line while the names are read, the failure with a way to read them again,
+     * a box for each name, or the line that says there is none. A name already ticked stays in a list
+     * that failed, and in one that lacks it, so it can be unticked.
+     * @param {{status: RecapNames['status'], names: string[]}} options
+     * @param {RecapPick} pick
+     * @param {() => void} ticked
+     * @returns {HTMLElement[]}
+     */
+    function recapPickBody(options, pick, ticked) {
+        const copy = PSL.RECAP_PICK_COPY;
+        const ready = options.status === 'ready';
+        const rows = PSL.recapPickRows(ready ? options.names : [], pick.draft, pick.query);
+        /** @type {HTMLElement[]} */
+        const nodes = [];
+        if (!ready && options.status !== 'error') {
+            nodes.push(el('p', {class: 'recap-pick-note', role: 'status', text: copy.loading}));
+        }
+        if (options.status === 'error') nodes.push(recapPickFailure());
+        rows.forEach(function (row) {
+            nodes.push(recapPickRow(row, ready, pick, ticked));
+        });
+        if (ready && rows.length === 0) {
+            nodes.push(el('p', {class: 'recap-pick-note', text: pick.query.trim() === '' ? copy.empty : copy.nomatch}));
+        }
+        return nodes;
+    }
+
+    function recapPickFailure() {
+        const retry = el('button', {
+            type: 'button', class: 'recap-pick-clear', 'data-pick': 'retry', text: PSL.RECAP_PICK_COPY.retry
+        });
+        retry.addEventListener('click', function () {
+            loadRecapNames();
+            render();
+        });
+        return el('div', {class: 'recap-pick-note', role: 'status'}, [
+            el('span', {text: PSL.RECAP_PICK_COPY.error}), retry
+        ]);
+    }
+
+    /**
+     * One name and its box. The name is the Hub's text, set as text.
+     * @param {{name: string, checked: boolean, absent: boolean}} row
+     * @param {boolean} known whether the Hub offered the names, so one it lacks can be said to be absent
+     * @param {RecapPick} pick
+     * @param {() => void} ticked
+     */
+    function recapPickRow(row, known, pick, ticked) {
+        const box = el('input', {type: 'checkbox', 'data-pick': 'box', 'data-name': row.name});
+        box.checked = row.checked;
+        box.disabled = !row.checked && pick.draft.length >= PSL.RECAP_FILTER_MAX_VALUES;
+        box.addEventListener('change', function () {
+            const rest = pick.draft.filter(function (name) {
+                return name !== row.name;
+            });
+            pick.draft = (box.checked ? rest.concat(row.name) : rest).sort();
+            ticked();
+        });
+        return el('label', {class: 'recap-pick-opt'}, [
+            box,
+            el('span', {class: 'recap-pick-name', text: row.name}),
+            row.absent && known ? el('span', {class: 'recap-pick-absent', text: PSL.RECAP_PICK_COPY.absent}) : null
+        ]);
     }
 
     /**
@@ -7640,7 +8186,7 @@
         const details = el('details', {class: 'recap-detail'}, [
             el('summary', {}, [svg([['path', {d: 'M9 6l6 6-6 6'}]], 12), document.createTextNode(t('recap.fix.summary'))]),
             el('div', {class: 'recap-detail-body'}, [
-                priority.template ? el('pre', {class: 'recap-code', text: priority.template}) : null,
+                priority.template ? recapTemplate(priority) : null,
                 recapFix(priority.suggested_fix),
                 recapCodeLocation(priority.code_location),
                 recapFacts(priority),
@@ -7652,6 +8198,18 @@
             state.panelOpen[key] = details.open;
         });
         return details;
+    }
+
+    /**
+     * The template as the engine saw it. SQL is laid out and coloured, one span per piece set with
+     * `textContent` since the text comes from observed traffic. Anything else is printed as it is.
+     * @param {RecapPriority} priority
+     */
+    function recapTemplate(priority) {
+        if (!PSL.isSqlFinding(priority.finding_type)) return el('pre', {class: 'recap-code', text: priority.template});
+        return el('pre', {class: 'recap-code'}, PSL.sqlTokens(priority.template).map(function (token) {
+            return el('span', {class: 'sql-' + token.kind, text: token.text});
+        }));
     }
 
     /**
@@ -11449,6 +12007,9 @@
             return;
         }
         if (state.form.pickerOpen) closePicker();
+        // The open list of the recap's filter line closes as its button does, and takes the focus back.
+        const pickButton = state.recapPick.open ? document.querySelector('.recap-pick-button[aria-expanded="true"]') : null;
+        if (pickButton instanceof HTMLElement) pickButton.click();
     });
     render();
     void loadShell();

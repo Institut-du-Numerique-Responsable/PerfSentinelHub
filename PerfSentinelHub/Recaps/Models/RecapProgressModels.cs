@@ -35,7 +35,11 @@ public interface IRecapProgress
 /// </summary>
 public sealed record RecapJobAudience(string? Owner, string Sources);
 
-/// <summary>One recap computation: its audience and the query, the view and the moves cut excepted.</summary>
+/// <summary>
+///     One recap computation: its audience and the query, the view and the moves cut excepted. Service
+///     and Grouping are the canonical key of the choices (<see cref="RecapFilterValues.KeyOf" />), so
+///     the same choices in another order are one job.
+/// </summary>
 public sealed record RecapJobKey(
     RecapJobAudience Audience,
     RecapPeriodKind Kind,

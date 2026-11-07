@@ -23,6 +23,7 @@ public sealed partial class ProblemCodeTests(HubApplicationFactory factory) : IC
     [InlineData("POST", "/api/analyses", 503, "No analysis engine is configured on this Hub.",
         "analysis_engine_missing")]
     [InlineData("GET", "/api/recap?period=year", 400, "The recap query is invalid.", "invalid_recap_query")]
+    [InlineData("GET", "/api/recap/filters?period=year", 400, "The recap query is invalid.", "invalid_recap_query")]
     [InlineData("GET", "/api/sources/test/acks", 404, "This source relays no acknowledgments.", "acks_not_relayed")]
     [InlineData("POST", "/api/actions", 403,
         "The Hub does not know who is asking, and an action is taken in somebody's name.", "unknown_caller")]

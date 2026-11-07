@@ -1562,6 +1562,38 @@ public sealed class ConfigurationTests
             new HubOptionsValidator().Validate(null, ValidOptions() with { Analysis = analysis }).Succeeded));
     }
 
+    [Theory]
+    [InlineData(16, 64, true)]
+    [InlineData(1, 1, true)]
+    [InlineData(64, 64, true)]
+    [InlineData(0, 64, false)]
+    [InlineData(16, 65, false)]
+    [InlineData(32, 16, false)]
+    [InlineData(16, 0, false)]
+    public void The_fetch_concurrency_warning_sits_inside_the_ceiling_the_engine_allows(
+        int warn, int max, bool accepted)
+    {
+        var result = new HubOptionsValidator().Validate(null, ValidOptions() with
+        {
+            Analysis = new AnalysisOptions { FetchConcurrencyWarn = warn, FetchConcurrencyMax = max }
+        });
+
+        Assert.Equal(accepted, result.Succeeded);
+        if (!accepted)
+            Assert.Contains(result.Failures ?? [], failure => failure.Contains(
+                "Hub:Analysis:FetchConcurrency", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(64, 16)]
+    [InlineData(16, 16)]
+    [InlineData(8, 8)]
+    [InlineData(1, 1)]
+    public void A_tempo_run_without_a_value_reads_sixteen_at_most(int max, int expected)
+    {
+        Assert.Equal(expected, new AnalysisOptions { FetchConcurrencyMax = max }.DefaultFetchConcurrency);
+    }
+
     [Fact]
     public void Invalid_bound_configuration_stops_the_host()
     {

@@ -314,6 +314,39 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
+    public void The_scope_names_every_service_and_namespace_chosen()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Filters = RecapFilters.Of("prod", null, ["checkout-api", "cart-api"], ["shop", "billing"])
+        };
+
+        var engineering = Visible(Html(snapshot));
+        var management = Visible(Html(RecapViews.Frozen(snapshot)));
+
+        Assert.Contains("Scope: environment prod, service checkout-api, cart-api, grouping shop, billing",
+            engineering, StringComparison.Ordinal);
+        // The management scope reads values only, and no service has one name to give for a list.
+        Assert.Contains("Scope: prod, checkout-api, cart-api", management, StringComparison.Ordinal);
+        Assert.Contains("Périmètre\u00a0: environnement prod, service checkout-api, cart-api, regroupement shop, billing",
+            Visible(Encoding.UTF8.GetString(RecapReportRenderer.Render(snapshot, HubLang.Fr))),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void One_chosen_value_renders_as_the_single_filter_did()
+    {
+        var single = RecapSnapshots.Distinctive() with { Filters = new RecapFilters("prod", null, "cart-api", "shop") };
+        var listed = RecapSnapshots.Distinctive() with
+        {
+            Filters = RecapFilters.Of("prod", null, ["cart-api"], ["shop"])
+        };
+
+        Assert.Equal(single.Filters, listed.Filters);
+        Assert.Equal(Html(single), Html(listed));
+    }
+
+    [Fact]
     public void The_engineering_report_shows_a_named_service_beside_its_technical_name()
     {
         var snapshot = RecapSnapshots.Distinctive() with

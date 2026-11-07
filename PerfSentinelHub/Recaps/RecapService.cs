@@ -12,8 +12,8 @@ public sealed record RecapRequest(
     RecapPeriodKind Kind,
     DateOnly At,
     IReadOnlyList<string>? SourceIds, // resolved environment/source_id filter, null = every source in Sources
-    string? Service,
-    string? Grouping,
+    IReadOnlyList<string>? Services, // the services chosen, canonical (RecapFilterValues), null = any
+    IReadOnlyList<string>? Groupings, // the namespaces chosen, likewise
     AccessScope? Access, // null = unrestricted (a worker); else the narrowed findings.read scope
     IReadOnlyList<SourceOptions> Sources, // the sources the caller may see
     RecapFilters Filters); // echoed as asked
@@ -75,6 +75,24 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             NamesOf(request, coverage.Late));
     }
 
+    /// <summary>
+    ///     The names a reader may filter this recap on, for the period and sources of
+    ///     <paramref name="request" />, whatever it has already chosen: the list never narrows itself.
+    ///     No count: the findings read behind one takes seconds under a narrowed scope.
+    /// </summary>
+    public async Task<RecapFilterOptions> FilterOptionsAsync(
+        RecapRequest request,
+        CancellationToken cancellationToken)
+    {
+        var window = RecapPeriod.Of(request.Kind, request.At);
+        var services =
+            await database.QueryRecapServicesAsync(window, request.SourceIds, request.Access, cancellationToken);
+        var groupings =
+            await database.QueryRecapGroupingsAsync(window, request.SourceIds, request.Access, cancellationToken);
+        return new RecapFilterOptions(
+            [.. services.Where(RecapFilterValues.CanOffer)], [.. groupings.Where(RecapFilterValues.CanOffer)]);
+    }
+
     // ------------------------------------------------------------ reads
 
     private async Task<Reads> ReadFindingsAsync(
@@ -128,8 +146,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     {
         var rows = await database.QueryFindingsAsync(
             new FindingQuery(
-                request.Service, null, null, MaxFindings + 1, includeAcked, null, 0, request.SourceIds,
-                window.FromMs, window.ToMs, null, request.Grouping, request.Access),
+                null, null, null, MaxFindings + 1, includeAcked, null, 0, request.SourceIds,
+                window.FromMs, window.ToMs, null, null, request.Access, request.Services, request.Groupings),
             cancellationToken);
         return new Read([.. rows.Take(MaxFindings).Select(RecapEnvelope.Read)], rows.Count > MaxFindings);
     }

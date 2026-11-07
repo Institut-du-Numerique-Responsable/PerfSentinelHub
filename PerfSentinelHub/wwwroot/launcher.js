@@ -397,6 +397,7 @@
             if (r[name]) parts.push(name + ' = ' + r[name]);
         });
         if (r['max_traces'] != null) parts.push(['max_traces', r['max_traces']].join(' = '));
+        if (r['fetch_concurrency'] != null) parts.push(['fetch_concurrency', r['fetch_concurrency']].join(' = '));
         const detection = /** @type {Record<string, number|string>} */ (r['detection'] || {});
         Object.keys(detection).forEach(function (name) {
             parts.push(name + ' = ' + detection[name]);
@@ -444,6 +445,68 @@
         if (n <= Math.min(1200, hardCap)) return band('heavy', 'warn', false);
         if (n <= hardCap) return band('ceiling', 'crit', true);
         return band('over', 'crit', false);
+    }
+
+    /** What the engine reads at once when nobody chose, `AnalysisOptions.EngineDefaultFetchConcurrency`. */
+    const ENGINE_FETCH_DEFAULT = 16;
+
+    /**
+     * The count a form starts from: the engine's own default, lowered to what this Hub
+     * warns at or allows.
+     * @param {number} warn
+     * @param {number} max
+     * @returns {number}
+     */
+    function fetchDefault(warn, max) {
+        return Math.min(ENGINE_FETCH_DEFAULT, warn, max);
+    }
+
+    /**
+     * Where a simultaneous-reads count falls against this Hub's two limits. Above `warn` the
+     * run needs a confirmation, above `max` it is refused. Anything that is not a whole number
+     * of at least 1 is a third case: the server refuses it in the same words as a count past
+     * the max, so the screen stops it first and says what is wrong.
+     * @param {number} n
+     * @param {number} warn
+     * @param {number} max
+     * @returns {{key: 'ok' | 'over' | 'blocked' | 'invalid', needsAck: boolean}}
+     */
+    function fetchBand(n, warn, max) {
+        if (!Number.isInteger(n) || n < 1) return {key: 'invalid', needsAck: false};
+        if (n > max) return {key: 'blocked', needsAck: false};
+        return n > warn ? {key: 'over', needsAck: true} : {key: 'ok', needsAck: false};
+    }
+
+    /**
+     * Whether the form carries a reads count. `shown`: a Tempo source, a service run and an
+     * engine that reads the flag. `refused`: the same run on an engine that does not, under a
+     * max below the engine's default, which the server cannot run at all (it would have to
+     * pass a flag the engine does not know). A status without the fields, an older Hub or
+     * capture, reads as an engine that does not read the flag.
+     * @param {import('../types').Source | null | undefined} source
+     * @param {string} mode
+     * @param {Partial<import('../types').StatusLimits>} limits
+     * @returns {'shown' | 'refused' | 'hidden'}
+     */
+    function fetchAccess(source, mode, limits) {
+        if (!source || source.kind !== 'tempo' || mode !== 'service') return 'hidden';
+        if (limits.fetch_concurrency_supported === true) return 'shown';
+        return limits.fetch_concurrency_max < ENGINE_FETCH_DEFAULT ? 'refused' : 'hidden';
+    }
+
+    /**
+     * The count the request carries: what was typed, else the default. Undefined whenever the
+     * block is not on screen, so a source or a mode that takes none sends none.
+     * @param {{mode: string, fetchConcurrency: number | null}} form
+     * @param {import('../types').Source | null | undefined} source
+     * @param {import('../types').StatusLimits} limits
+     * @returns {number | undefined}
+     */
+    function fetchRequested(form, source, limits) {
+        if (fetchAccess(source, form.mode, limits) !== 'shown') return undefined;
+        return form.fetchConcurrency == null
+            ? fetchDefault(limits.fetch_concurrency_warn, limits.fetch_concurrency_max)
+            : form.fetchConcurrency;
     }
 
     /**
@@ -610,6 +673,13 @@
                 tail.push('--lookback ' + shq(String(request['lookback'])));
             }
             tail.push('--max-traces ' + String(request['max_traces']));
+            // Tempo's alone: `jaeger-query` has no such flag and would stop on it. The engine's own
+            // default is left unprinted: the run is the same, and a binary older than 0.43.0 would
+            // refuse a flag the reader never set.
+            if (request['fetch_concurrency'] != null && request['fetch_concurrency'] !== ENGINE_FETCH_DEFAULT
+                && source.kind === 'tempo') {
+                tail.push('--fetch-concurrency ' + String(request['fetch_concurrency']));
+            }
         }
         if (source.auth_header_name) tail.push('--auth-header-env PERF_SENTINEL_SOURCE_TOKEN');
         // Undotted, and named rather than left to the engine's discovery of
@@ -1134,10 +1204,20 @@
     }
 
     /**
+     * The daemon a handoff came from, for the link to carry: New analysis opens on a trace
+     * backend of its environment. Nothing when the row names none.
+     * @param {string | undefined} sourceId
+     * @returns {string}
+     */
+    function handoffOrigin(sourceId) {
+        return sourceId ? '&source=' + encodeURIComponent(sourceId) : '';
+    }
+
+    /**
      * The route that opens New analysis on an incident's window. The end is held
      * at now: an incident younger than two TTLs still has a `window_to_ms` in the
      * future, and the Hub refuses a window that ends there.
-     * @param {{id: string, service: string, window_from_ms: number, window_to_ms: number}} incident
+     * @param {{id: string, source_id?: string, service: string, window_from_ms: number, window_to_ms: number}} incident
      * @param {number} nowMs
      * @returns {string}
      */
@@ -1145,7 +1225,8 @@
         return '#/new?from=' + incident.window_from_ms
             + '&to=' + Math.min(incident.window_to_ms, nowMs)
             + '&service=' + encodeURIComponent(incident.service)
-            + '&incident=' + encodeURIComponent(incident.id);
+            + '&incident=' + encodeURIComponent(incident.id)
+            + handoffOrigin(incident.source_id);
     }
 
     /**
@@ -1156,7 +1237,8 @@
      * the bare `#/new` the tab points at, read as null.
      * @param {string | null | undefined} hash
      * @param {number} nowMs
-     * @returns {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string} | null}
+     * @returns {{fromMs: number, toMs: number, service: string, incidentId: string, pairKey: string,
+     *     sourceId: string | null} | null}
      */
     function readHandoff(hash, nowMs) {
         const text = String(hash || '');
@@ -1175,8 +1257,40 @@
             toMs: toMs,
             service: service,
             incidentId: params.get('incident') || '',
-            pairKey: params.get('pair') || ''
+            pairKey: params.get('pair') || '',
+            sourceId: params.get('source') || null
         };
+    }
+
+    /**
+     * The source a handed-over window or trace opens New analysis on. A daemon takes neither, so
+     * it is a trace backend, chosen in this order: one of the environment the daemon it came from
+     * sits in, the current pick kept if it is one; else the current pick if it is a backend; else
+     * the first backend. Null with no backend at all, the pick stays and the screen's banner says
+     * why. Only a source the caller may run an analysis on is ever returned.
+     * @param {Array<{id: string, kind: string, environment: string, permissions?: string[] | null}>} sources
+     *     every source the caller sees, so the origin is known even where they cannot run one
+     * @param {string | null} currentId the pick the form holds
+     * @param {string | null} sourceOfOrigin the daemon the incident or episode came from, or null
+     * @returns {string | null}
+     */
+    function handoffSourceId(sources, currentId, sourceOfOrigin) {
+        const backends = sources.filter(function (source) {
+            return source.kind !== 'daemon' && permits(source, 'analyses.run');
+        });
+        const origin = sources.find(function (source) {
+            return source.id === sourceOfOrigin;
+        });
+        const local = origin ? backends.filter(function (source) {
+            return source.environment === origin.environment;
+        }) : [];
+        const keep = function (/** @type {typeof backends} */ list) {
+            return list.find(function (source) {
+                return source.id === currentId;
+            });
+        };
+        const picked = keep(local) || local[0] || keep(backends) || backends[0];
+        return picked ? picked.id : null;
     }
 
     /**
@@ -1246,7 +1360,8 @@
      * New analysis on an episode's window, a minute wider on each side and held at now, on
      * the service of the side that fires first, the way an incident hands over its own. The
      * pair rides along for the banner's wording.
-     * @param {{started_at_ms: number, ended_at_ms: number | null, pair_key: string, source: {service: string}}} episode
+     * @param {{started_at_ms: number, ended_at_ms: number | null, pair_key: string, source_id?: string,
+     *     source: {service: string}}} episode
      * @param {number} nowMs
      * @returns {string}
      */
@@ -1255,33 +1370,39 @@
         return '#/new?from=' + (episode.started_at_ms - EPISODE_MARGIN_MS)
             + '&to=' + Math.min(end, nowMs)
             + '&service=' + encodeURIComponent(episode.source.service)
-            + '&pair=' + encodeURIComponent(episode.pair_key);
+            + '&pair=' + encodeURIComponent(episode.pair_key)
+            + handoffOrigin(episode.source_id);
     }
 
     /**
      * New analysis on a trace of the episode's last co-occurrence: the first finding's, the
      * second's carried for the banner, or the second's alone. Null when the daemon kept neither.
-     * @param {{sample_trace_id: string | null, source_sample_trace_id: string | null}} episode
+     * @param {{sample_trace_id: string | null, source_sample_trace_id: string | null, source_id?: string}} episode
      * @returns {string | null}
      */
     function pairTraceHash(episode) {
         const first = episode.source_sample_trace_id || episode.sample_trace_id;
         if (!first) return null;
         const other = episode.source_sample_trace_id && episode.sample_trace_id;
-        return '#/new?trace=' + encodeURIComponent(first) + (other ? '&other=' + encodeURIComponent(other) : '');
+        return '#/new?trace=' + encodeURIComponent(first) + (other ? '&other=' + encodeURIComponent(other) : '')
+            + handoffOrigin(episode.source_id);
     }
 
     /**
      * What a `#/new?trace=…&other=…` hash carries, or null for any other route.
      * @param {string | null | undefined} hash
-     * @returns {{traceId: string, otherTraceId: string} | null}
+     * @returns {{traceId: string, otherTraceId: string, sourceId: string | null} | null}
      */
     function readTraceHandoff(hash) {
         const text = String(hash || '');
         if (text.indexOf('#/new?') !== 0) return null;
         const params = new URLSearchParams(text.slice('#/new?'.length));
         const traceId = (params.get('trace') || '').trim();
-        return traceId === '' ? null : {traceId: traceId, otherTraceId: (params.get('other') || '').trim()};
+        return traceId === '' ? null : {
+            traceId: traceId,
+            otherTraceId: (params.get('other') || '').trim(),
+            sourceId: params.get('source') || null
+        };
     }
 
     /**
@@ -2068,6 +2189,7 @@
         if (r['trace_id']) return Object.assign(form, {mode: 'trace', traceId: String(r['trace_id'])});
         Object.assign(form, {mode: 'service', service: String(r['service'] || ''), traceId: ''});
         if (typeof r['max_traces'] === 'number') form.maxTraces = r['max_traces'];
+        if (typeof r['fetch_concurrency'] === 'number') form.fetchConcurrency = r['fetch_concurrency'];
         if (typeof r['from_ms'] === 'number' && typeof r['to_ms'] === 'number') {
             return Object.assign(form, {rangeMode: 'absolute', fromMs: r['from_ms'], toMs: r['to_ms']});
         }
@@ -2338,28 +2460,50 @@
     }
 
     /**
-     * What a `#/recap?…` hash names. Anything it does not know reads as the default, and a filter
-     * that is blank, past 256 characters or carries a control character as none.
+     * The most names one recap filter takes, as RecapFilterValues.MaxValues: past it the Hub answers 400.
+     */
+    const RECAP_FILTER_MAX_VALUES = 50;
+
+    /**
+     * Whether `text` is a day of the calendar, as the Hub's own yyyy-MM-dd parse asks. A date past it,
+     * `2026-13-45`, has no period to work out and `toISOString` throws on it.
+     * @param {string} text
+     * @returns {boolean}
+     */
+    function isCalendarDay(text) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+        const date = cardDate(text);
+        return !Number.isNaN(date.getTime()) && cardIso(date) === text;
+    }
+
+    /**
+     * What a `#/recap?…` hash names. Anything it does not know reads as the default. A service or a
+     * namespace is a repeated key (`service=a&service=b`), each name read once and in the order the Hub
+     * keys a job on, so the same choices in another order are one job; a name that is blank, past 256
+     * characters or carries a control character is left out. A name is kept whole, as the Hub matches it.
      * @param {string | null | undefined} hash
      * @returns {{period: 'day' | 'week' | 'month', at: string | null, environment: string | null,
-     *   service: string | null, grouping: string | null, view: 'tech' | 'pilotage'}}
+     *   services: string[], groupings: string[], view: 'tech' | 'pilotage'}}
      */
     function readRecapRoute(hash) {
         const text = String(hash || '');
         const query = text.indexOf('#/recap?') === 0 ? text.slice('#/recap?'.length) : '';
         const params = new URLSearchParams(query);
-        const filter = function (/** @type {string} */ key) {
-            const value = (params.get(key) || '').trim();
-            return value === '' || value.length > 256 || /\p{Cc}/u.test(value) ? null : value;
+        const sound = function (/** @type {string} */ value) {
+            return value.trim() !== '' && value.length <= 256 && !/\p{Cc}/u.test(value);
+        };
+        const names = function (/** @type {string} */ key) {
+            return Array.from(new Set(params.getAll(key).filter(sound))).sort();
         };
         const period = params.get('period') || '';
         const at = params.get('at') || '';
+        const environment = (params.get('environment') || '').trim();
         return {
             period: RECAP_PERIODS.indexOf(period) >= 0 ? /** @type {'day' | 'week' | 'month'} */ (period) : 'week',
-            at: /^\d{4}-\d{2}-\d{2}$/.test(at) ? at : null,
-            environment: filter('environment'),
-            service: filter('service'),
-            grouping: filter('grouping'),
+            at: isCalendarDay(at) ? at : null,
+            environment: sound(environment) ? environment : null,
+            services: names('service'),
+            groupings: names('grouping'),
             view: params.get('view') === 'pilotage' ? 'pilotage' : 'tech'
         };
     }
@@ -2372,11 +2516,26 @@
     function recapHash(route) {
         const parts = [];
         if (route.period !== 'week') parts.push('period=' + encodeURIComponent(route.period));
-        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
-            if (route[key]) parts.push(key + '=' + encodeURIComponent(route[key]));
+        if (route.at) parts.push('at=' + encodeURIComponent(route.at));
+        if (route.environment) parts.push('environment=' + encodeURIComponent(route.environment));
+        recapNameQuery(route).forEach(function (pair) {
+            parts.push(pair);
         });
         if (route.view !== 'tech') parts.push('view=' + encodeURIComponent(route.view));
         return parts.length ? '#/recap?' + parts.join('&') : '#/recap';
+    }
+
+    /**
+     * The `key=value` pairs of the names a route chooses, one pair for each: a repeated key.
+     * @param {{services: string[], groupings: string[]}} route
+     * @returns {string[]}
+     */
+    function recapNameQuery(route) {
+        return route.services.map(function (name) {
+            return 'service=' + encodeURIComponent(name);
+        }).concat(route.groupings.map(function (name) {
+            return 'grouping=' + encodeURIComponent(name);
+        }));
     }
 
     /**
@@ -2415,16 +2574,75 @@
     }
 
     /**
-     * The day and the filters a route names, each as `&key=value`, in the order the Hub reads them.
+     * The day, the environment and the names a route chooses, each as `&key=value`, in the order the Hub
+     * reads them.
      * @param {ReturnType<typeof readRecapRoute>} route
      * @returns {string}
      */
     function recapFilterQuery(route) {
+        return recapScopeQuery(route) + recapNameQuery(route).map(function (pair) {
+            return '&' + pair;
+        }).join('');
+    }
+
+    /**
+     * The day and the environment a route names, each as `&key=value`: what the names a list offers depend on.
+     * @param {{at: string | null, environment: string | null}} route
+     * @returns {string}
+     */
+    function recapScopeQuery(route) {
         let query = '';
-        ['at', 'environment', 'service', 'grouping'].forEach(function (key) {
-            if (route[key]) query += '&' + key + '=' + encodeURIComponent(route[key]);
-        });
+        if (route.at) query += '&at=' + encodeURIComponent(route.at);
+        if (route.environment) query += '&environment=' + encodeURIComponent(route.environment);
         return query;
+    }
+
+    /**
+     * The read of the names a list offers for a route's period and environment. It names the period's
+     * first day, as recapJobKey does, so it is the same path all period long and serves as the key of
+     * what was read. The names already chosen are not in it: the Hub ignores them, and fifty long ones
+     * would make a request line it refuses.
+     * @param {ReturnType<typeof readRecapRoute>} route
+     * @param {number} [now] the moment that decides today when the route names no day, Date.now() by default
+     * @returns {string}
+     */
+    function recapFiltersPath(route, now) {
+        return '/api/recap/filters?period=' + encodeURIComponent(route.period)
+            + recapScopeQuery({at: recapPeriodDay(route, now), environment: route.environment});
+    }
+
+    /**
+     * The first day of the period a route names. The Hub reads an absent day as today in UTC.
+     * @param {{period: string, at: string | null}} route
+     * @param {number} [now] the moment that decides today when the route names no day, Date.now() by default
+     * @returns {string}
+     */
+    function recapPeriodDay(route, now) {
+        const day = route.at || cardIso(new Date(now === undefined ? Date.now() : now));
+        return route.period === 'day' ? day : cardPeriodStart(route.period, day);
+    }
+
+    /**
+     * The rows of a checkbox list: the names the Hub offers in its order, then the chosen ones it does
+     * not offer for this period, flagged `absent` so they can still be unticked. `query` keeps the rows
+     * whose name holds it, as plain text and whatever the case.
+     * @param {string[]} offered
+     * @param {string[]} chosen
+     * @param {string} query
+     * @returns {Array<{name: string, checked: boolean, absent: boolean}>}
+     */
+    function recapPickRows(offered, chosen, query) {
+        const rows = offered.map(function (name) {
+            return {name: name, checked: chosen.indexOf(name) >= 0, absent: false};
+        }).concat(chosen.filter(function (name) {
+            return offered.indexOf(name) < 0;
+        }).map(function (name) {
+            return {name: name, checked: true, absent: true};
+        }));
+        const wanted = query.trim().toLowerCase();
+        return wanted === '' ? rows : rows.filter(function (row) {
+            return row.name.toLowerCase().includes(wanted);
+        });
     }
 
     /**
@@ -2435,11 +2653,9 @@
      * @returns {string}
      */
     function recapJobKey(route, now) {
-        // The Hub reads an absent day as today in UTC and keys a job on its period's first day, so the
-        // key does too: another day of the same period is the same job, past its end another one.
-        const day = route.at || cardIso(new Date(now === undefined ? Date.now() : now));
-        const at = route.period === 'day' ? day : cardPeriodStart(route.period, day);
-        return recapPath(Object.assign({}, route, {view: 'tech', at: at}));
+        // The Hub keys a job on its period's first day, so the key does too: another day of the same
+        // period is the same job, past its end another one.
+        return recapPath(Object.assign({}, route, {view: 'tech', at: recapPeriodDay(route, now)}));
     }
 
     /**
@@ -2527,13 +2743,18 @@
     const RECAP_REPORTS_COPY = textTable('recap.reports.', ['title', 'hint', 'help', 'generate', 'generating', 'none',
         'failed', 'refused']);
 
+    /** The fixed copy of the checkbox lists on the filter line, pinned with the Management words test. */
+    const RECAP_PICK_COPY = textTable('recap.pick.', ['all.service', 'all.grouping', 'search', 'loading', 'error',
+        'retry', 'empty', 'nomatch', 'absent', 'clear']);
+
     /**
      * What Generate a report would freeze for a route.
      * @param {ReturnType<typeof readRecapRoute>} route
      * @returns {string}
      */
     function recapFreezeText(route) {
-        const filters = route.environment || route.service || route.grouping ? t('recap.freeze.filters') : '';
+        const filters = route.environment || route.services.length > 0 || route.groupings.length > 0
+            ? t('recap.freeze.filters') : '';
         return route.at
             ? t('recap.freeze.at.' + route.period, {at: recapDay(route.at), filters: filters})
             : t('recap.freeze.last.' + route.period, {filters: filters});
@@ -2548,7 +2769,8 @@
     function recapErrorText(status, view) {
         const audience = view === 'pilotage' ? 'pilotage' : 'tech';
         if (status === 403) return t('recap.error.forbidden.' + audience);
-        if (status === 400) return t('recap.error.invalid');
+        // A request line the server finds too long, as fifty long names make, is a filter it cannot read.
+        if (status === 400 || status === 414 || status === 431) return t('recap.error.invalid');
         return t('recap.error.other.' + audience);
     }
 
@@ -2609,18 +2831,19 @@
 
     /**
      * The body of a generate request: the screen's period and filters, and the date only when
-     * the route names one (the Hub then takes the last closed period).
+     * the route names one (the Hub then takes the last closed period). A filter with one name is sent
+     * as that text and one with several as a list, never both, which the Hub refuses.
      * @param {ReturnType<typeof readRecapRoute>} route
-     * @returns {{period: string, at?: string, environment: string | null, service: string | null,
-     *   grouping: string | null}}
+     * @returns {{period: string, at?: string, environment: string | null, service?: string | null,
+     *   services?: string[], grouping?: string | null, groupings?: string[]}}
      */
     function recapOnDemandBody(route) {
         return {
             period: route.period,
             ...(route.at ? {at: route.at} : {}),
             environment: route.environment,
-            service: route.service,
-            grouping: route.grouping
+            ...(route.services.length > 1 ? {services: route.services} : {service: route.services[0] || null}),
+            ...(route.groupings.length > 1 ? {groupings: route.groupings} : {grouping: route.groupings[0] || null})
         };
     }
 
@@ -2702,6 +2925,212 @@
      */
     function dividesBefore(items, index) {
         return index > 0 && !hasAvoidableVolume(items[index]) && hasAvoidableVolume(items[index - 1]);
+    }
+
+    /**
+     * The longest statement that is laid out. Past it the text stays as it came and only the
+     * colours apply: a long template is read as a block, and breaking it adds length to a screen
+     * that already has too much.
+     */
+    const RECAP_SQL_LAYOUT_MAX = 600;
+    /** Where the grouped columns wrap, indent included. */
+    const RECAP_SQL_LINE_WIDTH = 100;
+
+    // Each alternative eats the whole of what it names, so no clause word inside a string, a
+    // comment or a quoted name is ever read as one. An unterminated one runs to the end. The last
+    // alternative takes any character left, so the pieces always add back to the input.
+    // shortcut: no dollar-quoted strings, the engine rewrites literals to `?` before a template
+    // reaches the Hub, add one if a template ever carries one.
+    const SQL_LEXEME = new RegExp([
+        /--[^\n]*/, // line comment
+        /\/\*[\s\S]*?(?:\*\/|$)/, // block comment
+        /'(?:[^']|'')*(?:'|$)/, // string
+        /"(?:[^"]|"")*(?:"|$)/, // quoted name
+        /`[^`]*(?:`|$)/, // quoted name, MySQL
+        /\s+/,
+        /\$\d+|\$\?|\?/, // parameter, `$?` being what the engine writes for `$1`
+        /[\p{L}\p{N}_$.]+/u, // name, number, keyword
+        /[=<>!]+/, // comparison, or the start of a longer operator
+        /[\s\S]/u // anything else, one character
+    ].map(function (part) {
+        return part.source;
+    }).join('|'), 'gu');
+    const SQL_KEYWORDS = new Set(['select', 'from', 'where', 'join', 'inner', 'left', 'right', 'full', 'outer', 'cross',
+        'natural', 'on', 'using', 'and', 'or', 'not', 'in', 'is', 'null', 'true', 'false', 'like', 'ilike', 'between',
+        'exists', 'as', 'distinct', 'group', 'by', 'having', 'order', 'asc', 'desc', 'limit', 'offset', 'union', 'all',
+        'intersect', 'except', 'case', 'when', 'then', 'else', 'end', 'insert', 'into', 'values', 'update', 'set',
+        'delete', 'returning', 'with', 'any', 'some']);
+    // A clause keyword, the word that names the part of the statement being read.
+    const SQL_CLAUSES = new Set(['select', 'from', 'join', 'where', 'group', 'order', 'having', 'limit', 'offset',
+        'union', 'intersect', 'except']);
+    const SQL_JOIN_PREFIXES = new Set(['left', 'right', 'inner', 'full', 'cross', 'natural', 'outer']);
+    // The comparisons that get a blank on each side. `<=>` or `->` are another operator, left whole.
+    const SQL_COMPARISONS = new Set(['=', '<>', '!=', '<', '>', '<=', '>=']);
+    const SQL_TABLE_AFTER = new Set(['from', 'join', 'into', 'update']);
+    // A blank goes beside a comparison only where the neighbour is a name, a value or a bracket, so
+    // that `@>` or `<-` is never pulled apart.
+    const SQL_BEFORE_COMPARISON = /[\p{L}\p{N}_$?'"`)]$/u;
+    const SQL_AFTER_COMPARISON = /^[\p{L}\p{N}_$?'"`(]/u;
+
+    /**
+     * Whether a finding is about SQL, which is what its template is then.
+     * @param {string} findingType
+     * @returns {boolean}
+     */
+    function isSqlFinding(findingType) {
+        return typeof findingType === 'string' && findingType.endsWith('_sql');
+    }
+
+    /**
+     * Each piece of the text with the blanks that came before it. Blanks at the end are returned
+     * as a last piece with no text.
+     * @param {string} text
+     * @returns {Array<{gap: string, text: string}>}
+     */
+    function sqlItems(text) {
+        const items = [];
+        let gap = '';
+        for (const [piece] of text.matchAll(SQL_LEXEME)) {
+            if (/^\s/.test(piece)) gap = piece;
+            else {
+                items.push({gap, text: piece});
+                gap = '';
+            }
+        }
+        items.push({gap, text: ''});
+        return items;
+    }
+
+    /**
+     * Whether the piece at `index` opens a line: a clause keyword, a join with its qualifier,
+     * `group by`, `order by`. `from` after `delete` or `distinct` belongs to the line before it.
+     * @param {Array<{text: string}>} items
+     * @param {number} index
+     * @param {string} before the lower-cased piece before it
+     * @returns {boolean}
+     */
+    function sqlOpensLine(items, index, before) {
+        const word = items[index].text.toLowerCase();
+        const after = items[index + 1] ? items[index + 1].text.toLowerCase() : '';
+        if (word === 'join') return !SQL_JOIN_PREFIXES.has(before);
+        if (SQL_JOIN_PREFIXES.has(word)) return !SQL_JOIN_PREFIXES.has(before) && (after === 'join' || SQL_JOIN_PREFIXES.has(after));
+        if (word === 'group' || word === 'order') return after === 'by';
+        if (word === 'from') return before !== 'delete' && before !== 'distinct';
+        return SQL_CLAUSES.has(word);
+    }
+
+    /**
+     * @typedef {{tidy: boolean, out: import('../types').SqlToken[], clauses: string[], before: string,
+     *   table: boolean, indent: boolean, comma: boolean, compare: boolean, width: number}} SqlScan
+     */
+
+    /**
+     * @param {SqlScan} scan
+     * @param {import('../types').SqlToken['kind']} kind
+     * @param {string} text
+     */
+    function sqlEmit(scan, kind, text) {
+        if (!text) return;
+        const last = scan.out[scan.out.length - 1];
+        if (last && last.kind === kind) last.text += text;
+        else scan.out.push({kind, text});
+        const lineStart = text.lastIndexOf('\n');
+        scan.width = lineStart < 0 ? scan.width + text.length : text.length - lineStart - 1;
+    }
+
+    /**
+     * @param {SqlScan} scan
+     * @param {string} text
+     * @param {string} lower
+     * @returns {import('../types').SqlToken['kind']}
+     */
+    function sqlKind(scan, text, lower) {
+        if (text === '?' || /^\$[\d?]/.test(text)) return 'param';
+        if (SQL_KEYWORDS.has(lower) || SQL_COMPARISONS.has(text)) return 'keyword';
+        if (/^(--|\/\*)/.test(text)) return 'text';
+        if (scan.table && /^[\p{L}_"`]/u.test(text)) return 'table';
+        return scan.clauses[scan.clauses.length - 1] === 'select' ? 'column' : 'text';
+    }
+
+    /**
+     * What goes between the last piece and this one. Laid out, a clause opens a line, the
+     * columns follow `select` indented and grouped, a comparison has a blank on each side. Not
+     * laid out, the blanks that came with the text.
+     * @param {SqlScan} scan
+     * @param {Array<{gap: string, text: string}>} items
+     * @param {number} index
+     * @param {boolean} opens
+     * @returns {string}
+     */
+    function sqlSeparator(scan, items, index, opens) {
+        const {gap, text} = items[index];
+        if (!scan.tidy) return gap;
+        if (scan.out.length === 0) return '';
+        if (opens) return '\n';
+        if (scan.indent) return '\n  ';
+        if (scan.comma) return scan.width + 1 + text.length + 1 > RECAP_SQL_LINE_WIDTH ? '\n  ' : ' ';
+        if (gap) return gap;
+        const beside = SQL_COMPARISONS.has(text)
+            ? SQL_BEFORE_COMPARISON.test(items[index - 1].text)
+            : scan.compare && SQL_AFTER_COMPARISON.test(text);
+        return beside ? ' ' : '';
+    }
+
+    /**
+     * Moves the scan past one piece: the brackets, the clause being read, what the next piece
+     * expects.
+     * @param {SqlScan} scan
+     * @param {string} text
+     * @param {string} lower
+     */
+    function sqlAdvance(scan, text, lower) {
+        const clauses = scan.clauses;
+        const top = clauses.length - 1;
+        scan.indent = scan.tidy && top === 0 && lower === 'select';
+        if (text === '(') clauses.push(clauses[top]);
+        else if (text === ')' && top > 0) clauses.pop();
+        else if (SQL_CLAUSES.has(lower)) clauses[top] = lower;
+        const now = clauses.length - 1;
+        scan.table = SQL_TABLE_AFTER.has(lower) || (text === ',' && clauses[now] === 'from');
+        scan.comma = scan.tidy && now === 0 && text === ',' && clauses[0] === 'select';
+        scan.compare = scan.tidy && SQL_COMPARISONS.has(text);
+        scan.before = lower;
+    }
+
+    /**
+     * @param {SqlScan} scan
+     * @param {Array<{gap: string, text: string}>} items
+     * @param {number} index
+     */
+    function sqlStep(scan, items, index) {
+        const text = items[index].text;
+        const lower = text.toLowerCase();
+        const opens = scan.tidy && scan.clauses.length === 1 && sqlOpensLine(items, index, scan.before);
+        const gap = sqlSeparator(scan, items, index, opens);
+        const inColumns = scan.clauses[scan.clauses.length - 1] === 'select';
+        sqlEmit(scan, inColumns && !gap.includes('\n') ? 'column' : 'text', gap);
+        sqlEmit(scan, sqlKind(scan, text, lower), text);
+        sqlAdvance(scan, text, lower);
+    }
+
+    /**
+     * A statement as the coloured pieces the recap prints. Only blanks are added, removed or
+     * moved, and only up to {@link RECAP_SQL_LAYOUT_MAX} characters: no piece of the text is ever
+     * changed, so what is copied from the screen is still the same query. Whatever sits inside a
+     * string, a comment or a quoted name keeps its blanks too.
+     * @param {string} text
+     * @returns {import('../types').SqlToken[]}
+     */
+    function sqlTokens(text) {
+        /** @type {SqlScan} */
+        const scan = {tidy: text.length <= RECAP_SQL_LAYOUT_MAX, out: [], clauses: [''], before: '', table: false,
+            indent: false, comma: false, compare: false, width: 0};
+        const items = sqlItems(text);
+        items.forEach(function (item, index) {
+            if (item.text) sqlStep(scan, items, index);
+            else if (!scan.tidy) sqlEmit(scan, 'text', item.gap);
+        });
+        return scan.out;
     }
 
     /**
@@ -3691,6 +4120,10 @@
         statusKey,
         argsLine,
         weightBand,
+        fetchDefault,
+        fetchBand,
+        fetchAccess,
+        fetchRequested,
         shq,
         psq,
         SHELLS,
@@ -3740,6 +4173,7 @@
         correlationPairs,
         spansOverlap,
         episodeHandoffHash,
+        handoffSourceId,
         pairTraceHash,
         readTraceHandoff,
         timelineMarks,
@@ -3797,10 +4231,14 @@
         namesService,
         readRecapRoute,
         recapHash,
+        recapFiltersPath,
+        recapPickRows,
+        RECAP_FILTER_MAX_VALUES,
         breakParts,
         recapPath,
         recapReportLabel,
         RECAP_REPORTS_COPY,
+        RECAP_PICK_COPY,
         recapPlain,
         recapFreezeText,
         recapErrorText,
@@ -3822,6 +4260,9 @@
         trendText,
         hasAvoidableVolume,
         dividesBefore,
+        isSqlFinding,
+        sqlTokens,
+        RECAP_SQL_LAYOUT_MAX,
         confirmationLabel,
         periodText,
         incompleteText,

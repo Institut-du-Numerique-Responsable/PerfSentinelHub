@@ -122,6 +122,7 @@ export interface RunRequest {
     from_ms?: number;
     to_ms?: number;
     max_traces?: number;
+    fetch_concurrency?: number;
     detection?: Record<string, number | string>;
 }
 
@@ -132,6 +133,9 @@ export interface StatusLimits {
     report_retention_hours: number;
     max_traces_embedded: number;
     max_read_limit: number;
+    fetch_concurrency_warn: number;
+    fetch_concurrency_max: number;
+    fetch_concurrency_supported: boolean;
 }
 
 /** One detection threshold a run may override, `DetectionKnob`. */
@@ -440,6 +444,12 @@ export interface RecapPriority {
     confidence?: string;
 }
 
+/** One coloured piece of a recap priority's SQL, as `PSL.sqlTokens` cuts it. Joined, the texts are the statement. */
+export interface SqlToken {
+    kind: 'keyword' | 'table' | 'param' | 'column' | 'text';
+    text: string;
+}
+
 /** One finding that moved, `RecapMove`. */
 export interface RecapMove {
     finding_type: string;
@@ -494,6 +504,12 @@ export interface RecapTiles {
     };
 }
 
+/** GET /api/recap/filters, `RecapFilterOptions`. Each list is sorted by name. */
+export interface RecapFilterOptions {
+    services: string[];
+    groupings: string[];
+}
+
 /** GET /api/recap, `RecapSnapshot`. */
 export interface RecapSnapshot {
     schema_version: number;
@@ -507,6 +523,10 @@ export interface RecapSnapshot {
         service: string | null;
         grouping: string | null;
         service_label: string | null;
+        /** Several services chosen, sorted; `service` is then null. Absent while one or none is chosen. */
+        services?: string[];
+        /** Several namespaces chosen, sorted; `grouping` is then null. Absent while one or none is chosen. */
+        groupings?: string[];
     };
     comparison_exact: boolean;
     tiles: RecapTiles;

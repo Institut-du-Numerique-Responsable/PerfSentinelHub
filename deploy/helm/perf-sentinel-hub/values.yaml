@@ -28,6 +28,11 @@ hub:
     identityHeader: X-Forwarded-User
     workers: 2
     maxTracesCap: 2000
+    # Simultaneous trace reads a Tempo run may ask for. Past the first the launcher
+    # asks for a confirmation, past the second the Hub refuses. 1 to 64, the first
+    # at most the second. Needs an engine from 0.43.0.
+    fetchConcurrencyWarn: 16
+    fetchConcurrencyMax: 64
     timeout: "00:05:00"
     # Free memory, in MiB, the container needs for a run to start the engine,
     # which runs inside it. Below it the run fails with hub_memory_low instead of

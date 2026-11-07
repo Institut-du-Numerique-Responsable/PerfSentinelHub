@@ -115,6 +115,7 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         if (analysis.MaxTracesCap is < 1 or > AnalysisOptions.EngineMaxTraces)
             errors.Add($"Hub:Analysis:MaxTracesCap must be between 1 and {AnalysisOptions.EngineMaxTraces}, "
                        + "the engine's own limit on --max-traces.");
+        ValidateFetchConcurrency(analysis, errors);
         if (analysis.MaxTracesEmbedded is < 0 or > 10_000)
             errors.Add("Hub:Analysis:MaxTracesEmbedded must be between 0 and 10000.");
         if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))
@@ -126,6 +127,15 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
         if (analysis.RunRetention <= analysis.ReportRetention)
             errors.Add("Hub:Analysis:RunRetention must be longer than Hub:Analysis:ReportRetention, "
                        + "since an expired run keeps its parameters after its report is deleted.");
+    }
+
+    private static void ValidateFetchConcurrency(AnalysisOptions analysis, List<string> errors)
+    {
+        if (analysis.FetchConcurrencyMax is < 1 or > AnalysisOptions.EngineMaxFetchConcurrency)
+            errors.Add($"Hub:Analysis:FetchConcurrencyMax must be between 1 and "
+                       + $"{AnalysisOptions.EngineMaxFetchConcurrency}, the engine's own limit on --fetch-concurrency.");
+        if (analysis.FetchConcurrencyWarn < 1 || analysis.FetchConcurrencyWarn > analysis.FetchConcurrencyMax)
+            errors.Add("Hub:Analysis:FetchConcurrencyWarn must be between 1 and Hub:Analysis:FetchConcurrencyMax.");
     }
 
     private static void ValidateAnalysisPaths(AnalysisOptions analysis, List<string> errors)

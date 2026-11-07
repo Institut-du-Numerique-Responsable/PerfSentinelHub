@@ -355,6 +355,14 @@ public sealed record AnalysisOptions
     // run on an engine error the operator never asked for.
     public const int EngineMaxTraces = 10_000;
 
+    // The engine's own ceiling on --fetch-concurrency, enforced when it parses
+    // its arguments, like EngineMaxTraces above.
+    public const int EngineMaxFetchConcurrency = 64;
+
+    // What an engine reads when `--fetch-concurrency` is not given, and the only
+    // value an engine that predates the flag can run at.
+    public const int EngineDefaultFetchConcurrency = 16;
+
     // Absent means the Hub keeps collecting findings but cannot run an
     // analysis: the launcher reads a null engine version and says so.
     public string? EngineBinaryPath { get; set; }
@@ -370,6 +378,16 @@ public sealed record AnalysisOptions
     public int Workers { get; set; } = 2;
 
     public int MaxTracesCap { get; set; } = 2000;
+
+    // Simultaneous trace reads one Tempo run may ask for. Past Warn the launcher
+    // makes the operator confirm, since Tempo spends memory on every read in
+    // flight; past Max the Hub refuses.
+    public int FetchConcurrencyWarn { get; set; } = 16;
+    public int FetchConcurrencyMax { get; set; } = EngineMaxFetchConcurrency;
+
+    // What a Tempo run reads when the request names no value: the engine's own
+    // default of 16, held under the ceiling when the operator set one below it.
+    public int DefaultFetchConcurrency => Math.Min(EngineDefaultFetchConcurrency, FetchConcurrencyMax);
 
     // Span trees embedded in the rendered report. Passing this at all opts the
     // sink out of size targeting, which is why it is set: without it a wide

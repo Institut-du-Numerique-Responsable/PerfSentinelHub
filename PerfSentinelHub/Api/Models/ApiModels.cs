@@ -34,7 +34,7 @@ public sealed record StatusResponse(
 
 /// <summary>
 ///     What a run costs, reported rather than assumed: the launcher shows these
-///     four figures next to the button instead of guessing them. The read
+///     figures next to the button instead of guessing them. The read
 ///     limit is the operator's ceiling on a listing page, so the launcher sizes
 ///     its pages under it instead of learning it from a 400.
 /// </summary>
@@ -43,7 +43,10 @@ public sealed record StatusLimits(
     int AnalysisTimeoutSeconds,
     int ReportRetentionHours,
     int MaxTracesEmbedded,
-    int MaxReadLimit);
+    int MaxReadLimit,
+    int FetchConcurrencyWarn,
+    int FetchConcurrencyMax,
+    bool FetchConcurrencySupported);
 
 /// <summary>
 ///     One detection threshold a run may override. `Kind` is `integer`, `decimal`
@@ -122,7 +125,9 @@ public sealed record DetectionImportResponse(int Accepted, int Rejected, IReadOn
 // SourceIds is the resolved scope, as on IncidentQuery below. FromMs and ToMs
 // bound the observation window in epoch milliseconds, each side open when null.
 // Signature is an exact match. Access null reads every copy, as with access off;
-// otherwise only the copies its patterns read.
+// otherwise only the copies its patterns read. Service and Grouping are the one value of
+// /api/findings; the recap sends Services and Groupings, and the SQL reads the list whichever
+// was set, the lists first. An empty list filters nothing.
 public sealed record FindingQuery(
     string? Service,
     string? FindingType,
@@ -136,7 +141,21 @@ public sealed record FindingQuery(
     long? ToMs = null,
     string? Signature = null,
     string? Grouping = null,
-    AccessScope? Access = null);
+    AccessScope? Access = null,
+    IReadOnlyList<string>? Services = null,
+    IReadOnlyList<string>? Groupings = null)
+{
+    public IReadOnlyList<string>? ServiceValues => ValuesOf(Services, Service);
+
+    public IReadOnlyList<string>? GroupingValues => ValuesOf(Groupings, Grouping);
+
+    private static IReadOnlyList<string>? ValuesOf(IReadOnlyList<string>? many, string? one)
+    {
+        if (many is { Count: > 0 })
+            return many;
+        return one is null ? null : [one];
+    }
+}
 
 // SourceIds is the resolved set: one id from source_id, every id of an
 // environment from environment, null for the whole fleet.
@@ -407,3 +426,6 @@ public sealed record TerminalTokenResponse(
     long CreatedAtMs,
     long ExpiresAtMs,
     long? LastUsedAtMs);
+
+// GET /api/recap/filters: the names a reader may filter the recap on, each list sorted by name.
+public sealed record RecapFilterOptions(IReadOnlyList<string> Services, IReadOnlyList<string> Groupings);

@@ -8,22 +8,24 @@ namespace PerfSentinelHub.Api;
 /// <summary>
 ///     What a caller asks of POST /api/recap/reports: a closed period, named by its kind and by any date
 ///     inside it, and the filters the recap takes. The last closed period when no date is given.
+///     Services and Groupings are what the body chose, canonical: service or services, grouping or
+///     groupings, never both forms of one filter.
 /// </summary>
 public sealed record RecapOnDemand(
     RecapPeriodKind Kind,
     DateOnly At,
     string? Environment,
     string? SourceId,
-    string? Service,
-    string? Grouping,
+    IReadOnlyList<string>? Services,
+    IReadOnlyList<string>? Groupings,
     string Lang = HubLang.En)
 {
-    private const int MaxChars = 256;
+    private const int MaxChars = RecapFilterValues.MaxChars;
 
     // The recap reads the period before the one asked for, which the calendar cannot give year 1.
-    private static readonly DateOnly Earliest = new(1900, 1, 1);
+    internal static readonly DateOnly Earliest = new(1900, 1, 1);
 
-    private static readonly string[] Filters = ["environment", "source_id", "service", "grouping"];
+    private static readonly string[] Filters = ["environment", "source_id"];
 
     public static RecapOnDemand? TryParse(ReadOnlyMemory<byte> body, DateOnly today, out string? error)
     {
@@ -58,11 +60,57 @@ public sealed record RecapOnDemand(
             if (!TryReadText(root, Filters[i], out filters[i]))
                 return Refuse($"{Filters[i]} must be 1 to {MaxChars} characters with no control character.", out error);
 
+        if (!TryReadChoice(root, "service", "services", out var services))
+            return Refuse(ChoiceError("service", "services"), out error);
+        if (!TryReadChoice(root, "grouping", "groupings", out var groupings))
+            return Refuse(ChoiceError("grouping", "groupings"), out error);
         if (!TryReadLang(root, out var lang))
             return Refuse("lang must be en or fr.", out error);
 
         error = null;
-        return new RecapOnDemand(kind, at, filters[0], filters[1], filters[2], filters[3], lang);
+        return new RecapOnDemand(kind, at, filters[0], filters[1], services, groupings, lang);
+    }
+
+    private static string ChoiceError(string one, string many)
+    {
+        return $"{one} is one text and {many} an array of at most {RecapFilterValues.MaxValues} texts, " +
+               $"each 1 to {MaxChars} characters with no control character. Give one of the two.";
+    }
+
+    // Absent or null is no choice. Else one text under `one` or an array of texts under `many`, not both.
+    private static bool TryReadChoice(JsonElement root, string one, string many, out IReadOnlyList<string>? values)
+    {
+        values = null;
+        var single = Given(root, one);
+        var list = Given(root, many);
+        if (single is not null && list is not null)
+            return false;
+        if (single is { } text)
+            return text.ValueKind == JsonValueKind.String &&
+                   RecapFilterValues.TryCanonical([text.GetString()!], out values);
+        return list is not { } array || (array.ValueKind == JsonValueKind.Array && TryReadTexts(array, out values));
+    }
+
+    private static JsonElement? Given(JsonElement root, string name)
+    {
+        return root.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null ? value : null;
+    }
+
+    private static bool TryReadTexts(JsonElement array, out IReadOnlyList<string>? values)
+    {
+        values = null;
+        // Counted before it is read, so a long array costs no more than the cap allows.
+        if (array.GetArrayLength() > RecapFilterValues.MaxValues)
+            return false;
+        var texts = new List<string>();
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                return false;
+            texts.Add(item.GetString()!);
+        }
+
+        return RecapFilterValues.TryCanonical(texts, out values);
     }
 
     private static bool TryReadDate(JsonElement root, RecapPeriodKind kind, DateOnly today, out DateOnly at)

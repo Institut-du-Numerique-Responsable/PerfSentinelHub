@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using PerfSentinelHub.Access;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Recaps;
@@ -393,6 +394,155 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Several_services_widen_the_recap_and_are_echoed_as_a_list()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-1");
+        await SeedAsync("a", "two", Thu, service: "svc-2");
+        await SeedAsync("a", "three", Thu, service: "svc-3");
+        await _database.SetServiceLabelAsync("svc-1", "First", "alice", Token);
+
+        var snapshot = await _service.ComputeAsync(Request(services: ["svc-1", "svc-2"]), Token);
+
+        Assert.Equal(["one", "two"], snapshot.Priorities.Select(priority => priority.Signature).Order());
+        Assert.Null(snapshot.Filters.Service);
+        Assert.Equal(["svc-1", "svc-2"], snapshot.Filters.Services);
+        // A name belongs to one service: a list of two carries none.
+        Assert.Null(snapshot.Filters.ServiceLabel);
+        var single = await _service.ComputeAsync(Request(services: ["svc-1"]), Token);
+        Assert.Equal("svc-1", single.Filters.Service);
+        Assert.Null(single.Filters.Services);
+        Assert.Equal("First", single.Filters.ServiceLabel);
+    }
+
+    [Fact]
+    public async Task A_service_list_and_a_namespace_list_combine_with_and()
+    {
+        await SeedAsync("a", "one-x", Thu, service: "svc-1", grouping: "ns-x");
+        await SeedAsync("a", "one-y", Thu, service: "svc-1", grouping: "ns-y");
+        await SeedAsync("a", "two-x", Thu, service: "svc-2", grouping: "ns-x");
+        await SeedAsync("a", "three-x", Thu, service: "svc-3", grouping: "ns-x");
+
+        var snapshot = await _service.ComputeAsync(
+            Request(services: ["svc-1", "svc-2"], groupings: ["ns-x", "ns-z"]), Token);
+
+        Assert.Equal(["one-x", "two-x"], snapshot.Priorities.Select(priority => priority.Signature).Order());
+        Assert.Equal(["ns-x", "ns-z"], snapshot.Filters.Groupings);
+        Assert.Null(snapshot.Filters.Grouping);
+    }
+
+    // The lists ride the same access-scoped read as the single values: a list never reaches past the scope.
+    [Fact]
+    public async Task A_narrowed_scope_holds_when_the_recap_asks_for_several_services()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-1");
+        await SeedAsync("a", "two", Thu, service: "svc-2");
+        var onlyOne = AccessScope.Of([AccessPattern.Compile(new PatternOptions { Service = "svc-1" })]);
+
+        var snapshot = await _service.ComputeAsync(Request(services: ["svc-1", "svc-2"], access: onlyOne), Token);
+
+        Assert.Equal("one", Assert.Single(snapshot.Priorities).Signature);
+    }
+
+    // ------------------------------------------------------------ filter options
+
+    [Fact]
+    public async Task The_filter_names_keep_to_the_period_and_the_environment()
+    {
+        await SeedAsync("a", "now", Thu, service: "svc-now", grouping: "ns-now");
+        await SeedAsync("a", "old", LastMon, service: "svc-old", grouping: "ns-old");
+        await SeedAsync("b", "lab", Thu, service: "svc-lab", grouping: "ns-lab");
+
+        var options = await _service.FilterOptionsAsync(Request("prod"), Token);
+
+        Assert.Equal(["svc-now"], options.Services);
+        Assert.Equal(["ns-now"], options.Groupings);
+    }
+
+    // The period is judged copy by copy: a sibling seen this week does not bring back last week's names.
+    [Fact]
+    public async Task A_copy_out_of_the_period_offers_no_name_through_a_sibling_in_it()
+    {
+        await SeedAsync("a", "f", LastMon, service: "svc-old", grouping: "ns-old");
+        await SeedAsync("b", "f", Thu, service: "svc-now", grouping: "ns-now");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-now"], options.Services);
+        Assert.Equal(["ns-now"], options.Groupings);
+    }
+
+    // The signature is grouping-blind: a service moved between namespaces stays one copy, in both.
+    [Fact]
+    public async Task A_namespace_last_seen_before_the_period_is_not_offered_by_a_copy_still_in_it()
+    {
+        await SeedAsync("a", "f", LastMon, grouping: "ns-old");
+        await SeedAsync("a", "f", Mon, grouping: "ns-first-day");
+        await SeedAsync("a", "f", Thu, grouping: "ns-now");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["ns-first-day", "ns-now"], options.Groupings);
+    }
+
+    [Fact]
+    public async Task The_filter_names_are_sorted_and_each_appears_once()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-b", grouping: "ns-b");
+        await SeedAsync("a", "two", Thu, service: "svc-a", grouping: "ns-c");
+        await SeedAsync("b", "three", Thu, service: "svc-a", grouping: "ns-a");
+        await SeedAsync("b", "four", Thu, service: "svc-c", grouping: "ns-b");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-a", "svc-b", "svc-c"], options.Services);
+        Assert.Equal(["ns-a", "ns-b", "ns-c"], options.Groupings);
+    }
+
+    // The recap answers 400 on each of these and the screen's route drops them: a box that filters on
+    // nothing is no offer. Only a push can store one, the engine sends neither.
+    [Fact]
+    public async Task A_name_the_recap_would_refuse_is_not_offered()
+    {
+        var tooLong = new string('l', RecapFilterValues.MaxChars + 1);
+        await SeedAsync("a", "long", Thu, service: tooLong, grouping: tooLong);
+        await SeedAsync("a", "control", Thu, service: "svc\u0001", grouping: "ns\\u0001");
+        await SeedAsync("a", "blank", Thu, service: "   ", grouping: "   ");
+        await SeedAsync("a", "fine", Thu, service: "svc-ok", grouping: "ns-ok");
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-ok"], options.Services);
+        Assert.Equal(["ns-ok"], options.Groupings);
+    }
+
+    // The recap still counts an acked finding, and can be filtered down to it.
+    [Fact]
+    public async Task An_acked_finding_keeps_its_names_on_offer()
+    {
+        await SeedAsync("a", "acked", Thu, service: "svc-1", grouping: "ns-x");
+        await _database.ReplaceSourceAcksAsync(
+            "a", [new ParsedAck("acked", "daemon", "robin", "known", "2026-09-20T10:00:00Z", null, null)],
+            AckReadStates.Ok, NowMs, Token);
+
+        var options = await _service.FilterOptionsAsync(Request(), Token);
+
+        Assert.Equal(["svc-1"], options.Services);
+        Assert.Equal(["ns-x"], options.Groupings);
+    }
+
+    [Fact]
+    public async Task A_choice_already_made_does_not_narrow_the_filter_options()
+    {
+        await SeedAsync("a", "one", Thu, service: "svc-1", grouping: "ns-x");
+        await SeedAsync("a", "two", Thu, service: "svc-2", grouping: "ns-y");
+
+        var options = await _service.FilterOptionsAsync(Request(services: ["svc-1"], groupings: ["ns-x"]), Token);
+
+        Assert.Equal(["svc-1", "svc-2"], options.Services);
+        Assert.Equal(["ns-x", "ns-y"], options.Groupings);
+    }
+
+    [Fact]
     public async Task Up_and_down_follow_the_configured_threshold()
     {
         await SeedAsync("a", S, Thu);
@@ -584,14 +734,20 @@ public sealed class RecapServiceTests : IAsyncLifetime
         return _service.ComputeAsync(Request(environment), Token);
     }
 
-    private static RecapRequest Request(string? environment = null, string? service = null)
+    private static RecapRequest Request(
+        string? environment = null,
+        string? service = null,
+        IReadOnlyList<string>? services = null,
+        IReadOnlyList<string>? groupings = null,
+        AccessScope? access = null)
     {
         var ids = environment is null
             ? null
             : (IReadOnlyList<string>)[.. Sources.Where(source => source.Environment == environment).Select(s => s.Id)];
+        var chosen = services ?? (service is null ? null : [service]);
         return new RecapRequest(
-            RecapPeriodKind.Week, new DateOnly(2026, 10, 29), ids, service, null, null, Sources,
-            new RecapFilters(environment, null, service, null));
+            RecapPeriodKind.Week, new DateOnly(2026, 10, 29), ids, chosen, groupings, access, Sources,
+            RecapFilters.Of(environment, null, chosen, groupings));
     }
 
     private Task SeedAsync(
@@ -600,13 +756,17 @@ public sealed class RecapServiceTests : IAsyncLifetime
         int day,
         string severity = "warning",
         string endpoint = "GET /orders",
-        string service = "order-svc")
+        string service = "order-svc",
+        string? grouping = null)
     {
         var configured = Sources.Single(item => item.Id == source);
         return _database.UpsertBatchAsync(
             new SourceSnapshot(source, configured.Name, configured.Environment, "0.37.1"),
             FindingJson.Batch(FindingJson.Envelope(signature, service: service, severity: severity,
-                endpoint: endpoint)),
+                endpoint: endpoint,
+                grouping: grouping is null
+                    ? null
+                    : $$"""[{"key":"k8s.namespace.name","value":"{{grouping}}"}]""")),
             day * DayMs + 3_600_000, Token);
     }
 

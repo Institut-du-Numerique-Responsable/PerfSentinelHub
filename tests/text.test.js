@@ -569,7 +569,9 @@ test("the publish command's comment reads in the shown language, its commands do
 // ---- the recap
 
 const RECAP_FUNCTIONS = ["recapRoute", "goRecap", "loadRecap", "readRecapReports", "renderRecapScreen",
-    "recapErrorBanner", "recapFilterLine", "recapTextFilter", "recapViewSwitch", "recapHeading", "recapHelp",
+    "recapErrorBanner", "recapFilterLine", "drawRecapScreen", "recapPickOptions",
+    "loadRecapNames", "recapMultiFilter", "paintRecapPickButton", "closeRecapPick", "recapPickPopover", "recapPickBody",
+    "recapPickFailure", "recapPickRow", "recapViewSwitch", "recapHeading", "recapHelp",
     "recapNotes", "recapPeriodBlock", "recapTile", "recapProgressChip", "recapPreviousText", "recapCount",
     "recapCo2Tile", "recapTiles", "recapPriorities", "recapPriorityNotes", "recapRow", "recapTechWhat",
     "recapPlainWhat", "recapServiceHead", "recapTrend", "recapFigure", "recapDetail", "recapFix", "recapCodeLocation",
@@ -578,7 +580,8 @@ const RECAP_FUNCTIONS = ["recapRoute", "goRecap", "loadRecap", "readRecapReports
     "recapNameButton", "recapNameEditor", "recapNameSave", "recapMoveWho", "recapMoveItem", "recapMoved",
     "recapMovedNote", "recapReportsPanel", "recapGenerateBar", "recapGenerate", "recapReportRow"];
 
-const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapHash", "recapPath", "recapReportLabel",
+const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapHash", "recapNameQuery", "recapPath",
+    "recapFilterQuery", "recapScopeQuery", "recapFiltersPath", "recapPickRows", "recapReportLabel",
     "recapFreezeText", "recapErrorText", "recapTruncatedText", "recapSourcesNote", "recapLateNote", "recapReportStatus",
     "recapDeliveryText", "recapOnDemandBody", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore",
     "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain"];
@@ -596,7 +599,7 @@ test("the recap screen holds no prose literal", () => {
         assert.deepEqual(PSL.literalsIn("function x() {" + app.slice(start, app.indexOf(";", start)) + "}", ["x"]), [],
             table);
     }
-    for (const table of ["RECAP_LABELS", "RECAP_HELP", "RECAP_REPORTS_COPY"]) {
+    for (const table of ["RECAP_LABELS", "RECAP_HELP", "RECAP_REPORTS_COPY", "RECAP_PICK_COPY"]) {
         const start = launcher.indexOf("const " + table + " = ");
         assert.ok(start >= 0, "launcher.js has no " + table);
         assert.deepEqual(PSL.literalsIn("function x() {" + launcher.slice(start, launcher.indexOf(";", start)) + "}",
@@ -626,10 +629,12 @@ test("Management_copy_carries_no_technical_word, in French", () => inLang("fr", 
         PSL.recapTruncatedText("pilotage"),
         PSL.recapSourcesNote(["svc-quiet"], "pilotage"),
         PSL.recapLateNote(["svc-quiet"]),
-        ...[403, 400, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
+        ...[403, 400, 414, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
         ...Object.values(PSL.RECAP_LABELS.pilotage),
         ...Object.values(PSL.RECAP_HELP.pilotage),
         ...Object.values(PSL.RECAP_REPORTS_COPY),
+        // Not "all services": the word is the filter's own label, which both views show.
+        ...Object.entries(PSL.RECAP_PICK_COPY).filter(([key]) => !key.startsWith("all.")).map(([, text]) => text),
         PSL.recapFreezeText(route),
         PSL.recapFreezeText(PSL.readRecapRoute("#/recap")),
         PSL.recapReportLabel(report),

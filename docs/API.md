@@ -596,20 +596,34 @@ nowhere gets the `403` the findings list gives.
 | Parameter                   | Default           | Does                                                             |
 |-----------------------------|-------------------|------------------------------------------------------------------|
 | `period`                    | `week`            | `day`, `week` (ISO, Monday to Sunday, UTC) or `month` (calendar) |
-| `at`                        | today, UTC        | Any day of the period, `yyyy-MM-dd`; a day after today is a `400` |
+| `at`                        | today, UTC        | Any day of the period, `yyyy-MM-dd`, from 1900 to today, else a `400` |
 | `view`                      | `tech`            | `tech` (Engineering) or `pilotage` (Management)                  |
 | `environment`, `source_id`  | the whole fleet   | As on `/api/findings`                                            |
-| `service`, `grouping`       | none              | As on `/api/findings`                                            |
+| `service`, `grouping`       | none              | One value as on `/api/findings`, or the key repeated for several |
 | `moves`                     | cut at 50         | `all` lists every move of each group, without `counts`           |
 
-A repeated parameter, a value the list does not know or invalid UTF-8 is a `400`.
+`service=a&service=b` keeps the findings of `a` or `b`, and a service and a grouping together keep
+the findings that match both. A value that is blank is ignored, as it is on `/api/findings`. A list
+holds at most 50 values of 256 characters, with no control character, a single value included: more
+is a `400` with the code `invalid_recap_query`. A repeated parameter other than `service` and
+`grouping`, a value the list does not know or invalid UTF-8 is a `400` too. The same values in
+another order, or repeated, are the same recap. The full 50 by 256 cannot be sent on a `GET`: that
+is 12,800 characters before any percent-encoding, and Kestrel stops a request line at 8 KB with a
+`414` before the Hub reads it. A query carries fewer, and only a body, `POST /api/recap/reports`,
+reaches the cap.
 
 The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, `period` and
 `previous` (each `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `notes[]`,
-`sampling_rate`, `truncated_to_days`), `filters` (as asked), `comparison_exact`, `tiles`,
+`sampling_rate`, `truncated_to_days`), `filters`, `comparison_exact`, `tiles`,
 `priorities[]`, `more_priorities`, `movements`, `nothing_moved`, `sources_without_volume[]`,
 `truncated` and `late_sources[]`.
 
+- **Filters.** `filters` echoes the request: `environment`, `source_id`, `service`, `grouping` and
+  `service_label`. With one service, `service` is that string, as it always was, and likewise
+  `grouping`. With several, `service` is `null` and `services[]` lists them, sorted and without
+  repeats, and likewise `grouping` and `groupings[]`. The two list keys are absent, not `null`,
+  while one value or none is chosen, so a script that reads `filters` and a report stored before
+  the lists read exactly as they did.
 - **Comparing.** A period in progress is compared on its closed days: `FromDay` to
   yesterday against the same number of first days of the previous period, reported in
   `previous.truncated_to_days`. Today is partial and would read as a drop against a full
@@ -676,7 +690,8 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   in every view, and `service` stays beside `service_label`, so a receiver can still group by
   the technical service. `filters.service_label` is the name of the service filter, or `null`,
   and `null` too when the caller reads no finding of that service in either period: a typed
-  filter never reveals the name of a service outside the caller's scope.
+  filter never reveals the name of a service outside the caller's scope. It is `null` as well
+  when several services are chosen, since a name belongs to one service.
 - **Two views.** `pilotage` is the `tech` snapshot with `view: "pilotage"`, the top five
   priorities, a fixed plain-language sentence per finding type in `plain`, and none of the
   technical keys: `signature`, `template`, `suggestion`, `suggested_fix`, `code_location`,
@@ -686,6 +701,28 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   rows too (see [Recap reports](#recap-reports)).
 - **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
   `truncated: true`; narrow the request with a filter.
+
+### Recap filters
+
+`GET /api/recap/filters` lists the names a reader may filter the recap on, for one period. It takes
+`period`, `at`, `environment` and `source_id` as `GET /api/recap` does, with the same `400`, and it
+is never open: a caller with `findings.read` nowhere gets the same `403`. A `service` or a `grouping`
+in the query does not narrow the list, so a choice already made leaves it whole. It is still checked
+against the caps above, since a value past them is a `400` here as on `GET /api/recap`.
+
+```json
+{"services":["cart","checkout"],"groupings":["shop-eu","shop-us"]}
+```
+
+- **Names.** Those of the finding copies present in the period, acknowledged ones included, each list
+  sorted by name. A copy absent from the period offers nothing, even when another copy of the same
+  finding is present. A copy that is present offers no namespace it was last seen in before the period.
+  A name the recap would refuse is left out: blank, over 256 characters or with a control character.
+- **No count.** A name carries no volume. Adding up a service's avoidable I/O takes the findings read
+  of the recap, which takes seconds under a narrowed scope, and a namespace could not carry one anyway:
+  volumes are stored per finding, and a finding seen in two namespaces would count whole in both.
+- **Scope.** No name outside the caller's `findings.read` scope, see
+  [ACCESS-CONTROL.md](ACCESS-CONTROL.md#projects).
 
 ### Recap jobs
 
@@ -702,7 +739,8 @@ result. `GET /api/recap` stays as it is for scripts and CI. Every route below is
 | `DELETE /api/recap/jobs/{id}`                  | Lets go of the job for the caller, `204`: a running one stops once nobody who started or joined it follows it |
 
 The query is the one of `GET /api/recap`, `view` and `moves` aside: one job computes the whole
-recap, and each view and cut is read from it. `POST` and `DELETE` are refused from another site
+recap, and each view and cut is read from it. The same services and groupings in another order
+or repeated join the same job. `POST` and `DELETE` are refused from another site
 (`403`) and without a JSON content type (`415`), as an acknowledgment is.
 
 - **The job.** `status` is `running`, `succeeded`, `failed` (with `error_code`) or `cancelled`.
@@ -807,7 +845,7 @@ A report item holds `id` (32 lowercase hex), `subscription` (`null` for an on-de
 `failed`), `attempts`, `last_attempt_ms`, `next_attempt_ms` and `last_status`. The HTML page lives
 outside `/api`, so a browser that follows a mailed link and holds no session is sent to sign in.
 
-**On demand.** The body is a JSON object, at most 4 KiB, with the same-origin rule and the
+**On demand.** The body is a JSON object, at most 32 KiB, with the same-origin rule and the
 JSON content type of the other writes:
 
 | Field                       | Does                                                                                   |
@@ -815,14 +853,18 @@ JSON content type of the other writes:
 | `period`                    | Required: `day`, `week` or `month`                                                     |
 | `at`                        | Any day of the period, `yyyy-MM-dd`, from 1900; default: the last closed period        |
 | `environment`, `source_id`  | As on `/api/recap`; an unknown one is `400 Unknown environment or source_id.`          |
-| `service`, `grouping`       | As on `/api/recap`                                                                     |
+| `service`, `grouping`       | One value, a string, as on `/api/recap`                                                |
+| `services`, `groupings`     | Several values, an array of strings, at most 50                                        |
 | `lang`                      | `en` (default) or `fr`, the language of the report's pages; else `400 lang must be en or fr.` |
 
-Each string is 1 to 256 characters with no control character. A period that has not ended before
+Each string is 1 to 256 characters with no control character. Give a filter in one form or the
+other: `service` beside `services`, or `grouping` beside `groupings`, is a `400`, and so is an
+array that holds anything but strings or more than 50 of them. Absent and `null` mean no filter.
+The report's `filters` then read as `GET /api/recap` echoes them. A period that has not ended before
 today is `400 A report covers a closed period; pick a date in an earlier one.` The report is built
 from the copies the caller reads under `findings.read`, as `GET /api/recap` is, stored in the
 caller's name with both views and no delivery. A caller the Hub cannot name gets `403`, a
-cross-site request `403`, a wrong content type `415`, a body over 4 KiB `413`.
+cross-site request `403`, a wrong content type `415`, a body over 32 KiB `413`.
 
 **Who reads what.** A holder of `recaps.read` reads every report. Anyone else with `findings.read`
 reads the reports they generated, matched on the account's immutable subject
@@ -1127,12 +1169,22 @@ the self-contained HTML dashboard the engine renders.
 | `GET /reports/{id}.html` | Serves a succeeded run's report, from the same origin as the rest             |
 
 The request shape follows the source's kind: `{}` for a daemon, which takes no parameters
-at all, `{service, lookback | from_ms + to_ms, max_traces}` for a trace backend, or
+at all, `{service, lookback | from_ms + to_ms, max_traces, fetch_concurrency}` for a trace backend, or
 `{trace_id}`. The engine's own exclusions are enforced before anything is queued, so an
 impossible pair is refused rather than discovered as a failed run three minutes later.
 A `service` is 1 to 256 characters with no whitespace, no control character and none of
 `"`, `=` and `\`: a `service.name` never needs them, and a trace backend's tag search would
 read them as syntax, so one is a `400`.
+`fetch_concurrency` is how many trace bodies the engine fetches at once after a Tempo search,
+passed to it as `--fetch-concurrency`. It is a whole number from 1 to
+`Hub:Analysis:FetchConcurrencyMax`, and a `400` on a Jaeger source, on a daemon, in trace ID
+mode, outside that range, or when it is a decimal or a string. A Tempo request that names none
+is given `min(16, FetchConcurrencyMax)` when the engine is 0.43.0 or later, and the stored
+request carries it, since the worker replays that request without knowing the engine's version.
+An older engine refuses the flag, so a value is a `400` (`fetch_concurrency_unsupported`)
+naming both versions. So is a Tempo request without one when `FetchConcurrencyMax` is under 16,
+because that engine would read 16 at once whatever the limit. At 16 and above it is queued as
+before and nothing is stored.
 A run starts work in the caller's name, so before the body is read a submission is held to
 the rule an ack is: a `Sec-Fetch-Site` other than `same-origin` is a `403` and a content type
 that is not JSON a `415`.
@@ -1661,7 +1713,7 @@ its `{"reason":"…"}` with no `detail`. A response with no body (`413`, `415`, 
 
 - The request itself: `invalid_json`, `invalid_request`, `unknown_source`, `unknown_scope`.
 - Who asks, and from where: `unknown_caller`, `foreign_origin`, `machine_token_read_only`, `no_grant`, `no_findings_read`.
-- Analyses: `analysis_engine_missing`, `detection_knob_unsupported`, `analysis_forbidden`.
+- Analyses: `analysis_engine_missing`, `detection_knob_unsupported`, `fetch_concurrency_unsupported`, `analysis_forbidden`.
 - Terminal sign-in and tokens: `browser_session_required`, `browser_not_allowed`, `unknown_token`, `session_ending`, `invalid_user_code`, `no_pending_sign_in`, `too_many_user_codes`.
 - Findings, actions and labels: `actions_forbidden`, `action_read_only`, `unknown_finding`, `action_exists`, `no_action`, `endpoint_labels_forbidden`, `service_labels_forbidden`, `unknown_endpoint`, `unknown_service`, `endpoint_label_read_only`, `service_label_read_only`.
 - Acknowledgments and their relay to a daemon: `acks_not_relayed`, `acks_forbidden`, `ack_read_only`, `unknown_finding_at_source`, `unknown_ack_at_source`, `daemon_unreachable`, `daemon_timeout`, `daemon_refused_signature`, `daemon_refused_credential`, `daemon_ack_not_found`, `daemon_already_acked`, `daemon_acks_disabled`, `daemon_ack_store_full`, `daemon_unexpected_answer`, `not_a_daemon`.

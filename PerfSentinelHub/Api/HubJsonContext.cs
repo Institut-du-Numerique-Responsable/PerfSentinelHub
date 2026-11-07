@@ -25,6 +25,7 @@ namespace PerfSentinelHub.Api;
 [JsonSerializable(typeof(ActionResponse))]
 [JsonSerializable(typeof(AccessResponse))]
 [JsonSerializable(typeof(RecapSnapshot))]
+[JsonSerializable(typeof(RecapFilterOptions))]
 [JsonSerializable(typeof(IReadOnlyList<RecapReportItem>))]
 [JsonSerializable(typeof(RecapReportItem))]
 [JsonSerializable(typeof(RecapReportDetail))]

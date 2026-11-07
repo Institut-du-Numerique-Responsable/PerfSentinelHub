@@ -59,7 +59,8 @@ public sealed partial class RecapGenerator(
 
         var snapshot = await recaps.ComputeAsync(
             new RecapRequest(
-                kind, period.From, sourceIds, subscription.Service, subscription.Grouping, null, settings.Sources,
+                kind, period.From, sourceIds, Single(subscription.Service), Single(subscription.Grouping), null,
+                settings.Sources,
                 new RecapFilters(
                     subscription.Environment, subscription.SourceId, subscription.Service, subscription.Grouping)),
             cancellationToken);
@@ -81,6 +82,12 @@ public sealed partial class RecapGenerator(
         if (await database.InsertRecapReportAsync(report, DeliveriesOf(subscription, snapshot), cancellationToken))
             LogGenerated(logger, subscription.Name, cadence, from, report.Summary.Complete,
                 report.Summary.NothingMoved);
+    }
+
+    // A subscription filters on one service and one grouping, a choice of a single value.
+    private static string[]? Single(string? value)
+    {
+        return value is null ? null : [value];
     }
 
     // A report that moved nothing is archived and sent nowhere.

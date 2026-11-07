@@ -345,6 +345,14 @@ Who a finding is attributed to:
 - One signature folds every grouping. A project that matches one grouping of a copy reads
   the copy's newest envelope, which may describe another grouping of the same service and
   endpoint.
+- A copy keeps every grouping it was seen in, and `grouping` on `GET /api/findings` and
+  `GET /api/recap` asks whether a copy was seen in it, not whether the caller's scope covers
+  it. A reader limited to `namespace=x` who passes `grouping=y` gets a row back when a copy
+  they read was also seen under `y`, which confirms that `y` exists. The recap takes up to 50
+  values of `grouping` per read, so a read tests up to 50 guesses where it tested one, and no
+  name becomes learnable that one guess at a time was not. `GET /api/recap/filters` adds no
+  disclosure: it offers a namespace only when the scope covers it, see
+  [ACCESS-CONTROL.md](ACCESS-CONTROL.md#projects).
 - An attribute or a service name is set by whoever deploys the application, by anyone who
   can send OTLP to a daemon, and by whoever holds a source's import key, for that source
   only. Matching is per copy, so a planted value exposes only copies at the source it was

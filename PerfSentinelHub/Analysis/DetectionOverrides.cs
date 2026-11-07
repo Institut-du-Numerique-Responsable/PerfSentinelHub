@@ -70,6 +70,9 @@ public sealed record DetectionOverrides
     /// </summary>
     private static readonly (DetectionKnob Knob, Version? Since)[] All = BuildAll();
 
+    // The engine minor that first read `tempo --fetch-concurrency`.
+    internal static readonly Version FetchConcurrencySince = new(0, 43, 0);
+
     // A named array rather than either inline form: `Split('-', '+')` reads as a
     // partial match for `Split(char, int)`, and `Split(['-', '+'])` allocates on
     // every call for a separator set that never changes.
@@ -95,6 +98,15 @@ public sealed record DetectionOverrides
     {
         var engine = ParseEngineVersion(engineVersion);
         return All.Where(entry => Reads(engine, entry.Since)).Select(entry => entry.Knob);
+    }
+
+    /// <summary>
+    ///     Whether an engine of that version takes `--fetch-concurrency` on `tempo`. An older one
+    ///     refuses the flag outright, so a version the probe could not read promises nothing.
+    /// </summary>
+    public static bool ReadsFetchConcurrency(string? engineVersion)
+    {
+        return Reads(ParseEngineVersion(engineVersion), FetchConcurrencySince);
     }
 
     private static (DetectionKnob, Version?)[] BuildAll()
@@ -178,7 +190,7 @@ public sealed record DetectionOverrides
     }
 
     /// <summary>What the Hub knows of its engine's version, saying so when it could not read it.</summary>
-    private static string Runs(string? engineVersion, Version? engine)
+    internal static string Runs(string? engineVersion, Version? engine)
     {
         if (engineVersion is null)
             return "this Hub has not read its engine's version";

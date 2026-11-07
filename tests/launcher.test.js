@@ -66,6 +66,46 @@ test("a trace id carries neither a window nor a cap", () => {
     assert.ok(!command.includes("--max-traces"));
 });
 
+test("a Tempo source carries its reads count after the cap, a Jaeger source never does", () => {
+    const request = {service: "orders", max_traces: 100, lookback: "1h", fetch_concurrency: 4};
+
+    assert.equal(
+        PSL.analysisCommand(tempo, request),
+        "perf-sentinel tempo --endpoint http://tempo.obs.svc:3200 --service orders \\\n"
+        + "  --lookback 1h --max-traces 100 --fetch-concurrency 4");
+    // `jaeger-query` has no such flag: the engine would stop on it.
+    const jaeger = {kind: "jaeger_query", engine_subcommand: "jaeger-query", base_url: "http://jaeger:16686"};
+    assert.ok(!PSL.analysisCommand(jaeger, request).includes("--fetch-concurrency"));
+    // A request without the field, a trace run or an older Hub, prints none either.
+    assert.ok(!PSL.analysisCommand(tempo, {service: "orders", max_traces: 100, lookback: "1h"})
+        .includes("--fetch-concurrency"));
+});
+
+test("data-over is written as the string the stylesheet matches, never as a bare presence", () => {
+    const read = file => require("node:fs").readFileSync(
+        require("node:path").join(__dirname, "..", "PerfSentinelHub", "wwwroot", file), "utf8");
+    const app = read("app.js");
+    const css = read("launcher.css");
+
+    // toggleAttribute writes data-over="", which `[data-over="true"]` never matches.
+    assert.ok(!/toggleAttribute\(\s*'data-over'/.test(app));
+    assert.ok(app.includes("number.setAttribute('data-over', bad ? 'true' : 'false')"), "the reads field");
+    assert.ok(app.includes("number.setAttribute('data-over', over ? 'true' : 'false')"), "the traces field");
+    const selectors = [...css.matchAll(/\[data-over[^\]]*\]/g)].map(match => match[0]);
+    assert.ok(selectors.length > 0);
+    assert.deepEqual(selectors.filter(selector => selector !== '[data-over="true"]'), []);
+});
+
+test("a count that is the engine's own default is left out of the printed command, any other is printed", () => {
+    const withCount = count => PSL.analysisCommand(tempo,
+        {service: "orders", max_traces: 100, lookback: "1h", fetch_concurrency: count});
+
+    // The run is the same, and a binary older than 0.43.0 would refuse a flag nobody set.
+    assert.ok(!withCount(16).includes("--fetch-concurrency"));
+    assert.ok(withCount(4).endsWith("--fetch-concurrency 4"));
+    assert.ok(withCount(17).endsWith("--fetch-concurrency 17"));
+});
+
 test("an authenticated source reads its header from the environment", () => {
     const command = PSL.analysisCommand(
         {...tempo, auth_header_name: "Authorization"},
@@ -495,14 +535,27 @@ test("every incidents read state the Hub files has words, bar the one the age al
 test("an incident's window travels to New analysis as a hash and back", () => {
     const incident = {
         id: "d650edad80ac5c2d99b8d1dde07100c2",
+        source_id: "shop prod",
         service: "shop svc",
         window_from_ms: 1000,
         window_to_ms: 5000
     };
     const hash = PSL.incidentHandoffHash(incident, 9000);
-    assert.equal(hash, "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2");
-    assert.deepEqual(PSL.readHandoff(hash, 9000),
-        {fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2", pairKey: ""});
+    assert.equal(hash,
+        "#/new?from=1000&to=5000&service=shop%20svc&incident=d650edad80ac5c2d99b8d1dde07100c2&source=shop%20prod");
+    assert.deepEqual(PSL.readHandoff(hash, 9000), {
+        fromMs: 1000, toMs: 5000, service: "shop svc", incidentId: "d650edad80ac5c2d99b8d1dde07100c2", pairKey: "",
+        sourceId: "shop prod"
+    });
+});
+
+test("a handoff link from before the source rode along still reads, with no source", () => {
+    const old = "#/new?from=1000&to=5000&service=svc&incident=abc";
+    assert.deepEqual(PSL.readHandoff(old, 9000),
+        {fromMs: 1000, toMs: 5000, service: "svc", incidentId: "abc", pairKey: "", sourceId: null});
+    assert.doesNotMatch(PSL.incidentHandoffHash({id: "abc", service: "svc", window_from_ms: 1000, window_to_ms: 5000}, 9000),
+        /source=/, "an incident that names no source writes none");
+    assert.equal(PSL.readHandoff("#/new?from=1000&to=5000&service=svc&source=", 9000).sourceId, null, "blank source");
 });
 
 test("the window's end is held at now, in the hash and again when it is read", () => {
@@ -1235,6 +1288,8 @@ test("running a past analysis again fills the form back from its request", () =>
     assert.equal(window.fromMs, 10);
     assert.equal(window.toMs, 20);
     assert.equal(window.maxTraces, 300);
+    assert.equal(window.fetchConcurrency, undefined, "a request without the count leaves the form's own");
+    assert.equal(PSL.formFromRequest({service: "orders", fetch_concurrency: 4}).fetchConcurrency, 4);
     assert.deepEqual(window.detection, {n_plus_one_threshold: 4});
     const relative = PSL.formFromRequest({service: "orders", lookback: "6h"});
     assert.equal(relative.rangeMode, "relative");
@@ -1250,6 +1305,111 @@ test("running a past analysis again fills the form back from its request", () =>
         service: "",
         traceId: ""
     });
+});
+
+test("a reads count is comfortable up to the warning, confirmed above it and refused above the max", () => {
+    assert.deepEqual(PSL.fetchBand(16, 16, 64), {key: "ok", needsAck: false});
+    assert.deepEqual(PSL.fetchBand(17, 16, 64), {key: "over", needsAck: true});
+    assert.deepEqual(PSL.fetchBand(64, 16, 64), {key: "over", needsAck: true});
+    assert.deepEqual(PSL.fetchBand(8, 4, 8), {key: "over", needsAck: true});
+    // Past the max there is nothing to confirm: the run is refused, not risked.
+    assert.deepEqual(PSL.fetchBand(9, 4, 8), {key: "blocked", needsAck: false});
+    assert.deepEqual(PSL.fetchBand(1, 1, 1), {key: "ok", needsAck: false});
+});
+
+test("an empty, negative, decimal or unreadable reads count is invalid, and nothing to confirm", () => {
+    // Number("") is 0, which is what an emptied number field reports.
+    for (const typed of [0, -3, 3.5, NaN, Infinity, Number("")]) {
+        assert.deepEqual(PSL.fetchBand(typed, 16, 64), {key: "invalid", needsAck: false}, String(typed));
+    }
+});
+
+test("the reads count starts at the engine's 16, lowered to the warning or the max", () => {
+    assert.equal(PSL.fetchDefault(16, 64), 16);
+    assert.equal(PSL.fetchDefault(4, 8), 4);
+    assert.equal(PSL.fetchDefault(32, 8), 8);
+    assert.equal(PSL.fetchDefault(64, 64), 16);
+});
+
+const fetchLimits = {fetch_concurrency_warn: 4, fetch_concurrency_max: 8, fetch_concurrency_supported: true};
+const jaegerSource = {kind: "jaeger_query", engine_subcommand: "jaeger-query"};
+
+test("the reads count is on screen for a Tempo service run on an engine that reads it, nowhere else", () => {
+    assert.equal(PSL.fetchAccess(tempo, "service", fetchLimits), "shown");
+    assert.equal(PSL.fetchAccess(jaegerSource, "service", fetchLimits), "hidden");
+    assert.equal(PSL.fetchAccess(tempo, "trace", fetchLimits), "hidden");
+    assert.equal(PSL.fetchAccess({kind: "daemon"}, "service", fetchLimits), "hidden");
+    assert.equal(PSL.fetchAccess(null, "service", fetchLimits), "hidden");
+});
+
+test("an engine that cannot apply the count leaves it out, and refuses only a max under its default", () => {
+    const old = {fetch_concurrency_warn: 4, fetch_concurrency_max: 8, fetch_concurrency_supported: false};
+    assert.equal(PSL.fetchAccess(tempo, "service", old), "refused");
+    assert.equal(PSL.fetchAccess(tempo, "service", {...old, fetch_concurrency_max: 16}), "hidden");
+    assert.equal(PSL.fetchAccess(tempo, "service", {...old, fetch_concurrency_max: 64}), "hidden");
+    // Nothing is refused on a run that reads no count: Jaeger, or one trace by ID.
+    assert.equal(PSL.fetchAccess(jaegerSource, "service", old), "hidden");
+    assert.equal(PSL.fetchAccess(tempo, "trace", old), "hidden");
+});
+
+test("a status without the fields, an older Hub or capture, reads as not supported and does not throw", () => {
+    const limits = {max_traces_cap: 2000, analysis_timeout_seconds: 300};
+    assert.equal(PSL.fetchAccess(tempo, "service", limits), "hidden");
+    assert.equal(PSL.fetchRequested({mode: "service", fetchConcurrency: null}, tempo, limits), undefined);
+    assert.equal(PSL.fetchAccess(tempo, "service", {}), "hidden");
+});
+
+test("the request carries the reads count only while the block is on screen", () => {
+    const form = {mode: "service", fetchConcurrency: null};
+    // Untouched: the default, lowered to the warning.
+    assert.equal(PSL.fetchRequested(form, tempo, fetchLimits), 4);
+    assert.equal(PSL.fetchRequested(form, tempo, {...fetchLimits, fetch_concurrency_warn: 16, fetch_concurrency_max: 64}), 16);
+    // Typed: what was typed, even a value that will be refused, so the screen can say so.
+    assert.equal(PSL.fetchRequested({...form, fetchConcurrency: 40}, tempo, fetchLimits), 40);
+    assert.equal(PSL.fetchRequested({...form, fetchConcurrency: 0}, tempo, fetchLimits), 0);
+    // Moving to a Jaeger source, or to a trace ID, takes the field off the request, typed value or not.
+    const typed = {mode: "service", fetchConcurrency: 6};
+    assert.equal(PSL.fetchRequested(typed, jaegerSource, fetchLimits), undefined);
+    assert.equal(PSL.fetchRequested({...typed, mode: "trace"}, tempo, fetchLimits), undefined);
+});
+
+test("the summary line of a run restates its reads count", () => {
+    assert.match(PSL.argsLine({request: {service: "orders", max_traces: 100, fetch_concurrency: 4}}),
+        /max_traces = 100 {3}· {3}fetch_concurrency = 4/);
+    assert.ok(!PSL.argsLine({request: {service: "orders", max_traces: 100}}).includes("fetch_concurrency"));
+});
+
+/** The text of a top-level function of app.js, to its closing brace. */
+function appFunction(name) {
+    const source = wwwroot("app.js");
+    const start = source.indexOf("\n    function " + name + "(");
+    assert.ok(start >= 0, "app.js has no " + name);
+    return source.slice(start, source.indexOf("\n    }\n", start));
+}
+
+test("choosing another source or another mode withdraws the confirmation of the reads count", () => {
+    // The tick belongs to one run's one count. app.js cannot run under Node, so this reads it:
+    // both paths that change what the block shows reset the box in the same breath as ackHeavy.
+    assert.match(appFunction("switchSource"), /state\.form\.ackFetch = false/);
+    assert.match(appFunction("setMode"), /state\.form\.ackFetch = false/);
+    assert.match(appFunction("rerun"), /ackFetch: false/);
+    // And the request takes the count from the one function the block itself reads.
+    assert.match(appFunction("buildRequest"), /PSL\.fetchRequested\(/);
+});
+
+test("a link moves the form to a trace backend through the same switch as a click, and saves nothing", () => {
+    // The reader's saved source is a preference: only their own click writes it. Same reading of app.js as above.
+    const click = appFunction("selectSource");
+    assert.match(click, /saveSource\(id\)/);
+    assert.match(click, /switchSource\(id\)/);
+    const link = appFunction("openHandoffSource");
+    assert.match(link, /PSL\.handoffSourceId\(/);
+    assert.match(link, /switchSource\(id\)/);
+    assert.doesNotMatch(link, /saveSource/);
+    assert.doesNotMatch(appFunction("switchSource"), /saveSource/);
+    // Both ways a link reaches the form, a window and a trace.
+    assert.match(appFunction("applyHandoff"), /openHandoffSource\(handoff\.sourceId\)/);
+    assert.match(appFunction("applyTraceHandoff"), /openHandoffSource\(handoff\.sourceId\)/);
 });
 
 test("a light read keeps the verdict calm over hints that only describe the daemon", () => {
@@ -1381,9 +1541,13 @@ test("two spans share a moment on their bounds, and a running one reaches every 
 
 test("an episode's window travels to New analysis a minute wider on each side, with its pair", () => {
     const hash = PSL.episodeHandoffHash(episode({}), 9_000_000);
-    assert.equal(hash, "#/new?from=940000&to=1120000&service=order%20svc&pair=" + "a".repeat(32));
-    assert.deepEqual(PSL.readHandoff(hash, 9_000_000),
-        {fromMs: 940000, toMs: 1120000, service: "order svc", incidentId: "", pairKey: "a".repeat(32)});
+    assert.equal(hash,
+        "#/new?from=940000&to=1120000&service=order%20svc&pair=" + "a".repeat(32) + "&source=checkout-prod");
+    assert.deepEqual(PSL.readHandoff(hash, 9_000_000), {
+        fromMs: 940000, toMs: 1120000, service: "order svc", incidentId: "", pairKey: "a".repeat(32),
+        sourceId: "checkout-prod"
+    });
+    assert.doesNotMatch(PSL.episodeHandoffHash(episode({source_id: undefined}), 9_000_000), /source=/);
 });
 
 test("a running episode's window ends now, never in a future the form refuses", () => {
@@ -1392,14 +1556,73 @@ test("a running episode's window ends now, never in a future the form refuses", 
 });
 
 test("the last pair's traces open New analysis on the first one, the other carried along", () => {
-    assert.equal(PSL.pairTraceHash(episode({})), "#/new?trace=" + "c".repeat(32) + "&other=" + "b".repeat(32));
-    assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null})), "#/new?trace=" + "b".repeat(32));
+    assert.equal(PSL.pairTraceHash(episode({})),
+        "#/new?trace=" + "c".repeat(32) + "&other=" + "b".repeat(32) + "&source=checkout-prod");
+    assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null})),
+        "#/new?trace=" + "b".repeat(32) + "&source=checkout-prod");
     assert.equal(PSL.pairTraceHash(episode({source_sample_trace_id: null, sample_trace_id: null})), null);
-    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1&other=y2"), {traceId: "x1", otherTraceId: "y2"});
-    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1"), {traceId: "x1", otherTraceId: ""});
+    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1&other=y2&source=s1"),
+        {traceId: "x1", otherTraceId: "y2", sourceId: "s1"});
+    assert.deepEqual(PSL.readTraceHandoff("#/new?trace=x1"), {traceId: "x1", otherTraceId: "", sourceId: null},
+        "a link from before the source rode along");
     assert.equal(PSL.readTraceHandoff("#/new?from=1&to=2&service=s"), null);
     assert.equal(PSL.readTraceHandoff("#/correlations?trace=x1"), null);
     assert.equal(PSL.readTraceHandoff(null), null);
+});
+
+// -------------------------------------------------- the source a handoff opens on
+
+const handoffSource = (id, kind, environment, extra) => Object.assign({id: id, kind: kind, environment: environment}, extra);
+const dProd = handoffSource("d-prod", "daemon", "production");
+const dStaging = handoffSource("d-staging", "daemon", "staging");
+const tProd = handoffSource("t-prod", "tempo", "production");
+const tProd2 = handoffSource("t-prod-2", "jaeger_query", "production");
+const tStaging = handoffSource("t-staging", "tempo", "staging");
+
+test("a handed-over window leaves a daemon for the trace backend of the environment it came from", () => {
+    const sources = [dProd, dStaging, tStaging, tProd];
+    assert.equal(PSL.handoffSourceId(sources, "d-prod", "d-prod"), "t-prod");
+    // A staging backend that happened to be selected is not where a production window belongs.
+    assert.equal(PSL.handoffSourceId(sources, "t-staging", "d-prod"), "t-prod");
+});
+
+test("a selection that is already a backend of that environment stays", () => {
+    assert.equal(PSL.handoffSourceId([dProd, tProd, tProd2], "t-prod-2", "d-prod"), "t-prod-2");
+    assert.equal(PSL.handoffSourceId([dProd, tProd, tProd2], "t-prod", "d-prod"), "t-prod");
+    // Not the one selected, so the first of the environment, in the list's order.
+    assert.equal(PSL.handoffSourceId([dProd, tProd2, tProd], "d-prod", "d-prod"), "t-prod-2");
+});
+
+test("an unknown origin keeps a backend selection and leaves a daemon for the first backend", () => {
+    const sources = [dProd, tStaging, tProd];
+    assert.equal(PSL.handoffSourceId(sources, "t-prod", null), "t-prod");
+    assert.equal(PSL.handoffSourceId(sources, "d-prod", null), "t-staging");
+    // An id the list does not hold is no more known than none.
+    assert.equal(PSL.handoffSourceId(sources, "t-prod", "gone"), "t-prod");
+    assert.equal(PSL.handoffSourceId(sources, null, "gone"), "t-staging", "nothing selected yet");
+});
+
+test("an environment with no backend falls back to the selection, then to the first backend", () => {
+    const sources = [dProd, dStaging, tStaging];
+    assert.equal(PSL.handoffSourceId(sources, "t-staging", "d-prod"), "t-staging");
+    assert.equal(PSL.handoffSourceId(sources, "d-prod", "d-prod"), "t-staging");
+});
+
+test("with no backend there is nothing to pick, and the selection stays", () => {
+    assert.equal(PSL.handoffSourceId([dProd, dStaging], "d-prod", "d-prod"), null);
+    assert.equal(PSL.handoffSourceId([], "d-prod", "d-prod"), null);
+});
+
+test("a source the caller may not run an analysis on is never the pick", () => {
+    const readOnly = handoffSource("t-ro", "tempo", "production", {permissions: ["findings.read"]});
+    const allowed = handoffSource("t-ok", "tempo", "production", {permissions: ["analyses.run"]});
+    assert.equal(PSL.handoffSourceId([dProd, readOnly], "d-prod", "d-prod"), null);
+    assert.equal(PSL.handoffSourceId([dProd, readOnly, allowed], "d-prod", "d-prod"), "t-ok");
+    // Nor is it kept for being selected.
+    assert.equal(PSL.handoffSourceId([readOnly, allowed], "t-ro", null), "t-ok");
+    // The origin is still known from a daemon the caller cannot run on.
+    const quietDaemon = handoffSource("d-prod", "daemon", "production", {permissions: ["findings.read"]});
+    assert.equal(PSL.handoffSourceId([quietDaemon, tStaging, tProd], "t-staging", "d-prod"), "t-prod");
 });
 
 test("a strip places each span on its range, clipped, and never thinner than three", () => {
@@ -1638,19 +1861,45 @@ test("an action owner reads as a name", () => {
 });
 
 test("the recap route reads its defaults and drops what it does not know", () => {
-    assert.deepEqual(PSL.readRecapRoute("#/recap"), {
-        period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"
-    });
+    const none = {period: "week", at: null, environment: null, services: [], groupings: [], view: "tech"};
+    assert.deepEqual(PSL.readRecapRoute("#/recap"), none);
     assert.deepEqual(PSL.readRecapRoute("#/recap?period=month&at=2026-10-29&environment=prod&service=a%2Fb&grouping=pay&view=pilotage"), {
-        period: "month", at: "2026-10-29", environment: "prod", service: "a/b", grouping: "pay", view: "pilotage"
+        period: "month", at: "2026-10-29", environment: "prod", services: ["a/b"], groupings: ["pay"], view: "pilotage"
     });
     // An unknown value reads as its default, a blank filter as none.
-    assert.deepEqual(PSL.readRecapRoute("#/recap?period=year&at=yesterday&view=ceo&service=%20"), {
-        period: "week", at: null, environment: null, service: null, grouping: null, view: "tech"
-    });
-    assert.equal(PSL.readRecapRoute("#/recap?service=a%0Ab").service, null, "control character");
-    assert.equal(PSL.readRecapRoute("#/recap?service=" + "a".repeat(257)).service, null, "too long");
+    assert.deepEqual(PSL.readRecapRoute("#/recap?period=year&at=yesterday&view=ceo&service=%20"), none);
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=a%0Ab").services, [], "control character");
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=" + "a".repeat(257)).services, [], "too long");
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=" + "a".repeat(256)).services, ["a".repeat(256)], "just short enough");
     assert.equal(PSL.readRecapRoute("#/new").period, "week", "another route reads as the defaults");
+    // Well formed but no day of the calendar: the Hub refuses it, and no period can be worked out from it.
+    assert.equal(PSL.readRecapRoute("#/recap?at=2026-13-45").at, null);
+    assert.equal(PSL.readRecapRoute("#/recap?at=2026-02-31").at, null);
+    assert.equal(PSL.readRecapRoute("#/recap?at=2026-02-28").at, "2026-02-28");
+    assert.doesNotThrow(() => PSL.recapFiltersPath(PSL.readRecapRoute("#/recap?at=2026-13-45")));
+    assert.doesNotThrow(() => PSL.recapJobKey(PSL.readRecapRoute("#/recap?at=2026-13-45")));
+});
+
+test("an old recap link with one service and one namespace still reads as one value each", () => {
+    const route = PSL.readRecapRoute("#/recap?service=a&grouping=b");
+    assert.deepEqual(route.services, ["a"]);
+    assert.deepEqual(route.groupings, ["b"]);
+    assert.equal(PSL.recapPath(route), "/api/recap?period=week&view=tech&service=a&grouping=b");
+});
+
+test("a repeated key reads every value, each once, in the order the Hub keys a job on", () => {
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=a&service=b").services, ["a", "b"]);
+    assert.deepEqual(PSL.readRecapRoute("#/recap?grouping=y&grouping=x&grouping=y").groupings, ["x", "y"]);
+    // One bad value costs only itself, and the others keep their place.
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=a%0Ab&service=ok&service=%20&service=" + "a".repeat(257)).services,
+        ["ok"]);
+    // The same choices in another order are one job, as the Hub's canonical list makes them.
+    const forward = PSL.readRecapRoute("#/recap?service=a&service=b");
+    const backward = PSL.readRecapRoute("#/recap?service=b&service=a");
+    assert.deepEqual(forward, backward);
+    assert.equal(PSL.recapJobKey(forward), PSL.recapJobKey(backward));
+    // A name is matched whole by the Hub: a space around it is part of it.
+    assert.deepEqual(PSL.readRecapRoute("#/recap?service=%20a%20").services, [" a "]);
 });
 
 test("the recap hash carries only what differs from the defaults", () => {
@@ -1659,8 +1908,8 @@ test("the recap hash carries only what differs from the defaults", () => {
         period: "day",
         at: "2026-10-29",
         environment: "pre prod",
-        service: "a/b",
-        grouping: null,
+        services: ["a/b"],
+        groupings: [],
         view: "pilotage"
     };
     assert.equal(PSL.recapHash(route),
@@ -1670,11 +1919,25 @@ test("the recap hash carries only what differs from the defaults", () => {
             period: "week",
             at: null,
             environment: null,
-            service: null,
-            grouping: null,
+            services: [],
+            groupings: [],
             view: "tech"
         }),
         "#/recap");
+    assert.equal(PSL.recapHash(PSL.readRecapRoute("#/recap?grouping=x&service=b&service=a")),
+        "#/recap?service=a&service=b&grouping=x");
+});
+
+test("a name with an ampersand, a comma or an accent survives the recap hash", () => {
+    const names = ["R&D", "a,b", "caf\u00e9-\u00c9quipe", "x=y+z%", "100 % #1", "o'reilly \"q\"", "\u65e5\u672c"];
+    const route = {period: "week", at: null, environment: null, services: names.slice().sort(), groupings: ["a&b,c"], view: "tech"};
+    const hash = PSL.recapHash(route);
+    assert.deepEqual(PSL.readRecapRoute(hash), route);
+    // Each is one value of the key, none split on the characters a query uses.
+    assert.equal(new URLSearchParams(hash.slice("#/recap?".length)).getAll("service").length, names.length);
+    // The browser's address bar may re-encode the fragment, and the name must still read back whole.
+    const url = new URL("http://hub.test/" + hash);
+    assert.deepEqual(PSL.readRecapRoute(url.hash), route);
 });
 
 test("a long name breaks at its separators and word boundaries, never inside a parameter", () => {
@@ -1696,17 +1959,21 @@ test("the recap path always names its period and view", () => {
             period: "day",
             at: "2026-10-29",
             environment: "prod",
-            service: "a b",
-            grouping: "g",
+            services: ["a b"],
+            groupings: ["g"],
             view: "pilotage"
         }),
         "/api/recap?period=day&view=pilotage&at=2026-10-29&environment=prod&service=a%20b&grouping=g");
+    // Several names repeat the key, which is how the Hub reads a list.
+    assert.equal(PSL.recapPath(PSL.readRecapRoute("#/recap?service=a%26b&service=c%2Cd&grouping=x&grouping=y")),
+        "/api/recap?period=week&view=tech&service=a%26b&service=c%2Cd&grouping=x&grouping=y");
 });
 
 test("a recap job is keyed on everything but the view and started with the same filters", () => {
-    const route = {period: "day", at: "2026-10-29", environment: "prod", service: "a b", grouping: null, view: "tech"};
+    const route = {period: "day", at: "2026-10-29", environment: "prod", services: ["a b"], groupings: [], view: "tech"};
     assert.equal(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {view: "pilotage"})));
-    assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {service: "c"})));
+    assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {services: ["c"]})));
+    assert.notEqual(PSL.recapJobKey(route), PSL.recapJobKey(Object.assign({}, route, {services: ["a b", "c"]})));
     // No day named reads as today in UTC, as the Hub does: past midnight UTC it is another day's job.
     const today = PSL.readRecapRoute("#/recap?period=day");
     const beforeMidnight = Date.UTC(2026, 10, 3, 23, 59);
@@ -1724,11 +1991,69 @@ test("a recap job is keyed on everything but the view and started with the same 
     assert.equal(PSL.recapJobKey(month), PSL.recapJobKey(Object.assign({}, month, {at: "2026-10-31"})));
     assert.equal(PSL.recapJobPath(route, false),
         "/api/recap/jobs?period=day&at=2026-10-29&environment=prod&service=a%20b");
+    // A job takes every name as a repeated key, none squeezed into one value.
+    assert.equal(PSL.recapJobPath(Object.assign({}, route, {services: ["a", "b&c"], groupings: ["x", "y"]}), true),
+        "/api/recap/jobs?period=day&at=2026-10-29&environment=prod&service=a&service=b%26c&grouping=x&grouping=y&refresh=true");
     assert.equal(PSL.recapJobPath(PSL.readRecapRoute("#/recap"), true), "/api/recap/jobs?period=week&refresh=true");
     assert.equal(PSL.recapJobResultPath("0123abcd", "pilotage", false),
         "/api/recap/jobs/0123abcd/result?view=pilotage");
     assert.equal(PSL.recapJobResultPath("0123abcd", "tech", true),
         "/api/recap/jobs/0123abcd/result?view=tech&moves=all");
+});
+
+test("the names a list offers are read for the period and the environment, never for the names chosen", () => {
+    const route = PSL.readRecapRoute("#/recap?period=month&at=2026-10-17&environment=pre%20prod&service=a&grouping=b&view=pilotage");
+    assert.equal(PSL.recapFiltersPath(route), "/api/recap/filters?period=month&at=2026-10-01&environment=pre%20prod");
+    assert.equal(PSL.recapFiltersPath(PSL.readRecapRoute("#/recap?period=day&at=2026-10-17")),
+        "/api/recap/filters?period=day&at=2026-10-17");
+    // No day named is today in UTC, and the path names the period's first day, so it holds for the whole period.
+    const week = PSL.readRecapRoute("#/recap?service=a");
+    const wednesday = Date.UTC(2026, 10, 4, 10);
+    assert.equal(PSL.recapFiltersPath(week, wednesday), "/api/recap/filters?period=week&at=2026-11-02");
+    assert.equal(PSL.recapFiltersPath(week, wednesday + 86_400_000), PSL.recapFiltersPath(week, wednesday));
+    assert.notEqual(PSL.recapFiltersPath(week, wednesday + 5 * 86_400_000), PSL.recapFiltersPath(week, wednesday));
+    // Fifty long names would push the request line past what the server accepts: none goes in.
+    const many = {...week, services: Array.from({length: 50}, (_, index) => String(index).padEnd(256, "x"))};
+    assert.equal(PSL.recapFiltersPath(many, wednesday), PSL.recapFiltersPath(week, wednesday));
+});
+
+test("a checkbox list holds the names offered, then the chosen ones the period lacks, and a search keeps some", () => {
+    const row = (name, checked, absent) => ({name, checked, absent});
+    assert.deepEqual(PSL.recapPickRows(["a", "b", "c"], ["b", "z"], ""),
+        [row("a", false, false), row("b", true, false), row("c", false, false), row("z", true, true)]);
+    assert.deepEqual(PSL.recapPickRows([], [], ""), []);
+    // The Hub's order is kept, not sorted again.
+    assert.deepEqual(PSL.recapPickRows(["b", "a"], [], "").map((entry) => entry.name), ["b", "a"]);
+    // A name chosen and offered is one row.
+    assert.equal(PSL.recapPickRows(["a"], ["a"], "").length, 1);
+});
+
+test("a search in a checkbox list is a plain, case-blind part of the name", () => {
+    const names = (query, offered, ticked) => PSL.recapPickRows(offered, ticked || [], query).map((entry) => entry.name);
+    assert.deepEqual(names("WEB", ["web-shop", "api", "Webhook"]), ["web-shop", "Webhook"]);
+    assert.deepEqual(names("  api ", ["web-shop", "api"]), ["api"]);
+    // Not a pattern: a dot or a star is itself.
+    assert.deepEqual(names(".", ["a.b", "ab"]), ["a.b"]);
+    assert.deepEqual(names("a*", ["a*b", "aab"]), ["a*b"]);
+    assert.deepEqual(names("\u00e9quipe", ["\u00c9quipe-A", "team"]), ["\u00c9quipe-A"]);
+    // A chosen name the period lacks is searched like the others, and nothing is left when nothing matches.
+    assert.deepEqual(names("old", ["new"], ["old-name"]), ["old-name"]);
+    assert.deepEqual(names("zzz", ["new"], ["old-name"]), []);
+});
+
+test("a recap that the Hub could not read for its filters says so, whether it refused or the request was too long", () => {
+    // Fifty long names make a request line the server refuses before any route reads it.
+    [400, 414, 431].forEach((status) => assert.equal(PSL.recapErrorText(status, "tech"), PSL.recapErrorText(400, "tech")));
+    assert.match(PSL.recapErrorText(414, "tech"), /filters/);
+    assert.match(PSL.recapErrorText(500, "tech"), /not any daemon/);
+    assert.equal(PSL.RECAP_FILTER_MAX_VALUES, 50, "the Hub's cap on the names of one filter");
+});
+
+test("what a frozen report says it freezes names the filters whichever way they were set", () => {
+    const several = PSL.readRecapRoute("#/recap?service=a&service=b");
+    assert.match(PSL.recapFreezeText(several), /with the filters above/);
+    assert.match(PSL.recapFreezeText(PSL.readRecapRoute("#/recap?grouping=g")), /with the filters above/);
+    assert.doesNotMatch(PSL.recapFreezeText(PSL.readRecapRoute("#/recap")), /filters/);
 });
 
 test("a screen id is 32 hex characters, drawn anew each time", () => {
@@ -1913,12 +2238,13 @@ test("Management_copy_carries_no_technical_word", () => {
         ...["confirmed", "contradicted", "came_back", "awaiting"].map((state) => PSL.confirmationLabel(state, "pilotage")),
         PSL.recapTruncatedText("pilotage"),
         PSL.recapSourcesNote(["svc-quiet"], "pilotage"),
-        ...[403, 400, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
+        ...[403, 400, 414, 500].map((status) => PSL.recapErrorText(status, "pilotage")),
         ...Object.values(PSL.RECAP_LABELS.pilotage),
         ...Object.values(PSL.RECAP_HELP.pilotage),
         ...Object.values(PSL.RECAP_REPORTS_COPY),
         PSL.recapFreezeText(route),
         PSL.recapFreezeText(PSL.readRecapRoute("#/recap")),
+        ...Object.values(PSL.RECAP_PICK_COPY),
         PSL.recapReportLabel(report),
         PSL.recapReportLabel({...report, subscription: "weekly-shop"}),
         PSL.recapReportStatus(report),
@@ -2060,6 +2386,18 @@ test("a generate request carries the screen's period and filters, and a date onl
     assert.deepEqual(
         PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?at=2026-10-14&environment=prod&namespace=x&grouping=checkout")),
         {period: "week", at: "2026-10-14", environment: "prod", service: null, grouping: "checkout"});
+});
+
+test("a generate request sends one name as a text and several as a list, each filter on its own", () => {
+    const several = PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?service=b&service=a&grouping=x"));
+    assert.deepEqual(several, {period: "week", environment: null, services: ["a", "b"], grouping: "x"});
+    // Never both forms of one filter: the Hub refuses that with a 400.
+    assert.ok(!("service" in several));
+    assert.ok(!("groupings" in several));
+    const grouped = PSL.recapOnDemandBody(PSL.readRecapRoute("#/recap?grouping=x&grouping=y"));
+    assert.deepEqual(grouped, {period: "week", environment: null, service: null, groupings: ["x", "y"]});
+    assert.ok(!("services" in grouped));
+    assert.ok(!("grouping" in grouped));
 });
 
 test("a timestamp reads in the browser's zone, in a fixed order", () => {
@@ -2432,4 +2770,156 @@ test("the language button rests on the active language and slides to the other o
     assert.match(rule(':root[lang="fr"] .shell-lang-track') || "", /transform: none/);
     assert.match(rule(".shell-lang:hover .shell-lang-track") || "", /transform: none/);
     assert.match(rule(':root[lang="fr"] .shell-lang:hover .shell-lang-track') || "", /translateX\(-19px\)/);
+});
+
+// ---- the SQL of a recap priority, laid out and coloured
+
+const SCREENSHOT_SQL = "select md1_0.id,md1_0.code,md1_0.created_by,md1_0.creation_date,md1_0.dossier_id,"
+    + "md1_0.libelle,md1_0.modification_date,md1_0.modified_by,md1_0.trace_id,md1_0.type,md1_0.valeur "
+    + "from mykinexo.meta_dossier md1_0 where md1_0.dossier_id=?";
+const sqlText = tokens => tokens.map(token => token.text).join("");
+const noBlanks = text => text.replace(/\s/g, "");
+
+test("the query of the screenshot reads select, grouped indented columns, from, where", () => {
+    const tokens = PSL.sqlTokens(SCREENSHOT_SQL);
+
+    assert.equal(sqlText(tokens), [
+        "select",
+        "  md1_0.id, md1_0.code, md1_0.created_by, md1_0.creation_date, md1_0.dossier_id, md1_0.libelle,",
+        "  md1_0.modification_date, md1_0.modified_by, md1_0.trace_id, md1_0.type, md1_0.valeur",
+        "from mykinexo.meta_dossier md1_0",
+        "where md1_0.dossier_id = ?"
+    ].join("\n"));
+    const word = (kind, text) => tokens.find(token => token.kind === kind && token.text.includes(text));
+    assert.ok(word("keyword", "select") && word("keyword", "from") && word("keyword", "where"));
+    assert.equal(word("keyword", "=").text, "=");
+    assert.equal(word("table", "mykinexo.meta_dossier").text, "mykinexo.meta_dossier");
+    assert.equal(word("param", "?").text, "?");
+    assert.ok(word("column", "md1_0.valeur"));
+    assert.ok(tokens.some(token => token.kind === "text" && token.text.includes("\n")),
+        "a line break is a text token, never part of a coloured one");
+});
+
+test("a clause opens a line, whatever its case", () => {
+    for (const clause of ["join", "left join", "left outer join", "where", "group by", "having", "order by", "limit",
+        "union"]) {
+        for (const written of [clause, clause.toUpperCase()]) {
+            const lines = sqlText(PSL.sqlTokens("select a from t " + written + " x")).split("\n");
+            assert.ok(lines.includes(written + " x"), written + " should open a line: " + JSON.stringify(lines));
+        }
+    }
+    assert.deepEqual(sqlText(PSL.sqlTokens("SELECT a FROM t")).split("\n"), ["SELECT", "  a", "FROM t"]);
+});
+
+test("a clause inside parentheses, a function and a delete stay on their line", () => {
+    const sub = sqlText(PSL.sqlTokens("select a from t where b in (select c from u where d=?)"));
+    assert.equal(sub, "select\n  a\nfrom t\nwhere b in (select c from u where d = ?)");
+    assert.equal(sqlText(PSL.sqlTokens("select left(a, 2), count(*) from t")), "select\n  left(a, 2), count(*)\nfrom t");
+    assert.equal(sqlText(PSL.sqlTokens("delete from t where a=?")), "delete from t\nwhere a = ?");
+});
+
+test("laying a query out never changes a token", () => {
+    const inputs = [
+        "select a from t where b = 'select from x' and c=?",
+        "select a from t -- from here\nwhere b=1",
+        "select a /* where */ from t where b=1 /* order by */ order by a",
+        'select "from", "a b" from "where" where "x"=?',
+        "select café, 名前, 😀 from täble where naïve='ñ ü' and 日本=?",
+        "select a from t where j@>b and c<@d and e<-1 and f->>g=? and h<=>i and k!=l and m<>n and o>=p",
+        "select a from t where b='unterminated",
+        "select a from t where b=1 /* unterminated",
+        "select a from t where b=$1 and c=$2",
+        "select a from t where x=$? and y=$?",
+        "",
+        "   "
+    ];
+    for (const input of inputs) {
+        for (const padded of [input, input + " ".repeat(601)]) {
+            assert.equal(noBlanks(sqlText(PSL.sqlTokens(padded))), noBlanks(padded), JSON.stringify(padded.slice(0, 80)));
+        }
+    }
+});
+
+test("a Postgres parameter is one parameter token, as the engine writes it with `$?` or as `$1`", () => {
+    const params = sql => PSL.sqlTokens(sql).filter(token => token.kind === "param").map(token => token.text);
+
+    assert.deepEqual(params("select a from t where x=$? and y=$?"), ["$?", "$?"]);
+    assert.deepEqual(params("select a from t where x=$1 and y=$12"), ["$1", "$12"]);
+    assert.deepEqual(params("select a from t where x=?"), ["?"]);
+});
+
+test("the inside of a string, a comment and a quoted name keeps its blanks and its operators", () => {
+    const text = sqlText(PSL.sqlTokens("select a from t where b='x=y  from z' and \"c=d  e\"=? -- g=h  from\n"));
+    assert.ok(text.includes("'x=y  from z'"));
+    assert.ok(text.includes('"c=d  e" = ?'));
+    assert.ok(text.includes("-- g=h  from"));
+    assert.ok(!/\nfrom z/.test(text));
+});
+
+test("an operator that is part of a longer one is not split by its blanks", () => {
+    const text = sqlText(PSL.sqlTokens("select a from t where j@>b and c<@d and e<-1 and f->>g=? and x=-1"));
+    for (const whole of ["@>", "<@", "<-", "->>", "=-"]) assert.ok(text.includes(whole), whole + " in " + text);
+});
+
+test("past 600 characters the layout stops and only the colours stay", () => {
+    const query = length => "select " + "c".repeat(length - "select  from t where x=?".length) + " from t where x=?";
+    const long = query(601);
+    assert.equal(long.length, 601);
+    const tokens = PSL.sqlTokens(long);
+
+    assert.equal(sqlText(tokens), long, "not one blank changes, not even around the =");
+    assert.ok(!sqlText(tokens).includes("\n"));
+    assert.deepEqual([...new Set(tokens.map(token => token.kind))].sort(),
+        ["column", "keyword", "param", "table", "text"]);
+
+    const exactly = query(600);
+    assert.equal(exactly.length, 600);
+    assert.ok(sqlText(PSL.sqlTokens(exactly)).includes("\nfrom t\nwhere x = ?"), "600 is still laid out");
+    assert.equal(PSL.RECAP_SQL_LAYOUT_MAX, 600);
+});
+
+test("only a finding on SQL gets the coloured block", () => {
+    assert.equal(PSL.isSqlFinding("redundant_sql"), true);
+    assert.equal(PSL.isSqlFinding("n_plus_one_sql"), true);
+    assert.equal(PSL.isSqlFinding("slow_sql"), true);
+    assert.equal(PSL.isSqlFinding("redundant_http"), false);
+    assert.equal(PSL.isSqlFinding("slow_messaging"), false);
+    assert.equal(PSL.isSqlFinding(undefined), false);
+    assert.match(wwwroot("app.js"), /PSL\.isSqlFinding\(priority\.finding_type\)/);
+});
+
+test("the SQL colours stay readable on the inset, in both themes", () => {
+    // WCAG 2.x contrast. The inset is --inset-bg laid over the card ground, --surface.
+    const tokens = wwwroot("tokens.css");
+    const rgba = value => {
+        const hex = value.match(/^#([0-9a-f]{6})$/i);
+        if (hex) return [0, 2, 4].map(at => parseInt(hex[1].substr(at, 2), 16)).concat(1);
+        const parts = value.match(/^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/);
+        return [1, 2, 3].map(at => Number(parts[at])).concat(Number(parts[4]));
+    };
+    const luminance = rgb => {
+        const [r, g, b] = rgb.slice(0, 3).map(channel => {
+            const c = channel / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a, b) => {
+        const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+        return (high + 0.05) / (low + 0.05);
+    };
+    const css = wwwroot("launcher.css");
+    const used = {keyword: "brand-text", table: "info-fg", param: "warn-fg", column: "text-2"};
+    for (const [kind, name] of Object.entries(used)) {
+        assert.match(css, new RegExp("\\.sql-" + kind + " \\{[^}]*color: var\\(--" + name + "\\);"));
+    }
+    for (const theme of ["dark", "light"]) {
+        const block = tokens.match(new RegExp(':root\\[data-theme="' + theme + '"\\] \\{([^}]*)\\}'))[1];
+        const token = name => rgba(block.match(new RegExp("--" + name + ":\\s*([^;]+);"))[1].trim());
+        const [ground, inset] = [token("surface"), token("inset-bg")];
+        const floor = ground.slice(0, 3).map((channel, at) => channel * (1 - inset[3]) + inset[at] * inset[3]);
+        for (const name of ["text", ...Object.values(used)]) {
+            assert.ok(ratio(token(name), floor) >= 4.5, theme + " --" + name + " on the inset: " + ratio(token(name), floor));
+        }
+    }
 });

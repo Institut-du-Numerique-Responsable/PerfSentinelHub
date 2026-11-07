@@ -34,7 +34,14 @@ public sealed class RecapJobsTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var computation in _computations)
+        Computation[] computations;
+        // Under the lock: a job's thread may still be adding its computation while this runs.
+        lock (_computations)
+        {
+            computations = [.. _computations];
+        }
+
+        foreach (var computation in computations)
             computation.Release.TrySetCanceled();
         _stopping.Dispose();
     }

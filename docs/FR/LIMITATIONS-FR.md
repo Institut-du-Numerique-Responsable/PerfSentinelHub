@@ -375,6 +375,14 @@ Avec `Hub:Access` activé, un appelant ne lit et n'écrit que ce qu'une autorisa
 - Une signature replie tous les regroupements. Un projet qui reconnaît un regroupement
   d'une copie lit l'enveloppe la plus récente de cette copie, qui peut décrire un autre
   regroupement du même service et du même endpoint.
+- Une copie garde tous les regroupements où elle a été vue, et `grouping` sur `GET /api/findings` et
+  `GET /api/recap` demande si une copie y a été vue, pas si le périmètre de l'appelant le couvre. Un
+  lecteur limité à `namespace=x` qui passe `grouping=y` récupère une ligne quand une copie qu'il lit a
+  aussi été vue sous `y`, ce qui confirme que `y` existe. Le récap accepte jusqu'à 50 valeurs de
+  `grouping` par lecture : une lecture teste donc jusqu'à 50 essais là où elle en testait un, et aucun
+  nom ne devient apprenable qu'un essai à la fois n'aurait pas révélé. `GET /api/recap/filters`
+  n'ajoute aucune divulgation : il ne propose un namespace que si le périmètre le couvre, voir
+  [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md#projets).
 - Un attribut ou un nom de service est posé par qui déploie l'application, par quiconque
   peut envoyer de l'OTLP à un daemon, et par qui détient la clé d'import d'une source,
   pour cette source seulement. La comparaison se fait par copie : une valeur plantée

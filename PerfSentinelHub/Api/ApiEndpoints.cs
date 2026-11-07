@@ -87,7 +87,10 @@ public static partial class ApiEndpoints
                     (int)analysis.Timeout.TotalSeconds,
                     (int)analysis.ReportRetention.TotalHours,
                     analysis.MaxTracesEmbedded,
-                    hubOptions.Value.MaxReadLimit),
+                    hubOptions.Value.MaxReadLimit,
+                    analysis.FetchConcurrencyWarn,
+                    analysis.FetchConcurrencyMax,
+                    DetectionOverrides.ReadsFetchConcurrency(engine.Version)),
                 [.. DetectionOverrides.SchemaFor(engine.Version)],
                 hubOptions.Value.Disclosures.Enabled &&
                 !access.Scope(request.HttpContext, AccessPermissions.DisclosuresRead).IsNothing
@@ -112,6 +115,7 @@ public static partial class ApiEndpoints
         app.MapPut("/api/labels/services", SetServiceLabelAsync);
         // Never anonymous: the recap is built from the copies the caller reads, as the findings are.
         app.MapGet("/api/recap", GetRecapAsync);
+        app.MapGet("/api/recap/filters", GetRecapFiltersAsync);
         // Never anonymous: a job is read only by the audience it was computed for.
         app.MapPost("/api/recap/jobs", StartRecapJob);
         app.MapGet("/api/recap/jobs/{id}", GetRecapJob);

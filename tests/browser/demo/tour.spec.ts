@@ -124,9 +124,9 @@ test("launcher tour", async ({ page }) => {
     await beat(page, 900);
     await analyse.click();
     await expect(page.locator(".banner")).toContainText("from the incidents screen", { timeout: 15_000 });
-    // The source that arrives selected is the daemon of act two, which takes no
-    // window, so the banner asks for a backend. Answering it is the last beat:
-    // the window and the service survive the switch, and the run can go.
+    // The link opens on a trace backend of the daemon's environment, a daemon taking
+    // no window. Naming the one the tour runs on is the last beat: the window and
+    // the service survive the switch, and the run can go.
     await hold(page, page.locator(".banner").first(), 3600);
     await page.locator("button.source-row", { hasText: "Tempo EU" }).click();
     await expect(page.locator('input[placeholder="order-service"]')).toHaveValue(/\S/);
