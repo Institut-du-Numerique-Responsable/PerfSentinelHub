@@ -223,12 +223,12 @@ Une clé seulement remplacée continue de garantir les cartes datées dans sa fe
 dans laquelle une clé volée pourrait aussi dater une carte.
 
 Un fichier original téléchargé depuis le Hub est vérifié octet par octet : toute retouche se lit
-modifiée. LinkedIn retire les métadonnées d'un fichier, un éditeur qui réenregistre un SVG en
+modifiée. Les réseaux sociaux retirent les métadonnées d'un fichier publié, un éditeur qui réenregistre un SVG en
 perd en général le `<metadata>`, et un convertisseur qui réenregistre un JPEG XL en perd en
 général la boîte `pscd` : une image republiée ou retouchée ne garde que son QR code. Le QR code
 prouve les chiffres, pas les pixels autour : la page de vérification affiche ces chiffres, à
-comparer avec l'image. LinkedIn n'accepte pas du tout le JPEG XL, c'est donc le PNG qu'il faut
-publier.
+comparer avec l'image. Les réseaux sociaux n'acceptent pas le JPEG XL, c'est donc le PNG qu'il
+faut publier.
 
 Les chiffres sont ceux que le Hub détenait. Une histoire cite le dernier échantillon que le Hub
 détenait avant que l'action soit marquée terminée, la copie la plus récente l'emportant. Son

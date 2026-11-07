@@ -463,8 +463,8 @@ as you type, and the engine's own refusal lands there too.
 
 The card downloads as an image (PNG), an image to print or scale (SVG), which stays sharp at any
 size, a smaller image to archive (JPEG XL), or a carousel (PDF). The JPEG XL holds the PNG's pixels,
-losslessly: keep it to archive or send, and post the PNG, since
-[LinkedIn does not accept JPEG XL](https://www.linkedin.com/help/linkedin/answer/a564109). Preview
+losslessly: keep it to archive or send, and post the PNG, since social networks do not accept
+JPEG XL. Preview
 renders the card: the image in a light frame, whatever the Hub's theme, the PNG for a JPEG XL
 choice, the carousel in the browser's own PDF viewer. A choice changed after a preview dims it and
 says so, except a move between PNG and JPEG XL, which shows the same image; Download always makes
