@@ -83,9 +83,11 @@ public static class EngineProcess
         }
     }
 
+    // The tail, because the engine prints its tracing first and its diagnostic last,
+    // and the diagnostic is the line the Hub classifies and an operator reads.
     private static string Truncate(string value)
     {
-        return value.Length <= MaxStandardErrorChars ? value : value[..MaxStandardErrorChars];
+        return value.Length <= MaxStandardErrorChars ? value : value[^MaxStandardErrorChars..];
     }
 
     private static void KillQuietly(Process process)

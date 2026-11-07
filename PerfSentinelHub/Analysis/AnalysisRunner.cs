@@ -165,12 +165,7 @@ public sealed partial class AnalysisRunner(
             return result.StandardOutput;
 
         var errorCode = EngineFailure.Classify(result.StandardError);
-        LogQueryFailed(
-            logger,
-            runId,
-            result.ExitCode,
-            errorCode,
-            result.StandardError.Length == 0 ? "(empty)" : result.StandardError);
+        LogQueryFailed(logger, runId, result.ExitCode, errorCode, Loggable(result.StandardError));
         throw new EngineFailedException(errorCode);
     }
 
@@ -309,8 +304,9 @@ public sealed partial class AnalysisRunner(
             // A refused render is deterministic (bad flag, unreadable input),
             // and its stderr names the cause. Without this line the run is
             // stored as binary_failed with zero diagnostic anywhere.
-            LogRenderFailed(logger, runId, result.ExitCode, result.StandardError);
-            return EngineFailure.Classify(result.StandardError);
+            var errorCode = EngineFailure.Classify(result.StandardError);
+            LogRenderFailed(logger, runId, result.ExitCode, errorCode, Loggable(result.StandardError));
+            return errorCode;
         }
         finally
         {
@@ -364,6 +360,12 @@ public sealed partial class AnalysisRunner(
         };
     }
 
+    // A blank message reads as a logging bug, so a silent crash says it was silent.
+    private static string Loggable(string standardError)
+    {
+        return standardError.Length == 0 ? "(empty)" : standardError;
+    }
+
     /// <summary>Best effort: false when the file is still there.</summary>
     private static bool TryDelete(string path)
     {
@@ -392,9 +394,9 @@ public sealed partial class AnalysisRunner(
     [LoggerMessage(
         1601,
         LogLevel.Warning,
-        "Render for run {RunId} exited {ExitCode}: {StandardError}")]
+        "Render for run {RunId} exited {ExitCode} as {ErrorCode}: {StandardError}")]
     private static partial void LogRenderFailed(
-        ILogger logger, string runId, int exitCode, string standardError);
+        ILogger logger, string runId, int exitCode, string errorCode, string standardError);
 
     [LoggerMessage(
         1603,

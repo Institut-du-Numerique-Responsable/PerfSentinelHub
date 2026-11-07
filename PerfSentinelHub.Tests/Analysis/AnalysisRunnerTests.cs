@@ -444,6 +444,64 @@ public sealed class AnalysisRunnerTests : IDisposable
             message => message.Contains("exited 1 as binary_failed: thread 'main' panicked", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(
+        "memory allocation of 208 bytes failed",
+        "exited 75 as engine_out_of_memory: memory allocation of 208 bytes failed")]
+    // A silent crash still leaves a line to read, never a blank message.
+    [InlineData("", "exited 75 as binary_failed: (empty)")]
+    public async Task A_failed_render_leaves_its_code_and_its_stderr_in_the_log(string stderr, string expected)
+    {
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(new FakeEngine
+        {
+            Output = ReportJson,
+            RenderFailsOn = "--output",
+            RenderError = stderr
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel")), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Contains(logger.Warnings, message => message.Contains(expected, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_long_stderr_keeps_its_last_chars_so_the_diagnostic_still_classifies_and_logs()
+    {
+        // The engine prints its tracing first and its diagnostic last: a cut at
+        // the head of the text would drop the very line the classifier reads.
+        const string diagnostic = "Error fetching traces from Tempo: the search matched 10 trace(s) but every fetch failed";
+        var tracing = string.Join(
+            '\n',
+            Enumerable.Range(0, 100).Select(i => $"2026-11-06T22:45:15Z  INFO sentinel_core::ingest::tempo: fetch {i}"));
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, $"{tracing}\n{diagnostic}"), logger: logger);
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisErrorCodes.FetchesFailed, outcome.ErrorCode);
+        var message = Assert.Single(logger.Warnings, m => m.StartsWith("Query for run", StringComparison.Ordinal));
+        Assert.EndsWith(diagnostic, message, StringComparison.Ordinal);
+        Assert.DoesNotContain("fetch 0\n", message, StringComparison.Ordinal);
+        // Exactly the last 4,096 characters, behind the prefix.
+        Assert.Equal(
+            "Query for run run-1 exited 1 as fetches_failed: ".Length + 4096,
+            message.Length);
+    }
+
+    [Fact]
+    public async Task A_query_that_dies_without_a_word_still_leaves_a_line_in_the_log()
+    {
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            logger.Warnings,
+            message => message.EndsWith("exited 1 as binary_failed: (empty)", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Output_that_is_not_a_report_fails_rather_than_rendering_nothing()
     {
