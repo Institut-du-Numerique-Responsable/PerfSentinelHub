@@ -16,7 +16,8 @@
     const SHELL = ['.shell-topbar', '#main', '.shell-footer'];
 
     /** @type {{source: () => import('../types').GuideSource, status: string, id: string | null, at: number,
-     *  steps: import('../types').GuideStep[], frame: number, from: number, painted: string} | null} */
+     *  steps: import('../types').GuideStep[], all: import('../types').GuideStep[], frame: number, from: number,
+     *  painted: string} | null} */
     let open = null;
     /** @type {{root: HTMLElement, hole: HTMLElement, marks: HTMLElement, card: HTMLElement, title: HTMLElement,
      *  body: HTMLElement, count: HTMLElement, quit: HTMLButtonElement, prev: HTMLButtonElement,
@@ -68,7 +69,6 @@
         const title = node('h2', {class: 'guide-title'});
         title.id = 'guide-title';
         const body = node('div', {class: 'guide-body'});
-        body.setAttribute('aria-live', 'polite');
         const count = node('span', {class: 'guide-count'});
         const quit = node('button', {class: 'guide-quit'});
         const prev = node('button', {class: 'pill-button'});
@@ -86,7 +86,11 @@
         });
         const nav = node('div', {class: 'guide-nav'});
         nav.append(count, prev, next);
-        card.append(quit, title, body, nav);
+        // One live region for the title, the text and the count, so a step is read out whole.
+        const live = node('div');
+        live.setAttribute('aria-live', 'polite');
+        live.append(title, body, nav);
+        card.append(quit, live);
         root.append(hole, marks, card);
         document.body.appendChild(root);
         return {root, hole, marks, card, title, body, count, quit, prev, next};
@@ -117,6 +121,7 @@
         // The last step has no element, so one is always there.
         const kept = all.slice(from).find(present) || steps[steps.length - 1];
         open.steps = steps;
+        open.all = all;
         open.at = steps.indexOf(kept);
         open.from = all.indexOf(kept);
         open.id = kept.id;
@@ -267,19 +272,30 @@
         });
     }
 
-    /** The focus goes back into the card only when it left it, so a redraw never takes it from a button. */
-    function holdFocus() {
+    /**
+     * The focus goes back into the card only when it left it, so a redraw never takes it from a button.
+     * Out of the wait card it goes to Next, so Enter does not close the guide the wait left on Quit.
+     * @param {boolean} woke
+     */
+    function holdFocus(woke) {
         const active = document.activeElement;
+        if (woke) {
+            dom.next.focus({preventScroll: true});
+            return;
+        }
         if (active && dom.card.contains(active) && !(/** @type {HTMLElement} */ (active)).hidden) return;
         (dom.next.hidden ? dom.quit : dom.next).focus({preventScroll: true});
     }
 
-    /** @param {boolean} moved */
-    function show(moved) {
+    /**
+     * @param {boolean} moved
+     * @param {boolean} [woke] the status just turned ready
+     */
+    function show(moved, woke) {
         paint();
         place();
         if (moved) reveal();
-        holdFocus();
+        holdFocus(Boolean(woke));
     }
 
     /** @param {number} by */
@@ -289,6 +305,7 @@
         if (to < 0 || to >= open.steps.length) return;
         open.at = to;
         open.id = open.steps[to].id;
+        open.from = open.all.indexOf(open.steps[to]);
         show(true);
     }
 
@@ -318,7 +335,7 @@
     function start(source) {
         if (open) stop();
         if (!dom) dom = build();
-        open = {source, status: 'wait', id: null, at: 0, steps: [], frame: 0, from: 0, painted: ''};
+        open = {source, status: 'wait', id: null, at: 0, steps: [], all: [], frame: 0, from: 0, painted: ''};
         SHELL.forEach(function (selector) {
             const part = document.querySelector(selector);
             if (part) part.setAttribute('inert', '');
@@ -334,8 +351,9 @@
 
     function refresh() {
         if (!open) return;
+        const waited = open.status !== 'ready';
         const moved = read();
-        show(moved);
+        show(moved, waited && open.status === 'ready');
     }
 
     function stop() {

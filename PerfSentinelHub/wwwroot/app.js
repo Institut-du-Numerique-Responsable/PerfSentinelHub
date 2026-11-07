@@ -1070,7 +1070,8 @@
     /** Draws the screen, then the guide's entry and the guide itself, which point into it. */
     function render() {
         renderScreen();
-        document.getElementById('guide-open').hidden = guideId(state.screen) === null;
+        // Without a status the screen drew only a banner, which no guide walks.
+        document.getElementById('guide-open').hidden = !state.status || guideId(state.screen) === null;
         GUIDE.refresh();
     }
 
@@ -9378,7 +9379,8 @@
         const card = cardState();
         const management = route.view === 'pilotage';
         const section = el('section', {
-            class: 'recap-section share', 'aria-labelledby': 'recap-h-share', 'data-guide': 'recap.card'
+            // The banner alone is no card to point at, so the guide skips its step.
+            class: 'recap-section share', 'aria-labelledby': 'recap-h-share', 'data-guide': cards ? 'recap.card' : null
         }, [
             ruledOverline(t('card.overline')),
             recapHeading('recap-h-share', PSL.CARD_COPY.title, PSL.CARD_COPY.hint, PSL.CARD_COPY.help, t('card.topic'))
