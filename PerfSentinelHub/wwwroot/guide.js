@@ -104,6 +104,11 @@
         if (given.status !== 'ready') return false;
         const all = given.steps;
         const steps = all.filter(present);
+        // A source with nothing to show yet is waited on, so a later guide can reuse the controller.
+        if (!steps.length) {
+            open.status = 'wait';
+            return false;
+        }
         let from = all.findIndex(function (step) {
             return step.id === lastId;
         });
@@ -320,7 +325,8 @@
         });
         dom.root.hidden = false;
         document.addEventListener('keydown', onKey, true);
-        global.addEventListener('scroll', schedule, {passive: true});
+        // Captured, so a scroll inside a nested scroller moves the cutout too.
+        global.addEventListener('scroll', schedule, {capture: true, passive: true});
         global.addEventListener('resize', schedule);
         read();
         show(open.status === 'ready');
@@ -337,7 +343,7 @@
         if (open.frame) cancelAnimationFrame(open.frame);
         open = null;
         document.removeEventListener('keydown', onKey, true);
-        global.removeEventListener('scroll', schedule);
+        global.removeEventListener('scroll', schedule, {capture: true});
         global.removeEventListener('resize', schedule);
         SHELL.forEach(function (selector) {
             const part = document.querySelector(selector);
