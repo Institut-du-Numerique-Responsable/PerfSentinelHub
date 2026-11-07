@@ -31,6 +31,30 @@ async function settle(page: Page): Promise<void> {
     }))).toBe(true);
 }
 
+/** Whether the cutout frames exactly these anchors, with its 7 px margin, after the scroll landed. */
+async function framed(page: Page, anchors: string[]): Promise<boolean> {
+    await settle(page);
+    return page.evaluate((names) => {
+        const rects = names.map((name) => document.querySelector(`[data-guide="${name}"]`)!.getBoundingClientRect());
+        const hole = document.querySelector(".guide-hole")!.getBoundingClientRect();
+        const near = (a: number, b: number) => Math.abs(a - b) <= 2;
+        return near(hole.left, Math.min(...rects.map((r) => r.left)) - 7) &&
+            near(hole.top, Math.min(...rects.map((r) => r.top)) - 7) &&
+            near(hole.right, Math.max(...rects.map((r) => r.right)) + 7) &&
+            near(hole.bottom, Math.max(...rects.map((r) => r.bottom)) + 7);
+    }, anchors);
+}
+
+/** Next until the step that frames `anchors`, whatever its title says. */
+async function goToAnchors(page: Page, anchors: string[]): Promise<void> {
+    const total = await totalSteps(page);
+    for (let step = 0; step < total; step += 1) {
+        if (await framed(page, anchors)) return;
+        await next(page).click();
+    }
+    throw new Error(`no step frames ${anchors.join(", ")}`);
+}
+
 async function totalSteps(page: Page): Promise<number> {
     const text = await count(page).textContent() ?? "";
     return Number(text.match(/(\d+)\D*$/)?.[1]);
@@ -110,14 +134,34 @@ test("the row step numbers its marks like its legend", async ({page}) => {
 test("a redraw keeps the step and the focus in the card", async ({page}) => {
     await openGuide(page);
     await goTo(page, "How to read a row");
+    expect(await framed(page, ["recap.row"])).toBe(true);
     const where = await count(page).textContent();
     await next(page).focus();
+    // The old row is tagged, and #main itself (which a render keeps) shifts what it redraws down:
+    // a guide that did not follow the render would frame the row where it was.
+    await page.evaluate(() => {
+        (document.querySelector('[data-guide="recap.row"]') as HTMLElement).dataset.stale = "1";
+        (document.querySelector("#main") as HTMLElement).style.paddingTop = "40px";
+    });
     // What a poll or a return to the screen does: the route is read again and #main redrawn.
     await page.evaluate(() => window.dispatchEvent(new HashChangeEvent("hashchange")));
-    await expect(title(page)).toHaveText("How to read a row", {timeout: 60_000});
-    await expect(count(page)).toHaveText(where!);
+    await expect(page.locator('[data-guide="recap.row"][data-stale]')).toHaveCount(0, {timeout: 60_000});
     await expect(page.locator('[data-guide="recap.row"]')).toBeVisible();
-    await expect(page.locator(".guide-marks .guide-mark").first()).toBeVisible();
+    await expect(title(page)).toHaveText("How to read a row");
+    await expect(count(page)).toHaveText(where!);
+    expect(await framed(page, ["recap.row"])).toBe(true);
+    // Each mark sits on its part of the new row, in the legend's order.
+    const parts = ["rank", "what", "where", "figure", "trend", "state"].map((part) => `recap.row.${part}`);
+    const offsets = await page.evaluate((names) => {
+        const marks = Array.from(document.querySelectorAll(".guide-marks .guide-mark"));
+        const found = names.map((name) => document.querySelector(`[data-guide="${name}"]`)).filter(Boolean);
+        return {
+            marks: marks.length, parts: found.length,
+            gaps: marks.map((mark, index) => mark.getBoundingClientRect().top - found[index]!.getBoundingClientRect().top)
+        };
+    }, parts);
+    expect(offsets.marks).toBe(offsets.parts);
+    for (const gap of offsets.gaps) expect(Math.abs(gap + 1)).toBeLessThanOrEqual(1);
     expect(await focusInCard(page)).toBe(true);
 });
 
@@ -230,6 +274,7 @@ test("going back leaves the guide and wakes the page", async ({page}) => {
 
 test("the page behind is inert", async ({page}) => {
     await openGuide(page);
+    await settle(page);
     const tech = page.locator('[data-guide="recap.view"] [role=radio]').filter({hasText: "Engineering"});
     const box = (await tech.boundingBox())!;
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -247,15 +292,14 @@ for (const lang of ["en", "fr"] as const) {
     test(`the figures match the screen (${lang})`, async ({page}) => {
         await useLang(page, lang);
         await openGuide(page);
-        await next(page).click();
-        await next(page).click();
+        await expect(count(page)).toHaveText(lang === "fr" ? /^1 sur \d+$/ : /^1 of \d+$/);
+        await goToAnchors(page, ["recap.io"]);
         const tile = (name: string) => page.locator(`[data-guide="${name}"] .disc-figure-value`);
         const io = (await tile("recap.io").textContent())!.trim();
         expect(io).not.toBe("");
         // The title is the tile's figure, as the tile writes it, then the words.
         await expect(title(page)).toHaveText(new RegExp("^" + io.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s"));
-        await next(page).click();
-        await next(page).click();
+        await goToAnchors(page, ["recap.findings", "recap.actions"]);
         const findings = (await tile("recap.findings").textContent())!.trim();
         const done = (await tile("recap.actions").evaluate((node) => node.firstChild?.textContent ?? ""))!.trim();
         await expect(title(page)).toHaveText(new RegExp(`^${findings}\\D.*, ${done}\\D`));
@@ -265,7 +309,7 @@ for (const lang of ["en", "fr"] as const) {
 test("nothing scrolls sideways", async ({page}) => {
     await openGuide(page);
     await eachStep(page, async () => {
-        await page.waitForTimeout(150);
+        await settle(page);
         const wide = await page.evaluate(() => ({
             scroll: document.documentElement.scrollWidth, width: window.innerWidth
         }));
@@ -277,14 +321,20 @@ test("nothing scrolls sideways", async ({page}) => {
 test("reduced motion moves without a transition", async ({page}) => {
     await page.emulateMedia({reducedMotion: "reduce"});
     await openGuide(page);
-    const durations = await page.evaluate(() => [".guide-root", ".guide-hole", ".guide-card", ".guide-marks"]
-        .map((selector) => getComputedStyle(document.querySelector(selector)!).transitionDuration));
-    expect(durations.every((duration) => duration.split(",").every((part) => parseFloat(part) === 0))).toBe(true);
-    // Each move lands at once: the scroll a frame after the click is the one a second later.
-    await eachStep(page, async () => {
+    await settle(page);
+    const total = await totalSteps(page);
+    const scrollY = () => page.evaluate(() => window.scrollY);
+    let scrolled = 0;
+    // Each move lands at once: the scroll a frame after the click is already the final one.
+    for (let index = 1; index < total; index += 1) {
+        const before = await scrollY();
+        await next(page).click();
         const first = await page.evaluate(() => new Promise<number>((done) =>
             requestAnimationFrame(() => done(window.scrollY))));
         await page.waitForTimeout(400);
-        expect(await page.evaluate(() => window.scrollY)).toBe(first);
-    });
+        expect(await scrollY()).toBe(first);
+        if (first !== before) scrolled += 1;
+    }
+    // Some of those moves had to scroll, or the check above proved nothing.
+    expect(scrolled).toBeGreaterThan(0);
 });

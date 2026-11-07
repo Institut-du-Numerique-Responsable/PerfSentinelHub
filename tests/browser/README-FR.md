@@ -47,22 +47,23 @@ Hub (`demo/access.spec.ts`) :
 
 ## Le parcours du guide
 
-`demo/guide.spec.ts` est la seule spec ici qui vérifie au lieu de capturer. Elle parcourt le guide du
-récapitulatif en vue Management sur le Hub que monte global-setup, à 1280 et 390 px, en clair et en
-sombre : chaque étape et le focus à la sortie, un redessin pendant une étape, la carte d'attente
+`demo/guide.spec.ts` est la seule spec ici qui vérifie au lieu de capturer. Elle parcourt le guide
+du récapitulatif en vue Management sur le Hub que monte global-setup, à 1280 et 390 px, en clair et
+en sombre : chaque étape et le focus à la sortie, un redessin pendant une étape, la carte d'attente
 pendant que le calcul du récapitulatif est retenu en cours (sans requête ajoutée), la carte d'échec,
 une ligne plus haute que la fenêtre, le bouton retour du navigateur, la page derrière restée inerte,
 les chiffres des titres contre les tuiles en anglais et en français, l'entrée sur la même ligne que
-les boutons de thème et de langue, aucun défilement horizontal et le mouvement réduit. Elle n'écrit rien dans `docs/img/`, et `npm run demo` la laisse de côté, puisqu'il
-ne lance que les projets de capture. Lancez-la par ses projets :
+les boutons de thème et de langue, aucun défilement horizontal et le mouvement réduit. Elle n'écrit
+rien dans `docs/img/`, et `npm run demo` la laisse de côté, puisqu'il ne lance que les projets de
+capture. Lancez-la par ses projets :
 
 ```bash
 npx playwright test -c playwright.demo.config.ts --project 'guide-*'
 ```
 
-La mise en place est celle de toute la démo, binaire du moteur compris. Comme pour les captures, elle
-rafraîchit `demo/fixtures/hub-embed.json` au passage : restaurez ce fichier ensuite, sauf si la capture
-était voulue.
+La mise en place est celle de toute la démo, binaire du moteur compris. Comme pour les captures,
+elle rafraîchit `demo/fixtures/hub-embed.json` au passage : restaurez ce fichier ensuite, sauf si la
+capture était voulue.
 
 ## Ce que global-setup doit monter d'abord
 
