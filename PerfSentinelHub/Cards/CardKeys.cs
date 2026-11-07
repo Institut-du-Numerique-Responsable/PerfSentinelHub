@@ -161,14 +161,15 @@ public sealed partial class CardKeys(
         }
     }
 
-    private static async Task<EngineResult> KeygenAsync(string binary, string outDirectory, string workingDirectory,
+    private async Task<EngineResult> KeygenAsync(string binary, string outDirectory, string workingDirectory,
         CancellationToken cancellationToken)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(KeygenTimeout);
         try
         {
-            return await EngineProcess.RunAsync(binary, ["card", "keygen", "--out-dir", outDirectory],
+            return await EngineProcess.RunAsync(
+                binary, [.. engine.MemoryLimitArguments, "card", "keygen", "--out-dir", outDirectory],
                 MaxLineBytes, workingDirectory, deadline.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

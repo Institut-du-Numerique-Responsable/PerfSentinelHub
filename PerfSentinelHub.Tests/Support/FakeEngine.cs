@@ -102,6 +102,9 @@ internal sealed record FakeEngine
     ///     <c>card-args.txt</c>, copies its <c>--input</c> to <c>card-input.json</c> and its
     ///     <c>--signing-key</c> to <c>card-key-seen.pk8</c> there, and refuses a missing <c>--out-dir</c>
     ///     as the engine does. <c>verify-card</c> appends its arguments to <c>verify-args.txt</c>.
+    ///     A leading <c>--memory-limit-mib N</c>, the engine's global flag, is consumed first and
+    ///     appends <c>N</c> to <c>memory-limit.txt</c> there. The batch file shifts it but <c>%*</c>
+    ///     still holds it, so on Windows the args files keep that prefix.
     /// </summary>
     public string WriteTo(string path)
     {
@@ -155,6 +158,7 @@ internal sealed record FakeEngine
         return $"""
                 #!/bin/sh
                 P={Quote(path)}
+                if [ "$1" = "--memory-limit-mib" ]; then echo "$2" >> memory-limit.txt; shift 2; fi
                 {version}
                 if [ "$1" = "report" ] && [ "$2" = "--help" ]; then cat "$P.help"; exit {HelpExitCode}; fi
                 if [ "$1" = "card" ] && [ "$3" = "--help" ]; then exit {(Card ? 0 : 2)}; fi
@@ -236,6 +240,7 @@ internal sealed record FakeEngine
         return $"""
                 @echo off
                 set "P={path}"
+                if "%~1"=="--memory-limit-mib" (>>memory-limit.txt echo %~2& shift& shift)
                 {version}
                 if "%~1"=="report" if "%~2"=="--help" (type "%P%.help" & exit /b {HelpExitCode})
                 if "%~1"=="card" if "%~3"=="--help" exit /b {(Card ? 0 : 2)}

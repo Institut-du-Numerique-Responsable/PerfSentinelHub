@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
@@ -137,7 +138,48 @@ public sealed class EngineProbeTests : IDisposable
         Assert.Null(probe.Version);
     }
 
-    private EngineProbe Probe(string? binaryPath)
+    [Fact]
+    public async Task A_cap_is_handed_to_an_engine_that_reads_it()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.2" }), 448, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(probe.MemoryLimitApplies);
+        Assert.Equal(["--memory-limit-mib", "448"], probe.MemoryLimitArguments);
+        Assert.Empty(logger.Warnings);
+    }
+
+    [Fact]
+    public async Task A_cap_an_older_engine_would_refuse_is_withheld_and_said_so()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.1" }), 448, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(probe.MemoryLimitApplies);
+        Assert.Empty(probe.MemoryLimitArguments);
+        var warning = Assert.Single(logger.Warnings);
+        Assert.Contains("448", warning, StringComparison.Ordinal);
+        Assert.Contains("0.43.1", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task No_cap_means_no_argument_and_no_warning()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.1" }), 0, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(probe.MemoryLimitApplies);
+        Assert.Empty(probe.MemoryLimitArguments);
+        Assert.Empty(logger.Warnings);
+    }
+
+    private EngineProbe Probe(string? binaryPath, int memoryLimitMiB = 0, ILogger<EngineProbe>? logger = null)
     {
         return new EngineProbe(
             Options.Create(new HubOptions
@@ -145,12 +187,13 @@ public sealed class EngineProbeTests : IDisposable
                 Analysis = new AnalysisOptions
                 {
                     EngineBinaryPath = binaryPath,
+                    EngineMemoryLimitMiB = memoryLimitMiB,
                     // The probe runs from the report directory, so the test must
                     // name one it owns rather than inherit the /data default.
                     ReportDirectory = _workspace
                 }
             }),
-            NullLogger<EngineProbe>.Instance);
+            logger ?? NullLogger<EngineProbe>.Instance);
     }
 
     private string WriteEngine(FakeEngine engine)

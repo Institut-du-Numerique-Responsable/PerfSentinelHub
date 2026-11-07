@@ -38,6 +38,9 @@ public sealed class AnalysisLauncherApiTests(HubApplicationFactory factory)
         Assert.Equal(64, limits.GetProperty("fetch_concurrency_max").GetInt32());
         // No engine binary, so no version to read the flag from.
         Assert.False(limits.GetProperty("fetch_concurrency_supported").GetBoolean());
+        // Off by default, and no engine to read the flag from.
+        Assert.Equal(0, limits.GetProperty("engine_memory_limit_mib").GetInt32());
+        Assert.False(limits.GetProperty("engine_memory_limit_supported").GetBoolean());
     }
 
     [Fact]

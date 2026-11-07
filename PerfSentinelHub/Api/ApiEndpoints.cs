@@ -90,7 +90,9 @@ public static partial class ApiEndpoints
                     hubOptions.Value.MaxReadLimit,
                     analysis.FetchConcurrencyWarn,
                     analysis.FetchConcurrencyMax,
-                    DetectionOverrides.ReadsFetchConcurrency(engine.Version)),
+                    DetectionOverrides.ReadsFetchConcurrency(engine.Version),
+                    analysis.EngineMemoryLimitMiB,
+                    DetectionOverrides.ReadsMemoryLimit(engine.Version)),
                 [.. DetectionOverrides.SchemaFor(engine.Version)],
                 hubOptions.Value.Disclosures.Enabled &&
                 !access.Scope(request.HttpContext, AccessPermissions.DisclosuresRead).IsNothing

@@ -45,7 +45,8 @@ public sealed class DisclosureRenderer(EngineProbe engine, IOptions<HubOptions> 
             try
             {
                 result = await EngineProcess.RunAsync(
-                    binary, arguments, MaxReasonLineBytes, analysis.ReportDirectory, deadline.Token);
+                    binary, [.. engine.MemoryLimitArguments, .. arguments], MaxReasonLineBytes,
+                    analysis.ReportDirectory, deadline.Token);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {

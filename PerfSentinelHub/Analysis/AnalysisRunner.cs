@@ -149,7 +149,8 @@ public sealed partial class AnalysisRunner(
     {
         var result = await EngineProcess.RunAsync(
             _analysis.EngineBinaryPath!,
-            request.ToEngineArguments(source, configPath),
+            // A global flag, so ahead of the subcommand.
+            [.. engine.MemoryLimitArguments, .. request.ToEngineArguments(source, configPath)],
             MaxReportJsonBytes,
             _analysis.ReportDirectory,
             cancellationToken,
@@ -266,7 +267,7 @@ public sealed partial class AnalysisRunner(
         try
         {
             await File.WriteAllBytesAsync(inputPath, reportJson, cancellationToken);
-            var arguments = new List<string>
+            var arguments = new List<string>(engine.MemoryLimitArguments)
             {
                 "report", "--input", inputPath, "--output", ReportPath(runId),
                 // Always passed. The flag opts the sink out of size targeting,

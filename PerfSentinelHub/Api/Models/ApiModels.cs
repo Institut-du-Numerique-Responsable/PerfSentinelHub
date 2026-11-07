@@ -46,7 +46,11 @@ public sealed record StatusLimits(
     int MaxReadLimit,
     int FetchConcurrencyWarn,
     int FetchConcurrencyMax,
-    bool FetchConcurrencySupported);
+    bool FetchConcurrencySupported,
+    // Named: the snake_case policy would split the unit into `mi_b`.
+    [property: JsonPropertyName("engine_memory_limit_mib")]
+    int EngineMemoryLimitMiB,
+    bool EngineMemoryLimitSupported);
 
 /// <summary>
 ///     One detection threshold a run may override. `Kind` is `integer`, `decimal`

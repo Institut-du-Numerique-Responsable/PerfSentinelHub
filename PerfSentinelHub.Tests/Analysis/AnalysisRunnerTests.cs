@@ -122,6 +122,32 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task The_query_and_the_render_run_under_the_configured_cap()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = RunnerOptions(new FakeEngine { Version = "0.43.2", Output = ReportJson }
+            .WriteTo(Path.Combine(_workspace, "perf-sentinel")));
+        options.Value.Analysis.EngineMemoryLimitMiB = 448;
+        var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
+        await probe.StartAsync(cancellationToken);
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(), options),
+            probe,
+            options,
+            NullLogger<AnalysisRunner>.Instance,
+            new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        // The fake appends the cap it was handed on every call, so two lines are the two steps.
+        var seen = await File.ReadAllLinesAsync(
+            Path.Combine(_workspace, "reports", "memory-limit.txt"),
+            cancellationToken);
+        Assert.Equal(["448", "448"], seen);
+    }
+
+    [Fact]
     public void A_daemon_report_goes_live_only_against_a_bare_origin()
     {
         // The engine's --daemon-url takes an origin and nothing else, so a

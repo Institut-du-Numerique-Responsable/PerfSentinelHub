@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
@@ -66,6 +67,22 @@ public sealed partial class EngineProbe(
     /// </summary>
     public bool SupportsCard { get; private set; }
 
+    /// <summary>
+    ///     Whether the configured memory cap reaches the engine: one is set and this binary reads
+    ///     it. An engine before 0.43.2 refuses the flag, so it runs uncapped rather than not at all.
+    /// </summary>
+    public bool MemoryLimitApplies => _analysis.EngineMemoryLimitMiB > 0 &&
+                                      DetectionOverrides.ReadsMemoryLimit(Version);
+
+    /// <summary>
+    ///     The global flag to put before the subcommand of every run, empty when it does not apply.
+    ///     Not for the probe: it runs before the version is known.
+    /// </summary>
+    public string[] MemoryLimitArguments =>
+        MemoryLimitApplies
+            ? ["--memory-limit-mib", _analysis.EngineMemoryLimitMiB.ToString(CultureInfo.InvariantCulture)]
+            : [];
+
     public bool SupportsCardCountry => DetectionOverrides.ParseEngineVersion(Version) is { } engine &&
                                        engine >= CardCountrySince;
 
@@ -106,6 +123,8 @@ public sealed partial class EngineProbe(
             SupportsCard = card.Result.Succeeded;
             if (!SupportsDaemonUrl)
                 LogNoDaemonUrl(logger, path);
+            if (_analysis.EngineMemoryLimitMiB > 0 && !MemoryLimitApplies)
+                LogMemoryLimitIgnored(logger, _analysis.EngineMemoryLimitMiB, Version);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -188,4 +207,9 @@ public sealed partial class EngineProbe(
     [LoggerMessage(1405, LogLevel.Information,
         "No --daemon-url in `report --help` from {Path}, so daemon reports render static.")]
     private static partial void LogNoDaemonUrl(ILogger logger, string path);
+
+    [LoggerMessage(1406, LogLevel.Warning,
+        "Hub:Analysis:EngineMemoryLimitMiB is {LimitMib} MiB but --memory-limit-mib needs engine 0.43.2 or later, "
+        + "and the version read from the binary is '{Version}', so engine runs are not capped.")]
+    private static partial void LogMemoryLimitIgnored(ILogger logger, int limitMib, string? version);
 }

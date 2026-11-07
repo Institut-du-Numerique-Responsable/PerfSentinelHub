@@ -122,6 +122,8 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
         if (analysis.MinFreeMemoryMiB is < 0 or > 65_536)
             errors.Add("Hub:Analysis:MinFreeMemoryMiB must be between 0 and 65536, 0 turning the check off.");
+        if (analysis.EngineMemoryLimitMiB is not 0 and (< 64 or > 1_048_576))
+            errors.Add("Hub:Analysis:EngineMemoryLimitMiB must be 0, or between 64 and 1048576.");
         if (analysis.ReportRetention <= TimeSpan.Zero)
             errors.Add("Hub:Analysis:ReportRetention must be positive.");
         if (analysis.RunRetention <= analysis.ReportRetention)

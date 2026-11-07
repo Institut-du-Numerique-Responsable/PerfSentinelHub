@@ -73,6 +73,9 @@ public sealed record DetectionOverrides
     // The engine minor that first read `tempo --fetch-concurrency`.
     internal static readonly Version FetchConcurrencySince = new(0, 43, 0);
 
+    // The engine patch that first took the global `--memory-limit-mib`.
+    internal static readonly Version MemoryLimitSince = new(0, 43, 2);
+
     // A named array rather than either inline form: `Split('-', '+')` reads as a
     // partial match for `Split(char, int)`, and `Split(['-', '+'])` allocates on
     // every call for a separator set that never changes.
@@ -107,6 +110,15 @@ public sealed record DetectionOverrides
     public static bool ReadsFetchConcurrency(string? engineVersion)
     {
         return Reads(ParseEngineVersion(engineVersion), FetchConcurrencySince);
+    }
+
+    /// <summary>
+    ///     Whether an engine of that version takes the global `--memory-limit-mib`. An older one
+    ///     refuses the flag outright, so a version the probe could not read promises nothing.
+    /// </summary>
+    public static bool ReadsMemoryLimit(string? engineVersion)
+    {
+        return Reads(ParseEngineVersion(engineVersion), MemoryLimitSince);
     }
 
     private static (DetectionKnob, Version?)[] BuildAll()

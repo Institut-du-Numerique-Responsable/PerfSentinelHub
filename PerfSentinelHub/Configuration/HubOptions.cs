@@ -401,6 +401,12 @@ public sealed record AnalysisOptions
     // hub_memory_low instead of getting the whole Hub OOM-killed. 0 turns it off.
     public int MinFreeMemoryMiB { get; set; } = 256;
 
+    // The address space, in MiB, each engine run may take, handed to the engine as its
+    // global --memory-limit-mib (0.43.2 and later, Linux): an allocation past it fails
+    // that one run with engine_out_of_memory instead of the kernel killing the engine,
+    // or the Hub with it. 0, the default, passes nothing.
+    public int EngineMemoryLimitMiB { get; set; } = 0;
+
     public TimeSpan ReportRetention { get; set; } = TimeSpan.FromHours(24);
 
     // How long a finished run's row survives. Far longer than ReportRetention on

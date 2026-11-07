@@ -128,8 +128,8 @@ public sealed class CardRenderer(EngineProbe engine, IOptions<HubOptions> option
         deadline.CancelAfter(timeout);
         try
         {
-            return await EngineProcess.RunAsync(binary, arguments, MaxLineBytes, options.Value.Analysis.ReportDirectory,
-                deadline.Token);
+            return await EngineProcess.RunAsync(binary, [.. engine.MemoryLimitArguments, .. arguments], MaxLineBytes,
+                options.Value.Analysis.ReportDirectory, deadline.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
