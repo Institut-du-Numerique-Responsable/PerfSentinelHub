@@ -14,6 +14,9 @@
     const GAP = 18;
     const EDGE = 16;
     const SHELL = ['.shell-topbar', '#main', '.shell-footer'];
+    // Live lists, made once: placeMarks runs on every scroll frame.
+    const NARROW = matchMedia('(max-width: 760px)');
+    const STILL = matchMedia('(prefers-reduced-motion: reduce)');
 
     /** @type {{source: () => import('../types').GuideSource, status: string, id: string | null, at: number,
      *  steps: import('../types').GuideStep[], all: import('../types').GuideStep[], frame: number, from: number,
@@ -38,9 +41,20 @@
         return made;
     }
 
+    /**
+     * The elements found so far: a render detaches the old ones, which is when they are looked up again.
+     * @type {Map<string, Element>}
+     */
+    const cache = new Map();
+
     /** @param {string} name */
     function anchor(name) {
-        return document.querySelector('[data-guide="' + name + '"]');
+        const kept = cache.get(name);
+        if (kept && kept.isConnected) return kept;
+        const node = document.querySelector('[data-guide="' + name + '"]');
+        if (node) cache.set(name, node);
+        else cache.delete(name);
+        return node;
     }
 
     /**
@@ -52,7 +66,7 @@
     }
 
     function reducedMotion() {
-        return matchMedia('(prefers-reduced-motion: reduce)').matches;
+        return STILL.matches;
     }
 
     function build() {
@@ -254,7 +268,7 @@
      * @param {{left: number}} rect
      */
     function placeMarks(rect) {
-        const narrow = matchMedia('(max-width: 760px)').matches;
+        const narrow = NARROW.matches;
         let number = 0;
         (open.steps[open.at].marks || []).forEach(function (mark) {
             const found = anchor(mark.anchor);
@@ -274,13 +288,19 @@
         if (open && !open.frame) open.frame = requestAnimationFrame(place);
     }
 
-    /** Brings the step's elements into view, leaving room for the card under them. */
+    /** How far down the window a sticky top bar reaches: it paints over the page, so over the cutout too. */
+    function covered() {
+        const bar = document.querySelector('.shell-topbar');
+        return bar && getComputedStyle(bar).position === 'sticky' ? bar.getBoundingClientRect().bottom : 0;
+    }
+
+    /** Brings the step's elements into view, under the top bar and leaving room for the card under them. */
     function reveal() {
         const rect = box();
         if (!rect) return;
         const room = global.innerHeight - (rect.bottom - rect.top) - dom.card.offsetHeight - GAP;
         global.scrollTo({
-            top: global.scrollY + rect.top - Math.max(90, room / 2),
+            top: global.scrollY + rect.top - Math.max(90, covered() + 30, room / 2),
             behavior: reducedMotion() ? 'auto' : 'smooth'
         });
     }

@@ -3024,7 +3024,13 @@ const SAYS = {
 
 /** Each guide test runs in both languages, with the phrases that language says. */
 function guideTest(name, body) {
-    for (const lang of ["fr", "en"]) test(name + " (" + lang + ")", () => inLang(lang, () => body(SAYS[lang])));
+    for (const lang of ["fr", "en"]) {
+        test(name + " (" + lang + ")", () => {
+            inLang(lang, () => body(SAYS[lang]));
+            // The run leaves no language behind it, so the next test starts in English as it expects.
+            assert.equal(PSL.lang(), "en");
+        });
+    }
 }
 
 test("the guide offers pilotage only on the pilotage recap", () => {
