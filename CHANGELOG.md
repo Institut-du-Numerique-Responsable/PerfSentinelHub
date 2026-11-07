@@ -51,7 +51,8 @@ All notable changes to PerfSentinelHub are recorded here.
   start.
 - The Helm chart sets `DOTNET_GCHeapHardLimit` from `hub.gcHeapLimitMiB` (832) and passes
   `hub.analysis.engineMemoryLimitMiB` (448). A release upgraded with `--reuse-values` over values
-  that lack them renders neither, and the Hub keeps its uncapped defaults.
+  that lack them renders neither: the engine then runs uncapped, and the Hub's heap takes the
+  runtime's default, 75% of the container limit.
 
 ### Changed
 
@@ -83,9 +84,10 @@ All notable changes to PerfSentinelHub are recorded here.
   line that quotes an HTTP status no longer decides the code. The last 4,096 characters of its
   stderr go to the Hub's log with the exit code and the code chosen, for the query and the render
   alike; no response and no screen carries them.
-- The Helm chart's `resources.limits.memory` goes from 1Gi to 2Gi, so each pod asks for 1 GiB
+- The Helm chart's `resources.limits.memory` goes from 1Gi to 2Gi, so each pod may use up to 1 GiB
   more: 832 MiB of heap, two runs at 448 MiB and 256 MiB of margin, from measurements in
-  docs/OPERATIONS.md.
+  docs/OPERATIONS.md. `requests.memory` stays 64Mi, but a LimitRange or a ResourceQuota on memory
+  limits may now reject the pod.
 
 ### Fixed
 

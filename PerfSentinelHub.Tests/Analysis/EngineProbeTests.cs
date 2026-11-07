@@ -9,8 +9,6 @@ namespace PerfSentinelHub.Tests.Analysis;
 // The probe runs a real subprocess, a FakeEngine script.
 public sealed class EngineProbeTests : IDisposable
 {
-    private const string HeapHardLimitVariable = "DOTNET_GCHeapHardLimit";
-
     private readonly string _workspace = Path.Combine(
         Path.GetTempPath(),
         $"perf-sentinel-hub-probe-{Guid.NewGuid():N}");
@@ -185,8 +183,8 @@ public sealed class EngineProbeTests : IDisposable
     // 384 MiB of heap and two runs of 448 MiB: 1,280 MiB, over a 1 GiB limit and under 1.5 GiB.
     [InlineData("18000000", "1073741824", true)]
     [InlineData("18000000", "1610612736", false)]
-    // Without a heap cap the Hub's share is unknown, so no sum is made. The NativeAOT
-    // runtime ignores a 0x prefix, so that value caps nothing either.
+    // Without the variable the runtime takes its default heap, 75% of the limit, which the
+    // probe does not sum. The NativeAOT runtime ignores a 0x prefix, so that value counts as none.
     [InlineData(null, "1073741824", false)]
     [InlineData("0x18000000", "1073741824", false)]
     public async Task A_memory_budget_over_the_container_limit_is_said_at_startup(
@@ -201,18 +199,14 @@ public sealed class EngineProbeTests : IDisposable
             Path.Combine(cgroup, "memory.max"),
             memoryMax + "\n",
             TestContext.Current.CancellationToken);
-        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.2" }), 448, logger, new CgroupMemory(cgroup));
+        var probe = Probe(
+            WriteEngine(new FakeEngine { Version = "0.43.2" }),
+            448,
+            logger,
+            new CgroupMemory(cgroup),
+            name => name == "DOTNET_GCHeapHardLimit" ? heapHardLimit : null);
 
-        // Process-wide, so set only around the probe, which reads it once at startup.
-        Environment.SetEnvironmentVariable(HeapHardLimitVariable, heapHardLimit);
-        try
-        {
-            await probe.StartAsync(TestContext.Current.CancellationToken);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(HeapHardLimitVariable, null);
-        }
+        await probe.StartAsync(TestContext.Current.CancellationToken);
 
         if (!warns)
         {
@@ -230,7 +224,8 @@ public sealed class EngineProbeTests : IDisposable
         string? binaryPath,
         int memoryLimitMiB = 0,
         ILogger<EngineProbe>? logger = null,
-        CgroupMemory? memory = null)
+        CgroupMemory? memory = null,
+        Func<string, string?>? environment = null)
     {
         return new EngineProbe(
             Options.Create(new HubOptions
@@ -246,7 +241,8 @@ public sealed class EngineProbeTests : IDisposable
             }),
             logger ?? NullLogger<EngineProbe>.Instance,
             // The host's own cgroup must not decide a test, so none unless one is given.
-            memory ?? new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
+            memory ?? new CgroupMemory(Path.Combine(_workspace, "no-cgroup")),
+            environment);
     }
 
     private string WriteEngine(FakeEngine engine)

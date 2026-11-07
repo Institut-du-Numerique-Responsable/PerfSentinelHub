@@ -14,7 +14,8 @@ namespace PerfSentinelHub.Analysis;
 public sealed partial class EngineProbe(
     IOptions<HubOptions> options,
     ILogger<EngineProbe> logger,
-    CgroupMemory? memory = null) : IHostedService
+    CgroupMemory? memory = null,
+    Func<string, string?>? environment = null) : IHostedService
 {
     // A `--version` line is a dozen bytes. Anything beyond this is not one,
     // and reading to the end would let a wrong binary size the buffer.
@@ -161,11 +162,11 @@ public sealed partial class EngineProbe(
     }
 
     // Bare hexadecimal digits, the way the NativeAOT runtime reads it: it ignores a value with a
-    // 0x prefix (measured on the image), so such a value caps nothing and is no heap here either.
-    private static long? HeapHardLimitBytes()
+    // 0x prefix (measured on the image) and takes its default, 75% of the limit, not summed here.
+    private long? HeapHardLimitBytes()
     {
         return long.TryParse(
-                   Environment.GetEnvironmentVariable("DOTNET_GCHeapHardLimit"),
+                   (environment ?? Environment.GetEnvironmentVariable)("DOTNET_GCHeapHardLimit"),
                    NumberStyles.AllowHexSpecifier,
                    CultureInfo.InvariantCulture,
                    out var bytes) && bytes > 0

@@ -105,11 +105,16 @@ Deux plafonds font échouer un tel run seul :
   antérieur à 0.43.2 ne lit pas l'option : il tourne alors sans plafond, et le Hub
   le dit une fois au démarrage.
 - **Celui du Hub.** Le chart pose `DOTNET_GCHeapHardLimit` depuis `hub.gcHeapLimitMiB`
-  (832 par défaut, null laisse le tas sans plafond). Au-delà, une allocation du Hub
+  (832 par défaut). Au-delà, une allocation du Hub
   lève une exception au lieu de grossir, et un run dont le rapport ne tient pas
   échoue en `hub_memory_low`. Si vous posez la variable vous-même, écrivez des
   chiffres hexadécimaux nus, `34000000` pour 832 Mio : le runtime NativeAOT ignore
-  une valeur préfixée par `0x`, et le tas n'a alors aucun plafond.
+  une valeur préfixée par `0x`, et le tas prend alors le défaut du runtime.
+
+Sans la variable (null dans le chart, ou une valeur en `0x`), le runtime plafonne
+quand même le tas, à son défaut de 75 % de la limite du conteneur : 768 Mio sous
+1 Gio, 1 536 Mio sous 2 Gio, relevé sur l'image. Ce défaut ne laisse pas de place au
+moteur : 0,75 x L + 2 x 448 Mio dépasse L pour toute limite sous 3 584 Mio.
 
 La limite doit tenir la somme : le tas, `Workers` runs au plafond du moteur, et
 `Hub:Analysis:MinFreeMemoryMiB` de marge. Les défauts du chart donnent
@@ -118,7 +123,8 @@ La limite doit tenir la somme : le tas, `Workers` runs au plafond du moteur, et
 dépassent, il écrit un avertissement (événement 1407) avec les quatre nombres. Il
 démarre quand même : la collecte et l'API de lecture ne dépendent pas d'une
 analyse. Sans `DOTNET_GCHeapHardLimit`, sans plafond du moteur appliqué ou sans
-limite du conteneur, aucune somme n'est faite.
+limite du conteneur, aucune somme n'est faite : le tas par défaut du runtime n'est
+pas additionné.
 
 Ce dont le moteur a besoin, mesuré sur le binaire 0.43.2 arm64 face à un Tempo
 factice aux traces synthétiques, 16 lectures à la fois. Un plafond de la colonne
@@ -138,17 +144,17 @@ Entre les deux colonnes, l'issue change d'un run à l'autre. À 448 Mio, un run 
 Ce dont le Hub a besoin, mesuré sur son image arm64 avec un moteur de substitution
 qui imprime un rapport, deux runs à la fois, dans un conteneur limité à 1 536 Mio :
 
-| Plafond du tas | Deux rapports de 49 Mio      | Deux rapports de 97 Mio        |
-|----------------|------------------------------|--------------------------------|
-| aucun          | pic à 962 Mio, tous passés   | pic à 1 085 Mio, tous passés   |
-| 384 Mio        | 5 échecs sur 10              |                                |
-| 640 Mio        | 1 échec sur 10               |                                |
-| 704 Mio        | 3 échecs sur 20              | 3 échecs sur 6                 |
-| 768 Mio        | 2 échecs sur 20              |                                |
-| 832 Mio        | aucun échec sur 20           | 4 échecs sur 10                |
+| Plafond du tas                   | Deux rapports de 49 Mio      | Deux rapports de 97 Mio        |
+|----------------------------------|------------------------------|--------------------------------|
+| défaut du runtime, 1 152 Mio     | pic à 962 Mio, tous passés   | pic à 1 085 Mio, tous passés   |
+| 384 Mio                          | 5 échecs sur 10              |                                |
+| 640 Mio                          | 1 échec sur 10               |                                |
+| 704 Mio                          | 3 échecs sur 20              | 3 échecs sur 6                 |
+| 768 Mio                          | 2 échecs sur 20              |                                |
+| 832 Mio                          | aucun échec sur 20           | 4 échecs sur 10                |
 
-Un pic est le `memory.current` du conteneur, lu toutes les 100 ms. Sans plafond, le
-runtime garde ce qu'il a alloué, donc le pic monte d'une paire de runs à la
+Un pic est le `memory.current` du conteneur, lu toutes les 100 ms. Sous le défaut,
+le runtime garde ce qu'il a alloué, donc le pic monte d'une paire de runs à la
 suivante : 556 Mio après la première paire de rapports de 49 Mio. Le Hub garde un
 rapport en plusieurs exemplaires pendant qu'il le lit (son tampon de lecture, la
 copie qu'il conserve, l'index du parseur), donc un run d'un rapport de 49 Mio prend

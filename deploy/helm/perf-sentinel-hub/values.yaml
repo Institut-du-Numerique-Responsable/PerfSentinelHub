@@ -23,8 +23,9 @@ hub:
   metricsPort: null
   # The Hub's own heap, in MiB, set as DOTNET_GCHeapHardLimit. Past it a run whose
   # report does not fit fails with hub_memory_low instead of getting the container
-  # OOM-killed. Two runs of a 49 MiB report need 832, measured. Null leaves the heap
-  # uncapped. See docs/OPERATIONS.md, Memory.
+  # OOM-killed. Two runs of a 49 MiB report need 832, measured. Null leaves the
+  # runtime's default, 75% of the container limit, which with two engine runs passes
+  # the limit below 3,584 MiB. See docs/OPERATIONS.md, Memory.
   gcHeapLimitMiB: 832
   analysis:
     # The engine ships in the image. Set to null to run the Hub as a
