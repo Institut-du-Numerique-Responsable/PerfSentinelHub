@@ -307,6 +307,16 @@ test("the two engine codes have a sentence in both languages", () => {
     inLang("fr", () => assert.match(PSL.ERRORS.fetches_failed, /lectures simultanées/));
 });
 
+test("a failed run's card renders the backticked setting names of its sentence as code", () => {
+    // proseInto leaves an odd number of backticks as plain text, so each sentence must carry an even number.
+    for (const lang of ["en", "fr"]) {
+        for (const [key, value] of Object.entries(TEXT[lang])) {
+            if (key.startsWith("error.run.")) assert.equal(value.split("`").length % 2, 1, lang + " " + key);
+        }
+    }
+    assert.match(wwwrootFile("app.js"), /proseInto\(el\('p', \{class: 'outcome-body'\}\), spec\.body\)/);
+});
+
 test("a failed run names the cap it reached, or a question mark when the Hub did not say", () => {
     assert.match(PSL.runFailureMeaning("engine_out_of_memory", 1024), /1024 MiB cap/);
     inLang("fr", () => assert.match(PSL.runFailureMeaning("engine_out_of_memory", 1024), /plafond de 1024 Mio/));

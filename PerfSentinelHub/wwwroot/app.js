@@ -4900,7 +4900,7 @@
         const spec = outcomeSpec(run, key);
         const panel = el('section', {class: 'outcome', 'data-tone': spec.tone}, [
             el('h2', {class: 'overline overline-p', text: '// ' + spec.title}),
-            el('p', {class: 'outcome-body', text: spec.body})
+            proseInto(el('p', {class: 'outcome-body'}), spec.body)
         ]);
         if (spec.counts) panel.appendChild(countStrip(spec.counts, {toned: true, filled: 1}));
         (spec.warnings || []).forEach(function (/** @type {{kind: string, message: string}} */ warning) {

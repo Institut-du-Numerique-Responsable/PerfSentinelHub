@@ -272,8 +272,9 @@ Report size is not a knob. The sink's 5 MiB target is a private constant with no
 flag, no environment variable and no config key. When it drops findings to fit,
 the run records how many survived, read back from the rendered file.
 
-The eight failure codes come from a heuristic on a bounded set of markers in the
-engine's stderr, not from a contract. Raw stderr never leaves the process.
+The eleven failure codes come from a heuristic on a bounded set of markers in the
+engine's stderr, not from a contract. Raw stderr is never returned, but the last
+4096 characters of a failed run's go to the Hub's log.
 
 Counts from runs with different detection thresholds are not comparable. Raising
 a threshold does not make a run lighter, it stops the detector from reporting

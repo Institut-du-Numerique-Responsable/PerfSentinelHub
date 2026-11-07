@@ -298,9 +298,10 @@ constante privée, sans option, sans variable d'environnement et sans clé de
 configuration. Quand il écarte des findings pour tenir, le run enregistre
 combien ont survécu, relu depuis le fichier rendu.
 
-Les huit codes d'échec viennent d'une heuristique sur un jeu borné de marqueurs
-dans la sortie d'erreur du moteur, pas d'un contrat. La sortie d'erreur brute ne
-quitte jamais le processus.
+Les onze codes d'échec viennent d'une heuristique sur un jeu borné de marqueurs
+dans la sortie d'erreur du moteur, pas d'un contrat. La sortie d'erreur brute n'est
+jamais renvoyée, mais les 4096 derniers caractères de celle d'un run en échec vont
+dans le journal du Hub.
 
 Les comptes de runs aux seuils de détection différents ne sont pas comparables.
 Relever un seuil n'allège pas un run, il empêche le détecteur de rapporter les
