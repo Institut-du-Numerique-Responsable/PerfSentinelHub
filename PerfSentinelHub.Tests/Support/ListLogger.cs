@@ -4,15 +4,26 @@ namespace PerfSentinelHub.Tests.Support;
 
 internal sealed class ListLogger<T> : ILogger<T>
 {
-    private readonly List<string> _messages = [];
+    private readonly List<(LogLevel Level, string Message)> _entries = [];
 
     public IReadOnlyList<string> Messages
     {
         get
         {
-            lock (_messages)
+            lock (_entries)
             {
-                return [.. _messages];
+                return [.. _entries.Select(entry => entry.Message)];
+            }
+        }
+    }
+
+    public IReadOnlyList<string> Warnings
+    {
+        get
+        {
+            lock (_entries)
+            {
+                return [.. _entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message)];
             }
         }
     }
@@ -34,9 +45,9 @@ internal sealed class ListLogger<T> : ILogger<T>
         Exception? exception,
         Func<TState, Exception?, string> formatter)
     {
-        lock (_messages)
+        lock (_entries)
         {
-            _messages.Add(formatter(state, exception));
+            _entries.Add((logLevel, formatter(state, exception)));
         }
     }
 }

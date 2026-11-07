@@ -50,6 +50,9 @@ internal sealed record FakeEngine
     /// <summary>A <c>report</c> argument that makes the render exit 75, as a failed scrape does.</summary>
     public string? RenderFailsOn { get; init; }
 
+    /// <summary>What a render stopped by <see cref="RenderFailsOn" /> writes on stderr before it exits 75.</summary>
+    public string RenderError { get; init; } = "";
+
     /// <summary>Whether <c>disclose-pdf</c> exists: its <c>--help</c> exits 0, or 2 as clap does for an unknown one.</summary>
     public bool DisclosePdf { get; init; }
 
@@ -107,6 +110,7 @@ internal sealed record FakeEngine
         File.WriteAllText($"{path}.help", Help);
         File.WriteAllText($"{path}.out", Output);
         File.WriteAllText($"{path}.err", Error);
+        File.WriteAllText($"{path}.rendererr", RenderError);
         File.WriteAllText($"{path}.html", "<html>report</html>");
         File.WriteAllText($"{path}.disclose", DisclosePdfOutput);
         File.WriteAllText($"{path}.pdf", "%PDF-1.7 fake");
@@ -204,7 +208,7 @@ internal sealed record FakeEngine
                 if [ "$1" = "report" ]; then
                   echo "$@" >> render-args.txt
                   printf '%s' "$PERF_SENTINEL_PGSTAT_AUTH_HEADER" > render-env.txt
-                  {(RenderFailsOn is null ? "" : $"case \" $* \" in *\" {RenderFailsOn} \"*) exit 75;; esac")}
+                  {(RenderFailsOn is null ? "" : $"case \" $* \" in *\" {RenderFailsOn} \"*) cat \"$P.rendererr\" >&2; exit 75;; esac")}
                   while [ $# -gt 0 ]; do
                     if [ "$1" = "--output" ]; then shift; cat "$P.html" > "$1"; fi
                     shift
@@ -242,7 +246,7 @@ internal sealed record FakeEngine
                 if not "%~1"=="report" goto query
                 >>render-args.txt echo %*
                 >render-env.txt echo(%PERF_SENTINEL_PGSTAT_AUTH_HEADER%
-                {(RenderFailsOn is null ? "" : $"echo %* | find \"{RenderFailsOn}\" >nul && exit /b 75")}
+                {(RenderFailsOn is null ? "" : $"echo %* | find \"{RenderFailsOn}\" >nul && (type \"%P%.rendererr\" 1>&2 & exit /b 75)")}
                 :next
                 if "%~1"=="" exit /b 0
                 if "%~1"=="--output" copy /y "%P%.html" "%~2" >nul

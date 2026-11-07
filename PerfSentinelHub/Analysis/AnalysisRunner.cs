@@ -75,7 +75,7 @@ public sealed partial class AnalysisRunner(
         {
             var reportJson = source.Kind == SourceKinds.Daemon
                 ? await daemonClient.FetchReportSnapshotAsync(source, _analysis.Timeout, timeout.Token)
-                : await QueryBackendAsync(request, source, configPath, timeout.Token);
+                : await QueryBackendAsync(run.Id, request, source, configPath, timeout.Token);
             if (reportJson is null)
                 return Failed(AnalysisErrorCodes.BinaryFailed);
 
@@ -84,10 +84,12 @@ public sealed partial class AnalysisRunner(
                 return Failed(AnalysisErrorCodes.HubMemoryLow);
 
             var summary = ReportSummary.TryParse(reportJson, out var binaryVersion);
-            // Short-circuit kept on purpose: output that is not a report must
-            // never reach the renderer.
-            if (summary is null || !await RenderWithDbStatAsync(run.Id, reportJson, configPath, source, timeout.Token))
+            // Checked first on purpose: output that is not a report must never
+            // reach the renderer.
+            if (summary is null)
                 return Failed(AnalysisErrorCodes.BinaryFailed);
+            if (await RenderWithDbStatAsync(run.Id, reportJson, configPath, source, timeout.Token) is { } renderFailure)
+                return Failed(renderFailure);
 
             summary.ReportBytes = RenderedBytes(run.Id);
             return new RunOutcome(AnalysisStatuses.Succeeded, null, binaryVersion, summary);
@@ -135,10 +137,11 @@ public sealed partial class AnalysisRunner(
     }
 
     /// <summary>
-    ///     Returns the engine's report JSON, or null when the engine refused. The
-    ///     stderr it wrote is used to name an owner and is never returned.
+    ///     Returns the engine's report JSON, or throws when the engine refused. The
+    ///     stderr it wrote names an owner and goes to the log, and is never returned.
     /// </summary>
-    private async Task<byte[]?> QueryBackendAsync(
+    private async Task<byte[]> QueryBackendAsync(
+        string runId,
         AnalysisRequest request,
         SourceOptions source,
         string? configPath,
@@ -158,9 +161,17 @@ public sealed partial class AnalysisRunner(
                     [AnalysisRequest.AuthTokenVariable] =
                         $"{source.AuthHeaderName}: {source.AuthHeaderValue}"
                 });
-        return result.Succeeded
-            ? result.StandardOutput
-            : throw new EngineFailedException(ClassifyEngineFailure(result.StandardError));
+        if (result.Succeeded)
+            return result.StandardOutput;
+
+        var errorCode = EngineFailure.Classify(result.StandardError);
+        LogQueryFailed(
+            logger,
+            runId,
+            result.ExitCode,
+            errorCode,
+            result.StandardError.Length == 0 ? "(empty)" : result.StandardError);
+        throw new EngineFailedException(errorCode);
     }
 
     /// <summary>
@@ -199,7 +210,8 @@ public sealed partial class AnalysisRunner(
 
     // The engine fails a whole render on a scrape it cannot make, so a Prometheus that
     // is down or a selector it refuses costs the tab, and not the report, on a second try.
-    private async Task<bool> RenderWithDbStatAsync(
+    // Null when a render went through, otherwise the code of the last one tried.
+    private async Task<string?> RenderWithDbStatAsync(
         string runId,
         byte[] reportJson,
         string? configPath,
@@ -213,10 +225,10 @@ public sealed partial class AnalysisRunner(
             .. DbStatArguments("pg-stat", source.PgStat, "PERF_SENTINEL_PGSTAT_AUTH_HEADER", environment),
             .. DbStatArguments("mysql-stat", source.MySqlStat, "PERF_SENTINEL_MYSQLSTAT_AUTH_HEADER", environment)
         ];
-        if (await RenderAsync(runId, reportJson, configPath, [.. live, .. dbStat], environment, cancellationToken))
-            return true;
-        if (dbStat.Length == 0)
-            return false;
+        var failure = await RenderAsync(
+            runId, reportJson, configPath, [.. live, .. dbStat], environment, cancellationToken);
+        if (failure is null || dbStat.Length == 0)
+            return failure;
         LogRenderedWithoutDbStat(logger, runId, source.Id);
         return await RenderAsync(runId, reportJson, configPath, live, null, cancellationToken);
     }
@@ -243,7 +255,7 @@ public sealed partial class AnalysisRunner(
         return [.. arguments];
     }
 
-    private async Task<bool> RenderAsync(
+    private async Task<string?> RenderAsync(
         string runId,
         byte[] reportJson,
         string? configPath,
@@ -291,12 +303,14 @@ public sealed partial class AnalysisRunner(
                 _analysis.ReportDirectory,
                 cancellationToken,
                 environment);
+            if (result.Succeeded)
+                return null;
+
             // A refused render is deterministic (bad flag, unreadable input),
             // and its stderr names the cause. Without this line the run is
             // stored as binary_failed with zero diagnostic anywhere.
-            if (!result.Succeeded)
-                LogRenderFailed(logger, runId, result.ExitCode, result.StandardError);
-            return result.Succeeded;
+            LogRenderFailed(logger, runId, result.ExitCode, result.StandardError);
+            return EngineFailure.Classify(result.StandardError);
         }
         finally
         {
@@ -350,39 +364,6 @@ public sealed partial class AnalysisRunner(
         };
     }
 
-    /// <summary>
-    ///     Names an owner from what the engine printed. A heuristic on purpose:
-    ///     the engine has no exit code per failure kind, and "the backend refused
-    ///     us" and "the binary broke" have different owners and different next
-    ///     steps. Anything unrecognised stays <c>binary_failed</c>.
-    /// </summary>
-    private static string ClassifyEngineFailure(string standardError)
-    {
-        if (Contains(standardError, "401") || Contains(standardError, "403") ||
-            Contains(standardError, "unauthorized") || Contains(standardError, "forbidden"))
-            return AnalysisErrorCodes.SourceAuthFailed;
-        // A timed-out query is a window too wide for the engine's own request
-        // deadline, not a backend that is down. Classing it as unreachable sent
-        // the operator to check a healthy backend.
-        if (Contains(standardError, "timed out"))
-            return AnalysisErrorCodes.Timeout;
-        // The engine's own body cap (0.17.0 wording): the launcher's
-        // output_too_large gloss already says exactly the right remedy.
-        if (Contains(standardError, "byte cap perf-sentinel applies"))
-            return AnalysisErrorCodes.OutputTooLarge;
-        if (Contains(standardError, "connection refused") || Contains(standardError, "dns error") ||
-            Contains(standardError, "error sending request"))
-            return AnalysisErrorCodes.SourceUnreachable;
-        return Contains(standardError, "400") || Contains(standardError, "bad request")
-            ? AnalysisErrorCodes.SourceRejectedRequest
-            : AnalysisErrorCodes.BinaryFailed;
-    }
-
-    private static bool Contains(string haystack, string needle)
-    {
-        return haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
-    }
-
     /// <summary>Best effort: false when the file is still there.</summary>
     private static bool TryDelete(string path)
     {
@@ -420,6 +401,13 @@ public sealed partial class AnalysisRunner(
         LogLevel.Warning,
         "Render for run {RunId} failed with the database statistics of source {SourceId}: rendering without them.")]
     private static partial void LogRenderedWithoutDbStat(ILogger logger, string runId, string sourceId);
+
+    [LoggerMessage(
+        1604,
+        LogLevel.Warning,
+        "Query for run {RunId} exited {ExitCode} as {ErrorCode}: {StandardError}")]
+    private static partial void LogQueryFailed(
+        ILogger logger, string runId, int exitCode, string errorCode, string standardError);
 }
 
 internal sealed class EngineFailedException(string errorCode)

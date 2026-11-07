@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
@@ -397,7 +398,9 @@ public sealed class AnalysisRunnerTests : IDisposable
     [Theory]
     [InlineData("error sending request for url: Connection refused", AnalysisErrorCodes.SourceUnreachable)]
     [InlineData("HTTP status 401 Unauthorized", AnalysisErrorCodes.SourceAuthFailed)]
-    [InlineData("backend returned 400 Bad Request", AnalysisErrorCodes.SourceRejectedRequest)]
+    [InlineData("Error: backend returned HTTP 400 for https://tempo/api/search", AnalysisErrorCodes.SourceRejectedRequest)]
+    // A bare 400 is a count in the engine's text, not a status.
+    [InlineData("Error: max_traces=400 is past the cap", AnalysisErrorCodes.BinaryFailed)]
     [InlineData("thread 'main' panicked", AnalysisErrorCodes.BinaryFailed)]
     // A window too wide for the engine's request deadline, not a backend down.
     [InlineData("Error fetching traces from Tempo: request timed out", AnalysisErrorCodes.Timeout)]
@@ -410,6 +413,35 @@ public sealed class AnalysisRunnerTests : IDisposable
         Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
         Assert.Equal(expected, outcome.ErrorCode);
         Assert.Null(outcome.Summary);
+    }
+
+    [Fact]
+    public async Task A_render_killed_by_its_memory_cap_is_named_as_such()
+    {
+        var runner = Runner(new FakeEngine
+        {
+            Output = ReportJson,
+            RenderFailsOn = "--output",
+            RenderError = "memory allocation of 208 bytes failed"
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel")));
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
+        Assert.Equal(AnalysisErrorCodes.EngineOutOfMemory, outcome.ErrorCode);
+    }
+
+    [Fact]
+    public async Task A_failed_query_leaves_its_stderr_in_the_log()
+    {
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, "thread 'main' panicked"), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            logger.Warnings,
+            message => message.Contains("exited 1 as binary_failed: thread 'main' panicked", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -456,7 +488,11 @@ public sealed class AnalysisRunnerTests : IDisposable
         });
     }
 
-    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null, CgroupMemory? memory = null)
+    private AnalysisRunner Runner(
+        string? binaryPath,
+        TimeSpan? timeout = null,
+        CgroupMemory? memory = null,
+        ILogger<AnalysisRunner>? logger = null)
     {
         var options = RunnerOptions(binaryPath, timeout);
         return new AnalysisRunner(
@@ -465,7 +501,7 @@ public sealed class AnalysisRunnerTests : IDisposable
             // ones, where the flag never applies anyway.
             new EngineProbe(options, NullLogger<EngineProbe>.Instance),
             options,
-            NullLogger<AnalysisRunner>.Instance,
+            logger ?? NullLogger<AnalysisRunner>.Instance,
             memory ?? new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
     }
 
