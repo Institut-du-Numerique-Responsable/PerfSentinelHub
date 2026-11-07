@@ -295,11 +295,12 @@ test("the entry shares its row with the theme and language", async ({page}) => {
 });
 
 test("going back leaves the guide and wakes the page", async ({page}) => {
-    await page.goto("/#/sources");
+    // A page without a guide, so the entry stays hidden once the page is back.
+    await page.goto("/#/nowhere");
     await expect(page.locator("#guide-open")).toBeHidden();
     await openGuide(page);
     await page.goBack();
-    await expect(page).toHaveURL(/#\/sources/);
+    await expect(page).toHaveURL(/#\/nowhere/);
     await expect(page.locator("#guide-root")).toBeHidden();
     for (const part of [".shell-topbar", "#main", ".shell-footer"])
         await expect(page.locator(part)).not.toHaveAttribute("inert", "");
@@ -502,12 +503,13 @@ async function walkTitles(page: Page): Promise<string[]> {
     return titles;
 }
 
-test("the entry shows on the analysis screens and not on Sources", async ({page}) => {
-    for (const route of ["/#/new", "/#/recent", `/#/run/${state.succeeded}`, `/#/report/${state.succeeded}`]) {
+test("the entry shows on the analysis and fleet screens, and not on a missing page", async ({page}) => {
+    for (const route of ["/#/new", "/#/recent", `/#/run/${state.succeeded}`, `/#/report/${state.succeeded}`,
+        "/#/sources", "/#/incidents", "/#/correlations"]) {
         await page.goto(route);
         await expect(page.locator("#guide-open"), route).toBeVisible({timeout: 30_000});
     }
-    await page.goto("/#/sources");
+    await page.goto("/#/nowhere");
     await expect(page.locator("#main h1")).toBeVisible();
     await expect(page.locator("#guide-open")).toBeHidden();
 });
@@ -579,4 +581,86 @@ test("the report walk stops at the frame", async ({page}) => {
     await page.keyboard.press("Escape");
     await page.locator("#guide-open").click();
     expect(await walkTitles(page)).toEqual(["You are in the report", "The engine's report", "You can open a report"]);
+});
+
+/** Unfolds the first row of the screen's table and waits for its anchor, before the guide opens. */
+async function unfold(page: Page, route: string, anchor: string): Promise<void> {
+    await page.goto(route);
+    await page.locator(".sources-wrap .row-toggle").first().click();
+    await expect(page.locator(`[data-guide="${anchor}"]`)).toBeVisible({timeout: 30_000});
+}
+
+test("the Sources walk reads the first row and the fleet bar, and no gauges while every row is folded", async ({page}) => {
+    await openOn(page, "/#/sources", '[data-guide="sources.table"]');
+    await goTo(page, "Health");
+    expect(await framed(page, ["sources.health"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    await goTo(page, "A fleet behind");
+    expect(await framed(page, ["shell.skew"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    expect(await walkTitles(page)).toEqual(["Fleet health", "Health", "Last success, unreachable for",
+        "Each source's engine", "A fleet behind", "Env (declared)", "Last error", "A daemon's detail",
+        "You can tell whether the data arrives"]);
+});
+
+test("an unfolded daemon row adds its gauges to the Sources walk", async ({page}) => {
+    await unfold(page, "/#/sources", "sources.gauges");
+    await openHere(page, '[data-guide="sources.gauges"]');
+    await goTo(page, "The daemon right now");
+    expect(await framed(page, ["sources.gauges"])).toBe(true);
+});
+
+test("the Incidents walk asks to unfold a row", async ({page}) => {
+    await openOn(page, "/#/incidents", '[data-guide="incidents.table"]');
+    await goTo(page, "What was already burning");
+    expect(await framed(page, ["incidents.row"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("Unfold a row, then open the guide again");
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    expect(await walkTitles(page)).toEqual(["Incidents the daemons recorded", "Narrow the list", "One row per incident",
+        "Capture", "What was already burning", "When each daemon was read",
+        "You can link an incident to what came before it"]);
+});
+
+test("an incident unfolded before the guide is read, and refolded it is skipped", async ({page}) => {
+    await unfold(page, "/#/incidents", "incidents.panel");
+    await openHere(page, '[data-guide="incidents.panel"]');
+    await goTo(page, "What was already burning");
+    await expect(card(page).locator("#guide-body")).not.toContainText("Unfold a row");
+    await goTo(page, "An unfolded incident");
+    expect(await framed(page, ["incidents.panel"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("\"Analyse this window\"");
+    await page.keyboard.press("Escape");
+    await page.locator(".sources-wrap .row-toggle").first().click();
+    await page.locator("#guide-open").click();
+    expect(await walkTitles(page)).not.toContain("An unfolded incident");
+});
+
+test("the Correlations walk says a pair is no cause, and an unfolded pair reads its episodes", async ({page}) => {
+    await openOn(page, "/#/correlations", '[data-guide="correlations.table"]');
+    expect(await walkTitles(page)).toEqual(["Findings that keep following each other", "A correlation is not a cause",
+        "Narrow the list", "One row per pair", "Unfold a pair", "Where the pairs come from", "You can read a correlation"]);
+    await unfold(page, "/#/correlations", "correlations.panel");
+    await openHere(page, '[data-guide="correlations.panel"]');
+    await goTo(page, "The episodes");
+    expect(await framed(page, ["correlations.panel"])).toBe(true);
+});
+
+test("an incidents read that fell back to an empty copy fails with its own words", async ({page}) => {
+    let stored = 200;
+    await page.route((url) => url.pathname === "/api/incidents/refresh",
+        (route) => route.fulfill({status: 500, json: {error: "demo"}}));
+    await page.route((url) => url.pathname === "/api/incidents",
+        (route) => route.fulfill(stored === 200 ? {json: []} : {status: stored, json: {error: "demo"}}));
+    await openOn(page, "/#/incidents", '.banner[data-tone="warn"]');
+    await expect(title(page)).toHaveText("The daemons were not read just now");
+    await expect(next(page)).toHaveText("Close");
+    await next(page).click();
+    // The stored copy fails too: the Hub's own failure, in the shared words of the guide.
+    stored = 500;
+    await page.reload();
+    await openHere(page, '.banner[data-tone="crit"]');
+    await expect(title(page)).toHaveText("The Hub did not return the incidents");
 });

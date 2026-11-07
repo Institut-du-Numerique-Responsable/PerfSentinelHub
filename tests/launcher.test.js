@@ -3533,7 +3533,7 @@ const analysisTest = (name, body) => guideTest(name, body, ANALYSIS_SAYS);
 test("each analysis screen has its own guide, and the others none yet", () => {
     for (const screen of ["new", "recent", "run", "report"]) assert.equal(PSL.guideIdFor(screen, null), screen);
     assert.equal(PSL.guideIdFor("recap", "tech"), "recap.tech");
-    for (const screen of ["sources", "ack", "missing", "access"]) assert.equal(PSL.guideIdFor(screen, null), null);
+    for (const screen of ["ack", "missing", "access"]) assert.equal(PSL.guideIdFor(screen, null), null);
 });
 
 test("a window's consequences keep the screen's thresholds", () => {
@@ -3718,6 +3718,153 @@ test("the analysis guides have no em dash, and French addresses the reader as vo
         assert.ok(all.length > 6000, "the variants were read");
         assert.doesNotMatch(all, /—/);
         assert.doesNotMatch(all, /guide\.(new|recent|run|report)\./, "every key has a text");
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});
+
+// ---- the guides of Sources, Incidents and Correlations
+
+const sourcesBy = (over) => Object.fromEntries(PSL.sourcesSteps(Object.assign({
+    unreachable: 0, behind: false, unknownProducer: false, lockedDaemon: false, gauges: null
+}, over)).map((step) => [step.id, step]));
+const incidentsBy = (over) => Object.fromEntries(PSL.incidentsSteps(Object.assign({
+    stale: false, unauthorized: null, filtered: false, panel: null
+}, over)).map((step) => [step.id, step]));
+const correlationsBy = (over) => Object.fromEntries(PSL.correlationsSteps(Object.assign({
+    pairOnly: false, limit: null, opened: false, traceable: false
+}, over)).map((step) => [step.id, step]));
+
+const FLEET_SAYS = {
+    fr: {
+        oneDown: "1 source est injoignable.", manyDown: "3 sources sont injoignables.", noThreshold: "aucun seuil",
+        unknown: "« Inconnu »", locked: "sources.read", hints: "Aucun conseil", readFailed: "La lecture de ce daemon a échoué",
+        stale: "copie de la dernière lecture", refused: "Daemon B a refusé la clé du Hub", filtered: "pour ce filtre",
+        unfold: "Dépliez une ligne, puis rouvrez le guide", before: "« avant l'incident » se déclenchaient déjà",
+        noFinding: "aucun finding pour cet incident", gone: "la rétention l'a supprimé", analyse: "« Analyser cette fenêtre »",
+        pairOnly: "Vous lisez une seule paire", limit: "aux 1000 épisodes", explain: "« Expliquer la dernière paire »",
+        notCause: "l'un provoque l'autre"
+    },
+    en: {
+        oneDown: "1 source is unreachable.", manyDown: "3 sources are unreachable.", noThreshold: "no threshold",
+        unknown: "\"Unknown\"", locked: "sources.read", hints: "No advice", readFailed: "The read of this daemon failed",
+        stale: "copy of the last read", refused: "Daemon B refused the Hub's key", filtered: "for this filter",
+        unfold: "Unfold a row, then open the guide again", before: "\"before the incident\" were already firing",
+        noFinding: "no finding for this incident", gone: "retention deleted it", analyse: "\"Analyse this window\"",
+        pairOnly: "You are reading a single pair", limit: "at the 1000 most recent", explain: "\"Explain the last pair\"",
+        notCause: "one causes the other"
+    }
+};
+const fleetTest = (name, body) => guideTest(name, body, FLEET_SAYS);
+
+test("Sources, Incidents and Correlations each have their guide", () => {
+    for (const screen of ["sources", "incidents", "correlations"]) assert.equal(PSL.guideIdFor(screen, null), screen);
+    for (const screen of ["ack", "missing", "access"]) assert.equal(PSL.guideIdFor(screen, null), null);
+});
+
+test("the Sources steps come in the screen's order, the fleet bar and the gauges only when the screen has them", () => {
+    const anchors = (over) => PSL.sourcesSteps(Object.assign({
+        unreachable: 0, behind: false, unknownProducer: false, lockedDaemon: false, gauges: null
+    }, over)).map((step) => [step.id, step.anchors]);
+    assert.deepEqual(anchors({behind: true, gauges: "read"}), [
+        ["table", ["sources.table"]], ["health", ["sources.health"]],
+        ["fresh", ["sources.last_success", "sources.down_for"]], ["producer", ["sources.producer"]],
+        ["skew", ["shell.skew"]], ["env", ["sources.env"]], ["error", ["sources.last_error"]],
+        ["daemon", ["sources.daemon"]], ["gauges", ["sources.gauges"]], ["end", []]]);
+    const plain = anchors({}).map((step) => step[0]);
+    assert.ok(!plain.includes("skew") && !plain.includes("gauges"));
+});
+
+fleetTest("Sources counts the unreachable sources as the tab does, and judges no age", (says) => {
+    assert.ok(!text(sourcesBy().health).includes(says.oneDown));
+    assert.ok(text(sourcesBy({unreachable: 1}).health).includes(says.oneDown));
+    assert.ok(text(sourcesBy({unreachable: 3}).health).includes(says.manyDown));
+    assert.ok(text(sourcesBy().fresh).includes(says.noThreshold));
+});
+
+fleetTest("Sources names an unread producer, a locked daemon and a failed read", (says) => {
+    assert.ok(!text(sourcesBy().producer).includes(says.unknown));
+    assert.ok(text(sourcesBy({unknownProducer: true}).producer).includes(says.unknown));
+    assert.ok(!text(sourcesBy().daemon).includes(says.locked));
+    assert.ok(text(sourcesBy({lockedDaemon: true}).daemon).includes(says.locked));
+    const read = text(sourcesBy({gauges: "read"}).gauges);
+    assert.ok(read.includes(says.hints) && !read.includes(says.readFailed));
+    const failed = text(sourcesBy({gauges: "failed"}).gauges);
+    assert.ok(failed.includes(says.readFailed) && !failed.includes(says.hints));
+});
+
+test("the Incidents steps come in the screen's order, the stale copy, a refusal and a panel only when there", () => {
+    const steps = PSL.incidentsSteps({stale: true, unauthorized: "Daemon B", filtered: false, panel: "findings"});
+    assert.deepEqual(steps.map((step) => [step.id, step.anchors]), [
+        ["intro", ["incidents.sub"]], ["stale", ["incidents.stale"]], ["unauthorized", ["incidents.unauthorized"]],
+        ["filters", ["incidents.filters"]], ["empty", ["incidents.empty"]], ["table", ["incidents.table"]],
+        ["capture", ["incidents.capture"]], ["row", ["incidents.row"]], ["panel", ["incidents.panel"]],
+        ["older", ["incidents.older"]], ["copy", ["incidents.copy"]], ["end", []]]);
+    const plain = Object.keys(incidentsBy());
+    for (const id of ["stale", "unauthorized", "panel"]) assert.ok(!plain.includes(id), id);
+});
+
+fleetTest("Incidents names the daemon that refused, a filtered empty list, and an unread fold", (says) => {
+    assert.ok(text(incidentsBy({stale: true}).stale).includes(says.stale));
+    assert.ok(text(incidentsBy({unauthorized: "Daemon B"}).unauthorized).includes(says.refused));
+    assert.ok(!text(incidentsBy().empty).includes(says.filtered));
+    assert.ok(text(incidentsBy({filtered: true}).empty).includes(says.filtered));
+    assert.ok(text(incidentsBy().row).includes(says.unfold));
+    assert.ok(!text(incidentsBy({panel: "findings"}).row).includes(says.unfold));
+});
+
+fleetTest("an unfolded incident says what was already firing, nothing frozen, or gone", (says) => {
+    const findings = text(incidentsBy({panel: "findings"}).panel);
+    assert.ok(findings.includes(says.before) && findings.includes(says.analyse) && !findings.includes(says.noFinding));
+    const none = text(incidentsBy({panel: "none"}).panel);
+    assert.ok(none.includes(says.noFinding) && none.includes(says.analyse) && !none.includes(says.before));
+    const gone = text(incidentsBy({panel: "gone"}).panel);
+    assert.ok(gone.includes(says.gone) && !gone.includes(says.analyse));
+});
+
+test("the Correlations steps come in the screen's order, the episodes only for an unfolded pair", () => {
+    const steps = PSL.correlationsSteps({pairOnly: false, limit: null, opened: true, traceable: false});
+    assert.deepEqual(steps.map((step) => [step.id, step.anchors]), [
+        ["intro", ["correlations.sub"]], ["cause", []], ["filters", ["correlations.filters"]],
+        ["empty", ["correlations.empty"]], ["table", ["correlations.table"]], ["pair", ["correlations.pair"]],
+        ["episodes", ["correlations.panel"]], ["note", ["correlations.note"]], ["end", []]]);
+    assert.ok(!("episodes" in correlationsBy()));
+});
+
+fleetTest("Correlations says a pair is no cause, a single pair, the limit, and the trace link", (says) => {
+    assert.ok(text(correlationsBy().cause).includes(says.notCause));
+    assert.ok(!text(correlationsBy().filters).includes(says.pairOnly));
+    assert.ok(text(correlationsBy({pairOnly: true}).filters).includes(says.pairOnly));
+    assert.ok(!text(correlationsBy().table).includes(says.limit));
+    assert.ok(text(correlationsBy({limit: 1000}).table).includes(says.limit));
+    assert.ok(text(correlationsBy().pair).includes(says.unfold));
+    assert.ok(!text(correlationsBy({opened: true}).pair).includes(says.unfold));
+    assert.ok(!text(correlationsBy({opened: true}).episodes).includes(says.explain));
+    assert.ok(text(correlationsBy({opened: true, traceable: true}).episodes).includes(says.explain));
+});
+
+test("the fleet guides have no em dash, and French addresses the reader as vous", () => {
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = [
+            ...PSL.sourcesSteps({unreachable: 2, behind: true, unknownProducer: true, lockedDaemon: true, gauges: "read"}),
+            ...PSL.sourcesSteps({unreachable: 1, behind: false, unknownProducer: false, lockedDaemon: false, gauges: "failed"}),
+            ...["findings", "none", "gone", null].flatMap((panel) =>
+                PSL.incidentsSteps({stale: true, unauthorized: "Daemon B", filtered: panel === null, panel})),
+            ...PSL.correlationsSteps({pairOnly: true, limit: 1000, opened: true, traceable: true}),
+            ...PSL.correlationsSteps({pairOnly: false, limit: null, opened: false, traceable: false})
+        ].map(text).join("\n");
+        assert.ok(all.length > 5000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        assert.doesNotMatch(all, /guide\.(sources|incidents|correlations|unfold)\b/, "every key has a text");
+        for (const state of ["wait", "failed"]) {
+            for (const id of ["sources", "incidents", "correlations"]) {
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".title"), id + " " + state);
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".body"), id + " " + state);
+            }
+        }
+        assert.ok(PSL.hasText("guide.incidents.failed.stale.title") && PSL.hasText("guide.incidents.failed.stale.body"));
         if (lang === "fr") {
             assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
             assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);

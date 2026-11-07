@@ -3257,15 +3257,15 @@
     const RECAP_MOVES_FIRST = 5;
 
     /**
-     * The guide that walks through a screen, or null where there is none: the recap in either view and
-     * the analysis screens.
+     * The guide that walks through a screen, or null where there is none: the recap in either view, the
+     * analysis screens and the fleet's.
      * @param {string} screen
      * @param {string | null} recapView `pilotage` or `tech` on the recap, null elsewhere
      * @returns {string | null}
      */
     function guideIdFor(screen, recapView) {
         if (screen === 'recap') return recapView === 'pilotage' || recapView === 'tech' ? 'recap.' + recapView : null;
-        return ['new', 'recent', 'run', 'report'].indexOf(screen) >= 0 ? screen : null;
+        return ['new', 'recent', 'run', 'report', 'sources', 'incidents', 'correlations'].indexOf(screen) >= 0 ? screen : null;
     }
 
     /**
@@ -3923,6 +3923,112 @@
                 title: t('report.gone.' + reportGoneView(shown ? 'expired' : key) + '.title'),
                 body: [text(key === 'queued' || key === 'running' ? 'gone.pending' : 'gone.finished')]
             }, text),
+            guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over Sources. The anchors sit on the first row; the fleet bar and the
+     * gauges exist only when the shell draws the one and an open daemon row has read the other.
+     * @param {import('../types').SourcesGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function sourcesSteps(ctx) {
+        const text = screenText('sources');
+        const health = [text('health.body'), text('health.rate'), text('health.full')];
+        if (ctx.unreachable > 0) health.push(text('health.unreachable.' + plural(ctx.unreachable), {count: ctx.unreachable}));
+        const producer = [text('producer.body'), text('producer.minor'), text('producer.backend')];
+        if (ctx.unknownProducer) producer.push(text('producer.unknown'));
+        const steps = [
+            guideStep('table', ['sources.table'], {body: [text('table.body'), text('table.config')]}, text),
+            guideStep('health', ['sources.health'], {body: health}, text),
+            guideStep('fresh', ['sources.last_success', 'sources.down_for'], {
+                body: [text('fresh.body'), text('fresh.threshold')]
+            }, text),
+            guideStep('producer', ['sources.producer'], {body: producer}, text)
+        ];
+        if (ctx.behind) steps.push(guideStep('skew', ['shell.skew'], undefined, text));
+        steps.push(
+            guideStep('env', ['sources.env'], undefined, text),
+            guideStep('error', ['sources.last_error'], undefined, text),
+            guideStep('daemon', ['sources.daemon'], {
+                body: ctx.lockedDaemon ? [text('daemon.body'), text('daemon.locked')] : [text('daemon.body')]
+            }, text));
+        if (ctx.gauges) {
+            steps.push(guideStep('gauges', ['sources.gauges'], {
+                body: ctx.gauges === 'failed' ? [text('gauges.failed')] : [text('gauges.body'), text('gauges.hints')]
+            }, text));
+        }
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over Incidents. The guide never unfolds a row: the panel step exists only
+     * for one the reader unfolded before opening it, and the row step says so otherwise.
+     * @param {import('../types').IncidentsGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function incidentsSteps(ctx) {
+        const text = screenText('incidents');
+        const steps = [guideStep('intro', ['incidents.sub'], {body: [text('intro.body'), text('intro.read')]}, text)];
+        if (ctx.stale) steps.push(guideStep('stale', ['incidents.stale'], undefined, text));
+        if (ctx.unauthorized) {
+            steps.push(guideStep('unauthorized', ['incidents.unauthorized'], {
+                body: [text('unauthorized.body', {name: ctx.unauthorized})]
+            }, text));
+        }
+        const row = [text('row.body'), text('row.window')];
+        if (!ctx.panel) row.push(t('guide.unfold'));
+        steps.push(
+            guideStep('filters', ['incidents.filters'], {body: [text('filters.body'), text('filters.read')]}, text),
+            guideStep('empty', ['incidents.empty'], {body: [text(ctx.filtered ? 'empty.filtered' : 'empty.body')]}, text),
+            guideStep('table', ['incidents.table'], undefined, text),
+            guideStep('capture', ['incidents.capture'], undefined, text),
+            guideStep('row', ['incidents.row'], {body: row}, text));
+        if (ctx.panel === 'gone') steps.push(guideStep('panel', ['incidents.panel'], {body: [text('panel.gone')]}, text));
+        else if (ctx.panel) {
+            steps.push(guideStep('panel', ['incidents.panel'], {
+                body: [text(ctx.panel === 'none' ? 'panel.none' : 'panel.before'), text('panel.analyse'),
+                    text('panel.correlations')]
+            }, text));
+        }
+        steps.push(
+            guideStep('older', ['incidents.older'], undefined, text),
+            guideStep('copy', ['incidents.copy'], undefined, text),
+            guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over Correlations. As on Incidents, the episodes are read only in a pair
+     * the reader unfolded before opening the guide.
+     * @param {import('../types').CorrelationsGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function correlationsSteps(ctx) {
+        const text = screenText('correlations');
+        const table = [text('table.body'), text('table.episodes')];
+        if (ctx.limit) table.push(text('table.limit', {limit: ctx.limit}));
+        const steps = [
+            guideStep('intro', ['correlations.sub'], undefined, text),
+            guideStep('cause', [], undefined, text),
+            guideStep('filters', ['correlations.filters'], {
+                body: ctx.pairOnly ? [text('filters.body'), text('filters.pair')] : [text('filters.body')]
+            }, text),
+            guideStep('empty', ['correlations.empty'], undefined, text),
+            guideStep('table', ['correlations.table'], {body: table}, text),
+            guideStep('pair', ['correlations.pair'], {
+                body: ctx.opened ? [text('pair.body')] : [text('pair.body'), t('guide.unfold')]
+            }, text)
+        ];
+        if (ctx.opened) {
+            steps.push(guideStep('episodes', ['correlations.panel'], {
+                body: ctx.traceable ? [text('episodes.body'), text('episodes.explain')] : [text('episodes.body')]
+            }, text));
+        }
+        steps.push(
+            guideStep('note', ['correlations.note'], undefined, text),
             guideStep('end', [], undefined, text));
         return steps;
     }
@@ -4975,6 +5081,9 @@
         runSteps,
         reportGoneView,
         reportSteps,
+        sourcesSteps,
+        incidentsSteps,
+        correlationsSteps,
         recapPilotageSteps,
         recapTechSteps,
         RECAP_FIRST_PAGE,

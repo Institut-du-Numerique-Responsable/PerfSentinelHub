@@ -559,6 +559,45 @@ export interface GuideStep {
 export interface GuideSource {
     status: "wait" | "failed" | "ready";
     steps: GuideStep[];
+    /** Which of the guide's wait or failed texts, `guide.<id>.<status>.<variant>.*`, when it has several. */
+    variant?: string;
+}
+
+/** What the Sources guide reads off the fleet the screen shows. */
+export interface SourcesGuideContext {
+    /** The sources the Sources tab counts as unreachable. */
+    unreachable: number;
+    /** The top bar draws the fleet's oldest version behind the Hub's engine. */
+    behind: boolean;
+    /** A daemon's producer cell reads unknown. */
+    unknownProducer: boolean;
+    /** The first daemon listed does not unfold for the caller. */
+    lockedDaemon: boolean;
+    /** The first open daemon row that has read, or failed to read, its daemon. */
+    gauges: "read" | "failed" | null;
+}
+
+/** What the Incidents guide reads off the listing. */
+export interface IncidentsGuideContext {
+    /** The rows are the stored copy of the last read. */
+    stale: boolean;
+    /** The name of the first daemon that refused the Hub's key. */
+    unauthorized: string | null;
+    filtered: boolean;
+    /** The first unfolded incident whose detail was read: with findings, none, or gone. */
+    panel: "findings" | "none" | "gone" | null;
+}
+
+/** What the Correlations guide reads off the listing. */
+export interface CorrelationsGuideContext {
+    /** The route names one pair. */
+    pairOnly: boolean;
+    /** The cap the read reached, or null below it. */
+    limit: number | null;
+    /** A pair is unfolded. */
+    opened: boolean;
+    /** A trace backend exists, so episodes carry the Explain link. */
+    traceable: boolean;
 }
 
 /** What the New screen's guide reads off the form and the Hub's status. */

@@ -257,7 +257,11 @@ const SCREEN_FUNCTIONS = ["renderSourcesScreen", "sourcesTable", "tableGroupRow"
     "ceilingNote", "requestCard", "expiryText", "outcomePanel", "outcomeSpec", "countStrip",
     "moveBadge", "actionRow", "actionButton", "resubmit", "loadRun", "scheduleRunPoll", "runUnreachableBanner",
     "detectionKnobs", "detectionCount", "setDetection", "refreshDetectionCount", "advancedPanel", "detectionRow",
-    "newGuideSource", "recentGuideSource", "runGuideSource"];
+    "newGuideSource", "recentGuideSource", "runGuideSource", "sourcesGuideSource", "incidentGuidePanel",
+    "incidentsGuideSource", "correlationsGuideSource", "foldGuide", "foldAnchors", "fleetBehind", "guideSourceAnchors",
+    "renderIncidentsScreen", "unauthorizedBanners", "incidentFilterLine", "incidentCopyNote", "incidentsTable",
+    "incidentRow", "incidentNameCell", "toggleIncident", "loadIncident", "incidentPanel", "renderCorrelationsScreen",
+    "correlationFilterLine", "correlationsTable", "pairRow", "pairPanel", "renderFleetSkew"];
 
 const SCREEN_HELPERS = ["sourceHealth", "dur", "durDown", "durParts", "humanDur", "versionGap", "skew", "argsLine",
     "weightBand", "bytes", "hostKwh", "sourceCountLabel", "monitorKeyHint"];
@@ -631,7 +635,8 @@ const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapH
     "techIoStep", "techCo2Step", "techActionsStep", "techTableStep", "techRowStep", "techFixStep", "techActStep",
     "techMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain",
     "screenText", "rangeNotes", "newSteps", "newRangeStep", "newTracesStep", "newFetchStep", "newCostStep",
-    "newSubmitStep", "recentSteps", "runSteps", "runOutcomeStep", "reportGoneView", "reportSteps"];
+    "newSubmitStep", "recentSteps", "runSteps", "runOutcomeStep", "reportGoneView", "reportSteps", "sourcesSteps",
+    "incidentsSteps", "correlationsSteps"];
 
 test("the recap screen holds no prose literal", () => {
     const app = wwwrootFile("app.js");

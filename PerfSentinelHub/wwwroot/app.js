@@ -916,10 +916,26 @@
         dropSegment(chip, '.shell-version-skew');
         if (!state.sources || !state.status || !state.status.engine_version) return;
 
-        // Behind only. A fleet ahead of the Hub is a normal moment during a rollout,
-        // and the arrow would have pointed from the newer version down to the older
-        // one, which reads as an instruction to downgrade.
-        const behind = state.sources
+        const behind = fleetBehind();
+        if (behind.length === 0) return;
+
+        const oldest = behind.sort(PSL.vcmp)[0];
+        chip.appendChild(el('span', {class: 'shell-version-rule', 'aria-hidden': 'true'}));
+        chip.appendChild(el('span', {class: 'shell-version-skew', 'data-guide': 'shell.skew'}, [
+            svg([['path', {d: 'M12 4l9 16H3z'}], ['path', {d: 'M12 10v4M12 17.4v.2'}]], 12),
+            el('span', {text: t('shell.skew', {oldest: oldest, engine: state.status.engine_version})})
+        ]));
+    }
+
+    /**
+     * The fleet's producer versions behind the Hub's engine, none until both are known. Behind only: a
+     * fleet ahead of the Hub is a normal moment during a rollout, and the arrow would have pointed from
+     * the newer version down to the older one, which reads as an instruction to downgrade.
+     * @returns {string[]}
+     */
+    function fleetBehind() {
+        if (!state.sources || !state.status || !state.status.engine_version) return [];
+        return state.sources
             .map(function (source) {
                 return source.producer_version;
             })
@@ -927,14 +943,6 @@
                 const skew = version && PSL.skew(version);
                 return skew && skew.dir === 'behind';
             });
-        if (behind.length === 0) return;
-
-        const oldest = behind.sort(PSL.vcmp)[0];
-        chip.appendChild(el('span', {class: 'shell-version-rule', 'aria-hidden': 'true'}));
-        chip.appendChild(el('span', {class: 'shell-version-skew'}, [
-            svg([['path', {d: 'M12 4l9 16H3z'}], ['path', {d: 'M12 10v4M12 17.4v.2'}]], 12),
-            el('span', {text: t('shell.skew', {oldest: oldest, engine: state.status.engine_version})})
-        ]));
     }
 
     function renderSourcesBadge() {
@@ -1220,6 +1228,116 @@
     }
 
     /**
+     * What the Sources guide reads: the fleet the table shows, and the first open daemon row that has read.
+     * @returns {import('../types').GuideSource}
+     */
+    function sourcesGuideSource() {
+        if (state.loading) return {status: 'wait', steps: []};
+        if (state.sourcesError) return {status: 'failed', steps: []};
+        if (!state.sources) return {status: 'wait', steps: []};
+        const daemons = state.sources.filter(function (source) {
+            return source.kind === 'daemon';
+        });
+        const open = daemons.find(function (source) {
+            const view = state.daemonViews[source.id];
+            return state.daemonOpen[source.id] === true && PSL.permits(source, 'sources.read')
+                && view !== undefined && view !== 'loading';
+        });
+        return {
+            status: 'ready', steps: PSL.sourcesSteps({
+                unreachable: state.sources.filter(function (source) {
+                    return !source.reachable;
+                }).length,
+                behind: fleetBehind().length > 0,
+                unknownProducer: daemons.some(function (source) {
+                    return !source.producer_version;
+                }),
+                lockedDaemon: daemons.length > 0 && !PSL.permits(daemons[0], 'sources.read'),
+                gauges: open
+                    ? (/** @type {DaemonView} */ (state.daemonViews[open.id]).error_code ? 'failed' : 'read')
+                    : null
+            })
+        };
+    }
+
+    /**
+     * @param {Incident} incident
+     * @returns {'findings' | 'none' | 'gone' | null} what its unfolded panel shows, null while it is folded or unread
+     */
+    function incidentGuidePanel(incident) {
+        const detail = state.incidentDetails[incident.id];
+        if (state.panelOpen[foldKey(incident)] !== true || detail === undefined || detail === 'loading') return null;
+        if (detail.error_code) return detail.error_code === 'gone' ? 'gone' : null;
+        return (detail.findings || []).length ? 'findings' : 'none';
+    }
+
+    /**
+     * What the Incidents guide reads: the listing, and the first unfolded incident whose detail was read.
+     * An error with no row is the guide's failure, the stale copy with its own words.
+     * @returns {import('../types').GuideSource}
+     */
+    function incidentsGuideSource() {
+        if (state.loading || state.incidents === null) return {status: 'wait', steps: []};
+        if (state.incidentsError && state.incidents.length === 0) {
+            return {status: 'failed', steps: [], variant: state.incidentsError};
+        }
+        const refused = (state.sources || []).find(function (source) {
+            return source.incidents_state === 'unauthorized';
+        });
+        const panels = state.incidents.map(incidentGuidePanel).filter(Boolean);
+        return {
+            status: 'ready', steps: PSL.incidentsSteps({
+                stale: state.incidentsError === 'stale',
+                unauthorized: refused ? refused.name : null,
+                filtered: Object.values(state.incidentFilter).some(Boolean),
+                panel: panels[0] || null
+            })
+        };
+    }
+
+    /**
+     * What the Correlations guide reads: the pairs of the period, and whether one is unfolded.
+     * @returns {import('../types').GuideSource}
+     */
+    function correlationsGuideSource() {
+        if (state.correlations === null) return {status: 'wait', steps: []};
+        if (state.correlationsError) return {status: 'failed', steps: []};
+        return {
+            status: 'ready', steps: PSL.correlationsSteps({
+                pairOnly: Boolean(state.correlationFilter.pair_key),
+                limit: state.correlations.length === CORRELATION_LIMIT ? CORRELATION_LIMIT : null,
+                opened: PSL.correlationPairs(state.correlations).some(function (pair) {
+                    return state.panelOpen['pair:' + pair.key] === true;
+                }),
+                traceable: (state.sources || []).some(function (source) {
+                    return source.kind !== 'daemon';
+                })
+            })
+        };
+    }
+
+    /**
+     * The attributes of an element the guide may point at only while its fold is open: the guide never
+     * opens a fold, and a folded row stays in the page. foldAnchors names it again when the fold moves.
+     * @param {string} name
+     * @param {boolean} open
+     */
+    function foldGuide(name, open) {
+        return {'data-guide-fold': name, 'data-guide': open ? name : null};
+    }
+
+    /**
+     * @param {Element} scope a fold that just opened or closed in place
+     * @param {boolean} open
+     */
+    function foldAnchors(scope, open) {
+        scope.querySelectorAll('[data-guide-fold]').forEach(function (node) {
+            if (open) node.setAttribute('data-guide', node.getAttribute('data-guide-fold'));
+            else node.removeAttribute('data-guide');
+        });
+    }
+
+    /**
      * The source of steps of each guide, by its PSL.guideIdFor id.
      * @type {Record<string, () => import('../types').GuideSource>}
      */
@@ -1229,7 +1347,10 @@
         'new': newGuideSource,
         'recent': recentGuideSource,
         'run': runGuideSource(PSL.runSteps),
-        'report': runGuideSource(PSL.reportSteps)
+        'report': runGuideSource(PSL.reportSteps),
+        'sources': sourcesGuideSource,
+        'incidents': incidentsGuideSource,
+        'correlations': correlationsGuideSource
     };
 
     function initGuide() {
@@ -1899,7 +2020,8 @@
             return section;
         }
 
-        section.appendChild(el('div', {class: 'sources-wrap'}, [sourcesTable(state.sources)]));
+        section.appendChild(el('div', {class: 'sources-wrap', 'data-guide': 'sources.table'},
+            [sourcesTable(state.sources)]));
         return section;
     }
 
@@ -1935,10 +2057,29 @@
                 [tableGroupRow(t('sources.group.backends'))],
                 rows(kinds.backends))
             : sources.flatMap(sourceRow);
+        guideSourceAnchors(body);
         return el('table', {class: 'table'}, [
             el('thead', {}, [head]),
             el('tbody', {}, body)
         ]);
+    }
+
+    /**
+     * Names the first row's cells, and the first daemon's name, where the Sources guide points.
+     * @param {HTMLElement[]} rows
+     */
+    function guideSourceAnchors(rows) {
+        const first = rows.find(function (row) {
+            return !row.classList.contains('table-group');
+        });
+        if (!first) return;
+        ['env', 'health', 'last_success', 'down_for', 'producer', 'last_error'].forEach(function (name) {
+            first.children[SOURCE_COLUMNS.indexOf(name)].setAttribute('data-guide', 'sources.' + name);
+        });
+        const daemon = rows.map(function (row) {
+            return row.querySelector('.row-toggle, .source-locked');
+        }).find(Boolean);
+        if (daemon) daemon.closest('td').setAttribute('data-guide', 'sources.daemon');
     }
 
     /**
@@ -2200,6 +2341,7 @@
         if (!cell) return;
         const row = /** @type {HTMLElement} */ (cell.parentNode);
         row.hidden = !open;
+        foldAnchors(cell, open);
         // A folded row is not being read, so it stops costing the daemon anything.
         if (!open) {
             stopTicker(source.id);
@@ -2243,6 +2385,7 @@
                 // cell is found again rather than kept in a closure.
                 const target = document.getElementById('daemon-detail-' + index);
                 if (target) target.replaceChildren(daemonPanel(source, index));
+                GUIDE.refresh();
                 // And the row may have been folded in the meantime, in which case
                 // starting to poll it would contradict the fold. A failed read still
                 // gets a ticker: its panel carries the same countdown, and the row
@@ -2304,7 +2447,8 @@
      * @param {string} code
      */
     function daemonError(source, index, code) {
-        return el('div', {class: 'daemon-panel'}, [
+        const gauges = foldGuide('sources.gauges', state.daemonOpen[source.id] === true);
+        return el('div', {class: 'daemon-panel', ...gauges}, [
             el('div', {class: 'banner', 'data-tone': 'crit'}, [
                 critGlyph(16),
                 el('div', {}, [
@@ -2408,7 +2552,8 @@
             }
         }
 
-        return el('div', {}, [
+        // One element for the guide's cutout: the verdict above, the gauges and the hints beside them.
+        return el('div', foldGuide('sources.gauges', state.daemonOpen[source.id] === true), [
             el('div', {class: 'daemon-verdict-row'}, [
                 el('span', {
                     class: 'daemon-verdict',
@@ -5589,7 +5734,7 @@
         const section = el('section', {}, [
             ruledOverline(t('incidents.overline')),
             el('h1', {class: 'page-title', text: t('incidents.title')}),
-            el('p', {class: 'page-sub'}, [
+            el('p', {class: 'page-sub', 'data-guide': 'incidents.sub'}, [
                 document.createTextNode(t('incidents.sub')),
                 helpDot(t('incidents.help'), t('incidents.topic'))
             ])
@@ -5603,7 +5748,10 @@
             return section;
         }
         if (state.incidentsError) {
-            section.appendChild(el('div', {class: 'banner', 'data-tone': INCIDENT_ERROR_TONE[state.incidentsError]}, [
+            section.appendChild(el('div', {
+                class: 'banner', 'data-tone': INCIDENT_ERROR_TONE[state.incidentsError],
+                'data-guide': state.incidentsError === 'stale' ? 'incidents.stale' : null
+            }, [
                 state.incidentsError === 'stale' ? warningGlyph(16) : critGlyph(16),
                 el('div', {text: t(INCIDENT_ERROR_TEXT[state.incidentsError])})
             ]));
@@ -5619,7 +5767,7 @@
         });
         section.appendChild(incidentFilterLine());
         if (state.incidents.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'incidents.empty'}, [
                 el('p', {class: 'empty-title', text: t('incidents.empty.title')}),
                 proseInto(el('p'), t(Object.values(state.incidentFilter).some(Boolean)
                     ? 'incidents.empty.body_filtered' : 'incidents.empty.body'))
@@ -5627,9 +5775,10 @@
             appendCopyNote(section);
             return section;
         }
-        section.appendChild(el('div', {class: 'sources-wrap'}, [incidentsTable(state.incidents)]));
+        section.appendChild(el('div', {class: 'sources-wrap', 'data-guide': 'incidents.table'},
+            [incidentsTable(state.incidents)]));
         if (!state.incidentsDone) {
-            const older = el('button', {type: 'button', class: 'pill-button'}, [
+            const older = el('button', {type: 'button', class: 'pill-button', 'data-guide': 'incidents.older'}, [
                 svg([['path', {d: 'M12 5v14M5 12l7 7 7-7'}]], 14),
                 el('span', {text: t('incidents.older')})
             ]);
@@ -5650,8 +5799,9 @@
     function unauthorizedBanners() {
         return (state.sources || []).filter(function (source) {
             return source.incidents_state === 'unauthorized';
-        }).map(function (source) {
-            return el('div', {class: 'banner', 'data-tone': 'warn'}, [
+        }).map(function (source, index) {
+            const guide = index === 0 ? 'incidents.unauthorized' : null;
+            return el('div', {class: 'banner', 'data-tone': 'warn', 'data-guide': guide}, [
                 warningGlyph(16),
                 el('div', {}, [
                     el('p', {}, [
@@ -5762,7 +5912,7 @@
             }), setFilter('source_id'))
         ]);
         folded.hidden = !state.incidentFiltersOpen;
-        return el('div', {class: 'filter-stack'}, [
+        return el('div', {class: 'filter-stack', 'data-guide': 'incidents.filters'}, [
             el('div', {class: 'refresh'}, [
                 filterSelect('kind', filter.kind, Object.keys(PSL.INCIDENT_KIND_LABEL).map(function (kind) {
                     return [kind, PSL.INCIDENT_KIND_LABEL[kind]];
@@ -5800,7 +5950,7 @@
             return source.kind === 'daemon';
         });
         if (daemons.length === 0) return null;
-        return el('p', {class: 'sources-note'}, [
+        return el('p', {class: 'sources-note', 'data-guide': 'incidents.copy'}, [
             el('span', {text: t('incidents.copy_note')})
         ].concat(daemons.map(function (source) {
             const text = function () {
@@ -5836,9 +5986,12 @@
                 'data-align': INCIDENT_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
+        const rows = incidents.flatMap(incidentRow);
+        rows[0].children[INCIDENT_COLUMNS.indexOf('capture')].setAttribute('data-guide', 'incidents.capture');
+        rows[0].children[INCIDENT_COLUMNS.indexOf('service')].setAttribute('data-guide', 'incidents.row');
         return el('table', {class: 'table'}, [
             el('thead', {}, [head]),
-            el('tbody', {}, incidents.flatMap(incidentRow))
+            el('tbody', {}, rows)
         ]);
     }
 
@@ -5952,6 +6105,7 @@
         if (cell) {
             const row = /** @type {HTMLElement} */ (cell.parentNode);
             row.hidden = !open;
+            foldAnchors(cell, open);
         }
         const detail = state.incidentDetails[incident.id];
         if (open && (detail === undefined || (detail !== 'loading' && detail.error_code))) loadIncident(incident);
@@ -5976,6 +6130,7 @@
             .finally(function () {
                 const target = document.getElementById('incident-detail-' + incidentKey(incident));
                 if (target) target.replaceChildren(incidentPanel(incident));
+                GUIDE.refresh();
             });
     }
 
@@ -5990,12 +6145,14 @@
                 el('div', {class: 'skeleton', style: 'height:90px'})
             ]);
         }
+        const opened = state.panelOpen[foldKey(incident)] === true;
         if (detail.error_code) {
-            return el('div', {class: 'daemon-panel'}, [
+            const gone = detail.error_code === 'gone';
+            return el('div', {class: 'daemon-panel', ...(gone ? foldGuide('incidents.panel', opened) : {})}, [
                 el('div', {class: 'banner', 'data-tone': 'crit'}, [
                     critGlyph(16),
                     el('p', {
-                        text: t(detail.error_code === 'gone' ? 'incidents.panel.gone' : 'incidents.panel.failed')
+                        text: t(gone ? 'incidents.panel.gone' : 'incidents.panel.failed')
                     })
                 ])
             ]);
@@ -6010,7 +6167,7 @@
         // The button comes after the note that describes the window, since it
         // is the action the note argues for. A bare row, so the panel's own
         // gap sets the distance and no margin adds a second one.
-        return el('div', {class: 'daemon-panel'}, [
+        return el('div', {class: 'daemon-panel', ...foldGuide('incidents.panel', opened)}, [
             el('p', {class: 'overline daemon-audience', text: t('incidents.panel.overline')}),
             el('p', {
                 class: 'daemon-source-note',
@@ -6278,7 +6435,7 @@
         const section = el('section', {}, [
             ruledOverline(t('correlations.overline')),
             el('h1', {class: 'page-title', text: t('correlations.title')}),
-            el('p', {class: 'page-sub'}, [
+            el('p', {class: 'page-sub', 'data-guide': 'correlations.sub'}, [
                 document.createTextNode(t('correlations.sub')),
                 helpDot(t('correlations.help'), t('correlations.topic'))
             ]),
@@ -6297,20 +6454,21 @@
         }
         const pairs = PSL.correlationPairs(state.correlations);
         if (pairs.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'correlations.empty'}, [
                 el('p', {class: 'empty-title', text: t('correlations.empty.title')}),
                 proseInto(el('p'), t('correlations.empty.body'))
             ]));
             return section;
         }
-        section.appendChild(el('div', {class: 'sources-wrap'}, [correlationsTable(pairs)]));
+        section.appendChild(el('div', {class: 'sources-wrap', 'data-guide': 'correlations.table'},
+            [correlationsTable(pairs)]));
         if (state.correlations.length === CORRELATION_LIMIT) {
             section.appendChild(el('p', {
                 class: 'sources-note',
                 text: t('correlations.limit', {limit: CORRELATION_LIMIT})
             }));
         }
-        section.appendChild(el('p', {class: 'sources-note'}, [
+        section.appendChild(el('p', {class: 'sources-note', 'data-guide': 'correlations.note'}, [
             el('span', {text: t('correlations.note.lead')}),
             el('span', {class: 'code-inline', text: '[daemon.hub_export]'}),
             el('span', {text: t('correlations.note.and')}),
@@ -6353,7 +6511,7 @@
                 href: '#/correlations'
             }, [el('span', {text: t('correlations.every_pair')})])
             : null;
-        return el('div', {class: 'refresh'}, [
+        return el('div', {class: 'refresh', 'data-guide': 'correlations.filters'}, [
             pairOnly,
             el('span', {class: 'refresh-label', text: t('correlations.range')}),
             range,
@@ -6378,7 +6536,9 @@
                 'data-align': CORRELATION_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
-        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, pairs.flatMap(pairRow))]);
+        const rows = pairs.flatMap(pairRow);
+        rows[0].querySelector('.row-toggle').setAttribute('data-guide', 'correlations.pair');
+        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, rows)]);
     }
 
     /**
@@ -6412,6 +6572,7 @@
             if (cell) {
                 const row = /** @type {HTMLElement} */ (cell.parentNode);
                 row.hidden = !next;
+                foldAnchors(cell, next);
             }
         });
         const row = el('tr', {}, [
@@ -6482,7 +6643,8 @@
             return incident.source_id === pair.source_id
                 && PSL.spansOverlap(incident.window_from_ms, incidentEnd(incident), fromMs, toMs);
         });
-        return el('div', {class: 'daemon-panel'}, [
+        const guide = foldGuide('correlations.panel', state.panelOpen['pair:' + pair.key] === true);
+        return el('div', {class: 'daemon-panel', ...guide}, [
             timelineStrip(pair.episodes, incidents, fromMs, toMs),
             el('div', {class: 'sources-wrap'}, [episodesTable(pair.episodes, incidents)])
         ]);

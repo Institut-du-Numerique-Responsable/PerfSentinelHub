@@ -18,7 +18,8 @@
     const NARROW = matchMedia('(max-width: 760px)');
     const STILL = matchMedia('(prefers-reduced-motion: reduce)');
 
-    /** @type {{source: () => import('../types').GuideSource, guide: string, status: string, id: string | null, at: number,
+    /** @type {{source: () => import('../types').GuideSource, guide: string, status: string, variant: string,
+     *  id: string | null, at: number,
      *  steps: import('../types').GuideStep[], all: import('../types').GuideStep[], frame: number, from: number,
      *  painted: string} | null} */
     let open = null;
@@ -123,6 +124,7 @@
         const was = open.steps[open.at];
         const lastId = was ? was.id : open.id;
         open.status = given.status;
+        open.variant = given.variant || '';
         if (given.status !== 'ready') return false;
         const all = given.steps;
         const steps = all.filter(present);
@@ -185,12 +187,16 @@
 
     /**
      * The guide's own wait or failed text, `guide.<id>.wait.title` for instance, else the shared one. The
-     * texts are keyed on the id's last part, `tech` for `recap.tech`.
+     * texts are keyed on the id's last part, `tech` for `recap.tech`, and a source's variant comes first:
+     * `guide.incidents.failed.stale.title`.
      * @param {string} part `title` or `body`
      */
     function stateText(part) {
-        const own = 'guide.' + open.guide.split('.').pop() + '.' + open.status + '.' + part;
-        return PSL.t(PSL.hasText(own) ? own : 'guide.' + open.status + '.' + part);
+        const own = 'guide.' + open.guide.split('.').pop() + '.' + open.status;
+        const keys = [own + '.' + open.variant + '.' + part, own + '.' + part, 'guide.' + open.status + '.' + part];
+        return PSL.t(keys.find(function (key) {
+            return PSL.hasText(key);
+        }) || keys[2]);
     }
 
     function paintState() {
@@ -207,7 +213,7 @@
     /** Writes the card, unless a render left it saying the same: the live body would read it out again. */
     function paint() {
         const step = open.status === 'ready' ? open.steps[open.at] : null;
-        const painted = JSON.stringify([PSL.lang(), open.status, open.at, open.steps.length, step,
+        const painted = JSON.stringify([PSL.lang(), open.status, open.variant, open.at, open.steps.length, step,
             step && (step.marks || []).map(function (mark) {
                 return Boolean(anchor(mark.anchor));
             })]);
@@ -382,7 +388,7 @@
     function start(source, guide = '') {
         if (open) stop();
         if (!dom) dom = build();
-        open = {source, guide, status: 'wait', id: null, at: 0, steps: [], all: [], frame: 0, from: 0, painted: ''};
+        open = {source, guide, status: 'wait', variant: '', id: null, at: 0, steps: [], all: [], frame: 0, from: 0, painted: ''};
         SHELL.forEach(function (selector) {
             const part = document.querySelector(selector);
             if (part) part.setAttribute('inert', '');
