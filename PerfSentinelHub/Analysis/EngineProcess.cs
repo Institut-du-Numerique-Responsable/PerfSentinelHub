@@ -84,10 +84,17 @@ public static class EngineProcess
     }
 
     // The tail, because the engine prints its tracing first and its diagnostic last,
-    // and the diagnostic is the line the Hub classifies and an operator reads.
+    // and the diagnostic is the line the Hub classifies and an operator reads. A cut
+    // inside a line drops that partial line: without its timestamp it would pass for
+    // a diagnostic line. A tail holding no line start (no newline, or only the final
+    // one) is kept whole rather than emptied.
     private static string Truncate(string value)
     {
-        return value.Length <= MaxStandardErrorChars ? value : value[^MaxStandardErrorChars..];
+        if (value.Length <= MaxStandardErrorChars)
+            return value;
+        var tail = value[^MaxStandardErrorChars..];
+        var cutInsideLine = value[^(MaxStandardErrorChars + 1)] != '\n';
+        return cutInsideLine ? tail[(tail.AsSpan(0, tail.Length - 1).IndexOf('\n') + 1)..] : tail;
     }
 
     private static void KillQuietly(Process process)

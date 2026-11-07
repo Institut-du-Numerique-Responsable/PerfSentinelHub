@@ -483,10 +483,49 @@ public sealed class AnalysisRunnerTests : IDisposable
         var message = Assert.Single(logger.Warnings, m => m.StartsWith("Query for run", StringComparison.Ordinal));
         Assert.EndsWith(diagnostic, message, StringComparison.Ordinal);
         Assert.DoesNotContain("fetch 0\n", message, StringComparison.Ordinal);
-        // Exactly the last 4,096 characters, behind the prefix.
+        // The cut landed inside a tracing line: its fragment has no timestamp, and
+        // would pass for a diagnostic line, so the text starts at the next line.
+        var logged = LoggedStandardError(message);
+        Assert.StartsWith("2026-11-06T22:45:15Z", logged, StringComparison.Ordinal);
+        Assert.True(logged.Length <= 4096);
+    }
+
+    [Fact]
+    public async Task A_cut_that_lands_on_a_line_start_keeps_that_line()
+    {
+        const string diagnostic = "Error: backend returned HTTP 403 for https://tempo/api/search";
+        const string firstLine = "2026-11-06T22:45:15Z  INFO sentinel_core: ";
+        // The tail is exactly 4,096 characters, so the cut falls right after the first newline.
+        var tail = $"{firstLine}{new string('y', 4096 - firstLine.Length - 1 - diagnostic.Length)}\n{diagnostic}";
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, $"dropped\n{tail}"), logger: logger);
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisErrorCodes.SourceAuthFailed, outcome.ErrorCode);
         Assert.Equal(
-            "Query for run run-1 exited 1 as fetches_failed: ".Length + 4096,
-            message.Length);
+            tail,
+            LoggedStandardError(Assert.Single(logger.Warnings, m => m.StartsWith("Query for run", StringComparison.Ordinal))));
+    }
+
+    [Fact]
+    public async Task A_long_single_line_keeps_its_last_chars_rather_than_nothing()
+    {
+        // Only the final newline: it ends the line, nothing follows it to start from.
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, new string('a', 5000) + "b\n"), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new string('a', 4094) + "b\n",
+            LoggedStandardError(Assert.Single(logger.Warnings, m => m.StartsWith("Query for run", StringComparison.Ordinal))));
+    }
+
+    // "Query for run {RunId} exited {ExitCode} as {ErrorCode}: " comes first, and no code holds a colon.
+    private static string LoggedStandardError(string message)
+    {
+        return message[(message.IndexOf(": ", StringComparison.Ordinal) + 2)..];
     }
 
     [Fact]
