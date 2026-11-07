@@ -120,13 +120,20 @@ public sealed partial class HubOptionsValidator(TimeProvider? timeProvider = nul
             errors.Add("Hub:Analysis:MaxTracesEmbedded must be between 0 and 10000.");
         if (analysis.Timeout <= TimeSpan.Zero || analysis.Timeout > TimeSpan.FromHours(1))
             errors.Add("Hub:Analysis:Timeout must be positive and at most one hour.");
-        if (analysis.MinFreeMemoryMiB is < 0 or > 65_536)
-            errors.Add("Hub:Analysis:MinFreeMemoryMiB must be between 0 and 65536, 0 turning the check off.");
+        ValidateMemorySettings(analysis, errors);
         if (analysis.ReportRetention <= TimeSpan.Zero)
             errors.Add("Hub:Analysis:ReportRetention must be positive.");
         if (analysis.RunRetention <= analysis.ReportRetention)
             errors.Add("Hub:Analysis:RunRetention must be longer than Hub:Analysis:ReportRetention, "
                        + "since an expired run keeps its parameters after its report is deleted.");
+    }
+
+    private static void ValidateMemorySettings(AnalysisOptions analysis, List<string> errors)
+    {
+        if (analysis.MinFreeMemoryMiB is < 0 or > 65_536)
+            errors.Add("Hub:Analysis:MinFreeMemoryMiB must be between 0 and 65536, 0 turning the check off.");
+        if (analysis.EngineMemoryLimitMiB is not 0 and (< 64 or > 1_048_576))
+            errors.Add("Hub:Analysis:EngineMemoryLimitMiB must be 0, or between 64 and 1048576.");
     }
 
     private static void ValidateFetchConcurrency(AnalysisOptions analysis, List<string> errors)

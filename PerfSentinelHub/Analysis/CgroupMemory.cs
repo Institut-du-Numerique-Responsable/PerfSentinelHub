@@ -14,14 +14,27 @@ public sealed class CgroupMemory(string root)
 {
     public static readonly CgroupMemory Container = new("/sys/fs/cgroup");
 
-    /// <summary>Null without a limit, outside cgroup v2, or when a file cannot be read.</summary>
-    public long? HeadroomBytes()
+    /// <summary>The container's limit, `memory.max`. Null without one, outside cgroup v2, or unreadable.</summary>
+    public long? LimitBytes()
     {
         try
         {
             var max = File.ReadAllText(Path.Combine(root, "memory.max")).Trim();
-            if (!long.TryParse(max, NumberStyles.None, CultureInfo.InvariantCulture, out var limit))
-                return null;
+            return long.TryParse(max, NumberStyles.None, CultureInfo.InvariantCulture, out var limit) ? limit : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Null without a limit, outside cgroup v2, or when a file cannot be read.</summary>
+    public long? HeadroomBytes()
+    {
+        if (LimitBytes() is not { } limit)
+            return null;
+        try
+        {
             var current = long.Parse(
                 File.ReadAllText(Path.Combine(root, "memory.current")).Trim(),
                 NumberStyles.None,

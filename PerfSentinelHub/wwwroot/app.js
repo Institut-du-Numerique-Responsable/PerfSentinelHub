@@ -4900,7 +4900,7 @@
         const spec = outcomeSpec(run, key);
         const panel = el('section', {class: 'outcome', 'data-tone': spec.tone}, [
             el('h2', {class: 'overline overline-p', text: '// ' + spec.title}),
-            el('p', {class: 'outcome-body', text: spec.body})
+            proseInto(el('p', {class: 'outcome-body'}), spec.body)
         ]);
         if (spec.counts) panel.appendChild(countStrip(spec.counts, {toned: true, filled: 1}));
         (spec.warnings || []).forEach(function (/** @type {{kind: string, message: string}} */ warning) {
@@ -4966,7 +4966,8 @@
                 tone: 'crit', title: run.error_code || 'internal',
                 body: t('run.outcome.failed_body', {
                     name: run.source_name,
-                    meaning: PSL.ERRORS[run.error_code] || t('run.outcome.unnamed')
+                    meaning: PSL.runFailureMeaning(run.error_code, state.status?.limits.engine_memory_limit_mib)
+                        || t('run.outcome.unnamed')
                 }),
                 primary: rerunAction(t('run.outcome.rerun'), false),
                 secondary: {label: t('run.outcome.check_source'), href: '#/sources'},

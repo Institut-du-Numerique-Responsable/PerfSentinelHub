@@ -9,7 +9,7 @@
  * out, so one added to a response and never used here does not have to appear.
  */
 
-/** The eight codes an analysis run can fail with. Mirrors `ErrorCodes`. */
+/** The eleven codes an analysis run can fail with. Mirrors `ErrorCodes`. */
 export type ErrorCode =
     | "source_unreachable"
     | "source_auth_failed"
@@ -17,6 +17,8 @@ export type ErrorCode =
     | "timeout"
     | "output_too_large"
     | "binary_failed"
+    | "fetches_failed"
+    | "engine_out_of_memory"
     | "invalid_request"
     | "hub_memory_low"
     | "internal";
@@ -136,6 +138,8 @@ export interface StatusLimits {
     fetch_concurrency_warn: number;
     fetch_concurrency_max: number;
     fetch_concurrency_supported: boolean;
+    /** The engine's memory cap in MiB, 0 when off. */
+    engine_memory_limit_mib: number;
 }
 
 /** One detection threshold a run may override, `DetectionKnob`. */

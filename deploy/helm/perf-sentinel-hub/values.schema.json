@@ -30,6 +30,16 @@
           "$comment": "8080 is the main port: /metrics would answer there and nothing else would.",
           "type": ["integer", "null"], "minimum": 1, "maximum": 65535, "not": { "const": 8080 }
         },
+        "gcHeapLimitMiB": { "type": ["integer", "null"], "minimum": 64 },
+        "analysis": {
+          "type": "object",
+          "properties": {
+            "engineMemoryLimitMiB": {
+              "type": "integer",
+              "anyOf": [{ "const": 0 }, { "minimum": 64, "maximum": 1048576 }]
+            }
+          }
+        },
         "disclosures": {
           "type": "object",
           "additionalProperties": false,

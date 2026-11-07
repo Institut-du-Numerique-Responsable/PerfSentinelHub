@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
@@ -12,7 +13,9 @@ namespace PerfSentinelHub.Analysis;
 /// </summary>
 public sealed partial class EngineProbe(
     IOptions<HubOptions> options,
-    ILogger<EngineProbe> logger) : IHostedService
+    ILogger<EngineProbe> logger,
+    CgroupMemory? memory = null,
+    Func<string, string?>? environment = null) : IHostedService
 {
     // A `--version` line is a dozen bytes. Anything beyond this is not one,
     // and reading to the end would let a wrong binary size the buffer.
@@ -27,12 +30,14 @@ public sealed partial class EngineProbe(
     // it at all and renders nothing.
     private const string DaemonUrlFlag = "--daemon-url";
     private const string HubRelayFlag = "--hub-relay";
+    private const long Mebibyte = 1024 * 1024;
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
 
     // card.json's equivalence_country, which an older engine refuses as an unknown key.
     private static readonly Version CardCountrySince = new(0, 40, 0);
 
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
+    private readonly CgroupMemory _memory = memory ?? CgroupMemory.Container;
 
     /// <summary>Null until probed, and null forever if the probe failed.</summary>
     public string? Version { get; private set; }
@@ -65,6 +70,22 @@ public sealed partial class EngineProbe(
     ///     renders no share card. False until probed, and whenever the probe could not answer.
     /// </summary>
     public bool SupportsCard { get; private set; }
+
+    /// <summary>
+    ///     Whether the configured memory cap reaches the engine: one is set and this binary reads
+    ///     it. An engine before 0.43.2 refuses the flag, so it runs uncapped rather than not at all.
+    /// </summary>
+    public bool MemoryLimitApplies => _analysis.EngineMemoryLimitMiB > 0 &&
+                                      DetectionOverrides.ReadsMemoryLimit(Version);
+
+    /// <summary>
+    ///     The global flag to put before the subcommand of every run, empty when it does not apply.
+    ///     Not for the probe: it runs before the version is known.
+    /// </summary>
+    public string[] MemoryLimitArguments =>
+        MemoryLimitApplies
+            ? ["--memory-limit-mib", _analysis.EngineMemoryLimitMiB.ToString(CultureInfo.InvariantCulture)]
+            : [];
 
     public bool SupportsCardCountry => DetectionOverrides.ParseEngineVersion(Version) is { } engine &&
                                        engine >= CardCountrySince;
@@ -115,11 +136,49 @@ public sealed partial class EngineProbe(
         {
             LogProbeFailed(logger, exception, path);
         }
+
+        // After the probe whatever its outcome: a binary that did not answer leaves the
+        // version unknown, and the cap is withheld from it just the same.
+        if (_analysis.EngineMemoryLimitMiB > 0 && !MemoryLimitApplies)
+            LogMemoryLimitIgnored(logger, _analysis.EngineMemoryLimitMiB, Version);
+        CheckMemoryBudget();
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     The Hub's heap cap and every worker's engine cap against the container's limit. Said, never
+    ///     refused: collection and the read API run whatever the sum, and only an analysis risks the
+    ///     limit. Without a heap cap, an applied engine cap or a container limit, nothing is summed.
+    /// </summary>
+    private void CheckMemoryBudget()
+    {
+        if (!MemoryLimitApplies || HeapHardLimitBytes() is not { } heap || _memory.LimitBytes() is not { } limit)
+            return;
+        var engines = (long)_analysis.Workers * _analysis.EngineMemoryLimitMiB * Mebibyte;
+        // The margin a run needs free before it starts: without it the heap and the caps fit
+        // the limit while every run is refused hub_memory_low.
+        var headroom = (long)_analysis.MinFreeMemoryMiB * Mebibyte;
+        if (heap + engines + headroom > limit)
+            LogMemoryBudgetExceeded(
+                logger, heap / Mebibyte, _analysis.Workers, _analysis.EngineMemoryLimitMiB,
+                _analysis.MinFreeMemoryMiB, limit / Mebibyte);
+    }
+
+    // Bare hexadecimal digits, the way the NativeAOT runtime reads it: it ignores a value with a
+    // 0x prefix (measured on the image) and takes its default, 75% of the limit, not summed here.
+    private long? HeapHardLimitBytes()
+    {
+        return long.TryParse(
+                   (environment ?? Environment.GetEnvironmentVariable)("DOTNET_GCHeapHardLimit"),
+                   NumberStyles.AllowHexSpecifier,
+                   CultureInfo.InvariantCulture,
+                   out var bytes) && bytes > 0
+            ? bytes
+            : null;
     }
 
     private static async Task<string?> RunVersionAsync(
@@ -188,4 +247,22 @@ public sealed partial class EngineProbe(
     [LoggerMessage(1405, LogLevel.Information,
         "No --daemon-url in `report --help` from {Path}, so daemon reports render static.")]
     private static partial void LogNoDaemonUrl(ILogger logger, string path);
+
+    [LoggerMessage(1406, LogLevel.Warning,
+        "Hub:Analysis:EngineMemoryLimitMiB is {LimitMib} MiB but --memory-limit-mib needs engine 0.43.2 or later, "
+        + "and the version read from the binary is '{Version}', so engine runs are not capped.")]
+    private static partial void LogMemoryLimitIgnored(ILogger logger, int limitMib, string? version);
+
+    [LoggerMessage(1407, LogLevel.Warning,
+        "The Hub's heap of {HeapMib} MiB, {Workers} runs of {EngineMib} MiB and {HeadroomMib} MiB of "
+        + "Hub:Analysis:MinFreeMemoryMiB exceed the container's {LimitMib} MiB: an analysis can get the Hub "
+        + "OOM-killed or be refused. Lower Hub:Analysis:Workers or Hub:Analysis:EngineMemoryLimitMiB, or raise "
+        + "the memory limit.")]
+    private static partial void LogMemoryBudgetExceeded(
+        ILogger logger,
+        long heapMib,
+        int workers,
+        int engineMib,
+        int headroomMib,
+        long limitMib);
 }

@@ -207,12 +207,18 @@
         'error.run.binary_failed': 'le binaire d\'analyse a échoué pour une raison qu\'aucun autre code ne '
             + 'couvre, et rien n\'a été enregistré. Relancez-le une fois. Si l\'échec se répète, envoyez '
             + 'l\'identifiant de cette analyse à la personne qui exploite le Hub.',
+        'error.run.fetches_failed': 'la recherche a trouvé des traces, mais la plupart des lectures ont échoué. Si '
+            + 'Tempo manque de mémoire, baissez les lectures simultanées et relancez.',
+        'error.run.engine_out_of_memory': 'le moteur a atteint son plafond de {limit} Mio et s\'est arrêté, le Hub a '
+            + 'continué. Demandez moins de traces, ou faites monter `Hub:Analysis:EngineMemoryLimitMiB`.',
         'error.run.invalid_request': 'les arguments ont été refusés avant le début de l\'analyse, donc rien n\'a '
             + 'été lu ni dépensé. Corrigez l\'identifiant de trace ou la valeur de lookback, puis soumettez de '
             + 'nouveau.',
-        'error.run.hub_memory_low': 'le Hub a refusé de lancer le binaire d\'analyse\u00a0: il restait trop peu de '
-            + 'mémoire à son conteneur, et le lancer quand même aurait fait tuer tout le Hub. Réessayez quand '
-            + 'le Hub est plus calme, ou demandez à la personne qui l\'exploite de relever sa limite de mémoire.',
+        'error.run.hub_memory_low': 'le Hub a manqué de mémoire\u00a0: soit il a refusé de lancer le binaire '
+            + 'd\'analyse parce qu\'il restait trop peu de mémoire à son conteneur, et le lancer quand même aurait '
+            + 'fait tuer tout le Hub, soit le rapport du moteur n\'a pas tenu dans la mémoire du Hub. Réessayez '
+            + 'quand le Hub est plus calme, ou demandez à la personne qui l\'exploite de relever sa limite de '
+            + 'mémoire.',
         'error.run.internal': 'le Hub lui-même a échoué, sans jamais toucher la source. Réessayez maintenant. '
             + 'S\'il échoue de la même façon, c\'est le Hub qui demande de l\'attention, pas votre requête.',
         'error.read.network_error': 'rien n\'a répondu à son adresse. Vérifiez que le daemon est démarré et que '
@@ -241,6 +247,8 @@
         'error.title.timeout': 'L\'analyse a dépassé le plafond d\'exécution.',
         'error.title.output_too_large': 'La source a renvoyé trop de données.',
         'error.title.binary_failed': 'Le binaire d\'analyse a échoué.',
+        'error.title.fetches_failed': 'Tempo n\'a pas pu servir la plupart des traces.',
+        'error.title.engine_out_of_memory': 'L\'analyse a dépassé la mémoire allouée au moteur.',
         'error.title.invalid_request': 'Les arguments ont été refusés avant le début de l\'analyse.',
         'error.title.hub_memory_low': 'Il restait trop peu de mémoire au Hub pour la lancer.',
         'error.title.internal': 'Le Hub a échoué de son côté.',

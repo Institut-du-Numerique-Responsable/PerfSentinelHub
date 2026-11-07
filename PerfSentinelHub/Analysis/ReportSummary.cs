@@ -40,13 +40,14 @@ public sealed record ReportSummary(
     ///     Reads the engine's report JSON. Returns null when the document is not
     ///     one, which the caller reports as a failed run rather than an empty one.
     /// </summary>
-    public static ReportSummary? TryParse(ReadOnlySpan<byte> reportJson, out string? binaryVersion)
+    public static ReportSummary? TryParse(ReadOnlyMemory<byte> reportJson, out string? binaryVersion)
     {
         binaryVersion = null;
         JsonDocument document;
         try
         {
-            document = JsonDocument.Parse(reportJson.ToArray());
+            // Parsed in place: a copy of a report of tens of MiB would count against the Hub's heap cap.
+            document = JsonDocument.Parse(reportJson);
         }
         catch (JsonException)
         {

@@ -80,6 +80,11 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
+            {{- with .Values.hub.gcHeapLimitMiB }}
+            # Bare hexadecimal: the NativeAOT runtime ignores a value with a 0x prefix.
+            - name: DOTNET_GCHeapHardLimit
+              value: {{ printf "%x" (mul . 1048576) | quote }}
+            {{- end }}
             {{- with .Values.hub.metricsPort }}
             # Hub:MetricsPort does not make Kestrel listen: the Hub stops at startup unless it does.
             - name: ASPNETCORE_HTTP_PORTS

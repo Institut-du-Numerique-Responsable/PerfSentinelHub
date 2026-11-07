@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
@@ -68,6 +69,27 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_partial_read_reaches_the_summary_as_a_warning()
+    {
+        var runner = Runner(StubEngine(
+            """
+            {
+              "analysis": {"traces_analyzed": 60},
+              "findings": [],
+              "quality_gate": {"passed": true},
+              "warning_details": [{"kind": "partial_fetch", "message": "40 of 100 trace reads failed"}]
+            }
+            """,
+            0));
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        var warning = Assert.Single(outcome.Summary!.Warnings);
+        Assert.Equal("partial_fetch", warning.Kind);
+        Assert.Equal("40 of 100 trace reads failed", warning.Message);
+    }
+
+    [Fact]
     public async Task A_run_is_refused_before_the_engine_when_the_container_lacks_memory()
     {
         // 1 GiB limit, 1,000,000,000 bytes in use and no reclaimable cache: 73 MiB left.
@@ -79,6 +101,26 @@ public sealed class AnalysisRunnerTests : IDisposable
         Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
         Assert.Equal(AnalysisErrorCodes.HubMemoryLow, outcome.ErrorCode);
         Assert.False(File.Exists(runner.ReportPath("run-1")));
+    }
+
+    [Fact]
+    public async Task A_report_the_hub_cannot_hold_is_a_memory_refusal()
+    {
+        // What DOTNET_GCHeapHardLimit throws when the report outgrows the Hub's heap: the run
+        // fails alone, as hub_memory_low, rather than as internal with its "retry now".
+        var options = RunnerOptions(StubEngine(ReportJson, 0));
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(new OutOfMemoryHandler()), options),
+            new EngineProbe(options, NullLogger<EngineProbe>.Instance),
+            options,
+            NullLogger<AnalysisRunner>.Instance,
+            new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
+        var source = Source() with { Kind = SourceKinds.Daemon, BaseUrl = new Uri("http://daemon.svc:4318/") };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
+        Assert.Equal(AnalysisErrorCodes.HubMemoryLow, outcome.ErrorCode);
     }
 
     [Fact]
@@ -118,6 +160,32 @@ public sealed class AnalysisRunnerTests : IDisposable
         // the released 0.16.0 rejects the flag outright.
         Assert.EndsWith("--max-traces-embedded 50", arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("--sort", arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_query_and_the_render_run_under_the_configured_cap()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = RunnerOptions(new FakeEngine { Version = "0.43.2", Output = ReportJson }
+            .WriteTo(Path.Combine(_workspace, "perf-sentinel")));
+        options.Value.Analysis.EngineMemoryLimitMiB = 448;
+        var probe = new EngineProbe(options, NullLogger<EngineProbe>.Instance);
+        await probe.StartAsync(cancellationToken);
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(), options),
+            probe,
+            options,
+            NullLogger<AnalysisRunner>.Instance,
+            new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), cancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Succeeded, outcome.Status);
+        // The fake appends the cap it was handed on every call, so two lines are the two steps.
+        var seen = await File.ReadAllLinesAsync(
+            Path.Combine(_workspace, "reports", "memory-limit.txt"),
+            cancellationToken);
+        Assert.Equal(["448", "448"], seen);
     }
 
     [Fact]
@@ -397,7 +465,9 @@ public sealed class AnalysisRunnerTests : IDisposable
     [Theory]
     [InlineData("error sending request for url: Connection refused", AnalysisErrorCodes.SourceUnreachable)]
     [InlineData("HTTP status 401 Unauthorized", AnalysisErrorCodes.SourceAuthFailed)]
-    [InlineData("backend returned 400 Bad Request", AnalysisErrorCodes.SourceRejectedRequest)]
+    [InlineData("Error: backend returned HTTP 400 for https://tempo/api/search", AnalysisErrorCodes.SourceRejectedRequest)]
+    // A bare 400 is a count in the engine's text, not a status.
+    [InlineData("Error: max_traces=400 is past the cap", AnalysisErrorCodes.BinaryFailed)]
     [InlineData("thread 'main' panicked", AnalysisErrorCodes.BinaryFailed)]
     // A window too wide for the engine's request deadline, not a backend down.
     [InlineData("Error fetching traces from Tempo: request timed out", AnalysisErrorCodes.Timeout)]
@@ -410,6 +480,136 @@ public sealed class AnalysisRunnerTests : IDisposable
         Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
         Assert.Equal(expected, outcome.ErrorCode);
         Assert.Null(outcome.Summary);
+    }
+
+    [Fact]
+    public async Task A_render_killed_by_its_memory_cap_is_named_as_such()
+    {
+        var runner = Runner(new FakeEngine
+        {
+            Output = ReportJson,
+            RenderFailsOn = "--output",
+            RenderError = "memory allocation of 208 bytes failed"
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel")));
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
+        Assert.Equal(AnalysisErrorCodes.EngineOutOfMemory, outcome.ErrorCode);
+    }
+
+    [Fact]
+    public async Task A_failed_query_leaves_its_stderr_in_the_log()
+    {
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, "thread 'main' panicked"), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            logger.Warnings,
+            message => message.Contains("exited 1 as binary_failed: thread 'main' panicked", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(
+        "memory allocation of 208 bytes failed",
+        "exited 75 as engine_out_of_memory: memory allocation of 208 bytes failed")]
+    // A silent crash still leaves a line to read, never a blank message.
+    [InlineData("", "exited 75 as binary_failed: (empty)")]
+    // The engine colors even a piped stream: the log keeps the text, not the escape codes.
+    [InlineData(
+        "\u001b[2m2026-11-06T22:45:15Z\u001b[0m \u001b[31mERROR\u001b[0m a: boom",
+        "exited 75 as binary_failed: 2026-11-06T22:45:15Z ERROR a: boom")]
+    public async Task A_failed_render_leaves_its_code_and_its_stderr_in_the_log(string stderr, string expected)
+    {
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(new FakeEngine
+        {
+            Output = ReportJson,
+            RenderFailsOn = "--output",
+            RenderError = stderr
+        }.WriteTo(Path.Combine(_workspace, "perf-sentinel")), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Contains(logger.Warnings, message => message.Contains(expected, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_long_stderr_keeps_its_last_chars_so_the_diagnostic_still_classifies_and_logs()
+    {
+        // The engine prints its tracing first and its diagnostic last: a cut at
+        // the head of the text would drop the very line the classifier reads.
+        const string diagnostic = "Error fetching traces from Tempo: the search matched 10 trace(s) but every fetch failed";
+        var tracing = string.Join(
+            '\n',
+            Enumerable.Range(0, 100).Select(i => $"2026-11-06T22:45:15Z  INFO sentinel_core::ingest::tempo: fetch {i}"));
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, $"{tracing}\n{diagnostic}"), logger: logger);
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisErrorCodes.FetchesFailed, outcome.ErrorCode);
+        var message = Assert.Single(logger.Warnings, m => m.StartsWith("Query for run", StringComparison.Ordinal));
+        Assert.EndsWith(diagnostic, message, StringComparison.Ordinal);
+        Assert.DoesNotContain("fetch 0\n", message, StringComparison.Ordinal);
+        // The cut landed inside a tracing line: its fragment has no timestamp, and
+        // would pass for a diagnostic line, so the text starts at the next line.
+        var logged = LoggedStandardError(message);
+        Assert.StartsWith("2026-11-06T22:45:15Z", logged, StringComparison.Ordinal);
+        Assert.True(logged.Length <= 4096);
+    }
+
+    [Fact]
+    public async Task A_cut_that_lands_on_a_line_start_keeps_that_line()
+    {
+        const string diagnostic = "Error: backend returned HTTP 403 for https://tempo/api/search";
+        const string firstLine = "2026-11-06T22:45:15Z  INFO sentinel_core: ";
+        // The tail is exactly 4,096 characters, so the cut falls right after the first newline.
+        var tail = $"{firstLine}{new string('y', 4096 - firstLine.Length - 1 - diagnostic.Length)}\n{diagnostic}";
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, $"dropped\n{tail}"), logger: logger);
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisErrorCodes.SourceAuthFailed, outcome.ErrorCode);
+        Assert.Equal(
+            tail,
+            LoggedStandardError(Assert.Single(logger.Warnings, m => m.StartsWith("Query for run", StringComparison.Ordinal))));
+    }
+
+    [Fact]
+    public async Task A_long_single_line_keeps_its_last_chars_rather_than_nothing()
+    {
+        // Only the final newline: it ends the line, nothing follows it to start from.
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1, new string('a', 5000) + "b\n"), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new string('a', 4094) + "b\n",
+            LoggedStandardError(Assert.Single(logger.Warnings, m => m.StartsWith("Query for run", StringComparison.Ordinal))));
+    }
+
+    // "Query for run {RunId} exited {ExitCode} as {ErrorCode}: " comes first, and no code holds a colon.
+    private static string LoggedStandardError(string message)
+    {
+        return message[(message.IndexOf(": ", StringComparison.Ordinal) + 2)..];
+    }
+
+    [Fact]
+    public async Task A_query_that_dies_without_a_word_still_leaves_a_line_in_the_log()
+    {
+        var logger = new ListLogger<AnalysisRunner>();
+        var runner = Runner(StubEngine(ReportJson, 1), logger: logger);
+
+        await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            logger.Warnings,
+            message => message.EndsWith("exited 1 as binary_failed: (empty)", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -456,7 +656,11 @@ public sealed class AnalysisRunnerTests : IDisposable
         });
     }
 
-    private AnalysisRunner Runner(string? binaryPath, TimeSpan? timeout = null, CgroupMemory? memory = null)
+    private AnalysisRunner Runner(
+        string? binaryPath,
+        TimeSpan? timeout = null,
+        CgroupMemory? memory = null,
+        ILogger<AnalysisRunner>? logger = null)
     {
         var options = RunnerOptions(binaryPath, timeout);
         return new AnalysisRunner(
@@ -465,7 +669,7 @@ public sealed class AnalysisRunnerTests : IDisposable
             // ones, where the flag never applies anyway.
             new EngineProbe(options, NullLogger<EngineProbe>.Instance),
             options,
-            NullLogger<AnalysisRunner>.Instance,
+            logger ?? NullLogger<AnalysisRunner>.Instance,
             memory ?? new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
     }
 
@@ -525,5 +729,15 @@ public sealed class AnalysisRunnerTests : IDisposable
     {
         using var document = JsonDocument.Parse("""{"service":"orders","lookback":"1h"}""");
         return AnalysisRequest.TryParse(document.RootElement, Source(), new AnalysisOptions(), Now, out _)!;
+    }
+
+    private sealed class OutOfMemoryHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            throw new OutOfMemoryException();
+        }
     }
 }

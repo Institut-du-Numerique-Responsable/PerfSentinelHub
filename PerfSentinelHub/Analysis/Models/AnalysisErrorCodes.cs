@@ -13,6 +13,8 @@ public static class AnalysisErrorCodes
     public const string Timeout = "timeout";
     public const string OutputTooLarge = "output_too_large";
     public const string BinaryFailed = "binary_failed";
+    public const string FetchesFailed = "fetches_failed";
+    public const string EngineOutOfMemory = "engine_out_of_memory";
     public const string InvalidRequest = "invalid_request";
     public const string HubMemoryLow = "hub_memory_low";
     public const string Internal = "internal";

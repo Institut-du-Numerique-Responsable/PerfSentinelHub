@@ -1585,6 +1585,28 @@ public sealed class ConfigurationTests
     }
 
     [Theory]
+    [InlineData(0, true)]
+    [InlineData(448, true)]
+    [InlineData(64, true)]
+    [InlineData(1_048_576, true)]
+    [InlineData(63, false)]
+    [InlineData(2_000_000, false)]
+    [InlineData(-1, false)]
+    public void The_engine_memory_cap_is_off_or_inside_the_range_the_engine_accepts(int limit, bool accepted)
+    {
+        var result = new HubOptionsValidator().Validate(null, ValidOptions() with
+        {
+            Analysis = new AnalysisOptions { EngineMemoryLimitMiB = limit }
+        });
+
+        Assert.Equal(accepted, result.Succeeded);
+        if (!accepted)
+            Assert.Contains(
+                "Hub:Analysis:EngineMemoryLimitMiB must be 0, or between 64 and 1048576.",
+                result.Failures ?? []);
+    }
+
+    [Theory]
     [InlineData(64, 16)]
     [InlineData(16, 16)]
     [InlineData(8, 8)]

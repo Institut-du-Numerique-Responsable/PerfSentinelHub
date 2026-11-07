@@ -36,6 +36,23 @@ All notable changes to PerfSentinelHub are recorded here.
   starts a line, the columns wrap together, and keywords, tables, parameters and columns take four
   theme colors, at AA contrast in both themes. Only blanks move, so what is copied is the same
   query. A statement over 600 characters is colored but not cut into lines.
+- `Hub:Analysis:EngineMemoryLimitMiB` caps the memory of every engine invocation, passed as
+  `--memory-limit-mib` before the subcommand: the query, the render, share cards and disclosure
+  PDFs, never the startup probe. 0, the default in the code, runs the engine uncapped; otherwise
+  64 to 1048576. An engine before `0.43.2` does not read the flag, so it runs uncapped and the Hub
+  logs one warning at startup. `GET /api/status` gains `limits.engine_memory_limit_mib` and
+  `limits.engine_memory_limit_supported`.
+- Two failure codes: `fetches_failed` when Tempo matched traces but most reads failed, and
+  `engine_out_of_memory` when the engine reached its cap and stopped while the Hub carried on, the
+  run's screen naming the cap. `hub_memory_low` now also covers a report that did not fit the Hub's own
+  heap, and its screen text says so.
+- At startup the Hub adds its heap cap (`DOTNET_GCHeapHardLimit`) to `Hub:Analysis:Workers` engine
+  caps and logs a warning when the sum passes the container's `memory.max`. It never refuses to
+  start.
+- The Helm chart sets `DOTNET_GCHeapHardLimit` from `hub.gcHeapLimitMiB` (832) and passes
+  `hub.analysis.engineMemoryLimitMiB` (448). A release upgraded with `--reuse-values` over values
+  that lack them renders neither: the engine then runs uncapped, and the Hub's heap takes the
+  runtime's default, 75% of the container limit.
 
 ### Changed
 
@@ -63,6 +80,19 @@ All notable changes to PerfSentinelHub are recorded here.
   `partial_fetch` warning, which the run's screen shows with the others.
   No detection, score or report format changes, and the disclosure schema stays
   `perf-sentinel-report/v1.8`.
+- A failed engine run is classified on its diagnostic lines, its tracing lines set aside, so a log
+  line that quotes an HTTP status no longer decides the code. A 5xx the backend returned is
+  `source_unreachable` and a 4xx `source_rejected_request`, as a daemon's status is; a thread the
+  engine's memory cap refused a stack is `engine_out_of_memory`. The last 4,096 characters of its
+  stderr go to the Hub's log with the exit code and the code chosen, for the query and the render
+  alike; no response and no screen carries them.
+- The Helm chart's `resources.limits.memory` goes from 1Gi to 2Gi, so each pod may use up to 1 GiB
+  more: 832 MiB of heap, two runs at 448 MiB and 256 MiB of margin, from measurements in
+  docs/OPERATIONS.md. `requests.memory` stays 64Mi, but a LimitRange or a ResourceQuota on memory
+  limits may now reject the pod. An operator who sets `resources.limits.memory` themselves (without
+  `--reuse-values`) keeps their value but picks up `hub.gcHeapLimitMiB: 832` and
+  `hub.analysis.engineMemoryLimitMiB: 448`; the new defaults assume 2Gi, so raise the limit or lower
+  `hub.gcHeapLimitMiB` or `hub.analysis.workers`, and event 1407 says at startup when they do not fit.
 
 ### Fixed
 

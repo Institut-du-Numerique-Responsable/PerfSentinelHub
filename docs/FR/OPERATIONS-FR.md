@@ -90,6 +90,78 @@ vérifie en lecture seule s'il reste une copie ou un incident sans elles, et ne
 prend le verrou d'écriture que s'il y en a. D'ici là, une telle copie ne
 correspond à aucune portée par attribut.
 
+## Mémoire
+
+Le moteur tourne en sous-processus dans le conteneur du Hub, donc une seule limite
+de mémoire couvre le Hub, chaque run en cours (`Hub:Analysis:Workers` à la fois) et
+le cache de pages que laisse la base. Sans plafond, un run qui ne tient pas fait
+tuer tout le conteneur pour manque de mémoire, avec toutes ses requêtes en cours.
+Deux plafonds font échouer un tel run seul :
+
+- **Celui du moteur.** `Hub:Analysis:EngineMemoryLimitMiB` (0 dans le code, 448 dans
+  le chart sous `hub.analysis.engineMemoryLimitMiB`) est passé en
+  `--memory-limit-mib` avant la sous-commande de chaque invocation du moteur. Un run
+  qui l'atteint échoue en `engine_out_of_memory` et le Hub continue. Un moteur
+  antérieur à 0.43.2 ne lit pas l'option : il tourne alors sans plafond, et le Hub
+  le dit une fois au démarrage.
+- **Celui du Hub.** Le chart pose `DOTNET_GCHeapHardLimit` depuis `hub.gcHeapLimitMiB`
+  (832 par défaut). Au-delà, une allocation du Hub
+  lève une exception au lieu de grossir, et un run dont le rapport ne tient pas
+  échoue en `hub_memory_low`. Si vous posez la variable vous-même, écrivez des
+  chiffres hexadécimaux nus, `34000000` pour 832 Mio : le runtime NativeAOT ignore
+  une valeur préfixée par `0x`, et le tas prend alors le défaut du runtime.
+
+Sans la variable (null dans le chart, ou une valeur en `0x`), le runtime plafonne
+quand même le tas, à son défaut de 75 % de la limite du conteneur : 768 Mio sous
+1 Gio, 1 536 Mio sous 2 Gio, relevé sur l'image. Ce défaut ne laisse pas de place au
+moteur : 0,75 x L + 2 x 448 Mio dépasse L pour toute limite sous 3 584 Mio.
+
+La limite doit tenir la somme : le tas, `Workers` runs au plafond du moteur, et
+`Hub:Analysis:MinFreeMemoryMiB` de marge. Les défauts du chart donnent
+832 + 2 x 448 + 256 = 1 984 Mio, sous sa limite de 2Gi. Au démarrage, le Hub lit le
+`memory.max` de sa cgroup, et quand le tas, `Workers` plafonds du moteur et la marge
+`MinFreeMemoryMiB` le dépassent ensemble, il écrit un avertissement (événement 1407)
+avec les cinq nombres. Il
+démarre quand même : la collecte et l'API de lecture ne dépendent pas d'une
+analyse. Sans `DOTNET_GCHeapHardLimit`, sans plafond du moteur appliqué ou sans
+limite du conteneur, aucune somme n'est faite : le tas par défaut du runtime n'est
+pas additionné.
+
+Ce dont le moteur a besoin, mesuré sur le binaire 0.43.2 arm64 face à un Tempo
+factice aux traces synthétiques, 16 lectures à la fois. Un plafond de la colonne
+« arrêtée » a arrêté la requête à chaque fois, un plafond de la colonne « passée »
+l'a laissée passer à chaque fois :
+
+| Run                | JSON   | Pic de la requête | Arrêtée sous | Passée sous | Pic du rendu, 50 traces embarquées |
+|--------------------|--------|-------------------|--------------|-------------|------------------------------------|
+| 500 x 200 spans    | 49 Mio | 270 Mio           | 352 Mio      | 448 Mio     | 203 Mio                            |
+| 100 x 2 000 spans  | 97 Mio | 440 Mio           | 512 Mio      | 576 Mio     | 519 Mio                            |
+| 500 x 2 000 spans  |        | 1 760 Mio         |              |             |                                    |
+
+Entre les deux colonnes, l'issue change d'un run à l'autre. À 448 Mio, un run de
+500 traces moyennes passe les deux étapes à chaque fois, et un run de 100 traces de
+2 000 spans s'arrête en `engine_out_of_memory`.
+
+Ce dont le Hub a besoin, mesuré sur son image arm64 avec un moteur de substitution
+qui imprime un rapport, deux runs à la fois, dans un conteneur limité à 1 536 Mio :
+
+| Plafond du tas                   | Deux rapports de 49 Mio      | Deux rapports de 97 Mio        |
+|----------------------------------|------------------------------|--------------------------------|
+| défaut du runtime, 1 152 Mio     | pic à 962 Mio, tous passés   | pic à 1 085 Mio, tous passés   |
+| 384 Mio                          | 5 échecs sur 10              |                                |
+| 640 Mio                          | 1 échec sur 10               |                                |
+| 704 Mio                          | 3 échecs sur 20              | 3 échecs sur 6                 |
+| 768 Mio                          | 2 échecs sur 20              |                                |
+| 832 Mio                          | aucun échec sur 20           | 4 échecs sur 10                |
+
+Un pic est le `memory.current` du conteneur, lu toutes les 100 ms. Sous le défaut,
+le runtime garde ce qu'il a alloué, donc le pic monte d'une paire de runs à la
+suivante : 556 Mio après la première paire de rapports de 49 Mio. Le Hub garde un
+rapport en plusieurs exemplaires pendant qu'il le lit (son tampon de lecture, la
+copie qu'il conserve, l'index du parseur), donc un run d'un rapport de 49 Mio prend
+environ 400 Mio de tas. Chaque échec était un `hub_memory_low`, et le Hub a
+continué de répondre tout du long.
+
 ## Métriques
 
 `GET /metrics` sert le format texte Prometheus. Il est écrit à la main plutôt

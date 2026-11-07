@@ -48,6 +48,14 @@ run cannot be held to the maximum, so the button stays off and says so. The run'
 carries the count, and the printed command too unless it is the engine's 16, which the engine
 takes anyway.
 
+A failed run names its code and gives one sentence on what to do next. Two concern Tempo
+reads and the engine's memory. `fetches_failed` says Tempo could not serve most of the traces
+its search found and asks for fewer simultaneous reads, the block above.
+`engine_out_of_memory` says the engine reached its memory cap and asks for fewer traces or a
+higher `Hub:Analysis:EngineMemoryLimitMiB`, the cap in MiB being the
+`limits.engine_memory_limit_mib` of `/api/status`. Where the Hub reports no cap, or reports it
+off, the sentence shows `?` in its place.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
   <img alt="The fleet health screen with a daemon row unfolded" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">

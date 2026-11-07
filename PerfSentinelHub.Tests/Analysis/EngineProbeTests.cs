@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PerfSentinelHub.Analysis;
@@ -137,7 +138,109 @@ public sealed class EngineProbeTests : IDisposable
         Assert.Null(probe.Version);
     }
 
-    private EngineProbe Probe(string? binaryPath)
+    [Fact]
+    public async Task A_cap_is_said_withheld_even_when_the_binary_could_not_be_run()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(Path.Combine(Path.GetTempPath(), $"absent-{Guid.NewGuid():N}"), 448, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(probe.MemoryLimitArguments);
+        Assert.Contains(logger.Warnings, warning => warning.Contains("not capped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_cap_is_handed_to_an_engine_that_reads_it()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.2" }), 448, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(probe.MemoryLimitApplies);
+        Assert.Equal(["--memory-limit-mib", "448"], probe.MemoryLimitArguments);
+        Assert.Empty(logger.Warnings);
+    }
+
+    [Fact]
+    public async Task A_cap_an_older_engine_would_refuse_is_withheld_and_said_so()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.1" }), 448, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(probe.MemoryLimitApplies);
+        Assert.Empty(probe.MemoryLimitArguments);
+        var warning = Assert.Single(logger.Warnings);
+        Assert.Contains("448", warning, StringComparison.Ordinal);
+        Assert.Contains("0.43.1", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task No_cap_means_no_argument_and_no_warning()
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.2" }), 0, logger);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(probe.MemoryLimitApplies);
+        Assert.Empty(probe.MemoryLimitArguments);
+        Assert.Empty(logger.Warnings);
+    }
+
+    [Theory]
+    // 384 MiB of heap, two runs of 448 MiB and the 256 MiB of MinFreeMemoryMiB: 1,536 MiB, over a
+    // 1 GiB limit, over 1.5 GiB less 64 MiB, and exactly within 1.5 GiB.
+    [InlineData("18000000", "1073741824", true)]
+    [InlineData("18000000", "1543503872", true)]
+    [InlineData("18000000", "1610612736", false)]
+    // Without the variable the runtime takes its default heap, 75% of the limit, which the
+    // probe does not sum. The NativeAOT runtime ignores a 0x prefix, so that value counts as none.
+    [InlineData(null, "1073741824", false)]
+    [InlineData("0x18000000", "1073741824", false)]
+    public async Task A_memory_budget_over_the_container_limit_is_said_at_startup(
+        string? heapHardLimit,
+        string memoryMax,
+        bool warns)
+    {
+        var logger = new ListLogger<EngineProbe>();
+        var cgroup = Path.Combine(_workspace, "cgroup");
+        Directory.CreateDirectory(cgroup);
+        await File.WriteAllTextAsync(
+            Path.Combine(cgroup, "memory.max"),
+            memoryMax + "\n",
+            TestContext.Current.CancellationToken);
+        var probe = Probe(
+            WriteEngine(new FakeEngine { Version = "0.43.2" }),
+            448,
+            logger,
+            new CgroupMemory(cgroup),
+            name => name == "DOTNET_GCHeapHardLimit" ? heapHardLimit : null);
+
+        await probe.StartAsync(TestContext.Current.CancellationToken);
+
+        if (!warns)
+        {
+            Assert.Empty(logger.Warnings);
+            return;
+        }
+
+        var warning = Assert.Single(logger.Warnings);
+        Assert.Contains("384 MiB", warning, StringComparison.Ordinal);
+        Assert.Contains("2 runs of 448 MiB", warning, StringComparison.Ordinal);
+        Assert.Contains("256 MiB of Hub:Analysis:MinFreeMemoryMiB", warning, StringComparison.Ordinal);
+        Assert.Contains((long.Parse(memoryMax) / (1024 * 1024)) + " MiB", warning, StringComparison.Ordinal);
+    }
+
+    private EngineProbe Probe(
+        string? binaryPath,
+        int memoryLimitMiB = 0,
+        ILogger<EngineProbe>? logger = null,
+        CgroupMemory? memory = null,
+        Func<string, string?>? environment = null)
     {
         return new EngineProbe(
             Options.Create(new HubOptions
@@ -145,12 +248,16 @@ public sealed class EngineProbeTests : IDisposable
                 Analysis = new AnalysisOptions
                 {
                     EngineBinaryPath = binaryPath,
+                    EngineMemoryLimitMiB = memoryLimitMiB,
                     // The probe runs from the report directory, so the test must
                     // name one it owns rather than inherit the /data default.
                     ReportDirectory = _workspace
                 }
             }),
-            NullLogger<EngineProbe>.Instance);
+            logger ?? NullLogger<EngineProbe>.Instance,
+            // The host's own cgroup must not decide a test, so none unless one is given.
+            memory ?? new CgroupMemory(Path.Combine(_workspace, "no-cgroup")),
+            environment);
     }
 
     private string WriteEngine(FakeEngine engine)

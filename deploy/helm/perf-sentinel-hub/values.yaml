@@ -21,6 +21,12 @@ hub:
   # metrics). Null answers /metrics on 8080 with everything else. Required with
   # hub.access.enabled; never 8080. Point a scrape at it, see docs/OPERATIONS.md.
   metricsPort: null
+  # The Hub's own heap, in MiB, set as DOTNET_GCHeapHardLimit. Past it a run whose
+  # report does not fit fails with hub_memory_low instead of getting the container
+  # OOM-killed. Two runs of a 49 MiB report need 832, measured. Null leaves the
+  # runtime's default, 75% of the container limit, which with two engine runs passes
+  # the limit below 3,584 MiB. See docs/OPERATIONS.md, Memory.
+  gcHeapLimitMiB: 832
   analysis:
     # The engine ships in the image. Set to null to run the Hub as a
     # collector only, which leaves the launcher unable to start a run.
@@ -34,6 +40,10 @@ hub:
     fetchConcurrencyWarn: 16
     fetchConcurrencyMax: 64
     timeout: "00:05:00"
+    # The memory cap, in MiB, of each engine run (--memory-limit-mib). Past it the
+    # run fails with engine_out_of_memory and the Hub carries on. 448 always passed
+    # a run of 500 medium traces. 0 runs the engine uncapped. Needs an engine from 0.43.2.
+    engineMemoryLimitMiB: 448
     # Free memory, in MiB, the container needs for a run to start the engine,
     # which runs inside it. Below it the run fails with hub_memory_low instead of
     # getting the Hub OOM-killed. 0 turns the check off.
@@ -264,6 +274,9 @@ probes:
 # was too tight once the database passed a few hundred MB: a Hub already at 190 MB
 # got OOM-killed rendering an 8 MB report, every request with it. Below
 # hub.analysis.minFreeMemoryMiB of headroom a run is refused with hub_memory_low.
+# 2Gi holds hub.gcHeapLimitMiB, hub.analysis.workers runs of
+# hub.analysis.engineMemoryLimitMiB and minFreeMemoryMiB: 832 + 2 x 448 + 256 is
+# 1,984 MiB. The Hub warns at startup when the first two pass the limit.
 resources:
   requests: { cpu: 50m, memory: 64Mi }
-  limits: { cpu: 500m, memory: 1Gi }
+  limits: { cpu: 500m, memory: 2Gi }
