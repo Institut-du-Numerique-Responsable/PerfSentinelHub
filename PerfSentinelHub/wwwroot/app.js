@@ -7926,14 +7926,6 @@
     }
 
     /**
-     * A count with thousands separators, or null when the Hub has none.
-     * @param {number | null} value
-     */
-    function recapCount(value) {
-        return value === null || value === undefined ? null : PSL.num(value);
-    }
-
-    /**
      * @param {RecapSnapshot} snapshot
      */
     function recapCo2Tile(snapshot) {
@@ -7968,8 +7960,8 @@
         const management = snapshot.view === 'pilotage';
         return el('div', {class: 'disc-figures recap-tiles'}, [
             recapTile(labels.io, recapProgressChip(snapshot),
-                el('span', {class: 'disc-figure-value', text: recapCount(tiles.avoidable_io_ops) || '\u2014'}),
-                [recapPreviousText(snapshot, recapCount(tiles.previous_avoidable_io_ops))],
+                el('span', {class: 'disc-figure-value', text: PSL.recapCount(tiles.avoidable_io_ops) || '\u2014'}),
+                [recapPreviousText(snapshot, PSL.recapCount(tiles.previous_avoidable_io_ops))],
                 recapHelp(snapshot, 'io'), labels.io),
             recapCo2Tile(snapshot),
             recapTile(labels.findings, null,
@@ -8169,7 +8161,7 @@
         }
         const share = max > 0 ? Math.max(2, Math.round(priority.avoidable_io_ops / max * 100)) : 2;
         return el('div', {class: 'recap-figure'}, [
-            el('span', {class: 'recap-figure-n', text: recapCount(priority.avoidable_io_ops)}),
+            el('span', {class: 'recap-figure-n', text: PSL.recapCount(priority.avoidable_io_ops)}),
             el('span', {class: 'recap-figure-u', text: lower}),
             el('span', {class: 'recap-bar', 'aria-hidden': 'true'}, [el('i', {style: 'width:' + share + '%'})]),
             recapTrend(priority)

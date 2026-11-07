@@ -543,6 +543,18 @@ export interface RecapSnapshot {
     late_sources: string[] | null;
 }
 
+/**
+ * One step of a screen's guide, as `PSL.recapPilotageSteps` works it out. `anchors` names the elements it
+ * points at; none makes a centred card with nothing cut out. Each mark is numbered on its own anchor.
+ */
+export interface GuideStep {
+    id: string;
+    anchors: string[];
+    title: string;
+    body: string[];
+    marks?: { anchor: string; text: string }[];
+}
+
 /** One stage of a recap job, `RecapJobStageItem`. */
 export interface RecapJobStage {
     name: string;

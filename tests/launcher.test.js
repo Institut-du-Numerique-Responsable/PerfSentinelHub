@@ -2923,3 +2923,298 @@ test("the SQL colours stay readable on the inset, in both themes", () => {
         }
     }
 });
+
+// ---- the pilotage guide's steps, worked out from the snapshot the screen has loaded
+
+/** Runs `body` in `lang`, then puts English back, so no test leaks its language. */
+function inLang(lang, body) {
+    PSL.setLang(lang);
+    try {
+        body();
+    } finally {
+        PSL.setLang("en");
+    }
+}
+
+/** Overlays `over` on `base`, object by object, so a test names only the field it changes. */
+function overlay(base, over) {
+    const out = {...base};
+    for (const [key, value] of Object.entries(over || {})) {
+        const plain = value && typeof value === "object" && !Array.isArray(value);
+        out[key] = plain && base[key] && typeof base[key] === "object" ? overlay(base[key], value) : value;
+    }
+    return out;
+}
+
+const pilotagePeriod = (from, to) => ({
+    kind: "week", from, to, in_progress: false, incomplete: [], notes: [], sampling_rate: null, truncated_to_days: null
+});
+
+const pilotageRow = (over) => Object.assign({
+    rank: 1, finding_type: "n_plus_one_sql", severity: "warning", service: "shop-svc", plain: "Loads each order line apart.",
+    detections: 12, avoidable_io_ops: 1200, co2_grams: null, co2_partial: false, volume_known: true, trend: "up",
+    change: 0.2, label: null, service_label: null, action: null
+}, over);
+
+function pilotageSnapshot(over) {
+    return overlay({
+        view: "pilotage",
+        period: pilotagePeriod("2026-10-26", "2026-11-01"),
+        previous: pilotagePeriod("2026-10-19", "2026-10-25"),
+        filters: {environment: null, source_id: null, service: null, grouping: null, service_label: null},
+        comparison_exact: true,
+        tiles: {
+            avoidable_io_ops: 168900, previous_avoidable_io_ops: 150000, co2_grams: 2000, previous_co2_grams: null,
+            co2_sources_without_coefficient: 0, co2_missing_reason: null, active_findings: 4, previous_active_findings: 5,
+            acked_findings: 0, actions: {todo: 1, in_progress: 0, done: 2, confirmed: 1, contradicted: 0, came_back: 0}
+        },
+        priorities: [pilotageRow(), pilotageRow({rank: 2, avoidable_io_ops: 300})],
+        more_priorities: 0,
+        movements: {new: [], gone: [], gone_with_confirmed_action: 0, up: [], down: [], came_back: [], done_still_detected: []},
+        nothing_moved: false,
+        sources_without_volume: [], truncated: false, late_sources: null
+    }, over);
+}
+
+/** The steps of a snapshot, by id. */
+function steps(over) {
+    return Object.fromEntries(PSL.recapPilotageSteps(pilotageSnapshot(over)).map((step) => [step.id, step]));
+}
+
+/** Every title, body paragraph and mark of every step, for a set of snapshots that cover the variants. */
+function allVariantsText() {
+    const variants = [
+        {},
+        {period: {in_progress: true}},
+        {period: {incomplete: ["restart"]}, previous: {incomplete: ["sampling"]}},
+        {filters: {environment: "production", services: ["a", "b"], groupings: ["x", "y"]}},
+        {tiles: {avoidable_io_ops: null, co2_grams: null, co2_missing_reason: "no_coefficient"}},
+        {tiles: {avoidable_io_ops: 1, co2_grams: null, co2_missing_reason: "no_avoidable_io", active_findings: 1,
+            actions: {done: 1}}},
+        {tiles: {co2_grams: 1200, co2_sources_without_coefficient: 2}},
+        {priorities: []},
+        {priorities: [pilotageRow({avoidable_io_ops: null, action: {status: "done"}})]},
+        {movements: {gone_with_confirmed_action: 2}},
+        {nothing_moved: true},
+        {previous: {truncated_to_days: 0}}
+    ];
+    return variants.flatMap((over) => PSL.recapPilotageSteps(pilotageSnapshot(over)))
+        .flatMap((step) => [step.title, ...step.body, ...(step.marks || []).map((mark) => mark.text)]).join("\n");
+}
+
+/** A phrase of each variant sentence, to tell which ones a step carries. */
+const SAYS = {
+    fr: {
+        notOver: "pas finie", closedDays: "déjà terminés", inexact: "pas exacte", wholePeriod: "toute la période",
+        filtered: "que les filtres retiennent", cite: "ne la citez pas", atLeast: "Au moins", noCoefficient: "de quoi estimer",
+        noIo: "Aucune opération inutile", nothingCounted: "Rien n'a été compté", confirmed: "correctif est confirmé",
+        nothingMoved: "Rien n'a bougé", noClosedDay: "Aucun jour de cette période", nobody: "personne n'a encore pris",
+        nothingToFix: "Rien à corriger", dash: "Un tiret", ioNone: "Opérations inutiles", ioOne: "1 opération inutile",
+        ioOther: " opérations inutiles"
+    },
+    en: {
+        notOver: "not over", closedDays: "already finished", inexact: "not exact", wholePeriod: "whole period",
+        filtered: "only what the filters keep", cite: "do not quote", atLeast: "At least", noCoefficient: "basis to estimate",
+        noIo: "No unnecessary operations", nothingCounted: "Nothing was counted", confirmed: "fix is confirmed",
+        nothingMoved: "Nothing has moved", noClosedDay: "No day of this period", nobody: "nobody has taken",
+        nothingToFix: "Nothing to fix", dash: "A dash", ioNone: "Unnecessary operations", ioOne: "1 unnecessary operation",
+        ioOther: " unnecessary operations"
+    }
+};
+
+/** Each guide test runs in both languages, with the phrases that language says. */
+function guideTest(name, body) {
+    for (const lang of ["fr", "en"]) test(name + " (" + lang + ")", () => inLang(lang, () => body(SAYS[lang])));
+}
+
+test("the guide offers pilotage only on the pilotage recap", () => {
+    assert.equal(PSL.guideIdFor("recap", "pilotage"), "recap.pilotage");
+    assert.equal(PSL.guideIdFor("recap", "tech"), null);
+    assert.equal(PSL.guideIdFor("recap", null), null);
+    assert.equal(PSL.guideIdFor("ack", null), null);
+});
+
+test("the recap count is the tile's: separated thousands, nothing without a value", () => {
+    assert.equal(PSL.recapCount(1234), PSL.num(1234));
+    assert.equal(PSL.recapCount(0), "0");
+    assert.equal(PSL.recapCount(null), null);
+    assert.equal(PSL.recapCount(undefined), null);
+});
+
+test("the steps come in the screen's order, each on its anchors", () => {
+    const list = PSL.recapPilotageSteps(pilotageSnapshot());
+    assert.deepEqual(list.map((step) => [step.id, step.anchors]), [
+        ["view", ["recap.view"]], ["period", ["recap.period"]], ["io", ["recap.io"]], ["co2", ["recap.co2"]],
+        ["open", ["recap.findings", "recap.actions"]], ["table", ["recap.table"]], ["row", ["recap.row"]],
+        ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
+        ["card", ["recap.card"]], ["end", []]]);
+    assert.deepEqual(list.find((step) => step.id === "row").marks.map((mark) => mark.anchor),
+        ["recap.row.rank", "recap.row.what", "recap.row.where", "recap.row.figure", "recap.row.trend", "recap.row.state"]);
+    assert.ok(list.every((step) => step.title && Array.isArray(step.body)));
+    assert.ok(list.filter((step) => step.id !== "row").every((step) => step.body.length && !step.marks));
+});
+
+guideTest("a closed period says nothing of days still to finish", (says) => {
+    const body = steps({period: {in_progress: false, incomplete: []}}).period.body.join(" ");
+    assert.ok(!body.includes(says.notOver));
+    assert.ok(body.includes(PSL.periodText(pilotageSnapshot().period)), "the period reads as the screen writes it");
+});
+
+guideTest("a period in progress says its comparisons use the days already finished", (says) => {
+    const body = steps({period: {in_progress: true}}).period.body.join(" ");
+    assert.ok(body.includes(says.notOver));
+    assert.ok(body.includes(says.closedDays));
+    assert.ok(!body.includes(says.inexact));
+    assert.ok(body.includes(PSL.periodText({...pilotageSnapshot().period, in_progress: true})));
+});
+
+guideTest("an incomplete period drops the closed-days claim and warns", (says) => {
+    const inProgress = steps({period: {in_progress: true, incomplete: ["restart"]}});
+    const body = inProgress.period.body.join(" ");
+    assert.ok(!body.includes(says.closedDays));
+    assert.ok(!body.includes(says.notOver));
+    assert.ok(body.includes(says.inexact));
+    assert.ok(inProgress.io.body.join(" ").includes(says.wholePeriod));
+});
+
+guideTest("an incomplete previous period alone also warns", (says) => {
+    const found = steps({period: {in_progress: true}, previous: {incomplete: ["sampling"]}});
+    const body = found.period.body.join(" ");
+    assert.ok(body.includes(says.inexact));
+    assert.ok(!body.includes(says.closedDays));
+    // The figure itself is the current period's: only its own gaps make it partial.
+    assert.ok(!found.io.body.join(" ").includes(says.wholePeriod));
+});
+
+guideTest("an active filter is said, none is not", (says) => {
+    assert.ok(steps({filters: {services: ["a", "b"]}}).period.body.join(" ").includes(says.filtered));
+    for (const filter of [{environment: "production"}, {source_id: "daemon-a"}, {service: "a"}, {grouping: "g"},
+        {groupings: ["g", "h"]}]) {
+        assert.ok(steps({filters: filter}).period.body.join(" ").includes(says.filtered), JSON.stringify(filter));
+    }
+    // A service's display label is not a filter of its own, and an empty list names nothing.
+    assert.ok(!steps({filters: {service_label: "Shop", services: [], groupings: []}}).period.body.join(" ")
+        .includes(says.filtered));
+    assert.ok(!steps({}).period.body.join(" ").includes(says.filtered));
+});
+
+guideTest("the title carries the figure the tile shows", (says) => {
+    assert.ok(steps({tiles: {avoidable_io_ops: 1234}}).io.title.includes(PSL.recapCount(1234)));
+    assert.equal(steps({tiles: {avoidable_io_ops: 1}}).io.title, says.ioOne);
+    assert.ok(steps({tiles: {avoidable_io_ops: 2}}).io.title.endsWith(says.ioOther));
+});
+
+guideTest("no figure of unnecessary operations is a title without a count, and says nothing was counted", (says) => {
+    const none = steps({tiles: {avoidable_io_ops: null}}).io;
+    assert.equal(none.title, says.ioNone);
+    assert.ok(none.body.join(" ").includes(says.nothingCounted));
+    assert.ok(!steps({tiles: {avoidable_io_ops: 5}}).io.body.join(" ").includes(says.nothingCounted));
+});
+
+guideTest("a known carbon figure is an order of magnitude, at least when sources send no coefficient", (says) => {
+    assert.ok(steps({}).co2.body.join(" ").includes(says.cite));
+    assert.ok(!steps({}).co2.body.join(" ").includes(says.atLeast));
+    const partial = steps({tiles: {co2_grams: 1200, co2_sources_without_coefficient: 2}}).co2.body.join(" ");
+    assert.ok(partial.includes(says.cite));
+    assert.ok(partial.includes(says.atLeast));
+    // Under a gram the tile reads "< 1 g" with no "at least": the guide does not point at a word it does not show.
+    assert.ok(!steps({tiles: {co2_grams: 0.4, co2_sources_without_coefficient: 2}}).co2.body.join(" ")
+        .includes(says.atLeast));
+});
+
+guideTest("no carbon figure never tells the reader not to cite one", (says) => {
+    const missing = steps({tiles: {co2_grams: null, co2_missing_reason: "no_coefficient"}}).co2.body.join(" ");
+    assert.ok(!missing.includes(says.cite));
+    assert.ok(!missing.includes(says.atLeast));
+    assert.ok(missing.includes(says.noCoefficient));
+    const idle = steps({tiles: {co2_grams: null, co2_missing_reason: "no_avoidable_io"}}).co2.body.join(" ");
+    assert.ok(!idle.includes(says.cite));
+    assert.ok(idle.includes(says.noIo));
+    assert.ok(!idle.includes(says.noCoefficient));
+    // A missing reason the Hub did not give reads as the general case.
+    assert.ok(steps({tiles: {co2_grams: null, co2_missing_reason: null}}).co2.body.join(" ").includes(says.noCoefficient));
+});
+
+guideTest("problems and actions are counted as the tiles count them, singular or plural", () => {
+    const one = steps({tiles: {active_findings: 1, actions: {done: 1}}}).open.title;
+    const many = steps({tiles: {active_findings: 12, actions: {done: 3}}}).open.title;
+    assert.ok(one.startsWith("1 ") && one.includes(", 1 "), one);
+    assert.ok(many.startsWith("12 ") && many.includes(", 3 "), many);
+    assert.notEqual(one.replace(/\d+/g, "n"), many.replace(/\d+/g, "n"));
+});
+
+guideTest("no priority drops the row and rewrites the table", (says) => {
+    const empty = PSL.recapPilotageSteps(pilotageSnapshot({priorities: []}));
+    assert.ok(!empty.some((step) => step.id === "row"));
+    const table = empty.find((step) => step.id === "table");
+    assert.ok(table.title.startsWith(says.nothingToFix));
+    assert.deepEqual(table.anchors, ["recap.table"]);
+    assert.notEqual(table.title, steps({}).table.title);
+    assert.notEqual(table.body.join(" "), steps({}).table.body.join(" "));
+    assert.ok(PSL.recapPilotageSteps(pilotageSnapshot()).some((step) => step.id === "row"));
+});
+
+guideTest("a first row without volume reads its dash", (says) => {
+    const figure = (over) => steps({priorities: [pilotageRow(over)]}).row.marks[3].text;
+    assert.ok(figure({avoidable_io_ops: null}).startsWith(says.dash));
+    assert.ok(figure({avoidable_io_ops: 0}).startsWith(says.dash), "a zero is no volume to the screen either");
+    assert.ok(!figure({avoidable_io_ops: 40}).startsWith(says.dash));
+});
+
+guideTest("a taken action does not say nobody took it", (says) => {
+    const state = (action) => steps({priorities: [pilotageRow({action})]}).row.marks[5].text;
+    assert.ok(state(null).includes(says.nobody));
+    for (const status of ["todo", "in_progress", "done"]) {
+        assert.ok(!state({status}).includes(says.nobody), status);
+    }
+    assert.notEqual(state({status: "todo"}), state(null));
+});
+
+guideTest("confirmed gone rows are told apart, none is not", (says) => {
+    assert.ok(steps({movements: {gone_with_confirmed_action: 2}}).moved.body.join(" ").includes(says.confirmed));
+    assert.ok(!steps({movements: {gone_with_confirmed_action: 0}}).moved.body.join(" ").includes(says.confirmed));
+    assert.ok(!steps({}).moved.body.join(" ").includes(says.confirmed));
+});
+
+guideTest("nothing moved and no closed day replace the comparison", (says) => {
+    const compared = steps({}).moved.body.join(" ");
+    const nothing = steps({nothing_moved: true}).moved.body.join(" ");
+    const none = steps({nothing_moved: true, previous: {truncated_to_days: 0}}).moved.body.join(" ");
+    assert.ok(nothing.includes(says.nothingMoved));
+    assert.ok(!nothing.includes(compared));
+    assert.ok(none.includes(says.noClosedDay));
+    // The screen says the closed days first: nothing moved is true there only because nothing was compared.
+    assert.ok(!none.includes(says.nothingMoved));
+    assert.ok(!compared.includes(says.nothingMoved) && !compared.includes(says.noClosedDay));
+    // A period with closed days that cut to none is the only no-closed-day case: 3 closed days compare as usual.
+    assert.equal(steps({previous: {truncated_to_days: 3}}).moved.body.join(" "), compared);
+});
+
+test("the guide's shell texts are set in both languages", () => {
+    const keys = ["open", "quit", "prev", "next", "close", "count", "wait.title", "wait.body", "failed.title", "failed.body"];
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        for (const key of keys) assert.ok(PSL.hasText("guide." + key), lang + " guide." + key);
+        assert.equal(PSL.t("guide.count", {at: 2, total: 9}), lang === "fr" ? "2 sur 9" : "2 of 9");
+    });
+    inLang("fr", () => {
+        assert.equal(PSL.t("guide.open"), "Comprendre cet écran");
+        assert.equal(PSL.t("guide.wait.title"), "Le récap se calcule");
+        assert.equal(PSL.t("guide.failed.title"), "Le récap n'a pas pu être lu");
+    });
+});
+
+test("pilotage text carries no term of the technical view", () => {
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const text = allVariantsText();
+        assert.ok(text.length > 1500, "the variants were read");
+        for (const term of ["finding", "I/O", "span", "N+1"]) assert.ok(!text.includes(term), lang + " " + term);
+        assert.doesNotMatch(text, /—/, "no em dash");
+    });
+});
+
+test("French pilotage text addresses the reader as vous", () => inLang("fr", () => {
+    const text = allVariantsText();
+    // \b treats an accented letter as a break ("êtes" would read as "tes"): letters are matched as letters.
+    assert.doesNotMatch(text, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+    assert.match(text, /(?<!\p{L})vous(?!\p{L})/iu);
+}));
