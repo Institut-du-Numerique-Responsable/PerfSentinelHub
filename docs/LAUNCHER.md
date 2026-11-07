@@ -227,7 +227,8 @@ read in the last ten seconds is skipped and its stored copy served instead.
 </picture>
 
 A row unfolds into the findings the daemon froze for that incident, each placed before
-the incident or after the restart from its own stamp against the incident's. The capture
+the incident or after it from its own stamp against the incident's; "after" names the
+restart, the deploy or the incident itself by its kind. The capture
 column carries the daemon's reading of how far back its ring still reached: complete,
 partial, or empty. Times are relative, never dates, and the exact stamp sits in the
 tooltip. Each finding shows the normalized query it was raised on, whole and wrapped,

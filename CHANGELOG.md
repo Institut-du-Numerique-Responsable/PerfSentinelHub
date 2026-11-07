@@ -67,7 +67,7 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Changed
 
-- Three published texts said something the code does not: a failed run's heading counted eight error codes where there are eleven, and now names no count; the Engineering recap's period help said today counts in the tiles only, where it also counts in the ranking; the French launcher doc placed a finding after the restart only, where the screen also says after the deploy or after the incident.
+- Three published texts said something the code does not: a failed run's heading counted eight error codes where there are eleven, and now names no count; the Engineering recap's period help said today counts in the tiles only, where it also counts in the ranking; the launcher doc, in English and French, placed a finding after the restart only, where the screen also says after the deploy or after the incident.
 - The recap's Management view says of the rows under the divider that no unnecessary operation was counted for them, where it said they were slowness rather than extra work. Rows land there whenever nothing was counted, including a chatty exchange or a fan-out, and a source that sends no volume.
 
 - `RecapFilters`, the `filters` of a recap in `GET /api/recap`, a job's result and a stored report,
