@@ -170,7 +170,7 @@ public sealed class EngineProbeTests : IDisposable
     public async Task No_cap_means_no_argument_and_no_warning()
     {
         var logger = new ListLogger<EngineProbe>();
-        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.1" }), 0, logger);
+        var probe = Probe(WriteEngine(new FakeEngine { Version = "0.43.2" }), 0, logger);
 
         await probe.StartAsync(TestContext.Current.CancellationToken);
 

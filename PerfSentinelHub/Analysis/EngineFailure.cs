@@ -23,7 +23,10 @@ public static partial class EngineFailure
         // The engine's own body cap: the launcher's output_too_large gloss already says
         // exactly the right remedy.
         (["byte cap perf-sentinel applies"], AnalysisErrorCodes.OutputTooLarge),
-        (["connection refused", "dns error", "error sending request"], AnalysisErrorCodes.SourceUnreachable),
+        // "transport error" is what engine 0.43.2 prints for a refused connection and for a DNS
+        // failure alike: "HTTP transport error: client error (Connect)".
+        (["connection refused", "dns error", "error sending request", "transport error"],
+            AnalysisErrorCodes.SourceUnreachable),
         (["HTTP 400", "bad request"], AnalysisErrorCodes.SourceRejectedRequest)
     ];
 
@@ -42,10 +45,15 @@ public static partial class EngineFailure
     /// </summary>
     public static string DiagnosticLines(string standardError)
     {
-        var lines = AnsiSequence().Replace(standardError, "").Split('\n')
+        var lines = WithoutColors(standardError).Split('\n')
             .Select(line => line.TrimEnd('\r'))
             .Where(line => !LogLine().IsMatch(line));
         return string.Join('\n', lines);
+    }
+
+    public static string WithoutColors(string standardError)
+    {
+        return AnsiSequence().Replace(standardError, "");
     }
 
     [GeneratedRegex(@"\x1b\[[0-9;]*m")]

@@ -363,10 +363,12 @@ public sealed partial class AnalysisRunner(
         };
     }
 
-    // A blank message reads as a logging bug, so a silent crash says it was silent.
+    // A blank message reads as a logging bug, so a silent crash says it was silent. The
+    // engine colors even a piped stream: the escape codes would reach the log raw.
     private static string Loggable(string standardError)
     {
-        return standardError.Length == 0 ? "(empty)" : standardError;
+        var plain = EngineFailure.WithoutColors(standardError);
+        return plain.Length == 0 ? "(empty)" : plain;
     }
 
     /// <summary>Best effort: false when the file is still there.</summary>

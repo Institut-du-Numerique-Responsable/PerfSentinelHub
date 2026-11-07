@@ -12,6 +12,9 @@ public sealed class EngineFailureTests
     [InlineData("memory allocation of 38502400 bytes failed\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace", AnalysisErrorCodes.EngineOutOfMemory)]
     [InlineData("Error: backend returned HTTP 403 for https://tempo/api/search", AnalysisErrorCodes.SourceAuthFailed)]
     [InlineData("Error fetching traces from Tempo: request timed out", AnalysisErrorCodes.Timeout)]
+    // Engine 0.43.2: a refused connection and a DNS failure both print this.
+    [InlineData("Error fetching traces from Tempo: HTTP transport error: client error (Connect)", AnalysisErrorCodes.SourceUnreachable)]
+    [InlineData("Error fetching traces from Jaeger query API: HTTP transport error: client error (Connect)", AnalysisErrorCodes.SourceUnreachable)]
     [InlineData("", AnalysisErrorCodes.BinaryFailed)]
     public void The_code_comes_from_the_diagnostic_lines(string stderr, string expected)
     {

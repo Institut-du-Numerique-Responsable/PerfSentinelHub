@@ -517,6 +517,10 @@ public sealed class AnalysisRunnerTests : IDisposable
         "exited 75 as engine_out_of_memory: memory allocation of 208 bytes failed")]
     // A silent crash still leaves a line to read, never a blank message.
     [InlineData("", "exited 75 as binary_failed: (empty)")]
+    // The engine colors even a piped stream: the log keeps the text, not the escape codes.
+    [InlineData(
+        "\u001b[2m2026-11-06T22:45:15Z\u001b[0m \u001b[31mERROR\u001b[0m a: boom",
+        "exited 75 as binary_failed: 2026-11-06T22:45:15Z ERROR a: boom")]
     public async Task A_failed_render_leaves_its_code_and_its_stderr_in_the_log(string stderr, string expected)
     {
         var logger = new ListLogger<AnalysisRunner>();
