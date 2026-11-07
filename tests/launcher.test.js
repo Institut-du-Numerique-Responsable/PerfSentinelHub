@@ -3215,7 +3215,9 @@ test("pilotage text carries no term of the technical view", () => {
     for (const lang of ["fr", "en"]) inLang(lang, () => {
         const text = allVariantsText();
         assert.ok(text.length > 1500, "the variants were read");
-        for (const term of ["finding", "I/O", "span", "N+1"]) assert.ok(!text.includes(term), lang + " " + term);
+        // Any case: a capitalised "Finding" opening a sentence is the same jargon.
+        const lower = text.toLowerCase();
+        for (const term of ["finding", "i/o", "span", "n+1"]) assert.ok(!lower.includes(term), lang + " " + term);
         assert.doesNotMatch(text, /—/, "no em dash");
     });
 });

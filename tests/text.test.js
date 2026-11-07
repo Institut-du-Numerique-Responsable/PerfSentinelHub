@@ -273,7 +273,8 @@ test("the guide never parses a string as markup", () => {
 
 test("the guide calls no route and stores nothing", () => {
     const code = wwwrootFile("guide.js");
-    for (const banned of ["fetch(", "XMLHttpRequest", "localStorage", "sendBeacon"]) assert.ok(!code.includes(banned), banned);
+    for (const banned of ["fetch(", "XMLHttpRequest", "localStorage", "sessionStorage", "indexedDB", "WebSocket", "EventSource",
+        "sendBeacon"]) assert.ok(!code.includes(banned), banned);
 });
 
 test("the sources, new analysis and run screens hold no prose literal", () => {

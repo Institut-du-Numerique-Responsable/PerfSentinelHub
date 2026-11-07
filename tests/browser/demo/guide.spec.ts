@@ -244,8 +244,11 @@ test("the card stays on screen beside a tall row", async ({page}) => {
     await settle(page);
     await expectInWindow(page, ".guide-card");
     for (const by of [300, -150]) {
+        const before = await page.evaluate(() => window.scrollY);
         await page.mouse.wheel(0, by);
         await settle(page);
+        // The wheel did scroll, or the card had nothing to follow.
+        expect(await page.evaluate(() => window.scrollY)).not.toBe(before);
         await expectInWindow(page, ".guide-card");
     }
 });
@@ -277,7 +280,19 @@ test("the page behind is inert", async ({page}) => {
     await settle(page);
     const tech = page.locator('[data-guide="recap.view"] [role=radio]').filter({hasText: "Engineering"});
     const box = (await tech.boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    // Nothing of the guide covers the radio: the click lands on it and only inert stops it. Hit-testing
+    // skips inert nodes, so the point is read with #main woken for that one synchronous call.
+    expect(await tech.evaluate((radio, [left, top]) => {
+        const main = document.getElementById("main")!;
+        const guide = document.elementFromPoint(left, top);
+        main.removeAttribute("inert");
+        const hit = document.elementFromPoint(left, top);
+        main.setAttribute("inert", "");
+        return !document.getElementById("guide-root")!.contains(guide) && hit !== null && radio.contains(hit);
+    }, [x, y])).toBe(true);
+    await page.mouse.click(x, y);
     await page.waitForTimeout(500);
     await expect(page).toHaveURL(/view=pilotage/);
     await expect(card(page)).toBeVisible();
@@ -318,7 +333,7 @@ test("nothing scrolls sideways", async ({page}) => {
     });
 });
 
-test("reduced motion moves without a transition", async ({page}) => {
+test("under reduced motion the scroll a frame after each move is already its final position", async ({page}) => {
     await page.emulateMedia({reducedMotion: "reduce"});
     await openGuide(page);
     await settle(page);
