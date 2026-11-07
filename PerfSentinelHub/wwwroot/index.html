@@ -135,6 +135,13 @@
     </nav>
 
     <div class="shell-cluster">
+        <!-- Shown on a screen that has a guide; app.js hides it elsewhere. -->
+        <button aria-label="Understand this screen" class="shell-guide" data-i18n-attr="aria-label:guide.open" hidden
+                id="guide-open" type="button">
+            <span aria-hidden="true" class="shell-guide-mark">?</span>
+            <span aria-hidden="true" class="shell-guide-label" data-i18n="guide.open">Understand this screen</span>
+        </button>
+
         <div class="shell-version" id="version-chip">
             <span class="shell-version-label" data-i18n="shell.version.hub">hub</span>
             <span class="shell-version-value" id="version-hub">…</span>
@@ -190,6 +197,7 @@
 <script src="text-en.js"></script>
 <script src="text-fr.js"></script>
 <script src="launcher.js"></script>
+<script src="guide.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

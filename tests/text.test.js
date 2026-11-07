@@ -266,6 +266,16 @@ function wwwrootFile(file) {
         require("node:path").join(__dirname, "..", "PerfSentinelHub", "wwwroot", file), "utf8");
 }
 
+test("the guide never parses a string as markup", () => {
+    assert.ok(!wwwrootFile("guide.js").includes("innerHTML"));
+    assert.ok(!wwwrootFile("guide.js").includes("insertAdjacentHTML"));
+});
+
+test("the guide calls no route and stores nothing", () => {
+    const code = wwwrootFile("guide.js");
+    for (const banned of ["fetch(", "XMLHttpRequest", "localStorage", "sendBeacon"]) assert.ok(!code.includes(banned), banned);
+});
+
 test("the sources, new analysis and run screens hold no prose literal", () => {
     const app = wwwrootFile("app.js");
     const launcher = wwwrootFile("launcher.js");
@@ -1051,7 +1061,7 @@ test("no screen holds a prose literal", () => {
     const allowlist = JSON.parse(require("node:fs").readFileSync(
         require("node:path").join(__dirname, "text-allowlist.json"), "utf8"));
     for (const entry of allowlist) assert.ok(entry.why && entry.why.length > 10, "no reason for " + entry.texts);
-    for (const file of ["app.js", "launcher.js", "device.js"]) {
+    for (const file of ["app.js", "launcher.js", "device.js", "guide.js"]) {
         const found = PSL.literalsIn("function x() {" + wwwrootFile(file) + "}", ["x"]);
         const allowed = allowlist.filter(entry => entry.file === file).flatMap(entry => entry.texts);
         assert.deepEqual(found.filter(text => !allowed.includes(text)), [], file);

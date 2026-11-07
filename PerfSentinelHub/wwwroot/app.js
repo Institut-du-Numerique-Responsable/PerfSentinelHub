@@ -10,6 +10,7 @@
     'use strict';
 
     const PSL = globalThis.PSL;
+    const GUIDE = /** @type {import('../types').GuideController} */ (globalThis.PSL_GUIDE);
     const THEME_KEY = 'perf-sentinel:theme';
     const THEME_POSITIONS = ['auto', 'light', 'dark'];
     const t = PSL.t;
@@ -213,6 +214,9 @@
     const state = {
         themePosition: document.documentElement.getAttribute('data-theme-position') || 'auto',
         screen: 'new',
+        // The guide open, by PSL.guideIdFor, or null.
+        /** @type {string | null} */
+        guide: null,
         /** @type {HubStatus | null} */
         status: null,
         // The HTTP status /api/status failed with, which tells "no grant" from "down".
@@ -1063,7 +1067,14 @@
         });
     }
 
+    /** Draws the screen, then the guide's entry and the guide itself, which point into it. */
     function render() {
+        renderScreen();
+        document.getElementById('guide-open').hidden = guideId(state.screen) === null;
+        GUIDE.refresh();
+    }
+
+    function renderScreen() {
         // A tip whose anchor is about to be replaced would never see its mouseleave.
         closeTip();
         // Same for the daemon tickers: they write into nodes this render replaces.
@@ -1118,6 +1129,32 @@
         // Here and not only on a route change: a run or a report names itself once it has loaded.
         const heading = document.querySelector('#main h1');
         document.title = heading ? heading.textContent + ' · Perf Sentinel Hub' : 'Perf Sentinel Hub';
+    }
+
+    /**
+     * The guide of a screen, or null where it has none.
+     * @param {string} screen
+     */
+    function guideId(screen) {
+        return PSL.guideIdFor(screen, screen === 'recap' ? recapRoute().view : null);
+    }
+
+    /**
+     * What the pilotage guide reads: the recap the screen holds. While it is computed the guide waits,
+     * and starts no computation of its own.
+     * @returns {import('../types').GuideSource}
+     */
+    function recapGuideSource() {
+        if (state.recapError !== null) return {status: 'failed', steps: []};
+        if (state.recap === null) return {status: 'wait', steps: []};
+        return {status: 'ready', steps: PSL.recapPilotageSteps(state.recap)};
+    }
+
+    function initGuide() {
+        document.getElementById('guide-open').addEventListener('click', function () {
+            state.guide = guideId(state.screen);
+            GUIDE.start(recapGuideSource);
+        });
     }
 
     /**
@@ -1645,6 +1682,8 @@
         const refocus = state.recapRefocus;
         state.recapRefocus = null;
         const screen = currentScreen();
+        // A guide walks the screen it was opened on: another screen, or the other view, ends it.
+        if (GUIDE.isOpen() && guideId(screen) !== state.guide) GUIDE.stop();
         if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
         // A recap job keeps running on the Hub: only the screen stops asking, and asks again on return.
@@ -7792,7 +7831,9 @@
      * @param {RecapRoute} route
      */
     function recapViewSwitch(route) {
-        const group = el('div', {class: 'segmented', role: 'radiogroup', 'aria-label': t('recap.view.label')});
+        const group = el('div', {
+            class: 'segmented', role: 'radiogroup', 'aria-label': t('recap.view.label'), 'data-guide': 'recap.view'
+        });
         ['tech', 'pilotage'].forEach(function (view) {
             const button = el('button', {
                 type: 'button', role: 'radio', 'aria-checked': route.view === view ? 'true' : 'false',
@@ -7857,7 +7898,7 @@
                 }).join(', ')
             }));
         }
-        const block = el('div', {class: 'recap-period-block'}, [
+        const block = el('div', {class: 'recap-period-block', 'data-guide': 'recap.period'}, [
             el('div', {class: 'recap-period'}, [
                 el('span', {class: 'recap-period-main', text: PSL.periodText(period)}),
                 el('span', {class: 'recap-period-tz', text: 'UTC'}),
@@ -7892,9 +7933,10 @@
      * @param {string[]} subs
      * @param {string} help
      * @param {string} topic
+     * @param {string} guide the tile's `data-guide` name
      */
-    function recapTile(label, chip, value, subs, help, topic) {
-        return el('div', {class: 'disc-figure'}, [
+    function recapTile(label, chip, value, subs, help, topic, guide) {
+        return el('div', {class: 'disc-figure', 'data-guide': guide}, [
             el('span', {class: 'disc-figure-label'}, [document.createTextNode(label), chip, helpDot(help, topic)]),
             value
         ].concat(subs.filter(Boolean).map(function (sub) {
@@ -7947,7 +7989,7 @@
         return recapTile(t('recap.tile.co2'), recapProgressChip(snapshot), value, [
             known ? t('recap.tile.magnitude', {tail: PSL.co2Tail(without, snapshot.view)}) : '',
             previous ? recapPreviousText(snapshot, previous) : ''
-        ], recapHelp(snapshot, 'co2'), t('recap.topic.co2'));
+        ], recapHelp(snapshot, 'co2'), t('recap.topic.co2'), 'recap.co2');
     }
 
     /**
@@ -7962,14 +8004,14 @@
             recapTile(labels.io, recapProgressChip(snapshot),
                 el('span', {class: 'disc-figure-value', text: PSL.recapCount(tiles.avoidable_io_ops) || '\u2014'}),
                 [recapPreviousText(snapshot, PSL.recapCount(tiles.previous_avoidable_io_ops))],
-                recapHelp(snapshot, 'io'), labels.io),
+                recapHelp(snapshot, 'io'), labels.io, 'recap.io'),
             recapCo2Tile(snapshot),
             recapTile(labels.findings, null,
                 el('span', {class: 'disc-figure-value', text: String(tiles.active_findings)}), [
                     recapPreviousText(snapshot, tiles.previous_active_findings),
                     t('recap.tile.acked.' + (management ? 'pilotage.' : 'tech.') + PSL.plural(tiles.acked_findings),
                         {count: tiles.acked_findings})
-                ], recapHelp(snapshot, 'findings'), labels.findings),
+                ], recapHelp(snapshot, 'findings'), labels.findings, 'recap.findings'),
             recapTile(t('recap.tile.actions'), null, el('span', {class: 'disc-figure-value'}, [
                 document.createTextNode(String(actions.done)),
                 el('span', {class: 'disc-figure-unit', text: t('recap.tile.done.' + PSL.plural(actions.done))})
@@ -7978,7 +8020,7 @@
                     confirmed: actions.confirmed, contradicted: actions.contradicted, came_back: actions.came_back
                 }),
                 t('recap.tile.actions.open', {in_progress: actions.in_progress, todo: actions.todo})
-            ], recapHelp(snapshot, 'actions'), t('recap.topic.actions'))
+            ], recapHelp(snapshot, 'actions'), t('recap.topic.actions'), 'recap.actions')
         ]);
     }
 
@@ -8001,12 +8043,17 @@
             if (PSL.dividesBefore(all, index)) {
                 list.appendChild(el('li', {
                     class: 'recap-divider',
-                    text: t('recap.prio.divider.' + (management ? 'pilotage' : 'tech'))
+                    text: t('recap.prio.divider.' + (management ? 'pilotage' : 'tech')),
+                    'data-guide': management ? 'recap.below' : null
                 }));
             }
-            list.appendChild(recapRow(priority, max, snapshot, route, PSL.namesService(shown, index)));
+            const row = recapRow(priority, max, snapshot, route, PSL.namesService(shown, index));
+            if (index === 0) guideRowAnchors(row);
+            list.appendChild(row);
         });
-        const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-prio'}, [
+        const section = el('section', {
+            class: 'recap-section', 'aria-labelledby': 'recap-h-prio', 'data-guide': 'recap.table'
+        }, [
             ruledOverline(t('recap.prio.overline')),
             recapHeading('recap-h-prio', t('recap.prio.title'), hint, recapHelp(snapshot, 'prio'), t('recap.topic.ranking'))
         ]);
@@ -8019,6 +8066,22 @@
         section.appendChild(list);
         recapPriorityNotes(snapshot, all, section);
         return section;
+    }
+
+    /**
+     * Names the first line and its parts, where the guide puts its numbered marks.
+     * @param {HTMLElement} row
+     */
+    function guideRowAnchors(row) {
+        row.setAttribute('data-guide', 'recap.row');
+        const parts = {
+            rank: '.recap-rank', what: '.recap-what', where: '.recap-where', figure: '.recap-figure',
+            trend: '.recap-trend', state: '.recap-action'
+        };
+        Object.keys(parts).forEach(function (part) {
+            const found = row.querySelector(parts[part]);
+            if (found) found.setAttribute('data-guide', 'recap.row.' + part);
+        });
     }
 
     /**
@@ -8654,7 +8717,9 @@
         ].filter(function (group) {
             return group[1].length > 0;
         });
-        const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-moved'}, [
+        const section = el('section', {
+            class: 'recap-section', 'aria-labelledby': 'recap-h-moved', 'data-guide': 'recap.moved'
+        }, [
             ruledOverline(t('recap.moves.overline')),
             recapHeading('recap-h-moved', labels.moved, recapAgainst('recap.moves.since.', snapshot.previous),
                 recapHelp(snapshot, 'moved'), labels.moved)
@@ -8948,7 +9013,9 @@
     function recapReportsPanel(route) {
         const reports = state.recapReports;
         if (reports === null) return null;
-        const section = el('section', {class: 'recap-section', 'aria-labelledby': 'recap-h-reports'}, [
+        const section = el('section', {
+            class: 'recap-section', 'aria-labelledby': 'recap-h-reports', 'data-guide': 'recap.reports'
+        }, [
             ruledOverline(t('recap.reports.overline')),
             recapHeading('recap-h-reports', PSL.RECAP_REPORTS_COPY.title, PSL.RECAP_REPORTS_COPY.hint,
                 PSL.RECAP_REPORTS_COPY.help, t('recap.topic.reports')),
@@ -9310,7 +9377,9 @@
         if (cards !== true && cards !== false) return null;
         const card = cardState();
         const management = route.view === 'pilotage';
-        const section = el('section', {class: 'recap-section share', 'aria-labelledby': 'recap-h-share'}, [
+        const section = el('section', {
+            class: 'recap-section share', 'aria-labelledby': 'recap-h-share', 'data-guide': 'recap.card'
+        }, [
             ruledOverline(t('card.overline')),
             recapHeading('recap-h-share', PSL.CARD_COPY.title, PSL.CARD_COPY.hint, PSL.CARD_COPY.help, t('card.topic'))
         ]);
@@ -11990,6 +12059,7 @@
     // daemon on its own rather than waiting to be clicked again.
     restoreFolds();
     restoreShell();
+    initGuide();
     // Escape closes the picker. Without it the only ways out are Apply, a quick
     // range or a click outside, and a keyboard user has none of them.
     globalThis.addEventListener('keydown', function (event) {

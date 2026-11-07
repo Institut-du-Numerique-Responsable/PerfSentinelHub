@@ -1,5 +1,5 @@
 /**
- * The shapes `wwwroot/launcher.js` and `wwwroot/app.js` annotate against, so
+ * The shapes `wwwroot/launcher.js`, `wwwroot/guide.js` and `wwwroot/app.js` annotate against, so
  * `tsc --noEmit` can check the JSDoc those files already carry.
  *
  * Hand-written rather than generated: the JSON the page reads is shaped by the
@@ -553,6 +553,20 @@ export interface GuideStep {
     title: string;
     body: string[];
     marks?: { anchor: string; text: string }[];
+}
+
+/** What a screen hands its guide on each read: still loading, failed, or the steps of what it shows. */
+export interface GuideSource {
+    status: "wait" | "failed" | "ready";
+    steps: GuideStep[];
+}
+
+/** `window.PSL_GUIDE`, the controller guide.js defines. */
+export interface GuideController {
+    start(source: () => GuideSource): void;
+    refresh(): void;
+    stop(): void;
+    isOpen(): boolean;
 }
 
 /** One stage of a recap job, `RecapJobStageItem`. */
