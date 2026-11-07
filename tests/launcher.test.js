@@ -3533,7 +3533,7 @@ const analysisTest = (name, body) => guideTest(name, body, ANALYSIS_SAYS);
 test("each analysis screen has its own guide, and the others none yet", () => {
     for (const screen of ["new", "recent", "run", "report"]) assert.equal(PSL.guideIdFor(screen, null), screen);
     assert.equal(PSL.guideIdFor("recap", "tech"), "recap.tech");
-    for (const screen of ["ack", "missing", "access"]) assert.equal(PSL.guideIdFor(screen, null), null);
+    for (const screen of ["ack", "missing"]) assert.equal(PSL.guideIdFor(screen, null), null);
 });
 
 test("a window's consequences keep the screen's thresholds", () => {
@@ -3761,7 +3761,7 @@ const fleetTest = (name, body) => guideTest(name, body, FLEET_SAYS);
 
 test("Sources, Incidents and Correlations each have their guide", () => {
     for (const screen of ["sources", "incidents", "correlations"]) assert.equal(PSL.guideIdFor(screen, null), screen);
-    for (const screen of ["ack", "missing", "access"]) assert.equal(PSL.guideIdFor(screen, null), null);
+    for (const screen of ["ack", "missing"]) assert.equal(PSL.guideIdFor(screen, null), null);
 });
 
 test("the Sources steps come in the screen's order, the fleet bar and the gauges only when the screen has them", () => {
@@ -3865,6 +3865,237 @@ test("the fleet guides have no em dash, and French addresses the reader as vous"
             }
         }
         assert.ok(PSL.hasText("guide.incidents.failed.stale.title") && PSL.hasText("guide.incidents.failed.stale.body"));
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});
+
+// ---- the guides of Disclosures, Access and Coverage
+
+const DISCLOSURE = {
+    id: "d1", report_uuid: "u1", organisation: "Acme", period: {type: "quarter", from: "2026-01-01", to: "2026-03-31"},
+    intent: "official", confidentiality: "public", content_hash: "abc", integrity_level: "signed",
+    figures: {
+        energy_kwh: 10, carbon_kgco2eq: 2, avoidable_ratio: 0.1, coverage: 0.9, applications_declared: null,
+        applications_measured: null, applications: []
+    },
+    files: {report: true, attestation: true, bundle: true, pdf: true}, pdf: "rendered", render_reason: null,
+    published_at_ms: 0, signature_added_at_ms: null, withdrawn: null
+};
+const publicItem = (over) => Object.assign({}, DISCLOSURE, over);
+const disclosureDetail = (item, over) => Object.assign({
+    disclosure: publicItem(item), checks: {content_hash: "checked", binding: "checked", signature: "declared", engine_version: "0.43.2"},
+    share_links: [], deliveries: [], expected_identity: null, expected_issuer: null, can_manage: false
+}, over);
+const WITHDRAWN = {at_ms: 0, reason: "typo", by: "ada"};
+const disclosuresBy = (first) => Object.fromEntries(PSL.disclosuresSteps({first: first === undefined ? publicItem() : first})
+    .map((step) => [step.id, step]));
+const disclosureBy = (item, over, report = null) => Object.fromEntries(PSL.disclosureSteps({
+    detail: disclosureDetail(item, over), report
+}).map((step) => [step.id, step]));
+const accessBy = (over) => Object.fromEntries(PSL.accessSteps(Object.assign({
+    machine: false, noGroup: false, noReach: false, everything: false, tokens: "listed"
+}, over)).map((step) => [step.id, step]));
+const coverageBy = (over) => Object.fromEntries(PSL.coverageSteps(Object.assign({
+    covered: false, truncated: false, backend: false, noConflict: false
+}, over)).map((step) => [step.id, step]));
+const HOSTS = {aggregate: {total_energy_kwh: 10, database_waste: {in_totals_windows: 2, windows_with_figure: 2, in_totals_energy_kwh: 1}}};
+
+const PUBLIC_SAYS = {
+    fr: {
+        bracket: "de la moitié au double du chiffre", official: "au moins 75 %", withdrawn: "le bandeau dit par qui",
+        unsigned: "n'est pas signé", refused: "a trouvé un problème", notChecked: "pour la raison du bandeau",
+        internal: "« Jamais partagée »", rendered: "a recalculé son empreinte", kept: "sans la vérifier ici",
+        pdf: "« Télécharger le PDF »", newLink: "« Nouveau lien de partage »", render: "« Rendre à nouveau »",
+        withdraw: "« Retirer » demande une raison", noWithdraw: "n'offre plus ni lien", neverLink: "n'a jamais de lien",
+        carbonBar: "La barre du carbone", measured: "2 des 3 applications déclarées", both: "« Hôtes de broker »",
+        database: "La ligne « Hôtes de base de données »", excluded: "par l'opérateur", hashChecked: "n'ont pas changé depuis",
+        hashNot: "n'a pas vérifié l'empreinte", signature: "sur votre ordinateur", audited: "Le niveau audité",
+        neverShared: "n'est jamais partagé", locked: "votre accès ne comprend pas", groupChange: "prochaine connexion",
+        noGroup: "aucun groupe", noReach: "Aucune autorisation ne concerne", everything: "« Tout » veut dire",
+        columns: "le rôle et ses permissions", noToken: "Aucun jeton de terminal.", tokensFailed: "n'a pas listé les jetons",
+        revoke: "« Révoquer »", covered: "Rien à attribuer", seen: "les sources où il a été vu", truncated: "200 premières",
+        backend: "Un backend de traces", none: "Aucun."
+    },
+    en: {
+        bracket: "from half to twice the figure", official: "at least 75 %", withdrawn: "the banner says by whom",
+        unsigned: "is not signed", refused: "found a problem", notChecked: "for the reason in the banner",
+        internal: "\"Never shared\"", rendered: "recomputed its content hash", kept: "without checking it here",
+        pdf: "\"Download the PDF\"", newLink: "\"New share link\"", render: "\"Render again\"",
+        withdraw: "\"Withdraw\" asks for a reason", noWithdraw: "offers neither a share link", neverLink: "never has a share link",
+        carbonBar: "The carbon bar", measured: "2 of the 3 declared applications", both: "\"Broker hosts\"",
+        database: "The \"Database hosts\" row", excluded: "by the operator", hashChecked: "have not changed since",
+        hashNot: "did not check the content hash", signature: "on your computer", audited: "The audited level",
+        neverShared: "is never shared", locked: "your access does not include", groupChange: "next sign-in",
+        noGroup: "in no group", noReach: "No grant concerns", everything: "\"Everything\" means",
+        columns: "the role and its permissions", noToken: "No terminal token.", tokensFailed: "did not list the tokens",
+        revoke: "\"Revoke\"", covered: "Nothing to assign", seen: "the sources where it was seen", truncated: "first 200",
+        backend: "A trace backend", none: "None."
+    }
+};
+const publicTest = (name, body) => guideTest(name, body, PUBLIC_SAYS);
+
+test("Disclosures, a disclosure, Access and Coverage each have their guide", () => {
+    for (const screen of ["disclosures", "disclosure", "access", "coverage"]) assert.equal(PSL.guideIdFor(screen, null), screen);
+    for (const screen of ["ack", "missing"]) assert.equal(PSL.guideIdFor(screen, null), null);
+});
+
+test("the Disclosures steps come in the screen's order, the card only with a report to read", () => {
+    assert.deepEqual(PSL.disclosuresSteps({first: publicItem()}).map((step) => [step.id, step.anchors]), [
+        ["intro", ["disc.sub"]], ["empty", ["disc.empty"]], ["rail", ["disc.rail"]], ["legend", ["disc.legend"]],
+        ["card", ["disc.card"]], ["publish", ["disc.publish"]], ["end", []]]);
+    assert.ok(!("card" in disclosuresBy(null)));
+});
+
+test("a disclosure's notes follow the order of its banners, then its chip", () => {
+    assert.deepEqual(PSL.disclosureNotes(publicItem()), []);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({integrity_level: "hash-only"})), ["unsigned"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({integrity_level: "none", intent: "internal"})), []);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({withdrawn: WITHDRAWN, integrity_level: "none", confidentiality: "internal"})),
+        ["withdrawn", "internal"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({pdf: "not_rendered", render_reason: "binding_mismatch"})), ["refused"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({pdf: "not_rendered", render_reason: "content_hash_mismatch"})), ["refused"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({pdf: "not_rendered", render_reason: "engine_missing"})), ["not_checked"]);
+});
+
+publicTest("the card of Disclosures quotes the carbon with its bracket and reads the first report's banners", (says) => {
+    const plain = text(disclosuresBy().card);
+    assert.ok(plain.includes(says.bracket) && plain.includes(says.official));
+    for (const note of ["withdrawn", "unsigned", "refused", "notChecked", "internal"]) assert.ok(!plain.includes(says[note]), note);
+    assert.ok(text(disclosuresBy(publicItem({withdrawn: WITHDRAWN})).card).includes(says.withdrawn));
+    assert.ok(text(disclosuresBy(publicItem({integrity_level: "hash-only"})).card).includes(says.unsigned));
+    assert.ok(text(disclosuresBy(publicItem({pdf: "not_rendered", render_reason: "binding_mismatch"})).card).includes(says.refused));
+    assert.ok(text(disclosuresBy(publicItem({pdf: "not_rendered", render_reason: null})).card).includes(says.notChecked));
+    assert.ok(text(disclosuresBy(publicItem({confidentiality: "internal"})).card).includes(says.internal));
+});
+
+test("the disclosure steps come in the screen's order", () => {
+    assert.deepEqual(PSL.disclosureSteps({detail: disclosureDetail(), report: null}).map((step) => [step.id, step.anchors]), [
+        ["head", ["disc.head", "disc.head.sub"]], ["actions", ["disc.actions"]], ["glance", ["disc.glance"]],
+        ["apps", ["disc.apps"]], ["integrity", ["disc.integrity"]], ["files", ["disc.files"]], ["links", ["disc.links"]],
+        ["deliveries", ["disc.deliveries"]], ["method", ["disc.method"]], ["end", []]]);
+    // No PDF and no right to manage: the bar holds no button, and the step has nothing to say.
+    assert.ok(!("actions" in disclosureBy({files: {report: true, attestation: false, bundle: false, pdf: false}})));
+});
+
+publicTest("the head of a disclosure says whether the Hub checked it, then its banners", (says) => {
+    const rendered = text(disclosureBy().head);
+    assert.ok(rendered.includes(says.rendered) && !rendered.includes(says.kept));
+    const kept = text(disclosureBy({pdf: "not_rendered", withdrawn: WITHDRAWN}).head);
+    assert.ok(kept.includes(says.kept) && kept.includes(says.withdrawn) && kept.includes(says.notChecked));
+});
+
+publicTest("the actions of a disclosure name each button the screen shows, and none without the right", (says) => {
+    const reader = text(disclosureBy().actions);
+    assert.ok(reader.includes(says.pdf));
+    for (const button of ["newLink", "render", "withdraw"]) assert.ok(!reader.includes(says[button]), button);
+    const manager = text(disclosureBy({}, {can_manage: true}).actions);
+    assert.ok(manager.includes(says.newLink) && manager.includes(says.withdraw) && !manager.includes(says.render));
+    assert.ok(text(disclosureBy({pdf: "not_rendered"}, {can_manage: true}).actions).includes(says.render));
+    const withdrawn = text(disclosureBy({withdrawn: WITHDRAWN}, {can_manage: true}).actions);
+    assert.ok(withdrawn.includes(says.noWithdraw) && !withdrawn.includes(says.newLink) && !withdrawn.includes(says.withdraw));
+    const internal = text(disclosureBy({confidentiality: "internal"}, {can_manage: true}).actions);
+    assert.ok(internal.includes(says.neverLink) && !internal.includes(says.newLink));
+});
+
+publicTest("a disclosure's figures, applications and integrity say what the screen shows", (says) => {
+    assert.ok(text(disclosureBy().glance).includes(says.carbonBar));
+    assert.ok(!text(disclosureBy({figures: Object.assign({}, DISCLOSURE.figures, {carbon_kgco2eq: 0})}).glance).includes(says.carbonBar));
+    const plain = text(disclosureBy().apps);
+    for (const variant of ["measured", "both", "database", "excluded"]) assert.ok(!plain.includes(says[variant]), variant);
+    const figures = Object.assign({}, DISCLOSURE.figures, {applications_declared: 3, applications_measured: 2});
+    assert.ok(text(disclosureBy({figures}).apps).includes(says.measured));
+    const database = text(disclosureBy({}, {}, HOSTS).apps);
+    assert.ok(database.includes(says.database) && !database.includes(says.both));
+    const both = Object.assign({}, HOSTS.aggregate, {messaging_waste: HOSTS.aggregate.database_waste});
+    assert.ok(text(disclosureBy({}, {}, {aggregate: both}).apps).includes(says.both));
+    const excluded = {scope_manifest: {applications_excluded: [{service_name: "batch"}]}};
+    assert.ok(text(disclosureBy({}, {}, excluded).apps).includes(says.excluded));
+    const checked = text(disclosureBy().integrity);
+    assert.ok(checked.includes(says.hashChecked) && checked.includes(says.signature) && checked.includes(says.audited));
+    const unchecked = text(disclosureBy({integrity_level: "audited"}, {checks: Object.assign({}, disclosureDetail().checks, {content_hash: "not_checked"})}).integrity);
+    assert.ok(unchecked.includes(says.hashNot) && !unchecked.includes(says.hashChecked) && !unchecked.includes(says.audited));
+});
+
+publicTest("a disclosure's share links say an internal report is never shared and a reader cannot manage them", (says) => {
+    const manager = text(disclosureBy({}, {can_manage: true}).links);
+    assert.ok(!manager.includes(says.neverShared) && !manager.includes(says.locked));
+    assert.ok(text(disclosureBy().links).includes(says.locked));
+    assert.ok(text(disclosureBy({confidentiality: "internal"}, {can_manage: true}).links).includes(says.neverShared));
+});
+
+test("the Access steps come in the screen's order", () => {
+    assert.deepEqual(PSL.accessSteps({machine: false, noGroup: false, noReach: false, everything: false, tokens: "listed"})
+        .map((step) => [step.id, step.anchors]), [
+        ["intro", ["access.sub"]], ["who", ["access.who"]], ["groups", ["access.groups"]], ["reach", ["access.reach"]],
+        ["tokens", ["access.tokens"]], ["admin", ["access.admin"]], ["projects", ["access.projects"]], ["end", []]]);
+});
+
+publicTest("Access says what your sign-in, groups, grants and tokens are", (says) => {
+    assert.ok(text(accessBy().who).includes(says.groupChange));
+    assert.ok(!text(accessBy({machine: true}).who).includes(says.groupChange));
+    assert.ok(!text(accessBy().groups).includes(says.noGroup));
+    assert.ok(text(accessBy({noGroup: true}).groups).includes(says.noGroup));
+    const reach = text(accessBy().reach);
+    assert.ok(reach.includes(says.columns) && !reach.includes(says.everything) && !reach.includes(says.noReach));
+    assert.ok(text(accessBy({everything: true}).reach).includes(says.everything));
+    const none = text(accessBy({noReach: true}).reach);
+    assert.ok(none.includes(says.noReach) && !none.includes(says.columns));
+    assert.ok(text(accessBy().tokens).includes(says.revoke));
+    const noToken = text(accessBy({tokens: "none"}).tokens);
+    assert.ok(noToken.includes(says.noToken) && !noToken.includes(says.revoke));
+    assert.ok(text(accessBy({tokens: "failed"}).tokens).includes(says.tokensFailed));
+});
+
+test("the Coverage steps come in the screen's order", () => {
+    assert.deepEqual(PSL.coverageSteps({covered: false, truncated: false, backend: false, noConflict: false})
+        .map((step) => [step.id, step.anchors]), [
+        ["intro", ["coverage.sub"]], ["attention", ["coverage.attention"]], ["snippet", ["coverage.snippet"]],
+        ["conflicts", ["coverage.conflicts"]], ["tokens", ["coverage.tokens"]], ["config", ["coverage.config"]], ["end", []]]);
+});
+
+publicTest("Coverage says nothing is left to assign, a cut list, a trace backend and no conflict", (says) => {
+    const listed = text(coverageBy().attention);
+    assert.ok(listed.includes(says.seen) && !listed.includes(says.covered));
+    for (const variant of ["truncated", "backend"]) assert.ok(!listed.includes(says[variant]), variant);
+    const covered = text(coverageBy({covered: true}).attention);
+    assert.ok(covered.includes(says.covered) && !covered.includes(says.seen));
+    assert.ok(text(coverageBy({truncated: true}).attention).includes(says.truncated));
+    assert.ok(text(coverageBy({backend: true}).attention).includes(says.backend));
+    assert.ok(!text(coverageBy().conflicts).includes(says.none));
+    assert.ok(text(coverageBy({noConflict: true}).conflicts).includes(says.none));
+});
+
+test("the public and access guides have no em dash, and French addresses the reader as vous", () => {
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = [
+            ...PSL.disclosuresSteps({first: publicItem({withdrawn: WITHDRAWN, pdf: "not_rendered", confidentiality: "internal"})}),
+            ...PSL.disclosuresSteps({first: publicItem({integrity_level: "hash-only", pdf: "not_rendered", render_reason: "binding_mismatch"})}),
+            ...PSL.disclosureSteps({
+                detail: disclosureDetail({
+                    figures: Object.assign({}, DISCLOSURE.figures, {applications_declared: 3, applications_measured: 2}),
+                    confidentiality: "internal", pdf: "not_rendered"
+                }, {can_manage: true}),
+                report: {aggregate: {database_waste: HOSTS.aggregate.database_waste}, scope_manifest: {applications_excluded: [{}]}}
+            }),
+            ...PSL.disclosureSteps({detail: disclosureDetail({withdrawn: WITHDRAWN}, {can_manage: true}), report: null}),
+            ...PSL.accessSteps({machine: false, noGroup: true, noReach: false, everything: true, tokens: "listed"}),
+            ...PSL.accessSteps({machine: true, noGroup: false, noReach: true, everything: false, tokens: "failed"}),
+            ...PSL.accessSteps({machine: true, noGroup: false, noReach: true, everything: false, tokens: "none"}),
+            ...PSL.coverageSteps({covered: false, truncated: true, backend: true, noConflict: true}),
+            ...PSL.coverageSteps({covered: true, truncated: false, backend: false, noConflict: false})
+        ].map(text).join("\n");
+        assert.ok(all.length > 6000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        assert.doesNotMatch(all, /guide\.(disclosures?|access|coverage)\b/, "every key has a text");
+        for (const state of ["wait", "failed"]) {
+            for (const id of ["disclosures", "disclosure"]) {
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".title"), id + " " + state);
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".body"), id + " " + state);
+            }
+        }
         if (lang === "fr") {
             assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
             assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);

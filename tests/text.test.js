@@ -261,7 +261,8 @@ const SCREEN_FUNCTIONS = ["renderSourcesScreen", "sourcesTable", "tableGroupRow"
     "incidentsGuideSource", "correlationsGuideSource", "foldGuide", "foldAnchors", "fleetBehind", "guideSourceAnchors",
     "renderIncidentsScreen", "unauthorizedBanners", "incidentFilterLine", "incidentCopyNote", "incidentsTable",
     "incidentRow", "incidentNameCell", "toggleIncident", "loadIncident", "incidentPanel", "renderCorrelationsScreen",
-    "correlationFilterLine", "correlationsTable", "pairRow", "pairPanel", "renderFleetSkew"];
+    "correlationFilterLine", "correlationsTable", "pairRow", "pairPanel", "renderFleetSkew", "disclosuresGuideSource",
+    "disclosureGuideSource", "ownTokens", "accessGuideSource", "coverageGuideSource", "guideId", "render"];
 
 const SCREEN_HELPERS = ["sourceHealth", "dur", "durDown", "durParts", "humanDur", "versionGap", "skew", "argsLine",
     "weightBand", "bytes", "hostKwh", "sourceCountLabel", "monitorKeyHint"];
@@ -536,7 +537,7 @@ const TASK6_FUNCTIONS = ["loadDisclosures", "loadDisclosure", "sendDisclosure", 
 // verifyCommand and publishCommand write command lines, which the guard would read as prose: the one comment
 // line of the second is pinned below instead.
 const TASK6_HELPERS = ["describePattern", "readDisclosureId", "quarterOf", "railCell", "periodRail", "coverageNotch",
-    "checkRows", "hostRows", "monthName", "periodLabel"];
+    "checkRows", "hostRows", "monthName", "periodLabel", "disclosureNotes"];
 
 test("the disclosures screens hold no prose literal", () => {
     const app = wwwrootFile("app.js");
@@ -636,7 +637,8 @@ const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapH
     "techMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain",
     "screenText", "rangeNotes", "newSteps", "newRangeStep", "newTracesStep", "newFetchStep", "newCostStep",
     "newSubmitStep", "recentSteps", "runSteps", "runOutcomeStep", "reportGoneView", "reportSteps", "sourcesSteps",
-    "incidentsSteps", "correlationsSteps"];
+    "incidentsSteps", "correlationsSteps", "disclosureNoteTexts", "disclosuresSteps", "disclosureSteps",
+    "disclosureActionTexts", "disclosureAppTexts", "disclosureIntegrityTexts", "accessSteps", "coverageSteps"];
 
 test("the recap screen holds no prose literal", () => {
     const app = wwwrootFile("app.js");

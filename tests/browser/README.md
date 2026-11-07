@@ -44,7 +44,9 @@ captured the same way, light and dark, from a second Hub (`demo/access.spec.ts`)
 
 ## The guide's walk
 
-`demo/guide.spec.ts` is the one spec here that asserts rather than captures. It walks the
+`demo/guide.spec.ts` and `demo/guide-access.spec.ts` are the specs here that assert rather than capture.
+The second walks the Access and Coverage guides on the access-on Hub, as a member, an admin and a
+caller no grant reaches, in the `guide-access-*` projects. The first walks the
 Management recap's guide on the Hub global-setup stands up, at 1280 and 390 px, light and dark:
 every step and the focus on exit, a redraw during a step, the wait card while the recap job is
 held running (and no request added), the failed card, a row taller than the window, the browser's

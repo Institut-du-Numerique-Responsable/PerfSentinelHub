@@ -503,9 +503,9 @@ async function walkTitles(page: Page): Promise<string[]> {
     return titles;
 }
 
-test("the entry shows on the analysis and fleet screens, and not on a missing page", async ({page}) => {
+test("the entry shows on the analysis, fleet and disclosure screens, and not on a missing page", async ({page}) => {
     for (const route of ["/#/new", "/#/recent", `/#/run/${state.succeeded}`, `/#/report/${state.succeeded}`,
-        "/#/sources", "/#/incidents", "/#/correlations"]) {
+        "/#/sources", "/#/incidents", "/#/correlations", "/#/disclosures", `/#/disclosures/${state.disclosure}`]) {
         await page.goto(route);
         await expect(page.locator("#guide-open"), route).toBeVisible({timeout: 30_000});
     }
@@ -663,4 +663,33 @@ test("an incidents read that fell back to an empty copy fails with its own words
     await page.reload();
     await openHere(page, '.banner[data-tone="crit"]');
     await expect(title(page)).toHaveText("The Hub did not return the incidents");
+});
+
+test("the Disclosures walk reads the rail, the legend and the first report", async ({page}) => {
+    await openOn(page, "/#/disclosures", '[data-guide="disc.card"]');
+    await goTo(page, "A report");
+    expect(await framed(page, ["disc.card"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("from half to twice the figure");
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    expect(await walkTitles(page)).toEqual(["Energy and carbon, period by period", "The quarters", "Declared or checked",
+        "A report", "Publishing the next one", "You can read a public report"]);
+});
+
+test("the walk of a disclosure frames its title and says who checked what", async ({page}) => {
+    await openOn(page, `/#/disclosures/${state.disclosure}`, '[data-guide="disc.integrity"]');
+    expect(await framed(page, ["disc.head", "disc.head.sub"])).toBe(true);
+    await goTo(page, "Who checked what");
+    expect(await framed(page, ["disc.integrity"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    expect(await walkTitles(page)).toEqual(["A disclosure", "Download, share, withdraw", "At a glance",
+        "The applications", "Who checked what", "The files", "The share links", "Method and limits",
+        "You know what this report guarantees"]);
+});
+
+test("a disclosure the Hub does not return offers only to close", async ({page}) => {
+    await openOn(page, "/#/disclosures/ffffffffffffffff", '.banner[data-tone="crit"]');
+    await expect(title(page)).toHaveText("The Hub did not return this disclosure");
+    await expect(next(page)).toHaveText("Close");
 });

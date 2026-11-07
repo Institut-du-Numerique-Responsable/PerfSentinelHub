@@ -600,6 +600,30 @@ export interface CorrelationsGuideContext {
     traceable: boolean;
 }
 
+/** What the Access guide reads off the caller's access. */
+export interface AccessGuideContext {
+    /** Signed in with a machine token, whose group is configuration rather than the provider's. */
+    machine: boolean;
+    noGroup: boolean;
+    noReach: boolean;
+    /** A grant names the project `*`. */
+    everything: boolean;
+    /** The caller's own terminal tokens, as the tokens card lists them. */
+    tokens: "listed" | "none" | "failed";
+}
+
+/** What the Coverage guide reads off an admin's access. */
+export interface CoverageGuideContext {
+    /** The Hub sent what no project covers, and it is empty. */
+    covered: boolean;
+    /** The uncovered lists stop at their cap. */
+    truncated: boolean;
+    /** An uncovered source is a trace backend, which stores no finding. */
+    backend: boolean;
+    /** The Hub sent the conflicts, and there are none. */
+    noConflict: boolean;
+}
+
 /** What the New screen's guide reads off the form and the Hub's status. */
 export interface NewGuideContext {
     /** Every configured source, and those the caller may run on. */

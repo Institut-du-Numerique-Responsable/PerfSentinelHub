@@ -47,7 +47,9 @@ Hub (`demo/access.spec.ts`) :
 
 ## Le parcours du guide
 
-`demo/guide.spec.ts` est la seule spec ici qui vérifie au lieu de capturer. Elle parcourt le guide
+`demo/guide.spec.ts` et `demo/guide-access.spec.ts` sont les specs ici qui vérifient au lieu de capturer.
+La seconde parcourt les guides d'Accès et de Couverture sur le Hub au contrôle d'accès actif, en membre,
+en admin et sans autorisation, dans les projets `guide-access-*`. La première parcourt le guide
 du récapitulatif en vue Management sur le Hub que monte global-setup, à 1280 et 390 px, en clair et
 en sombre : chaque étape et le focus à la sortie, un redessin pendant une étape, la carte d'attente
 pendant que le calcul du récapitulatif est retenu en cours (sans requête ajoutée), la carte d'échec,

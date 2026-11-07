@@ -3258,14 +3258,15 @@
 
     /**
      * The guide that walks through a screen, or null where there is none: the recap in either view, the
-     * analysis screens and the fleet's.
+     * analysis screens, the fleet's, the disclosures and the access screens.
      * @param {string} screen
      * @param {string | null} recapView `pilotage` or `tech` on the recap, null elsewhere
      * @returns {string | null}
      */
     function guideIdFor(screen, recapView) {
         if (screen === 'recap') return recapView === 'pilotage' || recapView === 'tech' ? 'recap.' + recapView : null;
-        return ['new', 'recent', 'run', 'report', 'sources', 'incidents', 'correlations'].indexOf(screen) >= 0 ? screen : null;
+        return ['new', 'recent', 'run', 'report', 'sources', 'incidents', 'correlations', 'disclosures', 'disclosure', 'access',
+            'coverage'].indexOf(screen) >= 0 ? screen : null;
     }
 
     /**
@@ -4031,6 +4032,194 @@
             guideStep('note', ['correlations.note'], undefined, text),
             guideStep('end', [], undefined, text));
         return steps;
+    }
+
+    /**
+     * What a disclosure's banners and chips say about it, in the order the screen draws them: withdrawn or
+     * official without a signature, then a PDF refused or left unchecked, then the internal chip.
+     * @param {import('../types').Disclosure} item
+     * @returns {string[]} keys of `guide.disclosures.note.*`
+     */
+    function disclosureNotes(item) {
+        const notes = [];
+        if (item.withdrawn) notes.push('withdrawn');
+        else if (item.intent === 'official' && (item.integrity_level === 'hash-only' || item.integrity_level === 'none')) {
+            notes.push('unsigned');
+        }
+        if (item.pdf !== 'rendered') {
+            // A render again the engine refused: the files are suspect, not merely unchecked.
+            const refused = item.render_reason === 'content_hash_mismatch' || item.render_reason === 'binding_mismatch';
+            notes.push(refused ? 'refused' : 'not_checked');
+        }
+        if (item.confidentiality === 'internal') notes.push('internal');
+        return notes;
+    }
+
+    /**
+     * @param {import('../types').Disclosure} item
+     * @returns {string[]}
+     */
+    function disclosureNoteTexts(item) {
+        return disclosureNotes(item).map(note => t('guide.disclosures.note.' + note));
+    }
+
+    /**
+     * The steps of the guide over Disclosures. The card step reads the first report, the one the
+     * anchor sits on; an empty list draws no rail, legend or card, and the controller drops them.
+     * @param {{first: import('../types').Disclosure | null}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function disclosuresSteps(ctx) {
+        const text = screenText('disclosures');
+        const steps = [
+            guideStep('intro', ['disc.sub'], {body: [text('intro.body'), text('intro.public')]}, text),
+            guideStep('empty', ['disc.empty'], undefined, text),
+            guideStep('rail', ['disc.rail'], undefined, text),
+            guideStep('legend', ['disc.legend'], {body: [text('legend.body'), text('legend.signature')]}, text)
+        ];
+        if (ctx.first) {
+            steps.push(guideStep('card', ['disc.card'], {
+                body: [text('card.body'), text('card.bracket'), text('card.coverage')].concat(disclosureNoteTexts(ctx.first))
+            }, text));
+        }
+        steps.push(guideStep('publish', ['disc.publish'], undefined, text), guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over one disclosure. A panel the screen leaves out (applications, deliveries,
+     * method without a report) has no anchor, and the controller drops its step.
+     * @param {{detail: import('../types').DisclosureDetail, report: import('../types').DisclosureReport | null}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function disclosureSteps(ctx) {
+        const text = screenText('disclosure');
+        const item = ctx.detail.disclosure;
+        const manage = ctx.detail.can_manage === true;
+        const carbon = item.figures && item.figures.carbon_kgco2eq;
+        const links = [text('links.body')];
+        if (item.confidentiality === 'internal') links.push(text('links.internal'));
+        if (!manage) links.push(text('links.locked'));
+        const steps = [guideStep('head', ['disc.head', 'disc.head.sub'], {
+            body: [text(item.pdf === 'rendered' ? 'head.rendered' : 'head.kept')].concat(disclosureNoteTexts(item))
+        }, text)];
+        const actions = disclosureActionTexts(item, manage, text);
+        if (actions.length) steps.push(guideStep('actions', ['disc.actions'], {body: actions}, text));
+        steps.push(
+            guideStep('glance', ['disc.glance'], {
+                body: carbon > 0 ? [text('glance.body'), text('glance.bracket')] : [text('glance.body')]
+            }, text),
+            guideStep('apps', ['disc.apps'], {body: disclosureAppTexts(item, ctx.report, text)}, text),
+            guideStep('integrity', ['disc.integrity'], {body: disclosureIntegrityTexts(ctx.detail, text)}, text),
+            guideStep('files', ['disc.files'], undefined, text),
+            guideStep('links', ['disc.links'], {body: links}, text),
+            guideStep('deliveries', ['disc.deliveries'], undefined, text),
+            guideStep('method', ['disc.method'], undefined, text),
+            guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * One sentence per button of the bar, as detailActions draws them. Without the right to manage, the
+     * PDF's button alone, when there is a PDF.
+     * @param {import('../types').Disclosure} item
+     * @param {boolean} manage
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {string[]}
+     */
+    function disclosureActionTexts(item, manage, text) {
+        const body = item.files.pdf ? [text('actions.pdf')] : [];
+        if (!manage) return body;
+        if (!item.withdrawn && item.confidentiality !== 'internal') body.push(text('actions.new_link'));
+        if (item.pdf !== 'rendered') body.push(text('actions.render'));
+        body.push(text(item.withdrawn ? 'actions.withdrawn' : 'actions.withdraw'));
+        if (item.confidentiality === 'internal') body.push(text('actions.internal'));
+        return body;
+    }
+
+    /**
+     * What the applications panel says under its head: the measured count, the host rows, an exclusion.
+     * @param {import('../types').Disclosure} item
+     * @param {import('../types').DisclosureReport | null} report
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {string[]}
+     */
+    function disclosureAppTexts(item, report, text) {
+        const figures = item.figures;
+        const body = [text('apps.body')];
+        if (figures && figures.applications_declared != null && figures.applications_measured != null) {
+            body.push(text('apps.measured', {measured: figures.applications_measured, declared: figures.applications_declared}));
+        }
+        const hosts = hostRows(report);
+        if (hosts.length) {
+            body.push(text(hosts.length > 1 ? 'apps.hosts.both'
+                : hosts[0].label === t('disc.host.database') ? 'apps.hosts.database' : 'apps.hosts.broker'));
+        }
+        const excluded = report && report.scope_manifest && report.scope_manifest.applications_excluded;
+        if (hasItems(excluded)) body.push(text('apps.excluded'));
+        return body;
+    }
+
+    /**
+     * @param {import('../types').DisclosureDetail} detail
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {string[]}
+     */
+    function disclosureIntegrityTexts(detail, text) {
+        const body = [text('integrity.body'), text(detail.checks.content_hash === 'checked' ? 'integrity.hash' : 'integrity.not_here'),
+            text('integrity.signature')];
+        if (detail.disclosure.integrity_level !== 'audited') body.push(text('integrity.audited'));
+        return body;
+    }
+
+    /**
+     * The steps of the guide over Access. On the page a caller no grant reaches, the reach card gives way
+     * to the request to send, so its step has no anchor; Admin and the projects exclude each other.
+     * @param {import('../types').AccessGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function accessSteps(ctx) {
+        const text = screenText('access');
+        let reach = [text('reach.body')];
+        if (ctx.noReach) reach = [text('reach.none')];
+        else if (ctx.everything) reach.push(text('reach.everything'));
+        let tokens = [text('tokens.body')];
+        if (ctx.tokens !== 'listed') tokens = [text('tokens.' + ctx.tokens)];
+        return [
+            guideStep('intro', ['access.sub'], undefined, text),
+            guideStep('who', ['access.who'], {body: ctx.machine ? [text('who.body')] : [text('who.body'), text('who.groups')]}, text),
+            guideStep('groups', ['access.groups'], {
+                body: ctx.noGroup ? [text('groups.body'), text('groups.none')] : [text('groups.body')]
+            }, text),
+            guideStep('reach', ['access.reach'], {body: reach}, text),
+            guideStep('tokens', ['access.tokens'], {body: tokens}, text),
+            guideStep('admin', ['access.admin'], undefined, text),
+            guideStep('projects', ['access.projects'], undefined, text),
+            guideStep('end', [], undefined, text)
+        ];
+    }
+
+    /**
+     * The steps of the guide over Coverage. A card the screen leaves out has no anchor.
+     * @param {import('../types').CoverageGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function coverageSteps(ctx) {
+        const text = screenText('coverage');
+        const attention = ctx.covered ? [text('attention.none')] : [text('attention.body')];
+        if (ctx.truncated) attention.push(text('attention.truncated'));
+        if (ctx.backend) attention.push(text('attention.backend'));
+        return [
+            guideStep('intro', ['coverage.sub'], undefined, text),
+            guideStep('attention', ['coverage.attention'], {body: attention}, text),
+            guideStep('snippet', ['coverage.snippet'], undefined, text),
+            guideStep('conflicts', ['coverage.conflicts'], {
+                body: ctx.noConflict ? [text('conflicts.body'), text('conflicts.none')] : [text('conflicts.body')]
+            }, text),
+            guideStep('tokens', ['coverage.tokens'], undefined, text),
+            guideStep('config', ['coverage.config'], undefined, text),
+            guideStep('end', [], undefined, text)
+        ];
     }
 
     /**
@@ -5084,6 +5273,11 @@
         sourcesSteps,
         incidentsSteps,
         correlationsSteps,
+        disclosureNotes,
+        disclosuresSteps,
+        disclosureSteps,
+        accessSteps,
+        coverageSteps,
         recapPilotageSteps,
         recapTechSteps,
         RECAP_FIRST_PAGE,

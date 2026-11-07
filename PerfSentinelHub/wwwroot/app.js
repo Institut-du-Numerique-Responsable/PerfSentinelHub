@@ -702,7 +702,8 @@
             state.tokens = null;
             state.tokensFailed = true;
         }
-        if (state.screen === 'access' || state.screen === 'coverage') render();
+        // Without a status, every route draws the access screen under the no-grant banner.
+        if (state.screen === 'access' || state.screen === 'coverage' || !state.status) render();
     }
 
     /**
@@ -1078,8 +1079,7 @@
     /** Draws the screen, then the guide's entry and the guide itself, which point into it. */
     function render() {
         renderScreen();
-        // Without a status the screen drew only a banner, which no guide walks.
-        document.getElementById('guide-open').hidden = !state.status || guideId(state.screen) === null;
+        document.getElementById('guide-open').hidden = guideId(state.screen) === null;
         GUIDE.refresh();
     }
 
@@ -1145,6 +1145,9 @@
      * @param {string} screen
      */
     function guideId(screen) {
+        // Without a status every route draws the same page: the caller's access under the no-grant banner,
+        // which the Access guide walks, or a banner alone, which no guide walks.
+        if (!state.status) return state.access && PSL.shellBanner(state.statusError) ? 'access' : null;
         return PSL.guideIdFor(screen, screen === 'recap' ? recapRoute().view : null);
     }
 
@@ -1317,6 +1320,76 @@
     }
 
     /**
+     * What the Disclosures guide reads: the list, and the first report, the one its card step points at.
+     * @returns {import('../types').GuideSource}
+     */
+    function disclosuresGuideSource() {
+        if (state.disclosures === null) return {status: 'wait', steps: []};
+        if (state.disclosuresError) return {status: 'failed', steps: []};
+        return {status: 'ready', steps: PSL.disclosuresSteps({first: state.disclosures[0] || null})};
+    }
+
+    /**
+     * What the guide of one disclosure reads: its detail, and the report.json beside it when it came.
+     * @returns {import('../types').GuideSource}
+     */
+    function disclosureGuideSource() {
+        if (state.disclosureError) return {status: 'failed', steps: []};
+        if (!state.disclosure) return {status: 'wait', steps: []};
+        return {status: 'ready', steps: PSL.disclosureSteps({detail: state.disclosure, report: state.disclosureReport})};
+    }
+
+    /** The terminal tokens the access page lists, the caller's own. */
+    function ownTokens() {
+        return (state.tokens || []).filter(function (/** @type {TerminalToken} */ token) {
+            return token.subject === state.access.subject;
+        });
+    }
+
+    /**
+     * What the Access guide reads: the caller's access, with or without the no-grant banner. The screen
+     * exists only once /api/access answered, so there is nothing to wait for.
+     * @returns {import('../types').GuideSource}
+     */
+    function accessGuideSource() {
+        const access = state.access;
+        let tokens = 'listed';
+        if (state.tokensFailed) tokens = 'failed';
+        else if (ownTokens().length === 0) tokens = 'none';
+        return {
+            status: 'ready', steps: PSL.accessSteps({
+                machine: access.caller === 'machine_token',
+                noGroup: access.groups.length === 0,
+                noReach: access.reach.length === 0,
+                everything: access.reach.some(function (entry) {
+                    return entry.project === '*';
+                }),
+                tokens: /** @type {'listed' | 'none' | 'failed'} */ (tokens)
+            })
+        };
+    }
+
+    /**
+     * What the Coverage guide reads: what no project covers and the conflicts, as an admin's access holds them.
+     * @returns {import('../types').GuideSource}
+     */
+    function coverageGuideSource() {
+        const unmatched = state.access.unmatched;
+        const conflicts = state.access.conflicts;
+        const count = unmatched ? unmatched.services.length + unmatched.attributes.length + unmatched.sources.length : 0;
+        return {
+            status: 'ready', steps: PSL.coverageSteps({
+                covered: Boolean(unmatched) && count === 0,
+                truncated: count > 0 && unmatched.truncated,
+                backend: count > 0 && unmatched.sources.some(function (row) {
+                    return row.findings == null;
+                }),
+                noConflict: Boolean(conflicts) && conflicts.copies.length === 0
+            })
+        };
+    }
+
+    /**
      * The attributes of an element the guide may point at only while its fold is open: the guide never
      * opens a fold, and a folded row stays in the page. foldAnchors names it again when the fold moves.
      * @param {string} name
@@ -1350,7 +1423,11 @@
         'report': runGuideSource(PSL.reportSteps),
         'sources': sourcesGuideSource,
         'incidents': incidentsGuideSource,
-        'correlations': correlationsGuideSource
+        'correlations': correlationsGuideSource,
+        'disclosures': disclosuresGuideSource,
+        'disclosure': disclosureGuideSource,
+        'access': accessGuideSource,
+        'coverage': coverageGuideSource
     };
 
     function initGuide() {
@@ -11020,6 +11097,7 @@
      */
     function disclosureBanners(item) {
         const banners = [];
+        const notes = PSL.disclosureNotes(item);
         if (item.withdrawn) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'crit'}, [critGlyph(16), el('div', {
                 text: t('disc.banner.withdrawn', {
@@ -11029,14 +11107,13 @@
                     reason: (item.withdrawn.reason || '').replace(/\.+\s*$/, '') || t('disc.banner.withdrawn.no_reason')
                 })
             })]));
-        } else if (item.intent === 'official' && (item.integrity_level === 'hash-only' || item.integrity_level === 'none')) {
+        } else if (notes.indexOf('unsigned') >= 0) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'warn'}, [warningGlyph(16), el('div', {
                 text: t('disc.banner.unsigned')
             })]));
         }
         if (item.pdf !== 'rendered') {
-            // A render again the engine refused: the files are suspect, not merely unchecked.
-            const refused = item.render_reason === 'content_hash_mismatch' || item.render_reason === 'binding_mismatch';
+            const refused = notes.indexOf('refused') >= 0;
             const reason = RENDER_REASONS[item.render_reason] ? t(RENDER_REASONS[item.render_reason])
                 : item.render_reason || t('disc.render.none');
             const text = el('div', {text: t(refused ? 'disc.banner.refused' : 'disc.banner.not_checked', {reason: reason})});
@@ -11105,7 +11182,7 @@
     }
 
     function railLegend() {
-        return el('div', {class: 'disc-legend'}, [
+        return el('div', {class: 'disc-legend', 'data-guide': 'disc.legend'}, [
             el('span', {class: 'disc-legend-label', text: t('disc.legend.declared')}),
             levelChip('hash-only'), levelChip('signed'), levelChip('signed-with-attestation'),
             el('span', {class: 'disc-legend-label', text: t('disc.legend.checked')}),
@@ -11115,20 +11192,22 @@
     }
 
     function publishPanel() {
-        return terminalBlock({
+        const panel = terminalBlock({
             head: t('disc.publish.head'),
             sub: t('disc.publish.sub'),
             text: PSL.publishCommand(location.origin),
             copyLabel: t('disc.publish.copy'),
             notes: [t('disc.publish.note')]
         });
+        panel.setAttribute('data-guide', 'disc.publish');
+        return panel;
     }
 
     function renderDisclosuresScreen() {
         const section = el('section', {class: 'disc'}, [
             ruledOverline(t('disc.overline')),
             el('h1', {class: 'page-title', text: t('disc.title')}),
-            el('p', {class: 'page-sub', text: t('disc.sub')})
+            el('p', {class: 'page-sub', 'data-guide': 'disc.sub', text: t('disc.sub')})
         ]);
         if (state.disclosures === null) {
             section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px'}));
@@ -11142,20 +11221,22 @@
             return section;
         }
         if (state.disclosures.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'disc.empty'}, [
                 el('p', {class: 'empty-title', text: t('disc.empty.title')}),
                 el('p', {text: t('disc.empty.body')})
             ]));
             section.appendChild(publishPanel());
             return section;
         }
-        section.appendChild(el('div', {class: 'disc-rail-wrap'}, [
+        section.appendChild(el('div', {class: 'disc-rail-wrap', 'data-guide': 'disc.rail'}, [
             el('span', {class: 'disc-legend-label', text: t('disc.rail.head')}),
             railView(state.disclosures)
         ]));
         section.appendChild(railLegend());
-        state.disclosures.forEach(function (item) {
-            section.appendChild(disclosureCard(item));
+        state.disclosures.forEach(function (item, index) {
+            const card = disclosureCard(item);
+            if (index === 0) card.setAttribute('data-guide', 'disc.card');
+            section.appendChild(card);
         });
         section.appendChild(publishPanel());
         return section;
@@ -11167,9 +11248,10 @@
      * @param {string} head
      * @param {string} sub
      * @param {Child[]} children
+     * @param {string} guide the name the guide points it at
      */
-    function detailPanel(head, sub, children) {
-        return el('section', {class: 'card disc-panel'}, /** @type {Child[]} */ ([
+    function detailPanel(head, sub, children, guide) {
+        return el('section', {class: 'card disc-panel', 'data-guide': guide}, /** @type {Child[]} */ ([
             el('div', {class: 'disc-panel-head'}, [
                 el('h2', {class: 'overline', text: head}),
                 sub ? el('p', {class: 'disc-panel-sub', text: sub}) : null
@@ -11310,7 +11392,7 @@
             return t('disc.apps.col.' + id);
         });
         return detailPanel(t('disc.apps.head'), [coverage, hostNote].filter(Boolean).join(' ') || null,
-            [simpleTable(heads, rows, [heads[1], heads[3], heads[4], heads[5]])]);
+            [simpleTable(heads, rows, [heads[1], heads[3], heads[4], heads[5]])], 'disc.apps');
     }
 
     /**
@@ -11353,7 +11435,7 @@
                     copyLabel: t('disc.verify.copy'),
                     notes: [t('disc.verify.note')]
                 })
-            ]);
+            ], 'disc.integrity');
     }
 
     /**
@@ -11371,7 +11453,7 @@
             ]);
         });
         return detailPanel(t('disc.files.head'), t('disc.files.sub'),
-            [simpleTable([t('disc.files.col.file'), t('disc.files.col.role'), ''], rows), status]);
+            [simpleTable([t('disc.files.col.file'), t('disc.files.col.role'), ''], rows), status], 'disc.files');
     }
 
     /**
@@ -11423,7 +11505,7 @@
                 class: 'sources-note',
                 text: t(item.confidentiality === 'internal' ? 'disc.links.internal' : 'disc.links.none')
             }));
-        return detailPanel(t('disc.links.head'), t('disc.links.sub'), children);
+        return detailPanel(t('disc.links.head'), t('disc.links.sub'), children, 'disc.links');
     }
 
     /**
@@ -11461,7 +11543,8 @@
         const heads = ['webhook', 'event', 'last_attempt', 'outcome'].map(function (id) {
             return t('disc.deliveries.col.' + id);
         });
-        return detailPanel(t('disc.deliveries.head'), t('disc.deliveries.sub'), [simpleTable(heads.concat(['']), rows)]);
+        return detailPanel(t('disc.deliveries.head'), t('disc.deliveries.sub'), [simpleTable(heads.concat(['']), rows)],
+            'disc.deliveries');
     }
 
     /**
@@ -11490,7 +11573,7 @@
             disclaimers.length ? engineText(el('ol', {class: 'disc-disclaimers'}, disclaimers.map(function (/** @type {string} */ text) {
                 return el('li', {text: String(text)});
             }))) : null
-        ]);
+        ], 'disc.method');
     }
 
     /**
@@ -11584,7 +11667,7 @@
             buttons.push(toggle);
         }
         buttons.push(status);
-        return el('div', {class: 'disc-actions'}, buttons);
+        return el('div', {class: 'disc-actions', 'data-guide': 'disc.actions'}, buttons);
     }
 
     function renderDisclosureScreen() {
@@ -11610,13 +11693,13 @@
         [
             ruledOverline(t('disc.detail.overline', {period: PSL.periodLabel(item.period)})),
             el('h1', {
-                class: 'page-title', text: t('disc.detail.title', {
+                class: 'page-title', 'data-guide': 'disc.head', text: t('disc.detail.title', {
                     organisation: item.organisation,
                     from: PSL.day(item.period.from, {withYear: true}), to: PSL.day(item.period.to, {withYear: true})
                 })
             }),
             el('p', {
-                class: 'page-sub',
+                class: 'page-sub', 'data-guide': 'disc.head.sub',
                 text: t(item.pdf === 'rendered' ? 'disc.detail.sub.rendered' : 'disc.detail.sub.kept', {
                     intent: PSL.hasText(intent) ? t(intent)
                         : t('disc.detail.intent.other', {intent: item.intent.charAt(0).toUpperCase() + item.intent.slice(1)}),
@@ -11637,7 +11720,7 @@
         section.appendChild(detailPanel(t('disc.glance.head'), null, [
             disclosureFigures(item.figures),
             carbonBracket(item.figures && item.figures.carbon_kgco2eq)
-        ]));
+        ], 'disc.glance'));
         [applicationsPanel(state.disclosureReport, item.figures), integrityPanel(detail), filesPanel(item),
             shareLinksPanel(detail, manage), deliveriesPanel(detail, manage), methodPanel(state.disclosureReport)]
             .forEach(function (panel) {
@@ -11663,7 +11746,7 @@
         const section = el('section', {class: 'access-screen'}, [
             ruledOverline(t('access.overline')),
             el('h1', {class: 'page-title', text: t('access.title')}),
-            el('p', {class: 'page-sub', text: t('access.sub')})
+            el('p', {class: 'page-sub', 'data-guide': 'access.sub', text: t('access.sub')})
         ]);
         if (banner) section.appendChild(noGrantBanner(banner));
 
@@ -11674,7 +11757,7 @@
                 el('span', {text: signedIn.subjectLabel}),
                 el('code', {class: 'access-subject', text: signedIn.subject})
             ])
-        ]));
+        ], undefined, 'access.who'));
         section.appendChild(accessCard(t('access.card.groups'), [
             access.groups.length === 0
                 ? el('p', {class: 'access-muted', text: t('access.groups.none')})
@@ -11688,7 +11771,7 @@
                         text: group.name + ' · ' + group.origin
                     });
                 }))
-        ]));
+        ], undefined, 'access.groups'));
         if (banner) {
             // The banner already says nothing is reached. What helps now is the request.
             section.appendChild(terminalBlock({
@@ -11707,21 +11790,19 @@
                         reach.map(function (/** @type {{project: string, group: string, role: string, permissions: string}} */ row) {
                             return [row.project, row.group, row.role, row.permissions];
                         }))
-            ]));
+            ], undefined, 'access.reach'));
         }
         if (state.tokens || state.tokensFailed) {
-            section.appendChild(tokensCard((state.tokens || []).filter(function (/** @type {TerminalToken} */ token) {
-                return token.subject === access.subject;
-            }), t('access.card.own_tokens'), 'tokens-own'));
+            section.appendChild(tokensCard(ownTokens(), t('access.card.own_tokens'), 'tokens-own', 'access.tokens'));
         }
         if (access.admin) {
-            section.appendChild(el('p', {class: 'access-pointer'}, [
+            section.appendChild(el('p', {class: 'access-pointer', 'data-guide': 'access.admin'}, [
                 el('span', {text: t('access.admin.lead')}),
                 el('a', {href: '#/coverage', text: t('shell.tab.coverage')}),
                 el('span', {text: t('access.admin.tail')})
             ]));
         } else if (access.projects.length > 0) {
-            section.appendChild(accessCard(t('access.card.projects'), [projectsTable(access.projects)]));
+            section.appendChild(accessCard(t('access.card.projects'), [projectsTable(access.projects)], undefined, 'access.projects'));
         }
         return section;
     }
@@ -11735,21 +11816,23 @@
         const section = el('section', {class: 'access-screen'}, [
             ruledOverline(t('coverage.overline')),
             el('h1', {class: 'page-title', text: t('coverage.title')}),
-            el('p', {class: 'page-sub', text: t('coverage.sub')})
+            el('p', {class: 'page-sub', 'data-guide': 'coverage.sub', text: t('coverage.sub')})
         ]);
         if (access.unmatched) section.appendChild(attentionCard(access.unmatched));
         const snippet = access.unmatched ? PSL.coverageSnippet(access.unmatched) : null;
         if (snippet) {
-            section.appendChild(terminalBlock({
+            const block = terminalBlock({
                 head: t('coverage.snippet.head'),
                 sub: t('coverage.snippet.sub'),
                 text: snippet,
                 copyLabel: t('coverage.snippet.copy')
-            }));
+            });
+            block.setAttribute('data-guide', 'coverage.snippet');
+            section.appendChild(block);
         }
         if (access.conflicts) section.appendChild(conflictsCard(access.conflicts));
         if (state.tokens || state.tokensFailed) {
-            section.appendChild(tokensCard(state.tokens || [], t('coverage.card.tokens'), 'tokens-all'));
+            section.appendChild(tokensCard(state.tokens || [], t('coverage.card.tokens'), 'tokens-all', 'coverage.tokens'));
         }
         if (access.configuration) section.appendChild(configurationCard(access.configuration));
         return section;
@@ -11760,9 +11843,10 @@
      * @param {string} title
      * @param {Child[]} children
      * @param {string} [headingId]
+     * @param {string} [guide] the name the guide points it at
      */
-    function accessCard(title, children, headingId) {
-        return el('section', {class: 'card access-card'}, /** @type {Child[]} */ ([
+    function accessCard(title, children, headingId, guide) {
+        return el('section', {class: 'card access-card', 'data-guide': guide}, /** @type {Child[]} */ ([
             el('h2', {class: 'overline access-card-title', id: headingId, tabindex: headingId ? '-1' : null}, [
                 el('span', {'aria-hidden': 'true', text: '// '}),
                 el('span', {text: title})
@@ -11815,8 +11899,9 @@
      * @param {TerminalToken[]} tokens
      * @param {string} title
      * @param {string} headingId
+     * @param {string} guide
      */
-    function tokensCard(tokens, title, headingId) {
+    function tokensCard(tokens, title, headingId, guide) {
         const rows = PSL.tokenRows(tokens);
         const notice = state.tokensNotice && state.tokensNotice.card === headingId ? state.tokensNotice : null;
         return accessCard(title, [
@@ -11836,7 +11921,7 @@
                         rows.map(function (/** @type {{id: string, owner: string, from: string, created: string, expires: string, lastUsed: string}} */ row) {
                             return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row, headingId)];
                         }))
-        ], headingId);
+        ], headingId, guide);
     }
 
     /**
@@ -11961,7 +12046,7 @@
                 configuration.local_accounts.map(function (/** @type {string} */ name) {
                     return [name, 'local:' + name];
                 }))
-        ]);
+        ], undefined, 'coverage.config');
     }
 
     /**
@@ -11971,7 +12056,8 @@
     function attentionCard(unmatched) {
         const count = unmatched.services.length + unmatched.attributes.length + unmatched.sources.length;
         if (count === 0) {
-            return accessCard(t('coverage.attention.title'), [el('p', {text: t('coverage.attention.none')})]);
+            return accessCard(t('coverage.attention.title'), [el('p', {text: t('coverage.attention.none')})], undefined,
+                'coverage.attention');
         }
         const parts = [el('p', {text: t('coverage.attention.count.' + PSL.plural(count), {count: count})})];
         if (unmatched.services.length > 0) {
@@ -11998,7 +12084,7 @@
         if (unmatched.truncated) {
             parts.push(el('p', {class: 'access-muted', text: t('coverage.truncated')}));
         }
-        return accessCard(t('coverage.attention.title'), parts);
+        return accessCard(t('coverage.attention.title'), parts, undefined, 'coverage.attention');
     }
 
     /**
@@ -12018,7 +12104,7 @@
                             row.values.join(', '), String(row.identities_without_key)];
                     })),
             conflicts.truncated ? el('p', {class: 'access-muted', text: t('coverage.conflicts.truncated')}) : null
-        ]);
+        ], undefined, 'coverage.conflicts');
     }
 
     function renderRecentScreen() {
