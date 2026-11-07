@@ -82,6 +82,67 @@ answers, not before: the first pass of the retention worker checks, read-only,
 whether any copy or incident still lacks them, and takes the write lock only when
 one does. Until it lands, such a copy matches no attribute scope.
 
+## Memory
+
+The engine runs as a subprocess inside the Hub's container, so one memory limit
+covers the Hub, every run in flight (`Hub:Analysis:Workers` at a time) and the page
+cache the database leaves. Without caps, a run that does not fit gets the whole
+container OOM-killed, every request in flight with it. Two caps make such a run
+fail on its own:
+
+- **The engine's.** `Hub:Analysis:EngineMemoryLimitMiB` (0 in the code, 448 in the
+  chart as `hub.analysis.engineMemoryLimitMiB`) is passed as `--memory-limit-mib`
+  before the subcommand of every engine invocation. A run that reaches it fails
+  with `engine_out_of_memory` and the Hub carries on. An engine before 0.43.2 does
+  not read the flag: it then runs uncapped, and the Hub says so once at startup.
+- **The Hub's.** The chart sets `DOTNET_GCHeapHardLimit` from `hub.gcHeapLimitMiB`
+  (832 by default, null leaves the heap uncapped). Past it an allocation of the Hub
+  throws instead of growing, and a run whose report does not fit fails with
+  `hub_memory_low`. When you set the variable yourself, write bare hexadecimal
+  digits, `34000000` for 832 MiB: the NativeAOT runtime ignores a value with a `0x`
+  prefix, and the heap then has no cap at all.
+
+The limit has to hold the sum: the heap, `Workers` runs at the engine's cap, and
+`Hub:Analysis:MinFreeMemoryMiB` of margin. The chart's defaults give
+832 + 2 x 448 + 256 = 1,984 MiB, under its 2Gi limit. At startup the Hub reads the
+cgroup's `memory.max`, and when the heap plus `Workers` engine caps pass it, it logs
+a warning (event 1407) with the four numbers. It starts anyway: collection and the
+read API do not depend on an analysis. Without `DOTNET_GCHeapHardLimit`, an applied
+engine cap or a container limit, no sum is made.
+
+What the engine needs, measured on the 0.43.2 arm64 binary against a stub Tempo
+with synthetic traces, 16 reads at a time. A cap in the "stopped" column stopped
+the query every time, one in the "passed" column let it through every time:
+
+| Run               | JSON   | Query peak | Stopped under | Passed under | Render peak, 50 embedded traces |
+|-------------------|--------|------------|---------------|--------------|---------------------------------|
+| 500 x 200 spans   | 49 MiB | 270 MiB    | 352 MiB       | 448 MiB      | 203 MiB                         |
+| 100 x 2,000 spans | 97 MiB | 440 MiB    | 512 MiB       | 576 MiB      | 519 MiB                         |
+| 500 x 2,000 spans |        | 1,760 MiB  |               |              |                                 |
+
+Between the two columns the outcome changes from one run to the next. At 448 MiB a
+run of 500 medium traces passes both steps every time, and a run of 100 traces of
+2,000 spans stops with `engine_out_of_memory`.
+
+What the Hub needs, measured on its arm64 image with a stand-in engine that prints
+a report, two runs at a time, in a container limited to 1,536 MiB:
+
+| Heap cap | Two 49 MiB reports       | Two 97 MiB reports         |
+|----------|--------------------------|----------------------------|
+| none     | peak 962 MiB, all passed | peak 1,085 MiB, all passed |
+| 384 MiB  | 5 of 10 failed           |                            |
+| 640 MiB  | 1 of 10 failed           |                            |
+| 704 MiB  | 3 of 20 failed           | 3 of 6 failed              |
+| 768 MiB  | 2 of 20 failed           |                            |
+| 832 MiB  | none of 20 failed        | 4 of 10 failed             |
+
+A peak is the container's `memory.current`, read every 100 ms. Uncapped, the runtime
+keeps what it allocated, so the peak climbs from one pair of runs to the next: 556
+MiB after the first pair of 49 MiB reports. The Hub holds a report several times
+while it reads it (its read buffer, the copy it keeps, the parser's index), so one
+run of a 49 MiB report takes about 400 MiB of heap. Every failure was
+`hub_memory_low`, and the Hub kept answering throughout.
+
 ## Metrics
 
 `GET /metrics` serves the Prometheus text format. It is written by hand rather

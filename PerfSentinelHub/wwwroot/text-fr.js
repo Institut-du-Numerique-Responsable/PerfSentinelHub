@@ -215,8 +215,9 @@
             + 'été lu ni dépensé. Corrigez l\'identifiant de trace ou la valeur de lookback, puis soumettez de '
             + 'nouveau.',
         'error.run.hub_memory_low': 'le Hub a refusé de lancer le binaire d\'analyse\u00a0: il restait trop peu de '
-            + 'mémoire à son conteneur, et le lancer quand même aurait fait tuer tout le Hub. Réessayez quand '
-            + 'le Hub est plus calme, ou demandez à la personne qui l\'exploite de relever sa limite de mémoire.',
+            + 'mémoire à son conteneur, et le lancer quand même aurait fait tuer tout le Hub, ou le rapport du '
+            + 'moteur n\'a pas tenu dans la mémoire du Hub. Réessayez quand le Hub est plus calme, ou '
+            + 'demandez à la personne qui l\'exploite de relever sa limite de mémoire.',
         'error.run.internal': 'le Hub lui-même a échoué, sans jamais toucher la source. Réessayez maintenant. '
             + 'S\'il échoue de la même façon, c\'est le Hub qui demande de l\'attention, pas votre requête.',
         'error.read.network_error': 'rien n\'a répondu à son adresse. Vérifiez que le daemon est démarré et que '

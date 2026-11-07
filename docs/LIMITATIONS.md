@@ -276,6 +276,12 @@ The eleven failure codes come from a heuristic on a bounded set of markers in th
 engine's stderr, not from a contract. Raw stderr is never returned, but the last
 4096 characters of a failed run's go to the Hub's log.
 
+The memory sum the Hub checks at startup is an approximation. Share cards and
+disclosure PDFs run the engine under the same cap, but outside the analysis
+workers: they were not measured and are not in the sum. Every figure in
+[OPERATIONS.md](OPERATIONS.md#memory) was measured on arm64 only, and the outcome
+near a cap changes from one run to the next.
+
 Counts from runs with different detection thresholds are not comparable. Raising
 a threshold does not make a run lighter, it stops the detector from reporting
 the smaller cases.

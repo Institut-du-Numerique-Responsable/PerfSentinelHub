@@ -1354,7 +1354,9 @@ avant chacune de ses deux exécutions, le Hub lit ce que sa cgroup peut encore d
 cache de pages récupérable compté comme libre, et fait échouer le run quand c'est sous
 `Hub:Analysis:MinFreeMemoryMiB`. Un moteur qui ne tient pas ferait tuer tout le Hub pour
 manque de mémoire, avec toutes ses requêtes en cours. Un conteneur sans limite de
-mémoire, ou hors cgroup v2, n'est pas vérifié.
+mémoire, ou hors cgroup v2, n'est pas vérifié. Le même code nomme un rapport qui n'a
+pas tenu dans le tas du Hub lui-même, au-delà de `DOTNET_GCHeapHardLimit`, voir
+[OPERATIONS-FR.md](OPERATIONS-FR.md#mémoire).
 
 La sortie d'erreur brute n'est jamais renvoyée : aucune réponse et aucun écran ne la porte.
 Elle est lue pour nommer un responsable, puisque "le backend nous a refusés" et "le binaire

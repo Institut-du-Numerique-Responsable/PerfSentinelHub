@@ -104,6 +104,26 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_report_the_hub_cannot_hold_is_a_memory_refusal()
+    {
+        // What DOTNET_GCHeapHardLimit throws when the report outgrows the Hub's heap: the run
+        // fails alone, as hub_memory_low, rather than as internal with its "retry now".
+        var options = RunnerOptions(StubEngine(ReportJson, 0));
+        var runner = new AnalysisRunner(
+            new DaemonClient(new HttpClient(new OutOfMemoryHandler()), options),
+            new EngineProbe(options, NullLogger<EngineProbe>.Instance),
+            options,
+            NullLogger<AnalysisRunner>.Instance,
+            new CgroupMemory(Path.Combine(_workspace, "no-cgroup")));
+        var source = Source() with { Kind = SourceKinds.Daemon, BaseUrl = new Uri("http://daemon.svc:4318/") };
+
+        var outcome = await runner.RunAsync(Run(), source, Request(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisStatuses.Failed, outcome.Status);
+        Assert.Equal(AnalysisErrorCodes.HubMemoryLow, outcome.ErrorCode);
+    }
+
+    [Fact]
     public async Task Reclaimable_page_cache_counts_as_free_memory()
     {
         // The same usage, 800 MB of it cache the kernel drops under pressure.
@@ -705,5 +725,15 @@ public sealed class AnalysisRunnerTests : IDisposable
     {
         using var document = JsonDocument.Parse("""{"service":"orders","lookback":"1h"}""");
         return AnalysisRequest.TryParse(document.RootElement, Source(), new AnalysisOptions(), Now, out _)!;
+    }
+
+    private sealed class OutOfMemoryHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            throw new OutOfMemoryException();
+        }
     }
 }

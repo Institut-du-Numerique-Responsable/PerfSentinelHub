@@ -344,6 +344,8 @@ public sealed partial class AnalysisRunner(
             DaemonTimeoutException => AnalysisErrorCodes.Timeout,
             ResponseTooLargeException or EngineOutputTooLargeException => AnalysisErrorCodes.OutputTooLarge,
             HttpRequestException http => ClassifyHttp(http.StatusCode),
+            // DOTNET_GCHeapHardLimit reached: the report did not fit the Hub's heap, the Hub lives on.
+            OutOfMemoryException => AnalysisErrorCodes.HubMemoryLow,
             _ => AnalysisErrorCodes.Internal
         };
     }

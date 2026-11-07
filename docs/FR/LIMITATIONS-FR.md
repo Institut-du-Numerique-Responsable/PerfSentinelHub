@@ -303,6 +303,13 @@ dans la sortie d'erreur du moteur, pas d'un contrat. La sortie d'erreur brute n'
 jamais renvoyée, mais les 4096 derniers caractères de celle d'un run en échec vont
 dans le journal du Hub.
 
+La somme de mémoire que le Hub vérifie au démarrage est une approximation. Les
+cartes à partager et les PDF de divulgation lancent le moteur sous le même plafond,
+mais hors des workers d'analyse : ils n'ont pas été mesurés et n'entrent pas dans
+la somme. Tous les chiffres de [OPERATIONS-FR.md](OPERATIONS-FR.md#mémoire) ont été
+mesurés sur arm64 seulement, et l'issue près d'un plafond change d'un run à
+l'autre.
+
 Les comptes de runs aux seuils de détection différents ne sont pas comparables.
 Relever un seuil n'allège pas un run, il empêche le détecteur de rapporter les
 cas les plus petits.

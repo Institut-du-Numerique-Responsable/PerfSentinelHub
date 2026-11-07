@@ -1263,7 +1263,9 @@ before each of its two runs the Hub reads what its cgroup can still give, the re
 page cache counted as free, and fails the run when that is under
 `Hub:Analysis:MinFreeMemoryMiB`. An engine that does not fit would get the whole Hub
 OOM-killed, every request in flight with it. A container without a memory limit, or
-outside cgroup v2, is not checked.
+outside cgroup v2, is not checked. The same code names a report that did not fit the
+Hub's own heap, past `DOTNET_GCHeapHardLimit`, see
+[OPERATIONS.md](OPERATIONS.md#memory).
 
 Raw stderr is never returned: no response and no screen carries it. It is read to name an
 owner, since "the backend refused us" and "the binary broke" have different owners, and that

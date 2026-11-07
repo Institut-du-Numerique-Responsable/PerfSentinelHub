@@ -201,8 +201,9 @@
         'error.run.invalid_request': 'the arguments were rejected before the run started, so nothing was read '
             + 'and nothing was spent. Fix the trace ID or the lookback value and submit again.',
         'error.run.hub_memory_low': 'the Hub refused to start the analysis binary: its container had too little '
-            + 'memory left for it, and running it anyway would have got the whole Hub killed. Retry when the '
-            + 'Hub is quieter, or have whoever operates it raise its memory limit.',
+            + 'memory left for it, and running it anyway would have got the whole Hub killed, or the engine\'s '
+            + 'report did not fit in the Hub\'s memory. Retry when the Hub is quieter, or have whoever '
+            + 'operates it raise its memory limit.',
         'error.run.internal': 'the Hub itself failed and never touched the source. Retry now. If it fails the '
             + 'same way, the Hub needs attention rather than your request.',
         'error.read.network_error': 'nothing answered at its address. Check the daemon is up and that the Hub '

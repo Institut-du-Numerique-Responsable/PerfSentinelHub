@@ -13,7 +13,8 @@ namespace PerfSentinelHub.Analysis;
 /// </summary>
 public sealed partial class EngineProbe(
     IOptions<HubOptions> options,
-    ILogger<EngineProbe> logger) : IHostedService
+    ILogger<EngineProbe> logger,
+    CgroupMemory? memory = null) : IHostedService
 {
     // A `--version` line is a dozen bytes. Anything beyond this is not one,
     // and reading to the end would let a wrong binary size the buffer.
@@ -28,12 +29,14 @@ public sealed partial class EngineProbe(
     // it at all and renders nothing.
     private const string DaemonUrlFlag = "--daemon-url";
     private const string HubRelayFlag = "--hub-relay";
+    private const long Mebibyte = 1024 * 1024;
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
 
     // card.json's equivalence_country, which an older engine refuses as an unknown key.
     private static readonly Version CardCountrySince = new(0, 40, 0);
 
     private readonly AnalysisOptions _analysis = options.Value.Analysis;
+    private readonly CgroupMemory _memory = memory ?? CgroupMemory.Container;
 
     /// <summary>Null until probed, and null forever if the probe failed.</summary>
     public string? Version { get; private set; }
@@ -125,6 +128,7 @@ public sealed partial class EngineProbe(
                 LogNoDaemonUrl(logger, path);
             if (_analysis.EngineMemoryLimitMiB > 0 && !MemoryLimitApplies)
                 LogMemoryLimitIgnored(logger, _analysis.EngineMemoryLimitMiB, Version);
+            CheckMemoryBudget();
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -139,6 +143,34 @@ public sealed partial class EngineProbe(
     public Task StopAsync(CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     The Hub's heap cap and every worker's engine cap against the container's limit. Said, never
+    ///     refused: collection and the read API run whatever the sum, and only an analysis risks the
+    ///     limit. Without a heap cap, an applied engine cap or a container limit, nothing is summed.
+    /// </summary>
+    private void CheckMemoryBudget()
+    {
+        if (!MemoryLimitApplies || HeapHardLimitBytes() is not { } heap || _memory.LimitBytes() is not { } limit)
+            return;
+        var engines = (long)_analysis.Workers * _analysis.EngineMemoryLimitMiB * Mebibyte;
+        if (heap + engines > limit)
+            LogMemoryBudgetExceeded(
+                logger, heap / Mebibyte, _analysis.Workers, _analysis.EngineMemoryLimitMiB, limit / Mebibyte);
+    }
+
+    // Bare hexadecimal digits, the way the NativeAOT runtime reads it: it ignores a value with a
+    // 0x prefix (measured on the image), so such a value caps nothing and is no heap here either.
+    private static long? HeapHardLimitBytes()
+    {
+        return long.TryParse(
+                   Environment.GetEnvironmentVariable("DOTNET_GCHeapHardLimit"),
+                   NumberStyles.AllowHexSpecifier,
+                   CultureInfo.InvariantCulture,
+                   out var bytes) && bytes > 0
+            ? bytes
+            : null;
     }
 
     private static async Task<string?> RunVersionAsync(
@@ -212,4 +244,15 @@ public sealed partial class EngineProbe(
         "Hub:Analysis:EngineMemoryLimitMiB is {LimitMib} MiB but --memory-limit-mib needs engine 0.43.2 or later, "
         + "and the version read from the binary is '{Version}', so engine runs are not capped.")]
     private static partial void LogMemoryLimitIgnored(ILogger logger, int limitMib, string? version);
+
+    [LoggerMessage(1407, LogLevel.Warning,
+        "The Hub's heap of {HeapMib} MiB and {Workers} runs of {EngineMib} MiB exceed the container's "
+        + "{LimitMib} MiB: an analysis can get the Hub OOM-killed. Lower Hub:Analysis:Workers or "
+        + "Hub:Analysis:EngineMemoryLimitMiB, or raise the memory limit.")]
+    private static partial void LogMemoryBudgetExceeded(
+        ILogger logger,
+        long heapMib,
+        int workers,
+        int engineMib,
+        long limitMib);
 }
