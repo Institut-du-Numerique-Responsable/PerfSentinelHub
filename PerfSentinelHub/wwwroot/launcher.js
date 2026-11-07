@@ -55,7 +55,20 @@
      * @type {Record<import('../types').ErrorCode, string>}
      */
     const ERRORS = textTable('error.run.', ['source_unreachable', 'source_auth_failed', 'source_rejected_request',
-        'timeout', 'output_too_large', 'binary_failed', 'invalid_request', 'hub_memory_low', 'internal']);
+        'timeout', 'output_too_large', 'binary_failed', 'fetches_failed', 'engine_out_of_memory', 'invalid_request',
+        'hub_memory_low', 'internal']);
+
+    /**
+     * The sentence of a failed run's code, the engine's memory cap filled in where it names one.
+     * `?` stands for a cap the Hub did not report (or reports as off), never a literal `{limit}`.
+     * @param {string | null | undefined} code
+     * @param {number | null | undefined} limitMib
+     * @returns {string | undefined}
+     */
+    function runFailureMeaning(code, limitMib) {
+        const sentence = code ? /** @type {Record<string, string | undefined>} */ (ERRORS)[code] : undefined;
+        return sentence?.replace('{limit}', limitMib != null && limitMib > 0 ? String(limitMib) : '?');
+    }
 
     /**
      * What a failed read of a source means. A different vocabulary from ERRORS,
@@ -110,8 +123,8 @@
 
     /** @type {Record<import('../types').ErrorCode, string>} */
     const ERROR_TITLES = textTable('error.title.', ['source_unreachable', 'source_auth_failed',
-        'source_rejected_request', 'timeout', 'output_too_large', 'binary_failed', 'invalid_request', 'hub_memory_low',
-        'internal']);
+        'source_rejected_request', 'timeout', 'output_too_large', 'binary_failed', 'fetches_failed',
+        'engine_out_of_memory', 'invalid_request', 'hub_memory_low', 'internal']);
 
     /** @type {Record<import('../types').SourceKind, string>} */
     const KIND_LABEL = {daemon: 'daemon', tempo: 'tempo', jaeger_query: 'victoria traces'};
@@ -4095,6 +4108,7 @@
             return HUB;
         },
         ERRORS,
+        runFailureMeaning,
         READ_ERRORS,
         ERROR_TITLES,
         sourceHealth,

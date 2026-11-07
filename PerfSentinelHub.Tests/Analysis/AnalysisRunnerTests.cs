@@ -69,6 +69,27 @@ public sealed class AnalysisRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_partial_read_reaches_the_summary_as_a_warning()
+    {
+        var runner = Runner(StubEngine(
+            """
+            {
+              "analysis": {"traces_analyzed": 60},
+              "findings": [],
+              "quality_gate": {"passed": true},
+              "warning_details": [{"kind": "partial_fetch", "message": "40 of 100 trace reads failed"}]
+            }
+            """,
+            0));
+
+        var outcome = await runner.RunAsync(Run(), Source(), Request(), TestContext.Current.CancellationToken);
+
+        var warning = Assert.Single(outcome.Summary!.Warnings);
+        Assert.Equal("partial_fetch", warning.Kind);
+        Assert.Equal("40 of 100 trace reads failed", warning.Message);
+    }
+
+    [Fact]
     public async Task A_run_is_refused_before_the_engine_when_the_container_lacks_memory()
     {
         // 1 GiB limit, 1,000,000,000 bytes in use and no reclaimable cache: 73 MiB left.

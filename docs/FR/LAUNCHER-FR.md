@@ -52,6 +52,13 @@ sous 16, un run Tempo ne peut pas être tenu au maximum : le bouton reste étein
 porte le nombre, et la commande imprimée aussi sauf s'il vaut le 16 du moteur, que le moteur prend
 de toute façon.
 
+Un run en échec nomme son code et donne une phrase sur ce qu'il faut faire ensuite. Deux découlent
+du bloc ci-dessus. `fetches_failed` dit que Tempo n'a pas pu servir la plupart des traces trouvées par
+sa recherche et demande moins de lectures simultanées. `engine_out_of_memory` dit que le moteur a atteint
+son plafond de mémoire et demande moins de traces ou un `Hub:Analysis:EngineMemoryLimitMiB` plus haut, le
+plafond en Mio étant le `limits.engine_memory_limit_mib` de `/api/status`. Là où le Hub ne signale aucun
+plafond, ou le signale éteint, la phrase montre `?` à sa place.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources-dark.png">
   <img alt="L'écran de santé de la flotte avec une ligne daemon dépliée" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-sources.png">

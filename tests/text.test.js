@@ -298,6 +298,26 @@ test("a run's failure vocabulary reads in the shown language", () => {
     });
 });
 
+test("the two engine codes have a sentence in both languages", () => {
+    for (const code of ["fetches_failed", "engine_out_of_memory"]) {
+        assert.ok(PSL.ERRORS[code]);
+        assert.ok(PSL.ERROR_TITLES[code]);
+    }
+    assert.match(PSL.ERRORS.engine_out_of_memory, /\{limit\}/);
+    inLang("fr", () => assert.match(PSL.ERRORS.fetches_failed, /lectures simultanées/));
+});
+
+test("a failed run names the cap it reached, or a question mark when the Hub did not say", () => {
+    assert.match(PSL.runFailureMeaning("engine_out_of_memory", 1024), /1024 MiB cap/);
+    inLang("fr", () => assert.match(PSL.runFailureMeaning("engine_out_of_memory", 1024), /plafond de 1024 Mio/));
+    for (const limit of [undefined, null, 0]) {
+        assert.match(PSL.runFailureMeaning("engine_out_of_memory", limit), /its \? MiB cap/);
+    }
+    assert.equal(PSL.runFailureMeaning("timeout", 1024), PSL.ERRORS.timeout);
+    assert.equal(PSL.runFailureMeaning("no_such_code", 1024), undefined);
+    assert.equal(PSL.runFailureMeaning(null, 1024), undefined);
+});
+
 test("durations write their units in the shown language", () => {
     assert.equal(PSL.dur(3_900_000), "1 h 5 m");
     assert.equal(PSL.humanDur("15m"), "15 minutes");

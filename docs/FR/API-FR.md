@@ -1336,9 +1336,18 @@ résultat le dit au-dessus du lien.
 
 ### Échec et expiration
 
-Chaque échec est l'un de neuf codes : `source_unreachable`, `source_auth_failed`,
+Chaque échec est l'un de onze codes : `source_unreachable`, `source_auth_failed`,
 `source_rejected_request`, `timeout`, `output_too_large`, `binary_failed`,
-`invalid_request`, `hub_memory_low`, `internal`.
+`fetches_failed`, `engine_out_of_memory`, `invalid_request`, `hub_memory_low`, `internal`.
+
+`fetches_failed` est un run Tempo dont la recherche a trouvé des traces mais dont la plupart
+des lectures ont échoué, le plus souvent un querier à court de mémoire : baissez les lectures
+simultanées et relancez. Un run où quelques lectures seulement échouent réussit quand même,
+et son résumé porte un avertissement `partial_fetch`.
+
+`engine_out_of_memory` est le moteur qui atteint `Hub:Analysis:EngineMemoryLimitMiB` : il
+s'est arrêté sur une allocation refusée et le Hub a continué. Demandez moins de traces, ou
+relevez le plafond.
 
 `hub_memory_low` est un refus du Hub lui-même. Le moteur tourne dans le conteneur du Hub :
 avant chacune de ses deux exécutions, le Hub lit ce que sa cgroup peut encore donner, le
@@ -1347,10 +1356,11 @@ cache de pages récupérable compté comme libre, et fait échouer le run quand 
 manque de mémoire, avec toutes ses requêtes en cours. Un conteneur sans limite de
 mémoire, ou hors cgroup v2, n'est pas vérifié.
 
-La sortie d'erreur brute ne quitte jamais le process. Elle est lue pour nommer un
-responsable, puisque "le backend nous a refusés" et "le binaire a cassé" n'ont pas le même
-responsable, et cette classification est une heuristique sur un ensemble borné de
-marqueurs plutôt qu'un contrat.
+La sortie d'erreur brute n'est jamais renvoyée : aucune réponse et aucun écran ne la porte.
+Elle est lue pour nommer un responsable, puisque "le backend nous a refusés" et "le binaire
+a cassé" n'ont pas le même responsable, et cette classification est une heuristique sur un
+ensemble borné de marqueurs plutôt qu'un contrat. Les 4096 derniers caractères de celle d'un
+run en échec vont dans le journal du Hub, où la personne qui l'exploite peut les lire.
 
 Les rapports sont supprimés `Hub:Analysis:ReportRetention` après leur succès, et le run
 est marqué expiré en gardant ses paramètres. La ligne elle-même survit ensuite jusqu'à

@@ -1245,9 +1245,18 @@ so above the link.
 
 ### Failure and expiry
 
-Every failure is one of nine codes: `source_unreachable`, `source_auth_failed`,
+Every failure is one of eleven codes: `source_unreachable`, `source_auth_failed`,
 `source_rejected_request`, `timeout`, `output_too_large`, `binary_failed`,
-`invalid_request`, `hub_memory_low`, `internal`.
+`fetches_failed`, `engine_out_of_memory`, `invalid_request`, `hub_memory_low`, `internal`.
+
+`fetches_failed` is a Tempo run whose search found traces but whose reads mostly failed,
+usually a querier short of memory: lower the simultaneous reads and run it again. A run
+where only some reads fail still succeeds, and its summary carries a `partial_fetch`
+warning.
+
+`engine_out_of_memory` is the engine reaching `Hub:Analysis:EngineMemoryLimitMiB`: it
+stopped on a refused allocation and the Hub carried on. Ask for fewer traces, or raise the
+cap.
 
 `hub_memory_low` is the Hub's own refusal. The engine runs inside the Hub's container, so
 before each of its two runs the Hub reads what its cgroup can still give, the reclaimable
@@ -1256,9 +1265,11 @@ page cache counted as free, and fails the run when that is under
 OOM-killed, every request in flight with it. A container without a memory limit, or
 outside cgroup v2, is not checked.
 
-Raw stderr never leaves the process. It is read to name an owner, since "the backend
-refused us" and "the binary broke" have different owners, and that classification is a
-heuristic on a bounded set of markers rather than a contract.
+Raw stderr is never returned: no response and no screen carries it. It is read to name an
+owner, since "the backend refused us" and "the binary broke" have different owners, and that
+classification is a heuristic on a bounded set of markers rather than a contract. The last
+4096 characters of a failed run's stderr go to the Hub's log, where whoever operates the Hub
+can read them.
 
 Reports are deleted `Hub:Analysis:ReportRetention` after they succeed, and the run is
 marked expired while keeping its parameters. The row itself then survives until

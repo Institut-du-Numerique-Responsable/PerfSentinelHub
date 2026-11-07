@@ -194,6 +194,10 @@
         'error.run.binary_failed': 'the analysis binary failed for a reason none of the other codes covers, and '
             + 'nothing was stored. Run it once more. If it repeats, send this analysis ID to whoever operates '
             + 'the Hub.',
+        'error.run.fetches_failed': 'the search found traces, but most of the reads failed. If Tempo is short of '
+            + 'memory, lower the simultaneous reads and run it again.',
+        'error.run.engine_out_of_memory': 'the engine reached its {limit} MiB cap and stopped, the Hub carried on. '
+            + 'Ask for fewer traces, or raise `Hub:Analysis:EngineMemoryLimitMiB`.',
         'error.run.invalid_request': 'the arguments were rejected before the run started, so nothing was read '
             + 'and nothing was spent. Fix the trace ID or the lookback value and submit again.',
         'error.run.hub_memory_low': 'the Hub refused to start the analysis binary: its container had too little '
@@ -225,6 +229,8 @@
         'error.title.timeout': 'The run exceeded the execution ceiling.',
         'error.title.output_too_large': 'The source returned too much data.',
         'error.title.binary_failed': 'The analysis binary failed.',
+        'error.title.fetches_failed': 'Tempo could not serve most of the traces.',
+        'error.title.engine_out_of_memory': 'The analysis exceeded the memory given to the engine.',
         'error.title.invalid_request': 'The arguments were rejected before the run started.',
         'error.title.hub_memory_low': 'The Hub had too little memory left to run it.',
         'error.title.internal': 'The Hub failed on its own side.',
