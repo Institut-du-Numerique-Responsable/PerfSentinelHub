@@ -14,9 +14,25 @@ All notable changes to PerfSentinelHub are recorded here.
   behind takes no click or key while the guide is open, Escape quits, the arrows move, Tab stays in
   the card and the focus returns to the button. Leaving the screen or the view, the browser's back
   button included, closes it. The guide reads only what the screen loaded: opened while the recap is
-  computed it waits for the result, and it starts no computation, sends no request and stores
-  nothing. `tests/browser/demo/guide.spec.ts` walks it in a browser at 1280 and 390 px, light and
-  dark, outside `npm run demo`.
+  computed it waits for the result, and it starts no computation and sends no request.
+  `tests/browser/demo/guide.spec.ts` walks it in a browser at 1280 and 390 px, light and dark,
+  outside `npm run demo`.
+- Every other screen gets its guide too: New analysis, Recent, a run and its report, Sources,
+  Incidents, Correlations, the recap's Engineering view, Disclosures and one disclosure, Your access
+  and Coverage. The ack page and an unknown address have none, and the button is absent there. Each
+  guide says only what the screen shows at that moment, such as the namespace a pre-filled window
+  covers or the engine's caveats on a run. A detail behind a fold, an incident's findings, a pair's
+  episodes or a daemon's gauges, is read only if it was unfolded before the guide opened: the guide
+  never unfolds one. The page a signed-in caller no grant reaches gets the guide of Your access.
+  LIMITATIONS.md gains a section saying a correlation is a repeated co-occurrence, not a cause.
+- The guide's button opens a menu: Understand this screen, and I am… (Je suis… in French), five
+  roles each with its question and what its path brings. Dev walks the Engineering recap, Tech lead
+  the Engineering recap then New analysis, Architect Correlations, Incidents then Sources, Project
+  manager the Management recap, and CTO the Management recap then Disclosures. A path moves from
+  screen to screen with `screen 1 of 2` and Next screen, a screen hidden for the caller is skipped
+  and named on the last card, and one that shows an error says so and offers the next. The role
+  chosen last is kept in that browser's `localStorage` under `perf-sentinel:guide-role`, nowhere
+  else, and the menu ticks it next time.
 - New analysis gets a Simultaneous reads block (Lectures simultanées in French) under Max traces,
   to choose how many trace bodies the engine reads from Tempo at once. It is passed as
   `--fetch-concurrency` and shows for a Tempo source in service mode on an engine from `0.43.0`,
@@ -112,6 +128,8 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Fixed
 
+- On the page a signed-in caller no grant reaches, the terminal tokens card stayed missing when the
+  token list arrived after the page was first drawn. It is drawn when the list arrives.
 - A link to a window or a trace opens New analysis on a trace backend of the incident's
   environment, not on a daemon. Analyse this window, from an incident and from a correlated pair,
   and Explain the last pair kept whichever source was selected, often a daemon, which takes no
