@@ -3441,6 +3441,8 @@ techTest("what moved follows the screen's note, its confirmed fixes, its long gr
     // A list the Hub cut counts its whole length.
     const counts = {new: 40, gone: 0, up: 0, down: 0, came_back: 0, done_still_detected: 0};
     assert.ok(text(techSteps({movements: {new: [moved()], counts}}).moved).includes(says.longGroup));
+    // Opened but still cut, while its whole list is read, the screen keeps the button.
+    assert.ok(text(techSteps({movements: {new: [moved()], counts}}, {movesOpen: {new: true}}).moved).includes(says.longGroup));
     assert.ok(!text(techSteps({movements: {new: Array.from({length: 5}, () => moved())}}).moved).includes(says.longGroup));
     assert.ok(text(techSteps({sources_without_volume: ["daemon-b"]}).moved).includes(says.sources));
 });

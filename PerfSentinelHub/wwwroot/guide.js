@@ -50,7 +50,8 @@
     /** @param {string} name */
     function anchor(name) {
         const kept = cache.get(name);
-        if (kept && kept.isConnected) return kept;
+        // A node can lose its name without leaving the page: a fold that closes unnames its detail.
+        if (kept && kept.isConnected && kept.getAttribute('data-guide') === name) return kept;
         const node = document.querySelector('[data-guide="' + name + '"]');
         if (node) cache.set(name, node);
         else cache.delete(name);

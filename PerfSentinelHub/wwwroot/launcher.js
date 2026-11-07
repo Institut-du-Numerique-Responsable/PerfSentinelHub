@@ -3659,8 +3659,8 @@
 
     /**
      * What moved, in the order of the screen's note: no closed day, nothing moved, then what the
-     * groups hold. A group is long while the screen shows its Show all button, which an opened group
-     * no longer does.
+     * groups hold. A group is long while the screen shows its Show all button: over five, unless it
+     * was opened and the Hub sent all of it.
      * @param {import('../types').RecapSnapshot} snapshot
      * @param {Record<string, boolean>} opened the groups the reader opened
      * @returns {import('../types').GuideStep}
@@ -3673,7 +3673,8 @@
         if (moves.gone_with_confirmed_action > 0) body.push(techText('moved.confirmed'));
         const long = ['new', 'gone', 'up', 'down', 'came_back', 'done_still_detected'].some(function (key) {
             const total = moves.counts ? moves.counts[key] : moves[key].length;
-            return total > RECAP_MOVES_FIRST && !opened[key];
+            const cut = total > moves[key].length;
+            return total > RECAP_MOVES_FIRST && !(opened[key] && !cut);
         });
         if (long) body.push(techText('moved.long'));
         if (hasItems(snapshot.sources_without_volume)) body.push(techText('moved.sources'));

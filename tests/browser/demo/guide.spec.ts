@@ -456,3 +456,19 @@ test("a guide reads its own wait text, else the shared one", async ({page}) => {
     await expect(title(page)).toHaveText("The recap is being computed");
     await page.keyboard.press("Escape");
 });
+
+test("a fix folded between two openings of the guide is skipped the second time", async ({page}) => {
+    await openTechGuide(page);
+    await goTo(page, "How to fix");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await page.locator('[data-guide="recap.row"] .recap-detail > summary').click();
+    await expect(page.locator('[data-guide="recap.row.detail"]')).toHaveCount(0);
+    await page.locator("#guide-open").click();
+    const titles: string[] = [];
+    await eachStep(page, async () => {
+        titles.push(await title(page).textContent() ?? "");
+    });
+    expect(titles).toContain("Take an action");
+    expect(titles).not.toContain("How to fix");
+});
