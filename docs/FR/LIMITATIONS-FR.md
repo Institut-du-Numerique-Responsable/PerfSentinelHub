@@ -83,6 +83,12 @@ réussi efface `unreachable_since_ms`. Une source dont le push arrive alors que
 son poll échoue continue de rapporter `unreachable_since`. Voir
 [OPERATIONS-FR.md](OPERATIONS-FR.md).
 
+## Ce qu'affirme une corrélation
+
+Une corrélation est une co-occurrence répétée, pas une cause : deux findings
+qui se déclenchent sans cesse l'un après l'autre dans le délai réglé sur le
+daemon, ce qui ne dit pas que l'un provoque l'autre.
+
 ## Ce qu'affirment `status` et `lineage`
 
 `status` est une présomption, pas un verdict. Il est dérivé à la lecture depuis

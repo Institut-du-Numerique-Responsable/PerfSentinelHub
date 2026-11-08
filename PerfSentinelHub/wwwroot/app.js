@@ -214,7 +214,7 @@
     const state = {
         themePosition: document.documentElement.getAttribute('data-theme-position') || 'auto',
         screen: 'new',
-        // The guide open, by PSL.guideIdFor, or null.
+        // The screen guide open, by guideId (the no-grant page reads as access), or null.
         /** @type {string | null} */
         guide: null,
         /** @type {HubStatus | null} */
@@ -702,7 +702,8 @@
             state.tokens = null;
             state.tokensFailed = true;
         }
-        if (state.screen === 'access' || state.screen === 'coverage') render();
+        // Without a status, every route draws the access screen under the no-grant banner.
+        if (state.screen === 'access' || state.screen === 'coverage' || !state.status) render();
     }
 
     /**
@@ -916,10 +917,26 @@
         dropSegment(chip, '.shell-version-skew');
         if (!state.sources || !state.status || !state.status.engine_version) return;
 
-        // Behind only. A fleet ahead of the Hub is a normal moment during a rollout,
-        // and the arrow would have pointed from the newer version down to the older
-        // one, which reads as an instruction to downgrade.
-        const behind = state.sources
+        const behind = fleetBehind();
+        if (behind.length === 0) return;
+
+        const oldest = behind.sort(PSL.vcmp)[0];
+        chip.appendChild(el('span', {class: 'shell-version-rule', 'aria-hidden': 'true'}));
+        chip.appendChild(el('span', {class: 'shell-version-skew', 'data-guide': 'shell.skew'}, [
+            svg([['path', {d: 'M12 4l9 16H3z'}], ['path', {d: 'M12 10v4M12 17.4v.2'}]], 12),
+            el('span', {text: t('shell.skew', {oldest: oldest, engine: state.status.engine_version})})
+        ]));
+    }
+
+    /**
+     * The fleet's producer versions behind the Hub's engine, none until both are known. Behind only: a
+     * fleet ahead of the Hub is a normal moment during a rollout, and the arrow would have pointed from
+     * the newer version down to the older one, which reads as an instruction to downgrade.
+     * @returns {string[]}
+     */
+    function fleetBehind() {
+        if (!state.sources || !state.status || !state.status.engine_version) return [];
+        return state.sources
             .map(function (source) {
                 return source.producer_version;
             })
@@ -927,14 +944,6 @@
                 const skew = version && PSL.skew(version);
                 return skew && skew.dir === 'behind';
             });
-        if (behind.length === 0) return;
-
-        const oldest = behind.sort(PSL.vcmp)[0];
-        chip.appendChild(el('span', {class: 'shell-version-rule', 'aria-hidden': 'true'}));
-        chip.appendChild(el('span', {class: 'shell-version-skew'}, [
-            svg([['path', {d: 'M12 4l9 16H3z'}], ['path', {d: 'M12 10v4M12 17.4v.2'}]], 12),
-            el('span', {text: t('shell.skew', {oldest: oldest, engine: state.status.engine_version})})
-        ]));
     }
 
     function renderSourcesBadge() {
@@ -1070,8 +1079,10 @@
     /** Draws the screen, then the guide's entry and the guide itself, which point into it. */
     function render() {
         renderScreen();
-        // Without a status the screen drew only a banner, which no guide walks.
-        document.getElementById('guide-open').hidden = !state.status || guideId(state.screen) === null;
+        const entry = document.getElementById('guide-open');
+        entry.hidden = guideId(state.screen) === null;
+        // The host hides with the entry, and would hide an open menu with aria-expanded left true.
+        if (entry.hidden) closeGuideMenu(false);
         GUIDE.refresh();
     }
 
@@ -1137,24 +1148,448 @@
      * @param {string} screen
      */
     function guideId(screen) {
+        // Without a status every route draws the same page: the caller's access under the no-grant banner,
+        // which the Access guide walks, or a banner alone, which no guide walks.
+        if (!state.status) return state.access && PSL.shellBanner(state.statusError) ? 'access' : null;
         return PSL.guideIdFor(screen, screen === 'recap' ? recapRoute().view : null);
     }
 
     /**
-     * What the pilotage guide reads: the recap the screen holds. While it is computed the guide waits,
-     * and starts no computation of its own.
+     * What the recap guides read: the recap the screen holds, in the view it was computed for. While it
+     * is computed the guide waits, and starts no computation of its own.
      * @returns {import('../types').GuideSource}
      */
     function recapGuideSource() {
         if (state.recapError !== null) return {status: 'failed', steps: []};
-        if (state.recap === null) return {status: 'wait', steps: []};
-        return {status: 'ready', steps: PSL.recapPilotageSteps(state.recap)};
+        // The recap of the other view, which a path's move to this one finds before the read starts again.
+        if (state.recap === null || state.recap.view !== recapRoute().view) return {status: 'wait', steps: []};
+        if (state.recap.view === 'pilotage') return {status: 'ready', steps: PSL.recapPilotageSteps(state.recap)};
+        return {
+            status: 'ready',
+            steps: PSL.recapTechSteps(state.recap, {showAll: state.recapShowAll, movesOpen: state.recapMovesOpen})
+        };
     }
 
+    /**
+     * What the New guide reads: the form as it stands, and what the screen would say about it.
+     * @returns {import('../types').GuideSource}
+     */
+    function newGuideSource() {
+        if (state.loading) return {status: 'wait', steps: []};
+        if (state.sourcesError) return {status: 'failed', steps: []};
+        if (!state.status) return {status: 'wait', steps: []};
+        const source = selectedSource();
+        const skew = source && PSL.skew(source.producer_version);
+        const band = fetchBandNow();
+        return {
+            status: 'ready', steps: PSL.newSteps({
+                sources: (state.sources || []).length,
+                runnable: runSources().length,
+                windowHandoff: Boolean(state.handoff),
+                namespaced: Boolean(state.handoff && state.handoff.namespace),
+                traceHandoff: Boolean(state.traceHandoff),
+                daemon: Boolean(source && source.kind === 'daemon'),
+                skewPill: runSources().some(function (row) {
+                    return Boolean(PSL.skew(row.producer_version));
+                }),
+                mode: state.form.mode,
+                rangeMode: state.form.rangeMode,
+                spanMs: windowSpanMs(),
+                retentionHours: source ? source.retention_hours : null,
+                maxTraces: state.form.maxTraces,
+                weighed: weighedRuns().length > 0,
+                fetchBand: band ? band.key : null,
+                queue: state.status.queue_depth,
+                limits: state.status.limits,
+                blocker: submitBlocker(),
+                unreachable: Boolean(source && !source.reachable),
+                skewBehind: Boolean(skew && skew.dir === 'behind'),
+                command: Boolean(source && PSL.analysisCommand(source, buildRequest(source), state.shell))
+            })
+        };
+    }
+
+    /**
+     * What the Recent guide reads: the list, once it has loaded.
+     * @returns {import('../types').GuideSource}
+     */
+    function recentGuideSource() {
+        if (!state.runs || !state.status) return {status: 'wait', steps: []};
+        return {
+            status: 'ready',
+            steps: PSL.recentSteps({hours: state.status.limits.report_retention_hours, first: state.runs[0] || null})
+        };
+    }
+
+    /**
+     * The source of the run guide or the report guide: both read the run the route names.
+     * @param {(ctx: {run: Run, now: number, limits: import('../types').StatusLimits}) => import('../types').GuideStep[]} steps
+     * @returns {() => import('../types').GuideSource}
+     */
+    function runGuideSource(steps) {
+        return function () {
+            const id = currentRunId();
+            if (state.runError === id) return {status: 'failed', steps: []};
+            if (!state.run || state.run.id !== id || !state.status) return {status: 'wait', steps: []};
+            return {status: 'ready', steps: steps({run: state.run, now: Date.now(), limits: state.status.limits})};
+        };
+    }
+
+    /**
+     * What the Sources guide reads: the fleet the table shows, and the first open daemon row that has read.
+     * @returns {import('../types').GuideSource}
+     */
+    function sourcesGuideSource() {
+        if (state.loading) return {status: 'wait', steps: []};
+        if (state.sourcesError) return {status: 'failed', steps: []};
+        if (!state.sources) return {status: 'wait', steps: []};
+        const daemons = state.sources.filter(function (source) {
+            return source.kind === 'daemon';
+        });
+        const open = daemons.find(function (source) {
+            const view = state.daemonViews[source.id];
+            return state.daemonOpen[source.id] === true && PSL.permits(source, 'sources.read')
+                && view !== undefined && view !== 'loading';
+        });
+        return {
+            status: 'ready', steps: PSL.sourcesSteps({
+                unreachable: state.sources.filter(function (source) {
+                    return !source.reachable;
+                }).length,
+                behind: fleetBehind().length > 0,
+                unknownProducer: daemons.some(function (source) {
+                    return !source.producer_version;
+                }),
+                lockedDaemon: daemons.length > 0 && !PSL.permits(daemons[0], 'sources.read'),
+                gauges: open
+                    ? (/** @type {DaemonView} */ (state.daemonViews[open.id]).error_code ? 'failed' : 'read')
+                    : null
+            })
+        };
+    }
+
+    /**
+     * @param {Incident} incident
+     * @returns {'findings' | 'none' | 'gone' | null} what its unfolded panel shows, null while it is folded or unread
+     */
+    function incidentGuidePanel(incident) {
+        const detail = state.incidentDetails[incident.id];
+        if (state.panelOpen[foldKey(incident)] !== true || detail === undefined || detail === 'loading') return null;
+        if (detail.error_code) return detail.error_code === 'gone' ? 'gone' : null;
+        return (detail.findings || []).length ? 'findings' : 'none';
+    }
+
+    /**
+     * What the Incidents guide reads: the listing, and the first unfolded incident whose detail was read.
+     * An error with no row is the guide's failure, the stale copy with its own words.
+     * @returns {import('../types').GuideSource}
+     */
+    function incidentsGuideSource() {
+        if (state.loading || state.incidents === null) return {status: 'wait', steps: []};
+        if (state.incidentsError && state.incidents.length === 0) {
+            return {status: 'failed', steps: [], variant: state.incidentsError};
+        }
+        const refused = (state.sources || []).find(function (source) {
+            return source.incidents_state === 'unauthorized';
+        });
+        const panels = state.incidents.map(incidentGuidePanel).filter(Boolean);
+        return {
+            status: 'ready', steps: PSL.incidentsSteps({
+                stale: state.incidentsError === 'stale',
+                unauthorized: refused ? refused.name : null,
+                filtered: Object.values(state.incidentFilter).some(Boolean),
+                panel: panels[0] || null,
+                unfolded: state.incidents.some(function (incident) {
+                    return state.panelOpen[foldKey(incident)] === true;
+                })
+            })
+        };
+    }
+
+    /**
+     * What the Correlations guide reads: the pairs of the period, and whether one is unfolded.
+     * @returns {import('../types').GuideSource}
+     */
+    function correlationsGuideSource() {
+        if (state.correlations === null) return {status: 'wait', steps: []};
+        if (state.correlationsError) return {status: 'failed', steps: []};
+        return {
+            status: 'ready', steps: PSL.correlationsSteps({
+                pairOnly: Boolean(state.correlationFilter.pair_key),
+                limit: state.correlations.length === CORRELATION_LIMIT ? CORRELATION_LIMIT : null,
+                opened: PSL.correlationPairs(state.correlations).some(function (pair) {
+                    return state.panelOpen['pair:' + pair.key] === true;
+                }),
+                traceable: (state.sources || []).some(function (source) {
+                    return source.kind !== 'daemon';
+                })
+            })
+        };
+    }
+
+    /**
+     * What the Disclosures guide reads: the list, and the first report, the one its card step points at.
+     * @returns {import('../types').GuideSource}
+     */
+    function disclosuresGuideSource() {
+        if (state.disclosures === null) return {status: 'wait', steps: []};
+        if (state.disclosuresError) return {status: 'failed', steps: []};
+        return {status: 'ready', steps: PSL.disclosuresSteps({first: state.disclosures[0] || null})};
+    }
+
+    /**
+     * What the guide of one disclosure reads: its detail, and the report.json beside it when it came.
+     * @returns {import('../types').GuideSource}
+     */
+    function disclosureGuideSource() {
+        if (state.disclosureError) return {status: 'failed', steps: []};
+        if (!state.disclosure) return {status: 'wait', steps: []};
+        return {status: 'ready', steps: PSL.disclosureSteps({detail: state.disclosure, report: state.disclosureReport})};
+    }
+
+    /** The terminal tokens the access page lists, the caller's own. */
+    function ownTokens() {
+        return (state.tokens || []).filter(function (/** @type {TerminalToken} */ token) {
+            return token.subject === state.access.subject;
+        });
+    }
+
+    /**
+     * What the Access guide reads: the caller's access, with or without the no-grant banner. The screen
+     * exists only once /api/access answered, so there is nothing to wait for.
+     * @returns {import('../types').GuideSource}
+     */
+    function accessGuideSource() {
+        const access = state.access;
+        let tokens = 'listed';
+        if (state.tokensFailed) tokens = 'failed';
+        else if (ownTokens().length === 0) tokens = 'none';
+        return {
+            status: 'ready', steps: PSL.accessSteps({
+                machine: access.caller === 'machine_token',
+                noGroup: access.groups.length === 0,
+                noReach: access.reach.length === 0,
+                everything: access.reach.some(function (entry) {
+                    return entry.project === '*';
+                }),
+                tokens: /** @type {'listed' | 'none' | 'failed'} */ (tokens)
+            })
+        };
+    }
+
+    /**
+     * What the Coverage guide reads: what no project covers and the conflicts, as an admin's access holds them.
+     * @returns {import('../types').GuideSource}
+     */
+    function coverageGuideSource() {
+        const unmatched = state.access.unmatched;
+        const conflicts = state.access.conflicts;
+        const count = unmatched ? unmatched.services.length + unmatched.attributes.length + unmatched.sources.length : 0;
+        return {
+            status: 'ready', steps: PSL.coverageSteps({
+                covered: Boolean(unmatched) && count === 0,
+                truncated: count > 0 && unmatched.truncated,
+                backend: count > 0 && unmatched.sources.some(function (row) {
+                    return row.findings == null;
+                }),
+                noConflict: Boolean(conflicts) && conflicts.copies.length === 0
+            })
+        };
+    }
+
+    /**
+     * The attributes of an element the guide may point at only while its fold is open: the guide never
+     * opens a fold, and a folded row stays in the page. foldAnchors names it again when the fold moves.
+     * @param {string} name
+     * @param {boolean} open
+     */
+    function foldGuide(name, open) {
+        return {'data-guide-fold': name, 'data-guide': open ? name : null};
+    }
+
+    /**
+     * @param {Element} scope a fold that just opened or closed in place
+     * @param {boolean} open
+     */
+    function foldAnchors(scope, open) {
+        scope.querySelectorAll('[data-guide-fold]').forEach(function (node) {
+            if (open) node.setAttribute('data-guide', node.getAttribute('data-guide-fold'));
+            else node.removeAttribute('data-guide');
+        });
+    }
+
+    /**
+     * The source of steps of each guide, keyed by the id guideId returns.
+     * @type {Record<string, () => import('../types').GuideSource>}
+     */
+    const GUIDE_SOURCES = {
+        'recap.pilotage': recapGuideSource,
+        'recap.tech': recapGuideSource,
+        'new': newGuideSource,
+        'recent': recentGuideSource,
+        'run': runGuideSource(PSL.runSteps),
+        'report': runGuideSource(PSL.reportSteps),
+        'sources': sourcesGuideSource,
+        'incidents': incidentsGuideSource,
+        'correlations': correlationsGuideSource,
+        'disclosures': disclosuresGuideSource,
+        'disclosure': disclosureGuideSource,
+        'access': accessGuideSource,
+        'coverage': coverageGuideSource
+    };
+
     function initGuide() {
-        document.getElementById('guide-open').addEventListener('click', function () {
-            state.guide = guideId(state.screen);
-            GUIDE.start(recapGuideSource);
+        const entry = document.getElementById('guide-open');
+        entry.setAttribute('aria-haspopup', 'menu');
+        entry.setAttribute('aria-expanded', 'false');
+        entry.addEventListener('click', function () {
+            if (document.getElementById('guide-menu')) closeGuideMenu(true);
+            else openGuideMenu(false);
+        });
+        // Shift+Tab out of the menu lands on the entry with the menu still open.
+        entry.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape' || !document.getElementById('guide-menu')) return;
+            closeGuideMenu(true);
+            event.preventDefault();
+            event.stopPropagation();
+        });
+    }
+
+    /**
+     * The entry's menu: Understand this screen and I am…, or, once I am… is chosen, the roles, the one
+     * this browser remembers ticked. A list in the style of the recap's filters, over a backdrop.
+     * @param {boolean} roles
+     */
+    function openGuideMenu(roles) {
+        closeGuideMenu(false);
+        const entry = document.getElementById('guide-open');
+        const host = entry.parentElement;
+        const items = roles ? guideRoleItems() : guideMenuItems();
+        const list = el('div', {
+            role: 'menu', class: 'guide-menu-list', 'aria-labelledby': roles ? 'guide-menu-title' : null,
+            'aria-label': roles ? null : t('guide.menu.label'),
+            'aria-describedby': roles ? 'guide-menu-sub' : null
+        }, items);
+        const pop = el('div', {class: 'guide-menu', id: 'guide-menu'}, [
+            roles && el('p', {class: 'guide-menu-title', id: 'guide-menu-title', text: t('guide.role.title')}),
+            roles && el('p', {class: 'guide-menu-sub', id: 'guide-menu-sub', text: t('guide.role.sub')}),
+            list
+        ]);
+        pop.addEventListener('keydown', function (event) {
+            guideMenuKey(event, items);
+        });
+        // Tabbing on past the menu closes it where it is, as the recap's lists do.
+        pop.addEventListener('focusout', function (event) {
+            const to = event.relatedTarget;
+            if (to instanceof Element && !host.contains(to)) closeGuideMenu(false);
+        });
+        const backdrop = el('div', {class: 'picker-backdrop', id: 'guide-menu-backdrop'});
+        backdrop.addEventListener('click', function () {
+            closeGuideMenu(true);
+        });
+        host.append(backdrop, pop);
+        // On a phone the entry can sit mid-row: the menu slides right to stay in the window.
+        const left = pop.getBoundingClientRect().left;
+        if (left < 16) pop.style.right = left - 16 + 'px';
+        entry.setAttribute('aria-expanded', 'true');
+        (items.find(function (item) {
+            return item.getAttribute('aria-checked') === 'true';
+        }) || items[0]).focus();
+    }
+
+    /** The menu's two doors: the screen's own guide, and the roles, which need the status the paths read. */
+    function guideMenuItems() {
+        const screen = el('button', {type: 'button', class: 'guide-menu-item', role: 'menuitem', id: 'guide-menu-screen',
+            text: t('guide.menu.screen')});
+        screen.addEventListener('click', function () {
+            closeGuideMenu(false);
+            startScreenGuide();
+        });
+        const role = el('button', {type: 'button', class: 'guide-menu-item', role: 'menuitem', id: 'guide-menu-role',
+            text: t('guide.menu.role')});
+        role.addEventListener('click', function () {
+            openGuideMenu(true);
+        });
+        return state.status ? [screen, role] : [screen];
+    }
+
+    /** Each role with its question and what its path brings; the one this browser remembers is ticked. */
+    function guideRoleItems() {
+        const remembered = GUIDE.role();
+        return PSL.GUIDE_ROLES.map(function (role) {
+            const item = el('button', {
+                type: 'button', class: 'guide-menu-item', role: 'menuitemradio', 'data-role': role,
+                'aria-checked': role === remembered ? 'true' : 'false'
+            }, [
+                el('span', {class: 'guide-menu-name', text: t('guide.role.' + role)}),
+                el('span', {class: 'guide-menu-ask', text: t('guide.role.' + role + '.ask')}),
+                el('span', {class: 'guide-menu-promise', text: t('guide.path.' + role + '.promise')})
+            ]);
+            item.addEventListener('click', function () {
+                closeGuideMenu(false);
+                startRolePath(role);
+            });
+            return item;
+        });
+    }
+
+    /**
+     * Escape closes the menu and gives the focus back to the entry; the arrows, Home and End move in it.
+     * @param {KeyboardEvent} event
+     * @param {HTMLElement[]} items
+     */
+    function guideMenuKey(event, items) {
+        const at = items.indexOf(/** @type {HTMLElement} */ (document.activeElement));
+        /** @type {Record<string, number>} */
+        const moves = {ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1};
+        if (event.key === 'Escape') closeGuideMenu(true);
+        else if (event.key in moves) items[(moves[event.key] + items.length) % items.length].focus();
+        else return;
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    /** @param {boolean} refocus whether the entry takes the focus back */
+    function closeGuideMenu(refocus) {
+        const menu = document.getElementById('guide-menu');
+        if (!menu) return;
+        menu.remove();
+        document.getElementById('guide-menu-backdrop').remove();
+        const entry = document.getElementById('guide-open');
+        entry.setAttribute('aria-expanded', 'false');
+        if (refocus) entry.focus();
+    }
+
+    function startScreenGuide() {
+        state.guide = guideId(state.screen);
+        GUIDE.start(GUIDE_SOURCES[state.guide], state.guide);
+    }
+
+    /**
+     * Walks a role's screens, those whose tab this caller sees. The recap is entered in the path's view,
+     * by the route the view switch would write.
+     * @param {string} role
+     */
+    function startRolePath(role) {
+        const path = PSL.guidePath(role, function (screen) {
+            const tab = /** @type {HTMLElement | null} */ (document.querySelector('.shell-tab[data-screen="' + screen + '"]'));
+            // The tab bar is hidden whole on a page without a grant, so a hidden ancestor counts too.
+            return Boolean(tab) && !tab.closest('[hidden]');
+        });
+        GUIDE.startPath({
+            role, skipped: path.skipped, stops: path.stops.map(function (stop) {
+                const guide = PSL.guideIdFor(stop.screen, stop.view);
+                return Object.assign({}, stop, {
+                    guide,
+                    hash: stop.screen === 'recap'
+                        ? PSL.recapHash(Object.assign(PSL.readRecapRoute(location.hash), {view: stop.view}))
+                        : '#/' + stop.screen,
+                    // Without a status every route draws the same banner, a refusal to this screen's guide.
+                    source: function () {
+                        return state.status ? GUIDE_SOURCES[guide]() : {status: 'failed', steps: []};
+                    }
+                });
+            })
         });
     }
 
@@ -1683,8 +2118,13 @@
         const refocus = state.recapRefocus;
         state.recapRefocus = null;
         const screen = currentScreen();
-        // A guide walks the screen it was opened on: another screen, or the other view, ends it.
-        if (GUIDE.isOpen() && guideId(screen) !== state.guide) GUIDE.stop();
+        closeGuideMenu(false);
+        // A guide walks the screen it was opened on, a path the stop it is on or heads to: another screen,
+        // or the other view, ends it.
+        const stop = GUIDE.pathStop();
+        const kept = stop ? stop.screen === screen && (stop.view === null || stop.view === recapRoute().view)
+            : guideId(screen) === state.guide;
+        if (GUIDE.isOpen() && !kept) GUIDE.stop();
         if (screen !== 'ack') state.ackReturn = null;
         clearTimeout(state.runTimer);
         // A recap job keeps running on the Hub: only the screen stops asking, and asks again on return.
@@ -1818,7 +2258,8 @@
             return section;
         }
 
-        section.appendChild(el('div', {class: 'sources-wrap'}, [sourcesTable(state.sources)]));
+        section.appendChild(el('div', {class: 'sources-wrap', 'data-guide': 'sources.table'},
+            [sourcesTable(state.sources)]));
         return section;
     }
 
@@ -1854,10 +2295,29 @@
                 [tableGroupRow(t('sources.group.backends'))],
                 rows(kinds.backends))
             : sources.flatMap(sourceRow);
+        guideSourceAnchors(body);
         return el('table', {class: 'table'}, [
             el('thead', {}, [head]),
             el('tbody', {}, body)
         ]);
+    }
+
+    /**
+     * Names the first row's cells, and the first daemon's name, where the Sources guide points.
+     * @param {HTMLElement[]} rows
+     */
+    function guideSourceAnchors(rows) {
+        const first = rows.find(function (row) {
+            return !row.classList.contains('table-group');
+        });
+        if (!first) return;
+        ['env', 'health', 'last_success', 'down_for', 'producer', 'last_error'].forEach(function (name) {
+            first.children[SOURCE_COLUMNS.indexOf(name)].setAttribute('data-guide', 'sources.' + name);
+        });
+        const daemon = rows.map(function (row) {
+            return row.querySelector('.row-toggle, .source-locked');
+        }).find(Boolean);
+        if (daemon) daemon.closest('td').setAttribute('data-guide', 'sources.daemon');
     }
 
     /**
@@ -2119,6 +2579,7 @@
         if (!cell) return;
         const row = /** @type {HTMLElement} */ (cell.parentNode);
         row.hidden = !open;
+        foldAnchors(cell, open);
         // A folded row is not being read, so it stops costing the daemon anything.
         if (!open) {
             stopTicker(source.id);
@@ -2162,6 +2623,7 @@
                 // cell is found again rather than kept in a closure.
                 const target = document.getElementById('daemon-detail-' + index);
                 if (target) target.replaceChildren(daemonPanel(source, index));
+                GUIDE.refresh();
                 // And the row may have been folded in the meantime, in which case
                 // starting to poll it would contradict the fold. A failed read still
                 // gets a ticker: its panel carries the same countdown, and the row
@@ -2223,7 +2685,8 @@
      * @param {string} code
      */
     function daemonError(source, index, code) {
-        return el('div', {class: 'daemon-panel'}, [
+        const gauges = foldGuide('sources.gauges', state.daemonOpen[source.id] === true);
+        return el('div', {class: 'daemon-panel', ...gauges}, [
             el('div', {class: 'banner', 'data-tone': 'crit'}, [
                 critGlyph(16),
                 el('div', {}, [
@@ -2327,7 +2790,8 @@
             }
         }
 
-        return el('div', {}, [
+        // One element for the guide's cutout: the verdict above, the gauges and the hints beside them.
+        return el('div', foldGuide('sources.gauges', state.daemonOpen[source.id] === true), [
             el('div', {class: 'daemon-verdict-row'}, [
                 el('span', {
                     class: 'daemon-verdict',
@@ -3197,11 +3661,11 @@
             return section;
         }
         if (!state.sources || state.sources.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state', text: t('new.no_source')}));
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'new.empty', text: t('new.no_source')}));
             return section;
         }
         if (runSources().length === 0) {
-            section.appendChild(el('div', {class: 'empty-state', text: t('new.no_grant')}));
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'new.empty', text: t('new.no_grant')}));
             return section;
         }
 
@@ -3230,7 +3694,7 @@
         // No build queued here: submitRow's updateSubmit runs after the same
         // render and builds the panels, so a second build would be thrown away.
         state.terminalSig = null;
-        return el('div', {id: 'terminal-panels', class: 'terminal-stack'});
+        return el('div', {id: 'terminal-panels', class: 'terminal-stack', 'data-guide': 'new.terminal'});
     }
 
     /**
@@ -3250,6 +3714,8 @@
         if (sig === state.terminalSig) return;
         state.terminalSig = sig;
         slot.replaceChildren.apply(slot, terminalPanels(source));
+        // Built a microtask after the render, so the guide's cutout on the panels is placed again.
+        GUIDE.refresh();
     }
 
     /**
@@ -3357,7 +3823,7 @@
         const origin = handoff.pairKey
             ? t('new.handoff.episode', {name: name})
             : t('new.handoff.incident', {kind: kind || t('new.handoff.incident_kind'), name: name});
-        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info'}, [
+        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info', 'data-guide': 'new.handoff'}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el('div', {
                 text: t('new.handoff.window', {origin: origin, span: span})
@@ -3388,7 +3854,7 @@
                 render();
             });
         }
-        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info'}, [
+        return el('div', {class: 'banner', 'data-tone': daemon ? 'warn' : 'info', 'data-guide': 'new.handoff'}, [
             daemon ? warningGlyph(16) : infoGlyph(16),
             el('div', {}, [
                 el('p', {
@@ -3402,7 +3868,7 @@
     }
 
     function sourcePanel() {
-        return el('div', {class: 'card source-panel'}, [
+        return el('div', {class: 'card source-panel', 'data-guide': 'new.source'}, [
             el('div', {class: 'panel-head'}, [
                 el('h2', {class: 'overline', text: t('new.source.head')}),
                 el('span', {
@@ -3525,7 +3991,7 @@
     }
 
     function daemonNotice() {
-        return el('div', {class: 'notice'}, [
+        return el('div', {class: 'notice', 'data-guide': 'new.daemon'}, [
             svg([['circle', {cx: '12', cy: '12', r: '9'}], ['path', {d: 'M12 11v5M12 8.2v.2'}]], 16),
             el('div', {}, [
                 el('p', {text: t('new.daemon.none')}),
@@ -3584,7 +4050,9 @@
             });
             group.appendChild(button);
         });
-        return field(t('new.mode.field'), radioKeys(group, 'mode'), t('new.mode.gloss'));
+        const row = field(t('new.mode.field'), radioKeys(group, 'mode'), t('new.mode.gloss'));
+        row.setAttribute('data-guide', 'new.mode');
+        return row;
     }
 
     function serviceInput() {
@@ -3714,7 +4182,7 @@
             button,
             el('span', {class: 'range-wire', text: rangeWire()})
         ]);
-        const wrap = el('div', {class: 'range'}, [row]);
+        const wrap = el('div', {class: 'range', 'data-guide': 'new.range'}, [row]);
         button.addEventListener('click', function () {
             if (state.form.pickerOpen) {
                 closePicker();
@@ -3739,21 +4207,13 @@
      * @param {Source} source
      */
     function rangeConsequences(source) {
-        const notes = [];
-        const spanMs = windowSpanMs();
-        if (spanMs > 86400000) {
-            notes.push(consequence(t('new.range.wide')));
-        }
-        if (spanMs > 7 * 86400000) {
-            notes.push(consequence(t('new.range.timeout', {seconds: state.status.limits.analysis_timeout_seconds})));
-        }
-        if (source.retention_hours != null && spanMs > source.retention_hours * 3600000) {
-            notes.push(consequence(t('new.range.retention', {duration: PSL.dur(source.retention_hours * 3600000)}),
-                'warn'));
-        } else if (source.retention_hours == null && spanMs > 86400000) {
-            notes.push(consequence(t('new.range.undeclared')));
-        }
-        return notes;
+        // The thresholds are PSL.rangeNotes', which the guide reads too.
+        return PSL.rangeNotes(windowSpanMs(), source.retention_hours).map(function (note) {
+            if (note === 'retention') {
+                return consequence(t('new.range.retention', {duration: PSL.dur(source.retention_hours * 3600000)}), 'warn');
+            }
+            return consequence(t('new.range.' + note, {seconds: state.status.limits.analysis_timeout_seconds}));
+        });
     }
 
     /**
@@ -3964,7 +4424,7 @@
                 return segment;
             }));
 
-        const block = el('div', {class: 'field'}, [
+        const block = el('div', {class: 'field', 'data-guide': 'new.traces'}, [
             // A div and not a label: the "?" is a button, which a label may not
             // contain, and the real binding is the `for` on the name beside it.
             el('div', {class: 'field-label'}, [
@@ -4048,7 +4508,7 @@
         }).join(' ');
         const scale = el('div', {class: 'band-scale'}, [el('span', {class: 'band-scale-start', text: '1'}), grid]);
 
-        const block = el('div', {class: 'field'}, [
+        const block = el('div', {class: 'field', 'data-guide': 'new.fetch'}, [
             el('div', {class: 'field-label'}, [
                 el('label', {for: 'fetch-number', text: t('new.fetch.label')}),
                 el('span', {class: 'field-gloss', text: t('new.fetch.gloss')})
@@ -4122,19 +4582,7 @@
      * know before the run. Absent until this source has a measured run.
      */
     function weightHistory() {
-        const source = selectedSource();
-        if (!source || !state.runs) return null;
-        const past = state.runs.filter(function (run) {
-            /** @type {Partial<RunResult>} */
-            const result = run.result || {};
-            // Trace-id runs are excluded: their weight says nothing about the
-            // slider. A missing max_traces on a service run is the server-side
-            // default, not an unmeasured one.
-            return run.source_id === source.id &&
-                run.status === 'succeeded' &&
-                typeof result.report_bytes === 'number' &&
-                (run.request || {}).trace_id === undefined;
-        }).slice(0, 3);
+        const past = weighedRuns();
         if (past.length === 0) return null;
 
         return sinkBlock(t('new.weighed.head'), t('new.weighed.sub'),
@@ -4146,6 +4594,27 @@
                     duration: PSL.dur(Date.now() - (run.finished_at_ms || run.created_at_ms))
                 })];
             }));
+    }
+
+    /**
+     * The last three succeeded service runs on the chosen source that weighed their report, newest
+     * first: what weightHistory draws, and what the New guide only needs to count.
+     * @returns {Run[]}
+     */
+    function weighedRuns() {
+        const source = selectedSource();
+        if (!source || !state.runs) return [];
+        return state.runs.filter(function (run) {
+            /** @type {Partial<RunResult>} */
+            const result = run.result || {};
+            // Trace-id runs are excluded: their weight says nothing about the
+            // slider. A missing max_traces on a service run is the server-side
+            // default, not an unmeasured one.
+            return run.source_id === source.id &&
+                run.status === 'succeeded' &&
+                typeof result.report_bytes === 'number' &&
+                (run.request || {}).trace_id === undefined;
+        }).slice(0, 3);
     }
 
     /**
@@ -4433,7 +4902,7 @@
                 t('new.cost.workers_note')],
             [String(limits.report_retention_hours), t('unit.h'), t('new.cost.retention'), t('new.cost.retention_note')]
         ];
-        return el('section', {class: 'card cost'}, [
+        return el('section', {class: 'card cost', 'data-guide': 'new.cost'}, [
             el('div', {class: 'cost-head'}, [
                 el('h2', {class: 'overline', text: t('new.cost.head')}),
                 el('span', {class: 'cost-sub', text: t('new.cost.sub')})
@@ -4523,7 +4992,7 @@
             el('span', {text: t('new.submit.button')})
         ]);
         button.addEventListener('click', submit);
-        const row = el('div', {class: 'submit-row'}, [
+        const row = el('div', {class: 'submit-row', 'data-guide': 'new.submit'}, [
             button,
             el('p', {class: 'submit-sentence', id: 'submit-sentence'})
         ]);
@@ -4627,11 +5096,11 @@
 
         const key = PSL.statusKey(run);
         const view = runView(run, key);
-        section.appendChild(el('div', {class: 'run-head'}, [
+        section.appendChild(el('div', {class: 'run-head', 'data-guide': 'run.head'}, [
             el('span', {class: 'status-pill', 'data-status': key, text: t('status.' + key)}),
             el('span', {class: 'run-id', text: run.id})
         ]));
-        section.appendChild(el('h1', {class: 'page-title', text: view.headline}));
+        section.appendChild(el('h1', {class: 'page-title', 'data-guide': 'run.headline', text: view.headline}));
         const sub = typeof view.sub === 'function' ? view.sub : null;
         section.appendChild(live(el('p', {class: 'page-sub', text: sub ? sub() : view.sub}), sub));
 
@@ -4784,7 +5253,7 @@
             rows.push(logRow(run.expires_at_ms, t('run.log.deleted'), t('run.log.deleted_detail'), 'muted'));
         }
 
-        return el('section', {class: 'card log-card', 'aria-label': t('run.log.label')}, [
+        return el('section', {class: 'card log-card', 'aria-label': t('run.log.label'), 'data-guide': 'run.log'}, [
             el('div', {class: 'log-head'}, [
                 el('h2', {class: 'overline', text: t('run.log.head')}),
                 el('span', {class: 'log-head-note', text: t('run.log.note')})
@@ -4837,7 +5306,7 @@
             ]));
         });
 
-        const elapsed = el('section', {class: 'card rail-card'}, [
+        const elapsed = el('section', {class: 'card rail-card', 'data-guide': 'run.elapsed'}, [
             el('h2', {class: 'overline overline-p', text: t('run.elapsed')}),
             figure
         ]);
@@ -4904,7 +5373,7 @@
                 return expiryText(run);
             }]);
 
-        return el('section', {class: 'request'}, [
+        return el('section', {class: 'request', 'data-guide': 'run.request'}, [
             el('h2', {class: 'overline overline-p', text: t('run.request')}),
             el('div', {class: 'request-grid'}, facts.map(function (fact) {
                 return el('div', {class: 'fact-card'}, [
@@ -4938,7 +5407,7 @@
     function outcomePanel(run, key) {
         if (key === 'running' || key === 'queued') return null;
         const spec = outcomeSpec(run, key);
-        const panel = el('section', {class: 'outcome', 'data-tone': spec.tone}, [
+        const panel = el('section', {class: 'outcome', 'data-tone': spec.tone, 'data-guide': 'run.outcome'}, [
             el('h2', {class: 'overline overline-p', text: '// ' + spec.title}),
             proseInto(el('p', {class: 'outcome-body'}), spec.body)
         ]);
@@ -5310,7 +5779,7 @@
             body.appendChild(detectionRow(knob));
         });
 
-        const panel = el('details', {class: 'advanced'}, [summary, body]);
+        const panel = el('details', {class: 'advanced', 'data-guide': 'new.advanced'}, [summary, body]);
         // Open because the reader left it open, or because a threshold in it is
         // set and hiding that would hide what the run is about to do.
         panel.open = state.panelOpen.advanced === true || detectionCount() > 0;
@@ -5514,7 +5983,7 @@
         const section = el('section', {}, [
             ruledOverline(t('incidents.overline')),
             el('h1', {class: 'page-title', text: t('incidents.title')}),
-            el('p', {class: 'page-sub'}, [
+            el('p', {class: 'page-sub', 'data-guide': 'incidents.sub'}, [
                 document.createTextNode(t('incidents.sub')),
                 helpDot(t('incidents.help'), t('incidents.topic'))
             ])
@@ -5528,7 +5997,10 @@
             return section;
         }
         if (state.incidentsError) {
-            section.appendChild(el('div', {class: 'banner', 'data-tone': INCIDENT_ERROR_TONE[state.incidentsError]}, [
+            section.appendChild(el('div', {
+                class: 'banner', 'data-tone': INCIDENT_ERROR_TONE[state.incidentsError],
+                'data-guide': state.incidentsError === 'stale' ? 'incidents.stale' : null
+            }, [
                 state.incidentsError === 'stale' ? warningGlyph(16) : critGlyph(16),
                 el('div', {text: t(INCIDENT_ERROR_TEXT[state.incidentsError])})
             ]));
@@ -5544,7 +6016,7 @@
         });
         section.appendChild(incidentFilterLine());
         if (state.incidents.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'incidents.empty'}, [
                 el('p', {class: 'empty-title', text: t('incidents.empty.title')}),
                 proseInto(el('p'), t(Object.values(state.incidentFilter).some(Boolean)
                     ? 'incidents.empty.body_filtered' : 'incidents.empty.body'))
@@ -5552,9 +6024,10 @@
             appendCopyNote(section);
             return section;
         }
-        section.appendChild(el('div', {class: 'sources-wrap'}, [incidentsTable(state.incidents)]));
+        section.appendChild(el('div', {class: 'sources-wrap', 'data-guide': 'incidents.table'},
+            [incidentsTable(state.incidents)]));
         if (!state.incidentsDone) {
-            const older = el('button', {type: 'button', class: 'pill-button'}, [
+            const older = el('button', {type: 'button', class: 'pill-button', 'data-guide': 'incidents.older'}, [
                 svg([['path', {d: 'M12 5v14M5 12l7 7 7-7'}]], 14),
                 el('span', {text: t('incidents.older')})
             ]);
@@ -5575,8 +6048,9 @@
     function unauthorizedBanners() {
         return (state.sources || []).filter(function (source) {
             return source.incidents_state === 'unauthorized';
-        }).map(function (source) {
-            return el('div', {class: 'banner', 'data-tone': 'warn'}, [
+        }).map(function (source, index) {
+            const guide = index === 0 ? 'incidents.unauthorized' : null;
+            return el('div', {class: 'banner', 'data-tone': 'warn', 'data-guide': guide}, [
                 warningGlyph(16),
                 el('div', {}, [
                     el('p', {}, [
@@ -5687,7 +6161,7 @@
             }), setFilter('source_id'))
         ]);
         folded.hidden = !state.incidentFiltersOpen;
-        return el('div', {class: 'filter-stack'}, [
+        return el('div', {class: 'filter-stack', 'data-guide': 'incidents.filters'}, [
             el('div', {class: 'refresh'}, [
                 filterSelect('kind', filter.kind, Object.keys(PSL.INCIDENT_KIND_LABEL).map(function (kind) {
                     return [kind, PSL.INCIDENT_KIND_LABEL[kind]];
@@ -5725,7 +6199,7 @@
             return source.kind === 'daemon';
         });
         if (daemons.length === 0) return null;
-        return el('p', {class: 'sources-note'}, [
+        return el('p', {class: 'sources-note', 'data-guide': 'incidents.copy'}, [
             el('span', {text: t('incidents.copy_note')})
         ].concat(daemons.map(function (source) {
             const text = function () {
@@ -5761,9 +6235,12 @@
                 'data-align': INCIDENT_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
+        const rows = incidents.flatMap(incidentRow);
+        rows[0].children[INCIDENT_COLUMNS.indexOf('capture')].setAttribute('data-guide', 'incidents.capture');
+        rows[0].children[INCIDENT_COLUMNS.indexOf('service')].setAttribute('data-guide', 'incidents.row');
         return el('table', {class: 'table'}, [
             el('thead', {}, [head]),
-            el('tbody', {}, incidents.flatMap(incidentRow))
+            el('tbody', {}, rows)
         ]);
     }
 
@@ -5877,6 +6354,7 @@
         if (cell) {
             const row = /** @type {HTMLElement} */ (cell.parentNode);
             row.hidden = !open;
+            foldAnchors(cell, open);
         }
         const detail = state.incidentDetails[incident.id];
         if (open && (detail === undefined || (detail !== 'loading' && detail.error_code))) loadIncident(incident);
@@ -5901,6 +6379,7 @@
             .finally(function () {
                 const target = document.getElementById('incident-detail-' + incidentKey(incident));
                 if (target) target.replaceChildren(incidentPanel(incident));
+                GUIDE.refresh();
             });
     }
 
@@ -5915,12 +6394,14 @@
                 el('div', {class: 'skeleton', style: 'height:90px'})
             ]);
         }
+        const opened = state.panelOpen[foldKey(incident)] === true;
         if (detail.error_code) {
-            return el('div', {class: 'daemon-panel'}, [
+            const gone = detail.error_code === 'gone';
+            return el('div', {class: 'daemon-panel', ...(gone ? foldGuide('incidents.panel', opened) : {})}, [
                 el('div', {class: 'banner', 'data-tone': 'crit'}, [
                     critGlyph(16),
                     el('p', {
-                        text: t(detail.error_code === 'gone' ? 'incidents.panel.gone' : 'incidents.panel.failed')
+                        text: t(gone ? 'incidents.panel.gone' : 'incidents.panel.failed')
                     })
                 ])
             ]);
@@ -5935,7 +6416,7 @@
         // The button comes after the note that describes the window, since it
         // is the action the note argues for. A bare row, so the panel's own
         // gap sets the distance and no margin adds a second one.
-        return el('div', {class: 'daemon-panel'}, [
+        return el('div', {class: 'daemon-panel', ...foldGuide('incidents.panel', opened)}, [
             el('p', {class: 'overline daemon-audience', text: t('incidents.panel.overline')}),
             el('p', {
                 class: 'daemon-source-note',
@@ -6203,7 +6684,7 @@
         const section = el('section', {}, [
             ruledOverline(t('correlations.overline')),
             el('h1', {class: 'page-title', text: t('correlations.title')}),
-            el('p', {class: 'page-sub'}, [
+            el('p', {class: 'page-sub', 'data-guide': 'correlations.sub'}, [
                 document.createTextNode(t('correlations.sub')),
                 helpDot(t('correlations.help'), t('correlations.topic'))
             ]),
@@ -6222,20 +6703,21 @@
         }
         const pairs = PSL.correlationPairs(state.correlations);
         if (pairs.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'correlations.empty'}, [
                 el('p', {class: 'empty-title', text: t('correlations.empty.title')}),
                 proseInto(el('p'), t('correlations.empty.body'))
             ]));
             return section;
         }
-        section.appendChild(el('div', {class: 'sources-wrap'}, [correlationsTable(pairs)]));
+        section.appendChild(el('div', {class: 'sources-wrap', 'data-guide': 'correlations.table'},
+            [correlationsTable(pairs)]));
         if (state.correlations.length === CORRELATION_LIMIT) {
             section.appendChild(el('p', {
                 class: 'sources-note',
                 text: t('correlations.limit', {limit: CORRELATION_LIMIT})
             }));
         }
-        section.appendChild(el('p', {class: 'sources-note'}, [
+        section.appendChild(el('p', {class: 'sources-note', 'data-guide': 'correlations.note'}, [
             el('span', {text: t('correlations.note.lead')}),
             el('span', {class: 'code-inline', text: '[daemon.hub_export]'}),
             el('span', {text: t('correlations.note.and')}),
@@ -6278,7 +6760,7 @@
                 href: '#/correlations'
             }, [el('span', {text: t('correlations.every_pair')})])
             : null;
-        return el('div', {class: 'refresh'}, [
+        return el('div', {class: 'refresh', 'data-guide': 'correlations.filters'}, [
             pairOnly,
             el('span', {class: 'refresh-label', text: t('correlations.range')}),
             range,
@@ -6303,7 +6785,9 @@
                 'data-align': CORRELATION_COLUMNS_RIGHT.indexOf(name) >= 0 ? 'right' : null
             });
         }));
-        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, pairs.flatMap(pairRow))]);
+        const rows = pairs.flatMap(pairRow);
+        rows[0].querySelector('.row-toggle').setAttribute('data-guide', 'correlations.pair');
+        return el('table', {class: 'table'}, [el('thead', {}, [head]), el('tbody', {}, rows)]);
     }
 
     /**
@@ -6337,6 +6821,7 @@
             if (cell) {
                 const row = /** @type {HTMLElement} */ (cell.parentNode);
                 row.hidden = !next;
+                foldAnchors(cell, next);
             }
         });
         const row = el('tr', {}, [
@@ -6407,7 +6892,8 @@
             return incident.source_id === pair.source_id
                 && PSL.spansOverlap(incident.window_from_ms, incidentEnd(incident), fromMs, toMs);
         });
-        return el('div', {class: 'daemon-panel'}, [
+        const guide = foldGuide('correlations.panel', state.panelOpen['pair:' + pair.key] === true);
+        return el('div', {class: 'daemon-panel', ...guide}, [
             timelineStrip(pair.episodes, incidents, fromMs, toMs),
             el('div', {class: 'sources-wrap'}, [episodesTable(pair.episodes, incidents)])
         ]);
@@ -7120,8 +7606,8 @@
 
     // -------------------------------------------------------- screen: recap
 
-    const RECAP_FIRST_PAGE = 10;
-    const RECAP_MOVES_FIRST = 5;
+    const RECAP_FIRST_PAGE = PSL.RECAP_FIRST_PAGE;
+    const RECAP_MOVES_FIRST = PSL.RECAP_MOVES_FIRST;
     const RECAP_PERIOD_CHOICES = ['day', 'week', 'month'];
     /** @type {Record<string, GlyphPaths>} */
     const RECAP_STATE_GLYPH = {
@@ -7511,7 +7997,7 @@
         const environments = Array.from(new Set((state.sources || []).map(function (source) {
             return source.environment;
         }).filter(Boolean))).sort();
-        return el('div', {class: 'refresh recap-filter'}, [
+        return el('div', {class: 'refresh recap-filter', 'data-guide': 'recap.filters'}, [
             el('span', {class: 'refresh-label', text: t('recap.filter.period')}),
             period,
             day,
@@ -7619,7 +8105,7 @@
     function recapMultiFilter(label, allLabel, key, selected, options) {
         const pick = state.recapPick;
         const open = pick.open === key;
-        const host = el('div', {class: 'recap-pick', id: 'recap-pick-' + key});
+        const host = el('div', {class: 'recap-pick', id: 'recap-pick-' + key, 'data-guide': 'recap.pick.' + key});
         // This list alone is drawn again, so a focus that moved on to another control stays there.
         const again = function () {
             const fresh = recapMultiFilter(label, allLabel, key, selected, recapPickOptions(key));
@@ -8045,7 +8531,7 @@
                 list.appendChild(el('li', {
                     class: 'recap-divider',
                     text: t('recap.prio.divider.' + (management ? 'pilotage' : 'tech')),
-                    'data-guide': management ? 'recap.below' : null
+                    'data-guide': 'recap.below'
                 }));
             }
             const row = recapRow(priority, max, snapshot, route, PSL.namesService(shown, index));
@@ -8076,13 +8562,25 @@
     function guideRowAnchors(row) {
         row.setAttribute('data-guide', 'recap.row');
         const parts = {
-            rank: '.recap-rank', what: '.recap-what', where: '.recap-where', figure: '.recap-figure',
-            trend: '.recap-trend', state: '.recap-action'
+            rank: '.recap-rank', what: '.recap-what', where: '.recap-where', suggest: '.recap-suggest',
+            figure: '.recap-figure', trend: '.recap-trend', facts: '.facts', state: '.recap-action'
         };
         Object.keys(parts).forEach(function (part) {
             const found = row.querySelector(parts[part]);
             if (found) found.setAttribute('data-guide', 'recap.row.' + part);
         });
+        // A folded fix is no anchor: the guide never opens a fold, so its step waits for the reader to.
+        const detail = /** @type {HTMLDetailsElement | null} */ (row.querySelector('.recap-detail'));
+        if (!detail) return;
+        const sql = detail.querySelector('.recap-sql');
+        const name = function () {
+            if (detail.open) detail.setAttribute('data-guide', 'recap.row.detail');
+            else detail.removeAttribute('data-guide');
+            if (sql && detail.open) sql.setAttribute('data-guide', 'recap.row.sql');
+            else if (sql) sql.removeAttribute('data-guide');
+        };
+        name();
+        detail.addEventListener('toggle', name);
     }
 
     /**
@@ -8264,7 +8762,7 @@
      */
     function recapTemplate(priority) {
         if (!PSL.isSqlFinding(priority.finding_type)) return el('pre', {class: 'recap-code', text: priority.template});
-        return el('pre', {class: 'recap-code'}, PSL.sqlTokens(priority.template).map(function (token) {
+        return el('pre', {class: 'recap-code recap-sql'}, PSL.sqlTokens(priority.template).map(function (token) {
             return el('span', {class: 'sql-' + token.kind, text: token.text});
         }));
     }
@@ -8996,7 +9494,7 @@
         again.addEventListener('click', function () {
             loadRecap(false, true);
         });
-        return el('div', {class: 'recap-freshness'}, [
+        return el('div', {class: 'recap-freshness', 'data-guide': 'recap.fresh'}, [
             el('span', {class: 'recap-freshness-text', text: t('recap.job.fresh', fresh)}),
             again
         ]);
@@ -10774,6 +11272,7 @@
      */
     function disclosureBanners(item) {
         const banners = [];
+        const notes = PSL.disclosureNotes(item);
         if (item.withdrawn) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'crit'}, [critGlyph(16), el('div', {
                 text: t('disc.banner.withdrawn', {
@@ -10783,14 +11282,13 @@
                     reason: (item.withdrawn.reason || '').replace(/\.+\s*$/, '') || t('disc.banner.withdrawn.no_reason')
                 })
             })]));
-        } else if (item.intent === 'official' && (item.integrity_level === 'hash-only' || item.integrity_level === 'none')) {
+        } else if (notes.indexOf('unsigned') >= 0) {
             banners.push(el('div', {class: 'banner', 'data-tone': 'warn'}, [warningGlyph(16), el('div', {
                 text: t('disc.banner.unsigned')
             })]));
         }
         if (item.pdf !== 'rendered') {
-            // A render again the engine refused: the files are suspect, not merely unchecked.
-            const refused = item.render_reason === 'content_hash_mismatch' || item.render_reason === 'binding_mismatch';
+            const refused = notes.indexOf('refused') >= 0;
             const reason = RENDER_REASONS[item.render_reason] ? t(RENDER_REASONS[item.render_reason])
                 : item.render_reason || t('disc.render.none');
             const text = el('div', {text: t(refused ? 'disc.banner.refused' : 'disc.banner.not_checked', {reason: reason})});
@@ -10859,7 +11357,7 @@
     }
 
     function railLegend() {
-        return el('div', {class: 'disc-legend'}, [
+        return el('div', {class: 'disc-legend', 'data-guide': 'disc.legend'}, [
             el('span', {class: 'disc-legend-label', text: t('disc.legend.declared')}),
             levelChip('hash-only'), levelChip('signed'), levelChip('signed-with-attestation'),
             el('span', {class: 'disc-legend-label', text: t('disc.legend.checked')}),
@@ -10869,20 +11367,22 @@
     }
 
     function publishPanel() {
-        return terminalBlock({
+        const panel = terminalBlock({
             head: t('disc.publish.head'),
             sub: t('disc.publish.sub'),
             text: PSL.publishCommand(location.origin),
             copyLabel: t('disc.publish.copy'),
             notes: [t('disc.publish.note')]
         });
+        panel.setAttribute('data-guide', 'disc.publish');
+        return panel;
     }
 
     function renderDisclosuresScreen() {
         const section = el('section', {class: 'disc'}, [
             ruledOverline(t('disc.overline')),
             el('h1', {class: 'page-title', text: t('disc.title')}),
-            el('p', {class: 'page-sub', text: t('disc.sub')})
+            el('p', {class: 'page-sub', 'data-guide': 'disc.sub', text: t('disc.sub')})
         ]);
         if (state.disclosures === null) {
             section.appendChild(el('div', {class: 'card skeleton', style: 'height:220px'}));
@@ -10896,20 +11396,22 @@
             return section;
         }
         if (state.disclosures.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'disc.empty'}, [
                 el('p', {class: 'empty-title', text: t('disc.empty.title')}),
                 el('p', {text: t('disc.empty.body')})
             ]));
             section.appendChild(publishPanel());
             return section;
         }
-        section.appendChild(el('div', {class: 'disc-rail-wrap'}, [
+        section.appendChild(el('div', {class: 'disc-rail-wrap', 'data-guide': 'disc.rail'}, [
             el('span', {class: 'disc-legend-label', text: t('disc.rail.head')}),
             railView(state.disclosures)
         ]));
         section.appendChild(railLegend());
-        state.disclosures.forEach(function (item) {
-            section.appendChild(disclosureCard(item));
+        state.disclosures.forEach(function (item, index) {
+            const card = disclosureCard(item);
+            if (index === 0) card.setAttribute('data-guide', 'disc.card');
+            section.appendChild(card);
         });
         section.appendChild(publishPanel());
         return section;
@@ -10921,9 +11423,10 @@
      * @param {string} head
      * @param {string} sub
      * @param {Child[]} children
+     * @param {string} guide the name the guide points it at
      */
-    function detailPanel(head, sub, children) {
-        return el('section', {class: 'card disc-panel'}, /** @type {Child[]} */ ([
+    function detailPanel(head, sub, children, guide) {
+        return el('section', {class: 'card disc-panel', 'data-guide': guide}, /** @type {Child[]} */ ([
             el('div', {class: 'disc-panel-head'}, [
                 el('h2', {class: 'overline', text: head}),
                 sub ? el('p', {class: 'disc-panel-sub', text: sub}) : null
@@ -11064,7 +11567,7 @@
             return t('disc.apps.col.' + id);
         });
         return detailPanel(t('disc.apps.head'), [coverage, hostNote].filter(Boolean).join(' ') || null,
-            [simpleTable(heads, rows, [heads[1], heads[3], heads[4], heads[5]])]);
+            [simpleTable(heads, rows, [heads[1], heads[3], heads[4], heads[5]])], 'disc.apps');
     }
 
     /**
@@ -11107,7 +11610,7 @@
                     copyLabel: t('disc.verify.copy'),
                     notes: [t('disc.verify.note')]
                 })
-            ]);
+            ], 'disc.integrity');
     }
 
     /**
@@ -11125,7 +11628,7 @@
             ]);
         });
         return detailPanel(t('disc.files.head'), t('disc.files.sub'),
-            [simpleTable([t('disc.files.col.file'), t('disc.files.col.role'), ''], rows), status]);
+            [simpleTable([t('disc.files.col.file'), t('disc.files.col.role'), ''], rows), status], 'disc.files');
     }
 
     /**
@@ -11177,7 +11680,7 @@
                 class: 'sources-note',
                 text: t(item.confidentiality === 'internal' ? 'disc.links.internal' : 'disc.links.none')
             }));
-        return detailPanel(t('disc.links.head'), t('disc.links.sub'), children);
+        return detailPanel(t('disc.links.head'), t('disc.links.sub'), children, 'disc.links');
     }
 
     /**
@@ -11215,7 +11718,8 @@
         const heads = ['webhook', 'event', 'last_attempt', 'outcome'].map(function (id) {
             return t('disc.deliveries.col.' + id);
         });
-        return detailPanel(t('disc.deliveries.head'), t('disc.deliveries.sub'), [simpleTable(heads.concat(['']), rows)]);
+        return detailPanel(t('disc.deliveries.head'), t('disc.deliveries.sub'), [simpleTable(heads.concat(['']), rows)],
+            'disc.deliveries');
     }
 
     /**
@@ -11244,7 +11748,7 @@
             disclaimers.length ? engineText(el('ol', {class: 'disc-disclaimers'}, disclaimers.map(function (/** @type {string} */ text) {
                 return el('li', {text: String(text)});
             }))) : null
-        ]);
+        ], 'disc.method');
     }
 
     /**
@@ -11338,7 +11842,7 @@
             buttons.push(toggle);
         }
         buttons.push(status);
-        return el('div', {class: 'disc-actions'}, buttons);
+        return el('div', {class: 'disc-actions', 'data-guide': 'disc.actions'}, buttons);
     }
 
     function renderDisclosureScreen() {
@@ -11364,13 +11868,13 @@
         [
             ruledOverline(t('disc.detail.overline', {period: PSL.periodLabel(item.period)})),
             el('h1', {
-                class: 'page-title', text: t('disc.detail.title', {
+                class: 'page-title', 'data-guide': 'disc.head', text: t('disc.detail.title', {
                     organisation: item.organisation,
                     from: PSL.day(item.period.from, {withYear: true}), to: PSL.day(item.period.to, {withYear: true})
                 })
             }),
             el('p', {
-                class: 'page-sub',
+                class: 'page-sub', 'data-guide': 'disc.head.sub',
                 text: t(item.pdf === 'rendered' ? 'disc.detail.sub.rendered' : 'disc.detail.sub.kept', {
                     intent: PSL.hasText(intent) ? t(intent)
                         : t('disc.detail.intent.other', {intent: item.intent.charAt(0).toUpperCase() + item.intent.slice(1)}),
@@ -11391,7 +11895,7 @@
         section.appendChild(detailPanel(t('disc.glance.head'), null, [
             disclosureFigures(item.figures),
             carbonBracket(item.figures && item.figures.carbon_kgco2eq)
-        ]));
+        ], 'disc.glance'));
         [applicationsPanel(state.disclosureReport, item.figures), integrityPanel(detail), filesPanel(item),
             shareLinksPanel(detail, manage), deliveriesPanel(detail, manage), methodPanel(state.disclosureReport)]
             .forEach(function (panel) {
@@ -11417,7 +11921,7 @@
         const section = el('section', {class: 'access-screen'}, [
             ruledOverline(t('access.overline')),
             el('h1', {class: 'page-title', text: t('access.title')}),
-            el('p', {class: 'page-sub', text: t('access.sub')})
+            el('p', {class: 'page-sub', 'data-guide': 'access.sub', text: t('access.sub')})
         ]);
         if (banner) section.appendChild(noGrantBanner(banner));
 
@@ -11428,7 +11932,7 @@
                 el('span', {text: signedIn.subjectLabel}),
                 el('code', {class: 'access-subject', text: signedIn.subject})
             ])
-        ]));
+        ], undefined, 'access.who'));
         section.appendChild(accessCard(t('access.card.groups'), [
             access.groups.length === 0
                 ? el('p', {class: 'access-muted', text: t('access.groups.none')})
@@ -11442,7 +11946,7 @@
                         text: group.name + ' · ' + group.origin
                     });
                 }))
-        ]));
+        ], undefined, 'access.groups'));
         if (banner) {
             // The banner already says nothing is reached. What helps now is the request.
             section.appendChild(terminalBlock({
@@ -11461,21 +11965,19 @@
                         reach.map(function (/** @type {{project: string, group: string, role: string, permissions: string}} */ row) {
                             return [row.project, row.group, row.role, row.permissions];
                         }))
-            ]));
+            ], undefined, 'access.reach'));
         }
         if (state.tokens || state.tokensFailed) {
-            section.appendChild(tokensCard((state.tokens || []).filter(function (/** @type {TerminalToken} */ token) {
-                return token.subject === access.subject;
-            }), t('access.card.own_tokens'), 'tokens-own'));
+            section.appendChild(tokensCard(ownTokens(), t('access.card.own_tokens'), 'tokens-own', 'access.tokens'));
         }
         if (access.admin) {
-            section.appendChild(el('p', {class: 'access-pointer'}, [
+            section.appendChild(el('p', {class: 'access-pointer', 'data-guide': 'access.admin'}, [
                 el('span', {text: t('access.admin.lead')}),
                 el('a', {href: '#/coverage', text: t('shell.tab.coverage')}),
                 el('span', {text: t('access.admin.tail')})
             ]));
         } else if (access.projects.length > 0) {
-            section.appendChild(accessCard(t('access.card.projects'), [projectsTable(access.projects)]));
+            section.appendChild(accessCard(t('access.card.projects'), [projectsTable(access.projects)], undefined, 'access.projects'));
         }
         return section;
     }
@@ -11489,21 +11991,23 @@
         const section = el('section', {class: 'access-screen'}, [
             ruledOverline(t('coverage.overline')),
             el('h1', {class: 'page-title', text: t('coverage.title')}),
-            el('p', {class: 'page-sub', text: t('coverage.sub')})
+            el('p', {class: 'page-sub', 'data-guide': 'coverage.sub', text: t('coverage.sub')})
         ]);
         if (access.unmatched) section.appendChild(attentionCard(access.unmatched));
         const snippet = access.unmatched ? PSL.coverageSnippet(access.unmatched) : null;
         if (snippet) {
-            section.appendChild(terminalBlock({
+            const block = terminalBlock({
                 head: t('coverage.snippet.head'),
                 sub: t('coverage.snippet.sub'),
                 text: snippet,
                 copyLabel: t('coverage.snippet.copy')
-            }));
+            });
+            block.setAttribute('data-guide', 'coverage.snippet');
+            section.appendChild(block);
         }
         if (access.conflicts) section.appendChild(conflictsCard(access.conflicts));
         if (state.tokens || state.tokensFailed) {
-            section.appendChild(tokensCard(state.tokens || [], t('coverage.card.tokens'), 'tokens-all'));
+            section.appendChild(tokensCard(state.tokens || [], t('coverage.card.tokens'), 'tokens-all', 'coverage.tokens'));
         }
         if (access.configuration) section.appendChild(configurationCard(access.configuration));
         return section;
@@ -11514,9 +12018,10 @@
      * @param {string} title
      * @param {Child[]} children
      * @param {string} [headingId]
+     * @param {string} [guide] the name the guide points it at
      */
-    function accessCard(title, children, headingId) {
-        return el('section', {class: 'card access-card'}, /** @type {Child[]} */ ([
+    function accessCard(title, children, headingId, guide) {
+        return el('section', {class: 'card access-card', 'data-guide': guide}, /** @type {Child[]} */ ([
             el('h2', {class: 'overline access-card-title', id: headingId, tabindex: headingId ? '-1' : null}, [
                 el('span', {'aria-hidden': 'true', text: '// '}),
                 el('span', {text: title})
@@ -11569,8 +12074,9 @@
      * @param {TerminalToken[]} tokens
      * @param {string} title
      * @param {string} headingId
+     * @param {string} guide
      */
-    function tokensCard(tokens, title, headingId) {
+    function tokensCard(tokens, title, headingId, guide) {
         const rows = PSL.tokenRows(tokens);
         const notice = state.tokensNotice && state.tokensNotice.card === headingId ? state.tokensNotice : null;
         return accessCard(title, [
@@ -11590,7 +12096,7 @@
                         rows.map(function (/** @type {{id: string, owner: string, from: string, created: string, expires: string, lastUsed: string}} */ row) {
                             return [row.owner, row.from, row.created, row.expires, row.lastUsed, revokeButton(row, headingId)];
                         }))
-        ], headingId);
+        ], headingId, guide);
     }
 
     /**
@@ -11715,7 +12221,7 @@
                 configuration.local_accounts.map(function (/** @type {string} */ name) {
                     return [name, 'local:' + name];
                 }))
-        ]);
+        ], undefined, 'coverage.config');
     }
 
     /**
@@ -11725,7 +12231,8 @@
     function attentionCard(unmatched) {
         const count = unmatched.services.length + unmatched.attributes.length + unmatched.sources.length;
         if (count === 0) {
-            return accessCard(t('coverage.attention.title'), [el('p', {text: t('coverage.attention.none')})]);
+            return accessCard(t('coverage.attention.title'), [el('p', {text: t('coverage.attention.none')})], undefined,
+                'coverage.attention');
         }
         const parts = [el('p', {text: t('coverage.attention.count.' + PSL.plural(count), {count: count})})];
         if (unmatched.services.length > 0) {
@@ -11752,7 +12259,7 @@
         if (unmatched.truncated) {
             parts.push(el('p', {class: 'access-muted', text: t('coverage.truncated')}));
         }
-        return accessCard(t('coverage.attention.title'), parts);
+        return accessCard(t('coverage.attention.title'), parts, undefined, 'coverage.attention');
     }
 
     /**
@@ -11772,14 +12279,17 @@
                             row.values.join(', '), String(row.identities_without_key)];
                     })),
             conflicts.truncated ? el('p', {class: 'access-muted', text: t('coverage.conflicts.truncated')}) : null
-        ]);
+        ], undefined, 'coverage.conflicts');
     }
 
     function renderRecentScreen() {
         const section = el('section', {}, [
             ruledOverline(t('recent.overline')),
             el('h1', {class: 'page-title', text: t('recent.title')}),
-            el('p', {class: 'page-sub', text: t('recent.sub', {hours: state.status.limits.report_retention_hours})})
+            el('p', {
+                class: 'page-sub', 'data-guide': 'recent.sub',
+                text: t('recent.sub', {hours: state.status.limits.report_retention_hours})
+            })
         ]);
 
         if (!state.runs) {
@@ -11787,12 +12297,9 @@
             return section;
         }
         if (state.runs.length === 0) {
-            section.appendChild(el('div', {class: 'empty-state'}, [
-                el('p', {
-                    class: 'empty-title',
-                    text: t('recent.empty.title', {hours: state.status.limits.report_retention_hours})
-                }),
-                el('p', {text: t('recent.empty.body', {hours: state.status.limits.report_retention_hours})}),
+            section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'recent.empty'}, [
+                el('p', {class: 'empty-title', text: t('recent.empty.title')}),
+                el('p', {text: t('recent.empty.body')}),
                 el('div', {class: 'outcome-actions empty-actions'}, [
                     el('a', {class: 'action action-filled', href: '#/new', text: t('recent.run_new')})
                 ])
@@ -11805,7 +12312,7 @@
                 return run.producer_version;
             }).filter(Boolean))).sort(PSL.vcmp);
         if (binaries.length > 1) {
-            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn'}, [
+            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn', 'data-guide': 'recent.binaries'}, [
                 svg([['path', {d: 'M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'}],
                     ['path', {d: 'M12 9v4M12 17h.01'}]], 16),
                 el('p', {
@@ -11821,7 +12328,7 @@
             return Object.keys((run.request || {}).detection || {}).length > 0;
         });
         if (tuned.length > 0 && tuned.length < state.runs.length) {
-            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn'}, [
+            section.appendChild(el('div', {class: 'banner', 'data-tone': 'warn', 'data-guide': 'recent.tuned'}, [
                 warningGlyph(16),
                 el('p', {text: t('recent.tuned.' + PSL.plural(tuned.length), {count: tuned.length})})
             ]));
@@ -11833,10 +12340,13 @@
 
     /**
      * @param {Run} run
+     * @param {number} index its place in the list: the first is the one the guide reads
      */
-    function runCard(run) {
+    function runCard(run, index) {
         const key = PSL.statusKey(run);
-        const card = el('a', {class: 'run-card', 'data-status': key, href: '#/run/' + run.id});
+        const card = el('a', {
+            class: 'run-card', 'data-status': key, href: '#/run/' + run.id, 'data-guide': index === 0 ? 'recent.card' : null
+        });
 
         card.appendChild(el('span', {class: 'run-card-line'}, [
             el('span', {
@@ -11977,6 +12487,7 @@
         }
         const frame = el('iframe', {
             class: 'report-frame',
+            'data-guide': 'report.frame',
             src: '/reports/' + id + '.html',
             title: t('report.frame_title')
         });
@@ -12003,7 +12514,7 @@
                 return reportLifetime(id);
             });
         // Without a run, the page under the bar carries the ways out, so the bar does not repeat one.
-        return el('div', {class: 'report-bar'}, [
+        return el('div', {class: 'report-bar', 'data-guide': 'report.bar'}, [
             run ? el('a', {class: 'pill-button', href: '#/run/' + id}, [
                 svg([['path', {d: 'M14 6l-6 6 6 6'}]], 14),
                 el('span', {text: t('report.back')})
@@ -12020,9 +12531,9 @@
      * @param {string} key
      */
     function reportGone(run, key) {
-        const view = ['queued', 'running', 'failed', 'interrupted', 'expired'].indexOf(key) >= 0 ? key : 'other';
+        const view = PSL.reportGoneView(key);
         const finished = key !== 'queued' && key !== 'running';
-        return el('div', {class: 'gone report-gone'}, [
+        return el('div', {class: 'gone report-gone', 'data-guide': 'report.gone'}, [
             el('h1', {class: 'page-title', text: t('report.gone.' + view + '.title')}),
             el('p', {class: 'page-sub', text: t('report.gone.' + view + '.body', {name: run.source_name})}),
             el('div', {class: 'outcome-actions'}, [

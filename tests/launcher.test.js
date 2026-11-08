@@ -3023,21 +3023,48 @@ const SAYS = {
 };
 
 /** Each guide test runs in both languages, with the phrases that language says. */
-function guideTest(name, body) {
+function guideTest(name, body, says = SAYS) {
     for (const lang of ["fr", "en"]) {
         test(name + " (" + lang + ")", () => {
-            inLang(lang, () => body(SAYS[lang]));
+            inLang(lang, () => body(says[lang]));
             // The run leaves no language behind it, so the next test starts in English as it expects.
             assert.equal(PSL.lang(), "en");
         });
     }
 }
 
-test("the guide offers pilotage only on the pilotage recap", () => {
+test("the recap guide follows the view on screen", () => {
     assert.equal(PSL.guideIdFor("recap", "pilotage"), "recap.pilotage");
-    assert.equal(PSL.guideIdFor("recap", "tech"), null);
+    assert.equal(PSL.guideIdFor("recap", "tech"), "recap.tech");
     assert.equal(PSL.guideIdFor("recap", null), null);
     assert.equal(PSL.guideIdFor("ack", null), null);
+});
+
+test("a role's path lists its screens in order", () => {
+    assert.deepEqual(PSL.guidePath("cto", () => true).stops,
+        [{screen: "recap", view: "pilotage"}, {screen: "disclosures", view: null}]);
+    assert.deepEqual(PSL.guidePath("lead", () => true).stops,
+        [{screen: "recap", view: "tech"}, {screen: "new", view: null}]);
+    assert.deepEqual(PSL.guidePath("architect", () => true).stops.map((stop) => stop.screen),
+        ["correlations", "incidents", "sources"]);
+    assert.deepEqual(PSL.guidePath("dev", () => true).stops, [{screen: "recap", view: "tech"}]);
+    assert.deepEqual(PSL.guidePath("pm", () => true).stops, [{screen: "recap", view: "pilotage"}]);
+    assert.deepEqual(PSL.GUIDE_ROLES, ["dev", "lead", "architect", "pm", "cto"]);
+    // Every stop is a screen with a guide, and every role has its texts in both languages.
+    for (const role of PSL.GUIDE_ROLES) {
+        for (const stop of PSL.guidePath(role, () => true).stops) assert.ok(PSL.guideIdFor(stop.screen, stop.view), role);
+        for (const key of ["guide.role." + role, "guide.role." + role + ".ask", "guide.path." + role + ".promise"]) {
+            assert.ok(PSL.hasText(key), key);
+        }
+    }
+});
+
+test("a hidden screen is skipped and named", () => {
+    const path = PSL.guidePath("cto", (s) => s !== "disclosures");
+    assert.deepEqual(path.skipped, ["disclosures"]);
+    assert.equal(path.stops.length, 1);
+    assert.deepEqual(PSL.guidePath("cto", () => true).skipped, []);
+    assert.deepEqual(PSL.guidePath("nobody", () => true), {stops: [], skipped: []});
 });
 
 test("the recap count is the tile's: separated thousands, nothing without a value", () => {
@@ -3205,13 +3232,15 @@ guideTest("nothing moved and no closed day replace the comparison", (says) => {
 });
 
 test("the guide's shell texts are set in both languages", () => {
-    const keys = ["open", "quit", "prev", "next", "close", "count", "wait.title", "wait.body", "failed.title", "failed.body"];
+    const keys = ["open", "menu.label", "quit", "prev", "next", "close", "count", "wait.title", "wait.body", "failed.title",
+        "failed.body"];
     for (const lang of ["fr", "en"]) inLang(lang, () => {
         for (const key of keys) assert.ok(PSL.hasText("guide." + key), lang + " guide." + key);
         assert.equal(PSL.t("guide.count", {at: 2, total: 9}), lang === "fr" ? "2 sur 9" : "2 of 9");
     });
     inLang("fr", () => {
-        assert.equal(PSL.t("guide.open"), "Comprendre cet écran");
+        assert.equal(PSL.t("guide.open"), "Guide");
+        assert.equal(PSL.t("guide.menu.screen"), "Comprendre cet écran");
         assert.equal(PSL.t("guide.wait.title"), "Le récap se calcule");
         assert.equal(PSL.t("guide.failed.title"), "Le récap n'a pas pu être lu");
     });
@@ -3234,3 +3263,897 @@ test("French pilotage text addresses the reader as vous", () => inLang("fr", () 
     assert.doesNotMatch(text, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
     assert.match(text, /(?<!\p{L})vous(?!\p{L})/iu);
 }));
+
+// ---- the guide of the technical recap
+
+const techRow = (over) => pilotageRow(Object.assign({
+    signature: "sig-1", endpoint: "GET /orders/{id}", template: "SELECT * FROM order_line WHERE order_id = ?",
+    suggestion: "Batch the order lines.", confidence: "ci"
+}, over));
+
+function techSnapshot(over) {
+    return pilotageSnapshot(overlay({view: "tech", priorities: [techRow(), techRow({rank: 2, avoidable_io_ops: 300})]},
+        over));
+}
+
+/** The technical steps of a snapshot, by id, read with `ctx`. */
+function techSteps(over, ctx) {
+    return Object.fromEntries(PSL.recapTechSteps(techSnapshot(over), ctx || {}).map((step) => [step.id, step]));
+}
+
+const text = (step) => [step.title, ...step.body, ...(step.marks || []).map((mark) => mark.text)].join(" ");
+
+const TECH_SAYS = {
+    fr: {
+        banner: "Le bandeau nomme", closedDays: "jours clos", ranking: "dans le classement", note: "La note sous la période",
+        filtered: "que les filtres retiennent", noVolume: "le tiret ne veut pas dire zéro", wholePeriod: "toute la période",
+        truncated: "5 000 premiers", ioOne: "1 I/O évitable", ioNone: "I/O évitables", atLeastOne: "1 source n'envoie",
+        atLeastMany: "3 sources n'envoient", noIo: "Aucune I/O évitable à valoriser", noCoefficient: "Aucune source n'a envoyé",
+        magnitude: "ordre de grandeur", findingOne: "1 finding actif", findingMany: "4 findings actifs",
+        actionOne: "1 action terminée", actionMany: "2 actions terminées", actionsNone: "Actions",
+        tenFirst: "Les dix premières", showAll: "Tout afficher (12)", emptyTable: "Rien à classer sur cette période",
+        label: "nom métier", dash: "Un tiret", sql: "Une requête SQL est mise en page", long: "Au-delà de 600 caractères",
+        events: "l'historique de l'action", take: "« Prendre »", ack: "« Acquitter »", taken: "Le responsable",
+        verdict: "verdict du moteur : ", contradicted: "la contredit", name: "« Nommer »", denied: "rien n'est écrit",
+        noClosed: "Aucun jour de cette période", nothing: "Rien n'a bougé", groups: "Seuls les groupes",
+        confirmed: "« Avec un correctif confirmé »", longGroup: "cinq premiers", sources: "sources sans volume"
+    },
+    en: {
+        banner: "The banner names", closedDays: "finished days", ranking: "in the ranking", note: "The note under the period",
+        filtered: "only what the filters keep", noVolume: "the dash does not mean zero", wholePeriod: "whole period",
+        truncated: "first 5,000", ioOne: "1 avoidable I/O", ioNone: "Avoidable I/O", atLeastOne: "1 source sends",
+        atLeastMany: "3 sources send", noIo: "No avoidable I/O to put a figure on", noCoefficient: "No source sent",
+        magnitude: "order of magnitude", findingOne: "1 active finding", findingMany: "4 active findings",
+        actionOne: "1 action done", actionMany: "2 actions done", actionsNone: "Actions",
+        tenFirst: "The first ten", showAll: "Show all 12", emptyTable: "Nothing to rank in this period",
+        label: "business name", dash: "A dash", sql: "A SQL query is laid out", long: "Past 600 characters",
+        events: "history of the action", take: "\"Take\"", ack: "\"Acknowledge\"", taken: "The owner",
+        verdict: "engine's verdict: ", contradicted: "contradicts it", name: "\"Name this\"", denied: "nothing is written",
+        noClosed: "No day of this period", nothing: "Nothing has moved", groups: "Only the groups",
+        confirmed: "\"With a confirmed fix\"", longGroup: "first five", sources: "sources with no detection volume"
+    }
+};
+
+/** A technical guide test, in both languages. */
+const techTest = (name, body) => guideTest(name, body, TECH_SAYS);
+
+const moved = (over) => Object.assign({
+    finding_type: "n_plus_one_sql", service: "shop-svc", plain: "x", trend: "new", change: null, label: null,
+    service_label: null
+}, over);
+
+test("the technical steps come in the screen's order, each on its anchors", () => {
+    const list = PSL.recapTechSteps(techSnapshot(), {});
+    assert.deepEqual(list.map((step) => [step.id, step.anchors]), [
+        ["view", ["recap.view"]], ["filters", ["recap.filters"]], ["pick", ["recap.pick.services", "recap.pick.groupings"]],
+        ["fresh", ["recap.fresh"]], ["period", ["recap.period"]], ["io", ["recap.io"]], ["co2", ["recap.co2"]],
+        ["findings", ["recap.findings"]], ["actions", ["recap.actions"]], ["table", ["recap.table"]],
+        ["row", ["recap.row"]], ["fix", ["recap.row.detail"]], ["sql", ["recap.row.sql"]],
+        ["act", ["recap.row.facts", "recap.row.state"]],
+        ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
+        ["card", ["recap.card"]], ["end", []]]);
+    const row = list.find((step) => step.id === "row");
+    assert.deepEqual(row.body, []);
+    assert.deepEqual(row.marks.map((mark) => mark.anchor),
+        ["recap.row.rank", "recap.row.what", "recap.row.suggest", "recap.row.figure", "recap.row.trend"]);
+    assert.ok(list.every((step) => step.title && Array.isArray(step.body)));
+    assert.ok(list.filter((step) => step.id !== "row").every((step) => step.body.length && !step.marks));
+    // The card is the pilotage card, word for word.
+    const card = list.find((step) => step.id === "card");
+    assert.deepEqual([card.title, card.body], [PSL.t("guide.pilotage.card.title"), [PSL.t("guide.pilotage.card.body")]]);
+});
+
+test("no priority drops the row, its fix and its action", () => {
+    const ids = PSL.recapTechSteps(techSnapshot({priorities: []}), {}).map((step) => step.id);
+    for (const id of ["row", "fix", "sql", "act"]) assert.ok(!ids.includes(id), id);
+});
+
+test("the pick step says the most names a list takes", () => {
+    assert.ok(techSteps().pick.body.join(" ").includes(String(PSL.RECAP_FILTER_MAX_VALUES)));
+});
+
+techTest("the technical period names its banner, its running days and its notes", (says) => {
+    const closed = text(techSteps().period);
+    assert.ok(closed.includes(PSL.periodText(techSnapshot().period)));
+    for (const phrase of [says.banner, says.closedDays, says.note, says.filtered]) assert.ok(!closed.includes(phrase), phrase);
+    const open = text(techSteps({period: {in_progress: true}}).period);
+    assert.ok(open.includes(says.closedDays) && open.includes(says.ranking) && !open.includes(says.banner));
+    for (const gap of [{period: {in_progress: true, incomplete: ["restart"]}}, {previous: {incomplete: ["sampling"]}}]) {
+        const body = text(techSteps(gap).period);
+        assert.ok(body.includes(says.banner) && !body.includes(says.closedDays), JSON.stringify(gap));
+    }
+    assert.ok(text(techSteps({period: {notes: ["sampling"]}}).period).includes(says.note));
+    assert.ok(text(techSteps({previous: {notes: ["sampling"]}}).period).includes(says.note));
+    assert.ok(text(techSteps({filters: {services: ["a", "b"]}}).period).includes(says.filtered));
+});
+
+techTest("the avoidable I/O step carries the tile's figure, its dash and its gaps", (says) => {
+    assert.ok(techSteps({tiles: {avoidable_io_ops: 168900}}).io.title.startsWith(PSL.recapCount(168900) + " "));
+    assert.equal(techSteps({tiles: {avoidable_io_ops: 1}}).io.title, says.ioOne);
+    const none = techSteps({tiles: {avoidable_io_ops: null}}).io;
+    assert.equal(none.title, says.ioNone);
+    assert.equal(none.body.length, 1);
+    assert.ok(none.body[0].includes(says.noVolume));
+    assert.ok(!text(techSteps().io).includes(says.noVolume));
+    assert.ok(text(techSteps({period: {incomplete: ["restart"]}}).io).includes(says.wholePeriod));
+    assert.ok(!text(techSteps({previous: {incomplete: ["restart"]}}).io).includes(says.wholePeriod));
+    assert.ok(text(techSteps({truncated: true}).io).includes(says.truncated));
+    assert.ok(!text(techSteps().io).includes(says.truncated));
+});
+
+techTest("the CO2 step counts the sources without a coefficient, or gives the reason there is none", (says) => {
+    const whole = text(techSteps().co2);
+    assert.ok(whole.includes(says.magnitude) && !whole.includes(says.atLeastOne) && !whole.includes(says.atLeastMany));
+    assert.ok(text(techSteps({tiles: {co2_sources_without_coefficient: 1}}).co2).includes(says.atLeastOne));
+    assert.ok(text(techSteps({tiles: {co2_sources_without_coefficient: 3}}).co2).includes(says.atLeastMany));
+    // Under a gram the tile shows no "at least".
+    assert.ok(!text(techSteps({tiles: {co2_grams: 0.4, co2_sources_without_coefficient: 3}}).co2).includes(says.atLeastMany));
+    const idle = techSteps({tiles: {co2_grams: null, co2_missing_reason: "no_avoidable_io"}}).co2;
+    assert.deepEqual(idle.body.length, 1);
+    assert.ok(idle.body[0].includes(says.noIo));
+    const missing = techSteps({tiles: {co2_grams: null, co2_missing_reason: "no_coefficient"}}).co2;
+    assert.ok(missing.body[0].includes(says.noCoefficient) && !text(missing).includes(says.magnitude));
+});
+
+techTest("findings and actions are counted as their tiles count them", (says) => {
+    assert.equal(techSteps({tiles: {active_findings: 1}}).findings.title, says.findingOne);
+    assert.equal(techSteps({tiles: {active_findings: 4}}).findings.title, says.findingMany);
+    assert.equal(techSteps({tiles: {actions: {done: 1}}}).actions.title, says.actionOne);
+    assert.equal(techSteps({tiles: {actions: {done: 2}}}).actions.title, says.actionMany);
+    assert.equal(techSteps({tiles: {actions: {done: 0}}}).actions.title, says.actionsNone);
+});
+
+techTest("a long ranking says where the rest is until it is shown, an empty one says there is none", (says) => {
+    const twelve = Array.from({length: 12}, (_, index) => techRow({rank: index + 1}));
+    const cut = text(techSteps({priorities: twelve}).table);
+    assert.ok(cut.includes(says.tenFirst) && cut.includes(says.showAll), cut);
+    assert.ok(!text(techSteps({priorities: twelve}, {showAll: true}).table).includes(says.tenFirst));
+    assert.ok(!text(techSteps().table).includes(says.tenFirst));
+    const empty = techSteps({priorities: []}).table;
+    assert.equal(empty.title, says.emptyTable);
+    assert.deepEqual(empty.anchors, ["recap.table"]);
+    assert.equal(empty.body.length, 1);
+});
+
+techTest("the row names the business label when there is one and reads its dash", (says) => {
+    const what = (over) => techSteps({priorities: [techRow(over)]}).row.marks[1].text;
+    assert.ok(what({label: "Order lines"}).includes(says.label));
+    assert.ok(!what({}).includes(says.label));
+    const figure = (over) => techSteps({priorities: [techRow(over)]}).row.marks[3].text;
+    assert.ok(figure({avoidable_io_ops: null}).startsWith(says.dash));
+    assert.ok(figure({avoidable_io_ops: 0}).startsWith(says.dash));
+    assert.ok(!figure({}).startsWith(says.dash));
+});
+
+techTest("the sql step comes with a SQL query only, and names its limit past it", (says) => {
+    const sql = (over) => techSteps({priorities: [techRow(over)]}).sql;
+    assert.ok(text(sql({})).includes(says.sql) && !text(sql({})).includes(says.long));
+    assert.equal(sql({finding_type: "n_plus_one_http", template: "GET /orders/{id}"}), undefined);
+    assert.equal(sql({template: undefined}), undefined);
+    const long = text(sql({template: "SELECT a FROM b WHERE c = ? " + "AND d = ? ".repeat(70)}));
+    assert.ok(long.includes(says.sql) && long.includes(says.long));
+});
+
+techTest("the fix step leaves the SQL to its own step and names the action history only when it is there", (says) => {
+    const fix = (over) => text(techSteps({priorities: [techRow(over)]}).fix);
+    assert.ok(!fix({}).includes(says.sql));
+    assert.ok(!fix({}).includes(says.events));
+    assert.ok(fix({action: {status: "todo", events: [{from: null, to: "todo", by: "alice", at_ms: 1}]}}).includes(says.events));
+    assert.ok(!fix({action: {status: "todo", events: []}}).includes(says.events));
+});
+
+techTest("the act step tells taking from changing, and reads the engine's verdict", (says) => {
+    const act = (action) => text(techSteps({priorities: [techRow({action})]}).act);
+    const free = act(null);
+    assert.ok(free.includes(says.take) && free.includes(says.ack) && !free.includes(says.taken));
+    const taken = act({status: "in_progress", confirmation: null});
+    assert.ok(taken.includes(says.taken) && !taken.includes(says.take) && !taken.includes(says.verdict));
+    const confirmed = act({status: "done", confirmation: "confirmed"});
+    assert.ok(confirmed.includes(says.verdict + PSL.confirmationLabel("confirmed")), confirmed);
+    assert.ok(!confirmed.includes(says.contradicted));
+    for (const state of ["contradicted", "came_back"]) {
+        const told = act({status: "done", confirmation: state});
+        assert.ok(told.includes(says.verdict + PSL.confirmationLabel(state)) && told.includes(says.contradicted), state);
+    }
+    assert.ok(!act({status: "done", confirmation: null}).includes(says.verdict));
+    for (const body of [free, taken, confirmed]) assert.ok(body.includes(says.name) && body.includes(says.denied));
+});
+
+techTest("what moved follows the screen's note, its confirmed fixes, its long groups and its sources", (says) => {
+    const base = text(techSteps().moved);
+    assert.ok(base.includes(says.groups));
+    for (const phrase of [says.noClosed, says.nothing, says.confirmed, says.longGroup, says.sources]) {
+        assert.ok(!base.includes(phrase), phrase);
+    }
+    const none = techSteps({nothing_moved: true, previous: {truncated_to_days: 0}}).moved;
+    assert.ok(none.body[0].includes(says.noClosed) && !text(none).includes(says.nothing) && !text(none).includes(says.groups));
+    const nothing = techSteps({nothing_moved: true}).moved;
+    assert.ok(nothing.body[0].includes(says.nothing) && !text(nothing).includes(says.groups));
+    assert.ok(text(techSteps({movements: {gone_with_confirmed_action: 1}}).moved).includes(says.confirmed));
+    const six = Array.from({length: 6}, () => moved());
+    assert.ok(text(techSteps({movements: {new: six}}).moved).includes(says.longGroup));
+    assert.ok(!text(techSteps({movements: {new: six}}, {movesOpen: {new: true}}).moved).includes(says.longGroup));
+    // A list the Hub cut counts its whole length.
+    const counts = {new: 40, gone: 0, up: 0, down: 0, came_back: 0, done_still_detected: 0};
+    assert.ok(text(techSteps({movements: {new: [moved()], counts}}).moved).includes(says.longGroup));
+    // Opened but still cut, while its whole list is read, the screen keeps the button.
+    assert.ok(text(techSteps({movements: {new: [moved()], counts}}, {movesOpen: {new: true}}).moved).includes(says.longGroup));
+    assert.ok(!text(techSteps({movements: {new: Array.from({length: 5}, () => moved())}}).moved).includes(says.longGroup));
+    assert.ok(text(techSteps({sources_without_volume: ["daemon-b"]}).moved).includes(says.sources));
+});
+
+test("technical text has no em dash, and French addresses the reader as vous", () => {
+    const variants = [{}, {period: {in_progress: true, notes: ["sampling"]}}, {period: {incomplete: ["restart"]}},
+        {tiles: {avoidable_io_ops: null, co2_grams: null, co2_missing_reason: "no_coefficient"}, truncated: true},
+        {tiles: {co2_sources_without_coefficient: 2}}, {priorities: []},
+        {priorities: [techRow({label: "x", action: {status: "done", confirmation: "came_back",
+            events: [{from: null, to: "done", by: "a", at_ms: 1}]}})]},
+        {nothing_moved: true}, {previous: {truncated_to_days: 0}}, {sources_without_volume: ["b"]}];
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = variants.flatMap((over) => PSL.recapTechSteps(techSnapshot(over), {})).map(text).join("\n");
+        assert.ok(all.length > 3000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});
+
+// ---- the guides of the analysis screens: New, Recent, one run and its report
+
+const GUIDE_LIMITS = {
+    max_traces_cap: 2000, analysis_timeout_seconds: 300, report_retention_hours: 72, max_traces_embedded: 50,
+    max_read_limit: 1000, fetch_concurrency_warn: 16, fetch_concurrency_max: 64, fetch_concurrency_supported: true,
+    engine_memory_limit_mib: 0
+};
+const HOUR_MS = 3600000;
+
+/** What the New screen's source reads off `state`, a Tempo source on a service run by default. */
+const newCtx = (over) => Object.assign({
+    sources: 3, runnable: 3, windowHandoff: false, namespaced: false, traceHandoff: false, daemon: false, skewPill: false,
+    mode: "service", rangeMode: "relative", spanMs: HOUR_MS, retentionHours: 168, maxTraces: 100, weighed: false,
+    fetchBand: "ok", queue: 0, limits: GUIDE_LIMITS, blocker: null, unreachable: false, skewBehind: false, command: true
+}, over);
+const newBy = (over) => Object.fromEntries(PSL.newSteps(newCtx(over)).map((step) => [step.id, step]));
+
+const guideRun = (over) => Object.assign({
+    id: "0000000000000001", status: "succeeded", source_id: "tempo-eu", source_name: "Tempo EU", kind: "tempo",
+    request: {service: "order-svc", lookback: "1h", max_traces: 100}, error_code: null, producer_version: "0.43.2",
+    created_at_ms: 1000, started_at_ms: 2000, finished_at_ms: 9000, expires_at_ms: 1000 + 72 * HOUR_MS,
+    result: {findings: 3, critical: 0, warning: 3, info: 0, traces_analyzed: 100, quality_gate_passed: true, warnings: []}
+}, over);
+const runBy = (over, now = 5000) =>
+    Object.fromEntries(PSL.runSteps({run: guideRun(over), now, limits: GUIDE_LIMITS}).map((step) => [step.id, step]));
+const reportBy = (over) => Object.fromEntries(PSL.reportSteps({run: guideRun(over)}).map((step) => [step.id, step]));
+const recentBy = (first) =>
+    Object.fromEntries(PSL.recentSteps({hours: 72, first}).map((step) => [step.id, step]));
+
+const ANALYSIS_SAYS = {
+    fr: {
+        noSource: "aucune source configurée", noGrant: "Aucune autorisation", window: "d'où vient la fenêtre",
+        namespace: "aucun namespace",
+        trace: "« Utiliser l'autre trace »", daemon: "choisissez un backend", missing: "analyses.run",
+        skewPill: "« de retard »", traceMode: "Un identifiant désigne", absolute: "Elle est absolue",
+        relative: "Elle est relative", timeout: "300 secondes", retention: "Elle dépasse ce que la source",
+        undeclared: "Personne n'a déclaré", heavy: "« Lourd »", ceiling: "« Au plafond »", over: "plafond strict de 2000",
+        invalid: "au moins une trace", weighed: "mesuré, pas prédit", fetchLimits: "au plus 16 lectures",
+        fetchMax: "pas plus de 64", fetchOver: "cocher la case de l'alerte", fetchBlocked: "rien ne permet de lancer",
+        retentionHours: "Passé 72 h", queueOne: "derrière 1 tâche.", queueMany: "derrière 3 tâches.",
+        ready: "redit ce que l'analyse va faire", blocked: "dit pourquoi : ", unreachable: "Cette source ne répond pas",
+        skew: "Le bloc au-dessus nomme l'écart", intro: "supprimés 72 heures", emptyList: "jusqu'à ce que la rétention du Hub l'efface",
+        thresholds: "« Seuils »", error: "« Erreur »", logLive: "pas un flux", elapsedRunning: "La barre mesure",
+        elapsedQueued: "démarre quand un worker", elapsedTotal: "Le temps total", tuned: "couleur d'avertissement",
+        expires: "Le lien expire dans", caveats: "en anglais", frameEmpty: "Un rapport vide est attendu",
+        pending: "pas encore prêt", finished: "« La relancer avec les mêmes paramètres »", expiredHours: "vivent 72 heures"
+    },
+    en: {
+        noSource: "no configured source", noGrant: "No grant", window: "where the window comes from",
+        namespace: "and no namespace",
+        trace: "\"Use the other trace\"", daemon: "pick a trace backend", missing: "analyses.run",
+        skewPill: "\"behind\"", traceMode: "An ID names", absolute: "It is absolute", relative: "It is relative",
+        timeout: "300 seconds", retention: "It goes past what the source", undeclared: "Nobody declared",
+        heavy: "\"Heavy\"", ceiling: "\"At the ceiling\"", over: "hard cap of 2000", invalid: "at least one trace",
+        weighed: "measured, not predicted", fetchLimits: "at most 16 reads", fetchMax: "no more than 64",
+        fetchOver: "tick the alert's box", fetchBlocked: "nothing lets you run", retentionHours: "After 72 h",
+        queueOne: "behind 1 job.", queueMany: "behind 3 jobs.", ready: "restates what the analysis will do",
+        blocked: "says why: ", unreachable: "This source is not answering", skew: "The block above names the gap",
+        intro: "deleted 72 hours", emptyList: "until the Hub's retention erases it", thresholds: "\"Thresholds\"", error: "\"Error\"",
+        logLive: "not a stream", elapsedRunning: "The bar measures", elapsedQueued: "starts when a worker",
+        elapsedTotal: "The total time", tuned: "warning colour", expires: "The link expires in", caveats: "in English",
+        frameEmpty: "An empty report is expected", pending: "not ready yet",
+        finished: "\"Run it again with the same parameters\"", expiredHours: "live 72 hours"
+    }
+};
+const analysisTest = (name, body) => guideTest(name, body, ANALYSIS_SAYS);
+
+test("each analysis screen has its own guide, and the others none yet", () => {
+    for (const screen of ["new", "recent", "run", "report"]) assert.equal(PSL.guideIdFor(screen, null), screen);
+    assert.equal(PSL.guideIdFor("recap", "tech"), "recap.tech");
+    for (const screen of ["ack", "missing"]) assert.equal(PSL.guideIdFor(screen, null), null);
+});
+
+test("a window's consequences keep the screen's thresholds", () => {
+    const DAY = 24 * HOUR_MS;
+    assert.deepEqual(PSL.rangeNotes(DAY, 168), []);
+    assert.deepEqual(PSL.rangeNotes(DAY + 1, 168), ["wide"]);
+    assert.deepEqual(PSL.rangeNotes(7 * DAY + 1, 168), ["wide", "timeout", "retention"]);
+    assert.deepEqual(PSL.rangeNotes(2 * HOUR_MS, 1), ["retention"]);
+    assert.deepEqual(PSL.rangeNotes(DAY + 1, null), ["wide", "undeclared"]);
+    assert.deepEqual(PSL.rangeNotes(DAY, null), []);
+});
+
+test("the New steps come in the screen's order, each on its anchors", () => {
+    const list = PSL.newSteps(newCtx({windowHandoff: true}));
+    assert.deepEqual(list.map((step) => [step.id, step.anchors]), [
+        ["empty", ["new.empty"]], ["handoff", ["new.handoff"]], ["source", ["new.source"]], ["daemon", ["new.daemon"]],
+        ["mode", ["new.mode"]], ["range", ["new.range"]], ["traces", ["new.traces"]], ["fetch", ["new.fetch"]],
+        ["cost", ["new.cost"]], ["advanced", ["new.advanced"]], ["submit", ["new.submit"]],
+        ["terminal", ["new.terminal"]], ["end", []]]);
+    assert.ok(list.every((step) => step.title && step.body.length && !step.marks));
+});
+
+test("no handoff drops its step, no command drops the terminal", () => {
+    const ids = PSL.newSteps(newCtx({command: false})).map((step) => step.id);
+    assert.ok(!ids.includes("handoff") && !ids.includes("terminal"));
+});
+
+analysisTest("an empty New screen says whether no source exists or none is yours", (says) => {
+    assert.ok(text(newBy({sources: 0, runnable: 0}).empty).includes(says.noSource));
+    assert.ok(text(newBy({sources: 2, runnable: 0}).empty).includes(says.noGrant));
+});
+
+analysisTest("a handoff says where it comes from, and a daemon that cannot take it", (says) => {
+    const window = text(newBy({windowHandoff: true}).handoff);
+    assert.ok(window.includes(says.window) && !window.includes(says.trace) && !window.includes(says.daemon));
+    // The banner says the namespace's reach only for a namespaced row.
+    assert.ok(!window.includes(says.namespace));
+    assert.ok(text(newBy({windowHandoff: true, namespaced: true}).handoff).includes(says.namespace));
+    assert.ok(!text(newBy({traceHandoff: true, namespaced: true}).handoff).includes(says.namespace));
+    const trace = text(newBy({traceHandoff: true, daemon: true}).handoff);
+    assert.ok(trace.includes(says.trace) && trace.includes(says.daemon) && !trace.includes(says.window));
+});
+
+analysisTest("the source step counts the sources left out and the version pills only when there are some", (says) => {
+    const plain = text(newBy().source);
+    assert.ok(!plain.includes(says.missing) && !plain.includes(says.skewPill));
+    assert.ok(text(newBy({runnable: 2}).source).includes(says.missing));
+    assert.ok(text(newBy({skewPill: true}).source).includes(says.skewPill));
+});
+
+analysisTest("a trace ID run says the window and the cap do not apply", (says) => {
+    assert.ok(!text(newBy().mode).includes(says.traceMode));
+    assert.ok(text(newBy({mode: "trace"}).mode).includes(says.traceMode));
+});
+
+analysisTest("the range says its mode and the consequences the screen lists under it", (says) => {
+    const short = text(newBy().range);
+    assert.ok(short.includes(says.relative) && !short.includes(says.absolute));
+    for (const phrase of [says.timeout, says.retention, says.undeclared]) assert.ok(!short.includes(phrase), phrase);
+    assert.ok(text(newBy({rangeMode: "absolute"}).range).includes(says.absolute));
+    const long = text(newBy({spanMs: 8 * 24 * HOUR_MS}).range);
+    assert.ok(long.includes(says.timeout) && long.includes(says.retention) && long.includes(PSL.dur(168 * HOUR_MS)));
+    assert.ok(text(newBy({spanMs: 2 * 24 * HOUR_MS, retentionHours: null}).range).includes(says.undeclared));
+});
+
+analysisTest("the trace count reads its band, and the history only when there is one", (says) => {
+    const safe = text(newBy().traces);
+    for (const phrase of [says.heavy, says.ceiling, says.over, says.invalid, says.weighed]) assert.ok(!safe.includes(phrase), phrase);
+    assert.ok(text(newBy({maxTraces: 800}).traces).includes(says.heavy));
+    assert.ok(text(newBy({maxTraces: 1500}).traces).includes(says.ceiling));
+    assert.ok(text(newBy({maxTraces: 2500}).traces).includes(says.over));
+    assert.ok(text(newBy({maxTraces: 0}).traces).includes(says.invalid));
+    assert.ok(text(newBy({weighed: true}).traces).includes(says.weighed));
+});
+
+analysisTest("the reads step gives the Hub's limits and what its alert asks", (says) => {
+    const ok = text(newBy().fetch);
+    assert.ok(ok.includes(says.fetchLimits) && ok.includes(says.fetchMax));
+    assert.ok(!ok.includes(says.fetchOver) && !ok.includes(says.fetchBlocked));
+    assert.ok(text(newBy({fetchBand: "over"}).fetch).includes(says.fetchOver));
+    assert.ok(text(newBy({fetchBand: "blocked"}).fetch).includes(says.fetchBlocked));
+});
+
+analysisTest("the cost step gives the retention and the queue ahead, singular and plural", (says) => {
+    const none = text(newBy().cost);
+    assert.ok(none.includes(says.retentionHours) && !none.includes(says.queueOne) && !none.includes(says.queueMany));
+    assert.ok(text(newBy({queue: 1}).cost).includes(says.queueOne));
+    assert.ok(text(newBy({queue: 3}).cost).includes(says.queueMany));
+});
+
+analysisTest("the submit step says what blocks it, an unreachable source and an engine behind", (says) => {
+    const ready = text(newBy().submit);
+    assert.ok(ready.includes(says.ready) && !ready.includes(says.blocked));
+    assert.ok(!ready.includes(says.unreachable) && !ready.includes(says.skew));
+    const blocked = text(newBy({blocker: "Pick a service.", unreachable: true, skewBehind: true}).submit);
+    assert.ok(blocked.includes(says.blocked + "Pick a service.") && !blocked.includes(says.ready));
+    assert.ok(blocked.includes(says.unreachable) && blocked.includes(says.skew));
+});
+
+test("the Recent steps come in the screen's order, and no run drops the card", () => {
+    assert.deepEqual(PSL.recentSteps({hours: 72, first: guideRun()}).map((step) => [step.id, step.anchors]), [
+        ["intro", ["recent.sub"]], ["empty", ["recent.empty"]], ["binaries", ["recent.binaries"]],
+        ["tuned", ["recent.tuned"]], ["card", ["recent.card"]], ["end", []]]);
+    assert.ok(!PSL.recentSteps({hours: 72, first: null}).some((step) => step.id === "card"));
+});
+
+analysisTest("Recent gives the retention, and the card its thresholds and its error when it has them", (says) => {
+    const steps = recentBy(guideRun());
+    assert.ok(text(steps.intro).includes(says.intro) && text(steps.empty).includes(says.emptyList)
+        && !text(steps.empty).includes("72"));
+    assert.ok(!text(steps.card).includes(says.thresholds) && !text(steps.card).includes(says.error));
+    assert.ok(text(recentBy(guideRun({request: {service: "x", detection: {n_plus_one_threshold: 9}}})).card)
+        .includes(says.thresholds));
+    assert.ok(text(recentBy(guideRun({status: "failed", error_code: "timeout"})).card).includes(says.error));
+});
+
+test("the run steps come in the screen's order, the outcome only once the run is over", () => {
+    assert.deepEqual(PSL.runSteps({run: guideRun(), now: 5000, limits: GUIDE_LIMITS}).map((step) => [step.id, step.anchors]), [
+        ["head", ["run.head", "run.headline"]], ["log", ["run.log"]], ["elapsed", ["run.elapsed"]],
+        ["request", ["run.request"]], ["outcome", ["run.outcome"]], ["end", []]]);
+    for (const status of ["pending", "running"]) assert.ok(!("outcome" in runBy({status})), status);
+});
+
+analysisTest("the head and the outcome name the run's state", () => {
+    const states = {
+        queued: {status: "pending"}, running: {status: "running"}, succeeded: {}, empty: {result: {empty: true}},
+        failed: {status: "failed", error_code: "timeout"}, interrupted: {status: "interrupted"}, expired: {status: "expired"}
+    };
+    for (const [key, over] of Object.entries(states)) {
+        const steps = runBy(over);
+        assert.equal(steps.head.title, PSL.t("guide.run.head." + key + ".title"), key);
+        assert.ok(steps.head.body[0] && !steps.head.body[0].includes("{"), key);
+        if (steps.outcome) assert.equal(steps.outcome.title, PSL.t("guide.run.outcome." + key + ".title"), key);
+    }
+});
+
+analysisTest("the run's log, elapsed time, request and outcome read what the run holds", (says) => {
+    assert.ok(text(runBy({status: "running"}).log).includes(says.logLive));
+    assert.ok(!text(runBy().log).includes(says.logLive));
+    assert.ok(text(runBy({status: "running"}).elapsed).includes(says.elapsedRunning));
+    assert.ok(text(runBy({status: "pending"}).elapsed).includes(says.elapsedQueued));
+    assert.ok(text(runBy().elapsed).includes(says.elapsedTotal));
+    assert.ok(text(runBy({status: "running"}).elapsed).includes("300"));
+    assert.ok(!text(runBy().request).includes(says.tuned));
+    assert.ok(text(runBy({request: {service: "x", detection: {slow_ms: 9}}}).request).includes(says.tuned));
+    assert.ok(text(runBy({status: "expired"}).head).includes(says.expiredHours));
+    const outcome = text(runBy().outcome);
+    assert.ok(outcome.includes(says.expires + " " + PSL.durPrecise(72 * HOUR_MS - 4000)) && !outcome.includes(says.caveats));
+    assert.ok(text(runBy({result: {warnings: [{kind: "sampling", message: "x"}]}}).outcome).includes(says.caveats));
+    // The empty panel lists the engine's warnings too.
+    assert.ok(text(runBy({result: {empty: true, warnings: [{kind: "sampling", message: "x"}]}}).outcome).includes(says.caveats));
+    assert.ok(!text(runBy({result: {empty: true, warnings: []}}).outcome).includes(says.caveats));
+    assert.ok(!text(runBy({status: "failed", result: {warnings: [{kind: "sampling", message: "x"}]}}).outcome).includes(says.caveats));
+    // Past its expiry no link is promised.
+    assert.ok(!text(runBy({}, 1000 + 73 * HOUR_MS).outcome).includes(says.expires));
+});
+
+analysisTest("the report shows its frame, or says why there is none", (says) => {
+    const shown = reportBy();
+    assert.deepEqual(Object.keys(shown), ["bar", "frame", "gone", "end"]);
+    assert.deepEqual(shown.frame.anchors, ["report.frame"]);
+    assert.ok(!text(shown.frame).includes(says.frameEmpty));
+    assert.ok(text(reportBy({result: {empty: true}}).frame).includes(says.frameEmpty));
+    // A report deleted under a run that still reads succeeded is replaced in place by the expired notice.
+    assert.equal(shown.gone.title, PSL.t("report.gone.expired.title"));
+    for (const [over, view, phrase] of [[{status: "running"}, "running", says.pending], [{status: "pending"}, "queued", says.pending],
+        [{status: "failed"}, "failed", says.finished], [{status: "expired"}, "expired", says.finished]]) {
+        const steps = reportBy(over);
+        assert.ok(!("frame" in steps), view);
+        assert.equal(steps.gone.title, PSL.t("report.gone." + view + ".title"), view);
+        assert.ok(text(steps.gone).includes(phrase), view);
+    }
+});
+
+test("the analysis guides have no em dash, and French addresses the reader as vous", () => {
+    const news = [newCtx({windowHandoff: true, namespaced: true, traceHandoff: true, daemon: true, runnable: 2, skewPill: true,
+        mode: "trace", spanMs: 8 * 24 * HOUR_MS, weighed: true, fetchBand: "over", queue: 2, blocker: "x.",
+        unreachable: true, skewBehind: true}), newCtx({sources: 0, runnable: 0, retentionHours: null, spanMs: 2 * 24 * HOUR_MS,
+        maxTraces: 1500, fetchBand: "blocked", rangeMode: "absolute"}), newCtx({maxTraces: 800}), newCtx({maxTraces: 2500}),
+        newCtx({maxTraces: 0, runnable: 0})];
+    const runs = [{}, {status: "pending"}, {status: "running"}, {result: {empty: true}}, {status: "failed"},
+        {status: "interrupted"}, {status: "expired"}, {result: {warnings: [{kind: "k", message: "m"}]}}];
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = [
+            ...news.flatMap((ctx) => PSL.newSteps(ctx)),
+            ...PSL.recentSteps({hours: 72, first: guideRun({status: "failed", error_code: "timeout",
+                request: {detection: {a: 1}}})}),
+            ...runs.flatMap((over) => PSL.runSteps({run: guideRun(over), now: 5000, limits: GUIDE_LIMITS})),
+            ...runs.flatMap((over) => PSL.reportSteps({run: guideRun(over)}))
+        ].map(text).join("\n");
+        assert.ok(all.length > 6000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        assert.doesNotMatch(all, /guide\.(new|recent|run|report)\./, "every key has a text");
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});
+
+// ---- the guides of Sources, Incidents and Correlations
+
+const sourcesBy = (over) => Object.fromEntries(PSL.sourcesSteps(Object.assign({
+    unreachable: 0, behind: false, unknownProducer: false, lockedDaemon: false, gauges: null
+}, over)).map((step) => [step.id, step]));
+const incidentsBy = (over) => Object.fromEntries(PSL.incidentsSteps(Object.assign({
+    stale: false, unauthorized: null, filtered: false, panel: null, unfolded: false
+}, over)).map((step) => [step.id, step]));
+const correlationsBy = (over) => Object.fromEntries(PSL.correlationsSteps(Object.assign({
+    pairOnly: false, limit: null, opened: false, traceable: false
+}, over)).map((step) => [step.id, step]));
+
+const FLEET_SAYS = {
+    fr: {
+        oneDown: "1 source est injoignable.", manyDown: "3 sources sont injoignables.", noThreshold: "aucun seuil",
+        unknown: "« Inconnu »", locked: "sources.read", hints: "Aucun conseil", readFailed: "La lecture de ce daemon a échoué",
+        stale: "copie de la dernière lecture", refused: "Daemon B a refusé la clé du Hub", filtered: "pour ce filtre",
+        unfold: "Dépliez une ligne, puis rouvrez le guide", before: "« avant l'incident » se déclenchaient déjà",
+        noFinding: "aucun finding pour cet incident", gone: "la rétention l'a supprimé", analyse: "« Analyser cette fenêtre »",
+        pairOnly: "Vous lisez une seule paire", limit: "aux 1000 épisodes", explain: "« Expliquer la dernière paire »",
+        notCause: "l'un provoque l'autre"
+    },
+    en: {
+        oneDown: "1 source is unreachable.", manyDown: "3 sources are unreachable.", noThreshold: "no threshold",
+        unknown: "\"Unknown\"", locked: "sources.read", hints: "No advice", readFailed: "The read of this daemon failed",
+        stale: "copy of the last read", refused: "Daemon B refused the Hub's key", filtered: "for this filter",
+        unfold: "Unfold a row, then open the guide again", before: "\"before the incident\" were already firing",
+        noFinding: "no finding for this incident", gone: "retention deleted it", analyse: "\"Analyse this window\"",
+        pairOnly: "You are reading a single pair", limit: "at the 1000 most recent", explain: "\"Explain the last pair\"",
+        notCause: "one causes the other"
+    }
+};
+const fleetTest = (name, body) => guideTest(name, body, FLEET_SAYS);
+
+test("Sources, Incidents and Correlations each have their guide", () => {
+    for (const screen of ["sources", "incidents", "correlations"]) assert.equal(PSL.guideIdFor(screen, null), screen);
+    for (const screen of ["ack", "missing"]) assert.equal(PSL.guideIdFor(screen, null), null);
+});
+
+test("the Sources steps come in the screen's order, the fleet bar and the gauges only when the screen has them", () => {
+    const anchors = (over) => PSL.sourcesSteps(Object.assign({
+        unreachable: 0, behind: false, unknownProducer: false, lockedDaemon: false, gauges: null
+    }, over)).map((step) => [step.id, step.anchors]);
+    assert.deepEqual(anchors({behind: true, gauges: "read"}), [
+        ["table", ["sources.table"]], ["health", ["sources.health"]],
+        ["fresh", ["sources.last_success", "sources.down_for"]], ["producer", ["sources.producer"]],
+        ["skew", ["shell.skew"]], ["env", ["sources.env"]], ["error", ["sources.last_error"]],
+        ["daemon", ["sources.daemon"]], ["gauges", ["sources.gauges"]], ["end", []]]);
+    const plain = anchors({}).map((step) => step[0]);
+    assert.ok(!plain.includes("skew") && !plain.includes("gauges"));
+});
+
+fleetTest("Sources counts the unreachable sources as the tab does, and judges no age", (says) => {
+    assert.ok(!text(sourcesBy().health).includes(says.oneDown));
+    assert.ok(text(sourcesBy({unreachable: 1}).health).includes(says.oneDown));
+    assert.ok(text(sourcesBy({unreachable: 3}).health).includes(says.manyDown));
+    assert.ok(text(sourcesBy().fresh).includes(says.noThreshold));
+});
+
+fleetTest("Sources names an unread producer, a locked daemon and a failed read", (says) => {
+    assert.ok(!text(sourcesBy().producer).includes(says.unknown));
+    assert.ok(text(sourcesBy({unknownProducer: true}).producer).includes(says.unknown));
+    assert.ok(!text(sourcesBy().daemon).includes(says.locked));
+    assert.ok(text(sourcesBy({lockedDaemon: true}).daemon).includes(says.locked));
+    const read = text(sourcesBy({gauges: "read"}).gauges);
+    assert.ok(read.includes(says.hints) && !read.includes(says.readFailed));
+    const failed = text(sourcesBy({gauges: "failed"}).gauges);
+    assert.ok(failed.includes(says.readFailed) && !failed.includes(says.hints));
+});
+
+test("the Incidents steps come in the screen's order, the stale copy, a refusal and a panel only when there", () => {
+    const steps = PSL.incidentsSteps({stale: true, unauthorized: "Daemon B", filtered: false, panel: "findings", unfolded: true});
+    assert.deepEqual(steps.map((step) => [step.id, step.anchors]), [
+        ["intro", ["incidents.sub"]], ["stale", ["incidents.stale"]], ["unauthorized", ["incidents.unauthorized"]],
+        ["filters", ["incidents.filters"]], ["empty", ["incidents.empty"]], ["table", ["incidents.table"]],
+        ["capture", ["incidents.capture"]], ["row", ["incidents.row"]], ["panel", ["incidents.panel"]],
+        ["older", ["incidents.older"]], ["copy", ["incidents.copy"]], ["end", []]]);
+    const plain = Object.keys(incidentsBy());
+    for (const id of ["stale", "unauthorized", "panel"]) assert.ok(!plain.includes(id), id);
+});
+
+fleetTest("Incidents names the daemon that refused, a filtered empty list, and an unread fold", (says) => {
+    assert.ok(text(incidentsBy({stale: true}).stale).includes(says.stale));
+    assert.ok(text(incidentsBy({unauthorized: "Daemon B"}).unauthorized).includes(says.refused));
+    assert.ok(!text(incidentsBy().empty).includes(says.filtered));
+    assert.ok(text(incidentsBy({filtered: true}).empty).includes(says.filtered));
+    assert.ok(text(incidentsBy().row).includes(says.unfold));
+    assert.ok(!text(incidentsBy({panel: "findings", unfolded: true}).row).includes(says.unfold));
+    // A row unfolded on a detail that failed to read has no panel step, and is not asked to unfold again.
+    const failed = incidentsBy({unfolded: true});
+    assert.ok(!text(failed.row).includes(says.unfold) && !("panel" in failed));
+});
+
+fleetTest("an unfolded incident says what was already firing, nothing frozen, or gone", (says) => {
+    const findings = text(incidentsBy({panel: "findings"}).panel);
+    assert.ok(findings.includes(says.before) && findings.includes(says.analyse) && !findings.includes(says.noFinding));
+    const none = text(incidentsBy({panel: "none"}).panel);
+    assert.ok(none.includes(says.noFinding) && none.includes(says.analyse) && !none.includes(says.before));
+    const gone = text(incidentsBy({panel: "gone"}).panel);
+    assert.ok(gone.includes(says.gone) && !gone.includes(says.analyse));
+});
+
+test("the Correlations steps come in the screen's order, the episodes only for an unfolded pair", () => {
+    const steps = PSL.correlationsSteps({pairOnly: false, limit: null, opened: true, traceable: false});
+    assert.deepEqual(steps.map((step) => [step.id, step.anchors]), [
+        ["intro", ["correlations.sub"]], ["cause", []], ["filters", ["correlations.filters"]],
+        ["empty", ["correlations.empty"]], ["table", ["correlations.table"]], ["pair", ["correlations.pair"]],
+        ["episodes", ["correlations.panel"]], ["note", ["correlations.note"]], ["end", []]]);
+    assert.ok(!("episodes" in correlationsBy()));
+});
+
+fleetTest("Correlations says a pair is no cause, a single pair, the limit, and the trace link", (says) => {
+    assert.ok(text(correlationsBy().cause).includes(says.notCause));
+    assert.ok(!text(correlationsBy().filters).includes(says.pairOnly));
+    assert.ok(text(correlationsBy({pairOnly: true}).filters).includes(says.pairOnly));
+    assert.ok(!text(correlationsBy().table).includes(says.limit));
+    assert.ok(text(correlationsBy({limit: 1000}).table).includes(says.limit));
+    assert.ok(text(correlationsBy().pair).includes(says.unfold));
+    assert.ok(!text(correlationsBy({opened: true}).pair).includes(says.unfold));
+    assert.ok(!text(correlationsBy({opened: true}).episodes).includes(says.explain));
+    assert.ok(text(correlationsBy({opened: true, traceable: true}).episodes).includes(says.explain));
+});
+
+test("the fleet guides have no em dash, and French addresses the reader as vous", () => {
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = [
+            ...PSL.sourcesSteps({unreachable: 2, behind: true, unknownProducer: true, lockedDaemon: true, gauges: "read"}),
+            ...PSL.sourcesSteps({unreachable: 1, behind: false, unknownProducer: false, lockedDaemon: false, gauges: "failed"}),
+            ...["findings", "none", "gone", null].flatMap((panel) =>
+                PSL.incidentsSteps({stale: true, unauthorized: "Daemon B", filtered: panel === null, panel})),
+            ...PSL.correlationsSteps({pairOnly: true, limit: 1000, opened: true, traceable: true}),
+            ...PSL.correlationsSteps({pairOnly: false, limit: null, opened: false, traceable: false})
+        ].map(text).join("\n");
+        assert.ok(all.length > 5000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        assert.doesNotMatch(all, /guide\.(sources|incidents|correlations|unfold)\b/, "every key has a text");
+        for (const state of ["wait", "failed"]) {
+            for (const id of ["sources", "incidents", "correlations"]) {
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".title"), id + " " + state);
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".body"), id + " " + state);
+            }
+        }
+        assert.ok(PSL.hasText("guide.incidents.failed.stale.title") && PSL.hasText("guide.incidents.failed.stale.body"));
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});
+
+// ---- the guides of Disclosures, Access and Coverage
+
+const DISCLOSURE = {
+    id: "d1", report_uuid: "u1", organisation: "Acme", period: {type: "quarter", from: "2026-01-01", to: "2026-03-31"},
+    intent: "official", confidentiality: "public", content_hash: "abc", integrity_level: "signed",
+    figures: {
+        energy_kwh: 10, carbon_kgco2eq: 2, avoidable_ratio: 0.1, coverage: 0.9, applications_declared: null,
+        applications_measured: null, applications: []
+    },
+    files: {report: true, attestation: true, bundle: true, pdf: true}, pdf: "rendered", render_reason: null,
+    published_at_ms: 0, signature_added_at_ms: null, withdrawn: null
+};
+const publicItem = (over) => Object.assign({}, DISCLOSURE, over);
+const disclosureDetail = (item, over) => Object.assign({
+    disclosure: publicItem(item), checks: {content_hash: "checked", binding: "checked", signature: "declared", engine_version: "0.43.2"},
+    share_links: [], deliveries: [], expected_identity: null, expected_issuer: null, can_manage: false
+}, over);
+const WITHDRAWN = {at_ms: 0, reason: "typo", by: "ada"};
+const disclosuresBy = (first) => Object.fromEntries(PSL.disclosuresSteps({first: first === undefined ? publicItem() : first})
+    .map((step) => [step.id, step]));
+const disclosureBy = (item, over, report = null) => Object.fromEntries(PSL.disclosureSteps({
+    detail: disclosureDetail(item, over), report
+}).map((step) => [step.id, step]));
+const accessBy = (over) => Object.fromEntries(PSL.accessSteps(Object.assign({
+    machine: false, noGroup: false, noReach: false, everything: false, tokens: "listed"
+}, over)).map((step) => [step.id, step]));
+const coverageBy = (over) => Object.fromEntries(PSL.coverageSteps(Object.assign({
+    covered: false, truncated: false, backend: false, noConflict: false
+}, over)).map((step) => [step.id, step]));
+const HOSTS = {aggregate: {total_energy_kwh: 10, database_waste: {in_totals_windows: 2, windows_with_figure: 2, in_totals_energy_kwh: 1}}};
+
+const PUBLIC_SAYS = {
+    fr: {
+        bracket: "de la moitié au double du chiffre", official: "au moins 75 %", withdrawn: "le bandeau dit par qui",
+        unsigned: "n'est pas signé", refused: "a trouvé un problème", notChecked: "pour la raison du bandeau",
+        internal: "« Jamais partagée »", rendered: "a recalculé son empreinte", kept: "n'en a pas produit le PDF",
+        pdf: "« Télécharger le PDF »", newLink: "« Nouveau lien de partage »", render: "« Rendre à nouveau »",
+        withdraw: "« Retirer » demande une raison", noWithdraw: "n'offre plus ni lien", neverLink: "n'a jamais de lien",
+        carbonBar: "La barre du carbone", measured: "2 des 3 applications déclarées", both: "« Hôtes de broker »",
+        database: "La ligne « Hôtes de base de données »", broker: "La ligne « Hôtes de broker »", excluded: "par l'opérateur", hashChecked: "n'ont pas changé depuis",
+        hashNot: "n'a pas vérifié l'empreinte", hashMismatch: "ne correspond plus", signature: "sur votre ordinateur", audited: "Le niveau audité",
+        neverShared: "n'est jamais partagé", locked: "votre accès ne comprend pas", groupChange: "prochaine connexion",
+        noGroup: "aucun groupe", noReach: "Aucune autorisation ne concerne", everything: "« Tout » veut dire",
+        columns: "le rôle et ses permissions", noToken: "Aucun jeton de terminal.", tokensFailed: "n'a pas listé les jetons",
+        revoke: "« Révoquer »", covered: "Rien à attribuer", seen: "les sources où il a été vu", truncated: "200 premières",
+        backend: "Un backend de traces", none: "Aucun."
+    },
+    en: {
+        bracket: "from half to twice the figure", official: "at least 75%", withdrawn: "the banner says by whom",
+        unsigned: "is not signed", refused: "found a problem", notChecked: "for the reason in the banner",
+        internal: "\"Never shared\"", rendered: "recomputed its content hash", kept: "did not produce its PDF",
+        pdf: "\"Download the PDF\"", newLink: "\"New share link\"", render: "\"Render again\"",
+        withdraw: "\"Withdraw\" asks for a reason", noWithdraw: "offers neither a share link", neverLink: "never has a share link",
+        carbonBar: "The carbon bar", measured: "2 of the 3 declared applications", both: "\"Broker hosts\"",
+        database: "The \"Database hosts\" row", broker: "The \"Broker hosts\" row", excluded: "by the operator", hashChecked: "have not changed since",
+        hashNot: "did not check the content hash", hashMismatch: "no longer matches", signature: "on your computer", audited: "The audited level",
+        neverShared: "is never shared", locked: "your access does not include", groupChange: "next sign-in",
+        noGroup: "in no group", noReach: "No grant concerns", everything: "\"Everything\" means",
+        columns: "the role and its permissions", noToken: "No terminal token.", tokensFailed: "did not list the tokens",
+        revoke: "\"Revoke\"", covered: "Nothing to assign", seen: "the sources where it was seen", truncated: "first 200",
+        backend: "A trace backend", none: "None."
+    }
+};
+const publicTest = (name, body) => guideTest(name, body, PUBLIC_SAYS);
+
+test("Disclosures, a disclosure, Access and Coverage each have their guide", () => {
+    for (const screen of ["disclosures", "disclosure", "access", "coverage"]) assert.equal(PSL.guideIdFor(screen, null), screen);
+    for (const screen of ["ack", "missing"]) assert.equal(PSL.guideIdFor(screen, null), null);
+});
+
+test("the Disclosures steps come in the screen's order, the card only with a report to read", () => {
+    assert.deepEqual(PSL.disclosuresSteps({first: publicItem()}).map((step) => [step.id, step.anchors]), [
+        ["intro", ["disc.sub"]], ["empty", ["disc.empty"]], ["rail", ["disc.rail"]], ["legend", ["disc.legend"]],
+        ["card", ["disc.card"]], ["publish", ["disc.publish"]], ["end", []]]);
+    assert.ok(!("card" in disclosuresBy(null)));
+});
+
+test("a disclosure's notes follow the order of its banners, then its chip", () => {
+    assert.deepEqual(PSL.disclosureNotes(publicItem()), []);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({integrity_level: "hash-only"})), ["unsigned"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({integrity_level: "none", intent: "internal"})), []);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({withdrawn: WITHDRAWN, integrity_level: "none", confidentiality: "internal"})),
+        ["withdrawn", "internal"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({pdf: "not_rendered", render_reason: "binding_mismatch"})), ["refused"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({pdf: "not_rendered", render_reason: "content_hash_mismatch"})), ["refused"]);
+    assert.deepEqual(PSL.disclosureNotes(publicItem({pdf: "not_rendered", render_reason: "engine_missing"})), ["not_checked"]);
+});
+
+publicTest("the card of Disclosures quotes the carbon with its bracket and reads the first report's banners", (says) => {
+    const plain = text(disclosuresBy().card);
+    assert.ok(plain.includes(says.bracket) && plain.includes(says.official));
+    for (const note of ["withdrawn", "unsigned", "refused", "notChecked", "internal"]) assert.ok(!plain.includes(says[note]), note);
+    assert.ok(text(disclosuresBy(publicItem({withdrawn: WITHDRAWN})).card).includes(says.withdrawn));
+    assert.ok(text(disclosuresBy(publicItem({integrity_level: "hash-only"})).card).includes(says.unsigned));
+    assert.ok(text(disclosuresBy(publicItem({pdf: "not_rendered", render_reason: "binding_mismatch"})).card).includes(says.refused));
+    assert.ok(text(disclosuresBy(publicItem({pdf: "not_rendered", render_reason: null})).card).includes(says.notChecked));
+    assert.ok(text(disclosuresBy(publicItem({confidentiality: "internal"})).card).includes(says.internal));
+});
+
+test("the disclosure steps come in the screen's order", () => {
+    assert.deepEqual(PSL.disclosureSteps({detail: disclosureDetail(), report: null}).map((step) => [step.id, step.anchors]), [
+        ["head", ["disc.head", "disc.head.sub"]], ["actions", ["disc.actions"]], ["glance", ["disc.glance"]],
+        ["apps", ["disc.apps"]], ["integrity", ["disc.integrity"]], ["files", ["disc.files"]], ["links", ["disc.links"]],
+        ["deliveries", ["disc.deliveries"]], ["method", ["disc.method"]], ["end", []]]);
+    // No PDF and no right to manage: the bar holds no button, and the step has nothing to say.
+    assert.ok(!("actions" in disclosureBy({files: {report: true, attestation: false, bundle: false, pdf: false}})));
+});
+
+publicTest("the head of a disclosure says whether the Hub checked it, then its banners", (says) => {
+    const rendered = text(disclosureBy().head);
+    assert.ok(rendered.includes(says.rendered) && !rendered.includes(says.kept));
+    const kept = text(disclosureBy({pdf: "not_rendered", withdrawn: WITHDRAWN}).head);
+    assert.ok(kept.includes(says.kept) && kept.includes(says.withdrawn) && kept.includes(says.notChecked));
+});
+
+publicTest("the actions of a disclosure name each button the screen shows, and none without the right", (says) => {
+    const reader = text(disclosureBy().actions);
+    assert.ok(reader.includes(says.pdf));
+    for (const button of ["newLink", "render", "withdraw"]) assert.ok(!reader.includes(says[button]), button);
+    const manager = text(disclosureBy({}, {can_manage: true}).actions);
+    assert.ok(manager.includes(says.newLink) && manager.includes(says.withdraw) && !manager.includes(says.render));
+    assert.ok(text(disclosureBy({pdf: "not_rendered"}, {can_manage: true}).actions).includes(says.render));
+    const withdrawn = text(disclosureBy({withdrawn: WITHDRAWN}, {can_manage: true}).actions);
+    assert.ok(withdrawn.includes(says.noWithdraw) && !withdrawn.includes(says.newLink) && !withdrawn.includes(says.withdraw));
+    const internal = text(disclosureBy({confidentiality: "internal"}, {can_manage: true}).actions);
+    assert.ok(internal.includes(says.neverLink) && !internal.includes(says.newLink));
+});
+
+publicTest("a disclosure's figures, applications and integrity say what the screen shows", (says) => {
+    assert.ok(text(disclosureBy().glance).includes(says.carbonBar));
+    assert.ok(!text(disclosureBy({figures: Object.assign({}, DISCLOSURE.figures, {carbon_kgco2eq: 0})}).glance).includes(says.carbonBar));
+    const plain = text(disclosureBy().apps);
+    for (const variant of ["measured", "both", "database", "broker", "excluded"]) assert.ok(!plain.includes(says[variant]), variant);
+    const figures = Object.assign({}, DISCLOSURE.figures, {applications_declared: 3, applications_measured: 2});
+    assert.ok(text(disclosureBy({figures}).apps).includes(says.measured));
+    const database = text(disclosureBy({}, {}, HOSTS).apps);
+    assert.ok(database.includes(says.database) && !database.includes(says.both));
+    const both = Object.assign({}, HOSTS.aggregate, {messaging_waste: HOSTS.aggregate.database_waste});
+    assert.ok(text(disclosureBy({}, {}, {aggregate: both}).apps).includes(says.both));
+    const broker = text(disclosureBy({}, {}, {aggregate: {total_energy_kwh: 10, messaging_waste: HOSTS.aggregate.database_waste}}).apps);
+    assert.ok(broker.includes(says.broker) && !broker.includes(says.database));
+    const excluded = {scope_manifest: {applications_excluded: [{service_name: "batch"}]}};
+    assert.ok(text(disclosureBy({}, {}, excluded).apps).includes(says.excluded));
+    const checked = text(disclosureBy().integrity);
+    assert.ok(checked.includes(says.hashChecked) && checked.includes(says.signature) && checked.includes(says.audited));
+    const unchecked = text(disclosureBy({integrity_level: "audited"}, {checks: Object.assign({}, disclosureDetail().checks, {content_hash: "not_checked"})}).integrity);
+    assert.ok(unchecked.includes(says.hashNot) && !unchecked.includes(says.hashChecked) && !unchecked.includes(says.audited));
+    // A render the engine refused on the hash: the Hub did compare it, and found the file changed.
+    const altered = text(disclosureBy({pdf: "not_rendered", render_reason: "content_hash_mismatch"},
+        {checks: Object.assign({}, disclosureDetail().checks, {content_hash: "not_checked"})}).integrity);
+    assert.ok(altered.includes(says.hashMismatch) && !altered.includes(says.hashNot) && !altered.includes(says.hashChecked));
+});
+
+publicTest("a disclosure's share links say an internal report is never shared and a reader cannot manage them", (says) => {
+    const manager = text(disclosureBy({}, {can_manage: true}).links);
+    assert.ok(!manager.includes(says.neverShared) && !manager.includes(says.locked));
+    assert.ok(text(disclosureBy().links).includes(says.locked));
+    assert.ok(text(disclosureBy({confidentiality: "internal"}, {can_manage: true}).links).includes(says.neverShared));
+});
+
+test("the Access steps come in the screen's order", () => {
+    assert.deepEqual(PSL.accessSteps({machine: false, noGroup: false, noReach: false, everything: false, tokens: "listed"})
+        .map((step) => [step.id, step.anchors]), [
+        ["intro", ["access.sub"]], ["who", ["access.who"]], ["groups", ["access.groups"]], ["reach", ["access.reach"]],
+        ["tokens", ["access.tokens"]], ["admin", ["access.admin"]], ["projects", ["access.projects"]], ["end", []]]);
+});
+
+publicTest("Access says what your sign-in, groups, grants and tokens are", (says) => {
+    assert.ok(text(accessBy().who).includes(says.groupChange));
+    assert.ok(!text(accessBy({machine: true}).who).includes(says.groupChange));
+    assert.ok(!text(accessBy().groups).includes(says.noGroup));
+    assert.ok(text(accessBy({noGroup: true}).groups).includes(says.noGroup));
+    const reach = text(accessBy().reach);
+    assert.ok(reach.includes(says.columns) && !reach.includes(says.everything) && !reach.includes(says.noReach));
+    assert.ok(text(accessBy({everything: true}).reach).includes(says.everything));
+    const none = text(accessBy({noReach: true}).reach);
+    assert.ok(none.includes(says.noReach) && !none.includes(says.columns));
+    assert.ok(text(accessBy().tokens).includes(says.revoke));
+    const noToken = text(accessBy({tokens: "none"}).tokens);
+    assert.ok(noToken.includes(says.noToken) && !noToken.includes(says.revoke));
+    assert.ok(text(accessBy({tokens: "failed"}).tokens).includes(says.tokensFailed));
+});
+
+test("the Coverage steps come in the screen's order", () => {
+    assert.deepEqual(PSL.coverageSteps({covered: false, truncated: false, backend: false, noConflict: false})
+        .map((step) => [step.id, step.anchors]), [
+        ["intro", ["coverage.sub"]], ["attention", ["coverage.attention"]], ["snippet", ["coverage.snippet"]],
+        ["conflicts", ["coverage.conflicts"]], ["tokens", ["coverage.tokens"]], ["config", ["coverage.config"]], ["end", []]]);
+});
+
+publicTest("Coverage says nothing is left to assign, a cut list, a trace backend and no conflict", (says) => {
+    const listed = text(coverageBy().attention);
+    assert.ok(listed.includes(says.seen) && !listed.includes(says.covered));
+    for (const variant of ["truncated", "backend"]) assert.ok(!listed.includes(says[variant]), variant);
+    const covered = text(coverageBy({covered: true}).attention);
+    assert.ok(covered.includes(says.covered) && !covered.includes(says.seen));
+    assert.ok(text(coverageBy({truncated: true}).attention).includes(says.truncated));
+    assert.ok(text(coverageBy({backend: true}).attention).includes(says.backend));
+    assert.ok(!text(coverageBy().conflicts).includes(says.none));
+    assert.ok(text(coverageBy({noConflict: true}).conflicts).includes(says.none));
+});
+
+test("the public and access guides have no em dash, and French addresses the reader as vous", () => {
+    for (const lang of ["fr", "en"]) inLang(lang, () => {
+        const all = [
+            ...PSL.disclosuresSteps({first: publicItem({withdrawn: WITHDRAWN, pdf: "not_rendered", confidentiality: "internal"})}),
+            ...PSL.disclosuresSteps({first: publicItem({integrity_level: "hash-only", pdf: "not_rendered", render_reason: "binding_mismatch"})}),
+            ...PSL.disclosureSteps({
+                detail: disclosureDetail({
+                    figures: Object.assign({}, DISCLOSURE.figures, {applications_declared: 3, applications_measured: 2}),
+                    confidentiality: "internal", pdf: "not_rendered"
+                }, {can_manage: true}),
+                report: {aggregate: {database_waste: HOSTS.aggregate.database_waste}, scope_manifest: {applications_excluded: [{}]}}
+            }),
+            ...PSL.disclosureSteps({detail: disclosureDetail({withdrawn: WITHDRAWN}, {can_manage: true}), report: null}),
+            ...PSL.accessSteps({machine: false, noGroup: true, noReach: false, everything: true, tokens: "listed"}),
+            ...PSL.accessSteps({machine: true, noGroup: false, noReach: true, everything: false, tokens: "failed"}),
+            ...PSL.accessSteps({machine: true, noGroup: false, noReach: true, everything: false, tokens: "none"}),
+            ...PSL.coverageSteps({covered: false, truncated: true, backend: true, noConflict: true}),
+            ...PSL.coverageSteps({covered: true, truncated: false, backend: false, noConflict: false})
+        ].map(text).join("\n");
+        assert.ok(all.length > 6000, "the variants were read");
+        assert.doesNotMatch(all, /—/);
+        assert.doesNotMatch(all, /guide\.(disclosures?|access|coverage)\b/, "every key has a text");
+        for (const state of ["wait", "failed"]) {
+            for (const id of ["disclosures", "disclosure"]) {
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".title"), id + " " + state);
+                assert.ok(PSL.hasText("guide." + id + "." + state + ".body"), id + " " + state);
+            }
+        }
+        if (lang === "fr") {
+            assert.doesNotMatch(all, /(?<!\p{L})(tu|ton|ta|tes|toi)(?!\p{L})/iu);
+            assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
+        }
+    });
+});

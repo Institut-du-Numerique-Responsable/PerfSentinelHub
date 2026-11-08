@@ -1,4 +1,5 @@
 import {expect, Page, Request, Route, test} from "@playwright/test";
+import {state} from "./capture";
 
 // The pilotage guide walked on the real recap of the demo Hub. Assertions, not captures: nothing
 // here writes to docs/img, and `npm run demo` does not run it (see README).
@@ -11,6 +12,12 @@ const title = (page: Page) => page.locator("#guide-title");
 const next = (page: Page) => card(page).locator(".guide-nav .pill-primary");
 const count = (page: Page) => card(page).locator(".guide-count");
 
+/** The entry opens its menu, whose first choice is the guide of the screen on view. */
+async function screenGuide(page: Page): Promise<void> {
+    await page.locator("#guide-open").click();
+    await page.locator("#guide-menu-screen").click();
+}
+
 async function useLang(page: Page, lang: "en" | "fr"): Promise<void> {
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [LANG_KEY, lang]);
 }
@@ -19,7 +26,7 @@ async function useLang(page: Page, lang: "en" | "fr"): Promise<void> {
 async function openGuide(page: Page): Promise<void> {
     await page.goto(RECAP);
     await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 60_000});
-    await page.locator("#guide-open").click();
+    await screenGuide(page);
     await expect(card(page)).toBeVisible();
 }
 
@@ -193,7 +200,7 @@ test("a running recap shows the wait card and adds no request", async ({page}) =
     page.on("request", (request) => seen.push(request));
     await page.waitForTimeout(2_500);
     seen.splice(0).forEach((request) => before.add(request.method() + " " + new URL(request.url()).pathname));
-    await page.locator("#guide-open").click();
+    await screenGuide(page);
     await expect(title(page)).toHaveText("The recap is being computed");
     await expect(count(page)).toBeHidden();
     await expect(card(page).locator(".guide-quit")).toBeFocused();
@@ -214,7 +221,7 @@ test("a failed recap offers only to close", async ({page}) => {
         (route) => route.fulfill({status: 500, json: {error: "demo"}}));
     await page.goto(RECAP);
     // Opened before the error lands: the wait card gives way to the failed one.
-    await page.locator("#guide-open").click();
+    await screenGuide(page);
     await expect(title(page)).toHaveText("The recap could not be read", {timeout: 15_000});
     await expect(card(page).locator("button:visible")).toHaveCount(1);
     await expect(next(page)).toHaveText("Close");
@@ -294,11 +301,12 @@ test("the entry shares its row with the theme and language", async ({page}) => {
 });
 
 test("going back leaves the guide and wakes the page", async ({page}) => {
-    await page.goto("/#/sources");
+    // A page without a guide, so the entry stays hidden once the page is back.
+    await page.goto("/#/nowhere");
     await expect(page.locator("#guide-open")).toBeHidden();
     await openGuide(page);
     await page.goBack();
-    await expect(page).toHaveURL(/#\/sources/);
+    await expect(page).toHaveURL(/#\/nowhere/);
     await expect(page.locator("#guide-root")).toBeHidden();
     for (const part of [".shell-topbar", "#main", ".shell-footer"])
         await expect(page.locator(part)).not.toHaveAttribute("inert", "");
@@ -382,4 +390,484 @@ test("under reduced motion the scroll a frame after each move is already its fin
     }
     // Some of those moves had to scroll, or the check above proved nothing.
     expect(scrolled).toBeGreaterThan(0);
+});
+
+const TECH = "/#/recap?view=tech";
+
+/** The recap in its technical view, drawn; `before` runs on the drawn page, then the guide opens. */
+async function openTechGuide(page: Page, before?: () => Promise<void>): Promise<void> {
+    await page.goto(TECH);
+    await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 60_000});
+    if (before) await before();
+    await screenGuide(page);
+    await expect(card(page)).toBeVisible();
+}
+
+test("the technical walk reaches the priority, its fix and its action", async ({page}) => {
+    await openTechGuide(page);
+    const total = await totalSteps(page);
+    const titles: string[] = [];
+    await eachStep(page, async (index) => {
+        titles.push(await title(page).textContent() ?? "");
+        await expect(next(page)).toHaveText(index === total - 1 ? "Close" : "Next");
+    });
+    expect(titles[0]).toBe("You are in the Engineering view");
+    for (const wanted of ["What the page counts", "Lists to tick", "The period", "What to fix first",
+        "How to read a priority", "How to fix", "The query, laid out", "Take an action", "What moved"]) {
+        expect(titles).toContain(wanted);
+    }
+    expect(titles[total - 1]).toBe("You can now choose what to take");
+    await next(page).click();
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await expect(page.locator("#guide-open")).toBeFocused();
+});
+
+test("the technical row numbers its marks, and the fix and the action frame their parts", async ({page}) => {
+    await openTechGuide(page);
+    await goTo(page, "How to read a priority");
+    const legend = await card(page).locator(".guide-legend li").count();
+    expect(legend).toBeGreaterThanOrEqual(4);
+    await expect(page.locator(".guide-marks .guide-mark")).toHaveCount(legend);
+    await next(page).click();
+    // Split in two so that neither card takes more than half a phone's screen.
+    const half = async () => ((await card(page).boundingBox())?.height ?? 0) <= page.viewportSize()!.height / 2;
+    await expect(title(page)).toHaveText("How to fix");
+    expect(await framed(page, ["recap.row.detail"])).toBe(true);
+    expect(await half()).toBe(true);
+    await next(page).click();
+    await expect(title(page)).toHaveText("The query, laid out");
+    expect(await framed(page, ["recap.row.sql"])).toBe(true);
+    expect(await half()).toBe(true);
+    await next(page).click();
+    await expect(title(page)).toHaveText("Take an action");
+    expect(await framed(page, ["recap.row.facts", "recap.row.state"])).toBe(true);
+});
+
+test("a folded fix is skipped, as the guide never unfolds it", async ({page}) => {
+    await openTechGuide(page, async () => {
+        await page.locator('[data-guide="recap.row"] .recap-detail > summary').click();
+        await expect(page.locator('[data-guide="recap.row.detail"]')).toHaveCount(0);
+    });
+    const titles: string[] = [];
+    await eachStep(page, async () => {
+        titles.push(await title(page).textContent() ?? "");
+    });
+    expect(titles).toContain("Take an action");
+    expect(titles).not.toContain("How to fix");
+    expect(titles).not.toContain("The query, laid out");
+});
+
+test("a guide reads its own wait text, else the shared one", async ({page}) => {
+    await page.goto(TECH);
+    await expect(page.locator(".recap-row").first()).toBeVisible({timeout: 60_000});
+    type Guide = { PSL_GUIDE: { start(source: () => unknown, guide?: string): void }, PSL_TEXT: Record<string, Record<string, string>> };
+    await page.evaluate(() => {
+        const guide = window as unknown as Guide;
+        guide.PSL_TEXT.en["guide.probe.wait.title"] = "The probe waits";
+        guide.PSL_GUIDE.start(() => ({status: "wait", steps: []}), "screen.probe");
+    });
+    await expect(title(page)).toHaveText("The probe waits");
+    // No body of its own: the shared one.
+    await expect(card(page).locator("#guide-body")).toHaveText(/^The guide will start/);
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => (window as unknown as Guide).PSL_GUIDE.start(() => ({status: "wait", steps: []}), "recap.tech"));
+    await expect(title(page)).toHaveText("The recap is being computed");
+    await page.keyboard.press("Escape");
+});
+
+test("a fix folded between two openings of the guide is skipped the second time", async ({page}) => {
+    await openTechGuide(page);
+    await goTo(page, "How to fix");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await page.locator('[data-guide="recap.row"] .recap-detail > summary').click();
+    await expect(page.locator('[data-guide="recap.row.detail"]')).toHaveCount(0);
+    await screenGuide(page);
+    const titles: string[] = [];
+    await eachStep(page, async () => {
+        titles.push(await title(page).textContent() ?? "");
+    });
+    expect(titles).toContain("Take an action");
+    expect(titles).not.toContain("How to fix");
+    expect(titles).not.toContain("The query, laid out");
+});
+
+// ---- the analysis screens: New, Recent, one run and its report
+
+/** The guide opened once the screen has drawn `ready`. */
+async function openHere(page: Page, ready: string): Promise<void> {
+    await expect(page.locator(ready).first()).toBeVisible({timeout: 60_000});
+    await screenGuide(page);
+    await expect(card(page)).toBeVisible();
+}
+
+async function openOn(page: Page, route: string, ready: string): Promise<void> {
+    await page.goto(route);
+    await openHere(page, ready);
+}
+
+/** Every title of the walk, from the first card to the last, then Close. */
+async function walkTitles(page: Page): Promise<string[]> {
+    const total = await totalSteps(page);
+    const titles: string[] = [];
+    await eachStep(page, async (index) => {
+        titles.push(await title(page).textContent() ?? "");
+        await expect(next(page)).toHaveText(index === total - 1 ? "Close" : "Next");
+    });
+    await next(page).click();
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await expect(page.locator("#guide-open")).toBeFocused();
+    return titles;
+}
+
+test("the entry shows on the analysis, fleet and disclosure screens, and not on a missing page", async ({page}) => {
+    for (const route of ["/#/new", "/#/recent", `/#/run/${state.succeeded}`, `/#/report/${state.succeeded}`,
+        "/#/sources", "/#/incidents", "/#/correlations", "/#/disclosures", `/#/disclosures/${state.disclosure}`]) {
+        await page.goto(route);
+        await expect(page.locator("#guide-open"), route).toBeVisible({timeout: 30_000});
+    }
+    await page.goto("/#/nowhere");
+    await expect(page.locator("#main h1")).toBeVisible();
+    await expect(page.locator("#guide-open")).toBeHidden();
+});
+
+test("the New walk on a daemon skips the backend's fields", async ({page}) => {
+    await page.goto("/#/new");
+    await page.locator("button.source-row", {hasText: "Checkout production"}).click();
+    await openHere(page, '[data-guide="new.daemon"]');
+    const titles = await walkTitles(page);
+    expect(titles[0]).toBe("The source");
+    for (const wanted of ["A daemon takes no parameter", "What this analysis costs", "Run the analysis"]) {
+        expect(titles).toContain(wanted);
+    }
+    for (const absent of ["Service or trace ID", "Max traces", "Simultaneous reads", "Prefer your terminal?",
+        "Nothing to run here"]) expect(titles).not.toContain(absent);
+    expect(titles[titles.length - 1]).toBe("You can now run a measured analysis");
+});
+
+test("the New walk on Tempo reads the form, its reads and its command", async ({page}) => {
+    await page.goto("/#/new");
+    await page.locator("button.source-row", {hasText: "Tempo EU"}).click();
+    await openHere(page, '[data-guide="new.traces"]');
+    await goTo(page, "Max traces");
+    expect(await framed(page, ["new.traces"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    const titles = await walkTitles(page);
+    for (const wanted of ["Service or trace ID", "The period", "Max traces", "Simultaneous reads",
+        "For advanced users only", "Run the analysis", "Prefer your terminal?"]) expect(titles).toContain(wanted);
+    expect(titles).not.toContain("A daemon takes no parameter");
+});
+
+test("the Recent walk reads the first card", async ({page}) => {
+    await openOn(page, "/#/recent", ".run-card");
+    await goTo(page, "One analysis");
+    expect(await framed(page, ["recent.card"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    const titles = await walkTitles(page);
+    expect(titles[0]).toBe("Analyses this Hub still holds");
+    expect(titles).not.toContain("No recent analysis");
+    expect(titles[titles.length - 1]).toBe("You can find an analysis again");
+});
+
+test("the run walk names its state and frames its outcome", async ({page}) => {
+    await openOn(page, `/#/run/${state.succeeded}`, ".outcome");
+    await expect(title(page)).toHaveText("It succeeded");
+    expect(await framed(page, ["run.head", "run.headline"])).toBe(true);
+    await goTo(page, "The result");
+    expect(await framed(page, ["run.outcome"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("The link expires in");
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    expect(await walkTitles(page)).toEqual(["It succeeded", "Service events", "Elapsed time", "What it asked for",
+        "The result", "You can read this analysis"]);
+});
+
+test("an unknown run offers only to close", async ({page}) => {
+    await openOn(page, "/#/run/ffffffffffffffff", ".gone");
+    await expect(title(page)).toHaveText("No analysis with this ID");
+    await expect(card(page).locator(".guide-quit")).toBeHidden();
+    await expect(next(page)).toHaveText("Close");
+});
+
+test("the report walk stops at the frame", async ({page}) => {
+    await openOn(page, `/#/report/${state.succeeded}`, "iframe.report-frame");
+    await goTo(page, "The engine's report");
+    expect(await framed(page, ["report.frame"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    expect(await walkTitles(page)).toEqual(["You are in the report", "The engine's report", "You can open a report"]);
+});
+
+/** Unfolds the first row of the screen's table and waits for its anchor, before the guide opens. */
+async function unfold(page: Page, route: string, anchor: string): Promise<void> {
+    await page.goto(route);
+    await page.locator(".sources-wrap .row-toggle").first().click();
+    await expect(page.locator(`[data-guide="${anchor}"]`)).toBeVisible({timeout: 30_000});
+}
+
+test("the Sources walk reads the first row and the fleet bar, and no gauges while every row is folded", async ({page}) => {
+    await openOn(page, "/#/sources", '[data-guide="sources.table"]');
+    await goTo(page, "Health");
+    expect(await framed(page, ["sources.health"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    await goTo(page, "A fleet behind");
+    expect(await framed(page, ["shell.skew"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    expect(await walkTitles(page)).toEqual(["Fleet health", "Health", "Last success, unreachable for",
+        "Each source's engine", "A fleet behind", "Env (declared)", "Last error", "A daemon's detail",
+        "You can tell whether the data arrives"]);
+});
+
+test("an unfolded daemon row adds its gauges to the Sources walk", async ({page}) => {
+    await unfold(page, "/#/sources", "sources.gauges");
+    await openHere(page, '[data-guide="sources.gauges"]');
+    await goTo(page, "The daemon right now");
+    expect(await framed(page, ["sources.gauges"])).toBe(true);
+});
+
+test("the Incidents walk asks to unfold a row", async ({page}) => {
+    await openOn(page, "/#/incidents", '[data-guide="incidents.table"]');
+    await goTo(page, "What was already burning");
+    expect(await framed(page, ["incidents.row"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("Unfold a row, then open the guide again");
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    expect(await walkTitles(page)).toEqual(["Incidents the daemons recorded", "Narrow the list", "One row per incident",
+        "Capture", "What was already burning", "When each daemon was read",
+        "You can link an incident to what came before it"]);
+});
+
+test("an incident unfolded before the guide is read, and refolded it is skipped", async ({page}) => {
+    await unfold(page, "/#/incidents", "incidents.panel");
+    await openHere(page, '[data-guide="incidents.panel"]');
+    await goTo(page, "What was already burning");
+    await expect(card(page).locator("#guide-body")).not.toContainText("Unfold a row");
+    await goTo(page, "An unfolded incident");
+    expect(await framed(page, ["incidents.panel"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("\"Analyse this window\"");
+    await page.keyboard.press("Escape");
+    await page.locator(".sources-wrap .row-toggle").first().click();
+    await screenGuide(page);
+    expect(await walkTitles(page)).not.toContain("An unfolded incident");
+});
+
+test("the Correlations walk says a pair is no cause, and an unfolded pair reads its episodes", async ({page}) => {
+    await openOn(page, "/#/correlations", '[data-guide="correlations.table"]');
+    expect(await walkTitles(page)).toEqual(["Findings that keep following each other", "A correlation is not a cause",
+        "Narrow the list", "One row per pair", "Unfold a pair", "Where the pairs come from", "You can read a correlation"]);
+    await unfold(page, "/#/correlations", "correlations.panel");
+    await openHere(page, '[data-guide="correlations.panel"]');
+    await goTo(page, "The episodes");
+    expect(await framed(page, ["correlations.panel"])).toBe(true);
+});
+
+test("an incidents read that fell back to an empty copy fails with its own words", async ({page}) => {
+    let stored = 200;
+    await page.route((url) => url.pathname === "/api/incidents/refresh",
+        (route) => route.fulfill({status: 500, json: {error: "demo"}}));
+    await page.route((url) => url.pathname === "/api/incidents",
+        (route) => route.fulfill(stored === 200 ? {json: []} : {status: stored, json: {error: "demo"}}));
+    await openOn(page, "/#/incidents", '.banner[data-tone="warn"]');
+    await expect(title(page)).toHaveText("The daemons were not read just now");
+    await expect(next(page)).toHaveText("Close");
+    await next(page).click();
+    // The stored copy fails too: the Hub's own failure, in the shared words of the guide.
+    stored = 500;
+    await page.reload();
+    await openHere(page, '.banner[data-tone="crit"]');
+    await expect(title(page)).toHaveText("The Hub did not return the incidents");
+});
+
+test("the Disclosures walk reads the rail, the legend and the first report", async ({page}) => {
+    await openOn(page, "/#/disclosures", '[data-guide="disc.card"]');
+    await goTo(page, "A report");
+    expect(await framed(page, ["disc.card"])).toBe(true);
+    await expect(card(page).locator("#guide-body")).toContainText("from half to twice the figure");
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    expect(await walkTitles(page)).toEqual(["Energy and carbon, period by period", "The quarters", "Declared or checked",
+        "A report", "Publishing the next one", "You can read a public report"]);
+});
+
+test("the walk of a disclosure frames its title and says who checked what", async ({page}) => {
+    await openOn(page, `/#/disclosures/${state.disclosure}`, '[data-guide="disc.integrity"]');
+    expect(await framed(page, ["disc.head", "disc.head.sub"])).toBe(true);
+    await goTo(page, "Who checked what");
+    expect(await framed(page, ["disc.integrity"])).toBe(true);
+    await page.keyboard.press("Escape");
+    await screenGuide(page);
+    expect(await walkTitles(page)).toEqual(["A disclosure", "Download, share, withdraw", "At a glance",
+        "The applications", "Who checked what", "The files", "The share links", "Method and limits",
+        "You know what this report guarantees"]);
+});
+
+test("a disclosure the Hub does not return offers only to close", async ({page}) => {
+    await openOn(page, "/#/disclosures/ffffffffffffffff", '.banner[data-tone="crit"]');
+    await expect(title(page)).toHaveText("The Hub did not return this disclosure");
+    await expect(next(page)).toHaveText("Close");
+});
+
+// ---- « Je suis… » and the role paths
+
+const prev = (page: Page) => card(page).locator(".guide-nav .pill-button:not(.pill-primary)");
+
+/** The entry's menu, I am…, then the role: the path starts on its first screen. */
+async function rolePath(page: Page, role: string): Promise<void> {
+    await page.locator("#guide-open").click();
+    await page.locator("#guide-menu-role").click();
+    await page.locator(`#guide-menu [data-role="${role}"]`).click();
+    await expect(card(page)).toBeVisible();
+}
+
+/** The route first, then the entry, which shows once the screen is drawn. */
+async function landOn(page: Page, route: string): Promise<void> {
+    await page.goto(route);
+    await expect(page.locator("#guide-open")).toBeVisible({timeout: 30_000});
+}
+
+/** Next until the screen's last card, after `first` titled its first one. */
+async function toScreenEnd(page: Page, first: string, screen: string): Promise<void> {
+    await expect(title(page)).toHaveText(first, {timeout: 60_000});
+    await expect(prev(page)).toBeHidden();
+    const total = Number((await count(page).textContent() ?? "").match(/^\d+ of (\d+)/)?.[1]);
+    for (let index = 1; index < total; index += 1) {
+        await expect(count(page)).toHaveText(`${index} of ${total}${screen}`);
+        await next(page).click();
+    }
+    await expect(count(page)).toHaveText(`${total} of ${total}${screen}`);
+}
+
+test("the CTO path takes the recap in its management view, then Disclosures", async ({page}) => {
+    await landOn(page, "/#/new");
+    await rolePath(page, "cto");
+    await expect(page).toHaveURL(/#\/recap\?view=pilotage$/);
+    await toScreenEnd(page, "You are in the Management view", " · screen 1 of 2");
+    await expect(next(page)).toHaveText("Next screen");
+    await next(page).click();
+    await expect(page).toHaveURL(/#\/disclosures$/);
+    await toScreenEnd(page, "Energy and carbon, period by period", " · screen 2 of 2");
+    await expect(next(page)).toHaveText("Close");
+    await expect(card(page).locator("#guide-body")).not.toContainText("Skipped");
+    await next(page).click();
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await expect(page).toHaveURL(/#\/disclosures$/);
+    await expect(page.locator("#guide-open")).toBeFocused();
+});
+
+test("the lead path reads the recap in its technical view, then New analysis, and Back ends it", async ({page}) => {
+    await landOn(page, RECAP);
+    await rolePath(page, "lead");
+    await expect(page).toHaveURL(/#\/recap$/);
+    await toScreenEnd(page, "You are in the Engineering view", " · screen 1 of 2");
+    // Previous stays in the screen.
+    await prev(page).click();
+    await expect(count(page)).toHaveText(/ · screen 1 of 2$/);
+    await page.keyboard.press("ArrowRight");
+    await next(page).click();
+    await expect(page).toHaveURL(/#\/new$/);
+    await expect(count(page)).toHaveText(/^1 of \d+ · screen 2 of 2$/, {timeout: 30_000});
+    await expect(prev(page)).toBeHidden();
+    // A route that is not the path's next stop ends it.
+    await page.goBack();
+    await expect(page.locator("#guide-root")).toBeHidden();
+});
+
+test("a screen of a path that fails hands over to the next one", async ({page}) => {
+    await page.route((url) => url.pathname.startsWith("/api/recap/jobs"),
+        (route) => route.fulfill({status: 500, json: {error: "demo"}}));
+    await landOn(page, "/#/sources");
+    await rolePath(page, "lead");
+    await expect(title(page)).toHaveText("This screen did not show", {timeout: 15_000});
+    await expect(next(page)).toHaveText("Next screen");
+    await expect(next(page)).toBeFocused();
+    await next(page).click();
+    await expect(page).toHaveURL(/#\/new$/);
+    await expect(count(page)).toHaveText(/^1 of \d+ · screen 2 of 2$/, {timeout: 30_000});
+});
+
+test("the menu opens on the keyboard, Escape closes it and gives the focus back", async ({page}) => {
+    await landOn(page, "/#/sources");
+    await page.locator("#guide-open").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#guide-open")).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", {name: "Guide", exact: true})).toHaveAttribute("aria-haspopup", "menu");
+    await expect(page.getByRole("menu", {name: "Guide", exact: true})).toBeVisible();
+    await expect(page.locator("#guide-menu-screen")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator("#guide-menu-role")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator("#guide-menu-screen")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#guide-menu")).toHaveCount(0);
+    await expect(page.locator("#guide-open")).toBeFocused();
+    await expect(page.locator("#guide-open")).toHaveAttribute("aria-expanded", "false");
+    // Shift+Tab back onto the entry leaves the menu open, and Escape there still closes it.
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator("#guide-open")).toBeFocused();
+    await expect(page.locator("#guide-menu")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#guide-menu")).toHaveCount(0);
+    await expect(page.locator("#guide-open")).toBeFocused();
+    // A click on the backdrop closes it too, and the focus goes back to the entry.
+    await page.keyboard.press("Enter");
+    await page.locator("#guide-menu-backdrop").click({position: {x: 2, y: 2}});
+    await expect(page.locator("#guide-menu")).toHaveCount(0);
+    await expect(page.locator("#guide-open")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    // Nothing remembered yet: the first role takes the focus, none is ticked.
+    await expect(page.locator('#guide-menu [data-role="dev"]')).toBeFocused();
+    await expect(page.locator('#guide-menu [aria-checked="true"]')).toHaveCount(0);
+    await expectInWindow(page, "#guide-menu");
+    await page.keyboard.press("End");
+    await expect(page.locator('#guide-menu [data-role="cto"]')).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#guide-menu")).toHaveCount(0);
+    await expect(page.locator("#guide-open")).toBeFocused();
+    // Understand this screen, from the menu, still opens the screen's own guide.
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await expect(title(page)).toHaveText("Fleet health");
+});
+
+test("the role chosen is ticked next time, and quitting a path stays where it is", async ({page}) => {
+    await landOn(page, "/#/sources");
+    await rolePath(page, "architect");
+    await expect(page).toHaveURL(/#\/correlations$/);
+    await expect(count(page)).toHaveText(/^1 of \d+ · screen 1 of 3$/, {timeout: 30_000});
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#guide-root")).toBeHidden();
+    await expect(page).toHaveURL(/#\/correlations$/);
+    await page.locator("#guide-open").click();
+    await page.locator("#guide-menu-role").click();
+    await expect(page.locator('#guide-menu [aria-checked="true"]')).toHaveAttribute("data-role", "architect");
+    await expect(page.locator('#guide-menu [data-role="architect"]')).toBeFocused();
+});
+
+test("a storage that throws leaves the menu and the path working", async ({page}) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => Object.defineProperty(window, "localStorage", {
+        get() {
+            throw new DOMException("denied", "SecurityError");
+        }
+    }));
+    await landOn(page, "/#/sources");
+    await page.locator("#guide-open").click();
+    await page.locator("#guide-menu-role").click();
+    await expect(page.locator('#guide-menu [aria-checked="true"]')).toHaveCount(0);
+    await page.locator('#guide-menu [data-role="dev"]').click();
+    await expect(page).toHaveURL(/#\/recap$/);
+    await expect(title(page)).toHaveText("You are in the Engineering view", {timeout: 60_000});
+    await page.keyboard.press("Escape");
+    await page.locator("#guide-open").click();
+    await page.locator("#guide-menu-role").click();
+    await expect(page.locator('#guide-menu [aria-checked="true"]')).toHaveCount(0);
+    expect(errors).toEqual([]);
 });

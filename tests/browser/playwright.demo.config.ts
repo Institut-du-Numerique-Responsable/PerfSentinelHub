@@ -70,6 +70,13 @@ export default defineConfig({
                 testMatch: "guide.spec.ts",
                 use: {...devices["Desktop Chrome"], viewport, colorScheme, video: "off" as const}
             }))),
+        // The same walk on the access-on Hub, for the screens only it draws.
+        ...[{width: 1280, height: 900}, {width: 390, height: 844}].flatMap((viewport) =>
+            (["light", "dark"] as const).map((colorScheme) => ({
+                name: `guide-access-${viewport.width}-${colorScheme}`,
+                testMatch: "guide-access.spec.ts",
+                use: {...devices["Desktop Chrome"], viewport, colorScheme, video: "off" as const, baseURL: ACCESS_BASE_URL}
+            }))),
         {
             name: "access-stills-dark",
             testMatch: "access.spec.ts",

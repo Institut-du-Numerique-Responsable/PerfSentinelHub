@@ -3251,14 +3251,49 @@
 
     // ---- the guide of the manager's recap
 
+    /** The rows the technical ranking shows before its Show all button. */
+    const RECAP_FIRST_PAGE = 10;
+    /** The lines a group of What moved shows before its Show all button. */
+    const RECAP_MOVES_FIRST = 5;
+
     /**
-     * The guide that walks through a screen, or null where there is none: the recap in its management view.
+     * The guide that walks through a screen, or null where there is none: the recap in either view, the
+     * analysis screens, the fleet's, the disclosures and the access screens.
      * @param {string} screen
      * @param {string | null} recapView `pilotage` or `tech` on the recap, null elsewhere
      * @returns {string | null}
      */
     function guideIdFor(screen, recapView) {
-        return screen === 'recap' && recapView === 'pilotage' ? 'recap.pilotage' : null;
+        if (screen === 'recap') return recapView === 'pilotage' || recapView === 'tech' ? 'recap.' + recapView : null;
+        return ['new', 'recent', 'run', 'report', 'sources', 'incidents', 'correlations', 'disclosures', 'disclosure', 'access',
+            'coverage'].indexOf(screen) >= 0 ? screen : null;
+    }
+
+    /** The roles « Je suis… » offers, in the menu's order. */
+    const GUIDE_ROLES = ['dev', 'lead', 'architect', 'pm', 'cto'];
+
+    /** @type {Record<string, import('../types').GuideStop[]>} */
+    const GUIDE_PATHS = {
+        dev: [{screen: 'recap', view: 'tech'}],
+        lead: [{screen: 'recap', view: 'tech'}, {screen: 'new', view: null}],
+        architect: [{screen: 'correlations', view: null}, {screen: 'incidents', view: null}, {screen: 'sources', view: null}],
+        pm: [{screen: 'recap', view: 'pilotage'}],
+        cto: [{screen: 'recap', view: 'pilotage'}, {screen: 'disclosures', view: null}]
+    };
+
+    /**
+     * The screens a role's path walks, in order, and those it skips because their tab is not shown.
+     * @param {string} role
+     * @param {(screen: string) => boolean} visible whether the screen's tab is shown for this caller
+     * @returns {{stops: import('../types').GuideStop[], skipped: string[]}}
+     */
+    function guidePath(role, visible) {
+        const path = {stops: [], skipped: []};
+        (GUIDE_PATHS[role] || []).forEach(function (stop) {
+            if (visible(stop.screen)) path.stops.push(Object.assign({}, stop));
+            else path.skipped.push(stop.screen);
+        });
+        return path;
     }
 
     /**
@@ -3275,18 +3310,17 @@
      * @param {string} id
      * @param {string[]} anchors
      * @param {{title?: string, body?: string[], marks?: Array<{anchor: string, text: string}>}} [over]
+     * @param {(key: string, vars?: Record<string, string | number>) => string} [text] the guide's texts
      * @returns {import('../types').GuideStep}
      */
-    function guideStep(id, anchors, over) {
+    function guideStep(id, anchors, over, text = guideText) {
         const given = over || {};
-        const step = {
-            id, anchors, title: given.title ?? guideText(id + '.title'), body: given.body ?? [guideText(id + '.body')]
-        };
+        const step = {id, anchors, title: given.title ?? text(id + '.title'), body: given.body ?? [text(id + '.body')]};
         return given.marks ? {...step, marks: given.marks} : step;
     }
 
     /**
-     * @param {string[] | null | undefined} list
+     * @param {unknown[] | null | undefined} list
      * @returns {boolean}
      */
     function hasItems(list) {
@@ -3332,11 +3366,19 @@
         } else if (snapshot.period.in_progress) {
             body.push(guideText('period.open'));
         }
-        const filters = snapshot.filters;
-        const chosen = [filters.environment, filters.source_id, filters.service, filters.grouping,
-            ...(filters.services || []), ...(filters.groupings || [])];
-        if (chosen.some(Boolean)) body.push(guideText('period.filtered'));
+        if (recapFiltered(snapshot)) body.push(guideText('period.filtered'));
         return guideStep('period', ['recap.period'], {body});
+    }
+
+    /**
+     * Whether a filter narrows the snapshot. A service's display label is not one of its own.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {boolean}
+     */
+    function recapFiltered(snapshot) {
+        const filters = snapshot.filters;
+        return [filters.environment, filters.source_id, filters.service, filters.grouping,
+            ...(filters.services || []), ...(filters.groupings || [])].some(Boolean);
     }
 
     /**
@@ -3441,6 +3483,784 @@
         return guideStep('moved', ['recap.moved'], {
             body: confirmed ? [guideText('moved.body'), guideText('moved.confirmed')] : [guideText('moved.body')]
         });
+    }
+
+    // ---- the guide of the technical recap
+
+    /**
+     * @param {string} key under `guide.tech.`
+     * @param {Record<string, string | number>} [vars]
+     * @returns {string}
+     */
+    function techText(key, vars) {
+        return t('guide.tech.' + key, vars);
+    }
+
+    /**
+     * {@link guideStep} on the technical texts.
+     * @param {string} id
+     * @param {string[]} anchors
+     * @param {{title?: string, body?: string[], marks?: Array<{anchor: string, text: string}>}} [over]
+     * @returns {import('../types').GuideStep}
+     */
+    function techStep(id, anchors, over) {
+        return guideStep(id, anchors, over, techText);
+    }
+
+    /**
+     * The steps of the guide over the technical recap. Besides the snapshot, `ctx` brings what the screen
+     * has unfolded: the whole ranking shown, and the groups of What moved opened. A step whose element
+     * the screen does not draw (the freshness line, the reports, the card, the fix folded) is dropped by
+     * the controller.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @param {{showAll?: boolean, movesOpen?: Record<string, boolean>}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function recapTechSteps(snapshot, ctx) {
+        const first = snapshot.priorities[0];
+        const steps = [
+            techStep('view', ['recap.view'], {body: [techText('view.body'), techText('view.other')]}),
+            techStep('filters', ['recap.filters'], {body: [techText('filters.body'), techText('filters.link')]}),
+            techStep('pick', ['recap.pick.services', 'recap.pick.groupings'], {
+                body: [techText('pick.button'), techText('pick.once'),
+                    techText('pick.many', {max: String(RECAP_FILTER_MAX_VALUES)}), techText('pick.absent')]
+            }),
+            techStep('fresh', ['recap.fresh'], {body: [techText('fresh.body'), techText('fresh.again')]}),
+            techPeriodStep(snapshot),
+            techIoStep(snapshot),
+            techCo2Step(snapshot),
+            techStep('findings', ['recap.findings'], {
+                title: techText('findings.title.' + plural(snapshot.tiles.active_findings),
+                    {count: String(snapshot.tiles.active_findings)})
+            }),
+            techActionsStep(snapshot),
+            techTableStep(snapshot, Boolean(ctx && ctx.showAll))
+        ];
+        if (first) steps.push(techRowStep(first), techFixStep(first));
+        if (first && first.template && isSqlFinding(first.finding_type)) steps.push(techSqlStep(first));
+        if (first) steps.push(techActStep(first));
+        steps.push(
+            techStep('below', ['recap.below']),
+            techMovedStep(snapshot, (ctx && ctx.movesOpen) || {}),
+            techStep('reports', ['recap.reports']),
+            guideStep('card', ['recap.card']),
+            techStep('end', []));
+        return steps;
+    }
+
+    /**
+     * The period, then the one of the banner's gaps or the running days, the notes and the filters,
+     * in the order of {@link guidePeriodStep}.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techPeriodStep(snapshot) {
+        const body = [techText('period.body', {period: periodText(snapshot.period)})];
+        if (hasItems(snapshot.period.incomplete) || hasItems(snapshot.previous.incomplete)) {
+            body.push(techText('period.incomplete'));
+        } else if (snapshot.period.in_progress) {
+            body.push(techText('period.open'));
+        }
+        if (hasItems(snapshot.period.notes) || hasItems(snapshot.previous.notes)) body.push(techText('period.notes'));
+        if (recapFiltered(snapshot)) body.push(guideText('period.filtered'));
+        return techStep('period', ['recap.period'], {body});
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techIoStep(snapshot) {
+        const value = snapshot.tiles.avoidable_io_ops;
+        const count = recapCount(value);
+        const body = [techText(count === null ? 'io.none' : 'io.body')];
+        if (hasItems(snapshot.period.incomplete)) body.push(techText('io.incomplete'));
+        if (snapshot.truncated) body.push(techText('io.truncated'));
+        return techStep('io', ['recap.io'], {
+            title: count === null ? techText('io.title.none') : techText('io.title.' + plural(value), {count: count}),
+            body
+        });
+    }
+
+    /**
+     * As {@link guideCo2Step}, with the count of sources the technical tile gives.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techCo2Step(snapshot) {
+        const tiles = snapshot.tiles;
+        if (tiles.co2_grams === null || tiles.co2_grams === undefined) {
+            return techStep('co2', ['recap.co2'], {
+                body: [techText(tiles.co2_missing_reason === 'no_avoidable_io' ? 'co2.no_io' : 'co2.none')]
+            });
+        }
+        const without = tiles.co2_sources_without_coefficient;
+        const body = [techText('co2.body')];
+        if (co2Parts(tiles.co2_grams, without, tiles.co2_missing_reason, 'tech').lead) {
+            body.push(techText('co2.least.' + plural(without), {count: String(without)}));
+        }
+        return techStep('co2', ['recap.co2'], {body});
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @returns {import('../types').GuideStep}
+     */
+    function techActionsStep(snapshot) {
+        const done = snapshot.tiles.actions.done;
+        return techStep('actions', ['recap.actions'], {
+            title: done === 0 ? techText('actions.title.none') : techText('actions.title.' + plural(done), {count: String(done)}),
+            body: [techText('actions.body'), techText('actions.states')]
+        });
+    }
+
+    /**
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @param {boolean} showAll the whole ranking is shown
+     * @returns {import('../types').GuideStep}
+     */
+    function techTableStep(snapshot, showAll) {
+        const all = snapshot.priorities;
+        if (!all.length) {
+            return techStep('table', ['recap.table'], {
+                title: techText('table.empty.title'), body: [techText('table.empty.body')]
+            });
+        }
+        const body = [techText('table.body'), techText('table.co2')];
+        if (all.length > RECAP_FIRST_PAGE && !showAll) {
+            body.push(techText('table.more', {button: t('recap.prio.show_all', {count: all.length})}));
+        }
+        return techStep('table', ['recap.table'], {body});
+    }
+
+    /**
+     * How to read the first row. A mark whose part the row does not draw (no suggestion, no trend) is
+     * dropped by the controller.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techRowStep(first) {
+        const mark = (/** @type {string} */ part, /** @type {string} */ key) =>
+            ({anchor: 'recap.row.' + part, text: techText('row.' + key)});
+        return techStep('row', ['recap.row'], {
+            body: [],
+            marks: [
+                mark('rank', 'rank'),
+                mark('what', first.label ? 'what.label' : 'what'),
+                mark('suggest', 'suggest'),
+                mark('figure', hasAvoidableVolume(first) ? 'figure' : 'figure.none'),
+                mark('trend', 'trend')
+            ]
+        });
+    }
+
+    /**
+     * The folded detail of the first row; the controller drops the step while the fold is closed.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techFixStep(first) {
+        const body = [techText('fix.body')];
+        if (first.action && first.action.events && first.action.events.length) body.push(techText('fix.events'));
+        return techStep('fix', ['recap.row.detail'], {body});
+    }
+
+    /**
+     * The first row's SQL query, laid out in the open fold: a step of its own, so that neither card
+     * outgrows half a phone's screen.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techSqlStep(first) {
+        const body = [techText('sql.body')];
+        if (first.template.length > RECAP_SQL_LAYOUT_MAX) body.push(techText('sql.long', {max: num(RECAP_SQL_LAYOUT_MAX)}));
+        return techStep('sql', ['recap.row.sql'], {body});
+    }
+
+    /**
+     * Taking a finding or changing its action, the engine's verdict once it is done, then naming and
+     * the refusal every write can meet.
+     * @param {import('../types').RecapPriority} first
+     * @returns {import('../types').GuideStep}
+     */
+    function techActStep(first) {
+        const action = first.action;
+        const body = action ? [techText('act.taken')] : [techText('act.take'), techText('act.ack')];
+        const label = action && action.status === 'done' ? confirmationLabel(action.confirmation) : '';
+        if (label) body.push(techText('act.verdict', {label: label}));
+        if (action && (action.confirmation === 'contradicted' || action.confirmation === 'came_back')) {
+            body.push(techText('act.contradicted'));
+        }
+        body.push(techText('act.name'), techText('act.denied'));
+        return techStep('act', ['recap.row.facts', 'recap.row.state'], {body});
+    }
+
+    /**
+     * What moved, in the order of the screen's note: no closed day, nothing moved, then what the
+     * groups hold. A group is long while the screen shows its Show all button: over five, unless it
+     * was opened and the Hub sent all of it.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @param {Record<string, boolean>} opened the groups the reader opened
+     * @returns {import('../types').GuideStep}
+     */
+    function techMovedStep(snapshot, opened) {
+        const moves = snapshot.movements;
+        let body = [techText('moved.body'), techText('moved.gone')];
+        if (snapshot.previous.truncated_to_days === 0) body = [techText('moved.none_closed')];
+        else if (snapshot.nothing_moved) body = [techText('moved.nothing')];
+        if (moves.gone_with_confirmed_action > 0) body.push(techText('moved.confirmed'));
+        const long = ['new', 'gone', 'up', 'down', 'came_back', 'done_still_detected'].some(function (key) {
+            const total = moves.counts ? moves.counts[key] : moves[key].length;
+            const cut = total > moves[key].length;
+            return total > RECAP_MOVES_FIRST && !(opened[key] && !cut);
+        });
+        if (long) body.push(techText('moved.long'));
+        if (hasItems(snapshot.sources_without_volume)) body.push(techText('moved.sources'));
+        return techStep('moved', ['recap.moved'], {body});
+    }
+
+    // ---- the guides of the analysis screens: New, Recent, one run and its report
+
+    /**
+     * The texts of one guide, `guide.<guide>.<key>`.
+     * @param {string} guide
+     * @returns {(key: string, vars?: Record<string, string | number>) => string}
+     */
+    function screenText(guide) {
+        return function (key, vars) {
+            return t('guide.' + guide + '.' + key, vars);
+        };
+    }
+
+    /**
+     * What a window carries, in the order the New screen lists it under the range: wider than a day,
+     * past the week a scan rarely finishes in, then past the retention the source declares or with none
+     * declared.
+     * @param {number} spanMs
+     * @param {number | null | undefined} retentionHours
+     * @returns {Array<'wide' | 'timeout' | 'retention' | 'undeclared'>}
+     */
+    function rangeNotes(spanMs, retentionHours) {
+        /** @type {Array<'wide' | 'timeout' | 'retention' | 'undeclared'>} */
+        const notes = [];
+        if (spanMs > DAY_MS) notes.push('wide');
+        if (spanMs > 7 * DAY_MS) notes.push('timeout');
+        if (retentionHours != null && spanMs > retentionHours * 3600000) notes.push('retention');
+        else if (retentionHours == null && spanMs > DAY_MS) notes.push('undeclared');
+        return notes;
+    }
+
+    /**
+     * The steps of the guide over New. `ctx` is what the form holds, read off the screen's state. A step
+     * whose element the form does not draw (the daemon notice under a backend, the range under a trace ID,
+     * the reads block off Tempo) is dropped by the controller; an empty screen draws none but its own.
+     * @param {import('../types').NewGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function newSteps(ctx) {
+        const text = screenText('new');
+        const steps = [guideStep('empty', ['new.empty'], {body: [text(ctx.sources === 0 ? 'empty.none' : 'empty.grant')]}, text)];
+        const handoff = [];
+        if (ctx.windowHandoff) handoff.push(text('handoff.window'));
+        if (ctx.windowHandoff && ctx.namespaced) handoff.push(text('handoff.namespace'));
+        if (ctx.traceHandoff) handoff.push(text('handoff.trace'));
+        if (handoff.length && ctx.daemon) handoff.push(text('handoff.daemon'));
+        if (handoff.length) steps.push(guideStep('handoff', ['new.handoff'], {body: handoff}, text));
+        const source = [text('source.body'), text('source.rows'), text('source.note')];
+        if (ctx.runnable < ctx.sources) source.push(text('source.missing'));
+        if (ctx.skewPill) source.push(text('source.skew'));
+        steps.push(
+            guideStep('source', ['new.source'], {body: source}, text),
+            guideStep('daemon', ['new.daemon'], {body: [text('daemon.body'), text('daemon.sub')]}, text),
+            guideStep('mode', ['new.mode'], {
+                body: ctx.mode === 'trace' ? [text('mode.body'), text('mode.trace')] : [text('mode.body')]
+            }, text),
+            newRangeStep(ctx, text),
+            newTracesStep(ctx, text),
+            newFetchStep(ctx, text),
+            newCostStep(ctx, text),
+            guideStep('advanced', ['new.advanced'], {
+                body: [text('advanced.body'), text('advanced.doubt'), text('advanced.compare')]
+            }, text),
+            newSubmitStep(ctx, text));
+        if (ctx.command) steps.push(guideStep('terminal', ['new.terminal'], undefined, text));
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newRangeStep(ctx, text) {
+        const body = [text('range.body'), text(ctx.rangeMode === 'absolute' ? 'range.absolute' : 'range.relative')];
+        rangeNotes(ctx.spanMs, ctx.retentionHours).forEach(function (note) {
+            if (note === 'timeout') body.push(text('range.timeout', {seconds: ctx.limits.analysis_timeout_seconds}));
+            if (note === 'retention') body.push(text('range.retention', {duration: dur(ctx.retentionHours * 3600000)}));
+            if (note === 'undeclared') body.push(text('range.undeclared'));
+        });
+        return guideStep('range', ['new.range'], {body}, text);
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newTracesStep(ctx, text) {
+        const cap = ctx.limits.max_traces_cap;
+        const band = weightBand(ctx.maxTraces, cap).key;
+        const body = [text('traces.body'), text('traces.cap')];
+        if (band !== 'safe') body.push(text('traces.' + band, {cap: cap}));
+        if (ctx.weighed) body.push(text('traces.weighed'));
+        return guideStep('traces', ['new.traces'], {body}, text);
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newFetchStep(ctx, text) {
+        const limits = ctx.limits;
+        const body = [text('fetch.body'),
+            text('fetch.limits', {warn: limits.fetch_concurrency_warn, max: limits.fetch_concurrency_max}),
+            text('fetch.failed')];
+        if (ctx.fetchBand === 'over' || ctx.fetchBand === 'blocked') body.push(text('fetch.' + ctx.fetchBand));
+        return guideStep('fetch', ['new.fetch'], {body}, text);
+    }
+
+    /**
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newCostStep(ctx, text) {
+        const body = [text('cost.body'), text('cost.retention', {hours: ctx.limits.report_retention_hours})];
+        if (ctx.queue > 0) body.push(text('cost.queue.' + plural(ctx.queue), {count: ctx.queue}));
+        return guideStep('cost', ['new.cost'], {body}, text);
+    }
+
+    /**
+     * The button, with the screen's own blocker quoted when there is one.
+     * @param {import('../types').NewGuideContext} ctx
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function newSubmitStep(ctx, text) {
+        const body = [ctx.blocker ? text('submit.blocked', {blocker: ctx.blocker}) : text('submit.ready')];
+        if (ctx.unreachable) body.push(text('submit.unreachable'));
+        if (ctx.skewBehind) body.push(text('submit.skew'));
+        return guideStep('submit', ['new.submit'], {body}, text);
+    }
+
+    /**
+     * The steps of the guide over Recent. A banner the list does not draw is dropped by the controller;
+     * the card step needs a first run to read.
+     * @param {{hours: number, first: import('../types').Analysis | null}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function recentSteps(ctx) {
+        const text = screenText('recent');
+        const steps = [
+            guideStep('intro', ['recent.sub'], {body: [text('intro.body', {hours: ctx.hours}), text('intro.access')]}, text),
+            guideStep('empty', ['recent.empty'], {body: [text('empty.body')]}, text),
+            guideStep('binaries', ['recent.binaries'], undefined, text),
+            guideStep('tuned', ['recent.tuned'], undefined, text)
+        ];
+        const first = ctx.first;
+        if (first) {
+            const body = [text('card.body'), text('card.facts'), text('card.open')];
+            if (Object.keys((first.request || {})['detection'] || {}).length) body.push(text('card.thresholds'));
+            if (first.error_code) body.push(text('card.error'));
+            steps.push(guideStep('card', ['recent.card'], {body}, text));
+        }
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over one run, by its state. The outcome panel exists once the run is over.
+     * @param {{run: import('../types').Analysis, now: number, limits: import('../types').StatusLimits}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function runSteps(ctx) {
+        const text = screenText('run');
+        const run = ctx.run;
+        const key = statusKey(run);
+        const live = key === 'queued' || key === 'running';
+        const seconds = ctx.limits.analysis_timeout_seconds;
+        let elapsed = 'elapsed.total';
+        if (key === 'running') elapsed = 'elapsed.running';
+        else if (key === 'queued') elapsed = 'elapsed.queued';
+        const request = [text('request.body')];
+        if (Object.keys((run.request || {})['detection'] || {}).length) request.push(text('request.tuned'));
+        const steps = [
+            guideStep('head', ['run.head', 'run.headline'], {
+                title: text('head.' + key + '.title'),
+                body: [text('head.' + key + '.body', {hours: ctx.limits.report_retention_hours})]
+            }, text),
+            guideStep('log', ['run.log'], {body: live ? [text('log.body'), text('log.live')] : [text('log.body')]}, text),
+            guideStep('elapsed', ['run.elapsed'], {body: [text(elapsed, {seconds: seconds})]}, text),
+            guideStep('request', ['run.request'], {body: request}, text)
+        ];
+        if (!live) steps.push(runOutcomeStep(ctx, key, text));
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * What the outcome panel says for a run that is over. A link is promised only while it lives.
+     * @param {{run: import('../types').Analysis, now: number}} ctx
+     * @param {string} key the run's PSL.statusKey
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {import('../types').GuideStep}
+     */
+    function runOutcomeStep(ctx, key, text) {
+        const run = ctx.run;
+        const body = [text('outcome.' + key + '.body')];
+        if (key === 'succeeded') {
+            if (run.expires_at_ms && run.expires_at_ms > ctx.now) {
+                body.push(text('outcome.succeeded.open', {duration: durPrecise(run.expires_at_ms - ctx.now)}));
+            }
+        }
+        // The empty panel lists the engine's warnings too (outcomeSpec).
+        if ((key === 'succeeded' || key === 'empty') && hasItems(/** @type {unknown[]} */ ((run.result || {})['warnings']))) {
+            body.push(text('outcome.caveats'));
+        }
+        return guideStep('outcome', ['run.outcome'], {title: text('outcome.' + key + '.title'), body}, text);
+    }
+
+    /**
+     * Which `report.gone.<view>` notice a report link shows for a run in this state.
+     * @param {string} key the run's PSL.statusKey
+     * @returns {string}
+     */
+    function reportGoneView(key) {
+        return ['queued', 'running', 'failed', 'interrupted', 'expired'].indexOf(key) >= 0 ? key : 'other';
+    }
+
+    /**
+     * The steps of the guide over a report. It stops at the frame: the document inside is the engine's.
+     * A frame that finds its report deleted gives way, in place, to the expired notice, so a shown report
+     * also carries that notice's step, which the controller drops while the frame stands.
+     * @param {{run: import('../types').Analysis}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function reportSteps(ctx) {
+        const text = screenText('report');
+        const key = statusKey(ctx.run);
+        const shown = key === 'succeeded' || key === 'empty';
+        const steps = [guideStep('bar', ['report.bar'], undefined, text)];
+        if (shown) {
+            steps.push(guideStep('frame', ['report.frame'], {
+                body: key === 'empty' ? [text('frame.body'), text('frame.empty')] : [text('frame.body')]
+            }, text));
+        }
+        steps.push(
+            guideStep('gone', ['report.gone'], {
+                title: t('report.gone.' + reportGoneView(shown ? 'expired' : key) + '.title'),
+                body: [text(key === 'queued' || key === 'running' ? 'gone.pending' : 'gone.finished')]
+            }, text),
+            guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over Sources. The anchors sit on the first row; the fleet bar and the
+     * gauges exist only when the shell draws the one and an open daemon row has read the other.
+     * @param {import('../types').SourcesGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function sourcesSteps(ctx) {
+        const text = screenText('sources');
+        const health = [text('health.body'), text('health.rate'), text('health.full')];
+        if (ctx.unreachable > 0) health.push(text('health.unreachable.' + plural(ctx.unreachable), {count: ctx.unreachable}));
+        const producer = [text('producer.body'), text('producer.minor'), text('producer.backend')];
+        if (ctx.unknownProducer) producer.push(text('producer.unknown'));
+        const steps = [
+            guideStep('table', ['sources.table'], {body: [text('table.body'), text('table.config')]}, text),
+            guideStep('health', ['sources.health'], {body: health}, text),
+            guideStep('fresh', ['sources.last_success', 'sources.down_for'], {
+                body: [text('fresh.body'), text('fresh.threshold')]
+            }, text),
+            guideStep('producer', ['sources.producer'], {body: producer}, text)
+        ];
+        if (ctx.behind) steps.push(guideStep('skew', ['shell.skew'], undefined, text));
+        steps.push(
+            guideStep('env', ['sources.env'], undefined, text),
+            guideStep('error', ['sources.last_error'], undefined, text),
+            guideStep('daemon', ['sources.daemon'], {
+                body: ctx.lockedDaemon ? [text('daemon.body'), text('daemon.locked')] : [text('daemon.body')]
+            }, text));
+        if (ctx.gauges) {
+            steps.push(guideStep('gauges', ['sources.gauges'], {
+                body: ctx.gauges === 'failed' ? [text('gauges.failed')] : [text('gauges.body'), text('gauges.hints')]
+            }, text));
+        }
+        steps.push(guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over Incidents. The guide never unfolds a row: the panel step exists only
+     * for one the reader unfolded before opening it, and the row step says so otherwise.
+     * @param {import('../types').IncidentsGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function incidentsSteps(ctx) {
+        const text = screenText('incidents');
+        const steps = [guideStep('intro', ['incidents.sub'], {body: [text('intro.body'), text('intro.read')]}, text)];
+        if (ctx.stale) steps.push(guideStep('stale', ['incidents.stale'], undefined, text));
+        if (ctx.unauthorized) {
+            steps.push(guideStep('unauthorized', ['incidents.unauthorized'], {
+                body: [text('unauthorized.body', {name: ctx.unauthorized})]
+            }, text));
+        }
+        const row = [text('row.body'), text('row.window')];
+        if (!ctx.panel && !ctx.unfolded) row.push(t('guide.unfold'));
+        steps.push(
+            guideStep('filters', ['incidents.filters'], {body: [text('filters.body'), text('filters.read')]}, text),
+            guideStep('empty', ['incidents.empty'], {body: [text(ctx.filtered ? 'empty.filtered' : 'empty.body')]}, text),
+            guideStep('table', ['incidents.table'], undefined, text),
+            guideStep('capture', ['incidents.capture'], undefined, text),
+            guideStep('row', ['incidents.row'], {body: row}, text));
+        if (ctx.panel === 'gone') steps.push(guideStep('panel', ['incidents.panel'], {body: [text('panel.gone')]}, text));
+        else if (ctx.panel) {
+            steps.push(guideStep('panel', ['incidents.panel'], {
+                body: [text(ctx.panel === 'none' ? 'panel.none' : 'panel.before'), text('panel.analyse'),
+                    text('panel.correlations')]
+            }, text));
+        }
+        steps.push(
+            guideStep('older', ['incidents.older'], undefined, text),
+            guideStep('copy', ['incidents.copy'], undefined, text),
+            guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over Correlations. As on Incidents, the episodes are read only in a pair
+     * the reader unfolded before opening the guide.
+     * @param {import('../types').CorrelationsGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function correlationsSteps(ctx) {
+        const text = screenText('correlations');
+        const table = [text('table.body'), text('table.episodes')];
+        if (ctx.limit) table.push(text('table.limit', {limit: ctx.limit}));
+        const steps = [
+            guideStep('intro', ['correlations.sub'], undefined, text),
+            guideStep('cause', [], undefined, text),
+            guideStep('filters', ['correlations.filters'], {
+                body: ctx.pairOnly ? [text('filters.body'), text('filters.pair')] : [text('filters.body')]
+            }, text),
+            guideStep('empty', ['correlations.empty'], undefined, text),
+            guideStep('table', ['correlations.table'], {body: table}, text),
+            guideStep('pair', ['correlations.pair'], {
+                body: ctx.opened ? [text('pair.body')] : [text('pair.body'), t('guide.unfold')]
+            }, text)
+        ];
+        if (ctx.opened) {
+            steps.push(guideStep('episodes', ['correlations.panel'], {
+                body: ctx.traceable ? [text('episodes.body'), text('episodes.explain')] : [text('episodes.body')]
+            }, text));
+        }
+        steps.push(
+            guideStep('note', ['correlations.note'], undefined, text),
+            guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * What a disclosure's banners and chips say about it, in the order the screen draws them: withdrawn or
+     * official without a signature, then a PDF refused or left unchecked, then the internal chip.
+     * @param {import('../types').Disclosure} item
+     * @returns {string[]} keys of `guide.disclosures.note.*`
+     */
+    function disclosureNotes(item) {
+        const notes = [];
+        if (item.withdrawn) notes.push('withdrawn');
+        else if (item.intent === 'official' && (item.integrity_level === 'hash-only' || item.integrity_level === 'none')) {
+            notes.push('unsigned');
+        }
+        if (item.pdf !== 'rendered') {
+            // A render again the engine refused: the files are suspect, not merely unchecked.
+            const refused = item.render_reason === 'content_hash_mismatch' || item.render_reason === 'binding_mismatch';
+            notes.push(refused ? 'refused' : 'not_checked');
+        }
+        if (item.confidentiality === 'internal') notes.push('internal');
+        return notes;
+    }
+
+    /**
+     * @param {import('../types').Disclosure} item
+     * @returns {string[]}
+     */
+    function disclosureNoteTexts(item) {
+        return disclosureNotes(item).map(note => t('guide.disclosures.note.' + note));
+    }
+
+    /**
+     * The steps of the guide over Disclosures. The card step reads the first report, the one the
+     * anchor sits on; an empty list draws no rail, legend or card, and the controller drops them.
+     * @param {{first: import('../types').Disclosure | null}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function disclosuresSteps(ctx) {
+        const text = screenText('disclosures');
+        const steps = [
+            guideStep('intro', ['disc.sub'], {body: [text('intro.body'), text('intro.public')]}, text),
+            guideStep('empty', ['disc.empty'], undefined, text),
+            guideStep('rail', ['disc.rail'], undefined, text),
+            guideStep('legend', ['disc.legend'], {body: [text('legend.body'), text('legend.signature')]}, text)
+        ];
+        if (ctx.first) {
+            steps.push(guideStep('card', ['disc.card'], {
+                body: [text('card.body'), text('card.bracket'), text('card.coverage')].concat(disclosureNoteTexts(ctx.first))
+            }, text));
+        }
+        steps.push(guideStep('publish', ['disc.publish'], undefined, text), guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * The steps of the guide over one disclosure. A panel the screen leaves out (applications, deliveries,
+     * method without a report) has no anchor, and the controller drops its step.
+     * @param {{detail: import('../types').DisclosureDetail, report: import('../types').DisclosureReport | null}} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function disclosureSteps(ctx) {
+        const text = screenText('disclosure');
+        const item = ctx.detail.disclosure;
+        const manage = ctx.detail.can_manage === true;
+        const carbon = item.figures && item.figures.carbon_kgco2eq;
+        const links = [text('links.body')];
+        if (item.confidentiality === 'internal') links.push(text('links.internal'));
+        if (!manage) links.push(text('links.locked'));
+        const steps = [guideStep('head', ['disc.head', 'disc.head.sub'], {
+            body: [text(item.pdf === 'rendered' ? 'head.rendered' : 'head.kept')].concat(disclosureNoteTexts(item))
+        }, text)];
+        const actions = disclosureActionTexts(item, manage, text);
+        if (actions.length) steps.push(guideStep('actions', ['disc.actions'], {body: actions}, text));
+        steps.push(
+            guideStep('glance', ['disc.glance'], {
+                body: carbon > 0 ? [text('glance.body'), text('glance.bracket')] : [text('glance.body')]
+            }, text),
+            guideStep('apps', ['disc.apps'], {body: disclosureAppTexts(item, ctx.report, text)}, text),
+            guideStep('integrity', ['disc.integrity'], {body: disclosureIntegrityTexts(ctx.detail, text)}, text),
+            guideStep('files', ['disc.files'], undefined, text),
+            guideStep('links', ['disc.links'], {body: links}, text),
+            guideStep('deliveries', ['disc.deliveries'], undefined, text),
+            guideStep('method', ['disc.method'], undefined, text),
+            guideStep('end', [], undefined, text));
+        return steps;
+    }
+
+    /**
+     * One sentence per button of the bar, as detailActions draws them. Without the right to manage, the
+     * PDF's button alone, when there is a PDF.
+     * @param {import('../types').Disclosure} item
+     * @param {boolean} manage
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {string[]}
+     */
+    function disclosureActionTexts(item, manage, text) {
+        const body = item.files.pdf ? [text('actions.pdf')] : [];
+        if (!manage) return body;
+        if (!item.withdrawn && item.confidentiality !== 'internal') body.push(text('actions.new_link'));
+        if (item.pdf !== 'rendered') body.push(text('actions.render'));
+        body.push(text(item.withdrawn ? 'actions.withdrawn' : 'actions.withdraw'));
+        if (item.confidentiality === 'internal') body.push(text('actions.internal'));
+        return body;
+    }
+
+    /**
+     * What the applications panel says under its head: the measured count, the host rows, an exclusion.
+     * @param {import('../types').Disclosure} item
+     * @param {import('../types').DisclosureReport | null} report
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {string[]}
+     */
+    function disclosureAppTexts(item, report, text) {
+        const figures = item.figures;
+        const body = [text('apps.body')];
+        if (figures && figures.applications_declared != null && figures.applications_measured != null) {
+            body.push(text('apps.measured', {measured: figures.applications_measured, declared: figures.applications_declared}));
+        }
+        const hosts = hostRows(report);
+        if (hosts.length) {
+            body.push(text(hosts.length > 1 ? 'apps.hosts.both'
+                : hosts[0].label === t('disc.host.database') ? 'apps.hosts.database' : 'apps.hosts.broker'));
+        }
+        const excluded = report && report.scope_manifest && report.scope_manifest.applications_excluded;
+        if (hasItems(excluded)) body.push(text('apps.excluded'));
+        return body;
+    }
+
+    /**
+     * @param {import('../types').DisclosureDetail} detail
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text
+     * @returns {string[]}
+     */
+    function disclosureIntegrityTexts(detail, text) {
+        // A render the engine refused on the hash leaves HashChecked false, though the Hub did compare it.
+        let hash = detail.checks.content_hash === 'checked' ? 'integrity.hash' : 'integrity.not_here';
+        if (hash === 'integrity.not_here' && detail.disclosure.render_reason === 'content_hash_mismatch') hash = 'integrity.mismatch';
+        const body = [text('integrity.body'), text(hash), text('integrity.signature')];
+        if (detail.disclosure.integrity_level !== 'audited') body.push(text('integrity.audited'));
+        return body;
+    }
+
+    /**
+     * The steps of the guide over Access. On the page a caller no grant reaches, the reach card gives way
+     * to the request to send, so its step has no anchor; Admin and the projects exclude each other.
+     * @param {import('../types').AccessGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function accessSteps(ctx) {
+        const text = screenText('access');
+        let reach = [text('reach.body')];
+        if (ctx.noReach) reach = [text('reach.none')];
+        else if (ctx.everything) reach.push(text('reach.everything'));
+        let tokens = [text('tokens.body')];
+        if (ctx.tokens !== 'listed') tokens = [text('tokens.' + ctx.tokens)];
+        return [
+            guideStep('intro', ['access.sub'], undefined, text),
+            guideStep('who', ['access.who'], {body: ctx.machine ? [text('who.body')] : [text('who.body'), text('who.groups')]}, text),
+            guideStep('groups', ['access.groups'], {
+                body: ctx.noGroup ? [text('groups.body'), text('groups.none')] : [text('groups.body')]
+            }, text),
+            guideStep('reach', ['access.reach'], {body: reach}, text),
+            guideStep('tokens', ['access.tokens'], {body: tokens}, text),
+            guideStep('admin', ['access.admin'], undefined, text),
+            guideStep('projects', ['access.projects'], undefined, text),
+            guideStep('end', [], undefined, text)
+        ];
+    }
+
+    /**
+     * The steps of the guide over Coverage. A card the screen leaves out has no anchor.
+     * @param {import('../types').CoverageGuideContext} ctx
+     * @returns {import('../types').GuideStep[]}
+     */
+    function coverageSteps(ctx) {
+        const text = screenText('coverage');
+        const attention = ctx.covered ? [text('attention.none')] : [text('attention.body')];
+        if (ctx.truncated) attention.push(text('attention.truncated'));
+        if (ctx.backend) attention.push(text('attention.backend'));
+        return [
+            guideStep('intro', ['coverage.sub'], undefined, text),
+            guideStep('attention', ['coverage.attention'], {body: attention}, text),
+            guideStep('snippet', ['coverage.snippet'], undefined, text),
+            guideStep('conflicts', ['coverage.conflicts'], {
+                body: ctx.noConflict ? [text('conflicts.body'), text('conflicts.none')] : [text('conflicts.body')]
+            }, text),
+            guideStep('tokens', ['coverage.tokens'], undefined, text),
+            guideStep('config', ['coverage.config'], undefined, text),
+            guideStep('end', [], undefined, text)
+        ];
     }
 
     /**
@@ -4485,7 +5305,26 @@
         incompleteText,
         recapCount,
         guideIdFor,
+        GUIDE_ROLES,
+        guidePath,
+        rangeNotes,
+        newSteps,
+        recentSteps,
+        runSteps,
+        reportGoneView,
+        reportSteps,
+        sourcesSteps,
+        incidentsSteps,
+        correlationsSteps,
+        disclosureNotes,
+        disclosuresSteps,
+        disclosureSteps,
+        accessSteps,
+        coverageSteps,
         recapPilotageSteps,
+        recapTechSteps,
+        RECAP_FIRST_PAGE,
+        RECAP_MOVES_FIRST,
         notesText,
         httpUrl,
         localTime,

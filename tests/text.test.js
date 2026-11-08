@@ -256,7 +256,15 @@ const SCREEN_FUNCTIONS = ["renderSourcesScreen", "sourcesTable", "tableGroupRow"
     "rerunAction", "backLink", "runView", "eventLog", "logRow", "logClosing", "factsRail", "ceilingRule",
     "ceilingNote", "requestCard", "expiryText", "outcomePanel", "outcomeSpec", "countStrip",
     "moveBadge", "actionRow", "actionButton", "resubmit", "loadRun", "scheduleRunPoll", "runUnreachableBanner",
-    "detectionKnobs", "detectionCount", "setDetection", "refreshDetectionCount", "advancedPanel", "detectionRow"];
+    "detectionKnobs", "detectionCount", "setDetection", "refreshDetectionCount", "advancedPanel", "detectionRow",
+    "newGuideSource", "recentGuideSource", "runGuideSource", "sourcesGuideSource", "incidentGuidePanel",
+    "incidentsGuideSource", "correlationsGuideSource", "foldGuide", "foldAnchors", "fleetBehind", "guideSourceAnchors",
+    "renderIncidentsScreen", "unauthorizedBanners", "incidentFilterLine", "incidentCopyNote", "incidentsTable",
+    "incidentRow", "incidentNameCell", "toggleIncident", "loadIncident", "incidentPanel", "renderCorrelationsScreen",
+    "correlationFilterLine", "correlationsTable", "pairRow", "pairPanel", "renderFleetSkew", "disclosuresGuideSource",
+    "disclosureGuideSource", "ownTokens", "accessGuideSource", "coverageGuideSource", "guideId", "initGuide",
+    "openGuideMenu", "guideMenuItems", "guideRoleItems", "guideMenuKey", "closeGuideMenu", "startScreenGuide",
+    "startRolePath", "recapGuideSource", "render"];
 
 const SCREEN_HELPERS = ["sourceHealth", "dur", "durDown", "durParts", "humanDur", "versionGap", "skew", "argsLine",
     "weightBand", "bytes", "hostKwh", "sourceCountLabel", "monitorKeyHint"];
@@ -271,10 +279,19 @@ test("the guide never parses a string as markup", () => {
     assert.ok(!wwwrootFile("guide.js").includes("insertAdjacentHTML"));
 });
 
-test("the guide calls no route and stores nothing", () => {
+test("the guide calls no route and stores only the role", () => {
     const code = wwwrootFile("guide.js");
+    assert.ok(code.includes("const ROLE_KEY = 'perf-sentinel:guide-role';"));
+    // Its two accesses, each under a try: a browser that refuses storage must not break the menu.
+    const allowed = [/try \{\s*global\.localStorage\.setItem\(ROLE_KEY, path\.role\);/,
+        /try \{\s*return global\.localStorage\.getItem\(ROLE_KEY\);/];
+    let rest = code;
+    for (const access of allowed) {
+        assert.match(rest, access);
+        rest = rest.replace(access, "");
+    }
     for (const banned of ["fetch(", "XMLHttpRequest", "localStorage", "sessionStorage", "indexedDB", "WebSocket", "EventSource",
-        "sendBeacon"]) assert.ok(!code.includes(banned), banned);
+        "sendBeacon"]) assert.ok(!rest.includes(banned), banned);
 });
 
 test("the sources, new analysis and run screens hold no prose literal", () => {
@@ -531,7 +548,7 @@ const TASK6_FUNCTIONS = ["loadDisclosures", "loadDisclosure", "sendDisclosure", 
 // verifyCommand and publishCommand write command lines, which the guard would read as prose: the one comment
 // line of the second is pinned below instead.
 const TASK6_HELPERS = ["describePattern", "readDisclosureId", "quarterOf", "railCell", "periodRail", "coverageNotch",
-    "checkRows", "hostRows", "monthName", "periodLabel"];
+    "checkRows", "hostRows", "monthName", "periodLabel", "disclosureNotes"];
 
 test("the disclosures screens hold no prose literal", () => {
     const app = wwwrootFile("app.js");
@@ -626,7 +643,13 @@ const RECAP_HELPERS = ["serviceParts", "namesService", "readRecapRoute", "recapH
     "recapFreezeText", "recapErrorText", "recapTruncatedText", "recapSourcesNote", "recapLateNote", "recapReportStatus",
     "recapDeliveryText", "recapOnDemandBody", "recapCount", "guideIdFor", "guideText", "guideStep", "hasItems",
     "recapPilotageSteps", "guidePeriodStep", "guideIoStep", "guideCo2Step", "guideOpenStep", "guideTableStep",
-    "guideRowStep", "guideMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain"];
+    "guideRowStep", "guideMovedStep", "recapFiltered", "techText", "techStep", "recapTechSteps", "techPeriodStep",
+    "techIoStep", "techCo2Step", "techActionsStep", "techTableStep", "techRowStep", "techFixStep", "techSqlStep", "techActStep",
+    "techMovedStep", "co2Parts", "co2Text", "co2Tail", "hasAvoidableVolume", "dividesBefore", "trendText", "confirmationLabel", "periodText", "incompleteText", "notesText", "httpUrl", "localTime", "recapPlain",
+    "screenText", "rangeNotes", "newSteps", "newRangeStep", "newTracesStep", "newFetchStep", "newCostStep",
+    "newSubmitStep", "recentSteps", "runSteps", "runOutcomeStep", "reportGoneView", "reportSteps", "sourcesSteps",
+    "incidentsSteps", "correlationsSteps", "disclosureNoteTexts", "disclosuresSteps", "disclosureSteps",
+    "disclosureActionTexts", "disclosureAppTexts", "disclosureIntegrityTexts", "accessSteps", "coverageSteps"];
 
 test("the recap screen holds no prose literal", () => {
     const app = wwwrootFile("app.js");

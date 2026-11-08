@@ -84,6 +84,8 @@ without being clicked.
 Nothing but those names is stored. A browser that refuses storage simply starts everything
 folded.
 
+The guide's I am… remembers the role last chosen, see [the guide](#the-guide).
+
 The theme is tri-state: system, light, dark. Only the resolved light or dark ever reaches
 the DOM, so stylesheets see two values and never three. The position is stored under
 `perf-sentinel:theme` in both `localStorage` and `sessionStorage`, the second because the
@@ -406,27 +408,6 @@ access holds no `findings.read`. A success adds the row at once.
 A report keeps one language: the language on screen for a report generated here, the subscription's
 `Language` for a scheduled one. Its two downloads open in that language. A mailed report reaches each
 address in that address's own language, see [the configuration](CONFIGURATION.md).
-
-### The guide
-
-In the Management view, Understand this screen in the top bar, a "?" alone on a phone, walks the
-recap on the figures it shows. A cutout lights one part of the page at a time and dims the rest, and a
-card says what that part means, with `4 of 11`, Previous, Next and Quit. The step on the first row
-puts numbered marks on its parts, and the card names them under the same numbers. A part the page
-does not show, such as Reports for a caller who cannot read them or the separator when no row sits
-under it, is skipped and left out of the count. The last card, with no cutout, recalls the three
-questions the page answers. The Engineering view has no guide, and the button is absent there.
-
-While the guide is open, the page behind it takes no click and no key, but it still scrolls: no view,
-action or report can change behind the guide. Escape quits, the left and right arrows move from step
-to step, Tab stays in the card, and the focus goes back to the button on exit. Another screen or the
-other view, reached by the browser's back button too, closes the guide. With reduced motion set, the
-page jumps to each part instead of scrolling to it.
-
-The guide reads only what the screen already loaded and starts no computation. Opened while the recap
-is computed, it says so and starts when the result arrives; when the recap could not be read, it says
-so and only offers to close. It sends no request and stores nothing. The figures in its titles are
-written by the same functions as the tiles, so they read the same.
 
 ## Share cards
 
@@ -763,6 +744,67 @@ language of the form it came from. A language picked on these pages is not store
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in-dark.png">
   <img alt="The Hub's own sign-in page, with the local account fold opened" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in.png">
 </picture>
+
+## The guide
+
+Guide, in the top bar and a "?" alone on a phone, opens a menu of two choices: Understand this
+screen walks the screen on show, and I am… chains the screens of a role. The page a caller no grant
+reaches offers only the first, since every screen of a path would show the same refusal.
+
+Every screen has its guide: New analysis, Recent, a run and its report, Sources, Incidents,
+Correlations, both views of the recap, Disclosures and one disclosure, Your access and Coverage. The
+ack page and an unknown address have none, and the button is absent there. When the Hub's status
+cannot be read, every address draws the same page, and the button is absent too, except on the page
+a signed-in caller no grant reaches: its guide is the one of Your access, and walks who you are,
+your groups and your terminal tokens under the banner.
+
+A cutout lights one part of the page at a time and dims the rest, and a card says what that part
+means, with `4 of 11`, Previous, Next and Quit. A step can put numbered marks on its parts, and the
+card names them under the same numbers. A part the page does not show, such as Reports for a caller
+who cannot read them or a field the chosen source does not take, is skipped and left out of the
+count. The last card says what you can now do.
+
+A detail behind a fold is read only if you unfolded it before opening the guide: an incident's
+frozen findings, a pair's episodes, a daemon's gauges. Left folded, it has no step, and on Incidents
+and Correlations the row's step asks you to unfold a row and open the guide again. A detail still
+loading when the guide opens adds its step when it arrives.
+
+I am… lists five roles, each with its question and what its path brings:
+
+- Dev, the Engineering recap: the finding that costs the most, the query at fault and the
+  suggested fix.
+- Tech lead, the Engineering recap then New analysis: what the team takes on this week, then an
+  analysis run without overloading the trace backend.
+- Architect, Correlations, Incidents then Sources: which pairs of findings keep coming back, which
+  incidents the daemons recorded, and which sources no longer answer.
+- Project manager, the Management recap: the table to present in the meeting, and the figure to
+  quote.
+- CTO, the Management recap then Disclosures: whether it is getting better, which figure to quote,
+  and how to read the list of public reports.
+
+A path moves from screen to screen itself, with `screen 1 of 2` beside the step count and Next
+screen on a screen's last card. A screen that does not show for you, such as Disclosures for a
+caller without that tab, is skipped and named on the last card. A screen that shows an error or a
+refusal says so and offers Next screen, or Close on the path's last screen. Quit stays where you
+are. The browser remembers the role
+last chosen, under `perf-sentinel:guide-role` in `localStorage`, so the menu ticks it next time. It
+is kept nowhere else, and a browser that refuses storage ticks nothing.
+
+While the guide is open, the page behind it takes no click and no key, but it still scrolls: no view,
+action or report can change behind the guide. Escape quits, the left and right arrows move from step
+to step, Tab stays in the card, and the focus goes back to the button on exit. In the menu, the up
+and down arrows, Home and End move, and Escape or a click outside closes it. Another screen or the
+other view, reached by the browser's back button too, closes the guide, except the next screen of a
+path. With reduced motion set, the page jumps to each part instead of scrolling to it.
+
+The guide reads only what the screen already loaded and starts no computation. Opened while a screen
+loads, it says so and starts when the data arrives; when the screen could not be read, it says so
+and only offers to close. It sends no request, changes nothing on the Hub and unfolds nothing. A
+path only moves the address, and each screen then reads what it reads when you open it yourself: a
+path that enters the recap computes it as the tab would, and the guide itself never starts a
+computation.
+The figures the guide quotes are written by the same functions as the screen's, so they read the
+same.
 
 ## Safety
 

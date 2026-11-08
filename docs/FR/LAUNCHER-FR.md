@@ -90,6 +90,8 @@ laissée ouverte relit son daemon à la visite suivante sans qu'on la clique.
 Rien d'autre que ces noms n'est stocké. Un navigateur qui refuse le stockage démarre
 simplement tout replié.
 
+Le Je suis… du guide retient le dernier rôle choisi, voir [le guide](#le-guide).
+
 Le thème est à trois positions : système, clair, sombre. Seul le clair ou le sombre résolu
 atteint le DOM, de sorte que les feuilles de style voient deux valeurs et jamais trois. La
 position est stockée sous `perf-sentinel:theme` dans `localStorage` et dans
@@ -334,7 +336,7 @@ période précédente de même durée. Aucun modèle de langage ne le rédige : 
 l'avance et chaque chiffre vient des registres de détections des daemons. Il lit `GET /api/recap` ([l'API](API-FR.md#recap)), donc son
 périmètre, ses filtres et son volume de détections sont ceux de la liste des findings. Une période
 (jour, semaine ou mois, la semaine par défaut), un jour quelconque de cette période, un environnement,
-des services, des namespaces et la bascule Engineering ou Management la resserrent, et chaque choix s'écrit dans
+des services, des namespaces et la bascule Technique ou Pilotage la resserrent, et chaque choix s'écrit dans
 l'adresse, `#/recap?period=day&view=pilotage`, de sorte qu'une vue s'envoie en lien. La période se compte
 en jours UTC et le dit, alors que chaque horodatage de la page, le moment où une action a été prise ou
 terminée compris, s'affiche à votre heure avec son fuseau (`2026-10-29 14:32 CET`), l'instant UTC au survol.
@@ -345,7 +347,7 @@ faite, les neuf étapes chacune cochée avec sa durée, marquée en cours, ou pa
 le temps écoulé depuis le début du calcul. Vous pouvez quitter la page : le Hub poursuit, et en revenant
 vous retrouvez la même tâche, ou le résultat tout de suite si elle a fini. Une fois calculé, une ligne
 dit quand, et jusqu'à quand le Hub le réutilise (10 minutes pour une période en cours ou dont un jour est encore compté, une
-journée pour une période close), avec Recalculer à côté. Passer d'Engineering à Management, ou ouvrir tous les
+journée pour une période close), avec Recalculer à côté. Passer de Technique à Pilotage, ou ouvrir tous les
 mouvements d'un groupe, relit le même récap calculé ; changer un filtre en lance un autre et arrête celui
 que plus personne ne suit. Une écriture qui change le récap, une action, un nom ou un acquittement,
 depuis cet écran ou ailleurs, le fait recalculer à la visite suivante. Un Hub
@@ -394,7 +396,7 @@ de 600 caractères est colorée sans être coupée en lignes, et une route ou un
 sélecteur à côté la fait passer entre to do, in progress et done, et le verdict du moteur sur une action
 terminée (confirmed, still detected, came back, waiting for a sealed day) apparaît à côté. Acknowledge ouvre
 la page d'acquittement. Name this, ou Rename, donne à l'endpoint un nom métier qui titre la ligne, en
-Management aussi. Le propriétaire d'une action se lit comme un nom : celui que la connexion a donné, sinon
+Pilotage aussi. Le propriétaire d'une action se lit comme un nom : celui que la connexion a donné, sinon
 un nom tiré de l'identité (`alice.martin@acme.com` se lit Alice Martin), l'identité au survol. Un refus,
 pas d'identité ou pas de permission, montre dans la carte la phrase même du Hub.
 
@@ -403,7 +405,7 @@ détectés, les groupes qui contiennent quelque chose seulement. Disparu est une
 que le correctif est parti. Le premier jour d'une période, rien n'est comparé, et la page le dit au lieu de
 prétendre que rien n'a bougé.
 
-La vue Management lit le même classement en mots simples : les cinq premiers problèmes sous forme d'une
+La vue Pilotage lit le même classement en mots simples : les cinq premiers problèmes sous forme d'une
 phrase fixe par type, le nom de l'endpoint quand quelqu'un l'a donné (sinon l'endpoint sous le service), le
 chiffre en opérations inutiles, la tendance et l'action, en lecture seule. Elle ne porte aucun mot
 technique, ses sept textes d'aide non plus.
@@ -424,7 +426,7 @@ période où rien n'a bougé est archivée et jamais livrée), `Archived, no des
 sans webhook ni adresse, et `On demand, not sent` pour un rapport généré à la demande, qui n'est jamais
 livré.
 
-Management et Engineering téléchargent la page figée de chaque vue, un fichier autonome qui s'ouvre hors
+Pilotage et Technique téléchargent la page figée de chaque vue, un fichier autonome qui s'ouvre hors
 ligne, en clair comme en sombre, sans autre script que les deux qui règlent le thème et les heures. Un
 rapport ne porte que les vues avec lesquelles il a été figé.
 
@@ -438,29 +440,6 @@ Un rapport garde une seule langue : celle de l'écran pour un rapport généré 
 l'abonnement pour un rapport planifié. Ses deux téléchargements s'ouvrent dans cette langue. Un rapport
 envoyé par mail arrive à chaque adresse dans la langue de cette adresse, voir
 [la configuration](CONFIGURATION-FR.md).
-
-### Le guide
-
-En vue Management, Comprendre cet écran dans la barre du haut, un « ? » seul sur un téléphone,
-parcourt le récapitulatif sur les chiffres qu'il affiche. Une découpe éclaire une partie de la page
-à la fois et assombrit le reste, et une carte dit ce que cette partie veut dire, avec `4 sur 11`,
-Précédent, Suivant et Quitter. L'étape de la première ligne pose des pastilles numérotées sur ses
-parties, et la carte les nomme sous les mêmes numéros. Une partie que la page n'affiche pas, comme
-Reports pour un appelant qui ne peut pas les lire, ou la séparation quand aucune ligne n'est
-dessous, est sautée et ne compte pas. La dernière carte, sans découpe, rappelle les trois questions
-auxquelles la page répond. La vue Engineering n'a pas de guide, et le bouton n'y apparaît pas.
-
-Tant que le guide est ouvert, la page derrière lui ne prend ni clic ni touche, mais elle défile
-toujours : aucune vue, action ou rapport ne peut changer derrière le guide. Échap quitte, les
-flèches gauche et droite passent d'une étape à l'autre, Tab reste dans la carte, et le focus revient
-au bouton à la sortie. Un autre écran ou l'autre vue, y compris par le bouton retour du navigateur,
-ferme le guide. Avec le mouvement réduit, la page saute à chaque partie au lieu d'y défiler.
-
-Le guide ne lit que ce que l'écran a déjà chargé et ne lance aucun calcul. Ouvert pendant que le
-récapitulatif se calcule, il le dit et démarre à l'arrivée du résultat ; quand le récapitulatif n'a
-pas pu être lu, il le dit et propose seulement de fermer. Il n'envoie aucune requête et n'enregistre
-rien. Les chiffres de ses titres sont écrits par les mêmes fonctions que les tuiles, ils se lisent
-donc pareil.
 
 ## Cartes à partager
 
@@ -827,6 +806,72 @@ langue du formulaire d'où elle vient. Une langue choisie sur ces pages n'est pa
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in-dark.png">
   <img alt="La page de connexion du Hub, le pli du compte local ouvert" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/hub-sign-in.png">
 </picture>
+
+## Le guide
+
+Guide, dans la barre du haut, un « ? » seul sur un téléphone, ouvre un menu de deux choix :
+Comprendre cet écran parcourt l'écran affiché, et Je suis… enchaîne les écrans d'un rôle. La page
+d'un appelant qu'aucune autorisation ne concerne ne propose que le premier, puisque chaque écran
+d'un parcours y montrerait le même refus.
+
+Chaque écran a son guide : Nouvelle analyse, Récentes, un run et son rapport, Sources, Incidents,
+Corrélations, les deux vues du récapitulatif, Divulgations et une divulgation, Votre accès et
+Couverture. La page d'acquittement et une adresse inconnue n'en ont pas, et le bouton n'y apparaît
+pas. Quand le statut du Hub ne peut pas être lu, chaque adresse dessine la même page, et le bouton
+n'apparaît pas non plus, sauf sur la page d'un appelant connecté qu'aucune autorisation ne
+concerne : son guide est celui de Votre accès, et parcourt qui vous êtes, vos groupes et vos jetons
+de terminal sous le bandeau.
+
+Une découpe éclaire une partie de la page à la fois et assombrit le reste, et une carte dit ce que
+cette partie veut dire, avec `4 sur 11`, Précédent, Suivant et Quitter. Une étape peut poser des
+pastilles numérotées sur ses parties, et la carte les nomme sous les mêmes numéros. Une partie que
+la page n'affiche pas, comme Reports pour un appelant qui ne peut pas les lire, ou un champ que la
+source choisie ne prend pas, est sautée et ne compte pas. La dernière carte dit ce que vous savez
+désormais faire.
+
+Un détail derrière un repli n'est lu que si vous l'avez déplié avant d'ouvrir le guide : les
+findings figés d'un incident, les épisodes d'une paire, les jauges d'un daemon. Laissé replié, il
+n'a pas d'étape, et sur Incidents et Corrélations l'étape de la ligne vous demande de déplier une
+ligne et de rouvrir le guide. Un détail encore en lecture à l'ouverture du guide ajoute son étape à
+son arrivée.
+
+Je suis… liste cinq rôles, chacun avec sa question et ce que son parcours apporte :
+
+- Dev, le récapitulatif Technique : le finding qui coûte le plus, la requête en cause et le
+  correctif suggéré.
+- Tech lead, le récapitulatif Technique puis Nouvelle analyse : ce que l'équipe prend cette
+  semaine, puis une analyse lancée sans surcharger le backend de traces.
+- Architecte, Corrélations, Incidents puis Sources : quelles paires de findings reviennent, quels
+  incidents les daemons ont enregistrés, et quelles sources ne répondent plus.
+- Chef de projet, le récapitulatif Pilotage : le tableau à présenter en réunion, et le chiffre à
+  citer.
+- CTO, le récapitulatif Pilotage puis Divulgations : si ça s'améliore, quel chiffre citer, et
+  comment lire la liste des rapports publics.
+
+Un parcours passe de lui-même d'un écran à l'autre, avec `écran 1 sur 2` à côté du compte des
+étapes et Écran suivant sur la dernière carte d'un écran. Un écran qui ne s'affiche pas pour vous,
+comme Divulgations pour un appelant sans cet onglet, est sauté et nommé sur la dernière carte. Un
+écran qui montre une erreur ou un refus le dit et propose Écran suivant, ou Fermer sur le dernier
+écran du parcours. Quitter reste où vous êtes.
+Le navigateur retient le dernier rôle choisi, sous `perf-sentinel:guide-role` dans `localStorage`,
+pour que le menu le coche la fois suivante. Il n'est gardé nulle part ailleurs, et un navigateur
+qui refuse le stockage ne coche rien.
+
+Tant que le guide est ouvert, la page derrière lui ne prend ni clic ni touche, mais elle défile
+toujours : aucune vue, action ou rapport ne peut changer derrière le guide. Échap quitte, les
+flèches gauche et droite passent d'une étape à l'autre, Tab reste dans la carte, et le focus revient
+au bouton à la sortie. Dans le menu, les flèches haut et bas, Début et Fin déplacent le focus, et
+Échap ou un clic à côté le ferment. Un autre écran ou l'autre vue, y compris par le bouton retour du
+navigateur, ferme le guide, sauf l'écran suivant d'un parcours. Avec le mouvement réduit, la page
+saute à chaque partie au lieu d'y défiler.
+
+Le guide ne lit que ce que l'écran a déjà chargé et ne lance aucun calcul. Ouvert pendant qu'un
+écran se charge, il le dit et démarre à l'arrivée des données ; quand l'écran n'a pas pu être lu, il
+le dit et propose seulement de fermer. Il n'envoie aucune requête, ne change rien dans le Hub et ne
+déplie rien. Un parcours ne fait que changer l'adresse, et chaque écran lit alors ce qu'il lit quand
+vous l'ouvrez vous-même : un parcours qui entre dans le récapitulatif le calcule comme le ferait
+l'onglet, et le guide lui-même ne lance jamais de calcul. Les chiffres que le guide cite sont écrits par les mêmes fonctions que ceux
+de l'écran, ils se lisent donc pareil.
 
 ## Sûreté
 
