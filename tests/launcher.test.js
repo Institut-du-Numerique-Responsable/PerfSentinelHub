@@ -3541,7 +3541,7 @@ const ANALYSIS_SAYS = {
         fetchMax: "pas plus de 64", fetchOver: "cocher la case de l'alerte", fetchBlocked: "rien ne permet de lancer",
         retentionHours: "Passé 72 h", queueOne: "derrière 1 tâche.", queueMany: "derrière 3 tâches.",
         ready: "redit ce que l'analyse va faire", blocked: "dit pourquoi : ", unreachable: "Cette source ne répond pas",
-        skew: "Le bloc au-dessus nomme l'écart", intro: "supprimés 72 heures", emptyList: "après 72 heures",
+        skew: "Le bloc au-dessus nomme l'écart", intro: "supprimés 72 heures", emptyList: "jusqu'à ce que la rétention du Hub l'efface",
         thresholds: "« Seuils »", error: "« Erreur »", logLive: "pas un flux", elapsedRunning: "La barre mesure",
         elapsedQueued: "démarre quand un worker", elapsedTotal: "Le temps total", tuned: "couleur d'avertissement",
         expires: "Le lien expire dans", caveats: "en anglais", frameEmpty: "Un rapport vide est attendu",
@@ -3558,7 +3558,7 @@ const ANALYSIS_SAYS = {
         fetchOver: "tick the alert's box", fetchBlocked: "nothing lets you run", retentionHours: "After 72 h",
         queueOne: "behind 1 job.", queueMany: "behind 3 jobs.", ready: "restates what the analysis will do",
         blocked: "says why: ", unreachable: "This source is not answering", skew: "The block above names the gap",
-        intro: "deleted 72 hours", emptyList: "after 72 hours", thresholds: "\"Thresholds\"", error: "\"Error\"",
+        intro: "deleted 72 hours", emptyList: "until the Hub's retention erases it", thresholds: "\"Thresholds\"", error: "\"Error\"",
         logLive: "not a stream", elapsedRunning: "The bar measures", elapsedQueued: "starts when a worker",
         elapsedTotal: "The total time", tuned: "warning colour", expires: "The link expires in", caveats: "in English",
         frameEmpty: "An empty report is expected", pending: "not ready yet",
@@ -3679,7 +3679,8 @@ test("the Recent steps come in the screen's order, and no run drops the card", (
 
 analysisTest("Recent gives the retention, and the card its thresholds and its error when it has them", (says) => {
     const steps = recentBy(guideRun());
-    assert.ok(text(steps.intro).includes(says.intro) && text(steps.empty).includes(says.emptyList));
+    assert.ok(text(steps.intro).includes(says.intro) && text(steps.empty).includes(says.emptyList)
+        && !text(steps.empty).includes("72"));
     assert.ok(!text(steps.card).includes(says.thresholds) && !text(steps.card).includes(says.error));
     assert.ok(text(recentBy(guideRun({request: {service: "x", detection: {n_plus_one_threshold: 9}}})).card)
         .includes(says.thresholds));
@@ -3955,12 +3956,12 @@ const PUBLIC_SAYS = {
     fr: {
         bracket: "de la moitié au double du chiffre", official: "au moins 75 %", withdrawn: "le bandeau dit par qui",
         unsigned: "n'est pas signé", refused: "a trouvé un problème", notChecked: "pour la raison du bandeau",
-        internal: "« Jamais partagée »", rendered: "a recalculé son empreinte", kept: "sans la vérifier ici",
+        internal: "« Jamais partagée »", rendered: "a recalculé son empreinte", kept: "n'en a pas produit le PDF",
         pdf: "« Télécharger le PDF »", newLink: "« Nouveau lien de partage »", render: "« Rendre à nouveau »",
         withdraw: "« Retirer » demande une raison", noWithdraw: "n'offre plus ni lien", neverLink: "n'a jamais de lien",
         carbonBar: "La barre du carbone", measured: "2 des 3 applications déclarées", both: "« Hôtes de broker »",
         database: "La ligne « Hôtes de base de données »", broker: "La ligne « Hôtes de broker »", excluded: "par l'opérateur", hashChecked: "n'ont pas changé depuis",
-        hashNot: "n'a pas vérifié l'empreinte", signature: "sur votre ordinateur", audited: "Le niveau audité",
+        hashNot: "n'a pas vérifié l'empreinte", hashMismatch: "ne correspond plus", signature: "sur votre ordinateur", audited: "Le niveau audité",
         neverShared: "n'est jamais partagé", locked: "votre accès ne comprend pas", groupChange: "prochaine connexion",
         noGroup: "aucun groupe", noReach: "Aucune autorisation ne concerne", everything: "« Tout » veut dire",
         columns: "le rôle et ses permissions", noToken: "Aucun jeton de terminal.", tokensFailed: "n'a pas listé les jetons",
@@ -3968,14 +3969,14 @@ const PUBLIC_SAYS = {
         backend: "Un backend de traces", none: "Aucun."
     },
     en: {
-        bracket: "from half to twice the figure", official: "at least 75 %", withdrawn: "the banner says by whom",
+        bracket: "from half to twice the figure", official: "at least 75%", withdrawn: "the banner says by whom",
         unsigned: "is not signed", refused: "found a problem", notChecked: "for the reason in the banner",
-        internal: "\"Never shared\"", rendered: "recomputed its content hash", kept: "without checking it here",
+        internal: "\"Never shared\"", rendered: "recomputed its content hash", kept: "did not produce its PDF",
         pdf: "\"Download the PDF\"", newLink: "\"New share link\"", render: "\"Render again\"",
         withdraw: "\"Withdraw\" asks for a reason", noWithdraw: "offers neither a share link", neverLink: "never has a share link",
         carbonBar: "The carbon bar", measured: "2 of the 3 declared applications", both: "\"Broker hosts\"",
         database: "The \"Database hosts\" row", broker: "The \"Broker hosts\" row", excluded: "by the operator", hashChecked: "have not changed since",
-        hashNot: "did not check the content hash", signature: "on your computer", audited: "The audited level",
+        hashNot: "did not check the content hash", hashMismatch: "no longer matches", signature: "on your computer", audited: "The audited level",
         neverShared: "is never shared", locked: "your access does not include", groupChange: "next sign-in",
         noGroup: "in no group", noReach: "No grant concerns", everything: "\"Everything\" means",
         columns: "the role and its permissions", noToken: "No terminal token.", tokensFailed: "did not list the tokens",
@@ -4067,6 +4068,10 @@ publicTest("a disclosure's figures, applications and integrity say what the scre
     assert.ok(checked.includes(says.hashChecked) && checked.includes(says.signature) && checked.includes(says.audited));
     const unchecked = text(disclosureBy({integrity_level: "audited"}, {checks: Object.assign({}, disclosureDetail().checks, {content_hash: "not_checked"})}).integrity);
     assert.ok(unchecked.includes(says.hashNot) && !unchecked.includes(says.hashChecked) && !unchecked.includes(says.audited));
+    // A render the engine refused on the hash: the Hub did compare it, and found the file changed.
+    const altered = text(disclosureBy({pdf: "not_rendered", render_reason: "content_hash_mismatch"},
+        {checks: Object.assign({}, disclosureDetail().checks, {content_hash: "not_checked"})}).integrity);
+    assert.ok(altered.includes(says.hashMismatch) && !altered.includes(says.hashNot) && !altered.includes(says.hashChecked));
 });
 
 publicTest("a disclosure's share links say an internal report is never shared and a reader cannot manage them", (says) => {

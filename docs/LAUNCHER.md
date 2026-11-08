@@ -774,7 +774,7 @@ I am… lists five roles, each with its question and what its path brings:
 - Dev, the Engineering recap: the finding that costs the most, the query at fault and the
   suggested fix.
 - Tech lead, the Engineering recap then New analysis: what the team takes on this week, then an
-  analysis started without loading the backend.
+  analysis run without overloading the trace backend.
 - Architect, Correlations, Incidents then Sources: which pairs of findings keep coming back, which
   incidents the daemons recorded, and which sources no longer answer.
 - Project manager, the Management recap: the table to present in the meeting, and the figure to

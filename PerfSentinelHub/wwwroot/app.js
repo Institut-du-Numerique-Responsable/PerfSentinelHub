@@ -12284,11 +12284,8 @@
         }
         if (state.runs.length === 0) {
             section.appendChild(el('div', {class: 'empty-state', 'data-guide': 'recent.empty'}, [
-                el('p', {
-                    class: 'empty-title',
-                    text: t('recent.empty.title', {hours: state.status.limits.report_retention_hours})
-                }),
-                el('p', {text: t('recent.empty.body', {hours: state.status.limits.report_retention_hours})}),
+                el('p', {class: 'empty-title', text: t('recent.empty.title')}),
+                el('p', {text: t('recent.empty.body')}),
                 el('div', {class: 'outcome-actions empty-actions'}, [
                     el('a', {class: 'action action-filled', href: '#/new', text: t('recent.run_new')})
                 ])

@@ -3865,7 +3865,7 @@
         const text = screenText('recent');
         const steps = [
             guideStep('intro', ['recent.sub'], {body: [text('intro.body', {hours: ctx.hours}), text('intro.access')]}, text),
-            guideStep('empty', ['recent.empty'], {body: [text('empty.body', {hours: ctx.hours})]}, text),
+            guideStep('empty', ['recent.empty'], {body: [text('empty.body')]}, text),
             guideStep('binaries', ['recent.binaries'], undefined, text),
             guideStep('tuned', ['recent.tuned'], undefined, text)
         ];
@@ -4205,8 +4205,10 @@
      * @returns {string[]}
      */
     function disclosureIntegrityTexts(detail, text) {
-        const body = [text('integrity.body'), text(detail.checks.content_hash === 'checked' ? 'integrity.hash' : 'integrity.not_here'),
-            text('integrity.signature')];
+        // A render the engine refused on the hash leaves HashChecked false, though the Hub did compare it.
+        let hash = detail.checks.content_hash === 'checked' ? 'integrity.hash' : 'integrity.not_here';
+        if (hash === 'integrity.not_here' && detail.disclosure.render_reason === 'content_hash_mismatch') hash = 'integrity.mismatch';
+        const body = [text('integrity.body'), text(hash), text('integrity.signature')];
         if (detail.disclosure.integrity_level !== 'audited') body.push(text('integrity.audited'));
         return body;
     }

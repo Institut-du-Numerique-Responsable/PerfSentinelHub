@@ -336,7 +336,7 @@ période précédente de même durée. Aucun modèle de langage ne le rédige : 
 l'avance et chaque chiffre vient des registres de détections des daemons. Il lit `GET /api/recap` ([l'API](API-FR.md#recap)), donc son
 périmètre, ses filtres et son volume de détections sont ceux de la liste des findings. Une période
 (jour, semaine ou mois, la semaine par défaut), un jour quelconque de cette période, un environnement,
-des services, des namespaces et la bascule Engineering ou Management la resserrent, et chaque choix s'écrit dans
+des services, des namespaces et la bascule Technique ou Pilotage la resserrent, et chaque choix s'écrit dans
 l'adresse, `#/recap?period=day&view=pilotage`, de sorte qu'une vue s'envoie en lien. La période se compte
 en jours UTC et le dit, alors que chaque horodatage de la page, le moment où une action a été prise ou
 terminée compris, s'affiche à votre heure avec son fuseau (`2026-10-29 14:32 CET`), l'instant UTC au survol.
@@ -347,7 +347,7 @@ faite, les neuf étapes chacune cochée avec sa durée, marquée en cours, ou pa
 le temps écoulé depuis le début du calcul. Vous pouvez quitter la page : le Hub poursuit, et en revenant
 vous retrouvez la même tâche, ou le résultat tout de suite si elle a fini. Une fois calculé, une ligne
 dit quand, et jusqu'à quand le Hub le réutilise (10 minutes pour une période en cours ou dont un jour est encore compté, une
-journée pour une période close), avec Recalculer à côté. Passer d'Engineering à Management, ou ouvrir tous les
+journée pour une période close), avec Recalculer à côté. Passer de Technique à Pilotage, ou ouvrir tous les
 mouvements d'un groupe, relit le même récap calculé ; changer un filtre en lance un autre et arrête celui
 que plus personne ne suit. Une écriture qui change le récap, une action, un nom ou un acquittement,
 depuis cet écran ou ailleurs, le fait recalculer à la visite suivante. Un Hub
@@ -396,7 +396,7 @@ de 600 caractères est colorée sans être coupée en lignes, et une route ou un
 sélecteur à côté la fait passer entre to do, in progress et done, et le verdict du moteur sur une action
 terminée (confirmed, still detected, came back, waiting for a sealed day) apparaît à côté. Acknowledge ouvre
 la page d'acquittement. Name this, ou Rename, donne à l'endpoint un nom métier qui titre la ligne, en
-Management aussi. Le propriétaire d'une action se lit comme un nom : celui que la connexion a donné, sinon
+Pilotage aussi. Le propriétaire d'une action se lit comme un nom : celui que la connexion a donné, sinon
 un nom tiré de l'identité (`alice.martin@acme.com` se lit Alice Martin), l'identité au survol. Un refus,
 pas d'identité ou pas de permission, montre dans la carte la phrase même du Hub.
 
@@ -405,7 +405,7 @@ détectés, les groupes qui contiennent quelque chose seulement. Disparu est une
 que le correctif est parti. Le premier jour d'une période, rien n'est comparé, et la page le dit au lieu de
 prétendre que rien n'a bougé.
 
-La vue Management lit le même classement en mots simples : les cinq premiers problèmes sous forme d'une
+La vue Pilotage lit le même classement en mots simples : les cinq premiers problèmes sous forme d'une
 phrase fixe par type, le nom de l'endpoint quand quelqu'un l'a donné (sinon l'endpoint sous le service), le
 chiffre en opérations inutiles, la tendance et l'action, en lecture seule. Elle ne porte aucun mot
 technique, ses sept textes d'aide non plus.
@@ -426,7 +426,7 @@ période où rien n'a bougé est archivée et jamais livrée), `Archived, no des
 sans webhook ni adresse, et `On demand, not sent` pour un rapport généré à la demande, qui n'est jamais
 livré.
 
-Management et Engineering téléchargent la page figée de chaque vue, un fichier autonome qui s'ouvre hors
+Pilotage et Technique téléchargent la page figée de chaque vue, un fichier autonome qui s'ouvre hors
 ligne, en clair comme en sombre, sans autre script que les deux qui règlent le thème et les heures. Un
 rapport ne porte que les vues avec lesquelles il a été figé.
 
@@ -837,15 +837,15 @@ son arrivée.
 
 Je suis… liste cinq rôles, chacun avec sa question et ce que son parcours apporte :
 
-- Dev, le récapitulatif Engineering : le finding qui coûte le plus, la requête en cause et le
+- Dev, le récapitulatif Technique : le finding qui coûte le plus, la requête en cause et le
   correctif suggéré.
-- Tech lead, le récapitulatif Engineering puis Nouvelle analyse : ce que l'équipe prend cette
-  semaine, puis une analyse lancée sans charger le backend.
+- Tech lead, le récapitulatif Technique puis Nouvelle analyse : ce que l'équipe prend cette
+  semaine, puis une analyse lancée sans surcharger le backend de traces.
 - Architecte, Corrélations, Incidents puis Sources : quelles paires de findings reviennent, quels
   incidents les daemons ont enregistrés, et quelles sources ne répondent plus.
-- Chef de projet, le récapitulatif Management : le tableau à présenter en réunion, et le chiffre à
+- Chef de projet, le récapitulatif Pilotage : le tableau à présenter en réunion, et le chiffre à
   citer.
-- CTO, le récapitulatif Management puis Divulgations : si ça s'améliore, quel chiffre citer, et
+- CTO, le récapitulatif Pilotage puis Divulgations : si ça s'améliore, quel chiffre citer, et
   comment lire la liste des rapports publics.
 
 Un parcours passe de lui-même d'un écran à l'autre, avec `écran 1 sur 2` à côté du compte des
