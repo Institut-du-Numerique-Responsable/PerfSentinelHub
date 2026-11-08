@@ -124,13 +124,12 @@
      * that is still there.
      */
     function read() {
-        // On its way to a path's next screen the guide reads nothing until the route is there.
+        // On its way to a path's next screen the guide reads nothing until the route is drawn. The hash
+        // changes at once and the screen on the hashchange after it: a render landing in between would
+        // read the stop on the old screen, so arrived() waits for that event.
         if (open.heading !== null) {
-            if (global.location.hash !== open.heading) {
-                open.status = 'wait';
-                return false;
-            }
-            open.heading = null;
+            open.status = 'wait';
+            return false;
         }
         const given = open.source();
         const was = open.steps[open.at];
@@ -472,7 +471,16 @@
         }
         open.heading = to.hash;
         show(false);
+        // Registered after onRoute's own listener, so the screen is drawn when the stop is read.
+        global.addEventListener('hashchange', arrived, {once: true});
         global.location.hash = to.hash;
+    }
+
+    /** The route a path headed to has been drawn: the stop is read on it. */
+    function arrived() {
+        if (!open || open.heading === null) return;
+        open.heading = null;
+        refresh();
     }
 
     /** @param {import('../types').GuidePath} path */
@@ -514,6 +522,7 @@
         document.removeEventListener('keydown', onKey, true);
         global.removeEventListener('scroll', schedule, {capture: true});
         global.removeEventListener('resize', schedule);
+        global.removeEventListener('hashchange', arrived);
         SHELL.forEach(function (selector) {
             const part = document.querySelector(selector);
             if (part) part.removeAttribute('inert');

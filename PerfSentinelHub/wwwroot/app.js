@@ -1079,7 +1079,10 @@
     /** Draws the screen, then the guide's entry and the guide itself, which point into it. */
     function render() {
         renderScreen();
-        document.getElementById('guide-open').hidden = guideId(state.screen) === null;
+        const entry = document.getElementById('guide-open');
+        entry.hidden = guideId(state.screen) === null;
+        // The host hides with the entry, and would hide an open menu with aria-expanded left true.
+        if (entry.hidden) closeGuideMenu(false);
         GUIDE.refresh();
     }
 
@@ -1194,7 +1197,7 @@
                 spanMs: windowSpanMs(),
                 retentionHours: source ? source.retention_hours : null,
                 maxTraces: state.form.maxTraces,
-                weighed: Boolean(weightHistory()),
+                weighed: weighedRuns().length > 0,
                 fetchBand: band ? band.key : null,
                 queue: state.status.queue_depth,
                 limits: state.status.limits,
@@ -3711,6 +3714,8 @@
         if (sig === state.terminalSig) return;
         state.terminalSig = sig;
         slot.replaceChildren.apply(slot, terminalPanels(source));
+        // Built a microtask after the render, so the guide's cutout on the panels is placed again.
+        GUIDE.refresh();
     }
 
     /**
@@ -4577,19 +4582,7 @@
      * know before the run. Absent until this source has a measured run.
      */
     function weightHistory() {
-        const source = selectedSource();
-        if (!source || !state.runs) return null;
-        const past = state.runs.filter(function (run) {
-            /** @type {Partial<RunResult>} */
-            const result = run.result || {};
-            // Trace-id runs are excluded: their weight says nothing about the
-            // slider. A missing max_traces on a service run is the server-side
-            // default, not an unmeasured one.
-            return run.source_id === source.id &&
-                run.status === 'succeeded' &&
-                typeof result.report_bytes === 'number' &&
-                (run.request || {}).trace_id === undefined;
-        }).slice(0, 3);
+        const past = weighedRuns();
         if (past.length === 0) return null;
 
         return sinkBlock(t('new.weighed.head'), t('new.weighed.sub'),
@@ -4601,6 +4594,27 @@
                     duration: PSL.dur(Date.now() - (run.finished_at_ms || run.created_at_ms))
                 })];
             }));
+    }
+
+    /**
+     * The last three succeeded service runs on the chosen source that weighed their report, newest
+     * first: what weightHistory draws, and what the New guide only needs to count.
+     * @returns {Run[]}
+     */
+    function weighedRuns() {
+        const source = selectedSource();
+        if (!source || !state.runs) return [];
+        return state.runs.filter(function (run) {
+            /** @type {Partial<RunResult>} */
+            const result = run.result || {};
+            // Trace-id runs are excluded: their weight says nothing about the
+            // slider. A missing max_traces on a service run is the server-side
+            // default, not an unmeasured one.
+            return run.source_id === source.id &&
+                run.status === 'succeeded' &&
+                typeof result.report_bytes === 'number' &&
+                (run.request || {}).trace_id === undefined;
+        }).slice(0, 3);
     }
 
     /**
