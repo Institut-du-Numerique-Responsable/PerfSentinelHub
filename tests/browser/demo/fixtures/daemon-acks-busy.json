@@ -4,8 +4,8 @@
     "signature": "n_plus_one_http:order-svc:POST__api_orders_42_submit:cd80e7e97cf84255958943efe281962e",
     "by": "cache-guild@example.com",
     "reason": "Known, the read-through cache lands in front of it.",
-    "at": "2026-11-04T17:59:05.863684Z",
-    "expires_at": "2027-11-04T17:59:05Z",
+    "at": "2026-11-08T12:26:07.563421Z",
+    "expires_at": "2027-11-08T12:26:07Z",
     "source": "daemon"
   }
 ]
