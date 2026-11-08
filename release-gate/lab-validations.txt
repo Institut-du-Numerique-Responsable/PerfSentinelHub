@@ -375,3 +375,12 @@ v0.13.0	142b30b	2026-11-03	PASS
 # hub-lineage-mutation and hub-retention-purge, 193 checks with no fail and no
 # skip, first run. The lab ran with local, uncommitted Hub and daemon image pins.
 v0.14.0	b71f715	2026-11-04	PASS
+# v0.15.0: targeted pass at lab commit c681b80 on the cluster rebuilt that day
+# (make up-cni), a Release image of Hub bc910c7 (the 0.15.0 bump merge) against
+# the published perf-sentinel 0.43.2 image (sha256:3a2623b5). hub-recap (local
+# process, 17 checks) and hub-access-control (55 checks, seven legs) passed with
+# no fail and no skip, first run. Not run: the twelve other hub scenarios,
+# untouched by this release, which changes the launcher, the recap filters, the
+# analysis options and the engine's failure codes. The lab ran with a local,
+# uncommitted Hub image pin and a daemon pin bumped to 0.43.2 in the working tree.
+v0.15.0	c681b80	2026-11-08	PASS
