@@ -76,11 +76,11 @@
     {
       "name": "xunit.v3",
       "kind": "nuget",
-      "version": "4.0.2",
-      "digest_or_sha": "sha512-base64:jPqJKMQnhWCysQkAPjU8E4t3ejl/EOCd3ENcU/biyvtNuRncK+fDFDEw4Ixp6Gh83k5f5FBTH/RzTxaY18jSQg==",
-      "lock_content_hash": "TdjM2OAx7w/0E88E6PgaigLoTbQaxbSR3HF/8p92plchTjf29jPHW27ylvEOz+Nx8CvPwWKGQlOR1fDv6/Qh5A==",
-      "released_at": "2026-10-09T17:08:28.5Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/4.0.2.json",
+      "version": "4.0.3",
+      "digest_or_sha": "sha512-base64:cpENjBNI1hIrTJrDc4GKx8598a7T1XgHf8A91TOESj7RCSnqyuycLhDYhKedCKudeuYHS8pZVPrqQRNmK0WYAw==",
+      "lock_content_hash": "GxBopTuV5aU7NS0iE1P6I6YCQscIAP0iIyyZqZhs1c8Ry3cdiOouEtQQpX8cA7E1gEnKGRMNA+7NlhBy13AEyg==",
+      "released_at": "2026-11-09T00:41:32.12Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/xunit.v3/4.0.3.json",
       "reason": "Latest stable xUnit v3 meta-package."
     },
     {
@@ -95,10 +95,10 @@
     {
       "name": "dotnet-sonarscanner",
       "kind": "dotnet-tool",
-      "version": "12.0.0",
-      "digest_or_sha": "sha512-base64:3de/QlFpKg+CbPeWQmVOTnMh/7A0KIw44zrwIFVyPBtRevdNAi+CODye25mzdkxK1upJ0Qrzypua855bwPFwgg==",
-      "released_at": "2026-10-15T15:10:08.123Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-sonarscanner/12.0.0.json",
+      "version": "12.1.0",
+      "digest_or_sha": "sha512-base64:knZxTbjbxOzJgJGE7a5OEGdiR5jANmfjdnOVQbWDxKvMKFG4X2Vd0Ju7cQpCf1zS3zkrBx/Z9uUgZo4VCXEAtw==",
+      "released_at": "2026-11-05T15:54:33.67Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-sonarscanner/12.1.0.json",
       "reason": "Latest stable Sonar .NET scanner tool."
     },
     {
