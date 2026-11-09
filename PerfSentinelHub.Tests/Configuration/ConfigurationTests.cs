@@ -779,6 +779,51 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void A_subscription_service_list_outside_the_shape_is_refused()
+    {
+        const string message = "Hub:Recaps:Subscriptions:0:Services, Service counted, and ExcludedServices hold 50 "
+                               + "names at most, each 1 to 256 characters with no control character.";
+        var fiftyOne = Enumerable.Range(0, 51).Select(i => $"svc-{i}").ToArray();
+
+        Assert.Equal(message,
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Services = ["a\nb"] }))));
+        Assert.Equal(message,
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { ExcludedServices = fiftyOne }))));
+        // A fifty-first name in Service would leave the report's list unread, and the report on every service.
+        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with
+        {
+            Service = "svc-50",
+            Services = fiftyOne[..50]
+        }))));
+        Assert.Empty(AccessFailures(WithSubscription(Subscription() with
+        {
+            Service = "svc-0",
+            Services = fiftyOne[..50]
+        })));
+        Assert.Empty(AccessFailures(WithSubscription(Subscription() with { ExcludedServices = ["batch"] })));
+    }
+
+    // Next to chosen services an exclusion removes nothing, yet the scope line would name it.
+    [Fact]
+    public void A_subscription_chooses_its_services_or_leaves_some_out_not_both()
+    {
+        const string message =
+            "Hub:Recaps:Subscriptions:0:ExcludedServices goes without Service and Services: it leaves services out "
+            + "of the whole fleet.";
+
+        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with
+        {
+            Services = ["shop", "cart"],
+            ExcludedServices = ["batch"]
+        }))));
+        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with
+        {
+            Service = "cart",
+            ExcludedServices = ["cart"]
+        }))));
+    }
+
+    [Fact]
     public void A_subscription_naming_an_unknown_webhook_is_refused()
     {
         var subscription = Subscription() with { Webhooks = ["ops"] };

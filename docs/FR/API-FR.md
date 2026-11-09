@@ -672,7 +672,9 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   `grouping`. Avec plusieurs, `service` vaut `null` et `services[]` les liste, triés et sans
   doublon, et de même `grouping` et `groupings[]`. Les deux clés de liste sont absentes, pas
   `null`, tant qu'une valeur ou aucune n'est choisie : un script qui lit `filters` et un rapport
-  stocké avant les listes se lisent exactement comme avant.
+  stocké avant les listes se lisent exactement comme avant. Le rapport figé d'un abonnement porte
+  aussi `excluded_services[]`, trié, les services que son `ExcludedServices` laisse de côté, absent
+  quand il n'y en a aucun.
 - **Comparer.** Une période en cours se compare sur ses jours clos : du premier jour à hier
   contre le même nombre de premiers jours de la période précédente, indiqué dans
   `previous.truncated_to_days`. Aujourd'hui est partiel et se lirait comme une baisse face à

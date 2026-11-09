@@ -3378,7 +3378,7 @@
     function recapFiltered(snapshot) {
         const filters = snapshot.filters;
         return [filters.environment, filters.source_id, filters.service, filters.grouping,
-            ...(filters.services || []), ...(filters.groupings || [])].some(Boolean);
+            ...(filters.services || []), ...(filters.groupings || []), ...(filters.excluded_services || [])].some(Boolean);
     }
 
     /**

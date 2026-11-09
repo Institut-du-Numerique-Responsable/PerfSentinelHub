@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.403-resolute-aot@sha256:1aab8611ff772f183523a6435699f924d46b1be3f03d6833e9b26452d74083c0 AS build
 ARG TARGETARCH
-ARG VERSION=0.15.0
+ARG VERSION=0.16.0
 ARG SOURCE_DATE_EPOCH
 WORKDIR /src
 COPY . .
@@ -16,7 +16,7 @@ FROM ghcr.io/institut-du-numerique-responsable/perf-sentinel:0.43.2@sha256:3a262
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.14-resolute-chiseled-extra@sha256:9e6ce44af9c4fef28620453d51e9b431f83b9889c6a6b0ce749b2fc958438aa6
 ARG SOURCE_COMMIT=unknown
-LABEL org.opencontainers.image.version="0.15.0" \
+LABEL org.opencontainers.image.version="0.16.0" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \
       org.opencontainers.image.source="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub"
 WORKDIR /app
