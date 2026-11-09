@@ -294,7 +294,7 @@
       "name": "mcr.microsoft.com/dotnet/sdk",
       "kind": "container",
       "version": "10.0.403-resolute-aot",
-      "digest_or_sha": "sha256:a66703b1c786b77dad068cd0de51b5538b406f3febb16e8920ec9e73aee181ae",
+      "digest_or_sha": "sha256:1aab8611ff772f183523a6435699f924d46b1be3f03d6833e9b26452d74083c0",
       "released_at": "2026-10-25",
       "source": "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/10.0.403-resolute-aot",
       "reason": "Official NativeAOT SDK image matching the locked SDK."
