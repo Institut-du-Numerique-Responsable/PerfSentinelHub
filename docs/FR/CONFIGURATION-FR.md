@@ -339,12 +339,16 @@ l'organisation. `From` est une seule adresse sans nom d'affichage. Le mot de pas
 Secret (`Hub__Recaps__Smtp__Password`).
 
 **Les abonnements.** Chacun vaut `{ Name, Cadences, Views, Environment, SourceId, Service,
-Grouping, Webhooks, Emails, Language, Recipients }`. `Name` compte de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`,
+Services, ExcludedServices, Grouping, Webhooks, Emails, Language, Recipients }`. `Name` compte de 1 à 64 lettres ASCII, chiffres, `.`, `_` ou `-`,
 et est unique. `Cadences` liste `day`, `week` ou `month`, chacune une fois, au moins une. `Views`
 liste `pilotage`, `tech` ou les deux, chacune une fois. `Environment` et `SourceId` doivent
 correspondre à une source déclarée, et un `SourceId` doit appartenir à l'`Environment` quand les
 deux sont posés. `Service` et `Grouping` comptent de 1 à 256 caractères sans caractère de
-contrôle. `Webhooks` nomme des entrées de `Hub:Recaps:Webhooks`, et `Emails` compte au plus 50
+contrôle. `Services`, `Service` compris, et `ExcludedServices` comptent au plus 50 noms de la
+même forme. Un rapport lit les findings de `Service` et `Services` ensemble, ou, quand les deux
+sont vides, de tous les services moins ceux de `ExcludedServices`, refusé à côté de l'un ou de
+l'autre. Sa ligne de périmètre nomme ce qu'il garde ou laisse de côté. Un abonnement par projet, chacun avec ses services et ses destinations, est la façon
+d'envoyer à chaque équipe d'une même flotte son propre récap. `Webhooks` nomme des entrées de `Hub:Recaps:Webhooks`, et `Emails` compte au plus 50
 adresses distinctes sans nom d'affichage, ce qui exige `Hub:Recaps:Smtp:Host`. Un abonnement sans
 destination est valide : il archive ses rapports et n'en livre aucun.
 
@@ -361,8 +365,8 @@ deux langues.
 
 Sous Helm le bloc est `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` et
 `publicUrl` suivent les réglages ci-dessus. `subscriptions` transmet ses éléments tels quels,
-clés en camel case : `{ name, cadences, views, environment, sourceId, service, grouping,
-webhooks, emails, language, recipients }`, un destinataire valant `{ address, language }`. Un webhook vaut `{ name, secretName, urlKey, secretKey }` : son URL et son
+clés en camel case : `{ name, cadences, views, environment, sourceId, service, services,
+excludedServices, grouping, webhooks, emails, language, recipients }`, un destinataire valant `{ address, language }`. Un webhook vaut `{ name, secretName, urlKey, secretKey }` : son URL et son
 secret viennent tous deux de ce Secret. `smtp` prend `host`, `port`, `startTls`, `userName` et
 `from`, et le chart ne l'écrit qu'une fois `host` posé. `passwordSecretName` et
 `passwordSecretKey` nomment le Secret qui tient le mot de passe, qui arrive dans le pod en

@@ -51,7 +51,9 @@ public sealed record RecapFilters(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<string>? Services = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<string>? Groupings = null)
+    IReadOnlyList<string>? Groupings = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? ExcludedServices = null)
 {
     /// <summary>The filters of a request that chose these lists: a lone value goes to the string, else the list.</summary>
     public static RecapFilters Of(

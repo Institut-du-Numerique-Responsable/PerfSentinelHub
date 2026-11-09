@@ -149,6 +149,8 @@
                   "environment": { "type": "string", "minLength": 1 },
                   "sourceId": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
                   "service": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" },
+                  "services": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" } },
+                  "excludedServices": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" } },
                   "grouping": { "type": "string", "pattern": "^[^\\x00-\\x1F\\x7F-\\x9F]{1,256}$" },
                   "webhooks": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" } },
                   "emails": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[^\\s<>@\"]+@[^\\s<>@\"]+$" } },

@@ -16,7 +16,8 @@ public sealed record RecapRequest(
     IReadOnlyList<string>? Groupings, // the namespaces chosen, likewise
     AccessScope? Access, // null = unrestricted (a worker); else the narrowed findings.read scope
     IReadOnlyList<SourceOptions> Sources, // the sources the caller may see
-    RecapFilters Filters); // echoed as asked
+    RecapFilters Filters, // echoed as asked
+    IReadOnlyList<string>? ExcludedServices = null); // the services left out, canonical, null = none
 
 /// <summary>
 ///     Computes the review recap from three windowed findings reads, so scope, filters, access and
@@ -147,7 +148,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         var rows = await database.QueryFindingsAsync(
             new FindingQuery(
                 null, null, null, MaxFindings + 1, includeAcked, null, 0, request.SourceIds,
-                window.FromMs, window.ToMs, null, null, request.Access, request.Services, request.Groupings),
+                window.FromMs, window.ToMs, null, null, request.Access, request.Services, request.Groupings,
+                request.ExcludedServices),
             cancellationToken);
         return new Read([.. rows.Take(MaxFindings).Select(RecapEnvelope.Read)], rows.Count > MaxFindings);
     }

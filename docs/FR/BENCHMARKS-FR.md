@@ -116,6 +116,25 @@ Une copie qu'aucun motif ne lit coûte la sonde de chaque motif, donc une porté
 étroite coûte plus qu'une large : les mêmes 12 motifs écrits pour retenir 90 500
 copies prennent 0,1 s. Rien n'exécute encore cette CTE.
 
+## Noms des filtres du récap sur 100 000 findings
+
+`GET /api/recap/filters` liste les services et les namespaces sur lesquels un
+récap peut filtrer. Sur 100 000 findings tenus chacun par deux des quatre daemons
+(200 000 copies), observés un jour sur cinq pendant deux mois, avec un namespace
+et une équipe par copie, les deux listes d'un mois prennent 0,2 et 0,26 s sans
+restriction (40 services, 30 namespaces), et 0,48 et 0,56 s à travers les 12
+motifs ci-dessus. Trois passes, à 10 ms près. Mesuré par le test explicite
+`The_recap_names_over_100k_findings_on_two_sources`, même machine et même build,
+sans `ANALYZE`, que le Hub n'exécute jamais :
+
+```bash
+./PerfSentinelHub.Tests/bin/Release/net10.0/PerfSentinelHub.Tests \
+  -method '*.The_recap_names_over_100k_findings_on_two_sources' -explicit only -showLiveOutput
+```
+
+L'écran Récap lance cette lecture en même temps que le récap, donc une liste
+ouverte quelques secondes plus tard est déjà remplie.
+
 ## Reproduire
 
 ```bash

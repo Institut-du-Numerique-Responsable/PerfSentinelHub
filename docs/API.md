@@ -623,7 +623,8 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   `grouping`. With several, `service` is `null` and `services[]` lists them, sorted and without
   repeats, and likewise `grouping` and `groupings[]`. The two list keys are absent, not `null`,
   while one value or none is chosen, so a script that reads `filters` and a report stored before
-  the lists read exactly as they did.
+  the lists read exactly as they did. A subscription's frozen report also carries
+  `excluded_services[]`, sorted, the services its `ExcludedServices` leaves out, absent when none is.
 - **Comparing.** A period in progress is compared on its closed days: `FromDay` to
   yesterday against the same number of first days of the previous period, reported in
   `previous.truncated_to_days`. Today is partial and would read as a drop against a full
