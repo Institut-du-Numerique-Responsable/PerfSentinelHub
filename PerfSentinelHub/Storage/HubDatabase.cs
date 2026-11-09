@@ -670,6 +670,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
             parameters.Add(("$services", JsonArray(services)));
         }
 
+        if (query.ExcludedServices is { Count: > 0 } excluded)
+        {
+            where.Append(" AND service NOT IN (SELECT value FROM json_each($excluded_services))");
+            parameters.Add(("$excluded_services", JsonArray(excluded)));
+        }
+
         AddFilter(where, parameters, "finding_type", "$finding_type", query.FindingType);
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);

@@ -2,6 +2,28 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.16.0] - 2026-11-09
+
+### Added
+
+- A recap subscription keeps a list of services or leaves some out. `Hub:Recaps:Subscriptions`
+  items take `Services`, the services whose findings a report reads, with `Service` counted among
+  them, and `ExcludedServices`, the services a report of the whole fleet leaves out. Each holds 50
+  names at most, of the shape `Service` already has, and `ExcludedServices` is refused next to
+  `Service` or `Services`, where it would remove nothing. One subscription per project, each with
+  its own e-mails and webhooks, sends each team of one fleet its own recap. The report's scope line
+  names what it leaves out ("every service but a, b", "tous les services sauf a, b"), and a frozen
+  report's `filters` carry `excluded_services`, absent when none is. The Helm chart takes
+  `services` and `excludedServices` on a subscription.
+
+### Fixed
+
+- The recap's service and namespace lists no longer read as empty while their names load. The
+  names were read on the first click, which on a large base took seconds behind one quiet line;
+  they are now read with the recap, and a list opened before they land shows skeleton rows. A
+  failed read is tried again on the list's Retry or the next change of filters, not on every row
+  write. The names read itself takes 0.2 to 0.56 s over 100,000 findings, see BENCHMARKS.md.
+
 ## [0.15.0] - 2026-11-08
 
 ### Added
