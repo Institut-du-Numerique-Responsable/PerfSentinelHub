@@ -65,6 +65,15 @@ public sealed class RecapFilterStorageTests(HubApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Excluded_services_are_left_out_after_the_chosen_ones()
+    {
+        Assert.Equal(["rf-CY"], await ReadAsync(Query() with { ExcludedServices = ["rf-a", "rf-b"] }));
+        Assert.Equal(["rf-BX"],
+            await ReadAsync(Query() with { Services = ["rf-a", "rf-b"], ExcludedServices = ["rf-a"] }));
+        Assert.Equal(FourFindings, await ReadAsync(Query() with { ExcludedServices = [] }));
+    }
+
+    [Fact]
     public async Task An_empty_list_filters_nothing()
     {
         Assert.Equal(4, (await ReadAsync(Query() with { Services = [], Groupings = [] })).Count);

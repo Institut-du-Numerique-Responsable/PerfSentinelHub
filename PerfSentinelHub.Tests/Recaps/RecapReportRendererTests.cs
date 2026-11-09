@@ -314,6 +314,23 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
+    public void The_scope_names_the_services_left_out()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Filters = new RecapFilters("prod", null, null, null, ExcludedServices: ["batch-api", "legacy-api"])
+        };
+
+        Assert.Contains("Scope: environment prod, every service but batch-api, legacy-api",
+            Visible(Html(snapshot)), StringComparison.Ordinal);
+        Assert.Contains("Scope: prod, every service but batch-api, legacy-api",
+            Visible(Html(RecapViews.Frozen(snapshot))), StringComparison.Ordinal);
+        Assert.Contains("Périmètre : environnement prod, tous les services sauf batch-api, legacy-api",
+            Visible(Encoding.UTF8.GetString(RecapReportRenderer.Render(snapshot, HubLang.Fr))),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_scope_names_every_service_and_namespace_chosen()
     {
         var snapshot = RecapSnapshots.Distinctive() with
