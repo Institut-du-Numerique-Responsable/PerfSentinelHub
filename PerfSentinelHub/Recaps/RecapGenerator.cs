@@ -57,11 +57,11 @@ public sealed partial class RecapGenerator(
         if (!RecapSchedule.IsDue(period, coverage, now.ToUnixTimeMilliseconds(), settings.Recaps.MaxDelay))
             return;
 
-        // The validator already refused a list outside the shape, so both reads succeed.
-        RecapFilterValues.TryCanonical(
-            [.. subscription.Services, .. subscription.Service is null ? [] : new[] { subscription.Service }],
-            out var services);
-        RecapFilterValues.TryCanonical(subscription.ExcludedServices, out var excluded);
+        // The validator holds both lists to the shape; one that still fails is refused, since a null list
+        // would read every service and send the whole fleet's findings to this subscription's destinations.
+        if (!RecapFilterValues.TryCanonical(subscription.ChosenServices(), out var services) ||
+            !RecapFilterValues.TryCanonical(subscription.ExcludedServices, out var excluded))
+            throw new InvalidOperationException("The subscription names services outside the shape the Hub reads.");
         var grouping = Single(subscription.Grouping);
         var snapshot = await recaps.ComputeAsync(
             new RecapRequest(

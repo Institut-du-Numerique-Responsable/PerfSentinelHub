@@ -320,10 +320,10 @@ ExcludedServices, Grouping, Webhooks, Emails, Language, Recipients }`. `Name` is
 `Cadences` lists `day`, `week` or `month`, each once, at least one. `Views` lists `pilotage`,
 `tech` or both, each once. `Environment` and `SourceId` must match a declared source, and a
 `SourceId` must belong to the `Environment` when both are set. `Service` and `Grouping` are 1 to
-256 characters with no control character. `Services` and `ExcludedServices` hold 50 names at most,
-each of the same shape, and share none: a report reads the findings of `Service` and `Services`
-together, or of every service when both are empty, less those of `ExcludedServices`, and its
-scope line names both. One subscription per project, each with its own services and
+256 characters with no control character. `Services`, `Service` counted among them, and `ExcludedServices`
+hold 50 names at most, each of the same shape. A report reads the findings of `Service` and
+`Services` together, or, when both are empty, of every service less those of `ExcludedServices`,
+which is refused next to either. Its scope line names what it keeps or leaves out. One subscription per project, each with its own services and
 destinations, is how one fleet sends each team its own recap. `Webhooks` names entries of `Hub:Recaps:Webhooks`, and
 `Emails` holds at most 50 distinct addresses without a display name, which needs
 `Hub:Recaps:Smtp:Host`. A subscription with no destination is valid: it archives its reports and

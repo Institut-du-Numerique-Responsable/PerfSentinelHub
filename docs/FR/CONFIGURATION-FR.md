@@ -344,10 +344,10 @@ et est unique. `Cadences` liste `day`, `week` ou `month`, chacune une fois, au m
 liste `pilotage`, `tech` ou les deux, chacune une fois. `Environment` et `SourceId` doivent
 correspondre à une source déclarée, et un `SourceId` doit appartenir à l'`Environment` quand les
 deux sont posés. `Service` et `Grouping` comptent de 1 à 256 caractères sans caractère de
-contrôle. `Services` et `ExcludedServices` comptent au plus 50 noms de la même forme, sans nom
-commun : un rapport lit les findings de `Service` et `Services` ensemble, ou de tous les services
-quand les deux sont vides, moins ceux de `ExcludedServices`, et sa ligne de périmètre nomme les
-deux. Un abonnement par projet, chacun avec ses services et ses destinations, est la façon
+contrôle. `Services`, `Service` compris, et `ExcludedServices` comptent au plus 50 noms de la
+même forme. Un rapport lit les findings de `Service` et `Services` ensemble, ou, quand les deux
+sont vides, de tous les services moins ceux de `ExcludedServices`, refusé à côté de l'un ou de
+l'autre. Sa ligne de périmètre nomme ce qu'il garde ou laisse de côté. Un abonnement par projet, chacun avec ses services et ses destinations, est la façon
 d'envoyer à chaque équipe d'une même flotte son propre récap. `Webhooks` nomme des entrées de `Hub:Recaps:Webhooks`, et `Emails` compte au plus 50
 adresses distinctes sans nom d'affichage, ce qui exige `Hub:Recaps:Smtp:Host`. Un abonnement sans
 destination est valide : il archive ses rapports et n'en livre aucun.

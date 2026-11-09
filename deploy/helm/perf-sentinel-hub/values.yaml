@@ -133,7 +133,8 @@ hub:
   # past which a finding reads up or down on the recap page. Frozen reports are
   # off until subscriptions lists one: items { name, cadences (day, week,
   # month), views (pilotage, tech), environment, sourceId, service, services,
-  # excludedServices (50 names at most each, none in both), grouping,
+  # excludedServices (50 names at most each, service counted among services;
+  # excludedServices only when service and services are empty), grouping,
   # webhooks (names declared below), emails (needs smtp.host), language (en or
   # fr, default en), recipients (items { address, language }, needs smtp.host) }:
   # a recipient reads its mail in its own language, the rest in the

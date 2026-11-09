@@ -88,7 +88,8 @@ public sealed class RecapNamesBenchmarkTests : IDisposable
                 SELECT signature, source_id, 'l', day, 3 FROM finding_observations;
                 INSERT INTO finding_groupings(signature, source_id, grouping, last_seen_ms)
                 SELECT signature, source_id, 'ns-' || (rowid % 30), {today} * 86400000 FROM finding_sources;
-                INSERT INTO finding_attributes
+                INSERT INTO finding_attributes(
+                  signature, source_id, grouping_key, grouping_value, attr_key, attr_value, last_seen_ms)
                 SELECT signature, source_id, 'k8s.namespace.name', 'ns-' || (rowid % 30), 'team', 'team-' || (rowid % 50), 1
                 FROM finding_sources;
                 """;

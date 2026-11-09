@@ -272,6 +272,12 @@ public sealed record RecapSubscriptionOptions
     public string Language { get; set; } = HubLang.En;
 
     public IReadOnlyList<RecapRecipientOptions> Recipients { get; set; } = [];
+
+    // Service and Services as the one list a report reads, each name once.
+    public string[] ChosenServices()
+    {
+        return [.. Services.Union(Service is null ? [] : new[] { Service }, StringComparer.Ordinal)];
+    }
 }
 
 /// <summary>An address that reads its recap mail in a language of its own, else in its subscription's.</summary>

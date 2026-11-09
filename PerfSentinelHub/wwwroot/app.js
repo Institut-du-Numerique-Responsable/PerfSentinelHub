@@ -7652,8 +7652,9 @@
         const route = recapRoute();
         const key = PSL.recapJobKey(route);
         // The lists' names are read with the recap, not on the first click: on a large base they take
-        // seconds, and a list opened on them read as empty.
-        loadRecapNames();
+        // seconds, and a list opened on them read as empty. Not on a row write's reload (`keep`): a failed
+        // read would run again on each one, and the list's own retry and the next route change are enough.
+        if (!keep) loadRecapNames();
         // Carried with the read, so a job started before midnight UTC keeps the key it was started on.
         route.jobKey = key;
         // Every move when the screen already held them all or a group is being opened whole: a write
