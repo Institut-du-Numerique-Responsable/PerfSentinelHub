@@ -384,3 +384,11 @@ v0.14.0	b71f715	2026-11-04	PASS
 # analysis options and the engine's failure codes. The lab ran with a local,
 # uncommitted Hub image pin and a daemon pin bumped to 0.43.2 in the working tree.
 v0.15.0	c681b80	2026-11-08	PASS
+# v0.16.0: targeted pass at lab commit 66d3f04, a local Release build of Hub
+# 49e7324 (the 0.16.0 bump on PR #167) against the local perf-sentinel 0.43.2
+# binary. hub-recap (local process, 17 checks: carbon, actions, labels, a
+# subscription's frozen report signed to a webhook and mailed, a report hidden
+# from another reader) passed with no fail and no skip, first run. Not run: the
+# other hub scenarios and no cluster, since this release changes only the recap
+# subscriptions' service lists and the recap screen's filter lists.
+v0.16.0	66d3f04	2026-11-09	PASS

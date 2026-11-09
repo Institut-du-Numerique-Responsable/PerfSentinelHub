@@ -531,6 +531,8 @@ export interface RecapSnapshot {
         services?: string[];
         /** Several namespaces chosen, sorted; `grouping` is then null. Absent while one or none is chosen. */
         groupings?: string[];
+        /** The services a frozen report leaves out, sorted. Absent when none is. */
+        excluded_services?: string[];
     };
     comparison_exact: boolean;
     tiles: RecapTiles;

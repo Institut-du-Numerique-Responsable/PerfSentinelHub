@@ -147,7 +147,8 @@ public sealed record FindingQuery(
     string? Grouping = null,
     AccessScope? Access = null,
     IReadOnlyList<string>? Services = null,
-    IReadOnlyList<string>? Groupings = null)
+    IReadOnlyList<string>? Groupings = null,
+    IReadOnlyList<string>? ExcludedServices = null)
 {
     public IReadOnlyList<string>? ServiceValues => ValuesOf(Services, Service);
 

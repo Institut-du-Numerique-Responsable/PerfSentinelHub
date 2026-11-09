@@ -109,6 +109,24 @@ A copy no pattern reads costs every pattern's probe, so a narrow scope costs mor
 than a wide one: the same 12 patterns written to select 90,500 copies take
 0.1 s. Nothing runs this CTE yet.
 
+## Recap filter names over 100,000 findings
+
+`GET /api/recap/filters` lists the services and namespaces a recap may filter
+on. Over 100,000 findings held by two of four daemons each (200,000 copies),
+observed every fifth day over two months, with one namespace and one team per
+copy, a month's two lists take 0.2 and 0.26 s unrestricted (40 services, 30
+namespaces), and 0.48 and 0.56 s through the 12 patterns above. Three runs, within 10 ms of each other.
+Measured by the explicit test `The_recap_names_over_100k_findings_on_two_sources`,
+same machine and build, without `ANALYZE`, which the Hub never runs:
+
+```bash
+./PerfSentinelHub.Tests/bin/Release/net10.0/PerfSentinelHub.Tests \
+  -method '*.The_recap_names_over_100k_findings_on_two_sources' -explicit only -showLiveOutput
+```
+
+The recap screen starts this read with the recap itself, so a list opened a
+few seconds later is already filled.
+
 ## Reproduce
 
 ```bash
