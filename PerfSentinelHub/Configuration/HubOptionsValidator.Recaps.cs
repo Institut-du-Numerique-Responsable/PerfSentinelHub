@@ -92,6 +92,11 @@ public sealed partial class HubOptionsValidator
         ValidateSubscriptionScope(sub, path, options.Sources, errors);
         if (new[] { sub.Service, sub.Grouping }.Any(IsInvalidFilter))
             errors.Add($"{path}:Service and Grouping are 1 to 256 characters with no control character.");
+        if (!RecapFilterValues.TryCanonical(sub.Services, out _) ||
+            !RecapFilterValues.TryCanonical(sub.ExcludedServices, out _) ||
+            sub.ExcludedServices.Intersect(sub.Services.Append(sub.Service ?? ""), StringComparer.Ordinal).Any())
+            errors.Add($"{path}:Services and ExcludedServices hold {RecapFilterValues.MaxValues} names at most, "
+                       + $"each 1 to {RecapFilterValues.MaxChars} characters with no control character, and share none.");
         foreach (var name in sub.Webhooks.Where(name => !webhookNames.Contains(name)))
             errors.Add($"{path}:Webhooks names a webhook Hub:Recaps:Webhooks does not declare: '{name}'.");
         ValidateSubscriptionEmails(sub, path, options.Recaps.Smtp, errors);

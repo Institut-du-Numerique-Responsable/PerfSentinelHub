@@ -57,12 +57,20 @@ public sealed partial class RecapGenerator(
         if (!RecapSchedule.IsDue(period, coverage, now.ToUnixTimeMilliseconds(), settings.Recaps.MaxDelay))
             return;
 
+        // The validator already refused a list outside the shape, so both reads succeed.
+        RecapFilterValues.TryCanonical(
+            [.. subscription.Services, .. subscription.Service is null ? [] : new[] { subscription.Service }],
+            out var services);
+        RecapFilterValues.TryCanonical(subscription.ExcludedServices, out var excluded);
+        var grouping = Single(subscription.Grouping);
         var snapshot = await recaps.ComputeAsync(
             new RecapRequest(
-                kind, period.From, sourceIds, Single(subscription.Service), Single(subscription.Grouping), null,
-                settings.Sources,
-                new RecapFilters(
-                    subscription.Environment, subscription.SourceId, subscription.Service, subscription.Grouping)),
+                kind, period.From, sourceIds, services, grouping, null, settings.Sources,
+                RecapFilters.Of(subscription.Environment, subscription.SourceId, services, grouping) with
+                {
+                    ExcludedServices = excluded
+                },
+                excluded),
             cancellationToken);
         var report = new RecapReportRecord(
             new RecapReportSummary(
@@ -84,7 +92,7 @@ public sealed partial class RecapGenerator(
                 report.Summary.NothingMoved);
     }
 
-    // A subscription filters on one service and one grouping, a choice of a single value.
+    // A subscription filters on one grouping, a choice of a single value.
     private static string[]? Single(string? value)
     {
         return value is null ? null : [value];

@@ -260,6 +260,10 @@ public sealed record RecapSubscriptionOptions
     public string? Environment { get; set; }
     public string? SourceId { get; set; }
     public string? Service { get; set; }
+
+    // A project's services, Service among them, less the ones ExcludedServices leaves out.
+    public IReadOnlyList<string> Services { get; set; } = [];
+    public IReadOnlyList<string> ExcludedServices { get; set; } = [];
     public string? Grouping { get; set; }
     public IReadOnlyList<string> Webhooks { get; set; } = [];
     public IReadOnlyList<string> Emails { get; set; } = [];

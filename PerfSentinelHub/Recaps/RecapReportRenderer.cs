@@ -130,13 +130,14 @@ public static class RecapReportRenderer
     private static string Scope(Page page)
     {
         var filters = page.Snapshot.Filters;
+        var excluded = Named(page, "excluded", Joined(null, filters.ExcludedServices));
         var parts = page.Management
-            ? new[] { filters.Environment, filters.ServiceLabel ?? Joined(filters.Service, filters.Services) }
-                .Where(value => value is not null).Select(value => value!)
+            ? new[] { filters.Environment, filters.ServiceLabel ?? Joined(filters.Service, filters.Services), excluded }
+                .Where(value => !string.IsNullOrEmpty(value)).Select(value => value!)
             : new[]
             {
                 Named(page, "environment", filters.Environment), Named(page, "source", filters.SourceId),
-                Named(page, "service", Joined(filters.Service, filters.Services)),
+                Named(page, "service", Joined(filters.Service, filters.Services)), excluded,
                 Named(page, "grouping", Joined(filters.Grouping, filters.Groupings))
             }.Where(value => value.Length > 0);
         var list = parts.ToList();

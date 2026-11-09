@@ -779,6 +779,34 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void A_subscription_service_list_outside_the_shape_is_refused()
+    {
+        const string message = "Hub:Recaps:Subscriptions:0:Services and ExcludedServices hold 50 names at most, "
+                               + "each 1 to 256 characters with no control character, and share none.";
+        var fiftyOne = Enumerable.Range(0, 51).Select(i => $"svc-{i}").ToArray();
+
+        Assert.Equal(message,
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { Services = ["a\nb"] }))));
+        Assert.Equal(message,
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { ExcludedServices = fiftyOne }))));
+        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with
+        {
+            Services = ["shop", "cart"],
+            ExcludedServices = ["cart"]
+        }))));
+        Assert.Equal(message, Assert.Single(AccessFailures(WithSubscription(Subscription() with
+        {
+            Service = "cart",
+            ExcludedServices = ["cart"]
+        }))));
+        Assert.Empty(AccessFailures(WithSubscription(Subscription() with
+        {
+            Services = ["shop", "cart"],
+            ExcludedServices = ["batch"]
+        })));
+    }
+
+    [Fact]
     public void A_subscription_naming_an_unknown_webhook_is_refused()
     {
         var subscription = Subscription() with { Webhooks = ["ops"] };

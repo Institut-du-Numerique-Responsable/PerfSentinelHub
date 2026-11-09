@@ -216,6 +216,51 @@ public sealed partial class RecapGeneratorTests : IAsyncLifetime
         Assert.Null(snapshot.Filters.Groupings);
     }
 
+    // One subscription per project: one keeps its services, the single Service of older configurations
+    // counted among them; the other reads the rest of the fleet, less the services it leaves out.
+    [Fact]
+    public async Task A_subscription_keeps_its_services_or_leaves_out_its_excluded_ones()
+    {
+        await StartAsync(
+            new RecapSubscriptionOptions
+            {
+                Name = "shop",
+                Cadences = ["week"],
+                Views = [RecapViewNames.Pilotage],
+                Service = "cart-svc",
+                Services = ["order-svc"]
+            },
+            new RecapSubscriptionOptions
+            {
+                Name = "rest",
+                Cadences = ["week"],
+                Views = [RecapViewNames.Pilotage],
+                ExcludedServices = ["cart-svc", "order-svc"]
+            });
+        foreach (var (signature, service) in new[]
+                 {
+                     ("cart", "cart-svc"), ("order", "order-svc"), ("batch", "batch-svc"), ("other", "other-svc")
+                 })
+            await _database.UpsertBatchAsync(
+                new SourceSnapshot("a", "Shop", "prod", "0.37.1"),
+                FindingJson.Batch(FindingJson.Envelope(signature, service: service)),
+                (LastMon + 1) * DayMs + 3_600_000, Token);
+        await LedgerAsync("a", [.. Days(LastMon, 7)]);
+        await LedgerAsync("b", [.. Days(LastMon, 7)]);
+
+        await _generator.RunOnceAsync(Token);
+
+        var reports = await ReportsAsync();
+        var shop = await SnapshotAsync(reports.Single(report => report.Subscription == "shop"));
+        Assert.Equal(["cart", "order"], shop.Priorities.Select(priority => priority.Signature).Order());
+        Assert.Equal(["cart-svc", "order-svc"], shop.Filters.Services);
+        Assert.Null(shop.Filters.ExcludedServices);
+        var rest = await SnapshotAsync(reports.Single(report => report.Subscription == "rest"));
+        Assert.Equal(["batch", "other"], rest.Priorities.Select(priority => priority.Signature).Order());
+        Assert.Null(rest.Filters.Services);
+        Assert.Equal(["cart-svc", "order-svc"], rest.Filters.ExcludedServices);
+    }
+
     // ------------------------------------------------------------ once
 
     [Fact]

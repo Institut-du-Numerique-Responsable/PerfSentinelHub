@@ -315,12 +315,16 @@ Microsoft 365 or Gmail account restricted to OAuth does not offer `AUTH LOGIN`: 
 the organisation's relay instead. `From` is one address with no display name. The password comes
 through a Secret (`Hub__Recaps__Smtp__Password`).
 
-**Subscriptions.** Each one is `{ Name, Cadences, Views, Environment, SourceId, Service, Grouping,
-Webhooks, Emails, Language, Recipients }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
+**Subscriptions.** Each one is `{ Name, Cadences, Views, Environment, SourceId, Service, Services,
+ExcludedServices, Grouping, Webhooks, Emails, Language, Recipients }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
 `Cadences` lists `day`, `week` or `month`, each once, at least one. `Views` lists `pilotage`,
 `tech` or both, each once. `Environment` and `SourceId` must match a declared source, and a
 `SourceId` must belong to the `Environment` when both are set. `Service` and `Grouping` are 1 to
-256 characters with no control character. `Webhooks` names entries of `Hub:Recaps:Webhooks`, and
+256 characters with no control character. `Services` and `ExcludedServices` hold 50 names at most,
+each of the same shape, and share none: a report reads the findings of `Service` and `Services`
+together, or of every service when both are empty, less those of `ExcludedServices`, and its
+scope line names both. One subscription per project, each with its own services and
+destinations, is how one fleet sends each team its own recap. `Webhooks` names entries of `Hub:Recaps:Webhooks`, and
 `Emails` holds at most 50 distinct addresses without a display name, which needs
 `Hub:Recaps:Smtp:Host`. A subscription with no destination is valid: it archives its reports and
 delivers none.
@@ -337,8 +341,8 @@ languages.
 
 Under Helm the block is `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` and
 `publicUrl` follow the settings above. `subscriptions` passes its items as they are, keys in
-camel case: `{ name, cadences, views, environment, sourceId, service, grouping, webhooks,
-emails, language, recipients }`, a recipient being `{ address, language }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
+camel case: `{ name, cadences, views, environment, sourceId, service, services,
+excludedServices, grouping, webhooks, emails, language, recipients }`, a recipient being `{ address, language }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
 come from that Secret. `smtp` takes `host`, `port`, `startTls`, `userName` and `from`, and the
 chart writes it only once `host` is set. `passwordSecretName` and `passwordSecretKey` name the
 Secret holding the password, which reaches the pod as `Hub__Recaps__Smtp__Password`. The chart

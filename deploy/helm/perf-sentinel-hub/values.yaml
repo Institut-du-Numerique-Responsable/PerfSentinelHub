@@ -132,7 +132,8 @@ hub:
   # Review recaps. movementThreshold (above 0, at most 10) is the share of change
   # past which a finding reads up or down on the recap page. Frozen reports are
   # off until subscriptions lists one: items { name, cadences (day, week,
-  # month), views (pilotage, tech), environment, sourceId, service, grouping,
+  # month), views (pilotage, tech), environment, sourceId, service, services,
+  # excludedServices (50 names at most each, none in both), grouping,
   # webhooks (names declared below), emails (needs smtp.host), language (en or
   # fr, default en), recipients (items { address, language }, needs smtp.host) }:
   # a recipient reads its mail in its own language, the rest in the
