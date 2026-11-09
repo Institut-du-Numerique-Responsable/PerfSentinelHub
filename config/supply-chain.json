@@ -303,7 +303,7 @@
       "name": "mcr.microsoft.com/dotnet/runtime-deps",
       "kind": "container",
       "version": "10.0.14-resolute-chiseled-extra",
-      "digest_or_sha": "sha256:9e6ce44af9c4fef28620453d51e9b431f83b9889c6a6b0ce749b2fc958438aa6",
+      "digest_or_sha": "sha256:b43e736c73577b74673b18e8c18b497fa874350a267cb6d6e2688860e92896c6",
       "released_at": "2026-10-25",
       "source": "https://mcr.microsoft.com/v2/dotnet/runtime-deps/manifests/10.0.14-resolute-chiseled-extra",
       "reason": "Official chiseled runtime dependencies image matching .NET 10.0.14."
