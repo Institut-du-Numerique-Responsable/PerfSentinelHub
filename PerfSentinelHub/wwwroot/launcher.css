@@ -2367,6 +2367,16 @@ body[data-screen="report"] .shell-footer {
     color: var(--text-3);
 }
 
+.report-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.report-download .report-engine:empty {
+    display: none;
+}
+
 .report-stage {
     position: relative;
     display: flex;
