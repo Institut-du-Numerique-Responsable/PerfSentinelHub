@@ -162,9 +162,11 @@ public sealed class AuthenticationTests : IAsyncLifetime
 
     [Theory]
     [InlineData("iframe", HttpStatusCode.Unauthorized)]
+    // The launcher's download fetches it: a followed redirect would save the sign-in page as the report.
+    [InlineData("empty", HttpStatusCode.Unauthorized)]
     [InlineData("document", HttpStatusCode.Redirect)]
     [InlineData(null, HttpStatusCode.Redirect)]
-    public async Task A_report_answers_401_in_the_launcher_frame_and_signs_in_as_a_page(
+    public async Task A_report_answers_401_to_the_launcher_and_signs_in_as_a_page(
         string? destination, HttpStatusCode expected)
     {
         using var client = Client();

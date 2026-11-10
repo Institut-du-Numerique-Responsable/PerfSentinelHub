@@ -12472,9 +12472,9 @@
     function renderReportScreen(id) {
         const run = state.run && state.run.id === id ? state.run : null;
         const key = run ? PSL.statusKey(run) : null;
+        const shown = key === 'succeeded' || key === 'empty';
         const stage = el('div', {class: 'report-stage'});
-        const shell = el('div', {class: 'report-shell'},
-            [reportBar(id, run, key === 'succeeded' || key === 'empty'), stage]);
+        const shell = el('div', {class: 'report-shell'}, [reportBar(id, run, shown), stage]);
         if (state.runError === id) {
             stage.appendChild(el('div', {class: 'gone report-gone'}, [unknownRun()]));
             return shell;
@@ -12488,7 +12488,7 @@
             stage.appendChild(loading);
             return shell;
         }
-        if (key !== 'succeeded' && key !== 'empty') {
+        if (!shown) {
             stage.appendChild(reportGone(run, key));
             return shell;
         }

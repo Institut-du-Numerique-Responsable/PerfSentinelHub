@@ -2370,11 +2370,11 @@ body[data-screen="report"] .shell-footer {
 .report-download {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
 }
 
-.report-download .report-engine:empty {
-    display: none;
+/* A margin, not display: none, while empty: a hidden live region leaves the accessibility tree and its message goes unread. */
+.report-download .report-engine:not(:empty) {
+    margin-right: 10px;
 }
 
 .report-stage {
