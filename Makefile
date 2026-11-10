@@ -114,9 +114,8 @@ helm-lint:
 helm-template:
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) >/dev/null
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set ingress=null >/dev/null
-	! helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/deployment.yaml | grep -qE '^      (nodeSelector|tolerations|affinity):'
-	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set nodeSelector.pool=tools --set 'tolerations[0].key=pool' --set 'tolerations[0].operator=Exists' --show-only templates/deployment.yaml | grep -A1 '^      nodeSelector:' | grep -q 'pool: tools'
-	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set 'tolerations[0].key=pool' --set 'tolerations[0].operator=Exists' --show-only templates/deployment.yaml | grep -A2 '^      tolerations:' | grep -q 'key: pool'
+	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/deployment.yaml) && ! printf '%s' "$$out" | grep -qE '^      (nodeSelector|tolerations|affinity):'
+	out=$$(helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --set nodeSelector.pool=tools --set 'tolerations[0].key=pool' --set 'tolerations[0].operator=Exists' --set 'affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight=1' --show-only templates/deployment.yaml) && printf '%s' "$$out" | grep -A1 '^      nodeSelector:' | grep -q 'pool: tools' && printf '%s' "$$out" | grep -A2 '^      tolerations:' | grep -q 'key: pool' && printf '%s' "$$out" | grep -A1 '^      affinity:' | grep -q 'nodeAffinity:'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/configmap.yaml | grep -q '"DetectionRetention":"1100.00:00:00"'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/service.yaml | grep -A2 '^  labels:' | grep -q 'app.kubernetes.io/name: perf-sentinel-hub'
 	helm template test deploy/helm/perf-sentinel-hub $(HELM_TEST_VALUES) --show-only templates/service.yaml | grep -q -- '- name: http'
