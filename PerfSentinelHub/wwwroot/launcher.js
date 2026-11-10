@@ -2160,7 +2160,8 @@
                 io.save(blob, filename);
                 return true;
             });
-        }, function () {
+        }).catch(function () {
+            // The body failing mid-transfer too, not only the request: the caller's button waits on this.
             return false;
         });
     }
@@ -3952,7 +3953,10 @@
         const text = screenText('report');
         const key = statusKey(ctx.run);
         const shown = key === 'succeeded' || key === 'empty';
-        const steps = [guideStep('bar', ['report.bar'], undefined, text)];
+        // The download is in the bar only over a report there is to save.
+        const steps = [guideStep('bar', ['report.bar'], {
+            body: shown ? [text('bar.body'), text('bar.download')] : [text('bar.body')]
+        }, text)];
         if (shown) {
             steps.push(guideStep('frame', ['report.frame'], {
                 body: key === 'empty' ? [text('frame.body'), text('frame.empty')] : [text('frame.body')]

@@ -2,6 +2,28 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.17.0] - 2026-11-10
+
+### Added
+
+- An analysis report downloads as an HTML file. The report screen's bar carries "Download the
+  report" ("Télécharger le rapport") once the run has written one, and saves the bytes the frame
+  shows as `perf-sentinel-report-<id>.html`, readable offline since the engine's report carries its
+  own styles. The file is fetched through the session, so a lapsed one signs back in rather than
+  saving the sign-in page, and a report the Hub no longer serves says so instead of saving nothing.
+  The button leaves the bar once the frame finds the report gone.
+- The Helm chart takes `nodeSelector`, `tolerations` and `affinity`, passed to the pod's spec as
+  they are, so the Hub can run on a dedicated node pool. All three are empty by default and the pod
+  spec is unchanged without them. The PVC is `ReadWriteOnce`, and most block volumes are bound to
+  one zone: a selector naming nodes outside the volume's zone leaves the pod `Pending`.
+
+### Changed
+
+- The build and runtime images move to their rebuilt digests under the same tags,
+  `sdk:10.0.403-resolute-aot` and `runtime-deps:10.0.14-resolute-chiseled-extra`, which carry the
+  base distribution's latest package updates. The CI's actions move to their current releases and
+  the tests to xunit.v3 `4.0.3`; `config/supply-chain.json` records both.
+
 ## [0.16.0] - 2026-11-09
 
 ### Added

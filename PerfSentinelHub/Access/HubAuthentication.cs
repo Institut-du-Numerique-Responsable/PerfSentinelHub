@@ -159,8 +159,8 @@ public static partial class HubAuthentication
 
     // A fetch cannot follow a redirect to the provider's origin. The
     // API says 401 and the launcher reloads itself into the sign-in.
-    // A report says 401 only inside the launcher's frame: a shared
-    // report link opened on its own is a page and signs in like one.
+    // A report says 401 only to the launcher, in its frame or its download's
+    // fetch: a shared report link opened on its own is a page and signs in like one.
     private static void AnswerChallenge(HttpRequest request, HttpResponse response, string redirectUri)
     {
         if (AnswersUnauthorized(request))
@@ -172,7 +172,8 @@ public static partial class HubAuthentication
     private static bool AnswersUnauthorized(HttpRequest request)
     {
         return request.Path.StartsWithSegments("/api") ||
-               (request.Path.StartsWithSegments("/reports") && request.Headers["Sec-Fetch-Dest"] == "iframe");
+               (request.Path.StartsWithSegments("/reports") &&
+                request.Headers["Sec-Fetch-Dest"].ToString() is "iframe" or "empty");
     }
 
     // With access on: the machine token beside the cookie, and "hub" choosing per request.

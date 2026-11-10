@@ -2367,6 +2367,16 @@ body[data-screen="report"] .shell-footer {
     color: var(--text-3);
 }
 
+.report-download {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* A margin, not display: none, while empty: a hidden live region leaves the accessibility tree and its message goes unread. */
+.report-download .report-engine:not(:empty) {
+    margin-right: 10px;
+}
+
 .report-stage {
     position: relative;
     display: flex;

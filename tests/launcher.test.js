@@ -1840,6 +1840,16 @@ test("a download goes through fetch, and a 401 signs back in instead of saving t
     assert.equal(saved.length, 1);
 });
 
+test("a download cut off mid-body reads as not saved, rather than leaving its button waiting", async () => {
+    const env = {
+        fetch: async () => ({status: 200, ok: true, blob: () => Promise.reject(new TypeError("network error"))}),
+        reload: () => assert.fail("no reload for a broken body"),
+        save: () => assert.fail("nothing to save")
+    };
+
+    assert.equal(await PSL.downloadAs("/reports/0123456789abcdef.html", "report.html", env), false);
+});
+
 test("an action owner reads as a name", () => {
     // The SSO display name wins and the full identity stays on hover.
     assert.deepEqual(PSL.ownerLabel("alice.martin@acme.com", null),
@@ -3545,7 +3555,8 @@ const ANALYSIS_SAYS = {
         thresholds: "« Seuils »", error: "« Erreur »", logLive: "pas un flux", elapsedRunning: "La barre mesure",
         elapsedQueued: "démarre quand un worker", elapsedTotal: "Le temps total", tuned: "couleur d'avertissement",
         expires: "Le lien expire dans", caveats: "en anglais", frameEmpty: "Un rapport vide est attendu",
-        pending: "pas encore prêt", finished: "« La relancer avec les mêmes paramètres »", expiredHours: "vivent 72 heures"
+        pending: "pas encore prêt", finished: "« La relancer avec les mêmes paramètres »", expiredHours: "vivent 72 heures",
+        download: "« Télécharger le rapport »"
     },
     en: {
         noSource: "no configured source", noGrant: "No grant", window: "where the window comes from",
@@ -3562,7 +3573,8 @@ const ANALYSIS_SAYS = {
         logLive: "not a stream", elapsedRunning: "The bar measures", elapsedQueued: "starts when a worker",
         elapsedTotal: "The total time", tuned: "warning colour", expires: "The link expires in", caveats: "in English",
         frameEmpty: "An empty report is expected", pending: "not ready yet",
-        finished: "\"Run it again with the same parameters\"", expiredHours: "live 72 hours"
+        finished: "\"Run it again with the same parameters\"", expiredHours: "live 72 hours",
+        download: "\"Download the report\""
     }
 };
 const analysisTest = (name, body) => guideTest(name, body, ANALYSIS_SAYS);
@@ -3732,6 +3744,8 @@ analysisTest("the report shows its frame, or says why there is none", (says) => 
     const shown = reportBy();
     assert.deepEqual(Object.keys(shown), ["bar", "frame", "gone", "end"]);
     assert.deepEqual(shown.frame.anchors, ["report.frame"]);
+    // The bar offers the file only over a report it can save.
+    assert.ok(text(shown.bar).includes(says.download));
     assert.ok(!text(shown.frame).includes(says.frameEmpty));
     assert.ok(text(reportBy({result: {empty: true}}).frame).includes(says.frameEmpty));
     // A report deleted under a run that still reads succeeded is replaced in place by the expired notice.
@@ -3740,6 +3754,7 @@ analysisTest("the report shows its frame, or says why there is none", (says) => 
         [{status: "failed"}, "failed", says.finished], [{status: "expired"}, "expired", says.finished]]) {
         const steps = reportBy(over);
         assert.ok(!("frame" in steps), view);
+        assert.ok(!text(steps.bar).includes(says.download), view);
         assert.equal(steps.gone.title, PSL.t("report.gone." + view + ".title"), view);
         assert.ok(text(steps.gone).includes(phrase), view);
     }

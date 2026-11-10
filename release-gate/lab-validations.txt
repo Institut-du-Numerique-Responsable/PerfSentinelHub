@@ -392,3 +392,19 @@ v0.15.0	c681b80	2026-11-08	PASS
 # other hub scenarios and no cluster, since this release changes only the recap
 # subscriptions' service lists and the recap screen's filter lists.
 v0.16.0	66d3f04	2026-11-09	PASS
+# v0.17.0: full Hub pass at lab commit dd2addb on the cluster rebuilt that day
+# (make up-cni), a Release image of Hub a47815c (PR #169 head: the 0.17.0 bump,
+# the report download, the Helm scheduling keys, and main's rebuilt sdk and
+# runtime-deps base images) against the published perf-sentinel 0.43.2 image
+# (sha256:3a2623b5). All fourteen hub scenarios passed with no fail and no skip:
+# hub-ingestion, hub-incidents-mirror, hub-incidents-push, hub-correlations-push,
+# hub-disclosures, hub-source-reachability, hub-derived-status,
+# hub-detection-volume, hub-recap, hub-card, hub-lineage-mutation,
+# hub-retention-purge, hub-plugin-contract and hub-access-control.
+# hub-incidents-push passed on its second run: the first stopped at pre-flight on
+# ErrImageNeverPull, its isolated daemon scheduled on a node the published daemon
+# image had not been pulled to yet. dd2addb restores [daemon.hub_export]
+# enabled = false in the committed daemon manifest, whose leak made up-cni stop
+# before the network policies; they were applied by hand. The lab ran with
+# local, uncommitted Hub image and hub_export pins.
+v0.17.0	dd2addb	2026-11-10	PASS
