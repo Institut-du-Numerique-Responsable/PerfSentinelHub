@@ -282,3 +282,9 @@ probes:
 resources:
   requests: { cpu: 50m, memory: 64Mi }
   limits: { cpu: 500m, memory: 2Gi }
+# Where the pod may run, passed to its spec as they are. The PVC is ReadWriteOnce
+# and most block volumes are bound to one zone: a nodeSelector that names nodes
+# outside the volume's zone leaves the pod Pending.
+nodeSelector: {}
+tolerations: []
+affinity: {}

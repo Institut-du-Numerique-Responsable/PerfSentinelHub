@@ -2,6 +2,15 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- The Helm chart takes `nodeSelector`, `tolerations` and `affinity`, passed to the pod's spec as
+  they are, so the Hub can run on a dedicated node pool. All three are empty by default and the pod
+  spec is unchanged without them. The PVC is `ReadWriteOnce`, and most block volumes are bound to
+  one zone: a selector naming nodes outside the volume's zone leaves the pod `Pending`.
+
 ## [0.16.0] - 2026-11-09
 
 ### Added
