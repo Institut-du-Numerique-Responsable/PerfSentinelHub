@@ -3,6 +3,9 @@
   "type": "object",
   "required": ["image", "hub", "sources", "persistence", "probes", "resources"],
   "properties": {
+    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "tolerations": { "type": "array", "items": { "type": "object" } },
+    "affinity": { "type": "object" },
     "image": {
       "type": "object",
       "required": ["repository", "digest", "pullPolicy"],
