@@ -408,3 +408,11 @@ v0.16.0	66d3f04	2026-11-09	PASS
 # before the network policies; they were applied by hand. The lab ran with
 # local, uncommitted Hub image and hub_export pins.
 v0.17.0	dd2addb	2026-11-10	PASS
+# v0.17.1 targeted pass on a local Release build of release/0.17.1 (97e1103) and
+# a local perf-sentinel 0.44.1 release binary, no cluster: the engine repin to
+# 0.44.1 and the recaptured demo daemons. hub-detection-volume (the same total
+# by poll and push, two ledgers over a restart), hub-recap (17 checks) and
+# hub-card (24 checks: cards in png, svg, jxl and pdf verified offline, the
+# watch list to a real daemon). All PASS, no skip. Not run: the cluster hub
+# scenarios, unchanged Hub code since v0.17.0.
+v0.17.1	170f080	2026-11-11	PASS
