@@ -2,6 +2,21 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.44.1` as its analysis engine, repinned by digest from
+  `0.43.2`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.44.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. The engine masks upper-case alphanumeric codes and
+  hex ids in URL paths as `{id}`, and the ids of a source endpoint taken from the raw URL when a
+  service sets no `http.route`. A finding on such a URL gets a new signature, so the Hub lists it as
+  a new row and its acknowledgment must be renewed, while a batch reading thousands of records by
+  their number now sends one signature instead of one per record. The share cards and disclosure
+  PDFs the engine renders keep the same bytes. No report format changes, and the disclosure schema
+  stays `perf-sentinel-report/v1.8`.
+
 ## [0.17.0] - 2026-11-10
 
 ### Added
