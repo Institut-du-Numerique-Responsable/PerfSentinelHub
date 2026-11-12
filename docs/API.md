@@ -819,6 +819,8 @@ set is rejected at startup. `Confidentiality` (which must stay `public`) and `Sh
 are validated but unused here.
 
 Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart resumes them. A
+subscription with `DeliverAt` holds its deliveries until that time, see
+[CONFIGURATION.md](CONFIGURATION.md#recap-reports). A
 delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a
 request. So does one, webhook or e-mail, whose target the report's subscription no longer lists in
 the configuration in force when it is sent: taking an address or a webhook off a subscription

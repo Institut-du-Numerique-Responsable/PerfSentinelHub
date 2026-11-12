@@ -2,6 +2,20 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- A recap subscription takes `DeliverAt`, `HH:mm`, and `TimeZone`, an IANA zone, `UTC` by default.
+  A report is still frozen as soon as its period closes, often in the night, but its webhooks and
+  e-mails wait for the first `DeliverAt` time in `TimeZone` at or after that: a weekly recap frozen
+  on Monday at 01:30 in Paris with `DeliverAt: "09:00"` and `TimeZone: "Europe/Paris"` leaves at
+  09:00 that Monday, and one frozen past 09:00 waits for the next day's. A time a clock change
+  skips moves an hour on. `TimeZone` without `DeliverAt`, a zone the system does not know and a
+  time outside `00:00` to `23:59` are refused at startup. The delivery row keeps its due time, so a
+  restart in between keeps waiting. The Helm chart takes `deliverAt` and `timeZone` on a
+  subscription. `docs/CONFIGURATION.md`, `docs/API.md` and their French mirrors describe it.
+
 ## [0.17.1] - 2026-11-11
 
 ### Changed

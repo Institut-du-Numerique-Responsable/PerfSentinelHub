@@ -884,7 +884,8 @@ Un webhook de récap dont `IncludeShareLink` est activé est refusé au démarra
 (qui doit rester `public`) et `ShareLinkDays` (de 1 à 30) sont validés mais sans effet ici.
 
 Les livraisons tournent toutes les 15 secondes depuis la table `recap_deliveries`, si bien qu'un
-redémarrage les reprend. Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
+redémarrage les reprend. Un abonnement avec `DeliverAt` retient ses livraisons jusqu'à cette heure, voir
+[CONFIGURATION-FR.md](CONFIGURATION-FR.md#rapports-de-récap). Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
 été purgé entre-temps, échoue sans requête. De même pour une livraison, webhook ou e-mail, dont la
 souscription du rapport ne liste plus la cible dans la configuration en vigueur à l'envoi : retirer
 une adresse ou un webhook d'une souscription arrête dès le redémarrage suivant les livraisons

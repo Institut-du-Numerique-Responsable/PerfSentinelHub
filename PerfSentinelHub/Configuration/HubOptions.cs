@@ -273,6 +273,13 @@ public sealed record RecapSubscriptionOptions
 
     public IReadOnlyList<RecapRecipientOptions> Recipients { get; set; } = [];
 
+    // HH:mm in TimeZone: a frozen report's deliveries wait for the first such time at or after
+    // it is generated. Null sends them at once.
+    public string? DeliverAt { get; set; }
+
+    // The IANA zone DeliverAt reads in, UTC when null.
+    public string? TimeZone { get; set; }
+
     // Service and Services as the one list a report reads, each name once.
     public string[] ChosenServices()
     {

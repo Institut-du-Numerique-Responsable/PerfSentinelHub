@@ -18,8 +18,17 @@ public sealed partial class HubDatabase
                                                  FROM recap_deliveries
                                                  """;
 
+    /// <summary>Stores a report and its pending deliveries, due at once.</summary>
+    public Task<bool> InsertRecapReportAsync(
+        RecapReportRecord report,
+        IReadOnlyList<(string Channel, string Target)> deliveries,
+        CancellationToken cancellationToken)
+    {
+        return InsertRecapReportAsync(report, deliveries, report.Summary.GeneratedAtMs, cancellationToken);
+    }
+
     /// <summary>
-    ///     Stores a report and its pending deliveries, due at once, in one transaction. False when
+    ///     Stores a report and its pending deliveries, due at dueAtMs, in one transaction. False when
     ///     the subscription already holds a report for that cadence and period: nothing is written.
     ///     It waits for the write lock even from a request: the report it stores can take minutes to
     ///     compute, and giving up would throw that work away.
@@ -27,6 +36,7 @@ public sealed partial class HubDatabase
     public Task<bool> InsertRecapReportAsync(
         RecapReportRecord report,
         IReadOnlyList<(string Channel, string Target)> deliveries,
+        long dueAtMs,
         CancellationToken cancellationToken)
     {
         return WriteTransactionAsync(false, async (connection, transaction) =>
@@ -35,7 +45,7 @@ public sealed partial class HubDatabase
                 return false;
             foreach (var (channel, target) in deliveries)
                 await InsertRecapDeliveryRowAsync(
-                    connection, transaction, report.Summary, channel, target, cancellationToken);
+                    connection, transaction, report.Summary, channel, target, dueAtMs, cancellationToken);
             return true;
         }, cancellationToken);
     }
@@ -80,6 +90,7 @@ public sealed partial class HubDatabase
         RecapReportSummary report,
         string channel,
         string target,
+        long dueAtMs,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
@@ -87,7 +98,7 @@ public sealed partial class HubDatabase
         command.CommandText = """
                               INSERT INTO recap_deliveries(
                                 id, report_id, channel, target, state, created_at_ms, next_attempt_ms)
-                              VALUES ($id, $report_id, $channel, $target, $state, $at_ms, $at_ms);
+                              VALUES ($id, $report_id, $channel, $target, $state, $at_ms, $due_ms);
                               """;
         command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("$report_id", report.Id);
@@ -95,6 +106,7 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue("$target", target);
         command.Parameters.AddWithValue("$state", DeliveryStates.Pending);
         command.Parameters.AddWithValue("$at_ms", report.GeneratedAtMs);
+        command.Parameters.AddWithValue("$due_ms", dueAtMs);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

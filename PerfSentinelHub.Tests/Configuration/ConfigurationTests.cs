@@ -691,6 +691,30 @@ public sealed class ConfigurationTests
     }
 
     [Theory]
+    [InlineData("9:00")]
+    [InlineData("24:00")]
+    [InlineData("09:00:00")]
+    [InlineData("")]
+    public void A_deliver_at_outside_hh_mm_is_refused(string deliverAt)
+    {
+        Assert.Equal("Hub:Recaps:Subscriptions:0:DeliverAt must be HH:mm, from 00:00 to 23:59.",
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { DeliverAt = deliverAt }))));
+    }
+
+    [Fact]
+    public void A_time_zone_needs_a_deliver_at_and_a_name_the_system_knows()
+    {
+        Assert.Equal("Hub:Recaps:Subscriptions:0:TimeZone goes with DeliverAt.",
+            Assert.Single(AccessFailures(WithSubscription(Subscription() with { TimeZone = "Europe/Paris" }))));
+        Assert.Equal(
+            "Hub:Recaps:Subscriptions:0:TimeZone must be an IANA time zone the system knows, such as Europe/Paris.",
+            Assert.Single(AccessFailures(WithSubscription(
+                Subscription() with { DeliverAt = "09:00", TimeZone = "Europe/Nowhere" }))));
+        Assert.Empty(AccessFailures(WithSubscription(
+            Subscription() with { DeliverAt = "09:00", TimeZone = "Europe/Paris" })));
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("management")]
     [InlineData("tech,tech")]

@@ -316,7 +316,7 @@ the organisation's relay instead. `From` is one address with no display name. Th
 through a Secret (`Hub__Recaps__Smtp__Password`).
 
 **Subscriptions.** Each one is `{ Name, Cadences, Views, Environment, SourceId, Service, Services,
-ExcludedServices, Grouping, Webhooks, Emails, Language, Recipients }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
+ExcludedServices, Grouping, Webhooks, Emails, Language, Recipients, DeliverAt, TimeZone }`. `Name` is 1 to 64 ASCII letters, digits, `.`, `_` or `-`, and unique.
 `Cadences` lists `day`, `week` or `month`, each once, at least one. `Views` lists `pilotage`,
 `tech` or both, each once. `Environment` and `SourceId` must match a declared source, and a
 `SourceId` must belong to the `Environment` when both are set. `Service` and `Grouping` are 1 to
@@ -339,10 +339,19 @@ not the report's. An address appears in one list only, ignoring case, and `Email
 hold 50 addresses at most together. A webhook's JSON keys and other values stay the same in both
 languages.
 
+**Delivery time.** A report is frozen once its period has closed, often in the night, and its
+deliveries leave at once. `DeliverAt`, `HH:mm` from `00:00` to `23:59`, holds them until the first
+such time at or after the report is frozen, read in `TimeZone`: an IANA zone such as `Europe/Paris`,
+`UTC` when absent, and refused without `DeliverAt`. A weekly report frozen on Monday at 01:30 in
+Paris with `DeliverAt: "09:00"` leaves at 09:00 that Monday; one frozen at 09:30 leaves at 09:00 the
+next day, so a reader gets it at the hour they expect. A time a clock change skips moves an hour on.
+The report itself is stored and readable on the Hub as soon as it is frozen; only its webhooks and
+e-mails wait, and a restart in between keeps them waiting.
+
 Under Helm the block is `hub.recaps`. `movementThreshold`, `retention`, `maxDelay` and
 `publicUrl` follow the settings above. `subscriptions` passes its items as they are, keys in
 camel case: `{ name, cadences, views, environment, sourceId, service, services,
-excludedServices, grouping, webhooks, emails, language, recipients }`, a recipient being `{ address, language }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
+excludedServices, grouping, webhooks, emails, language, recipients, deliverAt, timeZone }`, a recipient being `{ address, language }`. A webhook is `{ name, secretName, urlKey, secretKey }`: its URL and its secret both
 come from that Secret. `smtp` takes `host`, `port`, `startTls`, `userName` and `from`, and the
 chart writes it only once `host` is set. `passwordSecretName` and `passwordSecretKey` name the
 Secret holding the password, which reaches the pod as `Hub__Recaps__Smtp__Password`. The chart

@@ -99,6 +99,20 @@ public sealed class RecapReportStorageTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Deliveries_wait_for_the_due_time_they_are_given()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var due = NowMs + 3_600_000;
+
+        Assert.True(await _database.InsertRecapReportAsync(
+            Report("r1", "weekly"), [(RecapChannels.Webhook, "ops")], due, cancellationToken));
+
+        Assert.Equal(due, Assert.Single(await _database.ListRecapDeliveriesAsync(["r1"], cancellationToken)).NextAttemptMs);
+        Assert.Empty(await _database.DueRecapDeliveriesAsync(due - 1, cancellationToken));
+        Assert.Single(await _database.DueRecapDeliveriesAsync(due, cancellationToken));
+    }
+
+    [Fact]
     public async Task Deliveries_land_with_their_report_pending_and_due_at_once()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

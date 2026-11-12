@@ -1,3 +1,4 @@
+using System.Globalization;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Recaps;
@@ -5,6 +6,59 @@ namespace PerfSentinelHub.Recaps;
 /// <summary>Pure rules of the scheduled reports: when a closed period is due and which sources a scope names.</summary>
 public static class RecapSchedule
 {
+    /// <summary>A DeliverAt value: HH:mm, 00:00 to 23:59.</summary>
+    public static bool TryParseDeliverAt(string? value, out TimeOnly time)
+    {
+        return TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time);
+    }
+
+    /// <summary>A TimeZone value, an IANA id the system knows; null reads as UTC.</summary>
+    public static bool TryFindTimeZone(string? id, out TimeZoneInfo zone)
+    {
+        zone = TimeZoneInfo.Utc;
+        if (id is null)
+            return true;
+        try
+        {
+            zone = TimeZoneInfo.FindSystemTimeZoneById(id);
+            return true;
+        }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>When a subscription's report generated at generatedAtMs may leave: at once without DeliverAt.</summary>
+    public static long DeliveryDueMs(long generatedAtMs, RecapSubscriptionOptions subscription)
+    {
+        return TryParseDeliverAt(subscription.DeliverAt, out var deliverAt) &&
+               TryFindTimeZone(subscription.TimeZone, out var zone)
+            ? DeliveryDueMs(generatedAtMs, deliverAt, zone)
+            : generatedAtMs;
+    }
+
+    /// <summary>
+    ///     The first deliverAt local time in zone at or after generatedAtMs. A report frozen past that
+    ///     time waits for the next day's, so a recipient always reads it at the hour they expect.
+    /// </summary>
+    public static long DeliveryDueMs(long generatedAtMs, TimeOnly deliverAt, TimeZoneInfo zone)
+    {
+        var generated = DateTimeOffset.FromUnixTimeMilliseconds(generatedAtMs);
+        var localDay = TimeZoneInfo.ConvertTime(generated, zone).Date;
+        for (var day = 0; ; day++)
+        {
+            var local = localDay.AddDays(day) + deliverAt.ToTimeSpan();
+            // shortcut: a time a DST change skips moves an hour on, the gap of every zone with DST
+            // today; an exotic half-hour gap would land 30 minutes late.
+            if (zone.IsInvalidTime(local))
+                local = local.AddHours(1);
+            var candidate = new DateTimeOffset(local, zone.GetUtcOffset(local));
+            if (candidate >= generated)
+                return candidate.ToUnixTimeMilliseconds();
+        }
+    }
+
     /// <summary>
     ///     False while the period runs. Once it has ended, true when every source that read a ledger
     ///     during it holds a sealed row for its last day, or when the max delay has passed. A source
