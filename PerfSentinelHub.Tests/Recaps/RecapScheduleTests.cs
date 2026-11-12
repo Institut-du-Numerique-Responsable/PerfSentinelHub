@@ -139,6 +139,15 @@ public sealed class RecapScheduleTests
     }
 
     [Fact]
+    public void A_time_the_clocks_go_back_over_leaves_at_its_first_occurrence()
+    {
+        // 2026-10-25 02:30 happens twice in Paris: at 00:30Z (CEST) and again at 01:30Z (CET).
+        Assert.Equal(Utc(10, 25, 0, 30), RecapSchedule.DeliveryDueMs(Utc(10, 24, 22), new TimeOnly(2, 30), Paris));
+        // Frozen between the two, it takes the second rather than waiting a day.
+        Assert.Equal(Utc(10, 25, 1, 30), RecapSchedule.DeliveryDueMs(Utc(10, 25, 1), new TimeOnly(2, 30), Paris));
+    }
+
+    [Fact]
     public void Without_deliver_at_a_report_is_due_when_generated()
     {
         var subscription = new RecapSubscriptionOptions { Name = "w", Cadences = ["week"], Views = ["pilotage"] };

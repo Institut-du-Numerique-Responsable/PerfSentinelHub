@@ -369,7 +369,8 @@ première de ces heures à partir du moment où le rapport est figé, lue dans `
 IANA comme `Europe/Paris`, `UTC` en son absence, et refusé sans `DeliverAt`. Un rapport hebdomadaire
 figé le lundi à 01:30 à Paris avec `DeliverAt: "09:00"` part à 09:00 ce lundi ; un rapport figé à
 09:30 part à 09:00 le lendemain, pour qu'un lecteur le reçoive à l'heure qu'il attend. Une heure
-qu'un changement d'heure saute avance d'une heure. Le rapport lui-même est rangé et lisible sur le
+qu'un changement d'heure saute avance d'une heure, et une heure que le retour à l'heure d'hiver fait
+vivre deux fois part à sa première occurrence. Le rapport lui-même est rangé et lisible sur le
 Hub dès qu'il est figé ; seuls ses webhooks et ses e-mails attendent, et un redémarrage entre-temps
 les laisse attendre.
 

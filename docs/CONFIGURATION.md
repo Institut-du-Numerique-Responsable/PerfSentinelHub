@@ -344,7 +344,8 @@ deliveries leave at once. `DeliverAt`, `HH:mm` from `00:00` to `23:59`, holds th
 such time at or after the report is frozen, read in `TimeZone`: an IANA zone such as `Europe/Paris`,
 `UTC` when absent, and refused without `DeliverAt`. A weekly report frozen on Monday at 01:30 in
 Paris with `DeliverAt: "09:00"` leaves at 09:00 that Monday; one frozen at 09:30 leaves at 09:00 the
-next day, so a reader gets it at the hour they expect. A time a clock change skips moves an hour on.
+next day, so a reader gets it at the hour they expect. A time a clock change skips moves an hour on,
+and one the clocks go back over leaves at its first occurrence.
 The report itself is stored and readable on the Hub as soon as it is frozen; only its webhooks and
 e-mails wait, and a restart in between keeps them waiting.
 

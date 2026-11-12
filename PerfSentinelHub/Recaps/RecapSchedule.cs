@@ -53,9 +53,16 @@ public static class RecapSchedule
             // today; an exotic half-hour gap would land 30 minutes late.
             if (zone.IsInvalidTime(local))
                 local = local.AddHours(1);
-            var candidate = new DateTimeOffset(local, zone.GetUtcOffset(local));
-            if (candidate >= generated)
-                return candidate.ToUnixTimeMilliseconds();
+            // A time the clocks go back over happens twice: the first one, the larger offset, comes first.
+            TimeSpan[] offsets = zone.IsAmbiguousTime(local)
+                ? [.. zone.GetAmbiguousTimeOffsets(local).OrderDescending()]
+                : [zone.GetUtcOffset(local)];
+            foreach (var offset in offsets)
+            {
+                var candidate = new DateTimeOffset(local, offset);
+                if (candidate >= generated)
+                    return candidate.ToUnixTimeMilliseconds();
+            }
         }
     }
 

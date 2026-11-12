@@ -11,7 +11,7 @@ All notable changes to PerfSentinelHub are recorded here.
   e-mails wait for the first `DeliverAt` time in `TimeZone` at or after that: a weekly recap frozen
   on Monday at 01:30 in Paris with `DeliverAt: "09:00"` and `TimeZone: "Europe/Paris"` leaves at
   09:00 that Monday, and one frozen past 09:00 waits for the next day's. A time a clock change
-  skips moves an hour on. `TimeZone` without `DeliverAt`, a zone the system does not know and a
+  skips moves an hour on, and one the clocks go back over leaves at its first occurrence. `TimeZone` without `DeliverAt`, a zone the system does not know and a
   time outside `00:00` to `23:59` are refused at startup. The delivery row keeps its due time, so a
   restart in between keeps waiting, and the Reports panel says when a held delivery leaves. The Helm
   chart takes `deliverAt` and `timeZone` on a subscription. `docs/CONFIGURATION.md`, `docs/API.md` and their French mirrors describe it.
