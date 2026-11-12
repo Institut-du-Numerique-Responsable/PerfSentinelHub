@@ -64,11 +64,16 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
             Assert.Single(action.Events));
     }
 
-    [Fact]
-    public async Task Take_with_a_session_display_name_returns_it()
+    [Theory]
+    [InlineData("POST")]
+    [InlineData("PATCH")]
+    public async Task Take_with_a_session_display_name_returns_it(string method)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var signature = await SeedAsync("session-display");
+        var signature = await SeedAsync("session-display-" + method);
+        // A PATCH takes the action over from somebody else.
+        if (method == "PATCH")
+            (await SendAsync("POST", Body(signature, "in_progress", "bob"))).Dispose();
         await using var provider = await FakeProvider.StartAsync(new Dictionary<string, string>
         {
             ["alice"] = """{"email":"alice@acme.com","name":"Alice Martin"}"""
@@ -87,18 +92,20 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
         });
         using var client = FakeProvider.Client(signedIn);
         using var callback = await FakeProvider.SignInAsync(client, "alice");
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/actions");
+        using var request = new HttpRequestMessage(new HttpMethod(method), "/api/actions");
         request.Headers.Add("Cookie", FakeProvider.SessionCookie(callback));
         request.Content = new StringContent(Body(signature, take: true), Encoding.UTF8, "application/json");
 
         using var response = await client.SendAsync(request, cancellationToken);
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(method == "POST" ? HttpStatusCode.Created : HttpStatusCode.OK, response.StatusCode);
         var body = await JsonOf(response);
         Assert.Equal("alice@acme.com", body["owner"]!.GetValue<string>());
         Assert.Equal("Alice Martin", body["owner_display"]!.GetValue<string>());
         var action = Assert.Single(await ReadAsync(signature));
-        Assert.Equal("Alice Martin", Assert.Single(action.Events).OwnerDisplay);
+        Assert.Equal("Alice Martin", action.Events[^1].OwnerDisplay);
+        // A take files one event, and a take over one more.
+        Assert.Equal(method == "POST" ? 1 : 2, action.Events.Count);
     }
 
     [Fact]
@@ -234,15 +241,33 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
     }
 
     [Fact]
-    public async Task A_patch_cannot_take()
+    public async Task A_patch_take_hands_the_action_to_the_caller_and_keeps_its_status()
     {
         var signature = await SeedAsync("patch-take");
-        using var created = await SendAsync("POST", Body(signature, "todo"));
+        using var created = await SendAsync("POST", Body(signature, "todo", "bob"));
 
         using var response = await SendAsync("PATCH", Body(signature, take: true));
 
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await JsonOf(response);
+        Assert.Equal("todo", body["status"]!.GetValue<string>());
+        Assert.Equal("alice", body["owner"]!.GetValue<string>());
+        var action = Assert.Single(await ReadAsync(signature));
+        Assert.Equal(new StoredActionEvent("todo", "todo", "alice", null, "alice", NowMs), action.Events[^1]);
+    }
+
+    [Theory]
+    [InlineData("""{"signature":"SIG","take":true,"status":"todo"}""")]
+    [InlineData("""{"signature":"SIG","take":true,"owner":null}""")]
+    public async Task A_patch_take_with_a_status_or_an_owner_is_a_400(string body)
+    {
+        var signature = await SeedAsync("patch-take-plus");
+        using var created = await SendAsync("POST", Body(signature, "todo", "bob"));
+
+        using var response = await SendAsync("PATCH", body.Replace("SIG", signature, StringComparison.Ordinal));
+
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("take applies to a new action only.", await DetailAsync(response));
+        Assert.Equal("take cannot be combined with status or owner.", await DetailAsync(response));
     }
 
     [Theory]

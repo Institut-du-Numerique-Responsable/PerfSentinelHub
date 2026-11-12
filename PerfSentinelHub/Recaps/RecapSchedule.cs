@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Recaps;
@@ -5,6 +7,68 @@ namespace PerfSentinelHub.Recaps;
 /// <summary>Pure rules of the scheduled reports: when a closed period is due and which sources a scope names.</summary>
 public static class RecapSchedule
 {
+    /// <summary>A DeliverAt value: HH:mm, 00:00 to 23:59.</summary>
+    public static bool TryParseDeliverAt(string? value, out TimeOnly time)
+    {
+        return TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time);
+    }
+
+    /// <summary>A TimeZone value, an IANA id the system knows; null reads as UTC.</summary>
+    public static bool TryFindTimeZone(string? id, out TimeZoneInfo zone)
+    {
+        zone = TimeZoneInfo.Utc;
+        if (id is null)
+            return true;
+        try
+        {
+            zone = TimeZoneInfo.FindSystemTimeZoneById(id);
+            return true;
+        }
+        // The third is a zoneinfo directory, such as Europe, which the runtime cannot read as a file.
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException
+                                              or SecurityException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>When a subscription's report generated at generatedAtMs may leave: at once without DeliverAt.</summary>
+    public static long DeliveryDueMs(long generatedAtMs, RecapSubscriptionOptions subscription)
+    {
+        return TryParseDeliverAt(subscription.DeliverAt, out var deliverAt) &&
+               TryFindTimeZone(subscription.TimeZone, out var zone)
+            ? DeliveryDueMs(generatedAtMs, deliverAt, zone)
+            : generatedAtMs;
+    }
+
+    /// <summary>
+    ///     The first deliverAt local time in zone at or after generatedAtMs. A report frozen past that
+    ///     time waits for the next day's, so a recipient always reads it at the hour they expect.
+    /// </summary>
+    public static long DeliveryDueMs(long generatedAtMs, TimeOnly deliverAt, TimeZoneInfo zone)
+    {
+        var generated = DateTimeOffset.FromUnixTimeMilliseconds(generatedAtMs);
+        var localDay = TimeZoneInfo.ConvertTime(generated, zone).Date;
+        for (var day = 0; ; day++)
+        {
+            var local = localDay.AddDays(day) + deliverAt.ToTimeSpan();
+            // A time a DST change skips moves on by whole hours until it exists: one hour almost
+            // everywhere, two in Troll, and a half-hour gap such as Lord Howe's lands 30 minutes late.
+            while (zone.IsInvalidTime(local))
+                local = local.AddHours(1);
+            // A time the clocks go back over happens twice: the first one, the larger offset, comes first.
+            TimeSpan[] offsets = zone.IsAmbiguousTime(local)
+                ? [.. zone.GetAmbiguousTimeOffsets(local).OrderDescending()]
+                : [zone.GetUtcOffset(local)];
+            foreach (var offset in offsets)
+            {
+                var candidate = new DateTimeOffset(local, offset);
+                if (candidate >= generated)
+                    return candidate.ToUnixTimeMilliseconds();
+            }
+        }
+    }
+
     /// <summary>
     ///     False while the period runs. Once it has ended, true when every source that read a ledger
     ///     during it holds a sealed row for its last day, or when the max delay has passed. A source

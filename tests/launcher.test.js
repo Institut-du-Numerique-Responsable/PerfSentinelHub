@@ -1850,6 +1850,28 @@ test("a download cut off mid-body reads as not saved, rather than leaving its bu
     assert.equal(await PSL.downloadAs("/reports/0123456789abcdef.html", "report.html", env), false);
 });
 
+test("the people an action can be handed to are the ones the recap already names", () => {
+    const action = (owner, display, events) => ({action: {status: "todo", owner, owner_display: display, events}});
+    const priorities = [
+        action("bob@acme.com", "Bob Durand", [
+            {from: null, to: "todo", owner: "carol@acme.com", owner_display: null, by: "dave.roux@acme.com"},
+            {from: "todo", to: "todo", owner: "bob@acme.com", owner_display: "Bob Durand", by: "machine:ci"}
+        ]),
+        action("alice@acme.com", "Alice Martin"),
+        action("carol@acme.com", "Carol Dupont"),
+        action(null, null),
+        {action: null}
+    ];
+
+    // Each identity once, with the best name known for it; the caller and machines are left out.
+    assert.deepEqual(PSL.recapOwnerChoices(priorities, "alice@acme.com"), [
+        {value: "bob@acme.com", label: "Bob Durand"},
+        {value: "carol@acme.com", label: "Carol Dupont"},
+        {value: "dave.roux@acme.com", label: "Dave Roux"}
+    ]);
+    assert.deepEqual(PSL.recapOwnerChoices([], null), []);
+});
+
 test("an action owner reads as a name", () => {
     // The SSO display name wins and the full identity stays on hover.
     assert.deepEqual(PSL.ownerLabel("alice.martin@acme.com", null),
@@ -2383,6 +2405,14 @@ test("a recap delivery reads as where it went and how it fared", () => {
         "webhook ops: pending (500), 3 tries");
     assert.equal(PSL.recapDeliveryText({channel: "webhook", target: "ops", state: "pending", attempts: 2}),
         "webhook ops: pending, 2 tries");
+    // Held for its DeliverAt time: the due time follows, and only before the first try.
+    const generated = Date.UTC(2026, 10, 9, 0, 30);
+    const held = {channel: "webhook", target: "ops", state: "pending", attempts: 0, next_attempt_ms: Date.UTC(2026, 10, 9, 8)};
+    // In the runner's own zone, whose offset may not be whole hours or may fall on the day before.
+    assert.equal(PSL.recapDeliveryText(held, generated),
+        "webhook ops: pending, leaves at " + PSL.localTime(held.next_attempt_ms));
+    assert.equal(PSL.recapDeliveryText({...held, next_attempt_ms: generated}, generated), "webhook ops: pending");
+    assert.equal(PSL.recapDeliveryText({...held, attempts: 1}, generated), "webhook ops: pending, 1 try");
 });
 
 test("a generate request carries the screen's period and filters, and a date only when one is set", () => {

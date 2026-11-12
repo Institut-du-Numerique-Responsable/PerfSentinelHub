@@ -103,6 +103,18 @@ public sealed partial class HubOptionsValidator
         foreach (var name in sub.Webhooks.Where(name => !webhookNames.Contains(name)))
             errors.Add($"{path}:Webhooks names a webhook Hub:Recaps:Webhooks does not declare: '{name}'.");
         ValidateSubscriptionEmails(sub, path, options.Recaps.Smtp, errors);
+        ValidateDeliverAt(sub, path, errors);
+    }
+
+    private static void ValidateDeliverAt(RecapSubscriptionOptions sub, string path, List<string> errors)
+    {
+        if (sub.DeliverAt is not null && !RecapSchedule.TryParseDeliverAt(sub.DeliverAt, out _))
+            errors.Add($"{path}:DeliverAt must be HH:mm, from 00:00 to 23:59.");
+        // A zone with nothing to read it would be tuned to no effect.
+        if (sub.TimeZone is not null && sub.DeliverAt is null)
+            errors.Add($"{path}:TimeZone goes with DeliverAt.");
+        else if (!RecapSchedule.TryFindTimeZone(sub.TimeZone, out _))
+            errors.Add($"{path}:TimeZone must be an IANA time zone the system knows, such as Europe/Paris.");
     }
 
     private static bool IsInvalidFilter(string? value)

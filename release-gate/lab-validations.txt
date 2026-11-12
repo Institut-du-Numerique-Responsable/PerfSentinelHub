@@ -416,3 +416,12 @@ v0.17.0	dd2addb	2026-11-10	PASS
 # watch list to a real daemon). All PASS, no skip. Not run: the cluster hub
 # scenarios, unchanged Hub code since v0.17.0.
 v0.17.1	170f080	2026-11-11	PASS
+# v0.18.0 targeted pass on a local Release build of feat/recap-deliver-at (9521721)
+# and the published perf-sentinel 0.45.0 macOS binary (checksum and attestation
+# verified), no cluster: the engine repin to 0.45.0, the recap delivery time and
+# action reassignment. hub-recap (17 checks), hub-detection-volume (the same total
+# by poll and push, two ledgers over a restart) and hub-card (24 checks). All
+# PASS, no skip. DeliverAt and the take over, unassign and assign controls are not
+# asserted by a scenario yet: unit tests and a local browser check cover them. Not
+# run: the cluster hub scenarios.
+v0.18.0	5d3961b	2026-11-12	PASS

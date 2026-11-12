@@ -158,6 +158,8 @@
                   "webhooks": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" } },
                   "emails": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^[^\\s<>@\"]+@[^\\s<>@\"]+$" } },
                   "language": { "enum": ["en", "fr"] },
+                  "deliverAt": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+                  "timeZone": { "type": "string", "pattern": "^[A-Za-z0-9_+/-]{1,64}$" },
                   "recipients": {
                     "type": "array",
                     "maxItems": 50,

@@ -136,7 +136,9 @@ hub:
   # excludedServices (50 names at most each, service counted among services;
   # excludedServices only when service and services are empty), grouping,
   # webhooks (names declared below), emails (needs smtp.host), language (en or
-  # fr, default en), recipients (items { address, language }, needs smtp.host) }:
+  # fr, default en), recipients (items { address, language }, needs smtp.host),
+  # deliverAt (HH:mm, holds the deliveries until that time) and timeZone (IANA,
+  # UTC by default, needs deliverAt) }:
   # a recipient reads its mail in its own language, the rest in the
   # subscription's, and emails and recipients hold 50 addresses at most
   # together, each in one list. retention is at least 32 days, maxDelay above

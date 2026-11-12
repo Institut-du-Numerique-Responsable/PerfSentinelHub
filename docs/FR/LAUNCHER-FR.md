@@ -394,7 +394,11 @@ paramètres et les colonnes prennent quatre couleurs du thème, chacune au contr
 Seuls les blancs bougent, aucun jeton ne change, donc ce qu'on copie est la même requête. Une requête de plus
 de 600 caractères est colorée sans être coupée en lignes, et une route ou un topic s'affiche tel quel. Take déclare l'action au nom sous lequel le Hub vous connaît, le
 sélecteur à côté la fait passer entre to do, in progress et done, et le verdict du moteur sur une action
-terminée (confirmed, still detected, came back, waiting for a sealed day) apparaît à côté. Acknowledge ouvre
+terminée (confirmed, still detected, came back, waiting for a sealed day) apparaît à côté. À côté du
+propriétaire, Take over vous confie l'action et garde son statut, Unassign me ou Unassign efface le
+propriétaire, et Assign… ouvre un champ qui le donne à n'importe qui, en proposant les personnes que les
+actions du récap nomment déjà (le Hub ne tient pas d'annuaire) ; sur un finding sans action, Assign… en
+déclare une à faire. Acknowledge ouvre
 la page d'acquittement. Name this, ou Rename, donne à l'endpoint un nom métier qui titre la ligne, en
 Pilotage aussi. Le propriétaire d'une action se lit comme un nom : celui que la connexion a donné, sinon
 un nom tiré de l'identité (`alice.martin@acme.com` se lit Alice Martin), l'identité au survol. Un refus,

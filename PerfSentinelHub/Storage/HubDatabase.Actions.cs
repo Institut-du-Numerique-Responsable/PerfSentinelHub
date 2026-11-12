@@ -105,8 +105,9 @@ public sealed partial class HubDatabase
     ///     Changes the status, the owner, or both, and logs it when one of them differs.
     ///     <paramref name="status" /> null leaves the status; <paramref name="ownerSet" /> false
     ///     leaves the owner and true sets it, to null to clear it. <c>done_at_ms</c> is stamped
-    ///     when the action enters done and cleared when it leaves it. An owner set from the body
-    ///     is a typed one, so it drops the display name; a status change or the same owner keeps it.
+    ///     when the action enters done and cleared when it leaves it. A new owner takes
+    ///     <paramref name="ownerDisplay" />, null for a typed one; a status change or the same owner
+    ///     keeps the display name it had.
     ///     Entering done freezes the envelope as <see cref="CreateActionAsync" /> does, and leaving
     ///     done clears it.
     /// </summary>
@@ -117,6 +118,7 @@ public sealed partial class HubDatabase
         string? status,
         string? owner,
         bool ownerSet,
+        string? ownerDisplay,
         string by,
         long nowMs,
         IReadOnlyList<string>? freezeFrom,
@@ -151,7 +153,7 @@ public sealed partial class HubDatabase
 
             var newStatus = status ?? currentStatus;
             var newOwner = ownerSet ? owner : currentOwner;
-            var newDisplay = newOwner == currentOwner ? currentDisplay : null;
+            var newDisplay = newOwner == currentOwner ? currentDisplay : ownerDisplay;
             if (newStatus == currentStatus && newOwner == currentOwner)
                 return ActionWriteOutcome.Written;
 

@@ -819,6 +819,8 @@ set is rejected at startup. `Confidentiality` (which must stay `public`) and `Sh
 are validated but unused here.
 
 Deliveries run every 15 seconds from the `recap_deliveries` table, so a restart resumes them. A
+subscription with `DeliverAt` holds its deliveries until that time, see
+[CONFIGURATION.md](CONFIGURATION.md#recap-reports). A
 delivery to a webhook no longer configured, or whose report was purged meanwhile, fails without a
 request. So does one, webhook or e-mail, whose target the report's subscription no longer lists in
 the configuration in force when it is sent: taking an address or a webhook off a subscription
@@ -1073,16 +1075,19 @@ open: under `Hub:Auth` they need a session.
 | Endpoint             | Body                                                            | Does                                  |
 |----------------------|-----------------------------------------------------------------|---------------------------------------|
 | `POST /api/actions`  | `{"signature":"…","take":true}` or `{"signature":"…","status":"…","owner":"…"}` | Declares the action on a finding      |
-| `PATCH /api/actions` | `{"signature":"…","status":"…","owner":"…"}`                    | Changes the status or the owner of it |
+| `PATCH /api/actions` | `{"signature":"…","take":true}` or `{"signature":"…","status":"…","owner":"…"}` | Changes the status or the owner of it |
 
 - `status` is `todo`, `in_progress` or `done`. Nothing defaults to `todo`.
 - `owner` is a string of 1 to 256 characters with no control character. `null` on a `PATCH`
   clears it.
-- `take: true` is a `POST` only and stands for `status: "in_progress"` with the caller as
-  owner. It cannot be combined with `status` or `owner`.
+- `take: true` names the caller as owner. On a `POST` it stands for `status: "in_progress"`
+  too; on a `PATCH` it takes the action over from whoever held it and keeps its status. It
+  cannot be combined with `status` or `owner`.
 - A `POST` needs `take: true` or a `status`, and an `owner` alone is not enough:
-  `400 {"detail":"An action needs a status or take."}`. A `PATCH` needs a `status` or an
-  `owner`. A `by` in the body is ignored: the Hub names the caller itself.
+  `400 {"detail":"An action needs a status or take."}`. A `PATCH` needs a `status`, an
+  `owner` or `take`. A `by` in the body is ignored: the Hub names the caller itself.
+- Anyone who may write the action may change its owner: take it over, clear it, theirs or
+  someone else's, or set it to another person. Each change is an event naming who made it.
 
 The Hub judges a request in this order, and a request it refuses writes nothing.
 
@@ -1093,7 +1098,6 @@ The Hub judges a request in this order, and a request it refuses writes nothing.
    `403 {"detail":"You may not act on findings."}` before the body is read. A body over
    8 KiB is a `413`.
 4. **The body.** One `400` per rule above, the signature held to the bounds of an ack's.
-   `take` in a `PATCH` is a `400`.
 5. **The finding.** The Hub must hold it, and with access control on the caller must read a
    copy of it, otherwise `404 {"detail":"The Hub holds no such finding."}`, the very answer
    a finding the caller may not read gets. A readable one the caller may not write is a

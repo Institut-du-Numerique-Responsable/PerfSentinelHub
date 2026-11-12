@@ -884,7 +884,8 @@ Un webhook de récap dont `IncludeShareLink` est activé est refusé au démarra
 (qui doit rester `public`) et `ShareLinkDays` (de 1 à 30) sont validés mais sans effet ici.
 
 Les livraisons tournent toutes les 15 secondes depuis la table `recap_deliveries`, si bien qu'un
-redémarrage les reprend. Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
+redémarrage les reprend. Un abonnement avec `DeliverAt` retient ses livraisons jusqu'à cette heure, voir
+[CONFIGURATION-FR.md](CONFIGURATION-FR.md#rapports-de-récap). Une livraison vers un webhook qui n'est plus configuré, ou dont le rapport a
 été purgé entre-temps, échoue sans requête. De même pour une livraison, webhook ou e-mail, dont la
 souscription du rapport ne liste plus la cible dans la configuration en vigueur à l'envoi : retirer
 une adresse ou un webhook d'une souscription arrête dès le redémarrage suivant les livraisons
@@ -1157,16 +1158,20 @@ corps JSON, et aucune n'est jamais ouverte : sous `Hub:Auth` elles demandent une
 | Endpoint             | Corps                                                           | Effet                                       |
 |----------------------|-----------------------------------------------------------------|---------------------------------------------|
 | `POST /api/actions`  | `{"signature":"…","take":true}` ou `{"signature":"…","status":"…","owner":"…"}` | Déclare l'action sur un finding             |
-| `PATCH /api/actions` | `{"signature":"…","status":"…","owner":"…"}`                    | Change le statut ou le responsable de celle-ci |
+| `PATCH /api/actions` | `{"signature":"…","take":true}` ou `{"signature":"…","status":"…","owner":"…"}` | Change le statut ou le responsable de celle-ci |
 
 - `status` vaut `todo`, `in_progress` ou `done`. Rien n'est mis à `todo` par défaut.
 - `owner` est une chaîne de 1 à 256 caractères sans caractère de contrôle. `null` sur un
   `PATCH` l'efface.
-- `take: true` ne vaut que pour un `POST` et tient lieu de `status: "in_progress"` avec
-  l'appelant pour responsable. Il ne se combine ni avec `status` ni avec `owner`.
+- `take: true` fait de l'appelant le responsable. Sur un `POST`, il tient aussi lieu de
+  `status: "in_progress"` ; sur un `PATCH`, il reprend l'action à qui la tenait et garde son
+  statut. Il ne se combine ni avec `status` ni avec `owner`.
 - Un `POST` exige `take: true` ou un `status`, et un `owner` seul ne suffit pas :
-  `400 {"detail":"An action needs a status or take."}`. Un `PATCH` exige un `status` ou un
-  `owner`. Un `by` dans le corps est ignoré : le Hub nomme lui-même l'appelant.
+  `400 {"detail":"An action needs a status or take."}`. Un `PATCH` exige un `status`, un
+  `owner` ou `take`. Un `by` dans le corps est ignoré : le Hub nomme lui-même l'appelant.
+- Quiconque peut écrire l'action peut en changer le responsable : la reprendre, l'effacer,
+  le sien ou celui d'un autre, ou y mettre une autre personne. Chaque changement est un
+  événement qui nomme son auteur.
 
 Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'écrit rien.
 
@@ -1177,7 +1182,7 @@ Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'écrit r
    nulle part reçoit `403 {"detail":"You may not act on findings."}` avant que le corps soit
    lu. Un corps de plus de 8 Kio est un `413`.
 4. **Le corps.** Un `400` par règle ci-dessus, la signature tenue aux bornes de celle d'un
-   acquittement. `take` dans un `PATCH` est un `400`.
+   acquittement.
 5. **Le finding.** Le Hub doit le détenir, et avec le contrôle d'accès l'appelant doit en lire
    une copie, sinon `404 {"detail":"The Hub holds no such finding."}`, exactement la réponse
    d'un finding que l'appelant ne peut pas lire. Un finding lisible que l'appelant ne peut

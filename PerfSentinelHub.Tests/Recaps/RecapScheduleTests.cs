@@ -107,4 +107,59 @@ public sealed class RecapScheduleTests
         Assert.False(RecapSchedule.TryScope("nowhere", null, Sources, out _));
         Assert.False(RecapSchedule.TryScope(null, "zz", Sources, out _));
     }
+
+    private static readonly TimeZoneInfo Paris = TimeZoneInfo.FindSystemTimeZoneById("Europe/Paris");
+
+    private static long Utc(int month, int day, int hour, int minute = 0)
+    {
+        return new DateTimeOffset(2026, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+    }
+
+    [Fact]
+    public void A_report_frozen_in_the_night_waits_for_the_morning_hour_of_its_zone()
+    {
+        // Monday 2026-11-09 00:30Z is 01:30 in Paris (UTC+1): 09:00 Paris is 08:00Z the same day.
+        Assert.Equal(Utc(11, 9, 8), RecapSchedule.DeliveryDueMs(Utc(11, 9, 0, 30), new TimeOnly(9, 0), Paris));
+        // In summer Paris is UTC+2: 09:00 Paris is 07:00Z.
+        Assert.Equal(Utc(6, 1, 7), RecapSchedule.DeliveryDueMs(Utc(6, 1, 0, 30), new TimeOnly(9, 0), Paris));
+    }
+
+    [Fact]
+    public void A_report_frozen_past_the_hour_waits_for_the_next_day_and_one_on_it_leaves_at_once()
+    {
+        Assert.Equal(Utc(11, 10, 8), RecapSchedule.DeliveryDueMs(Utc(11, 9, 8, 1), new TimeOnly(9, 0), Paris));
+        Assert.Equal(Utc(11, 9, 8), RecapSchedule.DeliveryDueMs(Utc(11, 9, 8), new TimeOnly(9, 0), Paris));
+    }
+
+    [Fact]
+    public void A_time_a_clock_change_skips_moves_an_hour_on()
+    {
+        // 2026-03-29 02:30 does not exist in Paris: clocks jump from 02:00 to 03:00 (01:00Z).
+        Assert.Equal(Utc(3, 29, 1, 30), RecapSchedule.DeliveryDueMs(Utc(3, 28, 23), new TimeOnly(2, 30), Paris));
+        // Troll jumps two hours, 01:00 to 03:00 (01:00Z): 01:30 moves on to 03:30, the first whole hour on that exists.
+        var troll = TimeZoneInfo.FindSystemTimeZoneById("Antarctica/Troll");
+        Assert.Equal(Utc(3, 29, 1, 30), RecapSchedule.DeliveryDueMs(Utc(3, 28, 23), new TimeOnly(1, 30), troll));
+    }
+
+    [Fact]
+    public void A_time_the_clocks_go_back_over_leaves_at_its_first_occurrence()
+    {
+        // 2026-10-25 02:30 happens twice in Paris: at 00:30Z (CEST) and again at 01:30Z (CET).
+        Assert.Equal(Utc(10, 25, 0, 30), RecapSchedule.DeliveryDueMs(Utc(10, 24, 22), new TimeOnly(2, 30), Paris));
+        // Frozen between the two, it takes the second rather than waiting a day.
+        Assert.Equal(Utc(10, 25, 1, 30), RecapSchedule.DeliveryDueMs(Utc(10, 25, 1), new TimeOnly(2, 30), Paris));
+    }
+
+    [Fact]
+    public void Without_deliver_at_a_report_is_due_when_generated()
+    {
+        var subscription = new RecapSubscriptionOptions { Name = "w", Cadences = ["week"], Views = ["pilotage"] };
+
+        Assert.Equal(Utc(11, 9, 0, 30), RecapSchedule.DeliveryDueMs(Utc(11, 9, 0, 30), subscription));
+        Assert.Equal(Utc(11, 9, 8), RecapSchedule.DeliveryDueMs(
+            Utc(11, 9, 0, 30), subscription with { DeliverAt = "09:00", TimeZone = "Europe/Paris" }));
+        // UTC when no zone is named.
+        Assert.Equal(Utc(11, 9, 9), RecapSchedule.DeliveryDueMs(
+            Utc(11, 9, 0, 30), subscription with { DeliverAt = "09:00" }));
+    }
 }

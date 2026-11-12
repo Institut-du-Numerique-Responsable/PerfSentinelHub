@@ -2,6 +2,47 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.18.0] - 2026-11-12
+
+### Added
+
+- A recap subscription takes `DeliverAt`, `HH:mm`, and `TimeZone`, an IANA zone, `UTC` by default.
+  A report is still frozen as soon as its period closes, often in the night, but its webhooks and
+  e-mails wait for the first `DeliverAt` time in `TimeZone` at or after that: a weekly recap frozen
+  on Monday at 01:30 in Paris with `DeliverAt: "09:00"` and `TimeZone: "Europe/Paris"` leaves at
+  09:00 that Monday, and one frozen past 09:00 waits for the next day's. A time a clock change
+  skips moves an hour on, and one the clocks go back over leaves at its first occurrence. `TimeZone` without `DeliverAt`, a zone the system does not know and a
+  time outside `00:00` to `23:59` are refused at startup. The delivery row keeps its due time, so a
+  restart in between keeps waiting, and the Reports panel says when a held delivery leaves. The Helm
+  chart takes `deliverAt` and `timeZone` on a subscription. `docs/CONFIGURATION.md`, `docs/API.md` and their French mirrors describe it.
+- An action changes hands from the recap. Beside its owner, Take over (Prendre à sa place) hands it
+  to you and keeps its status, Unassign me (Me retirer) or Unassign (Désaffecter) clears the owner,
+  and Assign… (Affecter…) sets it to anyone, offering the people the recap's actions already name;
+  on a finding with no action, Assign… declares one to do. `PATCH /api/actions` takes `take: true`,
+  which names the caller with their sign-in name; an assigned owner reads as a name made from the
+  identity, as a typed one always has. Anyone who may write an action may change its owner, and
+  each change is an event naming who made it.
+  `docs/API.md`, `docs/LAUNCHER.md` and their French mirrors describe it.
+
+### Changed
+
+- The image ships perf-sentinel `0.45.0` as its analysis engine, repinned by digest from
+  `0.44.1`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.44.1` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. A query that two instrumentation layers record
+  (Laravel and PDO, SQLAlchemy and asyncpg, a Rails `PREPARE` beside its `EXECUTE`) now counts
+  once, so `n_plus_one_sql` and `redundant_sql` findings and the I/O totals drop on those stacks,
+  and a read the strict classifier called `n_plus_one_sql` can turn `redundant_sql` again. The
+  engine also joins an OTLP JSON dump per resource before converting it, and a daemon stitches a
+  trace again when it leaves the window, so a finding on a long trace gets its real
+  `source_endpoint` and framework where it showed `unknown`. Either change gives the finding a new
+  signature: the Hub lists it as a new row whose acknowledgment must be renewed, the first recap
+  across the upgrade shows the old signature gone and the new one new, and the old row stays
+  until retention removes it. A batch analysis now reads the Collector dumps of the Java agent
+  2.33.x, which failed with `missing field descriptionKeys`. A daemon counts `events_processed`
+  when a trace leaves its window, 30 to 45 seconds after its spans arrive. No report format or
+  disclosure schema changes.
+
 ## [0.17.1] - 2026-11-11
 
 ### Changed

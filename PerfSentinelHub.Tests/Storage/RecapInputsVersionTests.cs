@@ -57,7 +57,7 @@ public sealed class RecapInputsVersionTests : IAsyncLifetime
 
         await _database.CreateActionAsync("sig", "todo", null, null, "alice", 1_000, null, Token);
         var afterCreate = _database.RecapInputsVersion;
-        await _database.UpdateActionAsync("sig", "in_progress", null, false, "alice", 2_000, null, Token);
+        await _database.UpdateActionAsync("sig", "in_progress", null, false, null, "alice", 2_000, null, Token);
         var afterUpdate = _database.RecapInputsVersion;
         await _database.SetEndpointLabelAsync("svc", "GET /a", "Orders", "alice", Token);
         var afterLabel = _database.RecapInputsVersion;
