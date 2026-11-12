@@ -16,9 +16,9 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
 
         await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 100, null,
             cancellationToken);
-        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, "bob", true, "alice", 200, null,
+        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, "bob", true, null, "alice", 200, null,
             cancellationToken);
-        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "bob", 300, null,
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, null, "bob", 300, null,
             cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
@@ -63,13 +63,32 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice@acme.com", "Alice Martin",
             "alice@acme.com", 100, null, cancellationToken);
 
-        await Database.UpdateActionAsync(signature, null, "Payments team", true, "alice@acme.com", 200, null,
+        await Database.UpdateActionAsync(signature, null, "Payments team", true, null, "alice@acme.com", 200, null,
             cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
         Assert.Equal("Payments team", action.Owner);
         Assert.Null(action.OwnerDisplay);
         Assert.Null(action.Events[1].OwnerDisplay);
+    }
+
+    [Fact]
+    public async Task An_owner_typed_by_identity_takes_the_name_the_sso_last_gave_it()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await Database.CreateActionAsync("display-known-a", ActionStatuses.InProgress, "carol@acme.com",
+            "Carol Dupont", "carol@acme.com", 100, null, cancellationToken);
+        await Database.CreateActionAsync("display-known-b", ActionStatuses.Todo, null, null, "bob", 100, null,
+            cancellationToken);
+        await Database.CreateActionAsync("display-known-c", ActionStatuses.Todo, "carol@acme.com", null, "bob", 150,
+            null, cancellationToken);
+
+        await Database.UpdateActionAsync("display-known-b", null, "carol@acme.com", true, null, "bob", 200, null,
+            cancellationToken);
+
+        var actions = await Database.ReadActionsAsync(["display-known-b", "display-known-c"], cancellationToken);
+        Assert.All(actions, action => Assert.Equal("Carol Dupont", action.OwnerDisplay));
+        Assert.Equal("Carol Dupont", actions.Single(action => action.Signature == "display-known-b").Events[1].OwnerDisplay);
     }
 
     [Fact]
@@ -80,8 +99,8 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice@acme.com", "Alice Martin",
             "alice@acme.com", 100, null, cancellationToken);
 
-        await Database.UpdateActionAsync(signature, null, "alice@acme.com", true, "bob", 150, null, cancellationToken);
-        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "bob", 200, null,
+        await Database.UpdateActionAsync(signature, null, "alice@acme.com", true, null, "bob", 150, null, cancellationToken);
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, null, "bob", 200, null,
             cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
@@ -98,7 +117,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         await Database.CreateActionAsync(signature, ActionStatuses.InProgress, "alice", null, "alice", 100, null,
             cancellationToken);
 
-        var outcome = await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, "alice", true, "bob",
+        var outcome = await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, "alice", true, null, "bob",
             200, null, cancellationToken);
 
         Assert.Equal(ActionWriteOutcome.Written, outcome);
@@ -119,7 +138,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
             await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "bob", 200, null,
                 cancellationToken));
         Assert.Equal(ActionWriteOutcome.Missing,
-            await Database.UpdateActionAsync("never", ActionStatuses.Done, null, false, "bob", 200, null,
+            await Database.UpdateActionAsync("never", ActionStatuses.Done, null, false, null, "bob", 200, null,
                 cancellationToken));
         Assert.Single(Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken)).Events);
     }
@@ -132,7 +151,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         await Database.CreateActionAsync(signature, ActionStatuses.Done, "alice", null, "alice", 100, null,
             cancellationToken);
 
-        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, true, "bob", 200, null,
+        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, true, null, "bob", 200, null,
             cancellationToken);
 
         var action = Assert.Single(await Database.ReadActionsAsync([signature], cancellationToken));
@@ -171,7 +190,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
                 await Database.CreateActionAsync("busy", ActionStatuses.Todo, null, null, "alice", 100, null,
                     cancellationToken));
             Assert.Equal(ActionWriteOutcome.Busy,
-                await Database.UpdateActionAsync("busy", ActionStatuses.Done, null, false, "alice", 100, null,
+                await Database.UpdateActionAsync("busy", ActionStatuses.Done, null, false, null, "alice", 100, null,
                     cancellationToken));
         }
         finally
@@ -228,7 +247,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
             cancellationToken);
         Assert.Null(await FrozenAsync(Database, signature));
 
-        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "alice", 400, null,
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, null, "alice", 400, null,
             cancellationToken);
 
         Assert.Equal(12, OccurrencesOf(await FrozenAsync(Database, signature)));
@@ -244,7 +263,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         await Database.CreateActionAsync(signature, ActionStatuses.Todo, null, null, "alice", 300, null,
             cancellationToken);
 
-        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, "alice", 400, ["a"],
+        await Database.UpdateActionAsync(signature, ActionStatuses.Done, null, false, null, "alice", 400, ["a"],
             cancellationToken);
 
         Assert.Equal(41, OccurrencesOf(await FrozenAsync(Database, signature)));
@@ -259,7 +278,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
         await Database.CreateActionAsync(signature, ActionStatuses.Done, null, null, "alice", 300, null,
             cancellationToken);
 
-        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, false, "alice", 400, null,
+        await Database.UpdateActionAsync(signature, ActionStatuses.InProgress, null, false, null, "alice", 400, null,
             cancellationToken);
 
         Assert.Null(await FrozenAsync(Database, signature));
@@ -275,7 +294,7 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
             cancellationToken);
         await SeedCopyAsync(Database, signature, "a", 7, 350);
 
-        await Database.UpdateActionAsync(signature, null, "bob", true, "alice", 400, null, cancellationToken);
+        await Database.UpdateActionAsync(signature, null, "bob", true, null, "alice", 400, null, cancellationToken);
 
         Assert.Equal(41, OccurrencesOf(await FrozenAsync(Database, signature)));
     }

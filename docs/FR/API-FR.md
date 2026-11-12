@@ -1158,16 +1158,20 @@ corps JSON, et aucune n'est jamais ouverte : sous `Hub:Auth` elles demandent une
 | Endpoint             | Corps                                                           | Effet                                       |
 |----------------------|-----------------------------------------------------------------|---------------------------------------------|
 | `POST /api/actions`  | `{"signature":"…","take":true}` ou `{"signature":"…","status":"…","owner":"…"}` | Déclare l'action sur un finding             |
-| `PATCH /api/actions` | `{"signature":"…","status":"…","owner":"…"}`                    | Change le statut ou le responsable de celle-ci |
+| `PATCH /api/actions` | `{"signature":"…","take":true}` ou `{"signature":"…","status":"…","owner":"…"}` | Change le statut ou le responsable de celle-ci |
 
 - `status` vaut `todo`, `in_progress` ou `done`. Rien n'est mis à `todo` par défaut.
 - `owner` est une chaîne de 1 à 256 caractères sans caractère de contrôle. `null` sur un
   `PATCH` l'efface.
-- `take: true` ne vaut que pour un `POST` et tient lieu de `status: "in_progress"` avec
-  l'appelant pour responsable. Il ne se combine ni avec `status` ni avec `owner`.
+- `take: true` fait de l'appelant le responsable. Sur un `POST`, il tient aussi lieu de
+  `status: "in_progress"` ; sur un `PATCH`, il reprend l'action à qui la tenait et garde son
+  statut. Il ne se combine ni avec `status` ni avec `owner`.
 - Un `POST` exige `take: true` ou un `status`, et un `owner` seul ne suffit pas :
-  `400 {"detail":"An action needs a status or take."}`. Un `PATCH` exige un `status` ou un
-  `owner`. Un `by` dans le corps est ignoré : le Hub nomme lui-même l'appelant.
+  `400 {"detail":"An action needs a status or take."}`. Un `PATCH` exige un `status`, un
+  `owner` ou `take`. Un `by` dans le corps est ignoré : le Hub nomme lui-même l'appelant.
+- Quiconque peut écrire l'action peut en changer le responsable : la reprendre, l'effacer,
+  le sien ou celui d'un autre, ou y mettre une autre personne. Chaque changement est un
+  événement qui nomme son auteur.
 
 Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'écrit rien.
 
@@ -1178,7 +1182,7 @@ Le Hub juge une requête dans cet ordre, et une requête qu'il refuse n'écrit r
    nulle part reçoit `403 {"detail":"You may not act on findings."}` avant que le corps soit
    lu. Un corps de plus de 8 Kio est un `413`.
 4. **Le corps.** Un `400` par règle ci-dessus, la signature tenue aux bornes de celle d'un
-   acquittement. `take` dans un `PATCH` est un `400`.
+   acquittement.
 5. **Le finding.** Le Hub doit le détenir, et avec le contrôle d'accès l'appelant doit en lire
    une copie, sinon `404 {"detail":"The Hub holds no such finding."}`, exactement la réponse
    d'un finding que l'appelant ne peut pas lire. Un finding lisible que l'appelant ne peut
@@ -1196,9 +1200,10 @@ Un `POST` répond `201` et un `PATCH` `200`, avec l'action telle qu'elle est dé
 ```
 
 `owner_display` est le nom que le fournisseur d'identité donne à l'appelant qui a pris le
-finding, ou `null` : un appelant par en-tête de proxy ou par jeton n'en a pas, et un `owner`
-posé par le corps est saisi à la main, il l'efface. Un changement de statut ou le même
-responsable le garde. Les événements le portent aussi. Il est affiché, jamais jugé.
+finding, ou `null` : un appelant par en-tête de proxy ou par jeton n'en a pas. Un `owner`
+posé par le corps prend le nom que le fournisseur d'identité a donné en dernier à cette
+identité, et aucun s'il est saisi à la main ou ne s'est jamais connecté. Un changement de
+statut ou le même responsable le garde. Les événements le portent aussi. Il est affiché, jamais jugé.
 `done_at_ms` est posé quand l'action entre dans `done` et effacé quand elle en sort. Chaque
 changement de statut ou de responsable ajoute un événement, avec le statut quitté, celui
 atteint, le responsable, l'appelant et l'heure. Les événements ne sont jamais réécrits, et ni

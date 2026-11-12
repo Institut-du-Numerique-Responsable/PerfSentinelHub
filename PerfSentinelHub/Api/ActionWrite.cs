@@ -6,7 +6,8 @@ namespace PerfSentinelHub.Api;
 
 /// <summary>
 ///     What a caller asks the Hub to record on a finding: a new action, by status or by taking
-///     it, or a change of an existing one. <c>OwnerSet</c> tells a cleared owner from an absent one.
+///     it, or a change of an existing one, which a take hands to the caller whoever held it.
+///     <c>OwnerSet</c> tells a cleared owner from an absent one.
 /// </summary>
 public sealed record ActionWrite(string Signature, string? Status, string? Owner, bool OwnerSet, bool Take)
 {
@@ -51,13 +52,11 @@ public sealed record ActionWrite(string Signature, string? Status, string? Owner
     // What the fields mean together, once each is well formed.
     private static string? Judge(bool create, string? status, bool ownerSet, bool take)
     {
-        if (take && !create)
-            return "take applies to a new action only.";
         if (take && (status is not null || ownerSet))
             return "take cannot be combined with status or owner.";
         if (create && !take && status is null)
             return "An action needs a status or take.";
-        return !create && status is null && !ownerSet ? "A change needs a status or an owner." : null;
+        return !create && !take && status is null && !ownerSet ? "A change needs a status, an owner or take." : null;
     }
 
     private static bool TryReadStatus(JsonElement root, out string? status)

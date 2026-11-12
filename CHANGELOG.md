@@ -15,6 +15,14 @@ All notable changes to PerfSentinelHub are recorded here.
   time outside `00:00` to `23:59` are refused at startup. The delivery row keeps its due time, so a
   restart in between keeps waiting, and the Reports panel says when a held delivery leaves. The Helm
   chart takes `deliverAt` and `timeZone` on a subscription. `docs/CONFIGURATION.md`, `docs/API.md` and their French mirrors describe it.
+- An action changes hands from the recap. Beside its owner, Take over (Prendre à sa place) hands it
+  to you and keeps its status, Unassign me (Me retirer) or Unassign (Désaffecter) clears the owner,
+  and Assign… (Affecter…) sets it to anyone, offering the people the recap's actions already name;
+  on a finding with no action, Assign… declares one to do. `PATCH /api/actions` takes `take: true`,
+  which names the caller with their sign-in name, and an owner typed by identity takes the name the
+  sign-in last gave it, so a person assigned from the list reads as when they take it. Anyone who
+  may write an action may change its owner, and each change is an event naming who made it.
+  `docs/API.md`, `docs/LAUNCHER.md` and their French mirrors describe it.
 
 ### Changed
 

@@ -2424,6 +2424,35 @@
         return name ? {text: name, title: owner} : {text: owner, title: null};
     }
 
+    /**
+     * Who an action can be handed to: every identity the recap's actions name, as owner or as
+     * author, each once with the best name known for it. The Hub keeps no directory, and these are
+     * people the caller already sees. The caller takes rather than assigns, and a machine is no one
+     * to hand work to, so both are left out.
+     * @param {{action: import('../types').RecapAction | null}[]} priorities
+     * @param {string | null | undefined} identity
+     * @returns {{value: string, label: string}[]}
+     */
+    function recapOwnerChoices(priorities, identity) {
+        /** @type {Map<string, string | null>} */
+        const seen = new Map();
+        const add = (/** @type {string | null} */ owner, /** @type {string | null} */ display) => {
+            if (!owner || owner === identity || owner.startsWith('machine:')) return;
+            if (!seen.has(owner) || (display && !seen.get(owner))) seen.set(owner, display || null);
+        };
+        priorities.forEach(function (priority) {
+            const action = priority.action;
+            if (!action) return;
+            add(action.owner, action.owner_display);
+            (action.events || []).forEach(function (event) {
+                add(event.owner, event.owner_display);
+                add(event.by, null);
+            });
+        });
+        return Array.from(seen, ([value, display]) => ({value, label: ownerLabel(value, display).text}))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }
+
     // ----------------------------------------------------------- the recap screen
 
     /**
@@ -5272,6 +5301,7 @@
         deviceNetworkAlert,
         deviceApproveStep,
         ownerLabel,
+        recapOwnerChoices,
         RECAP_LABELS,
         RECAP_HELP,
         serviceParts,

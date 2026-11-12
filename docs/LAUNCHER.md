@@ -366,7 +366,10 @@ what is copied is the same query. A statement over 600 characters is colored but
 and a route or a topic prints as it is. Take declares the action in the
 name the Hub knows you by, the select beside it moves it between to do, in progress and done, and
 the engine's verdict on a done action (confirmed, still detected, came back, waiting for a sealed
-day) appears beside it. Acknowledge opens the ack page. Name this, or Rename, gives the endpoint a
+day) appears beside it. Beside the owner, Take over hands the action to you and keeps its status,
+Unassign me or Unassign clears the owner, and Assign… opens a field that sets it to anyone, offering
+the people the recap's actions already name (the Hub keeps no directory); on a finding with no action,
+Assign… declares one to do. Acknowledge opens the ack page. Name this, or Rename, gives the endpoint a
 business name that titles the row, in Management too. An action's owner reads as a name: the one the
 sign-in gave, else one made from the identity (`alice.martin@acme.com` reads Alice Martin), with the
 identity on hover. A refusal, no identity or no permission, shows the Hub's own sentence in the card.

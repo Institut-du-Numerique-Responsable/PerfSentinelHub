@@ -1850,6 +1850,28 @@ test("a download cut off mid-body reads as not saved, rather than leaving its bu
     assert.equal(await PSL.downloadAs("/reports/0123456789abcdef.html", "report.html", env), false);
 });
 
+test("the people an action can be handed to are the ones the recap already names", () => {
+    const action = (owner, display, events) => ({action: {status: "todo", owner, owner_display: display, events}});
+    const priorities = [
+        action("bob@acme.com", "Bob Durand", [
+            {from: null, to: "todo", owner: "carol@acme.com", owner_display: null, by: "dave.roux@acme.com"},
+            {from: "todo", to: "todo", owner: "bob@acme.com", owner_display: "Bob Durand", by: "machine:ci"}
+        ]),
+        action("alice@acme.com", "Alice Martin"),
+        action("carol@acme.com", "Carol Dupont"),
+        action(null, null),
+        {action: null}
+    ];
+
+    // Each identity once, with the best name known for it; the caller and machines are left out.
+    assert.deepEqual(PSL.recapOwnerChoices(priorities, "alice@acme.com"), [
+        {value: "bob@acme.com", label: "Bob Durand"},
+        {value: "carol@acme.com", label: "Carol Dupont"},
+        {value: "dave.roux@acme.com", label: "Dave Roux"}
+    ]);
+    assert.deepEqual(PSL.recapOwnerChoices([], null), []);
+});
+
 test("an action owner reads as a name", () => {
     // The SSO display name wins and the full identity stays on hover.
     assert.deepEqual(PSL.ownerLabel("alice.martin@acme.com", null),
