@@ -2829,18 +2829,24 @@
 
     /**
      * One delivery of a report: the channel and where it went, the state, the last answer the
-     * destination gave and how many tries it took.
+     * destination gave and how many tries it took. A delivery that has not been tried and is due
+     * after the report was generated waits for its subscription's DeliverAt time, and says when.
      * @param {{channel: string, target: string, state: string, attempts?: number,
-     *   last_status?: number | null}} delivery
+     *   last_status?: number | null, next_attempt_ms?: number | null}} delivery
+     * @param {number} [generatedAtMs] when the report was frozen
      * @returns {string}
      */
-    function recapDeliveryText(delivery) {
+    function recapDeliveryText(delivery, generatedAtMs) {
         const attempts = delivery.attempts || 0;
         const state = hasText('recap.delivery.state.' + delivery.state)
             ? t('recap.delivery.state.' + delivery.state) : delivery.state;
+        const scheduled = delivery.state === 'pending' && attempts === 0 &&
+            typeof delivery.next_attempt_ms === 'number' && typeof generatedAtMs === 'number' &&
+            delivery.next_attempt_ms > generatedAtMs;
         return t('recap.delivery.line', {channel: delivery.channel, target: delivery.target, state: state})
             + (delivery.last_status === null || delivery.last_status === undefined ? '' : ' (' + delivery.last_status + ')')
-            + (attempts > 0 ? t('recap.delivery.attempts.' + plural(attempts), {count: attempts}) : '');
+            + (attempts > 0 ? t('recap.delivery.attempts.' + plural(attempts), {count: attempts}) : '')
+            + (scheduled ? t('recap.delivery.scheduled', {time: localTime(delivery.next_attempt_ms)}) : '');
     }
 
     /**

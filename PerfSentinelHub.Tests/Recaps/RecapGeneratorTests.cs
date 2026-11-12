@@ -296,6 +296,23 @@ public sealed partial class RecapGeneratorTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_subscription_with_deliver_at_holds_its_deliveries_until_that_time()
+    {
+        // The clock reads Monday 2026-10-26 00:30Z, 01:30 in Paris (UTC+1): 09:00 Paris is 08:00Z.
+        await StartAsync(Weekly(webhooks: ["ops"]) with { DeliverAt = "09:00", TimeZone = "Europe/Paris" });
+        await SeedAsync("a", S, LastMon + 1);
+
+        await _generator.RunOnceAsync(Token);
+
+        var report = Assert.Single(await ReportsAsync());
+        var delivery = Assert.Single(await _database.ListRecapDeliveriesAsync([report.Id], Token));
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-10-26T08:00:00Z", CultureInfo.InvariantCulture).ToUnixTimeMilliseconds(),
+            delivery.NextAttemptMs);
+        Assert.Empty(await _database.DueRecapDeliveriesAsync(NowMs, Token));
+    }
+
+    [Fact]
     public async Task A_moved_period_queues_one_delivery_per_destination()
     {
         await StartAsync(Weekly(

@@ -1773,6 +1773,7 @@
         'recap.delivery.state.pending': 'en attente',
         'recap.delivery.attempts.one': ', {count} essai',
         'recap.delivery.attempts.other': ', {count} essais',
+        'recap.delivery.scheduled': ', envoi prévu le {time}',
         'recap.freeze.at.day': 'Fige la journée du {at}{filters}.',
         'recap.freeze.at.week': 'Fige la semaine qui contient le {at}{filters}.',
         'recap.freeze.at.month': 'Fige le mois qui contient le {at}{filters}.',

@@ -1702,6 +1702,7 @@
         'recap.delivery.state.pending': 'pending',
         'recap.delivery.attempts.one': ', {count} try',
         'recap.delivery.attempts.other': ', {count} tries',
+        'recap.delivery.scheduled': ', sent at {time}',
         'recap.freeze.at.day': 'Freezes the day that holds {at}{filters}.',
         'recap.freeze.at.week': 'Freezes the week that holds {at}{filters}.',
         'recap.freeze.at.month': 'Freezes the month that holds {at}{filters}.',

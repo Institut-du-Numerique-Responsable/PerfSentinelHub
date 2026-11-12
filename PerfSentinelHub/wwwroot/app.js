@@ -9617,7 +9617,7 @@
             ].concat(report.deliveries.map(function (/** @type {import('../types').RecapDelivery} */ delivery) {
                 return el('span', {
                     class: 'status-pill', 'data-status': RECAP_DELIVERY_STATUS[delivery.state] || 'queued',
-                    text: PSL.recapDeliveryText(delivery)
+                    text: PSL.recapDeliveryText(delivery, report.generated_at_ms)
                 });
             })))
         ]);

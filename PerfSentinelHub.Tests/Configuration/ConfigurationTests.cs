@@ -712,6 +712,12 @@ public sealed class ConfigurationTests
                 Subscription() with { DeliverAt = "09:00", TimeZone = "Europe/Nowhere" }))));
         Assert.Empty(AccessFailures(WithSubscription(
             Subscription() with { DeliverAt = "09:00", TimeZone = "Europe/Paris" })));
+        // An empty or overlong id is a configuration error, not an exception out of the validator.
+        foreach (var zone in new[] { "", new string('a', 300) })
+            Assert.Equal(
+                "Hub:Recaps:Subscriptions:0:TimeZone must be an IANA time zone the system knows, such as Europe/Paris.",
+                Assert.Single(AccessFailures(WithSubscription(
+                    Subscription() with { DeliverAt = "09:00", TimeZone = zone }))));
     }
 
     [Theory]
