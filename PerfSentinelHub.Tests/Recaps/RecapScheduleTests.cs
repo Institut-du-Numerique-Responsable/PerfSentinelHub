@@ -136,6 +136,9 @@ public sealed class RecapScheduleTests
     {
         // 2026-03-29 02:30 does not exist in Paris: clocks jump from 02:00 to 03:00 (01:00Z).
         Assert.Equal(Utc(3, 29, 1, 30), RecapSchedule.DeliveryDueMs(Utc(3, 28, 23), new TimeOnly(2, 30), Paris));
+        // Troll jumps two hours, 01:00 to 03:00 (01:00Z): 01:30 moves on to 03:30, the first whole hour on that exists.
+        var troll = TimeZoneInfo.FindSystemTimeZoneById("Antarctica/Troll");
+        Assert.Equal(Utc(3, 29, 1, 30), RecapSchedule.DeliveryDueMs(Utc(3, 28, 23), new TimeOnly(1, 30), troll));
     }
 
     [Fact]

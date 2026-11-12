@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security;
 using PerfSentinelHub.Configuration;
 
 namespace PerfSentinelHub.Recaps;
@@ -23,7 +24,9 @@ public static class RecapSchedule
             zone = TimeZoneInfo.FindSystemTimeZoneById(id);
             return true;
         }
-        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        // The third is a zoneinfo directory, such as Europe, which the runtime cannot read as a file.
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException
+                                              or SecurityException)
         {
             return false;
         }
@@ -49,9 +52,9 @@ public static class RecapSchedule
         for (var day = 0; ; day++)
         {
             var local = localDay.AddDays(day) + deliverAt.ToTimeSpan();
-            // shortcut: a time a DST change skips moves an hour on, the gap of every zone with DST
-            // today; an exotic half-hour gap would land 30 minutes late.
-            if (zone.IsInvalidTime(local))
+            // A time a DST change skips moves on by whole hours until it exists: one hour almost
+            // everywhere, two in Troll, and a half-hour gap such as Lord Howe's lands 30 minutes late.
+            while (zone.IsInvalidTime(local))
                 local = local.AddHours(1);
             // A time the clocks go back over happens twice: the first one, the larger offset, comes first.
             TimeSpan[] offsets = zone.IsAmbiguousTime(local)

@@ -1200,10 +1200,9 @@ Un `POST` répond `201` et un `PATCH` `200`, avec l'action telle qu'elle est dé
 ```
 
 `owner_display` est le nom que le fournisseur d'identité donne à l'appelant qui a pris le
-finding, ou `null` : un appelant par en-tête de proxy ou par jeton n'en a pas. Un `owner`
-posé par le corps prend le nom que le fournisseur d'identité a donné en dernier à cette
-identité, et aucun s'il est saisi à la main ou ne s'est jamais connecté. Un changement de
-statut ou le même responsable le garde. Les événements le portent aussi. Il est affiché, jamais jugé.
+finding, ou `null` : un appelant par en-tête de proxy ou par jeton n'en a pas, et un `owner`
+posé par le corps est saisi à la main, il l'efface. Un changement de statut ou le même
+responsable le garde. Les événements le portent aussi. Il est affiché, jamais jugé.
 `done_at_ms` est posé quand l'action entre dans `done` et effacé quand elle en sort. Chaque
 changement de statut ou de responsable ajoute un événement, avec le statut quitté, celui
 atteint, le responsable, l'appelant et l'heure. Les événements ne sont jamais réécrits, et ni

@@ -1115,9 +1115,8 @@ A `POST` answers `201` and a `PATCH` `200` with the action as it now stands:
 ```
 
 `owner_display` is the name the identity provider gave the caller who took the finding, or
-`null`: a proxy-header or token caller has none. An `owner` set from the body takes the name
-the identity provider last gave that identity on a take, and none when it is typed by hand or
-was never signed in. A status change or the same owner keeps it. Events carry it too. It is
+`null`: a proxy-header or token caller has none, and an `owner` set from the body is typed by
+hand, so it clears it. A status change or the same owner keeps it. Events carry it too. It is
 shown, never judged. `done_at_ms` is stamped when the action enters `done` and cleared when it leaves it. Every
 change of the status or the owner appends an event, with the status it left, the one it
 reached, the owner, the caller and the time. The events are never rewritten, and neither the

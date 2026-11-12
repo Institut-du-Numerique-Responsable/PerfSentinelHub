@@ -40,18 +40,10 @@ public sealed partial class HubDatabase
 
     private const string CopiesOrder = "\nORDER BY fs.signature, fs.source_id;";
 
-    // The name the SSO last gave an owner, so one typed by identity reads as a take of it would.
-    private const string KnownDisplaySelect = """
-                                              SELECT owner_display FROM finding_action_events
-                                              WHERE owner = $owner AND owner_display IS NOT NULL
-                                              ORDER BY at_ms DESC, id DESC LIMIT 1;
-                                              """;
-
     /// <summary>
     ///     Files a new action and its first event, in one transaction. <c>Exists</c> when the
     ///     signature already has one, <c>Busy</c> when the write lock stays held past the wait.
-    ///     <paramref name="ownerDisplay" /> is the name the SSO gave <paramref name="owner" />, or when
-    ///     null the one it last gave that identity, if any.
+    ///     <paramref name="ownerDisplay" /> is the name the SSO gave <paramref name="owner" />, if any.
     ///     A done action keeps the finding's envelope from <paramref name="freezeFrom" />'s sources,
     ///     every source when null.
     /// </summary>
@@ -75,7 +67,6 @@ public sealed partial class HubDatabase
             TouchRecapInputs();
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
-            ownerDisplay ??= await KnownDisplayAsync(connection, transaction, owner, cancellationToken);
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
@@ -115,8 +106,8 @@ public sealed partial class HubDatabase
     ///     <paramref name="status" /> null leaves the status; <paramref name="ownerSet" /> false
     ///     leaves the owner and true sets it, to null to clear it. <c>done_at_ms</c> is stamped
     ///     when the action enters done and cleared when it leaves it. A new owner takes
-    ///     <paramref name="ownerDisplay" />, or for a typed one the name the SSO last gave that
-    ///     identity, none for a free text; a status change or the same owner keeps the display name.
+    ///     <paramref name="ownerDisplay" />, null for a typed one; a status change or the same owner
+    ///     keeps the display name it had.
     ///     Entering done freezes the envelope as <see cref="CreateActionAsync" /> does, and leaving
     ///     done clears it.
     /// </summary>
@@ -162,9 +153,7 @@ public sealed partial class HubDatabase
 
             var newStatus = status ?? currentStatus;
             var newOwner = ownerSet ? owner : currentOwner;
-            var newDisplay = newOwner == currentOwner
-                ? currentDisplay
-                : ownerDisplay ?? await KnownDisplayAsync(connection, transaction, newOwner, cancellationToken);
+            var newDisplay = newOwner == currentOwner ? currentDisplay : ownerDisplay;
             if (newStatus == currentStatus && newOwner == currentOwner)
                 return ActionWriteOutcome.Written;
 
@@ -274,21 +263,6 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue(SignatureParameter, signature);
         command.Parameters.AddWithValue("$sources", freezeFrom is null ? DBNull.Value : JsonArray(freezeFrom));
         await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static async Task<string?> KnownDisplayAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        string? owner,
-        CancellationToken cancellationToken)
-    {
-        if (owner is null)
-            return null;
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = KnownDisplaySelect;
-        command.Parameters.AddWithValue("$owner", owner);
-        return await command.ExecuteScalarAsync(cancellationToken) as string;
     }
 
     private static async Task InsertActionEventAsync(

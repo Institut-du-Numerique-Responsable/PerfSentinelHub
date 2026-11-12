@@ -19,9 +19,9 @@ All notable changes to PerfSentinelHub are recorded here.
   to you and keeps its status, Unassign me (Me retirer) or Unassign (Désaffecter) clears the owner,
   and Assign… (Affecter…) sets it to anyone, offering the people the recap's actions already name;
   on a finding with no action, Assign… declares one to do. `PATCH /api/actions` takes `take: true`,
-  which names the caller with their sign-in name, and an owner typed by identity takes the name the
-  sign-in last gave it, so a person assigned from the list reads as when they take it. Anyone who
-  may write an action may change its owner, and each change is an event naming who made it.
+  which names the caller with their sign-in name; an assigned owner reads as a name made from the
+  identity, as a typed one always has. Anyone who may write an action may change its owner, and
+  each change is an event naming who made it.
   `docs/API.md`, `docs/LAUNCHER.md` and their French mirrors describe it.
 
 ### Changed

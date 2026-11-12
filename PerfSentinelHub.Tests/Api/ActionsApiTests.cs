@@ -104,6 +104,8 @@ public sealed class ActionsApiTests(HubApplicationFactory factory)
         Assert.Equal("Alice Martin", body["owner_display"]!.GetValue<string>());
         var action = Assert.Single(await ReadAsync(signature));
         Assert.Equal("Alice Martin", action.Events[^1].OwnerDisplay);
+        // A take files one event, and a take over one more.
+        Assert.Equal(method == "POST" ? 1 : 2, action.Events.Count);
     }
 
     [Fact]

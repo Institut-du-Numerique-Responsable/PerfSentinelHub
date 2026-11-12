@@ -73,25 +73,6 @@ public sealed class ActionStorageTests(HubApplicationFactory factory) : IClassFi
     }
 
     [Fact]
-    public async Task An_owner_typed_by_identity_takes_the_name_the_sso_last_gave_it()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await Database.CreateActionAsync("display-known-a", ActionStatuses.InProgress, "carol@acme.com",
-            "Carol Dupont", "carol@acme.com", 100, null, cancellationToken);
-        await Database.CreateActionAsync("display-known-b", ActionStatuses.Todo, null, null, "bob", 100, null,
-            cancellationToken);
-        await Database.CreateActionAsync("display-known-c", ActionStatuses.Todo, "carol@acme.com", null, "bob", 150,
-            null, cancellationToken);
-
-        await Database.UpdateActionAsync("display-known-b", null, "carol@acme.com", true, null, "bob", 200, null,
-            cancellationToken);
-
-        var actions = await Database.ReadActionsAsync(["display-known-b", "display-known-c"], cancellationToken);
-        Assert.All(actions, action => Assert.Equal("Carol Dupont", action.OwnerDisplay));
-        Assert.Equal("Carol Dupont", actions.Single(action => action.Signature == "display-known-b").Events[1].OwnerDisplay);
-    }
-
-    [Fact]
     public async Task A_status_change_or_the_same_owner_keeps_the_display_name()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

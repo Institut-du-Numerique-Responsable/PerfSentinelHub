@@ -8994,7 +8994,10 @@
      * @param {RecapPriority} priority
      */
     function recapAssignButton(priority) {
-        const button = el('button', {class: 'recap-link', type: 'button', text: t('recap.action.assign')});
+        const button = el('button', {
+            class: 'recap-link', type: 'button', text: t('recap.action.assign'),
+            'aria-label': t('recap.action.assign.aria', {subject: priority.service + ' ' + (priority.endpoint || '')})
+        });
         button.addEventListener('click', function () {
             state.recapAssigning = state.recapAssigning === priority.signature ? null : priority.signature;
             state.recapAssignDraft = null;
@@ -9042,10 +9045,14 @@
                 cancel.click();
                 return;
             }
+            // A second Enter while the first is out would POST again and show a 409 over an assignment that landed.
+            if (state.recapBusy[signature]) return;
+            state.recapBusy[signature] = true;
             recapSend(priority.action ? 'PATCH' : 'POST', '/api/actions', priority.action
                 ? {signature: signature, owner: owner}
                 : {signature: signature, status: 'todo', owner: owner})
                 .then(function (failure) {
+                    delete state.recapBusy[signature];
                     if (failure) {
                         state.recapRowError[signature] = failure;
                         state.recapAssignDraft = owner || '';

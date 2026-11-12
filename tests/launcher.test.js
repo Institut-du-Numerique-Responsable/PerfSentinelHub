@@ -2408,7 +2408,9 @@ test("a recap delivery reads as where it went and how it fared", () => {
     // Held for its DeliverAt time: the due time follows, and only before the first try.
     const generated = Date.UTC(2026, 10, 9, 0, 30);
     const held = {channel: "webhook", target: "ops", state: "pending", attempts: 0, next_attempt_ms: Date.UTC(2026, 10, 9, 8)};
-    assert.match(PSL.recapDeliveryText(held, generated), /^webhook ops: pending, sent at 2026-11-09 \d\d:00 /);
+    // In the runner's own zone, whose offset may not be whole hours or may fall on the day before.
+    assert.equal(PSL.recapDeliveryText(held, generated),
+        "webhook ops: pending, leaves at " + PSL.localTime(held.next_attempt_ms));
     assert.equal(PSL.recapDeliveryText({...held, next_attempt_ms: generated}, generated), "webhook ops: pending");
     assert.equal(PSL.recapDeliveryText({...held, attempts: 1}, generated), "webhook ops: pending, 1 try");
 });

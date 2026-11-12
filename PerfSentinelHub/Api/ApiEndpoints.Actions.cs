@@ -78,15 +78,11 @@ public static partial class ApiEndpoints
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         var outcome = create
             ? await FileActionAsync(database, write, identity, request, nowMs, freezeFrom, cancellationToken)
-            : write.Take
-                // A take over keeps the status and names the caller as a POST take does.
-                ? await database.UpdateActionAsync(
-                    write.Signature, null, identity, true,
-                    request.HttpContext.User.FindFirstValue(AccessCaller.DisplayNameClaim), identity, nowMs,
-                    freezeFrom, cancellationToken)
-                : await database.UpdateActionAsync(
-                    write.Signature, write.Status, write.Owner, write.OwnerSet, null, identity, nowMs, freezeFrom,
-                    cancellationToken);
+            // A take over keeps the status, which a take never carries, and names the caller as a POST take does.
+            : await database.UpdateActionAsync(
+                write.Signature, write.Status, write.Take ? identity : write.Owner, write.Take || write.OwnerSet,
+                write.Take ? request.HttpContext.User.FindFirstValue(AccessCaller.DisplayNameClaim) : null,
+                identity, nowMs, freezeFrom, cancellationToken);
         return await ActionAnswerAsync(outcome, create, write.Signature, database, request, cancellationToken);
     }
 

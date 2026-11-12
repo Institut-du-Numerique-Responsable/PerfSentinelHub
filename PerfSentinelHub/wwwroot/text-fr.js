@@ -1710,6 +1710,7 @@
         'recap.action.unassign': 'Désaffecter',
         'recap.action.unassign.aria': 'Désaffecter {owner}',
         'recap.action.assign': 'Affecter…',
+        'recap.action.assign.aria': 'Affecter {subject}',
         'recap.assign.input': 'Qui s\'occupe de {subject}',
         'recap.assign.placeholder': 'Nom ou e-mail',
         'recap.assign.save': 'Affecter',
