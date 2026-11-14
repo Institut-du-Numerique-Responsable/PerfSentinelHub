@@ -1644,6 +1644,7 @@
         'recap.assign.placeholder': 'Name or e-mail',
         'recap.assign.save': 'Assign',
         'recap.action.status': 'action status',
+        'recap.action.pending': 'Updating the recap…',
         'recap.send.failed': 'The Hub did not answer.',
         'recap.name.service.subject': 'service {service}',
         'recap.name.service': 'Name service',

@@ -7688,6 +7688,7 @@
             state.recapNameDraft = null;
             state.recapAssigning = null;
             state.recapAssignDraft = null;
+            state.recapBusy = {};
             state.recapShowAll = false;
             state.recapMovesOpen = {};
             state.recapMovesFailed = null;
@@ -7920,6 +7921,10 @@
         }).finally(function () {
             if (sequence !== state.recapSeq) return;
             state.recapMovesLoading = null;
+            // A row write stays pending until the recap computed after it is on screen, so the row
+            // never shows its old owner with live buttons while the recompute runs. A write still on its
+            // way (true) keeps its row: freed now, a second click would send it again.
+            state.recapBusy = PSL.recapRowsLanded(state.recapBusy);
             if (currentScreen() !== 'recap') return;
             render();
             if (opening) focusFirstNewMove(opening);
@@ -8917,7 +8922,7 @@
      */
     function recapActionControls(priority, route) {
         const action = priority.action;
-        const busy = state.recapBusy[priority.signature] === true;
+        const busy = Boolean(state.recapBusy[priority.signature]);
         const ack = el('a', {
             class: 'ack-link', href: PSL.ackRouteHash(priority.signature, null, route.environment),
             text: t('recap.action.ack')
@@ -8935,7 +8940,7 @@
             take.addEventListener('click', function () {
                 recapWrite(priority.signature, 'POST', '/api/actions', {signature: priority.signature, take: true});
             });
-            return [take, recapAssignButton(priority), ack];
+            return [take, recapAssignButton(priority), ack, recapPending(busy)];
         }
         const select = el('select', {
                 class: 'refresh-select',
@@ -8955,7 +8960,17 @@
         });
         const confirmation = PSL.confirmationLabel(action.confirmation);
         return [recapOwner(action), ...recapOwnerButtons(priority, busy), select,
-            confirmation ? recapStateChip(action.confirmation, confirmation) : null, recapWhen(action), ack];
+            confirmation ? recapStateChip(action.confirmation, confirmation) : null, recapWhen(action), ack,
+            recapPending(busy)];
+    }
+
+    /**
+     * Says a row write is on its way: the write itself is quick, the recap computed after it can take
+     * seconds on a large base, and buttons merely greyed out read as a click that did nothing.
+     * @param {boolean} busy
+     */
+    function recapPending(busy) {
+        return busy ? el('span', {class: 'recap-pending', role: 'status', text: t('recap.action.pending')}) : null;
     }
 
     /**
@@ -8996,7 +9011,8 @@
     function recapAssignButton(priority) {
         const button = el('button', {
             class: 'recap-link', type: 'button', text: t('recap.action.assign'),
-            'aria-label': t('recap.action.assign.aria', {subject: priority.service + ' ' + (priority.endpoint || '')})
+            'aria-label': t('recap.action.assign.aria', {subject: priority.service + ' ' + (priority.endpoint || '')}),
+            disabled: state.recapBusy[/** @type {string} */ (priority.signature)] ? 'disabled' : null
         });
         button.addEventListener('click', function () {
             state.recapAssigning = state.recapAssigning === priority.signature ? null : priority.signature;
@@ -9014,6 +9030,7 @@
      */
     function recapAssignEditor(priority) {
         const signature = /** @type {string} */ (priority.signature);
+        const busy = Boolean(state.recapBusy[signature]);
         const choices = PSL.recapOwnerChoices(state.recap ? state.recap.priorities : [],
             state.status && state.status.identity);
         const input = el('input', {
@@ -9025,19 +9042,27 @@
             placeholder: t('recap.assign.placeholder'),
             'aria-label': t('recap.assign.input', {subject: priority.service + ' ' + (priority.endpoint || '')}),
             autocomplete: 'off',
-            spellcheck: 'false'
+            spellcheck: 'false',
+            readonly: busy ? 'readonly' : null
         });
         const options = el('datalist', {id: 'recap-owner-choices'}, choices.map(function (choice) {
             return el('option', {value: choice.value, label: choice.label});
         }));
-        const save = el('button', {class: 'pill-button pill-sm', type: 'submit', text: t('recap.assign.save')});
-        const cancel = el('button', {class: 'recap-link', type: 'button', text: t('recap.name.cancel')});
+        const save = el('button', {
+            class: 'pill-button pill-sm', type: 'submit', text: t('recap.assign.save'),
+            disabled: busy ? 'disabled' : null
+        });
+        // Greyed while the write is out: it would close the editor, not stop a write already sent.
+        const cancel = el('button', {
+            class: 'recap-link', type: 'button', text: t('recap.name.cancel'),
+            disabled: busy ? 'disabled' : null
+        });
         cancel.addEventListener('click', function () {
             state.recapAssigning = null;
             state.recapAssignDraft = null;
             render();
         });
-        const form = el('form', {class: 'recap-name'}, [input, options, save, cancel]);
+        const form = el('form', {class: 'recap-name'}, [input, options, save, cancel, recapPending(busy)]);
         form.addEventListener('submit', function (event) {
             event.preventDefault();
             const owner = input.value.trim() || null;
@@ -9048,11 +9073,13 @@
             // A second Enter while the first is out would POST again and show a 409 over an assignment that landed.
             if (state.recapBusy[signature]) return;
             state.recapBusy[signature] = true;
+            state.recapAssignDraft = input.value;
+            renderFocus('.recap-owner-input');
             recapSend(priority.action ? 'PATCH' : 'POST', '/api/actions', priority.action
                 ? {signature: signature, owner: owner}
                 : {signature: signature, status: 'todo', owner: owner})
                 .then(function (failure) {
-                    delete state.recapBusy[signature];
+                    state.recapBusy = PSL.recapWriteAnswered(state.recapBusy, signature, Boolean(failure));
                     if (failure) {
                         state.recapRowError[signature] = failure;
                         state.recapAssignDraft = owner || '';
@@ -9132,9 +9159,11 @@
         state.recapBusy[signature] = true;
         render();
         recapSend(method, path, body).then(function (failure) {
-            delete state.recapBusy[signature];
-            if (failure) state.recapRowError[signature] = failure;
-            else delete state.recapRowError[signature];
+            state.recapBusy = PSL.recapWriteAnswered(state.recapBusy, signature, Boolean(failure));
+            if (failure) {
+                state.recapRowError[signature] = failure;
+                render();
+            } else delete state.recapRowError[signature];
             // A write that landed changes the recap: computed again. A refused one changed nothing.
             loadRecap(true, !failure);
         });
@@ -9192,7 +9221,8 @@
     function recapNameButton(target) {
         const button = el('button', {
             class: 'recap-link', type: 'button', text: target.label ? target.rename : target.name,
-            'aria-label': t(target.label ? 'recap.name.aria.rename' : 'recap.name.aria', {subject: target.subject})
+            'aria-label': t(target.label ? 'recap.name.aria.rename' : 'recap.name.aria', {subject: target.subject}),
+            disabled: state.recapBusy[target.row] ? 'disabled' : null
         });
         button.addEventListener('click', function () {
             state.recapNaming = state.recapNaming === target.key ? null : target.key;
@@ -9208,6 +9238,7 @@
      * @param {NameTarget} target
      */
     function recapNameEditor(target) {
+        const busy = Boolean(state.recapBusy[target.row]);
         const input = el('input', {
             class: 'recap-input recap-name-input',
             type: 'text',
@@ -9215,16 +9246,24 @@
             value: state.recapNameDraft !== null ? state.recapNameDraft : target.label || '',
             placeholder: target.placeholder,
             'aria-label': t('recap.name.input', {subject: target.subject}),
-            spellcheck: 'false'
+            spellcheck: 'false',
+            readonly: busy ? 'readonly' : null
         });
-        const save = el('button', {class: 'pill-button pill-sm', type: 'submit', text: t('recap.name.save')});
-        const cancel = el('button', {class: 'recap-link', type: 'button', text: t('recap.name.cancel')});
+        const save = el('button', {
+            class: 'pill-button pill-sm', type: 'submit', text: t('recap.name.save'),
+            disabled: busy ? 'disabled' : null
+        });
+        // Greyed while the write is out: it would close the editor, not stop a write already sent.
+        const cancel = el('button', {
+            class: 'recap-link', type: 'button', text: t('recap.name.cancel'),
+            disabled: busy ? 'disabled' : null
+        });
         cancel.addEventListener('click', function () {
             state.recapNaming = null;
             state.recapNameDraft = null;
             render();
         });
-        const form = el('form', {class: 'recap-name'}, [input, save, cancel]);
+        const form = el('form', {class: 'recap-name'}, [input, save, cancel, recapPending(busy)]);
         form.addEventListener('submit', function (event) {
             event.preventDefault();
             recapNameSave(target, input.value.trim() || null);
@@ -9237,11 +9276,15 @@
      * @param {string | null} label
      */
     function recapNameSave(target, label) {
+        if (state.recapBusy[target.row]) return;
+        state.recapBusy[target.row] = true;
+        state.recapNameDraft = label === null ? '' : label;
+        renderFocus('.recap-name-input');
         recapSend('PUT', target.path, Object.assign({}, target.body, {label: label}))
             .then(function (failure) {
+                state.recapBusy = PSL.recapWriteAnswered(state.recapBusy, target.row, Boolean(failure));
                 if (failure) {
                     state.recapRowError[target.row] = failure;
-                    state.recapNameDraft = label === null ? '' : label;
                     render();
                     return;
                 }
