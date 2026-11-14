@@ -425,3 +425,12 @@ v0.17.1	170f080	2026-11-11	PASS
 # asserted by a scenario yet: unit tests and a local browser check cover them. Not
 # run: the cluster hub scenarios.
 v0.18.0	5d3961b	2026-11-12	PASS
+# v0.18.1 targeted pass on a local Release build of fix/recap-action-pending
+# (0a52c7e) and the perf-sentinel 0.45.0 release binary, no cluster, lab at
+# origin/main. The change is launcher-only: a recap row stays pending until the
+# recap computed after its write lands. hub-recap (21 checks, the hand-over and
+# a delivery held until DeliverAt included), hub-detection-volume and hub-card
+# (24 checks). All PASS, no skip. The pending row itself is browser behaviour no
+# scenario reaches: tests/launcher.test.js and a local browser check cover it.
+# Not run: the cluster hub scenarios, unchanged Hub server code since v0.18.0.
+v0.18.1	1c5bd7c	2026-11-14	PASS
