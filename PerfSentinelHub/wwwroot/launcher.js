@@ -2453,6 +2453,32 @@
             .sort((a, b) => a.label.localeCompare(b.label));
     }
 
+    /**
+     * Where a recap row's write stands once the Hub answered it. `true` is a write on its way; a write
+     * the Hub took is held as `'landed'` until the recap computed after it is on screen, so the row
+     * never shows its old state with live buttons meanwhile. A refusal frees the row at once.
+     * @param {Record<string, true | 'landed'>} busy
+     * @param {string} row
+     * @param {boolean} failed
+     * @returns {Record<string, true | 'landed'>}
+     */
+    function recapWriteAnswered(busy, row, failed) {
+        const next = Object.assign({}, busy);
+        if (failed) delete next[row];
+        else next[row] = 'landed';
+        return next;
+    }
+
+    /**
+     * The rows a recap landing frees: those whose write it was computed after. A write still out
+     * keeps its row, or a second click would send it again.
+     * @param {Record<string, true | 'landed'>} busy
+     * @returns {Record<string, true | 'landed'>}
+     */
+    function recapRowsLanded(busy) {
+        return Object.fromEntries(Object.entries(busy).filter(([, stage]) => stage !== 'landed'));
+    }
+
     // ----------------------------------------------------------- the recap screen
 
     /**
@@ -5302,6 +5328,8 @@
         deviceApproveStep,
         ownerLabel,
         recapOwnerChoices,
+        recapWriteAnswered,
+        recapRowsLanded,
         RECAP_LABELS,
         RECAP_HELP,
         serviceParts,

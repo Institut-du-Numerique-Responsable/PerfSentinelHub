@@ -2,6 +2,17 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- A change made from a recap row (take, take over, unassign, assign, a status, a name) now shows
+  "Updating the recap…" (« Mise à jour du récap… ») on the row and keeps its buttons greyed out
+  until the recap computed after it is on screen. The write itself was quick, but the recompute
+  after it could take seconds on a large base with nothing on screen, and the buttons came back
+  live meanwhile, so a second click looked needed. A disabled link on the row now also looks
+  disabled.
+
 ## [0.18.0] - 2026-11-12
 
 ### Added

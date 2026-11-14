@@ -1715,6 +1715,7 @@
         'recap.assign.placeholder': 'Nom ou e-mail',
         'recap.assign.save': 'Affecter',
         'recap.action.status': 'statut de l\'action',
+        'recap.action.pending': 'Mise à jour du récap…',
         'recap.send.failed': 'Le Hub n\'a pas répondu.',
         'recap.name.service.subject': 'service {service}',
         'recap.name.service': 'Nommer le service',

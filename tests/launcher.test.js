@@ -1872,6 +1872,21 @@ test("the people an action can be handed to are the ones the recap already names
     assert.deepEqual(PSL.recapOwnerChoices([], null), []);
 });
 
+test("a recap row stays pending from its click until the recap computed after its write lands", () => {
+    // Row a's write is on its way; row b's was taken by the Hub and waits for its recap.
+    let busy = PSL.recapWriteAnswered({a: true, b: true}, "b", false);
+    assert.deepEqual(busy, {a: true, b: "landed"});
+
+    // A recap landing frees b only: a's write is still out and could be sent twice.
+    busy = PSL.recapRowsLanded(busy);
+    assert.deepEqual(busy, {a: true});
+
+    // A refusal frees its row at once, with no recap to wait for.
+    assert.deepEqual(PSL.recapWriteAnswered(busy, "a", true), {});
+    // Neither changes the map it is given: the screen swaps state.recapBusy whole.
+    assert.deepEqual(busy, {a: true});
+});
+
 test("an action owner reads as a name", () => {
     // The SSO display name wins and the full identity stays on hover.
     assert.deepEqual(PSL.ownerLabel("alice.martin@acme.com", null),
