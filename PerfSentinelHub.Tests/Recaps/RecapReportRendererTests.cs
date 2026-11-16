@@ -576,7 +576,8 @@ public sealed partial class RecapReportRendererTests
         };
 
         var html = Html(RecapViews.Frozen(snapshot));
-        var moves = html[html.IndexOf("<div class=\"moves\">", StringComparison.Ordinal)..];
+        var start = html.IndexOf("<div class=\"moves\">", StringComparison.Ordinal);
+        var moves = html[start..html.IndexOf("</section>", start, StringComparison.Ordinal)];
         var groups = moves.Split("<div class=\"move\"", StringSplitOptions.None)[1..];
 
         var folded = groups[0].IndexOf("<details class=\"more\">", StringComparison.Ordinal);

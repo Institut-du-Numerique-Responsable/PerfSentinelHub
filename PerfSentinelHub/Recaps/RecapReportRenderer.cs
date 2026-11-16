@@ -300,9 +300,7 @@ public static class RecapReportRenderer
         PriorityList(html, page, 0, first, max);
         if (first < all.Count)
         {
-            html.Append(FoldedAt).Append("<summary>")
-                .Append(E(page.T("recap.prio.show_all", (CountName, all.Count.ToString(CultureInfo.InvariantCulture)))))
-                .Append("</summary>\n");
+            Fold(html, page, all.Count);
             PriorityList(html, page, first, all.Count, max);
             html.Append("</details>\n");
         }
@@ -317,6 +315,12 @@ public static class RecapReportRenderer
                 .Append(ParagraphEndLine);
         html.Append("</section>\n");
     }
+
+    // Opens the fold a long list hides its rest under; the caller closes it after the rest.
+    private static void Fold(StringBuilder html, Page page, int count) =>
+        html.Append(FoldedAt).Append("<summary>")
+            .Append(E(page.T("recap.prio.show_all", (CountName, count.ToString(CultureInfo.InvariantCulture)))))
+            .Append("</summary>\n");
 
     private static void PriorityList(StringBuilder html, Page page, int from, int to, long max)
     {
@@ -639,24 +643,23 @@ public static class RecapReportRenderer
             html.Append("<span class=\"sub\">").Append(E(sub)).Append(SpanEnd);
         html.Append("</h3>");
         var first = Math.Min(MovesFirstPage, items.Count);
-        MoveList(html, page, items.Take(first));
+        MoveList(html, page, items, 0, first);
         if (first < items.Count)
         {
-            html.Append(FoldedAt).Append("<summary>")
-                .Append(E(page.T("recap.prio.show_all", (CountName, items.Count.ToString(CultureInfo.InvariantCulture)))))
-                .Append("</summary>");
-            MoveList(html, page, items.Skip(first));
+            Fold(html, page, items.Count);
+            MoveList(html, page, items, first, items.Count);
             html.Append("</details>");
         }
 
         html.Append("</div>\n");
     }
 
-    private static void MoveList(StringBuilder html, Page page, IEnumerable<RecapMove> items)
+    private static void MoveList(StringBuilder html, Page page, IReadOnlyList<RecapMove> items, int from, int to)
     {
         html.Append("<ul>");
-        foreach (var item in items)
+        for (var index = from; index < to; index++)
         {
+            var item = items[index];
             html.Append("<li><span class=\"who\">");
             if (page.Management)
                 MoveWho(html, page, item);
