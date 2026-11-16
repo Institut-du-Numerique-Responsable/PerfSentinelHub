@@ -566,6 +566,28 @@ public sealed partial class RecapReportRendererTests
         Assert.Contains("<summary>Show all 12</summary>", html, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void A_move_group_shows_five_then_the_rest_folded()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            Movements = new RecapMovements(
+                Enumerable.Range(0, 7).Select(_ => RecapSnapshots.Move()).ToList(), [RecapSnapshots.Move()], 0, [], [], [], [])
+        };
+
+        var html = Html(RecapViews.Frozen(snapshot));
+        var start = html.IndexOf("<div class=\"moves\">", StringComparison.Ordinal);
+        var moves = html[start..html.IndexOf("</section>", start, StringComparison.Ordinal)];
+        var groups = moves.Split("<div class=\"move\"", StringSplitOptions.None)[1..];
+
+        var folded = groups[0].IndexOf("<details class=\"more\">", StringComparison.Ordinal);
+        Assert.True(folded > 0);
+        Assert.Equal(5, MoveRows().Count(groups[0][..folded]));
+        Assert.Equal(2, MoveRows().Count(groups[0][folded..]));
+        Assert.Contains("<summary>Show all 7</summary>", groups[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("<details", groups[1], StringComparison.Ordinal);
+    }
+
     // The divider separates the rows with a volume from the ones without, so it needs one of each.
     [Theory]
     [InlineData(new long[] { 0, 0 }, 0)]
@@ -618,6 +640,9 @@ public sealed partial class RecapReportRendererTests
 
     [GeneratedRegex(@"<li class=""row[ """"]")]
     private static partial Regex Rows();
+
+    [GeneratedRegex("<li>")]
+    private static partial Regex MoveRows();
 
     [GeneratedRegex("<(script|style)[^>]*>.*?</\\1>", RegexOptions.Singleline)]
     private static partial Regex ScriptOrStyle();

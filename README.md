@@ -26,7 +26,7 @@ SQLite. Daemons push their findings, and the Hub polls them as a fallback. Histo
 
 ## Run locally in five minutes
 
-Requirements: .NET SDK 10.0.403 and a reachable Perf Sentinel daemon.
+Requirements: .NET SDK 10.0.404 and a reachable Perf Sentinel daemon.
 
 ```bash
 Hub__DatabasePath=/tmp/perf-sentinel-hub.db \
@@ -83,7 +83,7 @@ IMAGE_DIGEST="$(jq -r .image.digest release/release-manifest.json)"
 docker pull "ghcr.io/institut-du-numerique-responsable/perf-sentinel-hub@$IMAGE_DIGEST"
 
 CHART=ghcr.io/institut-du-numerique-responsable/charts/perf-sentinel-hub
-CHART_DIGEST="$(oras resolve "$CHART:0.18.1")"
+CHART_DIGEST="$(oras resolve "$CHART:0.19.0")"
 helm pull "oci://$CHART@$CHART_DIGEST"
 ```
 

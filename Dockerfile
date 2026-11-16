@@ -1,6 +1,6 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.403-resolute-aot@sha256:1aab8611ff772f183523a6435699f924d46b1be3f03d6833e9b26452d74083c0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.404-resolute-aot@sha256:23f95eefa095a0137d9288a37922e31066c2dcb4a5903a805ed4f180d2c0f3d6 AS build
 ARG TARGETARCH
-ARG VERSION=0.18.1
+ARG VERSION=0.19.0
 ARG SOURCE_DATE_EPOCH
 WORKDIR /src
 COPY . .
@@ -14,9 +14,9 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
 # outside the registry.
 FROM ghcr.io/institut-du-numerique-responsable/perf-sentinel:0.45.0@sha256:2c1f63304196948424df05d8b0705fbea883097aa168e6ba6b0141c34fb1e29e AS engine
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.14-resolute-chiseled-extra@sha256:b43e736c73577b74673b18e8c18b497fa874350a267cb6d6e2688860e92896c6
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.15-resolute-chiseled-extra@sha256:21f636dfa1e34282a96032c76d39d7e82fb0f34a4f2441a1f5fe1e1a1301b91f
 ARG SOURCE_COMMIT=unknown
-LABEL org.opencontainers.image.version="0.18.1" \
+LABEL org.opencontainers.image.version="0.19.0" \
       org.opencontainers.image.revision="$SOURCE_COMMIT" \
       org.opencontainers.image.source="https://github.com/Institut-du-Numerique-Responsable/PerfSentinelHub"
 WORKDIR /app
