@@ -46,11 +46,11 @@
     {
       "name": "Microsoft.Data.Sqlite",
       "kind": "nuget",
-      "version": "10.0.14",
-      "digest_or_sha": "sha512-base64:K37udQU2dojYZuCUT9F8TlZTAxzE0XOkqUfgIM2+2Lj7yJnfoNhpLmxAp6eSL281R6ncc4uhIAvTxSpv1qjgVA==",
-      "lock_content_hash": "muyroan6rKrf0omZL8UF7Kw5uOGp/yBg1L/XWvkFN3WhKaNtK2IWqRZw93nIwVqjhTVDO0l4CEGhHIh+mb+sKg==",
-      "released_at": "2026-10-25T17:07:18.587Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/10.0.14.json",
+      "version": "11.0.0",
+      "digest_or_sha": "sha512-base64:mL2Ipz/AVpcPj/xqi3NTVcldzRs83KJ8yaunEs5zPQ6A9GwLolOg3js0SlPexkp5YsAFyyiGI4Z7czVzqfZu1g==",
+      "lock_content_hash": "K3hceHG5pxWJ+mytesLiGxmJ988YFrKnMGml0xbq//UWsM79KD8nQ5sBwTSLKgWecT6Saict/jIB8O6lDL0M2g==",
+      "released_at": "2026-11-10T13:09:34.75Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/11.0.0.json",
       "reason": "Latest stable supported SQLite provider."
     },
     {
