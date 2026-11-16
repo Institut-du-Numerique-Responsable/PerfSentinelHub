@@ -34,6 +34,7 @@ public static class RecapReportRenderer
         "t.title=t.textContent;t.textContent=p.day+'/'+p.month+'/'+p.year+' '+(p.hour==='24'?'00':p.hour)+':'+p.minute+' '+p.timeZoneName;});";
 
     private const int FirstPage = 10;
+    private const int MovesFirstPage = 5;
     private const string FoldedAt = "<details class=\"more\">";
 
     private const string SpanEnd = "</span>";
@@ -636,7 +637,24 @@ public static class RecapReportRenderer
             .Append(items.Count.ToString(CultureInfo.InvariantCulture)).Append(SpanEnd);
         if (sub.Length > 0)
             html.Append("<span class=\"sub\">").Append(E(sub)).Append(SpanEnd);
-        html.Append("</h3><ul>");
+        html.Append("</h3>");
+        var first = Math.Min(MovesFirstPage, items.Count);
+        MoveList(html, page, items.Take(first));
+        if (first < items.Count)
+        {
+            html.Append(FoldedAt).Append("<summary>")
+                .Append(E(page.T("recap.prio.show_all", (CountName, items.Count.ToString(CultureInfo.InvariantCulture)))))
+                .Append("</summary>");
+            MoveList(html, page, items.Skip(first));
+            html.Append("</details>");
+        }
+
+        html.Append("</div>\n");
+    }
+
+    private static void MoveList(StringBuilder html, Page page, IEnumerable<RecapMove> items)
+    {
+        html.Append("<ul>");
         foreach (var item in items)
         {
             html.Append("<li><span class=\"who\">");
@@ -649,7 +667,7 @@ public static class RecapReportRenderer
             html.Append(SpanEnd).Append(TrendHtml(page, item.Trend, item.Change)).Append("</li>");
         }
 
-        html.Append("</ul></div>\n");
+        html.Append("</ul>");
     }
 
     private static void MoveWho(StringBuilder html, Page page, RecapMove item)
