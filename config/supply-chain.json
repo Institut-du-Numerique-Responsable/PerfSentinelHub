@@ -36,21 +36,21 @@
     {
       "name": "Microsoft.AspNetCore.Mvc.Testing",
       "kind": "nuget",
-      "version": "10.0.14",
-      "digest_or_sha": "sha512-base64:4v0FDslYCyGoGI+95O9NFkNPpBtOOd3FGRYSREraPzDo7ZCEv/TJYCGVpUUcN68pzcscMqps42LUX+dQJucrbg==",
-      "lock_content_hash": "l3eFye4Bv4oGT1Ag8pFtZ6WM0LhR9PkNiDH1AYitZW2LAaFWl1FgF4Dj7wY4Fp/BqCZ4LLkBGLw+NE/CA5k6mQ==",
-      "released_at": "2026-10-25T17:07:21.037Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.aspnetcore.mvc.testing/10.0.14.json",
+      "version": "10.0.15",
+      "digest_or_sha": "sha512-base64:0BhIVxGdqIS34y8oA725ooqBMmADalyUBtZSeObBLWRQRHElyRBpUR2gAdqYmFD3Gdm4siV4nH/Rx8lhZz5MiA==",
+      "lock_content_hash": "qwZzLn60Ish1cTZoNDcbS/P8zjUjLGtZUye18KwB8n05eea5WGBgYO/HAxZWLRcFVkSD2ZXY496e1YX7Go4ndQ==",
+      "released_at": "2026-11-10T13:08:40.45Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.aspnetcore.mvc.testing/10.0.15.json",
       "reason": "Latest stable supported ASP.NET Core testing package."
     },
     {
       "name": "Microsoft.Data.Sqlite",
       "kind": "nuget",
-      "version": "10.0.14",
-      "digest_or_sha": "sha512-base64:K37udQU2dojYZuCUT9F8TlZTAxzE0XOkqUfgIM2+2Lj7yJnfoNhpLmxAp6eSL281R6ncc4uhIAvTxSpv1qjgVA==",
-      "lock_content_hash": "muyroan6rKrf0omZL8UF7Kw5uOGp/yBg1L/XWvkFN3WhKaNtK2IWqRZw93nIwVqjhTVDO0l4CEGhHIh+mb+sKg==",
-      "released_at": "2026-10-25T17:07:18.587Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/10.0.14.json",
+      "version": "10.0.15",
+      "digest_or_sha": "sha512-base64:Tj+zwGHKyBat4qQktUjL/sNgFbNjNad3aAr9BOMSUUxbVfx/Dh7HpzjcoCc0PxoLfXn8l6vxFa5TJrKnD7hB4A==",
+      "lock_content_hash": "PtnNCUloQOLAXhB09id+0CL2c9yd+9/wi0QHCHPa+zrTKEJTdu07jlUgblFjorYhKnwcHN1VS0z75jN8vFruuQ==",
+      "released_at": "2026-11-10T13:08:32.987Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.data.sqlite/10.0.15.json",
       "reason": "Latest stable supported SQLite provider."
     },
     {
@@ -86,10 +86,10 @@
     {
       "name": "dotnet-reportgenerator-globaltool",
       "kind": "dotnet-tool",
-      "version": "5.5.12",
-      "digest_or_sha": "sha512-base64:i+0V1aooHiL+4dCf4eaOXj5jTUd2Hw66EmA0eewjWiXbekIvegkzQ0Ktz1aRCCSs8DYhxGsVbNCbw0BZpFC5Vg==",
-      "released_at": "2026-10-27T20:05:28.54Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-reportgenerator-globaltool/5.5.12.json",
+      "version": "5.6.0",
+      "digest_or_sha": "sha512-base64:tlYygzLmBxRlpwmA3zeJ/m4CvShBAU4hT6S16SdefIqg8n3EjPUpMk06su04/z5v34vTGe2ZhEgXubD9ODVasg==",
+      "released_at": "2026-11-10T20:59:38.1Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-reportgenerator-globaltool/5.6.0.json",
       "reason": "Latest stable report generator tool."
     },
     {
@@ -447,11 +447,11 @@
     {
       "name": "Microsoft.Testing.Extensions.TrxReport",
       "kind": "nuget",
-      "version": "2.5.2",
-      "digest_or_sha": "sha512-base64:O3lE+Y6eZ96/U3TrpbVVpl2rBL9J06Ex5+zmBojafcs0Ofgk+PubeIWXRX/bjCgEg01ueshVA8RZHEq+Ro1Clg==",
-      "lock_content_hash": "Rk0LrXgGiS9yIOxmT+suGu4+R4F4qsvPhgEjQ+LEbUienq51AnLtLICfcpY0hjt5uon2RRbMPuJiHc6owW0lTA==",
-      "released_at": "2026-10-27T16:45:22.25Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.5.2.json",
+      "version": "2.5.3",
+      "digest_or_sha": "sha512-base64:6QynsVIqaNYxtyd0uMfI+J7r4++3VB1B6PmlwbC7YYvW/W9cXeQkpV1kbeF/sVIto9Nrb87Yv/FxLArqhIx68A==",
+      "lock_content_hash": "g+iSRKedpiZ9Kpkum1wJ3jWTeZhL+V/kmFHFT9IRhWDDZDSNPIlQCwS0kvn4f6NYtLHNUHdZLLqJ8lzi/ZEktg==",
+      "released_at": "2026-11-11T15:28:01.94Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.testing.extensions.trxreport/2.5.3.json",
       "reason": "TRX reporter for Microsoft.Testing.Platform, feeding sonar.cs.vstest.reportsPaths."
     }
   ]
