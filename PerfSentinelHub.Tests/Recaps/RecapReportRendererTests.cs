@@ -582,8 +582,8 @@ public sealed partial class RecapReportRendererTests
 
         var folded = groups[0].IndexOf("<details class=\"more\">", StringComparison.Ordinal);
         Assert.True(folded > 0);
-        Assert.Equal(5, Regex.Count(groups[0][..folded], "<li>"));
-        Assert.Equal(2, Regex.Count(groups[0][folded..], "<li>"));
+        Assert.Equal(5, MoveRows().Count(groups[0][..folded]));
+        Assert.Equal(2, MoveRows().Count(groups[0][folded..]));
         Assert.Contains("<summary>Show all 7</summary>", groups[0], StringComparison.Ordinal);
         Assert.DoesNotContain("<details", groups[1], StringComparison.Ordinal);
     }
@@ -640,6 +640,9 @@ public sealed partial class RecapReportRendererTests
 
     [GeneratedRegex(@"<li class=""row[ """"]")]
     private static partial Regex Rows();
+
+    [GeneratedRegex("<li>")]
+    private static partial Regex MoveRows();
 
     [GeneratedRegex("<(script|style)[^>]*>.*?</\\1>", RegexOptions.Singleline)]
     private static partial Regex ScriptOrStyle();
