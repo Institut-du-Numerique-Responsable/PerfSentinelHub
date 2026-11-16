@@ -434,3 +434,11 @@ v0.18.0	5d3961b	2026-11-12	PASS
 # scenario reaches: tests/launcher.test.js and a local browser check cover it.
 # Not run: the cluster hub scenarios, unchanged Hub server code since v0.18.0.
 v0.18.1	1c5bd7c	2026-11-14	PASS
+# v0.19.0 targeted pass on a local Release build of feat/recap-moves-fold
+# (4ce160a, SDK 10.0.404 and .NET 10.0.15) and the perf-sentinel 0.45.0 release
+# binary, no cluster, lab at origin/main. The change folds each "What moved"
+# group past five rows in the recap page and moves the toolchain to .NET 10.0.15.
+# hub-recap (21 checks), hub-detection-volume and hub-card (24 checks). All
+# PASS, no skip. The fold itself is page markup no scenario reaches:
+# RecapReportRendererTests covers it. Not run: the cluster hub scenarios.
+v0.19.0	53d8424	2026-11-16	PASS
