@@ -257,10 +257,10 @@
     {
       "name": "azure/setup-helm",
       "kind": "github-action",
-      "version": "5.0.1",
-      "digest_or_sha": "9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310",
-      "released_at": "2026-06-23T20:07:19Z",
-      "source": "https://github.com/Azure/setup-helm/releases/tag/v5.0.1",
+      "version": "5.1.0",
+      "digest_or_sha": "2f5e7bc67f1f9972ab16657bb795f36d8f04de0e",
+      "released_at": "2026-11-09T22:43:31Z",
+      "source": "https://github.com/azure/setup-helm/releases/tag/v5.1.0",
       "reason": "Latest stable Helm setup action, pinned to its release commit."
     },
     {
