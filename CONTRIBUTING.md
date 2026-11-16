@@ -27,9 +27,9 @@ signed tag is created.
 The protected GitHub check is `CI / Gate`, from the dedicated PerfSentinel CI Gate App. A
 GitHub Actions check of the same name does not satisfy that App-backed boundary.
 
-The toolchain is pinned: .NET SDK 10.0.404, ASP.NET and SQLite 10.0.14, SQLitePCLRaw
+The toolchain is pinned: .NET SDK 10.0.404, ASP.NET and SQLite 10.0.15, SQLitePCLRaw
 3.0.5, Helm 4.2.3, and SHA-pinned GitHub Actions (checkout 7.0.1, setup-dotnet 6.0.0,
-setup-helm 5.0.1, Trivy Action 0.36.0). Runtime containers are non-root, read-only, and
+setup-helm 5.1.0, Trivy Action 0.36.0). Runtime containers are non-root, read-only, and
 based on digest-pinned official NativeAOT and chiseled images.
 
 ## Commit and pull request rules
