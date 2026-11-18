@@ -118,6 +118,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                + $"WHERE e.signature = {signature} AND e.source_id = {sourceId})";
     }
 
+    // The words RecapEnvelope reads for ranking and movements, built from the row's own columns
+    // (copy-aware on a scoped read), so a slim read never looks an envelope up.
+    private const string SlimEnvelope =
+        "json_object('finding', json_object('type', f.finding_type, 'severity', f.severity, "
+        + "'service', f.service, 'source_endpoint', f.endpoint, 'confidence', f.max_confidence))";
+
     // The one source a read without access patterns is scoped to, null for none or several.
     private static string? OneSource(FindingQuery query)
     {
@@ -680,6 +686,12 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         AddFilter(where, parameters, "severity", "$severity", query.Severity);
         AddFilter(where, parameters, "sample_trace_id", "$trace_id", traceId);
         AddFilter(where, parameters, "signature", SignatureParameter, query.Signature);
+        if (query.Signatures is { } signatures)
+        {
+            where.Append(" AND signature IN (SELECT value FROM json_each($signatures))");
+            parameters.Add(("$signatures", JsonArray(signatures)));
+        }
+
         var windowed = AddWindow(parameters, query);
         var (volumeWindow, today) = AddVolumeWindow(parameters, query, windowed);
 
@@ -803,6 +815,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
         var envelope = row == "scoped"
             ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
             : SharedEnvelope("f.signature");
+        if (query.Slim)
+            envelope = SlimEnvelope;
         var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
         var grouped = query.GroupingValues is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));

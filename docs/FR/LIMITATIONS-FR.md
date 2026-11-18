@@ -194,8 +194,9 @@ aussi communs à tout le Hub et jamais purgés : le nom d'un endpoint comme celu
 survit aux findings qu'il nommait.
 
 Un récap lit les findings en quatre lectures au plus : la période avec ses findings acquittés,
-la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente. Chaque
-lecture s'arrête à 5 000 findings et garde les 5 000 premiers ; toute lecture qui déborde pose
+la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente. Les priorités
+et chaque liste de mouvements gardent leurs 5 000 premiers dans l'ordre du classement, et disent
+combien elles en ont laissé ; les tuiles comptent tous les findings lus. Chaque lecture s'arrête à 50 000 findings et garde les 50 000 premiers ; toute lecture qui déborde pose
 `truncated`, et les chiffres bâtis sur elle ne couvrent que ceux-là. Restreignez la requête avec
 un filtre.
 

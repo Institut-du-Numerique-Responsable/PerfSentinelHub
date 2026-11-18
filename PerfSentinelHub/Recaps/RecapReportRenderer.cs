@@ -310,10 +310,23 @@ public static class RecapReportRenderer
                 .Append(E(page.T("recap.more.report." + page.Plural(snapshot.MorePriorities),
                     (CountName, snapshot.MorePriorities.ToString(CultureInfo.InvariantCulture)))))
                 .Append(ParagraphEndLine);
+        // The tech list keeps the MaxFindings costliest; the management view sends the rest there.
+        if (!management)
+            Rest(html, page, snapshot.MorePriorities);
         if (snapshot.Truncated)
             html.Append("<p class=\"sources-note\">").Append(E(RecapText.Truncated(snapshot.View, page.Lang)))
                 .Append(ParagraphEndLine);
         html.Append("</section>\n");
+    }
+
+    // What a list the Hub kept the costliest of left out, said under it.
+    private static void Rest(StringBuilder html, Page page, int rest)
+    {
+        if (rest > 0)
+            html.Append("<p class=\"more-note\">")
+                .Append(E(page.T("recap.moves.rest." + page.Plural(rest),
+                    (CountName, rest.ToString(CultureInfo.InvariantCulture)))))
+                .Append(ParagraphEndLine);
     }
 
     // Opens the fold a long list hides its rest under; the caller closes it after the rest.
@@ -589,18 +602,20 @@ public static class RecapReportRenderer
         var lang = page.Lang;
         var moves = snapshot.Movements;
         var confirmed = moves.GoneWithConfirmedAction;
-        (string Title, IReadOnlyList<RecapMove> Items, string Sub, string Tone)[] groups =
+        // A list the Hub kept the costliest of counts its whole length.
+        var whole = RecapViews.WholeCounts(moves);
+        (string Title, IReadOnlyList<RecapMove> Items, int Whole, string Sub, string Tone)[] groups =
         [
-            (page.T("recap.moves.new"), moves.New, "", ""),
-            (page.T("recap.moves.gone.report"), moves.Gone,
+            (page.T("recap.moves.new"), moves.New, whole.New, "", ""),
+            (page.T("recap.moves.gone.report"), moves.Gone, whole.Gone,
                 confirmed > 0
                     ? page.T("recap.moves.confirmed." + page.Plural(confirmed),
                         (CountName, confirmed.ToString(CultureInfo.InvariantCulture)))
                     : "", ""),
-            (page.T("recap.moves.up"), moves.Up, "", "crit"),
-            (page.T("recap.moves.down"), moves.Down, "", ""),
-            (page.T("recap.moves.came_back"), moves.CameBack, "", "warn"),
-            (page.T("recap.moves.done_still"), moves.DoneStillDetected, "", "crit")
+            (page.T("recap.moves.up"), moves.Up, whole.Up, "", "crit"),
+            (page.T("recap.moves.down"), moves.Down, whole.Down, "", ""),
+            (page.T("recap.moves.came_back"), moves.CameBack, whole.CameBack, "", "warn"),
+            (page.T("recap.moves.done_still"), moves.DoneStillDetected, whole.DoneStillDetected, "", "crit")
         ];
         html.Append("<section class=\"section\">\n").Append(Overline(page.T("recap.moves.overline")))
             .Append("<h2 class=\"section-head\">").Append(E(labels.Moved)).Append("<small>")
@@ -611,7 +626,7 @@ public static class RecapReportRenderer
         {
             html.Append("<div class=\"moves\">\n");
             foreach (var group in shown)
-                MoveGroup(html, page, group.Title, group.Items, group.Sub, group.Tone);
+                MoveGroup(html, page, group.Title, group.Items, group.Whole, group.Sub, group.Tone);
             html.Append(DivEndLine);
         }
 
@@ -634,11 +649,12 @@ public static class RecapReportRenderer
     }
 
     private static void MoveGroup(
-        StringBuilder html, Page page, string title, IReadOnlyList<RecapMove> items, string sub, string tone)
+        StringBuilder html, Page page, string title, IReadOnlyList<RecapMove> items, int whole, string sub,
+        string tone)
     {
         html.Append("<div class=\"move\"").Append(tone.Length > 0 ? " data-tone=\"" + tone + "\"" : "")
             .Append("><h3>").Append(E(title)).Append("<span class=\"n\">")
-            .Append(items.Count.ToString(CultureInfo.InvariantCulture)).Append(SpanEnd);
+            .Append(whole.ToString(CultureInfo.InvariantCulture)).Append(SpanEnd);
         if (sub.Length > 0)
             html.Append("<span class=\"sub\">").Append(E(sub)).Append(SpanEnd);
         html.Append("</h3>");
@@ -651,6 +667,7 @@ public static class RecapReportRenderer
             html.Append("</details>");
         }
 
+        Rest(html, page, whole - items.Count);
         html.Append("</div>\n");
     }
 

@@ -158,8 +158,8 @@ public sealed record RecapMovements(
     IReadOnlyList<RecapMove> Down,
     IReadOnlyList<RecapMove> CameBack,
     IReadOnlyList<RecapMove> DoneStillDetected,
-    // Each list's whole length once GET /api/recap cut them; absent from a report or a webhook, whose
-    // lists are whole.
+    // Each list's whole length once a list was cut: by GET /api/recap for the screen, or by the Hub, which
+    // keeps the RecapService.MaxFindings first of each. Absent when every list is whole.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     RecapMoveCounts? Counts = null);
 

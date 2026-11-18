@@ -445,7 +445,7 @@ public sealed partial class RecapReportRendererTests
                         "too many problems to count them all, another measurement gap", visible,
             StringComparison.Ordinal);
         Assert.Contains("No figures came from: svc-quiet.", visible, StringComparison.Ordinal);
-        Assert.Contains("The Hub read the first 5,000 problems", visible, StringComparison.Ordinal);
+        Assert.Contains("The Hub read the first 50,000 problems", visible, StringComparison.Ordinal);
         Assert.Contains("2 more in the engineering view.", visible, StringComparison.Ordinal);
     }
 
@@ -486,6 +486,29 @@ public sealed partial class RecapReportRendererTests
             ],
             Truncated = true
         };
+    }
+
+    // A list the Hub kept the costliest of counts its whole length and says what it left out.
+    [Fact]
+    public void A_kept_list_shows_its_whole_length_and_what_it_left_out()
+    {
+        var snapshot = RecapSnapshots.Distinctive() with
+        {
+            MorePriorities = 7,
+            Movements = RecapSnapshots.Distinctive().Movements with { Counts = new RecapMoveCounts(9001, 1, 1, 1, 1, 1) }
+        };
+
+        var engineering = Visible(Html(snapshot));
+        var management = Visible(Html(RecapViews.Frozen(snapshot)));
+
+        Assert.Contains("9001", engineering, StringComparison.Ordinal);
+        Assert.Contains("…and 9000 more, not listed.", engineering, StringComparison.Ordinal);
+        Assert.Contains("…and 7 more, not listed.", engineering, StringComparison.Ordinal);
+        // Only the cut list and the priorities: a whole list says nothing.
+        Assert.Equal(2, engineering.Split("more, not listed").Length - 1);
+        // The management view sends the priorities to the engineering view, the moves still say their rest.
+        Assert.Contains("…and 9000 more, not listed.", management, StringComparison.Ordinal);
+        Assert.DoesNotContain("…and 7 more", management, StringComparison.Ordinal);
     }
 
     [Fact]

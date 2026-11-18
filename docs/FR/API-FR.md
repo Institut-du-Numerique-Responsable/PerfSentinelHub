@@ -649,7 +649,7 @@ liste des findings.
 | `view`                      | `tech`            | `tech` (Engineering) ou `pilotage` (Management)                   |
 | `environment`, `source_id`  | toute la flotte   | Comme sur `/api/findings`                                         |
 | `service`, `grouping`       | aucun             | Une valeur comme sur `/api/findings`, ou la clé répétée pour plusieurs |
-| `moves`                     | coupé à 50        | `all` liste tous les mouvements de chaque groupe, sans `counts`   |
+| `moves`                     | coupé à 50        | `all` liste tous les mouvements que le Hub garde de chaque groupe |
 
 `service=a&service=b` garde les findings de `a` ou de `b`, et un service avec un grouping gardent
 les findings qui correspondent aux deux. Une valeur vide est ignorée, comme sur `/api/findings`. Une
@@ -685,8 +685,8 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
 - **Classement.** Les findings non acquittés seulement. D'abord ceux qui ont des I/O
   évitables sur la période, par ce volume, puis les autres par sévérité (critical, warning,
   info) ; à égalité, le finding le plus souvent détecté, puis la signature. `rank` commence à
-  `1`. La vue `tech` liste tous les findings classés, `pilotage` les cinq premiers et
-  `more_priorities` compte le reste.
+  `1`. La vue `tech` liste les findings classés jusqu'au plafond ci-dessous, `pilotage` les cinq
+  premiers ; `more_priorities` compte le reste dans l'une et l'autre vue.
 - **Tendances.** Chaque finding classé est `new` (absent de la période précédente), `up`,
   `down` ou `flat` face à son propre volume de la période précédente, `change` étant l'écart
   relatif. La mesure est l'I/O évitable quand l'un des deux côtés en a, les détections sinon.
@@ -703,8 +703,8 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   qu'aucun finding des rangs 1 à 10 n'est passé `up` ou `down`. Chacune des six listes
   s'arrête à ses 50 premiers, et `movements.counts` (`new`, `gone`, `up`, `down`,
   `came_back`, `done_still_detected`) donne sa longueur entière ; `moves=all` lève la
-  coupe. Un rapport figé et son webhook gardent tous les mouvements et ne portent pas
-  `counts`.
+  coupe. Un rapport figé et son webhook gardent tous les mouvements que le Hub garde, et ne
+  portent `counts` que lorsqu'une liste dépasse le plafond ci-dessous.
 - **Incomplet et notes.** `incomplete` nomme ce qui interdit une comparaison exacte :
   `uncovered_days`, `open_day` (un jour passé non scellé), `restart` (un redémarrage du
   daemon a interrompu ses comptes) et `overflow`. `notes` nomme ce qui mérite une ligne et
@@ -754,8 +754,11 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   sauf sur une priorité ou un élément de mouvement dont le `label` est `null` : deux lignes du
   même type restent distinguées par la seule valeur technique qui reste. Un rapport figé et un
   webhook du récap retirent aussi `endpoint` de ces lignes (voir [Rapports de récap](#rapports-de-récap)).
-- **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
-  `truncated: true` ; resserrez la requête avec un filtre.
+- **Plafond.** `priorities` et chaque liste de mouvements gardent leurs 5 000 premiers, dans
+  l'ordre du classement ; les tuiles comptent toujours tous les findings lus, `more_priorities`
+  les priorités au-delà du plafond et `movements.counts` la longueur entière de chaque liste.
+  Une lecture de plus de 50 000 findings garde les 50 000 premiers et pose `truncated: true` ;
+  resserrez la requête avec un filtre.
 
 ### Filtres du récap
 

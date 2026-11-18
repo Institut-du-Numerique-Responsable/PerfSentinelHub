@@ -181,7 +181,8 @@ outlive the findings they named.
 
 A recap reads the findings in up to four reads: the period with its acknowledged findings,
 the period without them, the closed days of a period in progress, and the previous window.
-Each read stops at 5,000 findings and keeps the first 5,000; any read that overflows sets
+The priorities and each movement list keep their first 5,000 in ranking order, and say how many
+they left out; the tiles count every finding read. Each read stops at 50,000 findings and keeps the first 50,000; any read that overflows sets
 `truncated`, and the figures built on it cover those alone. Narrow the request with a filter.
 
 A report is frozen when it is generated and never follows later data: a finding detected or

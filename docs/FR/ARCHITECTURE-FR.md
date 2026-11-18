@@ -253,7 +253,7 @@ rendent incomplet, voir [API-FR.md](API-FR.md#ce-que-le-hub-ajoute-à-un-finding
 rétro-rempli : un jour antérieur à la mise à jour n'a pas de ligne et se lit inconnu.
 
 Le récap, `GET /api/recap`, n'écrit rien. `RecapService` fait jusqu'à
-quatre lectures fenêtrées des findings, chacune plafonnée à 5 000 : la période avec ses findings
+quatre lectures fenêtrées des findings, chacune plafonnée à 50 000 (l'instantané garde les 5 000 priorités les plus coûteuses) : la période avec ses findings
 acquittés, la période sans eux, les jours clos d'une période en cours, et la fenêtre précédente,
 sautée le premier jour d'une période. Il fait ensuite une lecture de couverture des jours des sources et une lecture
 carbone de leurs grammes évitables, et joint les actions et les libellés en dernier. Le calcul

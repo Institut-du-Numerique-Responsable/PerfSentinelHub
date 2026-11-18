@@ -767,7 +767,7 @@ test("the recap's figures and words read in the shown language", () => inLang("f
     assert.equal(PSL.notesText(["sampling", "shed"], 0.5, "pilotage"),
         "Note : seule une partie du trafic a été examinée (taux 0,5), une partie de l'activité a été écartée sous la charge");
     assert.equal(PSL.recapTruncatedText("pilotage"),
-        "Le Hub a lu les 5 000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.");
+        "Le Hub a lu les 50 000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.");
     assert.equal(PSL.recapSourcesNote(["a", "b"], "tech"), "Sources sans volume de détection : a, b.");
     assert.deepEqual(PSL.RECAP_LABELS.pilotage, {io: "Opérations inutiles", findings: "Problèmes ouverts",
         moved: "Ce qui a changé"});

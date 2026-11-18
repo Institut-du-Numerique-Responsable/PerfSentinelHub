@@ -2261,9 +2261,9 @@ test("Management_text_matches_the_launcher_helpers", () => {
     assert.equal(PSL.confirmationLabel("later", "pilotage"), "");
     assert.equal(PSL.confirmationLabel("confirmed", "tech"), "Confirmed by the engine");
     assert.equal(PSL.recapTruncatedText("pilotage"),
-        "The Hub read the first 5,000 problems and stopped there. Narrow the filters to see the others.");
+        "The Hub read the first 50,000 problems and stopped there. Narrow the filters to see the others.");
     assert.equal(PSL.recapTruncatedText("tech"),
-        "The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.");
+        "The Hub read the first 50,000 findings and stopped there. Narrow the filters to see the others.");
     assert.equal(PSL.recapSourcesNote(["a", "b"], "pilotage"), "No figures came from: a, b.");
     assert.equal(PSL.recapSourcesNote(["a", "b"], "tech"), "Sources without a detection volume: a, b.");
     assert.equal(PSL.recapLateNote(["a", "b"]), "Left out, as they recorded nothing until after this period: a, b.");
@@ -3342,7 +3342,7 @@ const TECH_SAYS = {
     fr: {
         banner: "Le bandeau nomme", closedDays: "jours clos", ranking: "dans le classement", note: "La note sous la période",
         filtered: "que les filtres retiennent", noVolume: "le tiret ne veut pas dire zéro", wholePeriod: "toute la période",
-        truncated: "5 000 premiers", ioOne: "1 I/O évitable", ioNone: "I/O évitables", atLeastOne: "1 source n'envoie",
+        truncated: "50 000 premiers", ioOne: "1 I/O évitable", ioNone: "I/O évitables", atLeastOne: "1 source n'envoie",
         atLeastMany: "3 sources n'envoient", noIo: "Aucune I/O évitable à valoriser", noCoefficient: "Aucune source n'a envoyé",
         magnitude: "ordre de grandeur", findingOne: "1 finding actif", findingMany: "4 findings actifs",
         actionOne: "1 action terminée", actionMany: "2 actions terminées", actionsNone: "Actions",
@@ -3356,7 +3356,7 @@ const TECH_SAYS = {
     en: {
         banner: "The banner names", closedDays: "finished days", ranking: "in the ranking", note: "The note under the period",
         filtered: "only what the filters keep", noVolume: "the dash does not mean zero", wholePeriod: "whole period",
-        truncated: "first 5,000", ioOne: "1 avoidable I/O", ioNone: "Avoidable I/O", atLeastOne: "1 source sends",
+        truncated: "first 50,000", ioOne: "1 avoidable I/O", ioNone: "Avoidable I/O", atLeastOne: "1 source sends",
         atLeastMany: "3 sources send", noIo: "No avoidable I/O to put a figure on", noCoefficient: "No source sent",
         magnitude: "order of magnitude", findingOne: "1 active finding", findingMany: "4 active findings",
         actionOne: "1 action done", actionMany: "2 actions done", actionsNone: "Actions",
@@ -3533,6 +3533,10 @@ techTest("what moved follows the screen's note, its confirmed fixes, its long gr
     assert.ok(text(techSteps({movements: {new: [moved()], counts}}).moved).includes(says.longGroup));
     // Opened but still cut, while its whole list is read, the screen keeps the button.
     assert.ok(text(techSteps({movements: {new: [moved()], counts}}, {movesOpen: {new: true}}).moved).includes(says.longGroup));
+    // Read whole and opened, a list the Hub kept the costliest of has nothing left to ask for.
+    const kept = Array.from({length: 6}, () => moved());
+    assert.ok(!text(techSteps({movements: {new: kept, counts}}, {movesOpen: {new: true}, movesWhole: true}).moved).includes(says.longGroup));
+    assert.ok(text(techSteps({movements: {new: kept, counts}}, {movesWhole: true}).moved).includes(says.longGroup));
     assert.ok(!text(techSteps({movements: {new: Array.from({length: 5}, () => moved())}}).moved).includes(says.longGroup));
     assert.ok(text(techSteps({sources_without_volume: ["daemon-b"]}).moved).includes(says.sources));
 });

@@ -469,7 +469,8 @@ secret n'est pas journalisé. Une adresse e-mail ne l'est pas non plus : une liv
 dit « an e-mail address ». L'hôte, l'utilisateur et le mot de passe du relais restent aussi hors du
 journal, et la journalisation des requêtes du client HTTP est coupée, comme pour les divulgations.
 
-**Taille.** Un instantané technique tient tous les findings classés de sa période, jusqu'à 5 000,
+**Taille.** Un instantané technique tient les 5 000 findings classés les plus coûteux de sa période
+et au plus 5 000 mouvements par liste de mouvements,
 et il est stocké par abonnement, cadence et période pendant toute la durée de
 `Hub:Recaps:Retention` (un an par défaut). Dimensionnez le disque en conséquence : un abonnement
 quotidien sur une flotte chargée stocke un instantané par jour. Les rapports partent avec le
