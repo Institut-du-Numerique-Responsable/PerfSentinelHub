@@ -812,10 +812,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}"),
             _ => ("WITH", "findings", "", "")
         };
-        var envelope = query.Slim ? SlimEnvelope
-            : row == "scoped"
-                ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
-                : SharedEnvelope("f.signature");
+        var envelope = row == "scoped"
+            ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
+            : SharedEnvelope("f.signature");
+        if (query.Slim)
+            envelope = SlimEnvelope;
         var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
         var grouped = query.GroupingValues is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));
