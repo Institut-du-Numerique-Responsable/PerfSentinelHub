@@ -2,6 +2,24 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- A recap ranks the whole period by avoidable I/O. Each of its reads stopped at the 5,000 most
+  recently seen findings, so a costly finding last seen early in a busy week could miss the ranking
+  and the tiles. Each read now loads up to 50,000 findings with their volumes only, and the
+  pattern, suggestion and fix are read for the kept priorities alone. The tiles count every
+  finding read.
+- The priorities and each "What moved" list keep their first 5,000 in ranking order and say what
+  they leave out. The Engineering view sets `more_priorities` and shows "…and N more, not listed."
+  (« … et N autres, non listés. ») under the list, and a cut movement list carries its whole length
+  in `movements.counts`, also on `moves=all`, in a frozen report and in its webhook. Every active
+  finding now gets its trend, so a new, rising or falling finding ranked past 5,000 is still
+  counted, and `nothing_moved` no longer reads true when only such findings moved.
+- An acknowledgement that lands while a recap is computed no longer strips a kept priority of its
+  pattern, suggestion and fix.
+
 ## [0.19.0] - 2026-11-16
 
 ### Changed

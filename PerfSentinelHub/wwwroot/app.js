@@ -331,6 +331,8 @@
         recapShowAll: false,
         // The What moved groups shown whole, by their key; the others stop at RECAP_MOVES_FIRST.
         recapMovesOpen: {},
+        // The snapshot on screen was read with moves=all: its lists are all the Hub keeps.
+        recapMovesWhole: false,
         // The group whose whole list is being read with moves=all, and the group whose read failed.
         recapMovesLoading: null,
         recapMovesFailed: null,
@@ -1169,7 +1171,9 @@
         if (state.recap.view === 'pilotage') return {status: 'ready', steps: PSL.recapPilotageSteps(state.recap)};
         return {
             status: 'ready',
-            steps: PSL.recapTechSteps(state.recap, {showAll: state.recapShowAll, movesOpen: state.recapMovesOpen})
+            steps: PSL.recapTechSteps(state.recap, {
+                showAll: state.recapShowAll, movesOpen: state.recapMovesOpen, movesWhole: state.recapMovesWhole
+            })
         };
     }
 
@@ -7663,7 +7667,7 @@
         // Every move when the screen already held them all or a group is being opened whole: a write
         // that lands meanwhile takes over that read instead of racing it, so the click is kept.
         const opening = keep ? state.recapMovesLoading : null;
-        const all = Boolean(opening) || (keep && state.recap && !state.recap.movements.counts);
+        const all = Boolean(opening) || (keep && state.recapMovesWhole);
         const previous = state.recapJob;
         clearTimeout(state.recapPollTimer);
         // A job this screen stops following for other filters is let go, so the Hub stops it once nobody
@@ -7691,6 +7695,7 @@
             state.recapBusy = {};
             state.recapShowAll = false;
             state.recapMovesOpen = {};
+            state.recapMovesWhole = false;
             state.recapMovesFailed = null;
             state.recapReports = null;
             state.recapGenerateError = null;
@@ -7700,7 +7705,7 @@
         }
         state.recapRestarts = 0;
         if (state.recapDirect) {
-            landRecap(sequence, getJson(PSL.recapPath(route) + (all ? '&moves=all' : '')), opening);
+            landRecap(sequence, getJson(PSL.recapPath(route) + (all ? '&moves=all' : '')), opening, all);
             return;
         }
         // The whole list of a group reads the snapshot on screen again, nothing is computed. Any other read
@@ -7746,7 +7751,7 @@
             if (error.status === 404 || error.status === 405) {
                 // A Hub without the route, or the site's replay of one: the single read of before.
                 state.recapDirect = true;
-                landRecap(sequence, getJson(PSL.recapPath(route) + (all ? '&moves=all' : '')), opening);
+                landRecap(sequence, getJson(PSL.recapPath(route) + (all ? '&moves=all' : '')), opening, all);
                 return;
             }
             if (error.status === 503) {
@@ -7836,7 +7841,7 @@
     function readRecapResult(sequence, job, route, all, opening) {
         getJson(PSL.recapJobResultPath(job.id, route.view, all)).then(function (snapshot) {
             if (sequence !== state.recapSeq) return;
-            landRecap(sequence, Promise.resolve(snapshot), opening);
+            landRecap(sequence, Promise.resolve(snapshot), opening, all);
         }).catch(function (error) {
             if (sequence !== state.recapSeq) return;
             // Expired or forgotten since: computed again, once.
@@ -7896,11 +7901,13 @@
      * @param {number} sequence
      * @param {Promise<RecapSnapshot>} read
      * @param {string | null} opening
+     * @param {boolean} [all] the read asked for every move
      */
-    function landRecap(sequence, read, opening) {
+    function landRecap(sequence, read, opening, all) {
         Promise.all([read, readRecapReports()]).then(function (results) {
             if (sequence !== state.recapSeq) return;
             state.recap = results[0];
+            state.recapMovesWhole = Boolean(all);
             state.recapReports = results[1];
             state.recapError = null;
             if (opening) {
@@ -8621,6 +8628,13 @@
             section.appendChild(el('p', {
                 class: 'recap-more',
                 text: t('recap.prio.more.' + PSL.plural(snapshot.more_priorities), {count: snapshot.more_priorities})
+            }));
+        }
+        // The tech list keeps the costliest the Hub ranks, so a list with a rest is long: said once shown whole.
+        if (snapshot.view !== 'pilotage' && snapshot.more_priorities > 0 && state.recapShowAll) {
+            section.appendChild(el('p', {
+                class: 'recap-more',
+                text: t('recap.moves.rest.' + PSL.plural(snapshot.more_priorities), {count: snapshot.more_priorities})
             }));
         }
         if (snapshot.truncated) {
@@ -9433,19 +9447,22 @@
     }
 
     /**
-     * A whole list that could not be read says so, and how much the Hub did not send.
+     * How much of a list the Hub did not send: once its whole list failed to read, or once a list
+     * the Hub kept the costliest of is opened.
      * @param {RecapMovements} moves
      * @param {RecapPriority[]} items
      * @param {string} key
      */
     function recapMovesRest(moves, items, key) {
         const rest = recapMovesTotal(moves, items, key) - items.length;
-        if (rest <= 0 || state.recapMovesFailed !== key) return null;
-        const announce = state.recapMovesAnnounce;
-        state.recapMovesAnnounce = false;
+        const failed = state.recapMovesFailed === key;
+        // Read whole, a list the Hub kept the costliest of says what it left out once opened.
+        if (rest <= 0 || !(failed || (state.recapMovesWhole && state.recapMovesOpen[key]))) return null;
+        const announce = failed && state.recapMovesAnnounce;
+        if (failed) state.recapMovesAnnounce = false;
         return el('p', {
             class: 'recap-more', role: announce ? 'alert' : null,
-            text: t('recap.moves.failed') + ' ' + t('recap.moves.rest.' + PSL.plural(rest), {count: rest})
+            text: (failed ? t('recap.moves.failed') + ' ' : '') + t('recap.moves.rest.' + PSL.plural(rest), {count: rest})
         });
     }
 
@@ -9467,7 +9484,8 @@
      */
     function recapMovesMore(moves, items, key) {
         const total = recapMovesTotal(moves, items, key);
-        const cut = total > items.length;
+        // Read whole, nothing more is to be asked: a shorter list is all the Hub keeps.
+        const cut = !state.recapMovesWhole && total > items.length;
         if ((state.recapMovesOpen[key] && !cut) || total <= RECAP_MOVES_FIRST) return null;
         const loading = state.recapMovesLoading === key;
         const more = el('button', {
@@ -9477,7 +9495,8 @@
             // aria-disabled, not disabled: the focus stays on the button while the list is read.
             'aria-disabled': loading ? 'true' : null,
             'aria-busy': loading ? 'true' : null,
-            text: loading ? t('recap.moves.loading') : t('recap.prio.show_all', {count: total})
+            // A kept list opens what the Hub sent, not its whole length: the rest line says the others.
+            text: loading ? t('recap.moves.loading') : t('recap.prio.show_all', {count: cut ? total : items.length})
         });
         more.addEventListener('click', function () {
             if (state.recapMovesLoading) return;

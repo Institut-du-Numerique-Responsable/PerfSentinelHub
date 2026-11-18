@@ -600,7 +600,7 @@ nowhere gets the `403` the findings list gives.
 | `view`                      | `tech`            | `tech` (Engineering) or `pilotage` (Management)                  |
 | `environment`, `source_id`  | the whole fleet   | As on `/api/findings`                                            |
 | `service`, `grouping`       | none              | One value as on `/api/findings`, or the key repeated for several |
-| `moves`                     | cut at 50         | `all` lists every move of each group, without `counts`           |
+| `moves`                     | cut at 50         | `all` lists every move the Hub keeps of each group               |
 
 `service=a&service=b` keeps the findings of `a` or `b`, and a service and a grouping together keep
 the findings that match both. A value that is blank is ignored, as it is on `/api/findings`. A list
@@ -635,7 +635,8 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
 - **Ranking.** Unacknowledged findings only. First those with avoidable I/O on the period,
   by that volume, then the others by severity (critical, warning, info); ties go to the
   finding detected more often, then to the signature. `rank` starts at `1`. The `tech` view
-  lists every ranked finding, `pilotage` the first five and `more_priorities` counts the rest.
+  lists the ranked findings up to the cap below, `pilotage` the first five; `more_priorities`
+  counts the rest in either view.
 - **Trends.** Each ranked finding is `new` (absent from the previous period), `up`, `down`
   or `flat` against its own volume in the previous period, `change` being the relative
   difference. The metric is the avoidable I/O when either side has it, the detections
@@ -652,7 +653,7 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   to 10 went `up` or `down`. Each of the six lists stops at its first 50, and
   `movements.counts` (`new`, `gone`, `up`, `down`, `came_back`, `done_still_detected`)
   gives its whole length; `moves=all` lifts the cut. A frozen report and its webhook keep
-  every move and carry no `counts`.
+  every move the Hub keeps, and carry `counts` only when a list passed the cap below.
 - **Incomplete and notes.** `incomplete` names what forbids an exact comparison:
   `uncovered_days`, `open_day` (a past day not sealed), `restart` (a daemon restart
   interrupted its counts) and `overflow`. `notes` names what is worth a line and leaves the
@@ -700,9 +701,10 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   priority or a movement item whose `label` is `null`: two rows of the same type stay apart
   by the one technical value left. A frozen report and a recap webhook drop `endpoint` on those
   rows too (see [Recap reports](#recap-reports)).
-- **Cap.** `priorities` and `movements.gone` keep their 5,000 costliest findings, and the tiles
-  still count every finding read. A read of more than 50,000 findings keeps the first 50,000 and
-  sets `truncated: true`; narrow the request with a filter.
+- **Cap.** `priorities` and each movement list keep their 5,000 first, in ranking order; the
+  tiles still count every finding read, `more_priorities` the priorities past the cap and
+  `movements.counts` each list's whole length. A read of more than 50,000 findings keeps the first
+  50,000 and sets `truncated: true`; narrow the request with a filter.
 
 ### Recap filters
 

@@ -26,7 +26,8 @@ public sealed record RecapRequest(
 /// </summary>
 public sealed class RecapService(HubDatabase database, IOptions<HubOptions> options, TimeProvider timeProvider)
 {
-    // The priorities a snapshot keeps, the costliest first: a kept recap stays a few MB.
+    // The priorities a snapshot keeps, the costliest first, and the moves each of its lists keeps: a
+    // kept recap stays a few MB.
     public const int MaxFindings = 5000;
 
     // Each read loads its whole window slim, up to this bound, so the tiles count every finding.
@@ -63,8 +64,9 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         var labels = await ReadLabelsAsync(reads, cancellationToken);
 
         progress?.Enter(RecapStage.Assemble);
-        var priorities = PrioritiesOf(reads, current, actions, labels);
-        var movements = MovementsOf(reads, priorities, actions, labels);
+        var trends = TrendsOf(reads);
+        var priorities = PrioritiesOf(reads, trends, current, actions, labels);
+        var movements = MovementsOf(reads, trends, actions, labels);
         return new RecapSnapshot(
             1,
             "tech",
@@ -75,7 +77,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             coverage.Current.Incomplete.Count == 0 && coverage.Previous.Incomplete.Count == 0,
             TilesOf(reads, current, previous, actions),
             priorities,
-            0,
+            reads.Ranked.Count - priorities.Count,
             movements,
             RecapMoves.NothingMoved(movements, priorities),
             SourcesWithoutVolume(request, reads, coverage.Covered),
@@ -142,7 +144,19 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         var words = await WordsAsync(request, span.Period, ranked, cancellationToken);
         return new Reads(
             all.Findings,
-            [.. ranked.Select(finding => words.GetValueOrDefault(finding.Signature) ?? finding)],
+            // Only the words: the volume and sources stay those the ranking and the tiles were read on.
+            [
+                .. ranked.Select(finding => words.GetValueOrDefault(finding.Signature) is { } full
+                    ? finding with
+                    {
+                        Template = full.Template,
+                        Suggestion = full.Suggestion,
+                        SuggestedFix = full.SuggestedFix,
+                        CodeLocation = full.CodeLocation,
+                        Confidence = full.Confidence
+                    }
+                    : finding)
+            ],
             closed.Findings.ToDictionary(finding => finding.Signature, StringComparer.Ordinal),
             previous?.Findings,
             all.Over || unacked.Over || closed.Over || previous?.Over == true);
@@ -171,7 +185,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             return [];
 
         var rows = await database.QueryFindingsAsync(
-            QueryOf(request, window, false, MaxFindings) with
+            // Acked too: an ack landing between the two reads must not strip a kept priority of its words.
+            QueryOf(request, window, true, MaxFindings) with
             {
                 Signatures = [.. ranked.Take(MaxFindings).Select(finding => finding.Signature)]
             },
@@ -353,8 +368,9 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
 
     // ------------------------------------------------------------ priorities and movements
 
-    private IReadOnlyList<RecapPriority> PrioritiesOf(
+    private static IReadOnlyList<RecapPriority> PrioritiesOf(
         Reads reads,
+        Dictionary<string, (string Trend, double? Change)> trends,
         Carbon? carbon,
         IReadOnlyDictionary<string, RecapAction> actions,
         Labels labels)
@@ -363,7 +379,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         [
             .. reads.Ranked.Take(MaxFindings).Select((finding, index) =>
             {
-                var (trend, change) = TrendOf(finding, reads);
+                var (trend, change) = trends[finding.Signature];
                 var co2 = carbon?.PerFinding.GetValueOrDefault(finding.Signature);
                 return new RecapPriority(
                     index + 1,
@@ -393,63 +409,69 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         ];
     }
 
+    // Every active finding's move, not only the kept priorities': one ranked past the cap still moved.
     // Both sides from closed days; a finding seen today only has no closed side and reads unknown.
-    private (string Trend, double? Change) TrendOf(RecapFinding finding, Reads reads)
+    private Dictionary<string, (string Trend, double? Change)> TrendsOf(Reads reads)
     {
-        return reads.Closed.TryGetValue(finding.Signature, out var closed)
-            ? RecapMoves.Trend(
-                closed, reads.PreviousBySignature.GetValueOrDefault(finding.Signature),
-                options.Value.Recaps.MovementThreshold)
-            : (Unknown, null);
+        return reads.Ranked.ToDictionary(
+            finding => finding.Signature,
+            finding => reads.Closed.TryGetValue(finding.Signature, out var closed)
+                ? RecapMoves.Trend(
+                    closed, reads.PreviousBySignature.GetValueOrDefault(finding.Signature),
+                    options.Value.Recaps.MovementThreshold)
+                : (Unknown, null),
+            StringComparer.Ordinal);
     }
 
+    // Each list keeps its MaxFindings first in ranking order, as the priorities do, and Counts says
+    // how long it was once one is cut.
     private static RecapMovements MovementsOf(
         Reads reads,
-        IReadOnlyList<RecapPriority> priorities,
+        Dictionary<string, (string Trend, double? Change)> trends,
         IReadOnlyDictionary<string, RecapAction> actions,
         Labels labels)
     {
         var current = reads.All.Select(finding => finding.Signature).ToHashSet(StringComparer.Ordinal);
-        var gone = RecapRanking.Order(reads.Previous ?? []).Where(finding => !current.Contains(finding.Signature))
-            .ToList();
-        var trends = priorities.ToDictionary(priority => priority.Signature!, StringComparer.Ordinal);
+        var gone = RecapRanking.Order((reads.Previous ?? []).Where(finding => !current.Contains(finding.Signature)));
+        var byTrend = reads.Ranked.ToLookup(finding => trends[finding.Signature].Trend, StringComparer.Ordinal);
+        var (news, ups, downs) = (byTrend["new"], byTrend["up"], byTrend["down"]);
+        var cameBack = Confirmed(reads, actions, "came_back");
+        var contradicted = Confirmed(reads, actions, "contradicted");
 
+        List<RecapMove> Kept(IEnumerable<RecapFinding> findings)
+        {
+            return
+            [
+                .. findings.Take(MaxFindings).Select(finding => trends.TryGetValue(finding.Signature, out var moved)
+                    ? Move(finding, moved.Trend, moved.Change, labels)
+                    : Move(finding, Unknown, null, labels))
+            ];
+        }
+
+        var whole = new RecapMoveCounts(
+            news.Count(), gone.Count, ups.Count(), downs.Count(), cameBack.Count, contradicted.Count);
         return new RecapMovements(
-            Trended(priorities, "new"),
+            Kept(news),
             [.. gone.Take(MaxFindings).Select(finding => Move(finding, "gone", null, labels))],
             gone.Count(finding => actions.GetValueOrDefault(finding.Signature)?.Confirmation == "confirmed"),
-            Trended(priorities, "up"),
-            Trended(priorities, "down"),
-            Confirmed(reads, actions, trends, labels, "came_back"),
-            Confirmed(reads, actions, trends, labels, "contradicted"));
-    }
-
-    private static List<RecapMove> Trended(IReadOnlyList<RecapPriority> priorities, string trend)
-    {
-        return
-        [
-            .. priorities.Where(priority => priority.Trend == trend).Select(priority => new RecapMove(
-                priority.FindingType, priority.Service, priority.Plain, priority.Trend, priority.Change,
-                priority.Label, priority.ServiceLabel, priority.Signature, priority.Endpoint))
-        ];
+            Kept(ups),
+            Kept(downs),
+            Kept(cameBack),
+            Kept(contradicted),
+            new[] { whole.New, whole.Gone, whole.Up, whole.Down, whole.CameBack, whole.DoneStillDetected }
+                .Any(count => count > MaxFindings)
+                ? whole
+                : null);
     }
 
     // The findings of the current read whose done action came back or was contradicted, in ranking order.
-    private static List<RecapMove> Confirmed(
+    private static IReadOnlyList<RecapFinding> Confirmed(
         Reads reads,
         IReadOnlyDictionary<string, RecapAction> actions,
-        Dictionary<string, RecapPriority> ranked,
-        Labels labels,
         string confirmation)
     {
-        return
-        [
-            .. RecapRanking.Order(reads.All)
-                .Where(finding => actions.GetValueOrDefault(finding.Signature)?.Confirmation == confirmation)
-                .Select(finding => ranked.TryGetValue(finding.Signature, out var priority)
-                    ? Move(finding, priority.Trend, priority.Change, labels)
-                    : Move(finding, Unknown, null, labels))
-        ];
+        return RecapRanking.Order(reads.All.Where(finding =>
+            actions.GetValueOrDefault(finding.Signature)?.Confirmation == confirmation));
     }
 
     private static RecapMove Move(RecapFinding finding, string trend, double? change, Labels labels)

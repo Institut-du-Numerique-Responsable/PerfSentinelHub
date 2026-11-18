@@ -149,7 +149,8 @@ public sealed record FindingQuery(
     IReadOnlyList<string>? Services = null,
     IReadOnlyList<string>? Groupings = null,
     IReadOnlyList<string>? ExcludedServices = null,
-    IReadOnlyList<string>? Signatures = null, // the recap's read of the words of its kept priorities
+    // The recap's read of the words of its kept priorities. An allow-list, unlike Services: empty matches none.
+    IReadOnlyList<string>? Signatures = null,
     bool Slim = false) // the envelope keeps only the words a recap ranks and moves by
 {
     public IReadOnlyList<string>? ServiceValues => ValuesOf(Services, Service);

@@ -3571,11 +3571,11 @@
 
     /**
      * The steps of the guide over the technical recap. Besides the snapshot, `ctx` brings what the screen
-     * has unfolded: the whole ranking shown, and the groups of What moved opened. A step whose element
-     * the screen does not draw (the freshness line, the reports, the card, the fix folded) is dropped by
-     * the controller.
+     * has unfolded: the whole ranking shown, the groups of What moved opened, and whether its lists were
+     * read whole. A step whose element the screen does not draw (the freshness line, the reports, the
+     * card, the fix folded) is dropped by the controller.
      * @param {import('../types').RecapSnapshot} snapshot
-     * @param {{showAll?: boolean, movesOpen?: Record<string, boolean>}} ctx
+     * @param {{showAll?: boolean, movesOpen?: Record<string, boolean>, movesWhole?: boolean}} ctx
      * @returns {import('../types').GuideStep[]}
      */
     function recapTechSteps(snapshot, ctx) {
@@ -3603,7 +3603,7 @@
         if (first) steps.push(techActStep(first));
         steps.push(
             techStep('below', ['recap.below']),
-            techMovedStep(snapshot, (ctx && ctx.movesOpen) || {}),
+            techMovedStep(snapshot, (ctx && ctx.movesOpen) || {}, Boolean(ctx && ctx.movesWhole)),
             techStep('reports', ['recap.reports']),
             guideStep('card', ['recap.card']),
             techStep('end', []));
@@ -3763,9 +3763,10 @@
      * was opened and the Hub sent all of it.
      * @param {import('../types').RecapSnapshot} snapshot
      * @param {Record<string, boolean>} opened the groups the reader opened
+     * @param {boolean} whole the lists were read with moves=all
      * @returns {import('../types').GuideStep}
      */
-    function techMovedStep(snapshot, opened) {
+    function techMovedStep(snapshot, opened, whole) {
         const moves = snapshot.movements;
         let body = [techText('moved.body'), techText('moved.gone')];
         if (snapshot.previous.truncated_to_days === 0) body = [techText('moved.none_closed')];
@@ -3773,7 +3774,8 @@
         if (moves.gone_with_confirmed_action > 0) body.push(techText('moved.confirmed'));
         const long = ['new', 'gone', 'up', 'down', 'came_back', 'done_still_detected'].some(function (key) {
             const total = moves.counts ? moves.counts[key] : moves[key].length;
-            const cut = total > moves[key].length;
+            // Read whole, a shorter list is all the Hub keeps: nothing is left to ask for.
+            const cut = !whole && total > moves[key].length;
             return total > RECAP_MOVES_FIRST && !(opened[key] && !cut);
         });
         if (long) body.push(techText('moved.long'));

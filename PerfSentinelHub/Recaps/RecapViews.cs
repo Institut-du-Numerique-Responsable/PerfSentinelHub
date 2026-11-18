@@ -24,10 +24,19 @@ public static class RecapViews
                 Down = [.. moves.Down.Take(ListedMoves)],
                 CameBack = [.. moves.CameBack.Take(ListedMoves)],
                 DoneStillDetected = [.. moves.DoneStillDetected.Take(ListedMoves)],
-                Counts = new RecapMoveCounts(moves.New.Count, moves.Gone.Count, moves.Up.Count, moves.Down.Count,
-                    moves.CameBack.Count, moves.DoneStillDetected.Count)
+                Counts = WholeCounts(moves)
             }
         };
+    }
+
+    /// <summary>
+    ///     Each list's whole length: the counts of a list the Hub already kept the costliest of, else the
+    ///     lists' own lengths.
+    /// </summary>
+    public static RecapMoveCounts WholeCounts(RecapMovements moves)
+    {
+        return moves.Counts ?? new RecapMoveCounts(moves.New.Count, moves.Gone.Count, moves.Up.Count,
+            moves.Down.Count, moves.CameBack.Count, moves.DoneStillDetected.Count);
     }
 
     /// <summary>

@@ -118,18 +118,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                + $"WHERE e.signature = {signature} AND e.source_id = {sourceId})";
     }
 
-    // An envelope cut to the words RecapEnvelope reads for ranking and movements, a few dozen
-    // bytes where the whole one carries the pattern, the suggestion and the fix.
-    private static string SlimEnvelope(string envelope)
-    {
-        return "(SELECT json_object('finding', json_object("
-               + "'type', json_extract(e, '$.finding.type'), "
-               + "'severity', json_extract(e, '$.finding.severity'), "
-               + "'service', json_extract(e, '$.finding.service'), "
-               + "'source_endpoint', json_extract(e, '$.finding.source_endpoint'), "
-               + "'confidence', json_extract(e, '$.finding.confidence'))) "
-               + $"FROM (SELECT {envelope} AS e))";
-    }
+    // The words RecapEnvelope reads for ranking and movements, built from the row's own columns
+    // (copy-aware on a scoped read), so a slim read never looks an envelope up.
+    private const string SlimEnvelope =
+        "json_object('finding', json_object('type', f.finding_type, 'severity', f.severity, "
+        + "'service', f.service, 'source_endpoint', f.endpoint, 'confidence', f.max_confidence))";
 
     // The one source a read without access patterns is scoped to, null for none or several.
     private static string? OneSource(FindingQuery query)
@@ -819,11 +812,10 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                 "scoped", HeartbeatInScope, $" AND fs.source_id {InScope}"),
             _ => ("WITH", "findings", "", "")
         };
-        var envelope = row == "scoped"
-            ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
-            : SharedEnvelope("f.signature");
-        if (query.Slim)
-            envelope = SlimEnvelope(envelope);
+        var envelope = query.Slim ? SlimEnvelope
+            : row == "scoped"
+                ? $"COALESCE({CopyEnvelope("f.signature", "f.copy_source_id")}, {SharedEnvelope("f.signature")})"
+                : SharedEnvelope("f.signature");
         var window = windowed ? InWindow(row, Copies(access, "p"), Copies(access, "dc")) : "";
         var grouped = query.GroupingValues is null ? "" : InGrouping(row, Copies(access, "g"));
         var unacked = query.IncludeAcked ? "" : Unacked(row, Copies(access, "u"));

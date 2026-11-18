@@ -78,6 +78,18 @@ public sealed class RecapViewsTests
         Assert.DoesNotContain("\"counts\"", JsonSerializer.Serialize(frozen, Wire));
     }
 
+    // A list the Hub kept the costliest of carries its whole length: the screen's cut and a report keep it.
+    [Fact]
+    public void A_kept_list_keeps_its_whole_length_through_every_view()
+    {
+        var whole = new RecapMoveCounts(9000, 1, 1, 1, 1, 1);
+        var tech = Tech(1) with { Movements = Tech(1).Movements with { Counts = whole } };
+
+        Assert.Equal(whole, RecapViews.Listed(tech).Movements.Counts);
+        Assert.Equal(whole, RecapViews.Frozen(tech).Movements.Counts);
+        Assert.Equal(whole, RecapViews.Listed(RecapViews.Pilotage(tech)).Movements.Counts);
+    }
+
     [Fact]
     public void Pilotage_json_carries_no_tech_key()
     {

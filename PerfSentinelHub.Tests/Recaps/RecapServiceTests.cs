@@ -153,6 +153,47 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal(RecapService.MaxFindings + 2, snapshot.Tiles.ActiveFindings);
         Assert.Equal(900, snapshot.Tiles.AvoidableIoOps);
         Assert.Equal(RecapService.MaxFindings + 2 - RecapViews.PilotagePriorities, RecapViews.Pilotage(snapshot).MorePriorities);
+        // The tech view says how many it left out past the cap.
+        Assert.Equal(2, snapshot.MorePriorities);
+    }
+
+    [Fact]
+    public async Task Past_the_list_cap_every_finding_still_moves_and_each_list_keeps_its_whole_length()
+    {
+        await SeedAsync("a", "costly", Mon);
+        var configured = Sources.Single(item => item.Id == "a");
+        // On a closed day with nothing the week before: every one of them is new.
+        await _database.UpsertBatchAsync(
+            new SourceSnapshot("a", configured.Name, configured.Environment, "0.37.1"),
+            FindingJson.Batch([
+                .. Enumerable.Range(0, RecapService.MaxFindings + 1)
+                    .Select(index => FindingJson.Envelope($"filler-{index:D5}"))
+            ]),
+            Mon * DayMs + 3_600_000, Token);
+        await LedgerAsync("a", [.. Days(Mon, 3), Open(Thu)], [Count(Mon, "costly", 900)]);
+
+        var snapshot = await RecapAsync();
+
+        Assert.Equal(RecapService.MaxFindings, snapshot.Movements.New.Count);
+        Assert.Equal("costly", snapshot.Movements.New[0].Signature);
+        Assert.Equal("filler-04998", snapshot.Movements.New[^1].Signature);
+        Assert.Equal(new RecapMoveCounts(RecapService.MaxFindings + 2, 0, 0, 0, 0, 0), snapshot.Movements.Counts);
+        // The screen's cut keeps the whole length, not the kept one.
+        Assert.Equal(RecapService.MaxFindings + 2, RecapViews.Listed(snapshot).Movements.Counts!.New);
+        Assert.False(snapshot.NothingMoved);
+    }
+
+    [Fact]
+    public async Task Lists_under_the_cap_carry_no_counts()
+    {
+        await SeedAsync("a", T, Mon);
+        await LedgerAsync("a", [.. Days(Mon, 3), Open(Thu)], [Count(Mon, T, 5)]);
+
+        var snapshot = await RecapAsync();
+
+        Assert.Single(snapshot.Movements.New);
+        Assert.Null(snapshot.Movements.Counts);
+        Assert.Equal(0, snapshot.MorePriorities);
     }
 
     [Fact]
