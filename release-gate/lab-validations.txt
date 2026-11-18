@@ -450,3 +450,12 @@ v0.19.0	53d8424	2026-11-16	PASS
 # checks). All PASS, no skip. The cap past 5,000 needs more findings than a
 # scenario seeds: RecapServiceTests covers it. Not run: the cluster hub scenarios.
 v0.19.1	c8eb442	2026-11-18	PASS
+# v0.20.0 targeted pass on a local Release build of feat/log-sso-sign-in
+# (e36f07f) and the perf-sentinel 0.46.0 release binary, no cluster, lab at
+# origin/main. The release logs each single sign-on (event 1903) and repins the
+# engine to 0.46.0, whose dates move from chrono to jiff in the same form.
+# hub-recap (21 checks), hub-detection-volume and hub-card (24 checks). All
+# PASS, no skip. The sign-in line is covered by AuthenticationTests: the provider
+# sign-in leg is in hub-access-control, a cluster scenario. Not run: the cluster
+# hub scenarios, the k3d cluster being down.
+v0.20.0	d349788	2026-11-18	PASS
