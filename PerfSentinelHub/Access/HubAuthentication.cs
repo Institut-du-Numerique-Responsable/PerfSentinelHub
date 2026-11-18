@@ -339,7 +339,24 @@ public static partial class HubAuthentication
 
         if (access.Enabled)
             AddAccessClaims(context, context.Identity, user.RootElement, auth, access, name, groups ?? []);
+
+        // Past every gate, once per session: the subject is the key the provider's own sign-in log uses.
+        // Both are sanitized as on the terminal approval, an identity that is not falling back to the subject.
+        string? subject = null;
+        if (user.RootElement.TryGetProperty(auth.SubjectClaim, out var field) &&
+            field.ValueKind == JsonValueKind.String &&
+            ApiEndpoints.Sanitized(field.GetString()) is { Length: > 0 } id)
+            subject = id;
+        LogSignedIn(
+            context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(HubAuthentication)),
+            ApiEndpoints.Sanitized(name) ?? subject ?? "(an identity with a control character)",
+            subject is null ? "no subject" : "subject " + subject,
+            ClientAddress.Normalize(context.HttpContext.Connection.RemoteIpAddress));
     }
+
+    [LoggerMessage(1903, LogLevel.Information, "Signed in: {Identity} ({Subject}) from {ClientAddress}.")]
+    private static partial void LogSignedIn(ILogger logger, string identity, string subject, string clientAddress);
 
     // A cosmetic field: anything but a short string with no control character is ignored, never a
     // sign-in failure.

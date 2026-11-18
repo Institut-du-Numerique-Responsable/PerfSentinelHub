@@ -250,7 +250,8 @@ public static partial class ApiEndpoints
             : null;
     }
 
-    private static string? Sanitized(string? identity)
+    // Shared with the sign-in log: a provider name may carry a line break that would forge a log line.
+    internal static string? Sanitized(string? identity)
     {
         if (identity is null)
             return null;

@@ -396,6 +396,43 @@ public sealed class AuthenticationTests : IAsyncLifetime
         Assert.DoesNotContain("/other", refusal, StringComparison.Ordinal);
     }
 
+    // Who signed in, for the operator: the identity and the subject the provider's own sign-in log
+    // keys on, never the display name, and once per session rather than per request.
+    [Fact]
+    public async Task A_sign_in_is_logged_with_its_identity_subject_and_address()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var logger = new ListLogger<Program>();
+        await using var logged = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.AddSingleton<ILoggerProvider>(new Capture(logger))));
+        using var client = Client(logged);
+
+        using var callback = await SignInAsync(client, "abc");
+        using var status = await client.GetAsync("/api/status", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        var line = Assert.Single(logger.Messages, message => message.StartsWith("Signed in:", StringComparison.Ordinal));
+        Assert.StartsWith("Signed in: alice@example.internal (subject 1) from ", line, StringComparison.Ordinal);
+        using var named = await SignInAsync(Client(logged), "named");
+        // userinfo without a subject says so; the display name never reaches the log.
+        Assert.Contains(logger.Messages, message =>
+            message.StartsWith("Signed in: alice@example.internal (no subject) from ", StringComparison.Ordinal));
+        Assert.DoesNotContain(logger.Messages, message => message.Contains("Alice Martin", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_refused_sign_in_logs_no_sign_in()
+    {
+        var logger = new ListLogger<Program>();
+        await using var gated = Gated(logger);
+        using var client = Client(gated);
+
+        using var callback = await SignInAsync(client, "outsider");
+
+        Assert.Equal(HttpStatusCode.Forbidden, callback.StatusCode);
+        Assert.DoesNotContain(logger.Messages, message => message.StartsWith("Signed in:", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Without_required_groups_the_groups_field_is_never_read_and_the_session_slides()
     {

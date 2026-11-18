@@ -2,6 +2,17 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- A single sign-on that succeeds logs event `1903` at Information, once per session: `Signed in:
+  alice@example.com (subject 3f2a…) from 10.0.4.12.`, with the identity, the `Hub:Auth:SubjectClaim`
+  value the provider's own sign-in log keys on, and the client address, never the display name.
+  Only refusals were logged (`1900`), so who opened the Hub through Entra ID or another provider
+  was known to the provider alone. The line holds personal data: keep it as long as your log
+  policy allows.
+
 ## [0.19.1] - 2026-11-18
 
 ### Fixed

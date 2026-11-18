@@ -49,13 +49,18 @@ browser goes through the authorization code flow with PKCE, the Hub exchanges
 the code at the token endpoint, then calls the userinfo endpoint with the access
 token and records the field named by `Hub:Auth:IdentityClaim` as the user. A
 userinfo without that field fails the sign-in rather than opening a nameless
-session. A failed sign-in, that one, a user cancelling on the provider's
-screen or a user outside the required groups, answers `403` with one line for
-every case, sending the user back to the Hub's home page or to its
-administrator, and logs the reason as a warning (event `1900`). No token is
-kept: the session is an encrypted `hub_session` cookie, `Secure`, `HttpOnly`,
-`SameSite=Lax`, valid 8 hours and renewed while in use, or not renewed under
-`Hub:Auth:RequiredGroups`. There is no sign-out button.
+session. A failed sign-in, that one, a user cancelling on the provider's screen
+or a user outside the required groups, answers `403` with one line for every
+case, sending the user back to the Hub's home page or to its administrator, and
+logs the reason as a warning (event `1900`). A sign-in that succeeds logs event
+`1903` at Information, once per session: `Signed in: alice@example.com (subject
+3f2a…) from 10.0.4.12.`, the identity, the `Hub:Auth:SubjectClaim` value (the id
+the provider's own sign-in log keys on, Entra ID's `sub` or `oid`) and the
+client address, never the display name. The line holds an e-mail address and an
+IP address: keep it as long as your log policy allows personal data, no longer.
+No token is kept: the session is an encrypted `hub_session` cookie, `Secure`,
+`HttpOnly`, `SameSite=Lax`, valid 8 hours and renewed while in use, or not
+renewed under `Hub:Auth:RequiredGroups`. There is no sign-out button.
 
 The signed-in user is what the topbar shows and what a run records as
 `requested_by`. `Hub:Analysis:IdentityHeader` is ignored for a signed-in user,
