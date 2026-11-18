@@ -196,9 +196,9 @@ public static class HubText
         ["recap.plain.serialized_calls"] =
             "The application does several steps one after another that could run at the same time, so people wait longer than needed.",
         ["recap.truncated.pilotage"] =
-            "The Hub read the first 5,000 problems and stopped there. Narrow the filters to see the others.",
+            "The Hub read the first 50,000 problems and stopped there. Narrow the filters to see the others.",
         ["recap.truncated.tech"] =
-            "The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.",
+            "The Hub read the first 50,000 findings and stopped there. Narrow the filters to see the others.",
         ["recap.sources_note.pilotage"] = "No figures came from: {sources}.",
         ["recap.sources_note.tech"] = "Sources without a detection volume: {sources}.",
         ["recap.late_note"] = "Left out, as they recorded nothing until after this period: {sources}.",
@@ -454,9 +454,9 @@ public static class HubText
         ["recap.plain.serialized_calls"] =
             "L'application fait l'une après l'autre plusieurs étapes qui pourraient avoir lieu en même temps, et les utilisateurs attendent plus que nécessaire.",
         ["recap.truncated.pilotage"] =
-            "Le Hub a lu les 5\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
+            "Le Hub a lu les 50\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
         ["recap.truncated.tech"] =
-            "Le Hub a lu les 5\u202f000 premiers findings et s'est arrêté là. Resserrez les filtres pour voir les autres.",
+            "Le Hub a lu les 50\u202f000 premiers findings et s'est arrêté là. Resserrez les filtres pour voir les autres.",
         ["recap.sources_note.pilotage"] = "Aucun chiffre n'est venu de\u00a0: {sources}.",
         ["recap.sources_note.tech"] = "Sources sans volume de détection\u00a0: {sources}.",
         ["recap.late_note"] =

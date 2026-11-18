@@ -40,7 +40,8 @@ public static class RecapViews
         {
             View = "pilotage",
             Priorities = [.. tech.Priorities.Take(PilotagePriorities).Select(Plain)],
-            MorePriorities = Math.Max(0, tech.Priorities.Count - PilotagePriorities),
+            // The tiles count every active finding, the tech list only the costliest MaxFindings.
+            MorePriorities = Math.Max(0, tech.Tiles.ActiveFindings - PilotagePriorities),
             // with, not a new record: the counts of a cut snapshot ride through.
             Movements = tech.Movements with
             {

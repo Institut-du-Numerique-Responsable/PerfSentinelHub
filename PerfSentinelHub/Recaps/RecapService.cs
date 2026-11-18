@@ -26,7 +26,14 @@ public sealed record RecapRequest(
 /// </summary>
 public sealed class RecapService(HubDatabase database, IOptions<HubOptions> options, TimeProvider timeProvider)
 {
+    // The priorities a snapshot keeps, the costliest first: a kept recap stays a few MB.
     public const int MaxFindings = 5000;
+
+    // Each read loads its whole window slim, up to this bound, so the tiles count every finding.
+    // shortcut: the volume fold still holds every count row of the window, read an aggregate if one
+    // scope ever nears this bound in one period.
+    public const int MaxRead = 50_000;
+
     private const long DayMs = 86_400_000;
     private const string Unknown = "unknown";
 
@@ -131,9 +138,11 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             progress?.Skip(RecapStage.FindingsPrevious);
         }
 
+        var ranked = RecapRanking.Order(unacked.Findings);
+        var words = await WordsAsync(request, span.Period, ranked, cancellationToken);
         return new Reads(
             all.Findings,
-            RecapRanking.Order(unacked.Findings),
+            [.. ranked.Select(finding => words.GetValueOrDefault(finding.Signature) ?? finding)],
             closed.Findings.ToDictionary(finding => finding.Signature, StringComparer.Ordinal),
             previous?.Findings,
             all.Over || unacked.Over || closed.Over || previous?.Over == true);
@@ -145,13 +154,37 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         bool includeAcked,
         CancellationToken cancellationToken)
     {
+        // Slim: the whole window costs its volumes and a few words per finding, not its envelopes.
         var rows = await database.QueryFindingsAsync(
-            new FindingQuery(
-                null, null, null, MaxFindings + 1, includeAcked, null, 0, request.SourceIds,
-                window.FromMs, window.ToMs, null, null, request.Access, request.Services, request.Groupings,
-                request.ExcludedServices),
+            QueryOf(request, window, includeAcked, MaxRead + 1) with { Slim = true }, cancellationToken);
+        return new Read([.. rows.Take(MaxRead).Select(RecapEnvelope.Read)], rows.Count > MaxRead);
+    }
+
+    // The kept priorities in full: a slim read leaves out the pattern, the suggestion and the fix.
+    private async Task<Dictionary<string, RecapFinding>> WordsAsync(
+        RecapRequest request,
+        RecapPeriod window,
+        IReadOnlyList<RecapFinding> ranked,
+        CancellationToken cancellationToken)
+    {
+        if (ranked.Count == 0)
+            return [];
+
+        var rows = await database.QueryFindingsAsync(
+            QueryOf(request, window, false, MaxFindings) with
+            {
+                Signatures = [.. ranked.Take(MaxFindings).Select(finding => finding.Signature)]
+            },
             cancellationToken);
-        return new Read([.. rows.Take(MaxFindings).Select(RecapEnvelope.Read)], rows.Count > MaxFindings);
+        return rows.Select(RecapEnvelope.Read).ToDictionary(finding => finding.Signature, StringComparer.Ordinal);
+    }
+
+    private static FindingQuery QueryOf(RecapRequest request, RecapPeriod window, bool includeAcked, int limit)
+    {
+        return new FindingQuery(
+            null, null, null, limit, includeAcked, null, 0, request.SourceIds,
+            window.FromMs, window.ToMs, null, null, request.Access, request.Services, request.Groupings,
+            request.ExcludedServices);
     }
 
     private static IReadOnlyList<string> ScopeSourceIds(RecapRequest request)
@@ -328,7 +361,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     {
         return
         [
-            .. reads.Ranked.Select((finding, index) =>
+            .. reads.Ranked.Take(MaxFindings).Select((finding, index) =>
             {
                 var (trend, change) = TrendOf(finding, reads);
                 var co2 = carbon?.PerFinding.GetValueOrDefault(finding.Signature);
@@ -383,7 +416,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
 
         return new RecapMovements(
             Trended(priorities, "new"),
-            [.. gone.Select(finding => Move(finding, "gone", null, labels))],
+            [.. gone.Take(MaxFindings).Select(finding => Move(finding, "gone", null, labels))],
             gone.Count(finding => actions.GetValueOrDefault(finding.Signature)?.Confirmation == "confirmed"),
             Trended(priorities, "up"),
             Trended(priorities, "down"),

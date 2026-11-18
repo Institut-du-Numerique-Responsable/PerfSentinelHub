@@ -435,7 +435,7 @@ logged. An e-mail address is not logged either: a delivery that gives up says "a
 The relay's host, user name and password stay out of the log too, and the HTTP client's own request
 logging is off, as for disclosures.
 
-**Size.** A tech snapshot holds every ranked finding of its period, up to 5,000, and is stored per
+**Size.** A tech snapshot holds the 5,000 costliest ranked findings of its period, and is stored per
 subscription, cadence and period for the whole of `Hub:Recaps:Retention` (a year by default).
 Size the disk accordingly: a daily subscription over a busy fleet stores a snapshot a day.
 Reports leave on the daily retention worker, on `generated_at_ms`, and their deliveries leave with

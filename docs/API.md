@@ -700,8 +700,9 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   priority or a movement item whose `label` is `null`: two rows of the same type stay apart
   by the one technical value left. A frozen report and a recap webhook drop `endpoint` on those
   rows too (see [Recap reports](#recap-reports)).
-- **Cap.** A read of more than 5,000 findings keeps the first 5,000 and sets
-  `truncated: true`; narrow the request with a filter.
+- **Cap.** `priorities` and `movements.gone` keep their 5,000 costliest findings, and the tiles
+  still count every finding read. A read of more than 50,000 findings keeps the first 50,000 and
+  sets `truncated: true`; narrow the request with a filter.
 
 ### Recap filters
 

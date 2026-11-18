@@ -445,7 +445,7 @@ public sealed partial class RecapReportRendererTests
                         "too many problems to count them all, another measurement gap", visible,
             StringComparison.Ordinal);
         Assert.Contains("No figures came from: svc-quiet.", visible, StringComparison.Ordinal);
-        Assert.Contains("The Hub read the first 5,000 problems", visible, StringComparison.Ordinal);
+        Assert.Contains("The Hub read the first 50,000 problems", visible, StringComparison.Ordinal);
         Assert.Contains("2 more in the engineering view.", visible, StringComparison.Ordinal);
     }
 

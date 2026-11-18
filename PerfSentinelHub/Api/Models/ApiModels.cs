@@ -148,7 +148,9 @@ public sealed record FindingQuery(
     AccessScope? Access = null,
     IReadOnlyList<string>? Services = null,
     IReadOnlyList<string>? Groupings = null,
-    IReadOnlyList<string>? ExcludedServices = null)
+    IReadOnlyList<string>? ExcludedServices = null,
+    IReadOnlyList<string>? Signatures = null, // the recap's read of the words of its kept priorities
+    bool Slim = false) // the envelope keeps only the words a recap ranks and moves by
 {
     public IReadOnlyList<string>? ServiceValues => ValuesOf(Services, Service);
 

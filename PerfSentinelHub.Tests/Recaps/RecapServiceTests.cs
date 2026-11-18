@@ -128,6 +128,34 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Past_the_list_cap_the_costliest_finding_leads_and_the_tiles_count_the_whole_week()
+    {
+        // The costly finding was last seen on Monday, every filler after it: a recency cut drops it.
+        await SeedAsync("a", "costly", Mon);
+        var configured = Sources.Single(item => item.Id == "a");
+        await _database.UpsertBatchAsync(
+            new SourceSnapshot("a", configured.Name, configured.Environment, "0.37.1"),
+            FindingJson.Batch([
+                .. Enumerable.Range(0, RecapService.MaxFindings + 1)
+                    .Select(index => FindingJson.Envelope($"filler-{index:D5}"))
+            ]),
+            Thu * DayMs + 3_600_000, Token);
+        await LedgerAsync("a", [Sealed(Mon), Open(Thu)], [Count(Mon, "costly", 900)]);
+
+        var snapshot = await RecapAsync();
+
+        Assert.False(snapshot.Truncated);
+        Assert.Equal(RecapService.MaxFindings, snapshot.Priorities.Count);
+        Assert.Equal("costly", snapshot.Priorities[0].Signature);
+        // The window is read slim, the kept priorities in full.
+        Assert.Equal("SELECT * FROM orders WHERE id = ?", snapshot.Priorities[0].Template);
+        Assert.Equal("Batch the lookups", snapshot.Priorities[^1].Suggestion);
+        Assert.Equal(RecapService.MaxFindings + 2, snapshot.Tiles.ActiveFindings);
+        Assert.Equal(900, snapshot.Tiles.AvoidableIoOps);
+        Assert.Equal(RecapService.MaxFindings + 2 - RecapViews.PilotagePriorities, RecapViews.Pilotage(snapshot).MorePriorities);
+    }
+
+    [Fact]
     public async Task Action_counts_cover_the_current_signatures()
     {
         await SeedAsync("a", S, Thu);

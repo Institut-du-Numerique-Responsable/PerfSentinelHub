@@ -2844,7 +2844,7 @@
     }
 
     /**
-     * The note under a ranking the Hub cut at 5,000, as RecapText.Truncated.
+     * The note under a ranking the Hub cut at 50,000, as RecapText.Truncated.
      * @param {string} view
      * @returns {string}
      */

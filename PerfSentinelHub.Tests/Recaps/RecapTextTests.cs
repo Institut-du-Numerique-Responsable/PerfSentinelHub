@@ -121,9 +121,9 @@ public sealed class RecapTextTests
         Assert.Equal("Came back", RecapText.Confirmation("came_back", "pilotage"));
         Assert.Equal("Waiting for a full day of measurements", RecapText.Confirmation("awaiting", "pilotage"));
         Assert.Equal("", RecapText.Confirmation("later", "pilotage"));
-        Assert.Equal("The Hub read the first 5,000 problems and stopped there. Narrow the filters to see the others.",
+        Assert.Equal("The Hub read the first 50,000 problems and stopped there. Narrow the filters to see the others.",
             RecapText.Truncated("pilotage"));
-        Assert.Equal("The Hub read the first 5,000 findings and stopped there. Narrow the filters to see the others.",
+        Assert.Equal("The Hub read the first 50,000 findings and stopped there. Narrow the filters to see the others.",
             RecapText.Truncated("tech"));
         Assert.Equal("No figures came from: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "pilotage"));
         Assert.Equal("Sources without a detection volume: a, b.", RecapText.SourcesWithoutVolume(["a", "b"], "tech"));
@@ -265,7 +265,7 @@ public sealed class RecapTextTests
         Assert.Equal("En attente d'une journée complète de mesures",
             RecapText.Confirmation("awaiting", "pilotage", fr));
         Assert.Equal(
-            "Le Hub a lu les 5\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
+            "Le Hub a lu les 50\u202f000 premiers problèmes et s'est arrêté là. Resserrez les filtres pour voir les autres.",
             RecapText.Truncated("pilotage", fr));
         Assert.Equal("Sources sans volume de détection\u00a0: a, b.",
             RecapText.SourcesWithoutVolume(["a", "b"], "tech", fr));

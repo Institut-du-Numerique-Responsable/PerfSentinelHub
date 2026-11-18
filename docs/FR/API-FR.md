@@ -754,8 +754,9 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   sauf sur une priorité ou un élément de mouvement dont le `label` est `null` : deux lignes du
   même type restent distinguées par la seule valeur technique qui reste. Un rapport figé et un
   webhook du récap retirent aussi `endpoint` de ces lignes (voir [Rapports de récap](#rapports-de-récap)).
-- **Plafond.** Une lecture de plus de 5 000 findings garde les 5 000 premiers et pose
-  `truncated: true` ; resserrez la requête avec un filtre.
+- **Plafond.** `priorities` et `movements.gone` gardent leurs 5 000 findings les plus coûteux, et
+  les tuiles comptent tous les findings lus. Une lecture de plus de 50 000 findings garde les
+  50 000 premiers et pose `truncated: true` ; resserrez la requête avec un filtre.
 
 ### Filtres du récap
 

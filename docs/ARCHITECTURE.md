@@ -236,7 +236,7 @@ serves and the reasons it falls short, see
 upgrade has no row and reads as unknown.
 
 The recap, `GET /api/recap`, writes nothing. `RecapService` makes
-up to four windowed reads of the findings, each capped at 5,000: the period with its acknowledged
+up to four windowed reads of the findings, each capped at 50,000 (the snapshot keeps the 5,000 costliest priorities): the period with its acknowledged
 findings, the period without them, the closed days of a period in progress, and the previous
 window, skipped on a period's first day. Then it makes a coverage read of the sources' days and a carbon
 read of their avoidable grams, and joins the actions and the labels last. The folding is pure
