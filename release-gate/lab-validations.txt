@@ -442,3 +442,11 @@ v0.18.1	1c5bd7c	2026-11-14	PASS
 # PASS, no skip. The fold itself is page markup no scenario reaches:
 # RecapReportRendererTests covers it. Not run: the cluster hub scenarios.
 v0.19.0	53d8424	2026-11-16	PASS
+# v0.19.1 targeted pass on a local Release build of fix/recap-full-period
+# (80d8b4e) and the perf-sentinel 0.45.0 release binary, no cluster, lab at
+# origin/main. The change reads each recap window whole (slim, up to 50,000),
+# keeps the 5,000 costliest priorities and moves per list and says what they
+# leave out. hub-recap (21 checks), hub-detection-volume and hub-card (24
+# checks). All PASS, no skip. The cap past 5,000 needs more findings than a
+# scenario seeds: RecapServiceTests covers it. Not run: the cluster hub scenarios.
+v0.19.1	c8eb442	2026-11-18	PASS
