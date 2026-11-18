@@ -2,6 +2,28 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.20.0] - 2026-11-18
+
+### Added
+
+- A single sign-on that succeeds logs event `1903` at Information, once per session: `Signed in:
+  alice@example.com (subject 3f2a…) from 10.0.4.12.`, with the identity, the `Hub:Auth:SubjectClaim`
+  value the provider's own sign-in log keys on, and the client address, never the display name.
+  Only refusals were logged (`1900`), so who opened the Hub through Entra ID or another provider
+  was known to the provider alone. The line holds personal data: keep it as long as your log
+  policy allows.
+
+### Changed
+
+- The image ships perf-sentinel `0.46.0` as its analysis engine, repinned by digest from
+  `0.45.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.45.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. The engine replaces chrono, chrono-tz and humantime
+  with jiff (RUSTSEC-2026-0542, 0543 and 0555); every date it writes keeps the 0.45.0 form, so
+  no payload the Hub reads changes, and a 0.45.0 disclosure still passes `verify-hash`. The
+  engine's `--expires` now refuses months and years (`1M`, `1y`); the Hub only shows `7d`. No
+  report format, disclosure schema or daemon route changes.
+
 ## [0.19.1] - 2026-11-18
 
 ### Fixed

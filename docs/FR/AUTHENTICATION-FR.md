@@ -51,14 +51,20 @@ navigateur passe par le flux authorization code avec PKCE, le Hub échange le
 code sur le token endpoint, puis appelle l'endpoint userinfo avec l'access token
 et enregistre comme utilisateur le champ nommé par `Hub:Auth:IdentityClaim`. Un
 userinfo sans ce champ fait échouer la connexion plutôt que d'ouvrir une session
-sans nom. Une connexion échouée, celle-là, un utilisateur qui annule sur
-l'écran du fournisseur ou un utilisateur hors des groupes exigés, répond `403`
-avec une même ligne pour tous les cas, renvoyant vers la page d'accueil du Hub
-ou vers son administrateur, et journalise la raison en warning (événement
-`1900`). Aucun token n'est conservé : la session est un cookie chiffré
-`hub_session`, `Secure`, `HttpOnly`, `SameSite=Lax`, valable 8 heures et
-prolongé tant qu'il sert, ou non prolongé sous `Hub:Auth:RequiredGroups`. Il n'y
-a pas de bouton de déconnexion.
+sans nom. Une connexion échouée, celle-là, un utilisateur qui annule sur l'écran
+du fournisseur ou un utilisateur hors des groupes exigés, répond `403` avec une
+même ligne pour tous les cas, renvoyant vers la page d'accueil du Hub ou vers
+son administrateur, et journalise la raison en warning (événement `1900`). Une
+connexion réussie journalise l'événement `1903` en Information, une fois par
+session : `Signed in: alice@example.com (subject 3f2a…) from 10.0.4.12.`,
+l'identité, la valeur de `Hub:Auth:SubjectClaim` (l'identifiant sur lequel le
+journal de connexion du fournisseur s'appuie, `sub` ou `oid` chez Entra ID) et
+l'adresse cliente, jamais le nom affiché. La ligne contient une adresse e-mail
+et une adresse IP : gardez-la aussi longtemps que votre politique de logs
+l'autorise pour des données personnelles, pas plus. Aucun token n'est conservé :
+la session est un cookie chiffré `hub_session`, `Secure`, `HttpOnly`,
+`SameSite=Lax`, valable 8 heures et prolongé tant qu'il sert, ou non prolongé
+sous `Hub:Auth:RequiredGroups`. Il n'y a pas de bouton de déconnexion.
 
 L'utilisateur connecté est ce qu'affiche la barre du haut et ce qu'un run
 enregistre comme `requested_by`. `Hub:Analysis:IdentityHeader` est ignoré pour
