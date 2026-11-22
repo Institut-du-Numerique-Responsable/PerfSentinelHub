@@ -459,3 +459,10 @@ v0.19.1	c8eb442	2026-11-18	PASS
 # sign-in leg is in hub-access-control, a cluster scenario. Not run: the cluster
 # hub scenarios, the k3d cluster being down.
 v0.20.0	d349788	2026-11-18	PASS
+# v0.20.1 targeted pass on a local Release build of chore/repin-engine-0.47.0
+# (76dc688) and the perf-sentinel 0.47.0 release binary, no cluster, lab at
+# origin/main. The release repins the engine to 0.47.0, whose new counter of
+# events dropped at the per-trace cap belongs to the daemon window only.
+# hub-recap (21 checks), hub-detection-volume and hub-card (24 checks). All
+# PASS, no skip. Not run: the cluster hub scenarios, the k3d cluster being down.
+v0.20.1	cb2877b	2026-11-22	PASS
