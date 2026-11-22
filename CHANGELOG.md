@@ -2,6 +2,17 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.20.2] - 2026-11-22
+
+### Changed
+
+- The image ships perf-sentinel `0.48.0` as its analysis engine, repinned by digest from
+  `0.47.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.47.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. The engine's two new avoidable energy and carbon
+  counters are daemon `/metrics` series. Its shared avoidable energy formula leaves disclosure
+  figures unchanged, and no report format, disclosure schema or daemon route changes.
+
 ## [0.20.1] - 2026-11-22
 
 ### Changed

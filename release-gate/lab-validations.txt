@@ -466,3 +466,10 @@ v0.20.0	d349788	2026-11-18	PASS
 # hub-recap (21 checks), hub-detection-volume and hub-card (24 checks). All
 # PASS, no skip. Not run: the cluster hub scenarios, the k3d cluster being down.
 v0.20.1	cb2877b	2026-11-22	PASS
+# v0.20.2 targeted pass on a local Release build of chore/repin-engine-0.48.0
+# (751f596) and the perf-sentinel 0.48.0 release binary built from its tag, no
+# cluster, lab at origin/main. The release repins the engine to 0.48.0, whose
+# avoidable energy and carbon counters are daemon /metrics series.
+# hub-recap (21 checks), hub-detection-volume and hub-card (24 checks). All
+# PASS, no skip. Not run: the cluster hub scenarios, the k3d cluster being down.
+v0.20.2	072101a	2026-11-22	PASS
