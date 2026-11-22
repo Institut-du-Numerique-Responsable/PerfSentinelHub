@@ -3,6 +3,8 @@ import {createHash, pbkdf2Sync, randomBytes} from "node:crypto";
 import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {join, resolve} from "node:path";
 import {tmpdir} from "node:os";
+// CommonJS, shared with fake-daemon.js, which runs as a plain node script.
+const {reachLastClosedWeek} = require("./demo/seen-window.js") as { reachLastClosedWeek: (firstSeenMs: number) => number };
 
 // The Hub has no seeder, no fixture loader and no demo mode. Its validation
 // refuses to start without a source, and a daemon view is read live rather
@@ -291,7 +293,7 @@ async function pushGroupedFindings(importKey: string): Promise<void> {
     // fake-daemon.js slides them, or the findings would sit past the retention.
     const delta = Date.now() - 120_000 - Math.max(...captured.map((f) => f.stored_at_ms));
     const findings = captured.map((f) =>
-        ({...f, stored_at_ms: f.stored_at_ms + delta, first_seen_ms: f.first_seen_ms + delta}));
+        ({...f, stored_at_ms: f.stored_at_ms + delta, first_seen_ms: reachLastClosedWeek(f.first_seen_ms + delta)}));
     const {version} = JSON.parse(readFileSync(join(__dirname, "demo", "fixtures", "daemon-status-busy.json"), "utf8")) as
         { version: string };
     const grouped = (envelope: { finding: Record<string, unknown> }, team?: string) =>
