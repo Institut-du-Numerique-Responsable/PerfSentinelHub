@@ -1,14 +1,14 @@
 [
   {
-    "id": "9ec3e0ed96fbb731d0ae6326d2833a26",
+    "id": "73ea90e557b8da536c21f6e244a86be8",
     "service": "reports-svc",
     "namespace": "reporting",
     "kind": "memory_saturation",
-    "at_ms": 1795364760466,
+    "at_ms": 1795374767524,
     "detail": "working set at 94 percent of the limit",
-    "window_from_ms": 1795364757466,
-    "window_to_ms": 1795364762466,
-    "oldest_finding_ms": 1795364756924,
+    "window_from_ms": 1795374764524,
+    "window_to_ms": 1795374769524,
+    "oldest_finding_ms": 1795374763984,
     "findings": [
       {
         "finding": {
@@ -27,8 +27,8 @@
             "span_duration_cv_x1000": 0
           },
           "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-          "first_timestamp": "2026-11-22T16:25:57.963Z",
-          "last_timestamp": "2026-11-22T16:25:57.963Z",
+          "first_timestamp": "2026-11-22T19:12:45.020Z",
+          "last_timestamp": "2026-11-22T19:12:45.020Z",
           "green_impact": {
             "estimated_extra_io_ops": 7,
             "io_intensity_score": 8.0,
@@ -37,22 +37,22 @@
           "confidence": "daemon_staging",
           "signature": "n_plus_one_sql:reports-svc:GET__reports:eca589985f26e880cf5b71a71303e90f"
         },
-        "stored_at_ms": 1795364759425,
-        "first_seen_ms": 1795364759425,
+        "stored_at_ms": 1795374766483,
+        "first_seen_ms": 1795374766483,
         "seen_count": 1
       }
     ]
   },
   {
-    "id": "967f660c7fe2419f6389236cf88cf307",
+    "id": "3a034ae642c4b598ac166cd3bf737707",
     "service": "checkout-svc",
     "namespace": "shop",
     "kind": "oom_kill",
-    "at_ms": 1795364760466,
+    "at_ms": 1795374767524,
     "detail": "container exceeded its memory limit",
-    "window_from_ms": 1795364757466,
-    "window_to_ms": 1795364762466,
-    "oldest_finding_ms": 1795364756924,
+    "window_from_ms": 1795374764524,
+    "window_to_ms": 1795374769524,
+    "oldest_finding_ms": 1795374763984,
     "findings": [
       {
         "finding": {
@@ -71,8 +71,8 @@
             "span_duration_cv_x1000": 0
           },
           "suggestion": "Use `WHERE ... IN (?)` to batch 8 queries into one",
-          "first_timestamp": "2026-11-22T16:25:57.962Z",
-          "last_timestamp": "2026-11-22T16:25:57.962Z",
+          "first_timestamp": "2026-11-22T19:12:45.019Z",
+          "last_timestamp": "2026-11-22T19:12:45.019Z",
           "green_impact": {
             "estimated_extra_io_ops": 7,
             "io_intensity_score": 8.0,
@@ -81,8 +81,8 @@
           "confidence": "daemon_staging",
           "signature": "n_plus_one_sql:checkout-svc:POST__checkout:e1e0bf0f3636b95b2421e5e4a3c0832c"
         },
-        "stored_at_ms": 1795364759425,
-        "first_seen_ms": 1795364759425,
+        "stored_at_ms": 1795374766483,
+        "first_seen_ms": 1795374766483,
         "seen_count": 1
       }
     ]
