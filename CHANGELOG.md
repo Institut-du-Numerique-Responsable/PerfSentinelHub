@@ -2,6 +2,18 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- The image ships perf-sentinel `0.47.0` as its analysis engine, repinned by digest from
+  `0.46.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.46.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. The engine's new
+  `perf_sentinel_trace_events_dropped_total` counter and its tuning warning belong to the daemon's
+  per-trace window. The batch analyses the Hub runs read each trace whole, so their reports do
+  not change. No report format, disclosure schema or daemon route changes.
+
 ## [0.20.0] - 2026-11-18
 
 ### Added
