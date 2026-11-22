@@ -1,5 +1,5 @@
 {
-  "version": "0.46.0",
+  "version": "0.47.0",
   "uptime_seconds": 511500,
   "active_traces": 344,
   "max_active_traces": 1000,
@@ -9,11 +9,11 @@
   "max_retained_findings": 10000,
   "findings_stored_total": 11,
   "detection_ledger": {
-    "ledger_id": "324813b6-24c0-4ec4-8d49-4942fd03c65a",
-    "started_ms": 1795044886147,
+    "ledger_id": "4388431c-2480-4d64-a11e-aa2d29287f37",
+    "started_ms": 1795364750828,
     "retained_days": 8,
-    "oldest_day": 20775,
-    "current_day": 20775,
+    "oldest_day": 20779,
+    "current_day": 20779,
     "sealed_through": null
   }
 }
