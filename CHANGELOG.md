@@ -2,6 +2,18 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.20.3] - 2026-11-22
+
+### Changed
+
+- The image ships perf-sentinel `0.48.1` as its analysis engine, repinned by digest from
+  `0.48.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.48.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. The engine no longer charges the waste of spans
+  with no region to the services that have one, so the avoidable CO2 the detection ledger sends
+  drops on daemons where some spans resolve no region. The ledger's op counts still cover every
+  span, and no report format, disclosure schema or daemon route changes.
+
 ## [0.20.2] - 2026-11-22
 
 ### Changed
