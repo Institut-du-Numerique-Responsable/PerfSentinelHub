@@ -29,6 +29,7 @@
 const http = require("node:http");
 const {existsSync, readFileSync} = require("node:fs");
 const {join} = require("node:path");
+const {reachLastClosedWeek} = require("./seen-window.js");
 
 const [port, variant = "busy"] = process.argv.slice(2);
 if (!port) {
@@ -50,17 +51,24 @@ const MS_FIELDS = new Set([
     "stored_at_ms", "first_seen_ms",
 ]);
 
-/** @param {string} body @param {string} anchor the field the newest row is newest by */
-function slideToNow(body, anchor) {
+/**
+ * @param {string} body @param {string} anchor the field the newest row is newest by
+ * @param {boolean} [reachWeek] move old first sightings into the last closed week, see seen-window.js
+ */
+function slideToNow(body, anchor, reachWeek = false) {
     const rows = JSON.parse(body);
     if (rows.length === 0) return body;
     const newest = Math.max(...rows.map((row) => row[anchor]));
     const delta = Date.now() - 120_000 - newest;
+    const shift = (key, value) => {
+        const moved = value + delta;
+        return reachWeek && key === "first_seen_ms" ? reachLastClosedWeek(moved) : moved;
+    };
     const slide = (node) => {
         if (Array.isArray(node)) return node.map(slide);
         if (node === null || typeof node !== "object") return node;
         return Object.fromEntries(Object.entries(node).map(
-            ([key, value]) => [key, MS_FIELDS.has(key) && typeof value === "number" ? value + delta : slide(value)]));
+            ([key, value]) => [key, MS_FIELDS.has(key) && typeof value === "number" ? shift(key, value) : slide(value)]));
     };
     return JSON.stringify(rows.map(slide));
 }
@@ -76,7 +84,7 @@ const routes = {
     "/api/status": fixture(`daemon-status-${variant}`),
     "/api/config": fixture("daemon-config"),
     "/api/export/report": JSON.stringify(report),
-    "/api/findings": slideToNow(fixture("daemon-findings"), "stored_at_ms"),
+    "/api/findings": slideToNow(fixture("daemon-findings"), "stored_at_ms", true),
     // A daemon with no incidents fixture has its alerting unwired, and answers
     // the empty listing a daemon with nothing recorded answers, not a 404.
     "/api/incidents": slideToNow(optional(`daemon-incidents-${variant}`) ?? "[]", "at_ms"),

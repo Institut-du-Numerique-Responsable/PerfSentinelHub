@@ -57,7 +57,7 @@ python-tests:
 # way launcher.js itself is authored. The last file skips itself when there is
 # no engine build to run, so this target needs nothing that the others did not.
 js-tests:
-	node --test tests/launcher.test.js tests/text.test.js tests/launcher-e2e.test.js
+	node --test tests/launcher.test.js tests/text.test.js tests/launcher-e2e.test.js tests/browser/demo/seen-window.test.js
 
 test: coverage
 
