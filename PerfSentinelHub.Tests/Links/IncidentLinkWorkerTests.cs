@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
+using PerfSentinelHub.Tests.Support;
 
 namespace PerfSentinelHub.Tests.Links;
 
@@ -168,6 +169,35 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task A_failed_catch_up_still_drains_the_queue()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"perf-sentinel-hub-links-{NewId()}.db");
+        var options = factory.Services.GetRequiredService<IOptions<HubOptions>>();
+        // Never initialized: the catch-up query finds no table and throws.
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = path, Sources = options.Value.Sources }), TimeProvider.System);
+        var queue = new IncidentLinkQueue();
+        queue.Enqueue(new IncidentKey("drained", Source));
+        var logger = new ListLogger<IncidentLinkWorker>();
+        using var worker = new IncidentLinkWorker(queue, database, options, logger);
+        await worker.StartAsync(Token);
+        try
+        {
+            Assert.True(await WaitAsync(() => Task.FromResult(
+                logger.Messages.Any(m => m.Contains("catch-up", StringComparison.Ordinal))
+                && logger.Messages.Any(m => m.Contains("drained", StringComparison.Ordinal)))));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+            TestPool.ClearFor(path);
+            File.Delete(path);
+            File.Delete($"{path}-shm");
+            File.Delete($"{path}-wal");
+        }
+    }
+
+    [Fact]
     public async Task A_findings_push_succeeds_while_the_worker_assesses_a_thousand_signatures()
     {
         var id = NewId();
@@ -182,11 +212,31 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         };
         request.Headers.Add("X-API-Key", ApiKey);
 
-        var processing = worker.ProcessAsync(key, Token);
+        // The assessment loops on a thread of its own for the whole push, so the two overlap
+        // for certain: a single pass could end before the request is even sent.
+        var stop = new CancellationTokenSource();
+        var started = new TaskCompletionSource();
+        var stress = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                await worker.ProcessAsync(key, Token);
+                started.TrySetResult();
+            }
+        }, Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(20), Token);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         using var response = await factory.CreateClient().SendAsync(request, Token);
+        clock.Stop();
+        var stillAssessing = !stress.IsCompleted;
+        await stop.CancelAsync();
+        await stress;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(await processing);
+        Assert.True(stillAssessing);
+        // The write gate is waited on for 5 s before a push answers 503; far below that is no wait.
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"push took {clock.Elapsed}");
         Assert.Equal(1000, (await factory.Database.ListLinksAsync(key, Token)).Count);
     }
 

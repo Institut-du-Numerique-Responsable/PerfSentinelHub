@@ -23,7 +23,19 @@ public sealed partial class IncidentLinkWorker(
                 queue.Enqueue(key);
             if (missing.Count > 0)
                 LogCatchUp(logger, missing.Count);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            // Not fatal: imports keep queueing, and the next start retries the catch-up.
+            LogCatchUpFailed(logger, exception);
+        }
 
+        try
+        {
             await foreach (var key in queue.ReadAllAsync(stoppingToken))
             {
                 try
@@ -42,10 +54,6 @@ public sealed partial class IncidentLinkWorker(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-        }
-        catch (Exception exception)
-        {
-            LogCatchUpFailed(logger, exception);
         }
     }
 
@@ -88,6 +96,6 @@ public sealed partial class IncidentLinkWorker(
     [LoggerMessage(1502, LogLevel.Error, "Assessing the finding links of incident {IncidentId} failed.")]
     private static partial void LogIncidentFailed(ILogger logger, string incidentId, Exception exception);
 
-    [LoggerMessage(1503, LogLevel.Error, "The finding link worker stopped: the startup catch-up failed.")]
+    [LoggerMessage(1503, LogLevel.Error, "The startup catch-up of finding links failed; incidents imported from now on are still assessed.")]
     private static partial void LogCatchUpFailed(ILogger logger, Exception exception);
 }
