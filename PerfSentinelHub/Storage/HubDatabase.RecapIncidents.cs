@@ -9,7 +9,6 @@ public sealed record RecapIncidentRow(
 // The incidents a recap counts: the same sources, services, namespaces and access as its findings.
 public sealed partial class HubDatabase
 {
-    // Declared after IncidentAccess: static fields initialize in order.
     private static readonly string RecapIncidentSql = $"""
         SELECT incidents.id, incidents.source_id, incidents.kind, incidents.service, incidents.at_ms,
                l.signature, l.level_rank
@@ -25,7 +24,8 @@ public sealed partial class HubDatabase
                OR json_extract(incidents.incident_json, '$.namespace') IN (SELECT value FROM json_each($groupings)))
         """;
 
-    private static readonly string ScopedRecapIncidentSql =
+    // A property, so it reads IncidentAccess when used, whatever the initializer order across partial files.
+    private static string ScopedRecapIncidentSql =>
         $"WITH {AccessPatternsCte}\n{RecapIncidentSql} AND {IncidentAccess}";
 
     /// <summary>

@@ -26,6 +26,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         factory.Services.GetRequiredService<IncidentLinkQueue>(),
         factory.Database,
         factory.Services.GetRequiredService<IOptions<HubOptions>>(),
+        TimeProvider.System,
         NullLogger<IncidentLinkWorker>.Instance);
 
     private static string Frozen(int count) =>
@@ -217,7 +218,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         var queue = new IncidentLinkQueue();
         queue.Enqueue(new IncidentKey("drained", Source));
         var logger = new ListLogger<IncidentLinkWorker>();
-        using var worker = new IncidentLinkWorker(queue, database, options, logger);
+        using var worker = new IncidentLinkWorker(queue, database, options, TimeProvider.System, logger);
         await worker.StartAsync(Token);
         try
         {
@@ -250,32 +251,108 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         };
         request.Headers.Add("X-API-Key", ApiKey);
 
-        // The assessment loops on a thread of its own for the whole push, so the two overlap
-        // for certain: a single pass could end before the request is even sent.
-        var stop = new CancellationTokenSource();
+        // The assessment loops on a thread of its own for the whole push, so the two overlap for
+        // certain. The counters prove a pass was running at the send or began during the request.
+        using var stop = new CancellationTokenSource();
+        var begun = 0;
+        var ended = 0;
         var started = new TaskCompletionSource();
         var stress = Task.Run(async () =>
         {
             while (!stop.IsCancellationRequested)
             {
+                Interlocked.Increment(ref begun);
                 await worker.ProcessAsync(key, Token);
+                Interlocked.Increment(ref ended);
                 started.TrySetResult();
             }
         }, Token);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(20), Token);
+        await Task.WhenAny(started.Task, stress).WaitAsync(TimeSpan.FromSeconds(20), Token);
+        if (stress.IsFaulted)
+            await stress;
 
+        var endedBefore = Volatile.Read(ref ended);
+        var begunBefore = Volatile.Read(ref begun);
         var clock = System.Diagnostics.Stopwatch.StartNew();
         using var response = await factory.CreateClient().SendAsync(request, Token);
         clock.Stop();
-        var stillAssessing = !stress.IsCompleted;
+        var begunAfter = Volatile.Read(ref begun);
         await stop.CancelAsync();
         await stress;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(stillAssessing);
+        Assert.True(begunAfter > begunBefore || begunBefore > endedBefore,
+            "no assessment ran while the push was in flight");
         // The write gate is waited on for 5 s before a push answers 503; far below that is no wait.
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"push took {clock.Elapsed}");
         Assert.Equal(1000, (await factory.Database.ListLinksAsync(key, Token)).Count);
+    }
+
+    [Fact]
+    public async Task A_failing_incident_is_logged_and_the_next_key_still_gets_links()
+    {
+        var bad = NewId();
+        var good = NewId();
+        await SeedIncidentAsync(bad, 1);
+        await SeedIncidentAsync(good, 2);
+        var queue = new IncidentLinkQueue();
+        queue.Enqueue(new IncidentKey(bad, Source));
+        queue.Enqueue(new IncidentKey(good, Source));
+        var logger = new ListLogger<IncidentLinkWorker>();
+        using var worker = new IncidentLinkWorker(queue, factory.Database,
+            new FailsOnce(factory.Services.GetRequiredService<IOptions<HubOptions>>().Value), TimeProvider.System, logger);
+        await worker.StartAsync(Token);
+        try
+        {
+            Assert.True(await WaitAsync(async () =>
+                (await factory.Database.ListLinksAsync(new IncidentKey(good, Source), Token)).Count == 2));
+            Assert.Contains(logger.Messages, m => m.Contains(bad, StringComparison.Ordinal));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task The_catch_up_runs_again_every_hour_to_retry_a_failed_assessment()
+    {
+        var sentinel = NewId();
+        var late = NewId();
+        await SeedIncidentAsync(sentinel, 1);
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider();
+        using var worker = new IncidentLinkWorker(new IncidentLinkQueue(), factory.Database,
+            factory.Services.GetRequiredService<IOptions<HubOptions>>(), clock,
+            NullLogger<IncidentLinkWorker>.Instance);
+        await worker.StartAsync(Token);
+        try
+        {
+            // Once the startup pass has done the sentinel, an incident seeded now is only found by a later pass.
+            Assert.True(await WaitAsync(async () =>
+                (await factory.Database.ListLinksAsync(new IncidentKey(sentinel, Source), Token)).Count == 1));
+            await SeedIncidentAsync(late, 1);
+            var lateKey = new IncidentKey(late, Source);
+
+            Assert.True(await WaitAsync(async () =>
+            {
+                clock.Advance(IncidentLinkWorker.CatchUpInterval);
+                return (await factory.Database.ListLinksAsync(lateKey, Token)).Count == 1;
+            }));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // The first read of the options throws: the first incident assessed fails, the next one is fine.
+    private sealed class FailsOnce(HubOptions inner) : IOptions<HubOptions>
+    {
+        private int _reads;
+
+        public HubOptions Value => Interlocked.Increment(ref _reads) == 1
+            ? throw new InvalidOperationException("simulated failure")
+            : inner;
     }
 
     private static string FixtureFindings() => File.ReadAllText(

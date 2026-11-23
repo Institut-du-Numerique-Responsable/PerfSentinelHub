@@ -303,12 +303,14 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
             await using var query = check.CreateCommand();
             query.CommandText = """
                                 SELECT (SELECT count(*) FROM sqlite_master WHERE name = 'incident_finding_links'),
-                                       (SELECT count(*) FROM schema_migrations WHERE version = 24);
+                                       (SELECT count(*) FROM schema_migrations WHERE version = 24),
+                                       (SELECT count(*) FROM sqlite_master WHERE name = 'ix_incident_finding_links_at');
                                 """;
             await using var reader = await query.ExecuteReaderAsync(Token);
             Assert.True(await reader.ReadAsync(Token));
             Assert.Equal(1, reader.GetInt64(0));
             Assert.Equal(1, reader.GetInt64(1));
+            Assert.Equal(1, reader.GetInt64(2));
         }
         finally
         {

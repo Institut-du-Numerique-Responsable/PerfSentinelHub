@@ -12,9 +12,25 @@ public sealed partial class IncidentLinkWorker(
     IncidentLinkQueue queue,
     HubDatabase database,
     IOptions<HubOptions> options,
+    TimeProvider timeProvider,
     ILogger<IncidentLinkWorker> logger) : BackgroundService
 {
+    // A failed assessment leaves an incident without current links; the catch-up runs again to retry it.
+    public static readonly TimeSpan CatchUpInterval = TimeSpan.FromHours(1);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await CatchUpAsync(stoppingToken);
+            await Task.WhenAll(ConsumeAsync(stoppingToken), RetryCatchUpAsync(stoppingToken));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task CatchUpAsync(CancellationToken stoppingToken)
     {
         try
         {
@@ -26,34 +42,40 @@ public sealed partial class IncidentLinkWorker(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            return;
+            throw;
         }
         catch (Exception exception)
         {
-            // Not fatal: imports keep queueing, and the next start retries the catch-up.
+            // Not fatal: imports keep queueing, and the next pass retries the catch-up.
             LogCatchUpFailed(logger, exception);
         }
+    }
 
-        try
+    private async Task RetryCatchUpAsync(CancellationToken stoppingToken)
+    {
+        while (true)
         {
-            await foreach (var key in queue.ReadAllAsync(stoppingToken))
-            {
-                try
-                {
-                    await ProcessAsync(key, stoppingToken);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    return;
-                }
-                catch (Exception exception)
-                {
-                    LogIncidentFailed(logger, key.Id, exception);
-                }
-            }
+            await Task.Delay(CatchUpInterval, timeProvider, stoppingToken);
+            await CatchUpAsync(stoppingToken);
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+    }
+
+    private async Task ConsumeAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var key in queue.ReadAllAsync(stoppingToken))
         {
+            try
+            {
+                await ProcessAsync(key, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                LogIncidentFailed(logger, key.Id, exception);
+            }
         }
     }
 
@@ -96,6 +118,6 @@ public sealed partial class IncidentLinkWorker(
     [LoggerMessage(1502, LogLevel.Error, "Assessing the finding links of incident {IncidentId} failed.")]
     private static partial void LogIncidentFailed(ILogger logger, string incidentId, Exception exception);
 
-    [LoggerMessage(1503, LogLevel.Error, "The startup catch-up of finding links failed; incidents imported from now on are still assessed.")]
+    [LoggerMessage(1503, LogLevel.Error, "The catch-up of finding links failed; incidents imported from now on are still assessed.")]
     private static partial void LogCatchUpFailed(ILogger logger, Exception exception);
 }
