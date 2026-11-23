@@ -56,11 +56,11 @@
     {
       "name": "Microsoft.Extensions.TimeProvider.Testing",
       "kind": "nuget",
-      "version": "10.11.0",
-      "digest_or_sha": "sha512-base64:z/wYTbttKomU+Bjry5xfc1oe2XHOtZIc4wgUsrLiHF5UgxTkcvUqCj00n/pW9ieIWBhb091MjDkHMoivSABmtQ==",
-      "lock_content_hash": "DTivKZ2Du0dJideTTa6vPj/eXKNRu+RxtjBX7NOOUXHBtHx1ehbE+lM+j3/5M3wU6BqzcZqEEyR4+FnPKs2rTA==",
-      "released_at": "2026-10-14T05:03:25.907Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.timeprovider.testing/10.11.0.json",
+      "version": "10.11.1",
+      "digest_or_sha": "sha512-base64:Qd6nXRwmGKTMJBEByXLta+h4rgi6EWx1NID6xhD778CKYutHVCb3ZC+CA80c8LXnVD/Dsy278j5VM+PfT05S0w==",
+      "lock_content_hash": "+ao8Sj5oSSANi3rM1JN0u/76bTE61Afxb2idMhlLjB84Z/bFArnUQeRrXOqzqaqj8bxqPQQUKXwv3jai+IN+GA==",
+      "released_at": "2026-11-20T00:58:37.407Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.timeprovider.testing/10.11.1.json",
       "reason": "Latest stable test clock package."
     },
     {
@@ -86,10 +86,10 @@
     {
       "name": "dotnet-reportgenerator-globaltool",
       "kind": "dotnet-tool",
-      "version": "5.6.0",
-      "digest_or_sha": "sha512-base64:tlYygzLmBxRlpwmA3zeJ/m4CvShBAU4hT6S16SdefIqg8n3EjPUpMk06su04/z5v34vTGe2ZhEgXubD9ODVasg==",
-      "released_at": "2026-11-10T20:59:38.1Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-reportgenerator-globaltool/5.6.0.json",
+      "version": "5.6.1",
+      "digest_or_sha": "sha512-base64:g3tGgqV1K0elPiV30l7nLvEF36QZk+ykIScCbUH+R0JivHFKXcGUrgbXklJGgXK0YOUDoJCnA03zzdIhtda/Eg==",
+      "released_at": "2026-11-20T20:03:15.133Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-reportgenerator-globaltool/5.6.1.json",
       "reason": "Latest stable report generator tool."
     },
     {
