@@ -56,11 +56,11 @@
     {
       "name": "Microsoft.Extensions.TimeProvider.Testing",
       "kind": "nuget",
-      "version": "10.11.1",
-      "digest_or_sha": "sha512-base64:Qd6nXRwmGKTMJBEByXLta+h4rgi6EWx1NID6xhD778CKYutHVCb3ZC+CA80c8LXnVD/Dsy278j5VM+PfT05S0w==",
-      "lock_content_hash": "+ao8Sj5oSSANi3rM1JN0u/76bTE61Afxb2idMhlLjB84Z/bFArnUQeRrXOqzqaqj8bxqPQQUKXwv3jai+IN+GA==",
-      "released_at": "2026-11-20T00:58:37.407Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.timeprovider.testing/10.11.1.json",
+      "version": "11.0.1",
+      "digest_or_sha": "sha512-base64:f7+QHBbbWU94j5jteoepD5shbsmUB3niBXXF/hzF2DeppBM7fpvx9Z3vQ3RhU9Zn8/HQr6g4OCkguYCnT+DbBA==",
+      "lock_content_hash": "2lLxpcMnu31ZrNwJ3ypqNKlavMvkJ8LhSn9YMgSTxfuyXxJGCvDHdGEyAtlc9NrXVLDA7lcIDqv0T+RnWc4nsg==",
+      "released_at": "2026-11-21T03:05:29.793Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.timeprovider.testing/11.0.1.json",
       "reason": "Latest stable test clock package."
     },
     {
