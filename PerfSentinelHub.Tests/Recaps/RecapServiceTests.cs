@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -763,7 +764,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal(
         [
             "enter findings_period", "enter findings_open", "enter findings_closed", "enter findings_previous",
-            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter assemble"
+            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter incidents", "enter assemble"
         ], progress.Seen);
     }
 
@@ -777,7 +778,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal(
         [
             "enter findings_period", "enter findings_open", "skip findings_closed", "enter findings_previous",
-            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter assemble"
+            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter incidents", "enter assemble"
         ], progress.Seen);
     }
 
@@ -792,11 +793,109 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal(
         [
             "enter findings_period", "enter findings_open", "skip findings_closed", "skip findings_previous",
-            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter assemble"
+            "enter coverage", "enter carbon", "enter actions", "enter labels", "enter incidents", "enter assemble"
         ], progress.Seen);
     }
 
     // ------------------------------------------------------------ helpers
+
+    // ------------------------------------------------------------ incidents
+
+    [Fact]
+    public async Task Recap_counts_period_incidents_once_per_id_and_by_kind()
+    {
+        await IncidentAsync("a", "i1", "oom_kill", Mon * DayMs + 1000);
+        await IncidentAsync("b", "i1", "oom_kill", Mon * DayMs + 1000);
+        await IncidentAsync("a", "i2", "error_spike", Thu * DayMs + 1000);
+        await IncidentAsync("a", "i3", "oom_kill", (LastMon + 1) * DayMs);
+
+        var incidents = (await RecapAsync()).Incidents;
+
+        Assert.NotNull(incidents);
+        Assert.Equal(2, incidents.Count);
+        Assert.Equal(1, incidents.ByKind["oom_kill"]);
+        Assert.Equal(1, incidents.ByKind["error_spike"]);
+    }
+
+    [Fact]
+    public async Task Recap_counts_only_the_incidents_of_the_sources_in_scope()
+    {
+        await IncidentAsync("a", "i1", "oom_kill", Mon * DayMs + 1000, ("s1", LinkLevel.Strong));
+        await IncidentAsync("b", "i2", "oom_kill", Mon * DayMs + 1000, ("s1", LinkLevel.Strong));
+
+        var incidents = (await RecapAsync("prod")).Incidents;
+
+        Assert.NotNull(incidents);
+        Assert.Equal(1, incidents.Count);
+        Assert.Equal(1, incidents.Suspects.Single().Strong);
+    }
+
+    [Fact]
+    public async Task Recap_previous_count_uses_the_truncated_previous_range()
+    {
+        // Three closed days in: the previous week counts its Monday to Wednesday only.
+        await IncidentAsync("a", "p1", "oom_kill", (LastMon + 2) * DayMs + 5000);
+        await IncidentAsync("a", "p2", "oom_kill", (LastMon + 3) * DayMs + 5000);
+
+        var incidents = (await RecapAsync()).Incidents;
+
+        Assert.NotNull(incidents);
+        Assert.Equal(0, incidents.Count);
+        Assert.Equal(1, incidents.PreviousCount);
+    }
+
+    [Fact]
+    public async Task Recap_without_incidents_still_carries_an_empty_section()
+    {
+        var incidents = (await RecapAsync()).Incidents;
+
+        Assert.NotNull(incidents);
+        Assert.Equal(0, incidents.Count);
+        Assert.Empty(incidents.ByKind);
+        Assert.Empty(incidents.Suspects);
+        Assert.Equal(0, incidents.MoreSuspects);
+    }
+
+    [Fact]
+    public async Task Recap_ranks_suspects_by_strong_then_medium()
+    {
+        await SeedAsync("a", "s-a", Mon);
+        var at = Mon * DayMs;
+        await IncidentAsync("a", "i1", "oom_kill", at + 1000, ("s-a", LinkLevel.Strong), ("s-b", LinkLevel.Strong),
+            ("s-c", LinkLevel.Medium), ("s-weak", LinkLevel.Weak));
+        await IncidentAsync("a", "i2", "error_spike", at + 2000, ("s-a", LinkLevel.Strong), ("s-b", LinkLevel.Medium),
+            ("s-c", LinkLevel.Medium), ("s-weak", LinkLevel.Weak));
+        await IncidentAsync("a", "i3", "oom_kill", at + 3000, ("s-b", LinkLevel.Medium), ("s-c", LinkLevel.Weak));
+        // The same incident seen by a second source counts once.
+        await IncidentAsync("b", "i2", "error_spike", at + 2000, ("s-a", LinkLevel.Strong));
+
+        var suspects = (await RecapAsync()).Incidents!.Suspects;
+
+        Assert.Equal(["s-a", "s-b", "s-c"], suspects.Select(suspect => suspect.Signature));
+        Assert.Equal([1, 2, 3], suspects.Select(suspect => suspect.Rank));
+        Assert.Equal(2, suspects[0].Strong);
+        Assert.Equal(0, suspects[0].Medium);
+        Assert.Equal(1, suspects[0].StrongByKind["oom_kill"]);
+        Assert.Equal(1, suspects[0].StrongByKind["error_spike"]);
+        Assert.Equal((1, 2), (suspects[1].Strong, suspects[1].Medium));
+        Assert.Equal("i2", suspects[0].LatestIncidentId);
+        // A weak link counts for the latest incident, and a finding the store holds names its endpoint.
+        Assert.Equal("i3", suspects[2].LatestIncidentId);
+        Assert.Equal("GET /orders", suspects[0].Endpoint);
+        Assert.Equal("unknown", suspects[1].FindingType);
+    }
+
+    private async Task IncidentAsync(
+        string source, string id, string kind, long atMs, params (string Signature, LinkLevel Level)[] links)
+    {
+        await _database.UpsertIncidentsAsync(
+            source, [new ParsedIncident(id, "order-svc", kind, atMs, null, atMs - 1000, atMs, null, 0, "{}", "[]")],
+            NowMs, Token);
+        await _database.ReplaceLinksAsync(
+            new IncidentKey(id, source), "env",
+            [.. links.Select(link => new StoredLink(link.Signature, link.Level, [], IncidentLinkRules.RulesVersion))],
+            Token);
+    }
 
     private Task<RecapSnapshot> RecapAsync(string? environment = null)
     {

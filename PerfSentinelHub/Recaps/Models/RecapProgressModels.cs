@@ -13,6 +13,7 @@ public enum RecapStage
     Carbon,
     Actions,
     Labels,
+    Incidents,
     Assemble
 }
 

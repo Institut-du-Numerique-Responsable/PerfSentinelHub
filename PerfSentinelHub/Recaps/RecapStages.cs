@@ -17,6 +17,7 @@ public static class RecapStages
             RecapStage.Carbon => "carbon",
             RecapStage.Actions => "actions",
             RecapStage.Labels => "labels",
+            RecapStage.Incidents => "incidents",
             RecapStage.Assemble => "assemble",
             // No catch-all: a stage added without a name must fail rather than reach the wire unnamed.
             _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null)
