@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Collection;
@@ -20,7 +21,8 @@ namespace PerfSentinelHub.Collection;
 public sealed partial class IncidentReader(
     DaemonClient client,
     HubDatabase database,
-    ILogger<IncidentReader> logger)
+    ILogger<IncidentReader> logger,
+    IncidentLinkQueue? links = null)
 {
     // Ten daemon pages. The daemon's ring defaults to 200, so this stops a
     // misconfigured daemon rather than bounding anything a fleet should reach.
@@ -46,6 +48,8 @@ public sealed partial class IncidentReader(
             }
 
             await database.UpsertIncidentsAsync(source.Id, incidents, observedAtMs, cancellationToken);
+            foreach (var incident in incidents)
+                links?.Enqueue(new IncidentKey(incident.Id, source.Id));
             return incidents.Count;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

@@ -11,6 +11,7 @@ using PerfSentinelHub.Cards;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Disclosures;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
@@ -162,6 +163,8 @@ builder.Services.AddHostedService<PollWorker>();
 builder.Services.AddSingleton<SignatureRate>();
 builder.Services.AddHostedService<SignatureRateWorker>();
 builder.Services.AddHostedService<RetentionWorker>();
+builder.Services.AddSingleton<IncidentLinkQueue>();
+builder.Services.AddHostedService<IncidentLinkWorker>();
 var authenticates = builder.AddHubAuthentication();
 // A report is several megabytes of repetitive HTML. Only the launcher's files and
 // the reports are compressed: none carries a secret, while a JSON answer may hold
