@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Collection;
@@ -71,7 +72,7 @@ public sealed class PollingTests : IDisposable
             new IncidentReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
-                NullLogger<IncidentReader>.Instance),
+                NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
@@ -159,7 +160,7 @@ public sealed class PollingTests : IDisposable
             new IncidentReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
-                NullLogger<IncidentReader>.Instance),
+                NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
@@ -284,7 +285,7 @@ public sealed class PollingTests : IDisposable
         {
             var importedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - age;
             Assert.True(push == "incidents"
-                ? await database.TryUpsertPushedIncidentsAsync("capped", [], importedAtMs, cancellationToken)
+                ? await database.TryUpsertPushedIncidentsAsync("capped", [], importedAtMs, cancellationToken) is not null
                 : await database.TryUpsertBatchAsync(
                     new SourceSnapshot("capped", "Capped", "test", "0.34.1"),
                     FindingParser.Parse(Encoding.UTF8.GetBytes(push == "empty" ? "[]" : $"[{finding}]")),
@@ -307,7 +308,7 @@ public sealed class PollingTests : IDisposable
             new IncidentReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
-                NullLogger<IncidentReader>.Instance),
+                NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
@@ -388,7 +389,7 @@ public sealed class PollingTests : IDisposable
         var poller = new SourcePoller(
             client,
             database,
-            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
             new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             new RingWatch(),
@@ -474,7 +475,7 @@ public sealed class PollingTests : IDisposable
         var poller = new SourcePoller(
             client,
             database,
-            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
             new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             rings,
@@ -554,7 +555,7 @@ public sealed class PollingTests : IDisposable
             new IncidentReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
-                NullLogger<IncidentReader>.Instance),
+                NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
@@ -624,7 +625,7 @@ public sealed class PollingTests : IDisposable
             new IncidentReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
-                NullLogger<IncidentReader>.Instance),
+                NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
@@ -756,7 +757,7 @@ public sealed class PollingTests : IDisposable
             new IncidentReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,
-                NullLogger<IncidentReader>.Instance),
+                NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(
                 new DaemonClient(new HttpClient(), Options.Create(options)),
                 database,

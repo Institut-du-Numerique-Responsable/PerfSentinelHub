@@ -22,7 +22,7 @@ public sealed partial class IncidentReader(
     DaemonClient client,
     HubDatabase database,
     ILogger<IncidentReader> logger,
-    IncidentLinkQueue? links = null)
+    IncidentLinkQueue links)
 {
     // Ten daemon pages. The daemon's ring defaults to 200, so this stops a
     // misconfigured daemon rather than bounding anything a fleet should reach.
@@ -47,9 +47,10 @@ public sealed partial class IncidentReader(
                 return null;
             }
 
-            await database.UpsertIncidentsAsync(source.Id, incidents, observedAtMs, cancellationToken);
-            foreach (var incident in incidents)
-                links?.Enqueue(new IncidentKey(incident.Id, source.Id));
+            // Only what moved: the whole ring comes back on every poll, and the startup
+            // catch-up covers a key lost with the in-memory queue.
+            foreach (var id in await database.UpsertIncidentsAsync(source.Id, incidents, observedAtMs, cancellationToken))
+                links.Enqueue(new IncidentKey(id, source.Id));
             return incidents.Count;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

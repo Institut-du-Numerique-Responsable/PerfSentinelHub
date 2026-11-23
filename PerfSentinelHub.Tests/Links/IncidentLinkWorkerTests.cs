@@ -70,12 +70,15 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
 
     private static string Id(int index) => "c" + index.ToString("x31", CultureInfo.InvariantCulture);
 
-    private async Task PushIncidentAsync(string id)
+    // A grown copy freezes one more finding, as the daemon's settle pass can.
+    private async Task PushIncidentAsync(string id, bool grown = false)
     {
         var array = JsonNode.Parse(File.ReadAllText(Path.Combine(
             AppContext.BaseDirectory, "Fixtures", "daemon-incidents-0.20.0.json")))!.AsArray();
         var incident = array[0]!.AsObject();
         incident["id"] = id;
+        if (grown)
+            incident["findings"]!.AsArray().Add(incident["findings"]![0]!.DeepClone());
         var body = new JsonObject
         {
             ["producer_version"] = "0.29.0",
@@ -123,7 +126,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
             await factory.Database.ReplaceLinksAsync(key, "test", [], Token);
             Assert.Empty(await factory.Database.ListLinksAsync(key, Token));
 
-            await PushIncidentAsync(id);
+            await PushIncidentAsync(id, grown: true);
 
             Assert.True(await WaitAsync(async () => (await factory.Database.ListLinksAsync(key, Token)).Count > 0));
         }
@@ -131,6 +134,41 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         {
             await worker.StopAsync(CancellationToken.None);
         }
+    }
+
+    [Fact]
+    public async Task A_push_queues_only_new_or_grown_incidents()
+    {
+        var id = Id(3);
+        var key = new IncidentKey(id, Source);
+        var queue = factory.Services.GetRequiredService<IncidentLinkQueue>();
+        await DrainAsync(queue);
+
+        await PushIncidentAsync(id);
+        Assert.Contains(key, await DrainAsync(queue));
+
+        await PushIncidentAsync(id);
+        Assert.DoesNotContain(key, await DrainAsync(queue));
+
+        await PushIncidentAsync(id, grown: true);
+        Assert.Contains(key, await DrainAsync(queue));
+    }
+
+    // What the queue holds now: an import queues its keys before it answers.
+    private static async Task<List<IncidentKey>> DrainAsync(IncidentLinkQueue queue)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var keys = new List<IncidentKey>();
+        try
+        {
+            await foreach (var key in queue.ReadAllAsync(timeout.Token))
+                keys.Add(key);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        return keys;
     }
 
     [Fact]

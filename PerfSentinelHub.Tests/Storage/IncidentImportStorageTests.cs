@@ -30,7 +30,7 @@ public sealed class IncidentImportStorageTests(HubApplicationFactory factory) : 
         var cancellationToken = TestContext.Current.CancellationToken;
         const string id = "a1000000000000000000000000000001";
 
-        Assert.True(await factory.Database.TryUpsertPushedIncidentsAsync(
+        Assert.NotNull(await factory.Database.TryUpsertPushedIncidentsAsync(
             Source, [Incident(id, null, 2)], 1_800_000_000_000, cancellationToken));
 
         var stored = await factory.Database.FindIncidentAsync(id, null, cancellationToken);

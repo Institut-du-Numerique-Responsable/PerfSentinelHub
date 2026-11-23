@@ -435,11 +435,11 @@ public static partial class ApiEndpoints
             {
                 if (import.Page.Incidents.Count == 0)
                     return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-                if (!await database.TryUpsertPushedIncidentsAsync(source.Id, import.Page.Incidents,
-                        timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
+                if (await database.TryUpsertPushedIncidentsAsync(source.Id, import.Page.Incidents,
+                        timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken) is not { } changed)
                     return null;
-                foreach (var incident in import.Page.Incidents)
-                    links.Enqueue(new IncidentKey(incident.Id, source.Id));
+                foreach (var id in changed)
+                    links.Enqueue(new IncidentKey(id, source.Id));
                 if (import.Page.RejectedCount > 0)
                     LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
                         import.Page.RejectedCount);
