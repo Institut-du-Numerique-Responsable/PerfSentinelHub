@@ -1109,17 +1109,34 @@
         const key = 'incidents.link.reason.' + reason.code;
         /** @param {number | undefined} x */
         const percent = function (x) {
-            return Math.round((x || 0) * 100);
+            return Math.round(x * 100);
         };
-        if (reason.code === 'intensity') return {key, params: {ratio: Math.round((reason.ratio || 0) * 10) / 10}};
+        // An absent number is unknown, not zero: the text without a number says so.
+        if (reason.code === 'intensity') {
+            if (reason.ratio == null) return {key: key + '_no_number', params: {}};
+            return {key, params: {ratio: Math.round(reason.ratio * 10) / 10}};
+        }
         if (reason.code === 'recurrence') {
             // Absent counts are hidden from this caller, an absent share is unknown: neither reads as zero.
             if (reason.k == null || reason.n == null) return {key: key + '_no_numbers', params: {}};
             if (reason.usual_share == null) return {key: key + '_no_usual', params: {k: reason.k, n: reason.n}};
             return {key, params: {k: reason.k, n: reason.n, usual: percent(reason.usual_share)}};
         }
-        if (reason.code === 'saturation') return {key, params: {value: percent(reason.value)}};
+        if (reason.code === 'saturation') {
+            if (reason.value == null) return {key: key + '_no_number', params: {}};
+            return {key, params: {value: percent(reason.value)}};
+        }
         return {key, params: {}};
+    }
+
+    /**
+     * The text key of a link level: its own, or a neutral one for a level this build does not know.
+     * @param {string} level
+     * @returns {string}
+     */
+    function linkLevelKey(level) {
+        const key = 'incidents.link.level.' + level;
+        return hasText(key) ? key : 'incidents.link.level.unknown';
     }
 
     /**
@@ -5369,6 +5386,7 @@
         sortFindings,
         linkReasonParts,
         linkChipLevel,
+        linkLevelKey,
         incidentKindsText,
         recapSuspectWhy,
         moreFiltersLabel,

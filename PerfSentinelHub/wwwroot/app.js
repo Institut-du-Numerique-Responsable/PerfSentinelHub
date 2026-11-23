@@ -6485,10 +6485,13 @@
         });
         const row = field(t('incidents.filter.label'), input, null);
         row.appendChild(count);
+        // The select is described by the note: a suspect level is not a proven cause.
+        const noteId = 'link-note-' + (++fieldCount);
+        level.setAttribute('aria-describedby', noteId);
         return el('div', {class: 'findings-controls'}, [
             row,
             field(t('incidents.link.filter'), level, null),
-            el('p', {class: 'field-note', text: t('incidents.link.note')})
+            el('p', {class: 'field-note', id: noteId, text: t('incidents.link.note')})
         ]);
     }
 
@@ -6518,7 +6521,13 @@
         const query = state.findingQuery[key] || '';
         const level = state.findingLevel[key] || '';
         const page = PSL.pageFindings(held.findings, query, state.findingLimit[key] || FINDINGS_PAGE, level);
-        table.querySelector('tbody').replaceChildren(...page.shown.map(held.row));
+        // A level that no finding has would leave an empty table: say so in a row instead.
+        const none = page.matched === 0 && level !== '';
+        table.querySelector('tbody').replaceChildren(...(none
+            ? [el('tr', {}, [el('td', {
+                colspan: String(table.querySelectorAll('thead th').length), text: t('incidents.link.filter.none')
+            })])]
+            : page.shown.map(held.row)));
         const count = document.querySelector(`[data-findings-count="${CSS.escape(key)}"]`);
         if (count) count.textContent = query.trim() === '' && level === '' ? '' : t('incidents.filter.shown', {
             shown: page.matched,
@@ -6706,13 +6715,13 @@
         if (level === null) return null;
         const link = row.link;
         if (!link) return el('span', {class: 'chip', 'data-link': 'pending', text: t('incidents.link.pending')});
-        const reasons = link.reasons.map(function (reason) {
+        const reasons = (link.reasons || []).map(function (reason) {
             const part = PSL.linkReasonParts(reason);
             return PSL.hasText(part.key) ? t(part.key, part.params) : '';
         }).filter(Boolean).join(' ');
         const chip = el('span', {
             class: 'chip', 'data-link': link.level, title: reasons || null,
-            text: t('incidents.link.level.' + link.level)
+            text: t(PSL.linkLevelKey(link.level))
         });
         if (reasons) chip.appendChild(el('span', {class: 'visually-hidden', text: ' ' + t('incidents.link.reasons', {list: reasons})}));
         return chip;

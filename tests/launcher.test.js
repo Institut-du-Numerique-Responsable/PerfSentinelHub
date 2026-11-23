@@ -1532,6 +1532,25 @@ test("a recurrence reason never reads an absent share or count as zero", () => {
     }
 });
 
+test("an intensity or saturation reason without its number reads without one", () => {
+    const parts = PSL.linkReasonParts;
+    assert.deepEqual(parts({code: "intensity"}), {key: "incidents.link.reason.intensity_no_number", params: {}});
+    assert.deepEqual(parts({code: "saturation"}), {key: "incidents.link.reason.saturation_no_number", params: {}});
+    // A real zero is a number, not an absence.
+    assert.deepEqual(parts({code: "saturation", value: 0}), {key: "incidents.link.reason.saturation", params: {value: 0}});
+    for (const key of ["incidents.link.reason.intensity_no_number", "incidents.link.reason.saturation_no_number"]) {
+        assert.ok(PSL.hasText(key), key);
+    }
+});
+
+test("a link level without a text of its own reads neutral, never as its raw key", () => {
+    assert.equal(PSL.linkLevelKey("strong"), "incidents.link.level.strong");
+    assert.equal(PSL.linkLevelKey("weak"), "incidents.link.level.weak");
+    assert.equal(PSL.linkLevelKey("brand_new"), "incidents.link.level.unknown");
+    assert.ok(PSL.hasText("incidents.link.level.unknown"));
+    assert.ok(PSL.hasText("incidents.link.filter.none"));
+});
+
 test("a frozen row without a signature gets no link chip, one not yet assessed reads pending", () => {
     assert.equal(PSL.linkChipLevel({finding: {signature: ""}}), null);
     assert.equal(PSL.linkChipLevel({finding: {}}), null);
