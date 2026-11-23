@@ -1519,6 +1519,27 @@ test("a link reason maps to its text key and its numbers", () => {
     }
 });
 
+test("a recurrence reason never reads an absent share or count as zero", () => {
+    const parts = PSL.linkReasonParts;
+    // No covered usual day: the share is unknown, not 0 %.
+    assert.deepEqual(parts({code: "recurrence", k: 2, n: 3}),
+        {key: "incidents.link.reason.recurrence_no_usual", params: {k: 2, n: 3}});
+    // A caller not holding the whole environment gets the code alone.
+    assert.deepEqual(parts({code: "recurrence"}),
+        {key: "incidents.link.reason.recurrence_no_numbers", params: {}});
+    for (const key of ["incidents.link.reason.recurrence_no_usual", "incidents.link.reason.recurrence_no_numbers"]) {
+        assert.ok(PSL.hasText(key), key);
+    }
+});
+
+test("a frozen row without a signature gets no link chip, one not yet assessed reads pending", () => {
+    assert.equal(PSL.linkChipLevel({finding: {signature: ""}}), null);
+    assert.equal(PSL.linkChipLevel({finding: {}}), null);
+    assert.equal(PSL.linkChipLevel({finding: {signature: "s"}}), "pending");
+    assert.equal(PSL.linkChipLevel({finding: {signature: "s"}, link: {level: "strong", reasons: [], rules_version: 2}}),
+        "strong");
+});
+
 test("a frozen finding's impact is the dashboard's traces times extra operations, absent when unscored", () => {
     const row = (seen, perTrace) => ({
         seen_count: seen, first_seen_ms: 1,

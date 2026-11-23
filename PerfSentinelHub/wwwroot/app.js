@@ -6590,7 +6590,7 @@
                     'data-sev': finding.severity || null,
                     text: severityLabel(finding.severity)
                 })]),
-                el('td', {}, [linkChip(row.link)]),
+                el('td', {}, [linkChip(row)]),
                 el('td', {'data-align': 'right', text: impact == null ? '—' : PSL.num(impact)}),
                 el('td', {class: 'table-mono'}, [breakable(finding.source_endpoint || '?')]),
                 // Whole, wrapped: the template is what tells two rows apart.
@@ -6699,9 +6699,12 @@
     /**
      * How suspect a finding is, as a chip. The reasons ride in the tooltip and in a visually hidden
      * span, which a keyboard or a screen reader reaches where a tooltip alone would not.
-     * @param {import('../types').IncidentLink | undefined} link
+     * @param {StoredFindingRow & {link?: import('../types').IncidentLink}} row
      */
-    function linkChip(link) {
+    function linkChip(row) {
+        const level = PSL.linkChipLevel(row);
+        if (level === null) return null;
+        const link = row.link;
         if (!link) return el('span', {class: 'chip', 'data-link': 'pending', text: t('incidents.link.pending')});
         const reasons = link.reasons.map(function (reason) {
             const part = PSL.linkReasonParts(reason);

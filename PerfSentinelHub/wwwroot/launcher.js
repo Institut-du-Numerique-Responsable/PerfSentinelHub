@@ -1113,10 +1113,24 @@
         };
         if (reason.code === 'intensity') return {key, params: {ratio: Math.round((reason.ratio || 0) * 10) / 10}};
         if (reason.code === 'recurrence') {
-            return {key, params: {k: reason.k || 0, n: reason.n || 0, usual: percent(reason.usual_share)}};
+            // Absent counts are hidden from this caller, an absent share is unknown: neither reads as zero.
+            if (reason.k == null || reason.n == null) return {key: key + '_no_numbers', params: {}};
+            if (reason.usual_share == null) return {key: key + '_no_usual', params: {k: reason.k, n: reason.n}};
+            return {key, params: {k: reason.k, n: reason.n, usual: percent(reason.usual_share)}};
         }
         if (reason.code === 'saturation') return {key, params: {value: percent(reason.value)}};
         return {key, params: {}};
+    }
+
+    /**
+     * What a frozen row's link chip shows: null for a row without a signature, which never gets a link,
+     * 'pending' until the Hub has assessed the incident, else the level.
+     * @param {{finding?: {signature?: string}, link?: import('../types').IncidentLink}} row
+     * @returns {string | null}
+     */
+    function linkChipLevel(row) {
+        if (!row.finding || !row.finding.signature) return null;
+        return row.link ? row.link.level : 'pending';
     }
 
     /**
@@ -5305,6 +5319,7 @@
         findingPhase,
         sortFindings,
         linkReasonParts,
+        linkChipLevel,
         moreFiltersLabel,
         findingTemplate,
         findingImpact,
