@@ -1101,6 +1101,16 @@
     }
 
     /**
+     * An incident's saturation as a rounded percentage, or null when absent or outside 0 to 1:
+     * the daemon sends a ratio, so any other value is a malformed push and reads as no saturation.
+     * @param {unknown} value
+     * @returns {number | null}
+     */
+    function saturationPercent(value) {
+        return typeof value === 'number' && value >= 0 && value <= 1 ? Math.round(value * 100) : null;
+    }
+
+    /**
      * The text key and the numbers behind one reason of a finding's link.
      * @param {import('../types').IncidentLinkReason} reason
      * @returns {{key: string, params: Record<string, number>}}
@@ -5385,6 +5395,7 @@
         findingPhase,
         sortFindings,
         linkReasonParts,
+        saturationPercent,
         linkChipLevel,
         linkLevelKey,
         incidentKindsText,

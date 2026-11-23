@@ -1505,6 +1505,15 @@ test("an incident's findings can be narrowed to one link level and sorted by it"
     assert.deepEqual(endpoints(PSL.sortFindings(rows, "link", "asc")).slice(0, 2), ["/n", "/w"]);
 });
 
+test("a saturation outside 0 to 1 reads as absent", () => {
+    assert.equal(PSL.saturationPercent(0.9735), 97);
+    assert.equal(PSL.saturationPercent(0), 0);
+    assert.equal(PSL.saturationPercent(1), 100);
+    for (const value of [98, -0.1, null, undefined, "0.9"]) {
+        assert.equal(PSL.saturationPercent(value), null);
+    }
+});
+
 test("a link reason maps to its text key and its numbers", () => {
     const parts = PSL.linkReasonParts;
     assert.deepEqual(parts({code: "recurrence", k: 4, n: 5, usual_share: 0.2}),

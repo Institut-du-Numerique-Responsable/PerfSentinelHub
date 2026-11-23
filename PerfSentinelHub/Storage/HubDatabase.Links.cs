@@ -52,6 +52,7 @@ public sealed partial class HubDatabase
             signatures, baselines, recurrences, seenBefore);
     }
 
+    // The daemon sends a ratio in [0, 1]; any other value is a malformed push and reads as none.
     private static double? SaturationOf(string incidentJson)
     {
         try
@@ -60,6 +61,7 @@ public sealed partial class HubDatabase
             return document.RootElement.ValueKind == JsonValueKind.Object
                    && document.RootElement.TryGetProperty("saturation", out var value)
                    && value.ValueKind == JsonValueKind.Number
+                   && value.GetDouble() is >= 0 and <= 1
                 ? value.GetDouble()
                 : null;
         }

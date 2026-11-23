@@ -6432,6 +6432,7 @@
         // The button comes after the note that describes the window, since it
         // is the action the note argues for. A bare row, so the panel's own
         // gap sets the distance and no margin adds a second one.
+        const saturation = PSL.saturationPercent(detail.saturation);
         return el('div', {class: 'daemon-panel', ...foldGuide('incidents.panel', opened)}, [
             el('p', {class: 'overline daemon-audience', text: t('incidents.panel.overline')}),
             el('p', {
@@ -6439,9 +6440,7 @@
                 text: t(INCIDENT_CAPTURE[capture]) + ' ' + t('incidents.panel.window', {
                     before: PSL.dur(detail.at_ms - detail.window_from_ms),
                     after: PSL.dur(detail.window_to_ms - detail.at_ms)
-                }) + (detail.saturation == null ? '' : ' ' + t('incidents.panel.saturation', {
-                    value: Math.round(detail.saturation * 100)
-                }))
+                }) + (saturation == null ? '' : ' ' + t('incidents.panel.saturation', {value: saturation}))
             }),
             el('div', {}, [analyse]),
             findings.length === 0

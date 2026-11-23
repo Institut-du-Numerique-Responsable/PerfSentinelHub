@@ -108,6 +108,23 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         Assert.Null(context.Saturation);
     }
 
+    // The push is a trust boundary: a value outside [0, 1] reads as no saturation, so it never lifts a level.
+    [Theory]
+    [InlineData("98")]
+    [InlineData("-0.1")]
+    public async Task Saturation_outside_zero_to_one_reads_as_absent(string value)
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs, Frozen(("sig-a", "slow_sql", 1, 1)),
+            incidentJson: $$"""{"saturation":{{value}}}""");
+
+        var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
+
+        Assert.NotNull(context);
+        Assert.Null(context.Saturation);
+    }
+
     [Fact]
     public async Task Baseline_counts_only_covered_days_without_gap_or_overflow()
     {
