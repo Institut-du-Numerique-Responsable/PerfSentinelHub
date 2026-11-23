@@ -408,6 +408,15 @@ Pilotage aussi. Le propriétaire d'une action se lit comme un nom : celui que la
 un nom tiré de l'identité (`alice.martin@acme.com` se lit Alice Martin), l'identité au survol. Un refus,
 pas d'identité ou pas de permission, montre dans la carte la phrase même du Hub.
 
+Incidents suit, quand la période en a eu : une tuile avec leur nombre, une fois par incident quelle
+que soit la source qui l'a vu, celui de la période précédente sous la même coupe que les autres
+tuiles, et le nombre par type. Dessous, Suspects récurrents liste les findings liés fortement ou
+moyennement à plusieurs de ces incidents, les plus souvent forts d'abord : le type, le service,
+l'endpoint quand la vue le montre, où il a été fort par type et combien de fois moyen, et un lien
+vers l'écran des incidents. Un niveau de lien dit à quel point un finding est suspect, pas une cause
+prouvée. La vue Technique garde dix suspects, la vue Pilotage trois, chacune disant combien elle en
+laisse de côté.
+
 What moved liste les findings nouveaux, disparus, en hausse, en baisse, revenus et terminés mais encore
 détectés, les groupes qui contiennent quelque chose seulement. Disparu est une présomption, pas la preuve
 que le correctif est parti. Le premier jour d'une période, rien n'est comparé, et la page le dit au lieu de

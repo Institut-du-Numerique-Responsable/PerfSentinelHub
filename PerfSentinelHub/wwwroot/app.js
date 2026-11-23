@@ -8082,7 +8082,7 @@
         const snapshot = state.recap;
         const labels = PSL.RECAP_LABELS[snapshot.view === 'pilotage' ? 'pilotage' : 'tech'];
         [recapFreshnessLine(route), recapPeriodBlock(snapshot), recapTiles(snapshot, labels), recapPriorities(snapshot, route),
-            recapMoved(snapshot, labels), recapReportsPanel(route), recapCardPanel(route)].forEach(function (part) {
+            recapIncidents(snapshot), recapMoved(snapshot, labels), recapReportsPanel(route), recapCardPanel(route)].forEach(function (part) {
             if (part) section.appendChild(part);
         });
         return section;
@@ -8464,7 +8464,7 @@
     }
 
     /**
-     * A heading with its "?" beside it, never inside it, centred on the heading's line.
+     * A heading with its "?" beside it, never inside it, centred on the heading's line; none without a help text.
      * @param {string} id
      * @param {string} text
      * @param {string} hint
@@ -8478,7 +8478,7 @@
                 id: id,
                 tabindex: '-1'
             }, [document.createTextNode(text), hint ? el('span', {text: hint}) : null]),
-            helpDot(help, topic)
+            help ? helpDot(help, topic) : null
         ]);
     }
 
@@ -8638,6 +8638,68 @@
                 t('recap.tile.actions.open', {in_progress: actions.in_progress, todo: actions.todo})
             ], recapHelp(snapshot, 'actions'), t('recap.topic.actions'), 'recap.actions')
         ]);
+    }
+
+    // ---- the incidents and their recurring suspects
+
+    /**
+     * The period's incidents and the findings linked to several of them, as the report shows them.
+     * Absent from a snapshot taken before incidents were counted, and from a period without any.
+     * @param {RecapSnapshot} snapshot
+     */
+    function recapIncidents(snapshot) {
+        const incidents = snapshot.incidents;
+        if (!incidents || (incidents.count === 0 && incidents.suspects.length === 0)) return null;
+        const management = snapshot.view === 'pilotage';
+        const section = el('section', {
+            class: 'recap-section', 'aria-labelledby': 'recap-h-incidents', 'data-guide': 'recap.incidents'
+        }, [
+            ruledOverline(t('recap.incidents.overline')),
+            recapHeading('recap-h-incidents', t('recap.incidents.title'), t('recap.incidents.hint'), '', ''),
+            el('div', {class: 'disc-figures recap-tiles'}, [
+                el('div', {class: 'disc-figure'}, [
+                    el('span', {class: 'disc-figure-label'}, [document.createTextNode(t('recap.incidents.title')),
+                        recapProgressChip(snapshot)]),
+                    el('span', {class: 'disc-figure-value', text: String(incidents.count)})
+                ].concat([recapPreviousText(snapshot, incidents.previous_count), PSL.incidentKindsText(incidents.by_kind)]
+                    .filter(Boolean).map(function (sub) {
+                        return el('span', {class: 'disc-figure-sub', text: sub});
+                    })))
+            ])
+        ]);
+        if (incidents.suspects.length === 0) return section;
+        const list = el('ol', {class: 'recap-list'}, incidents.suspects.map(function (suspect) {
+            return el('li', {class: 'run-card recap-row recap-suspect'}, [
+                el('span', {class: 'recap-rank', text: String(suspect.rank)}),
+                el('div', {class: 'recap-what'}, [
+                    el('div', {class: 'recap-head'}, [
+                        el('span', {
+                            class: 'chip', 'data-type': suspect.finding_type,
+                            text: PSL.FINDING_TYPE_LABEL[suspect.finding_type] || suspect.finding_type
+                        }),
+                        el('span', {class: 'table-strong', text: suspect.service}),
+                        suspect.endpoint ? el('span', {class: 'recap-endpoint', text: suspect.endpoint}) : null
+                    ]),
+                    el('p', {class: 'recap-why'}, [
+                        document.createTextNode(PSL.recapSuspectWhy(suspect) + ' '),
+                        el('a', {href: '#/incidents', text: t('recap.suspect.link')})
+                    ])
+                ])
+            ]);
+        }));
+        section.appendChild(el('div', {'data-guide': 'recap.suspects'}, [
+            el('h3', {class: 'recap-h3'}, [document.createTextNode(t('recap.suspects.title')),
+                el('span', {text: t('recap.suspects.hint')})]),
+            list
+        ]));
+        const more = incidents.more_suspects;
+        if (more > 0) {
+            section.appendChild(el('p', {
+                class: 'recap-more',
+                text: t('recap.suspects.more.' + (management ? 'pilotage.' : 'tech.') + PSL.plural(more), {count: more})
+            }));
+        }
+        return section;
     }
 
     // ---- the priorities

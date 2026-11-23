@@ -5256,6 +5256,34 @@ a.chip {
     letter-spacing: 0;
 }
 
+.recap-h3 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin: 22px 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.recap-h3 span {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-3);
+}
+
+/* A suspect has no figure column: its rank and what it is. */
+.recap-row.recap-suspect {
+    grid-template-columns: 26px minmax(0, 1fr);
+}
+
+.recap-why {
+    max-width: 68ch;
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: var(--text-2);
+}
+
 .recap-period {
     display: flex;
     flex-wrap: wrap;

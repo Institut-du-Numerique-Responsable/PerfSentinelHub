@@ -378,6 +378,14 @@ business name that titles the row, in Management too. An action's owner reads as
 sign-in gave, else one made from the identity (`alice.martin@acme.com` reads Alice Martin), with the
 identity on hover. A refusal, no identity or no permission, shows the Hub's own sentence in the card.
 
+Incidents follows, when the period had any: a tile with their count, once per incident whichever
+source saw it, the previous period's count under the same cut as the other tiles, and the count per
+kind. Under it, Recurring suspects lists the findings linked strongly or moderately to several of
+those incidents, the most often strong first: the type, the service, the endpoint when the view
+shows it, where it was strong by kind and how often medium, and a link to the Incidents screen. A
+link level says how suspect a finding is, not a proven cause. The Engineering view keeps ten
+suspects, the Management view three, each saying how many it leaves out.
+
 What moved lists new, gone, up, down, came back and done but still detected findings, the groups that
 hold something only. Gone is a presumption, not proof that the fix shipped. On the first day of a
 period nothing is compared, and the page says so rather than claiming nothing moved.

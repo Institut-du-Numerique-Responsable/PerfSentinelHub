@@ -1123,6 +1123,38 @@
     }
 
     /**
+     * "4 OOM kill, 2 restart": the incidents of each kind, the most first, then by kind.
+     * @param {Record<string, number>} byKind
+     * @returns {string}
+     */
+    function incidentKindsText(byKind) {
+        return Object.keys(byKind).filter(function (kind) {
+            return byKind[kind] > 0;
+        }).sort(function (a, b) {
+            return byKind[b] - byKind[a] || (a < b ? -1 : a > b ? 1 : 0);
+        }).map(function (kind) {
+            return byKind[kind] + ' ' + (INCIDENT_KIND_LABEL[kind] || kind);
+        }).join(', ');
+    }
+
+    /**
+     * Why a finding is a recurring suspect, as a sentence: strong in some kinds of incident, medium in
+     * others. "other" only follows a strong part, which already counted some incidents.
+     * @param {import('../types').RecapSuspect} suspect
+     * @returns {string}
+     */
+    function recapSuspectWhy(suspect) {
+        const parts = [];
+        if (suspect.strong > 0) parts.push(t('recap.suspect.strong', {kinds: incidentKindsText(suspect.strong_by_kind)}));
+        if (suspect.medium > 0) {
+            parts.push(t((suspect.strong > 0 ? 'recap.suspect.medium.' : 'recap.suspect.medium_only.')
+                + plural(suspect.medium), {count: suspect.medium}));
+        }
+        const text = parts.join(', ');
+        return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+    }
+
+    /**
      * What a frozen row's link chip shows: null for a row without a signature, which never gets a link,
      * 'pending' until the Hub has assessed the incident, else the level.
      * @param {{finding?: {signature?: string}, link?: import('../types').IncidentLink}} row
@@ -5320,6 +5352,8 @@
         sortFindings,
         linkReasonParts,
         linkChipLevel,
+        incidentKindsText,
+        recapSuspectWhy,
         moreFiltersLabel,
         findingTemplate,
         findingImpact,

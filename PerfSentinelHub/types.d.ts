@@ -565,6 +565,32 @@ export interface RecapSnapshot {
     sources_without_volume: string[];
     truncated: boolean;
     late_sources: string[] | null;
+    /** Absent from a snapshot taken before the recap counted incidents. */
+    incidents?: RecapIncidents | null;
+}
+
+/** The period's incidents, `RecapIncidents`: counted once per id, by kind, with their recurring suspects. */
+export interface RecapIncidents {
+    count: number;
+    previous_count: number;
+    by_kind: Record<string, number>;
+    suspects: RecapSuspect[];
+    more_suspects: number;
+}
+
+/** A finding strongly or moderately linked to several of the period's incidents, `RecapSuspect`. */
+export interface RecapSuspect {
+    rank: number;
+    /** Absent from the pilotage view. */
+    signature?: string;
+    finding_type: string;
+    service: string;
+    endpoint: string | null;
+    strong: number;
+    medium: number;
+    strong_by_kind: Record<string, number>;
+    latest_incident_id: string;
+    latest_source_id: string;
 }
 
 /**

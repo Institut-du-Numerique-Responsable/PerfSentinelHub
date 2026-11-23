@@ -4284,3 +4284,30 @@ test("the public and access guides have no em dash, and French addresses the rea
         }
     });
 });
+
+// ---- the recap's incidents tile and recurring suspects
+
+test("the recap counts incidents per kind, the most first, in the shown language", () => {
+    assert.equal(PSL.incidentKindsText({restart: 2, oom_kill: 4, deploy: 1, other: 0}),
+        "4 OOM kill, 2 restart, 1 deploy");
+    assert.equal(PSL.incidentKindsText({brand_new: 1}), "1 brand_new");
+    assert.equal(PSL.incidentKindsText({}), "");
+    inLang("fr", () => assert.equal(PSL.incidentKindsText({restart: 2, oom_kill: 2}), "2 OOM kill, 2 redémarrage"));
+});
+
+test("a recurring suspect says where it was strong and how often medium, never as a cause", () => {
+    const suspect = (strong, medium, byKind) => ({
+        rank: 1, finding_type: "n_plus_one_sql", service: "s", endpoint: null, strong: strong, medium: medium,
+        strong_by_kind: byKind, latest_incident_id: "i", latest_source_id: "a"
+    });
+    assert.equal(PSL.recapSuspectWhy(suspect(4, 1, {oom_kill: 3, restart: 1})),
+        "Strong in 3 OOM kill, 1 restart, medium in 1 other incident");
+    assert.equal(PSL.recapSuspectWhy(suspect(0, 2, {})), "Medium in 2 incidents");
+    inLang("fr", () => {
+        assert.equal(PSL.recapSuspectWhy(suspect(1, 2, {oom_kill: 1})),
+            "Fort dans 1 OOM kill, moyen dans 2 autres incidents");
+        assert.equal(PSL.recapSuspectWhy(suspect(0, 1, {})), "Moyen dans 1 incident");
+    });
+    assert.doesNotMatch(PSL.recapSuspectWhy(suspect(4, 1, {oom_kill: 4})), /cause/i);
+});
+
