@@ -88,6 +88,23 @@ public sealed class IncidentLinkRulesTests
     }
 
     [Fact]
+    public void Recurrence_without_ledger_coverage_carries_no_usual_share()
+    {
+        var result = IncidentLinkRules.Assess(Input("oom_kill", "n_plus_one_sql", Unknown, 1, new Recurrence(3, 3)));
+        var reason = Assert.Single(result.Reasons, r => r.Code == "recurrence");
+        Assert.Equal((3, 3), (reason.K, reason.N));
+        Assert.Null(reason.UsualShare);
+        Assert.Equal("""{"code":"recurrence","k":3,"n":3}""", JsonSerializer.Serialize(reason, Json));
+    }
+
+    [Fact]
+    public void Saturation_reason_carries_the_value()
+    {
+        var result = IncidentLinkRules.Assess(Input("oom_kill", "chatty_service", Daily(), 7, saturation: 0.95));
+        Assert.Equal(0.95, Assert.Single(result.Reasons, r => r.Code == "saturation").Value);
+    }
+
+    [Fact]
     public void Reasons_serialize_snake_case_without_nulls_and_levels_as_words()
     {
         var reason = new LinkReason("recurrence", K: 4, N: 5, UsualShare: 0.2);
