@@ -1084,7 +1084,10 @@
             + 'horodaté après l\'incident appartient au remplaçant, pas à l\'instance tombée.',
         'incidents.panel.no_finding': 'Le daemon n\'a figé aucun finding pour cet incident.',
         'incidents.filter.placeholder': 'endpoint ou template',
-        'incidents.filter.shown': '{shown} sur {total} affichés',
+        'incidents.filter.shown': 'Correspondances : {shown} sur {total}',
+        'incidents.findings.region': 'Findings figés de l\'incident',
+        'incidents.findings.more': 'Afficher {count} de plus',
+        'incidents.findings.all': 'Tout afficher ({left} de plus)',
         'incidents.filter.label': 'Filtrer les findings',
         'incidents.findings.no_credential': 'Aucune source de ce Hub n\'a d\'identifiant d\'acquittement, ces '
             + 'findings s\'acquittent donc dans chaque daemon, pas d\'ici.',

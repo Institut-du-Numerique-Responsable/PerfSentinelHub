@@ -1024,7 +1024,10 @@
             + 'finding stamped after the incident belongs to the replacement, not to what died.',
         'incidents.panel.no_finding': 'The daemon froze no finding for this incident.',
         'incidents.filter.placeholder': 'endpoint or template',
-        'incidents.filter.shown': '{shown} of {total} shown',
+        'incidents.filter.shown': 'Matches: {shown} of {total}',
+        'incidents.findings.region': 'The incident\'s frozen findings',
+        'incidents.findings.more': 'Show {count} more',
+        'incidents.findings.all': 'Show all ({left} more)',
         'incidents.filter.label': 'Filter the findings',
         'incidents.findings.no_credential': 'No source in this Hub has an ack credential, so these findings are '
             + 'acknowledged in each daemon, not from here.',

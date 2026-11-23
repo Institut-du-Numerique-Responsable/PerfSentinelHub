@@ -416,6 +416,8 @@
         incidentFiltersOpen: false,
         // What was typed above each incident's findings, by incident key.
         findingQuery: {},
+        // How many of each incident's findings the table draws, by incident key: FINDINGS_PAGE until asked for more.
+        findingLimit: {},
         // The incident a `#/new?from=…` link pre-filled the form from, or null.
         /** @type {?Handoff} */
         handoff: null,
@@ -6436,7 +6438,10 @@
             findings.length === 0
                 ? el('p', {class: 'daemon-lead', text: t('incidents.panel.no_finding')})
                 : findingsFilter(detail),
-            findings.length === 0 ? null : el('div', {class: 'sources-wrap'}, [incidentFindingsTable(findings, detail)]),
+            findings.length === 0 ? null : el('div', {
+                class: 'sources-wrap findings-wrap', tabindex: '0', 'aria-label': t('incidents.findings.region')
+            }, [incidentFindingsTable(findings, detail)]),
+            findings.length === 0 ? null : findingsMore(detail),
             incidentCorrelationsBlock(incident)
         ]);
     }
@@ -6451,23 +6456,13 @@
             type: 'search', class: 'input findings-filter', placeholder: t('incidents.filter.placeholder'),
             value: state.findingQuery[key] || '', autocomplete: 'off', spellcheck: 'false'
         });
-        const count = el('span', {class: 'field-gloss', 'aria-live': 'polite'});
-        const apply = function () {
+        const count = el('span', {class: 'field-gloss', 'aria-live': 'polite', 'data-findings-count': key});
+        input.addEventListener('input', function () {
             state.findingQuery[key] = input.value;
-            const rows = document.querySelectorAll(`[data-findings="${CSS.escape(key)}"] tbody tr`);
-            let shown = 0;
-            Array.prototype.forEach.call(rows, function (/** @type {HTMLElement} */ row) {
-                row.hidden = !PSL.findingMatches(FINDING_ROW.get(row), input.value);
-                if (!row.hidden) shown += 1;
-            });
-            count.textContent = input.value.trim() === '' ? '' : t('incidents.filter.shown', {
-                shown: shown,
-                total: rows.length
-            });
-        };
-        input.addEventListener('input', apply);
-        // Once the table beside it is in the page, so a query kept across a sort applies again.
-        queueMicrotask(apply);
+            // A new query starts again from the first page of what it matches.
+            delete state.findingLimit[key];
+            fillFindings(key);
+        });
         const row = field(t('incidents.filter.label'), input, null);
         row.appendChild(count);
         return row;
@@ -6481,8 +6476,65 @@
         return severity && PSL.hasText('severity.' + severity) ? t('severity.' + severity) : severity || '?';
     }
 
-    // Each table row's frozen finding, for the filter to test without reading it back from the cells.
-    const FINDING_ROW = new WeakMap();
+    // An incident's findings arrive by the hundred: the table draws this many, and more on demand.
+    const FINDINGS_PAGE = 20;
+
+    // Each findings table's sorted rows and how to draw one, for the filter and the more buttons to redraw its body.
+    const FINDING_TABLE = new WeakMap();
+
+    /**
+     * Draws the page of an incident's findings that its query and limit select, with the count
+     * beside the filter and the more buttons under the table. The filter field keeps its focus.
+     * @param {string} key
+     */
+    function fillFindings(key) {
+        const table = document.querySelector(`[data-findings="${CSS.escape(key)}"]`);
+        const held = table && FINDING_TABLE.get(table);
+        if (!held) return;
+        const query = state.findingQuery[key] || '';
+        const page = PSL.pageFindings(held.findings, query, state.findingLimit[key] || FINDINGS_PAGE);
+        table.querySelector('tbody').replaceChildren(...page.shown.map(held.row));
+        const count = document.querySelector(`[data-findings-count="${CSS.escape(key)}"]`);
+        if (count) count.textContent = query.trim() === '' ? '' : t('incidents.filter.shown', {
+            shown: page.matched,
+            total: held.findings.length
+        });
+        const more = /** @type {HTMLElement | null} */ (document.querySelector(`[data-findings-more="${CSS.escape(key)}"]`));
+        if (!more) return;
+        const left = page.matched - page.shown.length;
+        more.hidden = left === 0;
+        const next = /** @type {HTMLElement} */ (more.querySelector('[data-step="page"]'));
+        next.textContent = t('incidents.findings.more', {count: Math.min(FINDINGS_PAGE, left)});
+        // The page button would read the same as this one on the last page.
+        next.hidden = left <= FINDINGS_PAGE;
+        more.querySelector('[data-step="all"]').textContent = t('incidents.findings.all', {left: left});
+    }
+
+    /**
+     * The buttons that draw more of an incident's findings, a page or all of them, under its table.
+     * @param {Incident} incident
+     */
+    function findingsMore(incident) {
+        const key = incidentKey(incident);
+        /** @param {'page' | 'all'} step */
+        const button = function (step) {
+            const node = el('button', {type: 'button', class: 'pill-button', 'data-step': step});
+            node.addEventListener('click', function () {
+                const table = document.querySelector(`[data-findings="${CSS.escape(key)}"]`);
+                const total = table ? FINDING_TABLE.get(table).findings.length : 0;
+                state.findingLimit[key] = step === 'all'
+                    ? total
+                    : (state.findingLimit[key] || FINDINGS_PAGE) + FINDINGS_PAGE;
+                fillFindings(key);
+                // A button that hid itself would drop the focus to the page: the rows it drew take it.
+                const wrap = /** @type {HTMLElement | null} */ (table && table.closest('.findings-wrap'));
+                if (node.offsetParent === null && wrap) wrap.focus();
+            });
+            return node;
+        };
+        return el('div', {class: 'findings-more', 'data-findings-more': key, hidden: ''},
+            [button('page'), button('all')]);
+    }
 
     /**
      * @param {StoredFindingRow[]} findings
@@ -6497,7 +6549,8 @@
         const head = el('tr', {}, columns.map(function (name) {
             return findingHead(name, incident);
         }));
-        const rows = findings.map(function (row) {
+        /** @param {StoredFindingRow} row */
+        const draw = function (row) {
             /** @type {Partial<Finding>} */
             const finding = row.finding || {};
             const phase = PSL.findingPhase(row, incident);
@@ -6525,11 +6578,16 @@
                 // The daemon that froze the finding is the only one the page checks.
                 canAck ? el('td', {}, [finding.signature ? ackLink(finding, incident) : null]) : null
             ]);
-            FINDING_ROW.set(tr, row);
             return tr;
+        };
+        const key = incidentKey(incident);
+        const table = el('table', {class: 'table table-findings', 'data-findings': key},
+            [el('thead', {}, [head]), el('tbody', {}, [])]);
+        FINDING_TABLE.set(table, {findings: findings, row: draw});
+        // Once the table and the controls around it are in the page, so a query or a limit kept across a sort applies again.
+        queueMicrotask(function () {
+            fillFindings(key);
         });
-        const table = el('table', {class: 'table table-findings', 'data-findings': incidentKey(incident)},
-            [el('thead', {}, [head]), el('tbody', {}, rows)]);
         if (canAck) return table;
         return el('div', {}, [table, el('p', {
             class: 'field-note',

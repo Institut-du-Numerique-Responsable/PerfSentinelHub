@@ -1164,6 +1164,26 @@ a.shell-identity[aria-current="page"] {
     max-width: 320px;
 }
 
+/* A thousand frozen findings made the unfolded incident pages tall: past this height the
+   table scrolls inside the panel, its heads kept in view. */
+.findings-wrap {
+    max-height: min(70vh, 720px);
+    overflow-y: auto;
+}
+
+.findings-wrap thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface);
+}
+
+.findings-more {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .table-findings td.table-mono {
     overflow-wrap: anywhere;
 }

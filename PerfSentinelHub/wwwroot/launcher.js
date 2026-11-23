@@ -1081,6 +1081,22 @@
     }
 
     /**
+     * The frozen findings an incident's table draws: those that match the
+     * filter, the first `limit` of them, in the order they came in.
+     * @template T
+     * @param {T[]} rows
+     * @param {string} query
+     * @param {number} limit
+     * @returns {{shown: T[], matched: number}}
+     */
+    function pageFindings(rows, query, limit) {
+        const matched = rows.filter(function (row) {
+            return findingMatches(/** @type {{finding?: any}} */ (row), query);
+        });
+        return {shown: matched.slice(0, limit), matched: matched.length};
+    }
+
+    /**
      * The daemon-side ack, for a finding this Hub cannot acknowledge itself. The
      * reason is left for the operator to write, the flag order is the CLI's own:
      * `--daemon` belongs to `ack`, before the subcommand.
@@ -5262,6 +5278,7 @@
         findingTemplate,
         findingImpact,
         findingMatches,
+        pageFindings,
         ackCommand,
         phaseLabel,
         INCIDENT_READ_STATE,

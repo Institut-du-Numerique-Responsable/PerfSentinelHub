@@ -1477,6 +1477,19 @@ test("a frozen finding is told apart by its template, and found by it", () => {
     assert.deepEqual(sorted.map(PSL.findingTemplate), ["a", "b"]);
 });
 
+test("an incident's findings table draws a page of the matching rows and counts them all", () => {
+    const rows = ["/a", "/b", "/a/1", "/c", "/a/2"].map((endpoint) => ({finding: {source_endpoint: endpoint}}));
+    const endpoints = (page) => page.shown.map((row) => row.finding.source_endpoint);
+    const all = PSL.pageFindings(rows, "", 2);
+    assert.deepEqual(endpoints(all), ["/a", "/b"]);
+    assert.equal(all.matched, 5);
+    const filtered = PSL.pageFindings(rows, "/a", 2);
+    assert.deepEqual(endpoints(filtered), ["/a", "/a/1"]);
+    assert.equal(filtered.matched, 3);
+    assert.equal(PSL.pageFindings(rows, "/a", 10).shown.length, 3);
+    assert.deepEqual(PSL.pageFindings(rows, "orders", 2), {shown: [], matched: 0});
+});
+
 test("a frozen finding's impact is the dashboard's traces times extra operations, absent when unscored", () => {
     const row = (seen, perTrace) => ({
         seen_count: seen, first_seen_ms: 1,
