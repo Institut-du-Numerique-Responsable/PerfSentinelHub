@@ -44,17 +44,20 @@ public static class IncidentWriter
     /// <summary>
     ///     One incident whole, the findings the row was read with included, then
     ///     the links keyed by signature: absent until the worker has assessed it.
+    ///     Without <paramref name="recurrenceNumbers" />, a recurrence reason keeps
+    ///     its code and loses its counts, read beyond what the caller may see.
     /// </summary>
     public static async Task WriteObjectAsync(
         HttpResponse response,
         StoredIncident row,
         IReadOnlyList<StoredLink> links,
         IReadOnlyList<SourceOptions> sources,
+        bool recurrenceNumbers,
         CancellationToken cancellationToken)
     {
         response.ContentType = "application/json";
         await using var writer = new Utf8JsonWriter(response.BodyWriter);
-        WriteIncident(writer, row, sources, links);
+        WriteIncident(writer, row, sources, links, recurrenceNumbers);
         await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
@@ -81,7 +84,8 @@ public static class IncidentWriter
         Utf8JsonWriter writer,
         StoredIncident row,
         IReadOnlyList<SourceOptions> sources,
-        IReadOnlyList<StoredLink>? links = null)
+        IReadOnlyList<StoredLink>? links = null,
+        bool recurrenceNumbers = true)
     {
         using var document = JsonDocument.Parse(row.IncidentJson);
         writer.WriteStartObject();
@@ -109,7 +113,13 @@ public static class IncidentWriter
                 writer.WritePropertyName("level");
                 JsonSerializer.Serialize(writer, link.Level, HubJsonContext.Default.LinkLevel);
                 writer.WritePropertyName("reasons");
-                JsonSerializer.Serialize(writer, link.Reasons, HubJsonContext.Default.IReadOnlyListLinkReason);
+                JsonSerializer.Serialize(writer,
+                    recurrenceNumbers
+                        ? link.Reasons
+                        : [.. link.Reasons.Select(reason => reason.Code == "recurrence"
+                            ? reason with { K = null, N = null, UsualShare = null }
+                            : reason)],
+                    HubJsonContext.Default.IReadOnlyListLinkReason);
                 writer.WriteNumber("rules_version", link.RulesVersion);
                 writer.WriteEndObject();
             }

@@ -17,6 +17,7 @@ using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Api;
@@ -72,6 +73,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
             """{"sub":"u-attr","email":"attr@example.internal","groups":["/shop","/unrelated","INTERNAL:ci",7]}""",
         ["ss"] = """{"sub":"u-ss","email":"ss@example.internal","groups":"/ss"}""",
         ["lab"] = """{"sub":"u-lab","email":"lab@example.internal","groups":["/lab"]}""",
+        ["shopall"] = """{"sub":"u-shopall","email":"shopall@example.internal","groups":["/shopall"]}""",
         ["tempo"] = """{"sub":"u-tempo","email":"tempo@example.internal","groups":["/tempo"]}""",
         // attr's e-mail under another subject, as a reassigned address would be.
         ["attrtwin"] = """{"sub":"u-attr-2","email":"attr@example.internal","groups":["/shop"]}""",
@@ -721,6 +723,43 @@ public sealed class AccessRoutesTests : IAsyncLifetime
         // Only one of its two frozen findings carries team=shop.
         using var mixed = await attr.GetAsync($"/api/incidents/{MixedIncident}", cancellationToken);
         Assert.Equal(HttpStatusCode.NotFound, mixed.StatusCode);
+    }
+
+    // A recurrence count is read across every source of the incident's environment, so only a
+    // caller holding each of them whole sees its numbers; the others keep the code alone.
+    [Theory]
+    [InlineData("admin", true)]
+    [InlineData("lab", true)]
+    [InlineData("shopall", false)]
+    [InlineData("ss", false)]
+    [InlineData("attr", false)]
+    public async Task Recurrence_numbers_reach_only_a_caller_holding_the_whole_environment(string user, bool numbers)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        StoredLink[] links =
+        [
+            new(F1, LinkLevel.Strong,
+                [new LinkReason("mechanism_compatible"), new LinkReason("recurrence", K: 4, N: 5, UsualShare: 0.2)],
+                IncidentLinkRules.RulesVersion)
+        ];
+        await Database.ReplaceLinksAsync(new IncidentKey(Incident, "shop-d"), "prod", links, cancellationToken);
+        await Database.ReplaceLinksAsync(new IncidentKey(Incident, "lab-d"), "lab", links, cancellationToken);
+        using var client = await SignedInAsync(user);
+
+        using var response = await client.GetAsync($"/api/incidents/{Incident}", cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var reasons = document.RootElement.GetProperty("links").GetProperty(F1).GetProperty("reasons");
+        var recurrence = reasons[1];
+        Assert.Equal("recurrence", recurrence.GetProperty("code").GetString());
+        Assert.Equal(numbers, recurrence.TryGetProperty("k", out _));
+        Assert.Equal(numbers, recurrence.TryGetProperty("n", out _));
+        Assert.Equal(numbers, recurrence.TryGetProperty("usual_share", out _));
+        Assert.Equal("mechanism_compatible", reasons[0].GetProperty("code").GetString());
+        // The stored rows stay whole.
+        Assert.Equal(4, (await Database.ListLinksAsync(new IncidentKey(Incident, "shop-d"), cancellationToken))
+            .Single().Reasons[1].K);
     }
 
     [Fact]
@@ -1475,6 +1514,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                 new ProjectOptions
                     { Name = "shop-cart", Patterns = [new PatternOptions { Source = "shop-d", Service = "cart" }] },
                 new ProjectOptions { Name = "lab", Patterns = [new PatternOptions { Source = "lab-d" }] },
+                new ProjectOptions { Name = "shop-all", Patterns = [new PatternOptions { Source = "shop-d" }] },
                 new ProjectOptions { Name = "tempo-all", Patterns = [new PatternOptions { Source = "tempo" }] }
             ],
             Roles =
@@ -1490,6 +1530,7 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                 new GrantOptions { Group = "/shop", Project = "shop", Role = "member" },
                 new GrantOptions { Group = "/ss", Project = "shop-cart", Role = "member" },
                 new GrantOptions { Group = "/lab", Project = "lab", Role = "member" },
+                new GrantOptions { Group = "/shopall", Project = "shop-all", Role = "member" },
                 new GrantOptions { Group = "/lab", Project = "lab", Role = "operator" },
                 new GrantOptions { Group = "/tempo", Project = "tempo-all", Role = "reader" },
                 new GrantOptions { Group = "/viewers", Project = "shop", Role = "viewer" },

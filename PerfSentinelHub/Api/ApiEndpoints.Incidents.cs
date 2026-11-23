@@ -187,16 +187,25 @@ public static partial class ApiEndpoints
         CancellationToken cancellationToken)
     {
         // The richest copy the caller reads, and the 404 a missing incident gets otherwise.
-        var row = await database.FindIncidentAsync(
-            id, Narrowing(access.Scope(context, AccessPermissions.FindingsRead)), cancellationToken);
+        var scope = access.Scope(context, AccessPermissions.FindingsRead);
+        var row = await database.FindIncidentAsync(id, Narrowing(scope), cancellationToken);
         if (row is null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
 
+        // Recurrence counts incidents across the copy's whole environment, so its numbers go only to a
+        // caller holding every source there whole: a service or attribute pattern does not count.
+        var sources = options.Value.Sources;
+        var environment = sources
+            .FirstOrDefault(source => string.Equals(source.Id, row.SourceId, StringComparison.Ordinal))?.Environment;
+        var whole = scope.Patterns is null
+                    || (environment is not null && sources
+                        .Where(source => string.Equals(source.Environment, environment, StringComparison.Ordinal))
+                        .All(source => scope.HoldsAtSource(source.Id)));
         var links = await database.ListLinksAsync(new IncidentKey(id, row.SourceId), cancellationToken);
-        await IncidentWriter.WriteObjectAsync(context.Response, row, links, options.Value.Sources, cancellationToken);
+        await IncidentWriter.WriteObjectAsync(context.Response, row, links, sources, whole, cancellationToken);
     }
 
     private static bool TryParseIncidentQuery(
