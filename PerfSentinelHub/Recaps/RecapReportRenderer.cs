@@ -357,6 +357,9 @@ public static class RecapReportRenderer
                 .Append(E(page.T("recap.more.report." + page.Plural(incidents.MoreSuspects),
                     (CountName, incidents.MoreSuspects.ToString(CultureInfo.InvariantCulture)))))
                 .Append(ParagraphEndLine);
+        // The tech list keeps the first TechSuspects; the rest is said under it, as for the priorities.
+        if (!page.Management)
+            Rest(html, page, incidents.MoreSuspects);
     }
 
     // What a list the Hub kept the costliest of left out, said under it.

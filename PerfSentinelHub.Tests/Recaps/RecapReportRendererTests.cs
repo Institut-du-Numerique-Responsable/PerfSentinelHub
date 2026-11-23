@@ -91,6 +91,15 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
+    public void The_engineering_report_says_the_suspects_it_left_out()
+    {
+        var snapshot = RecapSnapshots.WithIncidents();
+        snapshot = snapshot with { Incidents = snapshot.Incidents! with { MoreSuspects = 4 } };
+
+        Assert.Contains("…and 4 more, not listed.", Visible(Html(snapshot)), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_suspect_never_strong_reads_medium_without_other()
     {
         var snapshot = RecapSnapshots.WithIncidents();
