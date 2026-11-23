@@ -34,7 +34,8 @@ public sealed partial class IncidentLinkWorker(
     {
         try
         {
-            var missing = await database.IncidentsNeedingLinksAsync(IncidentLinkRules.RulesVersion, stoppingToken);
+            var missing = await database.IncidentsNeedingLinksAsync(
+                IncidentLinkRules.RulesVersion, [.. options.Value.Sources.Select(s => s.Id)], stoppingToken);
             foreach (var key in missing)
                 queue.Enqueue(key);
             if (missing.Count > 0)
@@ -102,13 +103,14 @@ public sealed partial class IncidentLinkWorker(
                 context.Saturation,
                 windowMs,
                 signature.SeenCount,
-                signature.FirstSeenMs >= context.AtMs && !context.SeenBeforeDeploy.Contains(signature.Signature),
+                signature.FirstSeenMs >= context.AtMs && !context.SeenInBaselineDays.Contains(signature.Signature),
                 context.Baselines.GetValueOrDefault(signature.Signature, new Baseline(0, 0, 0)),
-                context.Recurrences.GetValueOrDefault(signature.Signature, new Recurrence(0, 0))));
+                context.Recurrences.GetValueOrDefault(signature.Signature, new Recurrence(0, 0)),
+                context.SeenInBaselineDays.Contains(signature.Signature)));
             links.Add(new StoredLink(signature.Signature, result.Level, result.Reasons, IncidentLinkRules.RulesVersion));
         }
 
-        await database.ReplaceLinksAsync(key, environment, links, cancellationToken);
+        await database.ReplaceLinksAsync(key, links, cancellationToken);
         return true;
     }
 

@@ -742,8 +742,8 @@ public sealed class AccessRoutesTests : IAsyncLifetime
                 [new LinkReason("mechanism_compatible"), new LinkReason("recurrence", K: 4, N: 5, UsualShare: 0.2)],
                 IncidentLinkRules.RulesVersion)
         ];
-        await Database.ReplaceLinksAsync(new IncidentKey(Incident, "shop-d"), "prod", links, cancellationToken);
-        await Database.ReplaceLinksAsync(new IncidentKey(Incident, "lab-d"), "lab", links, cancellationToken);
+        await Database.ReplaceLinksAsync(new IncidentKey(Incident, "shop-d"), links, cancellationToken);
+        await Database.ReplaceLinksAsync(new IncidentKey(Incident, "lab-d"), links, cancellationToken);
         using var client = await SignedInAsync(user);
 
         using var response = await client.GetAsync($"/api/incidents/{Incident}", cancellationToken);

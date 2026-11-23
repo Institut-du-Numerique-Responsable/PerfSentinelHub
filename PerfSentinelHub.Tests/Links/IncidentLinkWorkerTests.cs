@@ -124,7 +124,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         {
             await PushIncidentAsync(id);
             Assert.True(await WaitAsync(async () => (await factory.Database.ListLinksAsync(key, Token)).Count > 0));
-            await factory.Database.ReplaceLinksAsync(key, "test", [], Token);
+            await factory.Database.ReplaceLinksAsync(key, [], Token);
             Assert.Empty(await factory.Database.ListLinksAsync(key, Token));
 
             await PushIncidentAsync(id, grown: true);
@@ -189,8 +189,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         await SeedIncidentAsync(fresh, 2);
         await SeedIncidentAsync(stale, 2);
         var staleKey = new IncidentKey(stale, Source);
-        await factory.Database.ReplaceLinksAsync(staleKey, "test",
-            [new StoredLink("sig-0", LinkLevel.Weak, [], IncidentLinkRules.RulesVersion - 1)], Token);
+        await factory.Database.ReplaceLinksAsync(staleKey, [new StoredLink("sig-0", LinkLevel.Weak, [], IncidentLinkRules.RulesVersion - 1)], Token);
         using var worker = NewWorker();
         await worker.StartAsync(Token);
         try
@@ -346,11 +345,12 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
     }
 
     // The first read of the options throws: the first incident assessed fails, the next one is fine.
+    // The first read is the start-up catch-up's, the second the first queued key's.
     private sealed class FailsOnce(HubOptions inner) : IOptions<HubOptions>
     {
         private int _reads;
 
-        public HubOptions Value => Interlocked.Increment(ref _reads) == 1
+        public HubOptions Value => Interlocked.Increment(ref _reads) == 2
             ? throw new InvalidOperationException("simulated failure")
             : inner;
     }

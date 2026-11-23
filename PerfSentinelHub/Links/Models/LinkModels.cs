@@ -24,7 +24,8 @@ public sealed record LinkInput(
     long SeenCount,
     bool AppearedAfterDeploy,
     Baseline Baseline,
-    Recurrence Recurrence);
+    Recurrence Recurrence,
+    bool SeenInBaselineDays = false);
 
 public sealed record LinkReason(
     string Code,

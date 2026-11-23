@@ -581,13 +581,7 @@ internal static class Schema
                                   level_rank INTEGER NOT NULL,
                                   reasons_json TEXT NOT NULL,
                                   rules_version INTEGER NOT NULL,
-                                  incident_at_ms INTEGER NOT NULL,
-                                  service TEXT NOT NULL,
-                                  kind TEXT NOT NULL,
-                                  environment TEXT NOT NULL,
                                   PRIMARY KEY(incident_id, source_id, signature)
                                 );
-                                CREATE INDEX IF NOT EXISTS ix_incident_finding_links_at
-                                  ON incident_finding_links(incident_at_ms);
                                 """;
 }

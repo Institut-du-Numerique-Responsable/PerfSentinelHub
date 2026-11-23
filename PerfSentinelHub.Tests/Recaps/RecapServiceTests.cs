@@ -922,7 +922,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
             source, [new ParsedIncident(id, service, kind, atMs, null, atMs - 1000, atMs, null, 0, "{}", "[]")],
             NowMs, Token);
         await _database.ReplaceLinksAsync(
-            new IncidentKey(id, source), "env",
+            new IncidentKey(id, source),
             [.. links.Select(link => new StoredLink(link.Signature, link.Level, [], IncidentLinkRules.RulesVersion))],
             Token);
     }

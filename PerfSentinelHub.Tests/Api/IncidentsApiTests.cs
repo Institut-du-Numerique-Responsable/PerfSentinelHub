@@ -198,7 +198,6 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         await SeedAsync();
         await factory.Database.ReplaceLinksAsync(
             new IncidentKey(FixtureId, "test"),
-            "test",
             [
                 new StoredLink("sig-a", LinkLevel.Strong,
                     [new LinkReason("recurrence", K: 4, N: 5, UsualShare: 0.2), new LinkReason("mechanism_compatible")],
@@ -229,7 +228,7 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         await SeedAsync();
         // Another incident has links: this one, not yet assessed, must not borrow them.
         await factory.Database.ReplaceLinksAsync(
-            new IncidentKey(FixtureId, "test"), "test", [new StoredLink("sig-a", LinkLevel.Weak, [], 1)],
+            new IncidentKey(FixtureId, "test"), [new StoredLink("sig-a", LinkLevel.Weak, [], 1)],
             TestContext.Current.CancellationToken);
 
         Assert.True((await GetAsync(FixtureId)).TryGetProperty("links", out _));
@@ -259,7 +258,7 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     {
         await SeedAsync();
         await factory.Database.ReplaceLinksAsync(
-            new IncidentKey(FixtureId, "test"), "test", [new StoredLink("sig-a", LinkLevel.Weak, [], 1)],
+            new IncidentKey(FixtureId, "test"), [new StoredLink("sig-a", LinkLevel.Weak, [], 1)],
             TestContext.Current.CancellationToken);
 
         foreach (var incident in (await ListAsync("/api/incidents?source_id=test")).EnumerateArray())

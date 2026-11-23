@@ -5,25 +5,6 @@ using PerfSentinelHub.Links;
 
 namespace PerfSentinelHub.Storage;
 
-public sealed record IncidentKey(string Id, string SourceId);
-
-/// <summary>The frozen rows of one signature, summed: empty signatures are dropped before this.</summary>
-public sealed record FrozenSignature(string Signature, string FindingType, long SeenCount, long FirstSeenMs);
-
-public sealed record LinkContext(
-    string Service,
-    string Kind,
-    long AtMs,
-    long WindowFromMs,
-    long WindowToMs,
-    double? Saturation,
-    IReadOnlyList<FrozenSignature> Signatures,
-    IReadOnlyDictionary<string, Baseline> Baselines,
-    IReadOnlyDictionary<string, Recurrence> Recurrences,
-    IReadOnlySet<string> SeenBeforeDeploy);
-
-public sealed record StoredLink(string Signature, LinkLevel Level, IReadOnlyList<LinkReason> Reasons, int RulesVersion);
-
 public sealed partial class HubDatabase
 {
     private const int BaselineDays = 7;
@@ -196,44 +177,66 @@ public sealed partial class HubDatabase
             StringComparer.Ordinal), seenBefore);
     }
 
+    // The signature of one frozen row, null for a row FrozenRows skips; json_each of a NULL document is empty.
+    private const string FrozenSignatureSql = """
+                                              CASE WHEN f.type <> 'object' THEN NULL
+                                                   WHEN json_type(f.value, '$.finding.signature') = 'text'
+                                                     THEN json_extract(f.value, '$.finding.signature') END
+                                              """;
+
+    private const string RecurrenceSql = $"""
+        SELECT count(DISTINCT id) FROM incidents AS i WHERE {EarlierIncidentsWhere};
+        SELECT signature, count(DISTINCT id) FROM (
+          SELECT i.id AS id, {FrozenSignatureSql} AS signature
+          FROM incidents AS i,
+               json_each(CASE WHEN json_valid(i.findings_json) THEN i.findings_json END) AS f
+          WHERE {EarlierIncidentsWhere})
+        WHERE signature IN (SELECT value FROM json_each($wanted))
+        GROUP BY signature;
+        """;
+
+    private const string EarlierIncidentsWhere = """
+                                                 i.source_id IN (SELECT value FROM json_each($source_ids))
+                                                   AND i.service = $service AND i.kind = $kind
+                                                   AND i.at_ms >= $from_ms AND i.at_ms < $at_ms AND i.id <> $id
+                                                 """;
+
+    // By incident id: the same id stored by two sources is one incident, whose signatures are the union.
+    // shortcut: SQLite still parses every earlier copy's findings once per assessment; a per-incident
+    // signature table is the upgrade if a crash-looping service makes the catch-up slow.
     private static async Task<Dictionary<string, Recurrence>> LoadRecurrencesAsync(
         SqliteConnection connection, IncidentKey key, IReadOnlyCollection<string> environmentSourceIds,
         string service, string kind, long atMs, HashSet<string> wanted, CancellationToken cancellationToken)
     {
-        // By incident id: the same id stored by two sources is one incident, whose signatures are the union.
-        var earlier = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var withSignature = new Dictionary<string, int>(StringComparer.Ordinal);
+        int earlier;
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = """
-                                  SELECT id, findings_json FROM incidents
-                                  WHERE source_id IN (SELECT value FROM json_each($source_ids))
-                                    AND service = $service AND kind = $kind
-                                    AND at_ms >= $from_ms AND at_ms < $at_ms AND id <> $id;
-                                  """;
+            command.CommandText = RecurrenceSql;
             command.Parameters.AddWithValue("$source_ids",
                 JsonSerializer.Serialize([.. environmentSourceIds], HubJsonContext.Default.StringArray));
+            command.Parameters.AddWithValue("$wanted",
+                JsonSerializer.Serialize([.. wanted], HubJsonContext.Default.StringArray));
             command.Parameters.AddWithValue("$service", service);
             command.Parameters.AddWithValue("$kind", kind);
             command.Parameters.AddWithValue("$from_ms", atMs - RecurrenceLookbackMs);
             command.Parameters.AddWithValue("$at_ms", atMs);
             command.Parameters.AddWithValue("$id", key.Id);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            await reader.ReadAsync(cancellationToken);
+            earlier = reader.GetInt32(0);
+            await reader.NextResultAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
-            {
-                if (!earlier.TryGetValue(reader.GetString(0), out var carried))
-                    earlier[reader.GetString(0)] = carried = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var row in FrozenRows(reader.GetString(1)))
-                    carried.Add(row.Signature);
-            }
+                withSignature[reader.GetString(0)] = reader.GetInt32(1);
         }
 
-        return wanted.ToDictionary(s => s, s => new Recurrence(earlier.Count, earlier.Values.Count(c => c.Contains(s))),
+        return wanted.ToDictionary(s => s, s => new Recurrence(earlier, withSignature.GetValueOrDefault(s)),
             StringComparer.Ordinal);
     }
 
     /// <summary>Replaces one incident's links in a single transaction, under the write gate.</summary>
     public async Task ReplaceLinksAsync(
-        IncidentKey key, string environment, IReadOnlyList<StoredLink> links, CancellationToken cancellationToken)
+        IncidentKey key, IReadOnlyList<StoredLink> links, CancellationToken cancellationToken)
     {
         var reasonsJson = links.Select(link =>
             JsonSerializer.Serialize(link.Reasons, HubJsonContext.Default.IReadOnlyListLinkReason)).ToArray();
@@ -251,16 +254,13 @@ public sealed partial class HubDatabase
 
             if (links.Count > 0)
             {
-                // The incident's own columns are copied so the recap never joins back for them.
+                // From the incident row, so a copy purged since its context was loaded gets no links.
                 command.CommandText = """
                                       INSERT INTO incident_finding_links(
-                                        incident_id, source_id, signature, level, level_rank, reasons_json, rules_version,
-                                        incident_at_ms, service, kind, environment)
-                                      SELECT $id, $source_id, $signature, $level, $level_rank, $reasons_json, $rules_version,
-                                             at_ms, service, kind, $environment
+                                        incident_id, source_id, signature, level, level_rank, reasons_json, rules_version)
+                                      SELECT $id, $source_id, $signature, $level, $level_rank, $reasons_json, $rules_version
                                       FROM incidents WHERE id = $id AND source_id = $source_id;
                                       """;
-                command.Parameters.AddWithValue("$environment", environment);
                 var signature = command.Parameters.Add("$signature", SqliteType.Text);
                 var level = command.Parameters.Add("$level", SqliteType.Text);
                 var levelRank = command.Parameters.Add("$level_rank", SqliteType.Integer);
@@ -307,18 +307,31 @@ public sealed partial class HubDatabase
         return links;
     }
 
-    /// <summary>Incidents with frozen findings and no links at all, or links computed by older rules.</summary>
-    public async Task<IReadOnlyList<IncidentKey>> IncidentsNeedingLinksAsync(int rulesVersion, CancellationToken cancellationToken)
+    private const string IncidentsNeedingLinksSql = $"""
+        SELECT i.id, i.source_id FROM incidents AS i
+        WHERE i.finding_count > 0 AND i.source_id IN (SELECT value FROM json_each($source_ids))
+          AND NOT EXISTS (
+            SELECT 1 FROM incident_finding_links AS l
+            WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $rules_version)
+          AND EXISTS (
+            SELECT 1 FROM json_each(CASE WHEN json_valid(i.findings_json) THEN i.findings_json END) AS f
+            WHERE {FrozenSignatureSql} <> '');
+        """;
+
+    /// <summary>
+    ///     Incidents of <paramref name="sourceIds" /> with no links at all, or links computed by older rules.
+    ///     An incident none of whose frozen rows has a signature never gets a link, so it is left out, as
+    ///     is a source no longer configured: queueing either would repeat at every catch-up.
+    /// </summary>
+    public async Task<IReadOnlyList<IncidentKey>> IncidentsNeedingLinksAsync(
+        int rulesVersion, IReadOnlyCollection<string> sourceIds, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = """
-                              SELECT i.id, i.source_id FROM incidents AS i
-                              WHERE i.finding_count > 0 AND NOT EXISTS (
-                                SELECT 1 FROM incident_finding_links AS l
-                                WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $rules_version);
-                              """;
+        command.CommandText = IncidentsNeedingLinksSql;
         command.Parameters.AddWithValue("$rules_version", rulesVersion);
+        command.Parameters.AddWithValue("$source_ids",
+            JsonSerializer.Serialize([.. sourceIds], HubJsonContext.Default.StringArray));
         var keys = new List<IncidentKey>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

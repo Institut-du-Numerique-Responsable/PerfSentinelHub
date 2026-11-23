@@ -90,6 +90,18 @@ public sealed partial class HubDatabase
                                                    WHERE id = $id AND source_id = $source_id;
                                                    """;
 
+    // A copy whose findings the upsert replaces loses the links read from the old ones, on the same
+    // keep condition, so the worker's catch-up finds it again when its queued key is lost to a
+    // restart or its assessment fails: stale links would otherwise count as assessed for good.
+    private const string IncidentLinksReset = """
+                                              DELETE FROM incident_finding_links
+                                              WHERE incident_id = $id AND source_id = $source_id AND NOT EXISTS (
+                                                SELECT 1 FROM incidents
+                                                WHERE id = $id AND source_id = $source_id
+                                                  AND (finding_count > $finding_count
+                                                       OR findings_json IS $findings_json));
+                                              """;
+
     // True when the upsert below stores the copy or replaces its findings: the negation of
     // IncidentAttributesReset's keep condition, read before the upsert changes the row.
     private const string IncidentFindingsChange = """
@@ -123,7 +135,7 @@ public sealed partial class HubDatabase
     // Built once, the reset, the upsert and the derivation, so the command takes a
     // field rather than a string formatted at the call: every part is a constant.
     // Declared after IncidentAttributesUpsert: static fields initialize in order.
-    private static readonly string IncidentUpsert = IncidentAttributesReset + $"""
+    private static readonly string IncidentUpsert = IncidentAttributesReset + IncidentLinksReset + $"""
                                                                                INSERT INTO incidents({IncidentColumns}, findings_json)
                                                                                VALUES ($id, $source_id, $service, $kind, $at_ms, $ended_at_ms, $window_from_ms,
                                                                                        $window_to_ms, $oldest_finding_ms, $finding_count, $incident_json,

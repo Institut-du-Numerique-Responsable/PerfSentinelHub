@@ -6,7 +6,7 @@ namespace PerfSentinelHub.Links;
 /// </summary>
 public static class IncidentLinkRules
 {
-    public const int RulesVersion = 2;
+    public const int RulesVersion = 3;
 
     private const double HighIntensityRatio = 3;
     private const double MediumIntensityRatio = 1.5;
@@ -85,12 +85,20 @@ public static class IncidentLinkRules
             return Signal.None;
         }
 
+        // Seen only on days a gap or an overflow leaves uncovered: not new, its usual rate is unknown.
+        if (baseline.Detections <= 0 && input.SeenInBaselineDays)
+        {
+            reasons.Add(new LinkReason("intensity_unknown"));
+            return Signal.None;
+        }
+
         if (baseline.Detections <= 0)
         {
             reasons.Add(new LinkReason("intensity_new"));
             return Signal.High;
         }
 
+        // The daemon folds frozen rows over the incident window alone, so SeenCount is the window's count.
         var expected = (double)baseline.Detections / baseline.CoveredDays / MsPerDay * input.WindowMs;
         var ratio = input.SeenCount / expected;
         if (ratio < MediumIntensityRatio) return Signal.None;

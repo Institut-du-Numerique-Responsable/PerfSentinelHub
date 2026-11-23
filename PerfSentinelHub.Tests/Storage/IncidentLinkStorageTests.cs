@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
 using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
@@ -135,7 +136,7 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         Assert.Equal(new Baseline(2, 2, 21), context.Baselines["sig-a"]);
         Assert.Equal(new Baseline(2, 0, 0), context.Baselines["sig-b"]);
         // Seen in any of the 7 days, covered or not.
-        Assert.Equal(["sig-a", "sig-b"], context.SeenBeforeDeploy.Order());
+        Assert.Equal(["sig-a", "sig-b"], context.SeenInBaselineDays.Order());
     }
 
     [Fact]
@@ -152,7 +153,7 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
 
         Assert.NotNull(context);
         Assert.Equal(new Baseline(1, 0, 0), context.Baselines["sig-a"]);
-        Assert.Empty(context.SeenBeforeDeploy);
+        Assert.Empty(context.SeenInBaselineDays);
     }
 
     [Fact]
@@ -200,6 +201,9 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         await SeedIncidentAsync(shared, source, AtMs - DayMs, frozen);
         await SeedIncidentAsync(shared, twin, AtMs - DayMs, frozen);
         await SeedIncidentAsync(NewId(), source, AtMs - 2 * DayMs, Frozen(("sig-z", "slow_sql", 1, 1)));
+        // Malformed findings count as an earlier incident without the signature, and never fail the read.
+        await SeedIncidentAsync(NewId(), source, AtMs - 3 * DayMs, "not json");
+        await SeedIncidentAsync(NewId(), source, AtMs - 3 * DayMs, """["row",{"finding":{"signature":7}},{"finding":"sig-a"}]""");
         // Exactly 30 days earlier is still inside the lookback.
         await SeedIncidentAsync(NewId(), source, AtMs - 30 * DayMs, frozen);
         // Ignored: another environment, older than 30 days, later, another service or kind.
@@ -213,7 +217,27 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
             new IncidentKey(id, source), [source, twin], Token);
 
         Assert.NotNull(context);
-        Assert.Equal(new Recurrence(3, 2), context.Recurrences["sig-a"]);
+        Assert.Equal(new Recurrence(5, 2), context.Recurrences["sig-a"]);
+    }
+
+    [Fact]
+    public async Task Upsert_that_replaces_the_findings_drops_the_links_and_one_that_keeps_them_does_not()
+    {
+        var key = new IncidentKey(NewId(), NewId());
+        var poor = new ParsedIncident(key.Id, "checkout-svc", "oom_kill", AtMs, null, AtMs - 300_000, AtMs, null, 1,
+            "{}", Frozen(("sig-a", "slow_sql", 1, 1)));
+        var rich = poor with { FindingCount = 2, FindingsJson = Frozen(("sig-a", "slow_sql", 1, 1), ("sig-b", "slow_sql", 1, 1)) };
+        var link = new StoredLink("sig-a", LinkLevel.Weak, [], IncidentLinkRules.RulesVersion);
+
+        Assert.Equal([key.Id], await factory.Database.UpsertIncidentsAsync(key.SourceId, [poor], AtMs, Token));
+        await factory.Database.ReplaceLinksAsync(key, [link], Token);
+        // The same findings again, then a poorer re-capture: the copy keeps its findings and its links.
+        Assert.Empty(await factory.Database.UpsertIncidentsAsync(key.SourceId, [poor], AtMs + 1, Token));
+        Assert.Equal(1, await CountLinksAsync(key.Id));
+
+        Assert.Equal([key.Id], await factory.Database.UpsertIncidentsAsync(key.SourceId, [rich], AtMs + 2, Token));
+        Assert.Equal(0, await CountLinksAsync(key.Id));
+        Assert.Contains(key, await factory.Database.IncidentsNeedingLinksAsync(IncidentLinkRules.RulesVersion, [key.SourceId], Token));
     }
 
     [Fact]
@@ -226,9 +250,9 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
             IncidentLinkRules.RulesVersion);
         var second = new StoredLink("sig-b", LinkLevel.Weak, [], IncidentLinkRules.RulesVersion);
 
-        await factory.Database.ReplaceLinksAsync(key, "production", [first, second], Token);
-        await factory.Database.ReplaceLinksAsync(key, "production", [first], Token);
-        await factory.Database.ReplaceLinksAsync(key, "production", [first], Token);
+        await factory.Database.ReplaceLinksAsync(key, [first, second], Token);
+        await factory.Database.ReplaceLinksAsync(key, [first], Token);
+        await factory.Database.ReplaceLinksAsync(key, [first], Token);
 
         var links = await factory.Database.ListLinksAsync(key, Token);
         var link = Assert.Single(links);
@@ -246,21 +270,27 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         var outdated = new IncidentKey(NewId(), NewId());
         var current = new IncidentKey(NewId(), NewId());
         var empty = new IncidentKey(NewId(), NewId());
-        foreach (var key in new[] { missing, outdated, current })
+        var unsigned = new IncidentKey(NewId(), NewId());
+        var unconfigured = new IncidentKey(NewId(), NewId());
+        foreach (var key in new[] { missing, outdated, current, unconfigured })
             await SeedIncidentAsync(key.Id, key.SourceId, AtMs, Frozen(("sig-a", "slow_sql", 1, 1)));
         await SeedIncidentAsync(empty.Id, empty.SourceId, AtMs, "[]", findingCount: 0);
-        await factory.Database.ReplaceLinksAsync(outdated, "production",
-            [new StoredLink("sig-a", LinkLevel.Weak, [], 1)], Token);
-        await factory.Database.ReplaceLinksAsync(current, "production",
-            [new StoredLink("sig-a", LinkLevel.Weak, [], 2)], Token);
+        await SeedIncidentAsync(unsigned.Id, unsigned.SourceId, AtMs,
+            """[{"finding":{"type":"slow_sql"}},{"finding":{"type":"slow_sql","signature":""}},"row"]""");
+        await factory.Database.ReplaceLinksAsync(outdated, [new StoredLink("sig-a", LinkLevel.Weak, [], 1)], Token);
+        await factory.Database.ReplaceLinksAsync(current, [new StoredLink("sig-a", LinkLevel.Weak, [], 2)], Token);
 
-        var needing = await factory.Database.IncidentsNeedingLinksAsync(2, Token);
+        var needing = await factory.Database.IncidentsNeedingLinksAsync(2,
+            [missing.SourceId, outdated.SourceId, current.SourceId, empty.SourceId, unsigned.SourceId], Token);
 
         Assert.Contains(missing, needing);
         Assert.Contains(outdated, needing);
         Assert.DoesNotContain(current, needing);
         // No frozen finding, so no link is ever written: queueing it would repeat at every start.
         Assert.DoesNotContain(empty, needing);
+        // No row has a signature, so no link is ever written either; a dropped source is never assessed.
+        Assert.DoesNotContain(unsigned, needing);
+        Assert.DoesNotContain(unconfigured, needing);
     }
 
     [Fact]
@@ -271,8 +301,8 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         await SeedIncidentAsync(gone.Id, gone.SourceId, 1_000, Frozen(("sig-a", "slow_sql", 1, 1)));
         await SeedIncidentAsync(kept.Id, kept.SourceId, long.MaxValue / 4, Frozen(("sig-a", "slow_sql", 1, 1)));
         StoredLink[] links = [new("sig-a", LinkLevel.Weak, [], 1)];
-        await factory.Database.ReplaceLinksAsync(gone, "production", links, Token);
-        await factory.Database.ReplaceLinksAsync(kept, "production", links, Token);
+        await factory.Database.ReplaceLinksAsync(gone, links, Token);
+        await factory.Database.ReplaceLinksAsync(kept, links, Token);
 
         await factory.Database.PurgeAsync(10_000, 0, 0, 0, Token);
 
@@ -303,14 +333,12 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
             await using var query = check.CreateCommand();
             query.CommandText = """
                                 SELECT (SELECT count(*) FROM sqlite_master WHERE name = 'incident_finding_links'),
-                                       (SELECT count(*) FROM schema_migrations WHERE version = 24),
-                                       (SELECT count(*) FROM sqlite_master WHERE name = 'ix_incident_finding_links_at');
+                                       (SELECT count(*) FROM schema_migrations WHERE version = 24);
                                 """;
             await using var reader = await query.ExecuteReaderAsync(Token);
             Assert.True(await reader.ReadAsync(Token));
             Assert.Equal(1, reader.GetInt64(0));
             Assert.Equal(1, reader.GetInt64(1));
-            Assert.Equal(1, reader.GetInt64(2));
         }
         finally
         {

@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using PerfSentinelHub.Access;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
+using PerfSentinelHub.Links;
 
 namespace PerfSentinelHub.Storage;
 
@@ -531,3 +532,26 @@ public sealed record StoredCardKey(
     long CreatedAtMs,
     long? RetiredAtMs,
     string? RevokedOn);
+
+public sealed record IncidentKey(string Id, string SourceId);
+
+/// <summary>The frozen rows of one signature, summed: empty signatures are dropped before this.</summary>
+public sealed record FrozenSignature(string Signature, string FindingType, long SeenCount, long FirstSeenMs);
+
+public sealed record LinkContext(
+    string Service,
+    string Kind,
+    long AtMs,
+    long WindowFromMs,
+    long WindowToMs,
+    double? Saturation,
+    IReadOnlyList<FrozenSignature> Signatures,
+    IReadOnlyDictionary<string, Baseline> Baselines,
+    IReadOnlyDictionary<string, Recurrence> Recurrences,
+    IReadOnlySet<string> SeenInBaselineDays);
+
+public sealed record StoredLink(string Signature, LinkLevel Level, IReadOnlyList<LinkReason> Reasons, int RulesVersion);
+
+/// <summary>One incident copy of a recap read, with one of its links when it has any (Signature null otherwise).</summary>
+public sealed record RecapIncidentRow(
+    string Id, string SourceId, string Kind, string Service, long AtMs, string? Signature, int LevelRank);

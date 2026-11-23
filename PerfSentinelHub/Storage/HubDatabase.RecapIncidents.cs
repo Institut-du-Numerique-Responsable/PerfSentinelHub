@@ -2,10 +2,6 @@ using PerfSentinelHub.Access;
 
 namespace PerfSentinelHub.Storage;
 
-/// <summary>One incident copy of a recap read, with one of its links when it has any (Signature null otherwise).</summary>
-public sealed record RecapIncidentRow(
-    string Id, string SourceId, string Kind, string Service, long AtMs, string? Signature, int LevelRank);
-
 // The incidents a recap counts: the same sources, services, namespaces and access as its findings.
 public sealed partial class HubDatabase
 {
