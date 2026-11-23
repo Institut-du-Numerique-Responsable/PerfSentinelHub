@@ -298,7 +298,16 @@ de l'environnement nommé ne liste rien, la réponse d'une paire de filtres qui 
 
 `GET /api/incidents/{id}` renvoie un incident entier, findings compris, la
 copie la plus riche quand plusieurs sources tiennent l'id. Un finding dont `first_seen_ms`
-dépasse `at_ms` n'a démarré qu'après le redémarrage. Comme `/api/findings`, les deux
+dépasse `at_ms` n'a démarré qu'après le redémarrage. Le `saturation` du daemon
+(de 0 à 1, quand il en a envoyé un) voyage dans le document relayé et sert aux règles de lien.
+
+La lecture unitaire porte aussi `links`, écrit après `findings` et absent tant que le Hub n'a
+pas évalué l'incident, ce qu'un worker en arrière-plan fait quelque temps après l'enregistrement
+de la copie. Il associe la signature de chaque finding figé à `{"level", "reasons",
+"rules_version"}` : `level` vaut `strong`, `medium` ou `weak`, `reasons` liste les faits qui
+la justifient sous la forme `{"code"}` plus, quand la raison les a, `ratio`, `k`, `n`,
+`usual_share` et `value` (un champ sans valeur est omis), et `rules_version` est la version
+des règles qui l'ont calculé. La liste ne porte jamais `links`. Comme `/api/findings`, les deux
 répondent à quiconque atteint le port du Hub :
 la clé de lecture d'un daemon protège le daemon, et le Hub réexpose les findings gelés
 derrière ce qui protège le Hub.

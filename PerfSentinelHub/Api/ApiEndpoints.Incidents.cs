@@ -195,7 +195,8 @@ public static partial class ApiEndpoints
             return;
         }
 
-        await IncidentWriter.WriteObjectAsync(context.Response, row, options.Value.Sources, cancellationToken);
+        var links = await database.ListLinksAsync(new IncidentKey(id, row.SourceId), cancellationToken);
+        await IncidentWriter.WriteObjectAsync(context.Response, row, links, options.Value.Sources, cancellationToken);
     }
 
     private static bool TryParseIncidentQuery(

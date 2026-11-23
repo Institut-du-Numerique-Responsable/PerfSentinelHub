@@ -274,7 +274,16 @@ each other has.
 
 `GET /api/incidents/{id}` returns one incident whole, findings included, the richest copy
 when several sources hold the id. A finding whose `first_seen_ms` is past `at_ms` fired
-only after the restart. Like `/api/findings`, both
+only after the restart. The daemon's `saturation`
+(0 to 1, when it sent one) rides in the relayed document and is read by the link rules.
+
+The single read also carries `links`, written after `findings` and absent until the Hub has
+assessed the incident, which a background worker does some time after the copy is stored.
+It maps each frozen finding's signature to `{"level", "reasons", "rules_version"}`: `level`
+is `strong`, `medium` or `weak`, `reasons` lists the facts behind it as `{"code"}` plus,
+when the reason has them, `ratio`, `k`, `n`, `usual_share` and `value` (a field with no
+value is omitted), and `rules_version` is the version of the rules that computed it. The
+listing never carries `links`. Like `/api/findings`, both
 answer whoever reaches the Hub's port: a daemon's read key protects the daemon, and the
 Hub re-exposes the frozen findings behind whatever fronts the Hub.
 

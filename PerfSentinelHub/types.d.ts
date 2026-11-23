@@ -309,6 +309,22 @@ export interface FindingEnvelope extends StoredFindingRow, Partial<DetectionVolu
     acks?: FindingAck[];
 }
 
+/** How strongly a frozen finding is tied to its incident, `IncidentWriter`. */
+export interface IncidentLink {
+    level: "weak" | "medium" | "strong";
+    reasons: IncidentLinkReason[];
+    rules_version: number;
+}
+
+export interface IncidentLinkReason {
+    code: string;
+    ratio?: number;
+    k?: number;
+    n?: number;
+    usual_share?: number;
+    value?: number;
+}
+
 /** A row of GET /api/incidents, `IncidentWriter`: the daemon's document plus the Hub's fields. */
 export interface Incident {
     id: string;
@@ -322,6 +338,10 @@ export interface Incident {
     oldest_finding_ms?: number | null;
     /** Only on the single-incident read. */
     findings?: StoredFindingRow[];
+    /** The daemon's saturation reading at capture, 0 to 1, when it sent one. */
+    saturation?: number;
+    /** Only on the single-incident read, by signature; absent until the Hub has assessed the incident. */
+    links?: Record<string, IncidentLink>;
     ended_at_ms: number | null;
     source_id: string;
     source_name: string | null;

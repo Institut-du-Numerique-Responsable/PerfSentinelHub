@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -40,16 +41,20 @@ public static class IncidentWriter
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
 
-    /// <summary>One incident whole, the findings the row was read with included.</summary>
+    /// <summary>
+    ///     One incident whole, the findings the row was read with included, then
+    ///     the links keyed by signature: absent until the worker has assessed it.
+    /// </summary>
     public static async Task WriteObjectAsync(
         HttpResponse response,
         StoredIncident row,
+        IReadOnlyList<StoredLink> links,
         IReadOnlyList<SourceOptions> sources,
         CancellationToken cancellationToken)
     {
         response.ContentType = "application/json";
         await using var writer = new Utf8JsonWriter(response.BodyWriter);
-        WriteIncident(writer, row, sources);
+        WriteIncident(writer, row, sources, links);
         await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
@@ -75,7 +80,8 @@ public static class IncidentWriter
     private static void WriteIncident(
         Utf8JsonWriter writer,
         StoredIncident row,
-        IReadOnlyList<SourceOptions> sources)
+        IReadOnlyList<SourceOptions> sources,
+        IReadOnlyList<StoredLink>? links = null)
     {
         using var document = JsonDocument.Parse(row.IncidentJson);
         writer.WriteStartObject();
@@ -92,6 +98,23 @@ public static class IncidentWriter
         {
             writer.WritePropertyName("findings");
             writer.WriteRawValue(row.FindingsJson);
+        }
+
+        if (links is { Count: > 0 })
+        {
+            writer.WriteStartObject("links");
+            foreach (var link in links)
+            {
+                writer.WriteStartObject(link.Signature);
+                writer.WritePropertyName("level");
+                JsonSerializer.Serialize(writer, link.Level, HubJsonContext.Default.LinkLevel);
+                writer.WritePropertyName("reasons");
+                JsonSerializer.Serialize(writer, link.Reasons, HubJsonContext.Default.IReadOnlyListLinkReason);
+                writer.WriteNumber("rules_version", link.RulesVersion);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
         }
 
         JsonWrite.NumberOrNull(writer, "ended_at_ms", row.EndedAtMs);
