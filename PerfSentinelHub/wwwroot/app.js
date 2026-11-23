@@ -6448,7 +6448,8 @@
                 ? el('p', {class: 'daemon-lead', text: t('incidents.panel.no_finding')})
                 : findingsFilter(detail),
             findings.length === 0 ? null : el('div', {
-                class: 'sources-wrap findings-wrap', tabindex: '0', 'aria-label': t('incidents.findings.region')
+                class: 'sources-wrap findings-wrap', role: 'region', tabindex: '0',
+                'aria-label': t('incidents.findings.region')
             }, [incidentFindingsTable(findings, detail)]),
             findings.length === 0 ? null : findingsMore(detail),
             incidentCorrelationsBlock(incident)
@@ -6515,33 +6516,40 @@
      * @param {string} key
      */
     function fillFindings(key) {
-        const table = document.querySelector(`[data-findings="${CSS.escape(key)}"]`);
-        const held = table && FINDING_TABLE.get(table);
+        const name = CSS.escape(key);
+        // Two copies of one incident unfold the same detail, so both panels carry its key: each one is filled.
+        const tables = Array.from(document.querySelectorAll(`[data-findings="${name}"]`));
+        const held = tables.length > 0 ? FINDING_TABLE.get(tables[0]) : undefined;
         if (!held) return;
         const query = state.findingQuery[key] || '';
         const level = state.findingLevel[key] || '';
         const page = PSL.pageFindings(held.findings, query, state.findingLimit[key] || FINDINGS_PAGE, level);
-        // A level that no finding has would leave an empty table: say so in a row instead.
-        const none = page.matched === 0 && level !== '';
-        table.querySelector('tbody').replaceChildren(...(none
-            ? [el('tr', {}, [el('td', {
-                colspan: String(table.querySelectorAll('thead th').length), text: t('incidents.link.filter.none')
-            })])]
-            : page.shown.map(held.row)));
-        const count = document.querySelector(`[data-findings-count="${CSS.escape(key)}"]`);
-        if (count) count.textContent = query.trim() === '' && level === '' ? '' : t('incidents.filter.shown', {
-            shown: page.matched,
-            total: held.findings.length
+        // A level that no finding has would leave an empty table: say so in a row instead. Only when the
+        // level alone empties it, so a text query that matches nothing is not blamed on the level.
+        const none = page.matched === 0 && level !== ''
+            && PSL.pageFindings(held.findings, '', 0, level).matched === 0;
+        tables.forEach(function (table) {
+            table.querySelector('tbody').replaceChildren(...(none
+                ? [el('tr', {}, [el('td', {
+                    colspan: String(table.querySelectorAll('thead th').length), text: t('incidents.link.filter.none')
+                })])]
+                : page.shown.map(held.row)));
         });
-        const more = /** @type {HTMLElement | null} */ (document.querySelector(`[data-findings-more="${CSS.escape(key)}"]`));
-        if (!more) return;
+        document.querySelectorAll(`[data-findings-count="${name}"]`).forEach(function (count) {
+            count.textContent = query.trim() === '' && level === '' ? '' : t('incidents.filter.shown', {
+                shown: page.matched,
+                total: held.findings.length
+            });
+        });
         const left = page.matched - page.shown.length;
-        more.hidden = left === 0;
-        const next = /** @type {HTMLElement} */ (more.querySelector('[data-step="page"]'));
-        next.textContent = t('incidents.findings.more', {count: Math.min(FINDINGS_PAGE, left)});
-        // The page button would read the same as this one on the last page.
-        next.hidden = left <= FINDINGS_PAGE;
-        more.querySelector('[data-step="all"]').textContent = t('incidents.findings.all', {left: left});
+        document.querySelectorAll(`[data-findings-more="${name}"]`).forEach(function (/** @type {HTMLElement} */ more) {
+            more.hidden = left === 0;
+            const next = /** @type {HTMLElement} */ (more.querySelector('[data-step="page"]'));
+            next.textContent = t('incidents.findings.more', {count: Math.min(FINDINGS_PAGE, left)});
+            // The page button would read the same as this one on the last page.
+            next.hidden = left <= FINDINGS_PAGE;
+            more.querySelector('[data-step="all"]').textContent = t('incidents.findings.all', {left: left});
+        });
     }
 
     /**
@@ -6554,7 +6562,9 @@
         const button = function (step) {
             const node = el('button', {type: 'button', class: 'pill-button', 'data-step': step});
             node.addEventListener('click', function () {
-                const table = document.querySelector(`[data-findings="${CSS.escape(key)}"]`);
+                // This panel's own table: another copy of the incident may draw one under the same key.
+                const panel = node.closest('.daemon-panel');
+                const table = panel && panel.querySelector(`[data-findings="${CSS.escape(key)}"]`);
                 const total = table ? FINDING_TABLE.get(table).findings.length : 0;
                 state.findingLimit[key] = step === 'all'
                     ? total
@@ -6717,7 +6727,9 @@
         if (!link) return el('span', {class: 'chip', 'data-link': 'pending', text: t('incidents.link.pending')});
         const reasons = (link.reasons || []).map(function (reason) {
             const part = PSL.linkReasonParts(reason);
-            return PSL.hasText(part.key) ? t(part.key, part.params) : '';
+            // The ratio is the one decimal among the numbers: a comma in French.
+            const params = part.params.ratio == null ? part.params : {...part.params, ratio: PSL.decimal(part.params.ratio)};
+            return PSL.hasText(part.key) ? t(part.key, params) : '';
         }).filter(Boolean).join(' ');
         const chip = el('span', {
             class: 'chip', 'data-link': link.level, title: reasons || null,

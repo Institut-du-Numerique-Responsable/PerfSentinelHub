@@ -1782,6 +1782,7 @@
         'recap.job.stage.carbon': 'Carbon',
         'recap.job.stage.actions': 'Actions',
         'recap.job.stage.labels': 'Names',
+        'recap.job.stage.incidents': 'Incidents',
         'recap.job.stage.assemble': 'Putting it together',
         'recap.job.stage_pending': 'to come',
         'recap.job.stage_running': 'in progress',

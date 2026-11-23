@@ -1853,6 +1853,7 @@
         'recap.job.stage.carbon': 'Carbone',
         'recap.job.stage.actions': 'Actions',
         'recap.job.stage.labels': 'Noms',
+        'recap.job.stage.incidents': 'Incidents',
         'recap.job.stage.assemble': 'Mise en forme',
         'recap.job.stage_pending': 'à venir',
         'recap.job.stage_running': 'en cours',
