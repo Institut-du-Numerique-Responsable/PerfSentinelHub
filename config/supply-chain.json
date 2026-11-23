@@ -86,10 +86,10 @@
     {
       "name": "dotnet-reportgenerator-globaltool",
       "kind": "dotnet-tool",
-      "version": "5.6.0",
-      "digest_or_sha": "sha512-base64:tlYygzLmBxRlpwmA3zeJ/m4CvShBAU4hT6S16SdefIqg8n3EjPUpMk06su04/z5v34vTGe2ZhEgXubD9ODVasg==",
-      "released_at": "2026-11-10T20:59:38.1Z",
-      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-reportgenerator-globaltool/5.6.0.json",
+      "version": "5.6.1",
+      "digest_or_sha": "sha512-base64:g3tGgqV1K0elPiV30l7nLvEF36QZk+ykIScCbUH+R0JivHFKXcGUrgbXklJGgXK0YOUDoJCnA03zzdIhtda/Eg==",
+      "released_at": "2026-11-20T20:03:15.133Z",
+      "source": "https://api.nuget.org/v3/registration5-gz-semver2/dotnet-reportgenerator-globaltool/5.6.1.json",
       "reason": "Latest stable report generator tool."
     },
     {
