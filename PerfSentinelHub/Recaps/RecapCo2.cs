@@ -15,13 +15,15 @@ public sealed record CarbonDay(
     long? AvoidableIoOps,
     double? AvoidableGco2Low = null);
 
-public sealed record Co2Estimate(double? Grams, int SourcesWithoutCoefficient, string? MissingReason);
+/// <summary>The estimate, with the sources and the distinct days whose extra I/O it could not price.</summary>
+public sealed record Co2Estimate(
+    double? Grams, int SourcesWithoutCoefficient, string? MissingReason, int DaysWithoutCoefficient = 0);
 
 public static class RecapCo2
 {
     /// <summary>
     ///     A partial minimum: the extra I/O of each day priced at that day's own coefficient,
-    ///     the days without one left out and their sources counted. Never extrapolated.
+    ///     the days without one left out and counted, by source and by day. Never extrapolated.
     /// </summary>
     public static Co2Estimate Estimate(IReadOnlyList<CarbonDay> rows)
     {
@@ -30,12 +32,14 @@ public static class RecapCo2
             return new Co2Estimate(null, 0, "no_avoidable_io");
 
         var priced = counted.Where(HasCoefficient).ToList();
-        var without = counted.Where(row => !HasCoefficient(row)).Select(row => row.SourceId).Distinct().Count();
+        var unpriced = counted.Where(row => !HasCoefficient(row)).ToList();
+        var without = unpriced.Select(row => row.SourceId).Distinct().Count();
+        var days = unpriced.Select(row => row.Day).Distinct().Count();
         if (priced.Count == 0)
-            return new Co2Estimate(null, without, "no_coefficient");
+            return new Co2Estimate(null, without, "no_coefficient", days);
 
         var grams = priced.Sum(row => row.ExtraIoOps * row.AvoidableGco2!.Value / row.AvoidableIoOps!.Value);
-        return new Co2Estimate(Magnitude(grams), without, null);
+        return new Co2Estimate(Magnitude(grams), without, null, days);
     }
 
     /// <summary>

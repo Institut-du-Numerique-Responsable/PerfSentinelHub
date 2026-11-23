@@ -739,6 +739,8 @@ test("Management_help_carries_no_technical_word, in French", () => inLang("fr", 
 test("the recap's figures and words read in the shown language", () => inLang("fr", () => {
     assert.equal(PSL.co2Text(2000, 1, null), "au moins ~2 kg CO2e, estimation, 1 source sans coefficient");
     assert.equal(PSL.co2Text(2500, 2, null), "au moins ~2,5 kg CO2e, estimation, 2 sources sans coefficient");
+    assert.equal(PSL.co2Tail(2, "tech", 3), ", 2 sources sans coefficient sur 3 jours");
+    assert.equal(PSL.co2Tail(1, "tech", 1), ", 1 source sans coefficient sur 1 jour");
     assert.equal(PSL.co2Text(1234567, 0, null), "~1 230 kg CO2e, estimation");
     assert.equal(PSL.co2Text(999.5, 0, null), "~1 000 g CO2e, estimation");
     assert.equal(PSL.co2Text(null, 0, "no_coefficient"), "— aucun coefficient du moteur");

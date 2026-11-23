@@ -8616,14 +8616,17 @@
         // The full sentence stays on the figure for a reader the small print does not reach.
         const value = el('span', {
             class: 'disc-figure-value',
-            title: PSL.co2Text(tiles.co2_grams, without, tiles.co2_missing_reason, snapshot.view)
+            title: PSL.co2Text(tiles.co2_grams, without, tiles.co2_missing_reason, snapshot.view,
+                tiles.co2_days_without_coefficient)
         }, [
             co2.lead ? el('small', {text: co2.lead}) : null,
             document.createTextNode(co2.figure),
             el('span', {class: 'disc-figure-unit', text: co2.unit})
         ]);
         return recapTile(t('recap.tile.co2'), recapProgressChip(snapshot), value, [
-            known ? t('recap.tile.magnitude', {tail: PSL.co2Tail(without, snapshot.view)}) : '',
+            known ? t('recap.tile.magnitude', {
+                tail: PSL.co2Tail(without, snapshot.view, tiles.co2_days_without_coefficient)
+            }) : '',
             previous ? recapPreviousText(snapshot, previous) : ''
         ], recapHelp(snapshot, 'co2'), t('recap.topic.co2'), 'recap.co2');
     }

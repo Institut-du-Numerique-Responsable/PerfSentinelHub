@@ -552,7 +552,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             reads.Ranked.Count,
             reads.Previous?.Count ?? 0,
             reads.All.Count - reads.Ranked.Count,
-            CountsOf(reads.All.Select(finding => actions.GetValueOrDefault(finding.Signature)).OfType<RecapAction>()));
+            CountsOf(reads.All.Select(finding => actions.GetValueOrDefault(finding.Signature)).OfType<RecapAction>()),
+            estimate?.DaysWithoutCoefficient ?? 0);
     }
 
     // Null when no finding has a known I/O: an unknown volume is not a zero.

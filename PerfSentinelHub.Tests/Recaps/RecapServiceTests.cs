@@ -658,6 +658,7 @@ public sealed class RecapServiceTests : IAsyncLifetime
 
         Assert.Equal(1, snapshot.Tiles.Co2Grams);
         Assert.Equal(1, snapshot.Tiles.Co2SourcesWithoutCoefficient);
+        Assert.Equal(1, snapshot.Tiles.Co2DaysWithoutCoefficient);
         Assert.Null(snapshot.Tiles.Co2MissingReason);
         Assert.True(Assert.Single(snapshot.Priorities).Co2Partial);
     }

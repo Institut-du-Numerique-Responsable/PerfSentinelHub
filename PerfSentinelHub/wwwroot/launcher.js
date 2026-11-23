@@ -3076,14 +3076,15 @@
      * @param {number} sourcesWithoutCoefficient
      * @param {string | null | undefined} missingReason
      * @param {string} [view]
+     * @param {number} [days] the distinct days left unpriced, see co2Tail
      * @returns {string}
      */
-    function co2Text(grams, sourcesWithoutCoefficient, missingReason, view) {
+    function co2Text(grams, sourcesWithoutCoefficient, missingReason, view, days) {
         const parts = co2Parts(grams, sourcesWithoutCoefficient, missingReason, view);
         if (grams === null || grams === undefined) return parts.figure + ' ' + parts.unit;
         return t('recap.co2.text', {
             value: (parts.lead ? parts.lead + ' ' : '') + parts.figure + ' ' + parts.unit,
-            tail: co2Tail(sourcesWithoutCoefficient, view)
+            tail: co2Tail(sourcesWithoutCoefficient, view, days)
         });
     }
 
@@ -3091,13 +3092,20 @@
      * What a partial carbon figure leaves out, after a comma, or nothing when it is whole.
      * @param {number} sourcesWithoutCoefficient
      * @param {string} [view]
+     * @param {number} [days] the distinct days left unpriced; absent on a report frozen before they were counted
      * @returns {string}
      */
-    function co2Tail(sourcesWithoutCoefficient, view) {
+    function co2Tail(sourcesWithoutCoefficient, view, days) {
         if (!(sourcesWithoutCoefficient > 0)) return '';
-        return view === 'pilotage'
-            ? t('recap.co2.tail.pilotage')
-            : t('recap.co2.tail.tech.' + plural(sourcesWithoutCoefficient), {count: sourcesWithoutCoefficient});
+        if (view === 'pilotage') return t('recap.co2.tail.pilotage');
+        const count = plural(sourcesWithoutCoefficient);
+        if (!(days !== undefined && days > 0)) {
+            return t('recap.co2.tail.tech.' + count, {count: sourcesWithoutCoefficient});
+        }
+        return t('recap.co2.tail.tech.days.' + count, {
+            count: sourcesWithoutCoefficient,
+            days: t('recap.co2.days.' + plural(days), {count: days})
+        });
     }
 
     /**

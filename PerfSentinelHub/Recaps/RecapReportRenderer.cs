@@ -224,9 +224,13 @@ public static class RecapReportRenderer
             : null;
         Tile(html, page, page.T("recap.tile.co2"), snapshot.Period.InProgress, value,
         [
-            known ? page.T("recap.tile.magnitude", ("tail", RecapText.Co2Tail(without, snapshot.View, lang))) : "",
+            known
+                ? page.T("recap.tile.magnitude",
+                    ("tail", RecapText.Co2Tail(without, snapshot.View, lang, tiles.Co2DaysWithoutCoefficient)))
+                : "",
             previous is null ? "" : PreviousText(page, previous)
-        ], true, RecapText.Co2(tiles.Co2Grams, without, tiles.Co2MissingReason, snapshot.View, lang));
+        ], true, RecapText.Co2(tiles.Co2Grams, without, tiles.Co2MissingReason, snapshot.View, lang,
+            tiles.Co2DaysWithoutCoefficient));
     }
 
     // A tile's label, value and lines, each written where the tile shows it.

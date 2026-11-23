@@ -115,7 +115,8 @@ public sealed record RecapTiles(
     int ActiveFindings,
     int PreviousActiveFindings,
     int AckedFindings,
-    RecapActionCounts Actions);
+    RecapActionCounts Actions,
+    int Co2DaysWithoutCoefficient = 0);
 
 public sealed record RecapActionCounts(
     int Todo,

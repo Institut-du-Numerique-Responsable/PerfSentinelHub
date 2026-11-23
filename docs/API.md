@@ -689,8 +689,11 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
 - **Carbon.** `co2_grams` is context, never a sort key: an estimate, rounded to one
   significant figure, of the extra I/O priced at each day's own grams per avoidable I/O, as the
   engine sent them with its ledger days. It is a partial minimum when some sources send
-  no coefficient: `co2_sources_without_coefficient` counts them and the figure is never
-  extrapolated. With none, `co2_grams` is `null` and `co2_missing_reason` is
+  no coefficient: `co2_sources_without_coefficient` counts them, `co2_days_without_coefficient`
+  the distinct days of the period they leave unpriced (absent on a report frozen before 0.21.0),
+  and the figure is never extrapolated. A day of the period is priced whatever its coverage: a
+  gap, a restart or an overflow leaves its detections counted, and only a missing coefficient
+  leaves them out. A period in progress covers the days up to today. With none, `co2_grams` is `null` and `co2_missing_reason` is
   `no_coefficient`, or `no_avoidable_io` when there is nothing to price. A priority carries
   its own `co2_grams` and `co2_partial`.
 - **Actions and confirmation.** A priority carries its `action` (status, owner, `owner_display`,

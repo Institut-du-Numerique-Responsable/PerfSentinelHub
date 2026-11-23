@@ -2344,6 +2344,9 @@ test("Management_text_matches_the_launcher_helpers", () => {
     assert.equal(PSL.co2Tail(1, "pilotage"), ", part of the activity has no CO2 estimate");
     assert.equal(PSL.co2Tail(2, "tech"), ", 2 sources without a coefficient");
     assert.equal(PSL.co2Tail(1, "tech"), ", 1 source without a coefficient");
+    assert.equal(PSL.co2Tail(2, "tech", 3), ", 2 sources without a coefficient on 3 days");
+    assert.equal(PSL.co2Tail(1, "tech", 1), ", 1 source without a coefficient on 1 day");
+    assert.equal(PSL.co2Tail(1, "pilotage", 2), ", part of the activity has no CO2 estimate");
     assert.equal(PSL.co2Tail(0, "pilotage"), "");
     assert.equal(PSL.confirmationLabel("confirmed", "pilotage"), "Confirmed by the measurements");
     assert.equal(PSL.confirmationLabel("contradicted", "pilotage"), "Still detected");

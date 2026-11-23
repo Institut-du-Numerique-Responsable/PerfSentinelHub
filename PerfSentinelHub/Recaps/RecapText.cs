@@ -67,24 +67,32 @@ public static class RecapText
     }
 
     public static string Co2(double? grams, int sourcesWithoutCoefficient, string? missingReason, string view = "tech",
-        string lang = HubLang.En)
+        string lang = HubLang.En, int days = 0)
     {
         var (lead, figure, unit) = Co2Parts(grams, sourcesWithoutCoefficient, missingReason, view, lang);
         if (grams is null)
             return figure + " " + unit;
         return T(lang, "recap.co2.text", ("value", (lead.Length > 0 ? lead + " " : "") + figure + " " + unit),
-            ("tail", Co2Tail(sourcesWithoutCoefficient, view, lang)));
+            ("tail", Co2Tail(sourcesWithoutCoefficient, view, lang, days)));
     }
 
-    /// <summary>What a partial carbon figure leaves out, after a comma, or nothing when it is whole.</summary>
-    public static string Co2Tail(int sourcesWithoutCoefficient, string view, string lang = HubLang.En)
+    /// <summary>
+    ///     What a partial carbon figure leaves out, after a comma, or nothing when it is whole. With
+    ///     <paramref name="days" />, the distinct days left unpriced; 0 for a report frozen before they were counted.
+    /// </summary>
+    public static string Co2Tail(int sourcesWithoutCoefficient, string view, string lang = HubLang.En, int days = 0)
     {
         if (sourcesWithoutCoefficient <= 0)
             return "";
         if (view == RecapViewNames.Pilotage)
             return T(lang, "recap.co2.tail.pilotage");
-        return T(lang, "recap.co2.tail.tech." + HubLang.Plural(lang, sourcesWithoutCoefficient),
-            ("count", sourcesWithoutCoefficient.ToString(CultureInfo.InvariantCulture)));
+        var count = ("count", sourcesWithoutCoefficient.ToString(CultureInfo.InvariantCulture));
+        var plural = HubLang.Plural(lang, sourcesWithoutCoefficient);
+        if (days <= 0)
+            return T(lang, "recap.co2.tail.tech." + plural, count);
+        return T(lang, "recap.co2.tail.tech.days." + plural, count,
+            ("days", T(lang, "recap.co2.days." + HubLang.Plural(lang, days),
+                ("count", days.ToString(CultureInfo.InvariantCulture)))));
     }
 
     public static string Trend(string trend, double? change, string lang = HubLang.En)

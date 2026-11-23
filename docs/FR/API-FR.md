@@ -742,7 +742,11 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   un chiffre significatif, des I/O en trop valorisées au coefficient du jour (grammes par I/O
   évitable) tel que le moteur l'a envoyé avec ses jours de registre. C'est un minimum partiel
   quand certaines sources n'envoient aucun coefficient : `co2_sources_without_coefficient` les
-  compte et le chiffre n'est jamais extrapolé. Sans aucun coefficient, `co2_grams` vaut `null`
+  compte, `co2_days_without_coefficient` les jours distincts de la période qu'elles laissent sans
+  prix (absent d'un rapport figé avant 0.21.0), et le chiffre n'est jamais extrapolé. Un jour de
+  la période est chiffré quelle que soit sa couverture : un trou, un redémarrage ou un débordement
+  laisse ses détections comptées, et seule l'absence de coefficient les écarte. Une période en
+  cours couvre les jours jusqu'à aujourd'hui. Sans aucun coefficient, `co2_grams` vaut `null`
   et `co2_missing_reason` vaut `no_coefficient`, ou `no_avoidable_io` quand il n'y a rien à
   valoriser. Une priorité porte son propre `co2_grams` et `co2_partial`.
 - **Actions et confirmation.** Une priorité porte son `action` (statut, responsable, `owner_display`,

@@ -516,6 +516,8 @@ export interface RecapTiles {
     co2_grams: number | null;
     previous_co2_grams: number | null;
     co2_sources_without_coefficient: number;
+    /** Distinct days left unpriced; absent on a report frozen before 0.21.0. */
+    co2_days_without_coefficient?: number;
     co2_missing_reason: string | null;
     active_findings: number;
     previous_active_findings: number;

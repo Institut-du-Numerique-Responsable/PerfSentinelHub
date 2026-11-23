@@ -23,6 +23,10 @@ All notable changes to PerfSentinelHub are recorded here.
   often first. The screen, the HTML report, the mail and the webhook show them; the `tech` view
   lists 10 suspects and the `pilotage` view 3, each saying how many it leaves out. A `grouping`
   filter keeps the incidents whose alert carried that namespace.
+- A recap's carbon figure says over how many days it is short: the `tech` view's tail reads
+  "2 sources without a coefficient on 3 days", and the tiles carry
+  `co2_days_without_coefficient`. A day is left out of the figure only when its source sent no
+  coefficient; a gap, a restart or an overflow leaves it counted.
 
 ### Changed
 
