@@ -96,7 +96,9 @@ public sealed partial class RecapReportRendererTests
         var snapshot = RecapSnapshots.WithIncidents();
         var suspect = snapshot.Incidents!.Suspects[0] with
         {
-            Strong = 0, Medium = 2, StrongByKind = new Dictionary<string, int>()
+            Strong = 0,
+            Medium = 2,
+            StrongByKind = new Dictionary<string, int>()
         };
         snapshot = snapshot with { Incidents = snapshot.Incidents with { Suspects = [suspect] } };
 
