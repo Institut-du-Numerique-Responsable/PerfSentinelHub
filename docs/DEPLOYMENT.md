@@ -148,6 +148,26 @@ for a closed period, built by `perf-sentinel disclose` from the production daemo
 and signed by a scheduled job, often a CI workflow for its OIDC identity. The Hub keeps and
 shows it as it arrived, see [API.md](API.md#disclosures).
 
+## Saturation on an incident comes from the alert rule
+
+An incident carries a `saturation` only when the alert that raised it says so. A rule whose
+expression is already a ratio of the limit (memory used over the memory limit, for instance)
+adds the annotation `perf_sentinel_saturation`:
+
+```yaml
+annotations:
+  perf_sentinel_saturation: "{{ $value }}"
+```
+
+The daemon reads a bare number as a ratio of the limit and a number followed by `%` as a
+percentage, so `"0.97"` and `"97%"` both read 0.97 and `{{ $value | humanizePercentage }}`
+works too. A value above 1, or above 100%, is capped at 1: a bare `"98"` reads 1, not 98%. A
+negative, non-finite or unreadable value is dropped, and the incident is still recorded,
+without a saturation. perf-sentinel's
+`[daemon.incidents] saturation_annotation` renames the annotation it reads. The Hub shows the
+value as a percentage of the limit on the Incidents screen and uses it to link findings to the
+incident. Updating a deployment's rules is that deployment's own change.
+
 ## Grouping attributes are chosen at each daemon
 
 The Hub adds no grouping setting of its own. It records, per source, every

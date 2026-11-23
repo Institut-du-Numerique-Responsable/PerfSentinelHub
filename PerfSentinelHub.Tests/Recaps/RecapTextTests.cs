@@ -115,6 +115,12 @@ public sealed class RecapTextTests
         Assert.Equal(", part of the activity has no CO2 estimate", RecapText.Co2Tail(1, "pilotage"));
         Assert.Equal(", 2 sources without a coefficient", RecapText.Co2Tail(2, "tech"));
         Assert.Equal(", 1 source without a coefficient", RecapText.Co2Tail(1, "tech"));
+        // With the days counted, the tail says over how many days the figure is short.
+        Assert.Equal(", 2 sources without a coefficient on 3 days", RecapText.Co2Tail(2, "tech", days: 3));
+        Assert.Equal(", 1 source without a coefficient on 1 day", RecapText.Co2Tail(1, "tech", days: 1));
+        Assert.Equal(", part of the activity has no CO2 estimate", RecapText.Co2Tail(1, "pilotage", days: 2));
+        Assert.Equal(", 2 sources sans coefficient sur 3 jours", RecapText.Co2Tail(2, "tech", HubLang.Fr, 3));
+        Assert.Equal(", 1 source sans coefficient sur 1 jour", RecapText.Co2Tail(1, "tech", HubLang.Fr, 1));
         Assert.Equal("", RecapText.Co2Tail(0, "pilotage"));
         Assert.Equal("Confirmed by the measurements", RecapText.Confirmation("confirmed", "pilotage"));
         Assert.Equal("Still detected", RecapText.Confirmation("contradicted", "pilotage"));

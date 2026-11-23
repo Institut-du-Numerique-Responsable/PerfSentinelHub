@@ -90,6 +90,28 @@ public sealed partial class HubDatabase
                                                    WHERE id = $id AND source_id = $source_id;
                                                    """;
 
+    // A copy whose findings the upsert replaces loses the links read from the old ones, on the same
+    // keep condition, so the worker's catch-up finds it again when its queued key is lost to a
+    // restart or its assessment fails: stale links would otherwise count as assessed for good.
+    private const string IncidentLinksReset = """
+                                              DELETE FROM incident_finding_links
+                                              WHERE incident_id = $id AND source_id = $source_id AND NOT EXISTS (
+                                                SELECT 1 FROM incidents
+                                                WHERE id = $id AND source_id = $source_id
+                                                  AND (finding_count > $finding_count
+                                                       OR findings_json IS $findings_json));
+                                              """;
+
+    // True when the upsert below stores the copy or replaces its findings: the negation of
+    // IncidentAttributesReset's keep condition, read before the upsert changes the row.
+    private const string IncidentFindingsChange = """
+                                                  SELECT NOT EXISTS (
+                                                    SELECT 1 FROM incidents
+                                                    WHERE id = $id AND source_id = $source_id
+                                                      AND (finding_count > $finding_count
+                                                           OR findings_json IS $findings_json));
+                                                  """;
+
     // An incident copy, on the pairs every frozen finding carries. The ('', '') marker
     // H1 writes for a copy with none matches no key.
     public static readonly string IncidentAccess = Access(
@@ -113,7 +135,7 @@ public sealed partial class HubDatabase
     // Built once, the reset, the upsert and the derivation, so the command takes a
     // field rather than a string formatted at the call: every part is a constant.
     // Declared after IncidentAttributesUpsert: static fields initialize in order.
-    private static readonly string IncidentUpsert = IncidentAttributesReset + $"""
+    private static readonly string IncidentUpsert = IncidentAttributesReset + IncidentLinksReset + $"""
                                                                                INSERT INTO incidents({IncidentColumns}, findings_json)
                                                                                VALUES ($id, $source_id, $service, $kind, $at_ms, $ended_at_ms, $window_from_ms,
                                                                                        $window_to_ms, $oldest_finding_ms, $finding_count, $incident_json,
@@ -137,9 +159,10 @@ public sealed partial class HubDatabase
     ///     the daemon's own record only grows, so a smaller one is a re-capture
     ///     after a restart against a ring that had already evicted the window,
     ///     and it must not replace the copy this table exists to keep. An end
-    ///     is kept once seen.
+    ///     is kept once seen. Returns the ids whose stored findings the read
+    ///     added or replaced, the ones whose links need assessing again.
     /// </summary>
-    public async Task UpsertIncidentsAsync(
+    public async Task<IReadOnlyList<string>> UpsertIncidentsAsync(
         string sourceId,
         IReadOnlyList<ParsedIncident> incidents,
         long observedAtMs,
@@ -150,8 +173,8 @@ public sealed partial class HubDatabase
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
-            foreach (var incident in incidents)
-                await UpsertIncidentAsync(connection, transaction, sourceId, incident, observedAtMs, cancellationToken);
+            var changed = await UpsertAllAsync(connection, transaction, sourceId, incidents, observedAtMs,
+                cancellationToken);
             await RecordReadAsync(
                 connection,
                 transaction,
@@ -160,6 +183,7 @@ public sealed partial class HubDatabase
                 new SourceRead(observedAtMs, IncidentReadStates.Ok, null),
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            return changed;
         }
         finally
         {
@@ -173,24 +197,26 @@ public sealed partial class HubDatabase
     ///     the write lock as long as a findings push does, then gives up: a 503
     ///     the daemon retries beats a request held open behind a purge. Files
     ///     the push, not a read: incident_reads stays the poll's own ledger.
+    ///     Returns the ids whose stored findings changed, null when the lock
+    ///     was not taken.
     /// </summary>
-    public async Task<bool> TryUpsertPushedIncidentsAsync(
+    public async Task<IReadOnlyList<string>?> TryUpsertPushedIncidentsAsync(
         string sourceId,
         IReadOnlyList<ParsedIncident> incidents,
         long observedAtMs,
         CancellationToken cancellationToken)
     {
         if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
-            return false;
+            return null;
         try
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
-            foreach (var incident in incidents)
-                await UpsertIncidentAsync(connection, transaction, sourceId, incident, observedAtMs, cancellationToken);
+            var changed = await UpsertAllAsync(connection, transaction, sourceId, incidents, observedAtMs,
+                cancellationToken);
             await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return true;
+            return changed;
         }
         finally
         {
@@ -198,7 +224,22 @@ public sealed partial class HubDatabase
         }
     }
 
-    private static async Task UpsertIncidentAsync(
+    private static async Task<IReadOnlyList<string>> UpsertAllAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string sourceId,
+        IReadOnlyList<ParsedIncident> incidents,
+        long observedAtMs,
+        CancellationToken cancellationToken)
+    {
+        var changed = new List<string>();
+        foreach (var incident in incidents)
+            if (await UpsertIncidentAsync(connection, transaction, sourceId, incident, observedAtMs, cancellationToken))
+                changed.Add(incident.Id);
+        return changed;
+    }
+
+    private static async Task<bool> UpsertIncidentAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         string sourceId,
@@ -208,7 +249,7 @@ public sealed partial class HubDatabase
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = IncidentUpsert;
+        command.CommandText = IncidentFindingsChange;
         command.Parameters.AddWithValue("$id", incident.Id);
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
         command.Parameters.AddWithValue(ServiceParameter, incident.Service);
@@ -222,7 +263,11 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue("$incident_json", incident.IncidentJson);
         command.Parameters.AddWithValue("$findings_json", incident.FindingsJson);
         command.Parameters.AddWithValue(ObservedAtParameter, observedAtMs);
+        var changed = Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),
+            System.Globalization.CultureInfo.InvariantCulture) != 0;
+        command.CommandText = IncidentUpsert;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        return changed;
     }
 
     // For each copy `filter` keeps that has no row: the grouping pairs every frozen

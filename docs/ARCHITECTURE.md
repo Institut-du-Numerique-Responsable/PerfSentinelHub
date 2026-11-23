@@ -193,6 +193,8 @@ scoped to a source, an environment or a grant filters, counts and judges status 
 | `source_finding_imports`       | source, its last findings push                                 | never                                      |
 | `incidents`                    | incident and source                                            | retention, on `last_seen_ms`               |
 | `incident_attributes`          | incident, source and pair every frozen finding carries         | with its incident                          |
+| `incident_finding_links`       | incident, source and frozen signature, with its link level     | with its incident                          |
+| `incident_signatures`          | incident, source and frozen signature, kept by triggers        | with its incident, by trigger              |
 | `correlation_episodes`         | episode and source                                             | retention, on `last_seen_ms`               |
 | `source_acks`                  | source and signature                                           | retention, on `read_at_ms`                 |
 | `finding_actions`              | signature, with its status and owner, and the finding's envelope once done | never                          |

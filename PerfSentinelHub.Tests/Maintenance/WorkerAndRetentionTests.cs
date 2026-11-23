@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Maintenance;
 using PerfSentinelHub.Storage;
 
@@ -378,7 +379,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
         var poller = new SourcePoller(
             client,
             database,
-            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
             new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             new RingWatch(),
@@ -419,7 +420,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
         var poller = new SourcePoller(
             client,
             database,
-            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance),
+            new IncidentReader(client, database, NullLogger<IncidentReader>.Instance, new IncidentLinkQueue()),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
             new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             new RingWatch(),

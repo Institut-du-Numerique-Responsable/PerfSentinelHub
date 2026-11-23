@@ -441,6 +441,12 @@ d'autres équipes : les rôles intégrés `reader` et `member` le portent, un r�
 l'appelant, et une ligne de source écrite avant l'existence de la copie par source sert
 l'enveloppe partagée jusqu'à ce que cette source remonte à nouveau le finding.
 
+Le niveau de lien d'un finding d'incident et ses chiffres de récurrence sont calculés sur
+toutes les sources de l'environnement de l'incident. Les chiffres sont masqués pour un
+appelant qui ne tient pas chacune de ces sources entière : il ne voit que le code de
+récurrence. Seul le niveau reste calculé sur tout l'environnement, et un tel appelant peut
+donc voir un niveau influencé par des incidents de sources qu'il ne peut pas lire.
+
 La fraîcheur d'une décision :
 
 - les groupes du fournisseur sont lus à la connexion, ils ont donc 8 heures au plus, et un

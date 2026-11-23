@@ -298,8 +298,21 @@ de l'environnement nommé ne liste rien, la réponse d'une paire de filtres qui 
 
 `GET /api/incidents/{id}` renvoie un incident entier, findings compris, la
 copie la plus riche quand plusieurs sources tiennent l'id. Un finding dont `first_seen_ms`
-dépasse `at_ms` n'a démarré qu'après le redémarrage. Comme `/api/findings`, les deux
-répondent à quiconque atteint le port du Hub :
+dépasse `at_ms` n'a démarré qu'après le redémarrage. Le `saturation` du daemon
+(de 0 à 1, quand il en a envoyé un) voyage dans le document relayé et sert aux règles de lien.
+
+La lecture unitaire porte aussi `links`, écrit après `findings` et absent tant que le Hub n'a
+pas évalué l'incident, ce qu'un worker en arrière-plan fait quelque temps après l'enregistrement
+de la copie. Il associe la signature de chaque finding figé à `{"level", "reasons",
+"rules_version"}` : `level` vaut `strong`, `medium` ou `weak`, `reasons` liste les faits qui
+la justifient sous la forme `{"code"}` plus, quand la raison les a, `ratio`, `k`, `n`,
+`usual_share` et `value` (un champ sans valeur est omis), et `rules_version` est la version
+des règles qui l'ont calculé. Une raison `recurrence` compte les incidents de toutes les sources
+de l'environnement de l'incident : ses `k`, `n` et `usual_share` sont donc omis pour un
+appelant dont l'accès ne tient pas chacune de ces sources entière (un motif de service ou
+d'attribut ne suffit pas), le code reste. La liste ne porte jamais `links`, et un champ `links`
+du document propre à un daemon n'est pas relayé. Comme `/api/findings`, la liste et la lecture
+unitaire répondent toutes deux à quiconque atteint le port du Hub :
 la clé de lecture d'un daemon protège le daemon, et le Hub réexpose les findings gelés
 derrière ce qui protège le Hub.
 
@@ -729,7 +742,11 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   un chiffre significatif, des I/O en trop valorisées au coefficient du jour (grammes par I/O
   évitable) tel que le moteur l'a envoyé avec ses jours de registre. C'est un minimum partiel
   quand certaines sources n'envoient aucun coefficient : `co2_sources_without_coefficient` les
-  compte et le chiffre n'est jamais extrapolé. Sans aucun coefficient, `co2_grams` vaut `null`
+  compte, `co2_days_without_coefficient` les jours distincts de la période qu'elles laissent sans
+  prix (absent d'un rapport figé avant 0.21.0), et le chiffre n'est jamais extrapolé. Un jour de
+  la période est chiffré quelle que soit sa couverture : un trou, un redémarrage ou un débordement
+  laisse ses détections comptées, et seule l'absence de coefficient les écarte. Une période en
+  cours couvre les jours jusqu'à aujourd'hui. Sans aucun coefficient, `co2_grams` vaut `null`
   et `co2_missing_reason` vaut `no_coefficient`, ou `no_avoidable_io` quand il n'y a rien à
   valoriser. Une priorité porte son propre `co2_grams` et `co2_partial`.
 - **Actions et confirmation.** Une priorité porte son `action` (statut, responsable, `owner_display`,
@@ -754,6 +771,19 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   sauf sur une priorité ou un élément de mouvement dont le `label` est `null` : deux lignes du
   même type restent distinguées par la seule valeur technique qui reste. Un rapport figé et un
   webhook du récap retirent aussi `endpoint` de ces lignes (voir [Rapports de récap](#rapports-de-récap)).
+- **Incidents.** `incidents` compte les incidents de la période une seule fois chacun, toutes
+  sources confondues, avec `count`, `previous_count` (la période précédente coupée à la même
+  longueur, comme les tuiles), `by_kind` (`oom_kill`, `memory_saturation`, `restart`, `deploy`,
+  `other`) et `suspects` : les signatures liées `strong`, puis `medium`, à ces incidents, les plus
+  fréquentes d'abord. Un suspect porte `rank`, `signature` (absente de la vue `pilotage`), `finding_type`, `service`,
+  `endpoint`, `strong` et `medium` (des nombres d'incidents), `strong_by_kind`, et
+  `latest_incident_id` avec `latest_source_id`, l'incident le plus récent auquel il a été lié. La
+  vue `tech` garde les 10 premiers suspects, `pilotage` les 3 premiers, `more_suspects` comptant
+  les autres ; un rapport figé et un webhook du récap retirent aussi `endpoint` ici. La clé est
+  absente d'un rapport figé avant son existence. Un filtre `grouping` garde les incidents dont
+  l'alerte portait ce namespace : un incident n'a pas de valeur de regroupement à lui, donc sur
+  des daemons dont le premier `grouping_attributes` n'est pas `k8s.namespace.name` un récap
+  regroupé ne compte aucun incident. Un lien est un soupçon à vérifier, jamais une cause prouvée.
 - **Plafond.** `priorities` et chaque liste de mouvements gardent leurs 5 000 premiers, dans
   l'ordre du classement ; les tuiles comptent toujours tous les findings lus, `more_priorities`
   les priorités au-delà du plafond et `movements.counts` la longueur entière de chaque liste.
@@ -806,9 +836,9 @@ répétés, rejoignent la même tâche. `POST` et `DELETE` sont refusés depuis 
 et sans type de contenu JSON (`415`), comme un acquittement.
 
 - **La tâche.** `status` vaut `running`, `succeeded`, `failed` (avec `error_code`) ou `cancelled`.
-  `stages` liste dans l'ordre les neuf étapes d'un calcul, `findings_period`, `findings_open`,
-  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels` et
-  `assemble`, chacune `pending`, `running`, `done` (avec `ms`) ou `skipped` quand ce jour-là n'a rien
+  `stages` liste dans l'ordre les dix étapes d'un calcul, `findings_period`, `findings_open`,
+  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels`, `incidents`
+  et `assemble`, chacune `pending`, `running`, `done` (avec `ms`) ou `skipped` quand ce jour-là n'a rien
   à lire pour elle, et `stage` nomme celle qui tourne. `progress`, de `0` à `1`, est la part du
   travail attendu déjà faite : chaque étape pèse ce qu'elle a pris en moyenne dans les calculs
   précédents du Hub, les lectures de findings le plus tant qu'il n'y en a pas eu. Elle avance quand

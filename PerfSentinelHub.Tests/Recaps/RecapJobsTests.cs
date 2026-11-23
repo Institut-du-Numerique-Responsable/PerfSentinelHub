@@ -68,7 +68,7 @@ public sealed class RecapJobsTests : IDisposable
         Assert.Equal("skipped", StateOf(running, RecapStage.FindingsClosed));
         Assert.Equal("pending", StateOf(running, RecapStage.Labels));
         // Two findings reads of the four weighted, the done one and the skipped one, out of the whole.
-        Assert.Equal(40_000.0 / 95_000, running.Progress, 4);
+        Assert.Equal(40_000.0 / 98_000, running.Progress, 4);
 
         computation.Finish(Snapshot(true));
         var done = await SettledAsync(started.Id);

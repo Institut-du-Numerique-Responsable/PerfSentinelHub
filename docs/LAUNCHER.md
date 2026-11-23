@@ -238,7 +238,11 @@ since one endpoint often carries several, and its estimated impact, the findings
 dashboard's avoidable I/O operations: traces seen times extra operations per trace, a dash
 when the daemon has green scoring off. The findings open worst
 first, then most seen, a click or a keypress on a column head sorts them by that column,
-and a field above the table narrows them by endpoint or template. Five selects narrow the list. Kind and service stay
+and a field above the table narrows them by endpoint or template. A Link column gives each
+finding a level, strong, medium or weak, with its reasons in the tooltip and for screen readers,
+or says it is being assessed: it shows how suspect a finding is, not a proven cause. The findings
+open by that level, and a select beside the field keeps one level. When the daemon sent a
+saturation reading, the note above the table gives it. Five selects narrow the list. Kind and service stay
 in sight, and namespace, environment and daemon fold behind More filters, which says how
 many of them are set. The namespace one appears once a row has carried one. The Hub applies them, so the older
 rows a button loads next, a hundred at a time from the store rather than from the daemons,
@@ -317,7 +321,7 @@ on the page, the moment an action was taken or finished included, shows in your 
 (`2026-10-29 14:32 CET`), the UTC moment on hover.
 
 On a large database the recap takes minutes, so the screen asks the Hub to compute it as a job
-([the API](API.md#recap-jobs)) and shows where it is: a bar of the share of the work done, the nine
+([the API](API.md#recap-jobs)) and shows where it is: a bar of the share of the work done, the ten
 steps each ticked off with its duration, marked running, or not needed that day, and the time since the
 computation started. You can leave the page: the Hub goes on, and coming back picks up the same job, or
 shows the result at once if it finished. Once computed, a line says when, and until when the Hub reuses
@@ -373,6 +377,14 @@ Assign… declares one to do. Acknowledge opens the ack page. Name this, or Rena
 business name that titles the row, in Management too. An action's owner reads as a name: the one the
 sign-in gave, else one made from the identity (`alice.martin@acme.com` reads Alice Martin), with the
 identity on hover. A refusal, no identity or no permission, shows the Hub's own sentence in the card.
+
+Incidents follows, when the period had any: a tile with their count, once per incident whichever
+source saw it, the previous period's count under the same cut as the other tiles, and the count per
+kind. Under it, Recurring suspects lists the findings linked strongly or moderately to
+those incidents, the most often strong first: the type, the service, the endpoint when the view
+shows it, where it was strong by kind and how often medium, and a link to the Incidents screen. A
+link level says how suspect a finding is, not a proven cause. The Engineering view keeps ten
+suspects, the Management view three, each saying how many it leaves out.
 
 What moved lists new, gone, up, down, came back and done but still detected findings, the groups that
 hold something only. Gone is a presumption, not proof that the fix shipped. On the first day of a

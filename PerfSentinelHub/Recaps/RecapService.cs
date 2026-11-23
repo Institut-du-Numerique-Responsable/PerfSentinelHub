@@ -63,6 +63,9 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         progress?.Enter(RecapStage.Labels);
         var labels = await ReadLabelsAsync(reads, cancellationToken);
 
+        progress?.Enter(RecapStage.Incidents);
+        var incidents = await ReadIncidentsAsync(request, span, scope, cancellationToken);
+
         progress?.Enter(RecapStage.Assemble);
         var trends = TrendsOf(reads);
         var priorities = PrioritiesOf(reads, trends, current, actions, labels);
@@ -82,7 +85,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             RecapMoves.NothingMoved(movements, priorities),
             SourcesWithoutVolume(request, reads, coverage.Covered),
             reads.Truncated,
-            NamesOf(request, coverage.Late));
+            NamesOf(request, coverage.Late),
+            incidents);
     }
 
     /// <summary>
@@ -206,6 +210,54 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
     {
         var ids = request.SourceIds ?? [.. request.Sources.Select(source => source.Id)];
         return [.. ids.Where(id => request.Access is null || request.Access.ReachesSource(id))];
+    }
+
+    // ------------------------------------------------------------ incidents
+
+    public const int TechSuspects = 10;
+
+    // Incidents of the sources and filters the findings are read from. A suspect's type and endpoint
+    // come from the findings store, read for the kept suspects only, so no frozen findings are parsed.
+    private async Task<RecapIncidents> ReadIncidentsAsync(
+        RecapRequest request,
+        Span span,
+        IReadOnlyList<string> scope,
+        CancellationToken cancellationToken)
+    {
+        Task<IReadOnlyList<RecapIncidentRow>> Read(
+            RecapPeriod window, int minRank, IReadOnlyList<string>? signatures)
+        {
+            return database.ReadRecapIncidentsAsync(
+                window.FromMs, window.ToMs, scope, request.Services, request.ExcludedServices, request.Groupings,
+                request.Access, minRank, signatures, cancellationToken);
+        }
+
+        // One read of the strong and medium links, with a bare row for an incident that has none so the
+        // counts still see it: the ranking and Latest come from the same rows, so a link replaced
+        // meanwhile cannot unsettle a suspect.
+        var rows = await Read(span.Period, 2, null);
+        var previous = span.PreviousWindow is { } before ? await Read(before, 2, []) : [];
+        var ranked = RecapIncidentSuspects.Rank(rows);
+        var kept = ranked.Take(TechSuspects).ToList();
+        // No services filter here on purpose: the signatures already come from the filtered incidents.
+        var found = kept.Count == 0
+            ? []
+            : (await database.QueryFindingsAsync(
+                new FindingQuery(null, null, null, kept.Count, true, null, 0, scope, null, null, null, null,
+                    request.Access) with
+                {
+                    Signatures = [.. kept.Select(item => item.Signature)],
+                    Slim = true
+                },
+                cancellationToken)).Select(RecapEnvelope.Read).ToDictionary(f => f.Signature, StringComparer.Ordinal);
+        return new RecapIncidents(
+            rows.Select(row => row.Id).Distinct(StringComparer.Ordinal).Count(),
+            previous.Select(row => row.Id).Distinct(StringComparer.Ordinal).Count(),
+            rows.GroupBy(row => row.Id, StringComparer.Ordinal).Select(group => group.First().Kind)
+                .GroupBy(kind => kind, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal),
+            RecapIncidentSuspects.Named(kept, rows, found, Unknown),
+            ranked.Count - kept.Count);
     }
 
     // ------------------------------------------------------------ coverage
@@ -500,7 +552,8 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             reads.Ranked.Count,
             reads.Previous?.Count ?? 0,
             reads.All.Count - reads.Ranked.Count,
-            CountsOf(reads.All.Select(finding => actions.GetValueOrDefault(finding.Signature)).OfType<RecapAction>()));
+            CountsOf(reads.All.Select(finding => actions.GetValueOrDefault(finding.Signature)).OfType<RecapAction>()),
+            estimate?.DaysWithoutCoefficient ?? 0);
     }
 
     // Null when no finding has a known I/O: an unknown volume is not a zero.

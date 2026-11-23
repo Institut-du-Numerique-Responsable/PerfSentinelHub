@@ -6,6 +6,7 @@ public static class RecapViews
 {
     public const int PilotagePriorities = 5;
     public const int ListedMoves = 50;
+    public const int PilotageSuspects = 3;
 
     /// <summary>
     ///     The screen's cut of either view: each move list stops at its first <see cref="ListedMoves" />, in
@@ -51,6 +52,13 @@ public static class RecapViews
             Priorities = [.. tech.Priorities.Take(PilotagePriorities).Select(Plain)],
             // The tiles count every active finding, the tech list only the costliest MaxFindings.
             MorePriorities = Math.Max(0, tech.Tiles.ActiveFindings - PilotagePriorities),
+            Incidents = tech.Incidents is { } incidents
+                ? incidents with
+                {
+                    Suspects = [.. incidents.Suspects.Take(PilotageSuspects).Select(suspect => suspect with { Signature = null })],
+                    MoreSuspects = incidents.MoreSuspects + Math.Max(0, incidents.Suspects.Count - PilotageSuspects)
+                }
+                : null,
             // with, not a new record: the counts of a cut snapshot ride through.
             Movements = tech.Movements with
             {
@@ -76,6 +84,9 @@ public static class RecapViews
         return view with
         {
             Priorities = [.. view.Priorities.Select(priority => ByName(priority with { Endpoint = null }))],
+            Incidents = view.Incidents is { } incidents
+                ? incidents with { Suspects = [.. incidents.Suspects.Select(suspect => suspect with { Endpoint = null })] }
+                : null,
             Movements = moves with
             {
                 New = Unnamed(moves.New),

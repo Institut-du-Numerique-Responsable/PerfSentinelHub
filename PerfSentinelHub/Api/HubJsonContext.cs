@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using PerfSentinelHub.Cards;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -10,6 +11,9 @@ namespace PerfSentinelHub.Api;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
 [JsonSerializable(typeof(StatusResponse))]
 [JsonSerializable(typeof(DetectionKnob))]
+[JsonSerializable(typeof(IReadOnlyList<LinkReason>))]
+[JsonSerializable(typeof(LinkLevel))]
+[JsonSerializable(typeof(LinkReason))]
 [JsonSerializable(typeof(ImportResponse))]
 [JsonSerializable(typeof(DetectionImportResponse))]
 [JsonSerializable(typeof(IReadOnlyList<SourceResponse>))]

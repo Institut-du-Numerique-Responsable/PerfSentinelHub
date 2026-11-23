@@ -569,4 +569,65 @@ internal static class Schema
                                     REFERENCES finding_sources(signature, source_id) ON DELETE CASCADE
                                 );
                                 """;
+
+    // The signature of one frozen row of json_each alias f: null for a row that is not an object or
+    // whose finding carries no string signature, as HubDatabase.FrozenRows skips them.
+    private const string FrozenSignature = """
+                                           CASE WHEN f.type <> 'object' THEN NULL
+                                                WHEN json_type(f.value, '$.finding.signature') = 'text'
+                                                  THEN json_extract(f.value, '$.finding.signature') END
+                                           """;
+
+    // The signatures of the row a trigger names NEW; json_each of a NULL document yields no row.
+    // Deduplicated by hand: inside a trigger the upsert's conflict policy overrides OR IGNORE.
+    private const string NewSignatures = $"""
+        INSERT INTO incident_signatures(incident_id, source_id, signature)
+        SELECT DISTINCT NEW.id, NEW.source_id, n.signature FROM (
+          SELECT {FrozenSignature} AS signature
+          FROM json_each(CASE WHEN json_valid(NEW.findings_json) THEN NEW.findings_json END) AS f) AS n
+        WHERE n.signature <> '' AND NOT EXISTS (
+          SELECT 1 FROM incident_signatures AS s
+          WHERE s.incident_id = NEW.id AND s.source_id = NEW.source_id AND s.signature = n.signature);
+        """;
+
+    // Version 24 (23 is the per-source copy columns): how suspect each finding frozen on an incident
+    // is, one row per signature, recomputed off the import path and purged with the incident. Beside
+    // it, each copy's signatures, kept by triggers on every write to incidents, so the recurrence of
+    // a signature is an indexed join rather than a parse of every earlier copy's findings. The
+    // backfill runs once, for the copies stored before version 24.
+    internal const string V24 = $"""
+        CREATE TABLE IF NOT EXISTS incident_finding_links (
+          incident_id TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          signature TEXT NOT NULL,
+          level TEXT NOT NULL,
+          level_rank INTEGER NOT NULL,
+          reasons_json TEXT NOT NULL,
+          rules_version INTEGER NOT NULL,
+          PRIMARY KEY(incident_id, source_id, signature)
+        );
+        CREATE TABLE IF NOT EXISTS incident_signatures (
+          incident_id TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          signature TEXT NOT NULL,
+          PRIMARY KEY(incident_id, source_id, signature)
+        ) WITHOUT ROWID;
+        CREATE TRIGGER IF NOT EXISTS incident_signatures_insert AFTER INSERT ON incidents BEGIN
+          {NewSignatures}
+        END;
+        CREATE TRIGGER IF NOT EXISTS incident_signatures_update AFTER UPDATE OF findings_json ON incidents
+        WHEN NEW.findings_json IS NOT OLD.findings_json BEGIN
+          DELETE FROM incident_signatures WHERE incident_id = OLD.id AND source_id = OLD.source_id;
+          {NewSignatures}
+        END;
+        CREATE TRIGGER IF NOT EXISTS incident_signatures_delete AFTER DELETE ON incidents BEGIN
+          DELETE FROM incident_signatures WHERE incident_id = OLD.id AND source_id = OLD.source_id;
+        END;
+        INSERT OR IGNORE INTO incident_signatures(incident_id, source_id, signature)
+        SELECT id, source_id, signature FROM (
+          SELECT i.id, i.source_id, {FrozenSignature} AS signature
+          FROM incidents AS i, json_each(CASE WHEN json_valid(i.findings_json) THEN i.findings_json END) AS f
+          WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version = 24))
+        WHERE signature <> '';
+        """;
 }

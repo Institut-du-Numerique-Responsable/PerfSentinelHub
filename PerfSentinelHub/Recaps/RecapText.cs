@@ -67,24 +67,32 @@ public static class RecapText
     }
 
     public static string Co2(double? grams, int sourcesWithoutCoefficient, string? missingReason, string view = "tech",
-        string lang = HubLang.En)
+        string lang = HubLang.En, int days = 0)
     {
         var (lead, figure, unit) = Co2Parts(grams, sourcesWithoutCoefficient, missingReason, view, lang);
         if (grams is null)
             return figure + " " + unit;
         return T(lang, "recap.co2.text", ("value", (lead.Length > 0 ? lead + " " : "") + figure + " " + unit),
-            ("tail", Co2Tail(sourcesWithoutCoefficient, view, lang)));
+            ("tail", Co2Tail(sourcesWithoutCoefficient, view, lang, days)));
     }
 
-    /// <summary>What a partial carbon figure leaves out, after a comma, or nothing when it is whole.</summary>
-    public static string Co2Tail(int sourcesWithoutCoefficient, string view, string lang = HubLang.En)
+    /// <summary>
+    ///     What a partial carbon figure leaves out, after a comma, or nothing when it is whole. With
+    ///     <paramref name="days" />, the distinct days left unpriced; 0 for a report frozen before they were counted.
+    /// </summary>
+    public static string Co2Tail(int sourcesWithoutCoefficient, string view, string lang = HubLang.En, int days = 0)
     {
         if (sourcesWithoutCoefficient <= 0)
             return "";
         if (view == RecapViewNames.Pilotage)
             return T(lang, "recap.co2.tail.pilotage");
-        return T(lang, "recap.co2.tail.tech." + HubLang.Plural(lang, sourcesWithoutCoefficient),
-            ("count", sourcesWithoutCoefficient.ToString(CultureInfo.InvariantCulture)));
+        var count = ("count", sourcesWithoutCoefficient.ToString(CultureInfo.InvariantCulture));
+        var plural = HubLang.Plural(lang, sourcesWithoutCoefficient);
+        if (days <= 0)
+            return T(lang, "recap.co2.tail.tech." + plural, count);
+        return T(lang, "recap.co2.tail.tech.days." + plural, count,
+            ("days", T(lang, "recap.co2.days." + HubLang.Plural(lang, days),
+                ("count", days.ToString(CultureInfo.InvariantCulture)))));
     }
 
     public static string Trend(string trend, double? change, string lang = HubLang.En)
@@ -187,6 +195,43 @@ public static class RecapText
         if (view == RecapViewNames.Pilotage)
             return T(lang, HubText.Has("gap.pilotage." + reason) ? "gap.pilotage." + reason : "gap.pilotage.other");
         return HubText.Has("gap.tech." + reason) ? T(lang, "gap.tech." + reason) : reason;
+    }
+
+    public static string IncidentKind(string kind, string lang = HubLang.En)
+    {
+        return HubText.Has("incident.kind." + kind) ? T(lang, "incident.kind." + kind) : kind;
+    }
+
+    /// <summary>Counts per incident kind, the most frequent first: <c>4 OOM kill, 2 restart</c>.</summary>
+    public static string Kinds(IReadOnlyDictionary<string, int> byKind, string lang = HubLang.En)
+    {
+        return string.Join(", ", byKind.Where(pair => pair.Value > 0).OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => pair.Value.ToString(CultureInfo.InvariantCulture) + " " + IncidentKind(pair.Key, lang)));
+    }
+
+    /// <summary>Why a finding is a suspect: strong in some kinds of incident, medium in a few more.</summary>
+    public static string SuspectWhy(RecapSuspect suspect, string lang = HubLang.En)
+    {
+        var parts = new List<string>();
+        if (suspect.Strong > 0)
+            parts.Add(T(lang, "recap.suspect.strong", ("kinds", Kinds(suspect.StrongByKind, lang))));
+        if (suspect.Medium > 0)
+            // "other" only after a strong part, which already counted some incidents.
+            parts.Add(T(lang, (suspect.Strong > 0 ? "recap.suspect.medium." : "recap.suspect.medium_only.")
+                              + HubLang.Plural(lang, suspect.Medium),
+                ("count", suspect.Medium.ToString(CultureInfo.InvariantCulture))));
+        return string.Join(", ", parts);
+    }
+
+    /// <summary>"previous week 3", with the days it was cut to when that comparison was not over.</summary>
+    public static string Previous(RecapPeriodInfo previous, string value, string lang = HubLang.En)
+    {
+        var cut = previous.TruncatedToDays is > 0 and var days
+            ? T(lang, "recap.previous.cut." + HubLang.Plural(lang, days),
+                ("count", days.ToString(CultureInfo.InvariantCulture)))
+            : "";
+        return T(lang, "recap.previous." + previous.Kind, ("cut", cut), ("value", value));
     }
 
     public static string Type(string findingType, string lang = HubLang.En)

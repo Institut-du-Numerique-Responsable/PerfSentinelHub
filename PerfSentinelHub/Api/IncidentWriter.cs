@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Api;
@@ -40,16 +41,23 @@ public static class IncidentWriter
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
 
-    /// <summary>One incident whole, the findings the row was read with included.</summary>
+    /// <summary>
+    ///     One incident whole, the findings the row was read with included, then
+    ///     the links keyed by signature: absent until the worker has assessed it.
+    ///     Without <paramref name="recurrenceNumbers" />, a recurrence reason keeps
+    ///     its code and loses its counts, read beyond what the caller may see.
+    /// </summary>
     public static async Task WriteObjectAsync(
         HttpResponse response,
         StoredIncident row,
+        IReadOnlyList<StoredLink> links,
         IReadOnlyList<SourceOptions> sources,
+        bool recurrenceNumbers,
         CancellationToken cancellationToken)
     {
         response.ContentType = "application/json";
         await using var writer = new Utf8JsonWriter(response.BodyWriter);
-        WriteIncident(writer, row, sources);
+        WriteIncident(writer, row, sources, links, recurrenceNumbers);
         await writer.FlushAsync(cancellationToken);
         await response.BodyWriter.FlushAsync(cancellationToken);
     }
@@ -75,7 +83,9 @@ public static class IncidentWriter
     private static void WriteIncident(
         Utf8JsonWriter writer,
         StoredIncident row,
-        IReadOnlyList<SourceOptions> sources)
+        IReadOnlyList<SourceOptions> sources,
+        IReadOnlyList<StoredLink>? links = null,
+        bool recurrenceNumbers = true)
     {
         using var document = JsonDocument.Parse(row.IncidentJson);
         writer.WriteStartObject();
@@ -83,7 +93,8 @@ public static class IncidentWriter
         // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var property in document.RootElement.EnumerateObject())
         {
-            if (property.Name == "ended_at_ms")
+            // The Hub writes `links` itself below: a daemon's own would be a duplicate key.
+            if (property.Name is "ended_at_ms" or "links")
                 continue;
             property.WriteTo(writer);
         }
@@ -92,6 +103,29 @@ public static class IncidentWriter
         {
             writer.WritePropertyName("findings");
             writer.WriteRawValue(row.FindingsJson);
+        }
+
+        if (links is { Count: > 0 })
+        {
+            writer.WriteStartObject("links");
+            foreach (var link in links)
+            {
+                writer.WriteStartObject(link.Signature);
+                writer.WritePropertyName("level");
+                JsonSerializer.Serialize(writer, link.Level, HubJsonContext.Default.LinkLevel);
+                writer.WritePropertyName("reasons");
+                JsonSerializer.Serialize(writer,
+                    recurrenceNumbers
+                        ? link.Reasons
+                        : [.. link.Reasons.Select(reason => reason.Code == "recurrence"
+                            ? reason with { K = null, N = null, UsualShare = null }
+                            : reason)],
+                    HubJsonContext.Default.IReadOnlyListLinkReason);
+                writer.WriteNumber("rules_version", link.RulesVersion);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
         }
 
         JsonWrite.NumberOrNull(writer, "ended_at_ms", row.EndedAtMs);

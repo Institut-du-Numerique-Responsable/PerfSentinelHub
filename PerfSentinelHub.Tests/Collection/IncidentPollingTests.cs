@@ -9,6 +9,7 @@ using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Collection;
@@ -364,6 +365,73 @@ public sealed class IncidentPollingTests : IDisposable
         Assert.Equal(expected, await PairsAsync(database, cancellationToken));
     }
 
+    // Every poll re-reads the whole ring: only a copy the upsert stored or whose findings it
+    // replaced is reported, so the link worker never reassesses an incident that did not move.
+    [Fact]
+    public async Task Upsert_reports_only_the_incidents_whose_stored_findings_changed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (_, database) = await BuildAsync(TimeProvider.System, cancellationToken);
+        const string shop = """[{"key": "team", "value": "shop"}]""";
+        var one = await IncidentAsync(await FrozenAsync(cancellationToken, shop), cancellationToken);
+        var two = await IncidentAsync(await FrozenAsync(cancellationToken, shop, shop), cancellationToken);
+
+        Assert.Equal([FixtureId], await database.UpsertIncidentsAsync("a", [one], 1000, cancellationToken));
+        Assert.Empty(await database.UpsertIncidentsAsync("a", [one], 2000, cancellationToken));
+        Assert.Equal([FixtureId], await database.UpsertIncidentsAsync("a", [two], 3000, cancellationToken));
+        Assert.Empty(await database.UpsertIncidentsAsync("a", [one], 4000, cancellationToken));
+        Assert.Equal([FixtureId], await database.TryUpsertPushedIncidentsAsync("b", [one], 5000, cancellationToken));
+        Assert.Empty((await database.TryUpsertPushedIncidentsAsync("b", [one], 6000, cancellationToken))!);
+    }
+
+    [Fact]
+    public async Task A_poll_queues_only_new_or_grown_incidents_for_their_links()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var template = await TemplateAsync(cancellationToken);
+        var body = Page(template, 0, 1);
+        await using var daemon = await FakeDaemon.StartAsync(async context =>
+        {
+            if (context.Request.Path == "/api/incidents")
+                await context.Response.WriteAsync(body, cancellationToken);
+            else
+                await Baseline(context, cancellationToken);
+        }, cancellationToken);
+        var links = new IncidentLinkQueue();
+        var (poller, _) = await BuildAsync(TimeProvider.System, cancellationToken, links: links);
+        var first = new IncidentKey(0.ToString("x32"), "prod");
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+        Assert.Equal([first], await DrainAsync(links));
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+        Assert.Empty(await DrainAsync(links));
+
+        var grown = JsonNode.Parse(template)!;
+        grown["findings"]!.AsArray().Add(grown["findings"]![0]!.DeepClone());
+        body = $"[{grown.ToJsonString().Replace(FixtureId, 0.ToString("x32"), StringComparison.Ordinal)},"
+               + $"{template.Replace(FixtureId, 1.ToString("x32"), StringComparison.Ordinal)}]";
+        await poller.PollAsync(Source(daemon), cancellationToken);
+        Assert.Equal([first, new IncidentKey(1.ToString("x32"), "prod")], await DrainAsync(links));
+    }
+
+    // What the queue holds now: the keys are written before the call that queued them returns.
+    private static async Task<List<IncidentKey>> DrainAsync(IncidentLinkQueue queue)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var keys = new List<IncidentKey>();
+        try
+        {
+            await foreach (var key in queue.ReadAllAsync(timeout.Token))
+                keys.Add(key);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        return keys;
+    }
+
     // A copy with no common pair keeps the marker row alone, so a later start can tell it
     // from a copy never derived.
     [Theory]
@@ -583,7 +651,8 @@ public sealed class IncidentPollingTests : IDisposable
     private async Task<(SourcePoller Poller, HubDatabase Database)> BuildAsync(
         TimeProvider timeProvider,
         CancellationToken cancellationToken,
-        ILogger<IncidentReader>? logger = null)
+        ILogger<IncidentReader>? logger = null,
+        IncidentLinkQueue? links = null)
     {
         var options = new HubOptions { DatabasePath = _databasePath, HttpTimeout = TimeSpan.FromSeconds(2) };
         var database = new HubDatabase(Options.Create(options), timeProvider);
@@ -592,7 +661,8 @@ public sealed class IncidentPollingTests : IDisposable
         var poller = new SourcePoller(
             client,
             database,
-            new IncidentReader(client, database, logger ?? NullLogger<IncidentReader>.Instance),
+            new IncidentReader(client, database, logger ?? NullLogger<IncidentReader>.Instance,
+                links ?? new IncidentLinkQueue()),
             new AckReader(client, database, NullLogger<AckReader>.Instance),
             new DetectionReader(client, database, new DetectionWatch(), NullLogger<DetectionReader>.Instance),
             new RingWatch(),

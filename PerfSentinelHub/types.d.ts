@@ -262,6 +262,8 @@ export interface StoredFindingRow {
     stored_at_ms?: number;
     first_seen_ms: number;
     seen_count?: number;
+    /** Set by the launcher from the incident's `links`, absent until the Hub has assessed it. */
+    link?: IncidentLink;
 }
 
 /** The detection volume of a windowed read, `FindingEnvelopeWriter.WriteVolume`. */
@@ -309,6 +311,22 @@ export interface FindingEnvelope extends StoredFindingRow, Partial<DetectionVolu
     acks?: FindingAck[];
 }
 
+/** How strongly a frozen finding is tied to its incident, `IncidentWriter`. */
+export interface IncidentLink {
+    level: "weak" | "medium" | "strong";
+    reasons: IncidentLinkReason[];
+    rules_version: number;
+}
+
+export interface IncidentLinkReason {
+    code: string;
+    ratio?: number;
+    k?: number;
+    n?: number;
+    usual_share?: number;
+    value?: number;
+}
+
 /** A row of GET /api/incidents, `IncidentWriter`: the daemon's document plus the Hub's fields. */
 export interface Incident {
     id: string;
@@ -322,6 +340,10 @@ export interface Incident {
     oldest_finding_ms?: number | null;
     /** Only on the single-incident read. */
     findings?: StoredFindingRow[];
+    /** The daemon's saturation reading at capture, 0 to 1, when it sent one. */
+    saturation?: number;
+    /** Only on the single-incident read, by signature; absent until the Hub has assessed the incident. */
+    links?: Record<string, IncidentLink>;
     ended_at_ms: number | null;
     source_id: string;
     source_name: string | null;
@@ -494,6 +516,8 @@ export interface RecapTiles {
     co2_grams: number | null;
     previous_co2_grams: number | null;
     co2_sources_without_coefficient: number;
+    /** Distinct days left unpriced; absent on a report frozen before 0.21.0. */
+    co2_days_without_coefficient?: number;
     co2_missing_reason: string | null;
     active_findings: number;
     previous_active_findings: number;
@@ -543,6 +567,33 @@ export interface RecapSnapshot {
     sources_without_volume: string[];
     truncated: boolean;
     late_sources: string[] | null;
+    /** Absent from a snapshot taken before the recap counted incidents. */
+    incidents?: RecapIncidents | null;
+}
+
+/** The period's incidents, `RecapIncidents`: counted once per id, by kind, with their recurring suspects. */
+export interface RecapIncidents {
+    count: number;
+    previous_count: number;
+    by_kind: Record<string, number>;
+    suspects: RecapSuspect[];
+    more_suspects: number;
+}
+
+/** A finding strongly or moderately linked to the period's incidents, `RecapSuspect`. */
+export interface RecapSuspect {
+    rank: number;
+    /** Absent from the pilotage view. */
+    signature?: string;
+    finding_type: string;
+    service: string;
+    /** Absent when the finding has none, and from a frozen report or a webhook. */
+    endpoint?: string;
+    strong: number;
+    medium: number;
+    strong_by_kind: Record<string, number>;
+    latest_incident_id: string;
+    latest_source_id: string;
 }
 
 /**
@@ -590,6 +641,8 @@ export interface IncidentsGuideContext {
     panel: "findings" | "none" | "gone" | null;
     /** A row is unfolded, whatever its detail says: one that failed to read is not asked to unfold. */
     unfolded: boolean;
+    /** The panel shows the saturation the alert reported. */
+    saturation?: boolean;
 }
 
 /** What the Correlations guide reads off the listing. */

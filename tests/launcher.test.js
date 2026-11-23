@@ -1477,6 +1477,97 @@ test("a frozen finding is told apart by its template, and found by it", () => {
     assert.deepEqual(sorted.map(PSL.findingTemplate), ["a", "b"]);
 });
 
+test("an incident's findings table draws a page of the matching rows and counts them all", () => {
+    const rows = ["/a", "/b", "/a/1", "/c", "/a/2"].map((endpoint) => ({finding: {source_endpoint: endpoint}}));
+    const endpoints = (page) => page.shown.map((row) => row.finding.source_endpoint);
+    const all = PSL.pageFindings(rows, "", 2);
+    assert.deepEqual(endpoints(all), ["/a", "/b"]);
+    assert.equal(all.matched, 5);
+    const filtered = PSL.pageFindings(rows, "/a", 2);
+    assert.deepEqual(endpoints(filtered), ["/a", "/a/1"]);
+    assert.equal(filtered.matched, 3);
+    assert.equal(PSL.pageFindings(rows, "/a", 10).shown.length, 3);
+    assert.deepEqual(PSL.pageFindings(rows, "orders", 2), {shown: [], matched: 0});
+});
+
+test("an incident's findings can be narrowed to one link level and sorted by it", () => {
+    const row = (endpoint, level, severity = "warning") =>
+        ({seen_count: 1, first_seen_ms: 1, finding: {source_endpoint: endpoint, severity}, link: level && {level, reasons: []}});
+    const rows = [row("/n", null), row("/w", "weak"), row("/s", "strong"), row("/m", "medium"), row("/s2", "strong", "critical")];
+    const endpoints = (list) => list.map((r) => r.finding.source_endpoint);
+    const strong = PSL.pageFindings(rows, "", 1, "strong");
+    assert.equal(strong.matched, 2);
+    assert.deepEqual(endpoints(strong.shown), ["/s"]);
+    assert.equal(PSL.pageFindings(rows, "", 10, "").matched, 5);
+    assert.equal(PSL.pageFindings(rows, "/s", 10, "strong").matched, 2);
+    assert.equal(PSL.pageFindings(rows, "/w", 10, "strong").matched, 0);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "link", "desc")), ["/s2", "/s", "/m", "/w", "/n"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "link", "asc")).slice(0, 2), ["/n", "/w"]);
+});
+
+test("a saturation outside 0 to 1 reads as absent", () => {
+    assert.equal(PSL.saturationPercent(0.9735), 97);
+    assert.equal(PSL.saturationPercent(0), 0);
+    assert.equal(PSL.saturationPercent(1), 100);
+    for (const value of [98, -0.1, null, undefined, "0.9"]) {
+        assert.equal(PSL.saturationPercent(value), null);
+    }
+});
+
+test("a link reason maps to its text key and its numbers", () => {
+    const parts = PSL.linkReasonParts;
+    assert.deepEqual(parts({code: "recurrence", k: 4, n: 5, usual_share: 0.2}),
+        {key: "incidents.link.reason.recurrence", params: {k: 4, n: 5, usual: 20}});
+    assert.deepEqual(parts({code: "intensity", ratio: 2.46}),
+        {key: "incidents.link.reason.intensity", params: {ratio: 2.5}});
+    assert.deepEqual(parts({code: "saturation", value: 0.874}),
+        {key: "incidents.link.reason.saturation", params: {value: 87}});
+    for (const code of ["mechanism_compatible", "mechanism_partial", "mechanism_incompatible",
+        "appeared_after_deploy", "intensity_new", "intensity_unknown"]) {
+        assert.deepEqual(parts({code}), {key: "incidents.link.reason." + code, params: {}});
+    }
+});
+
+test("a recurrence reason never reads an absent share or count as zero", () => {
+    const parts = PSL.linkReasonParts;
+    // No covered usual day: the share is unknown, not 0 %.
+    assert.deepEqual(parts({code: "recurrence", k: 2, n: 3}),
+        {key: "incidents.link.reason.recurrence_no_usual", params: {k: 2, n: 3}});
+    // A caller not holding the whole environment gets the code alone.
+    assert.deepEqual(parts({code: "recurrence"}),
+        {key: "incidents.link.reason.recurrence_no_numbers", params: {}});
+    for (const key of ["incidents.link.reason.recurrence_no_usual", "incidents.link.reason.recurrence_no_numbers"]) {
+        assert.ok(PSL.hasText(key), key);
+    }
+});
+
+test("an intensity or saturation reason without its number reads without one", () => {
+    const parts = PSL.linkReasonParts;
+    assert.deepEqual(parts({code: "intensity"}), {key: "incidents.link.reason.intensity_no_number", params: {}});
+    assert.deepEqual(parts({code: "saturation"}), {key: "incidents.link.reason.saturation_no_number", params: {}});
+    // A real zero is a number, not an absence.
+    assert.deepEqual(parts({code: "saturation", value: 0}), {key: "incidents.link.reason.saturation", params: {value: 0}});
+    for (const key of ["incidents.link.reason.intensity_no_number", "incidents.link.reason.saturation_no_number"]) {
+        assert.ok(PSL.hasText(key), key);
+    }
+});
+
+test("a link level without a text of its own reads neutral, never as its raw key", () => {
+    assert.equal(PSL.linkLevelKey("strong"), "incidents.link.level.strong");
+    assert.equal(PSL.linkLevelKey("weak"), "incidents.link.level.weak");
+    assert.equal(PSL.linkLevelKey("brand_new"), "incidents.link.level.unknown");
+    assert.ok(PSL.hasText("incidents.link.level.unknown"));
+    assert.ok(PSL.hasText("incidents.link.filter.none"));
+});
+
+test("a frozen row without a signature gets no link chip, one not yet assessed reads pending", () => {
+    assert.equal(PSL.linkChipLevel({finding: {signature: ""}}), null);
+    assert.equal(PSL.linkChipLevel({finding: {}}), null);
+    assert.equal(PSL.linkChipLevel({finding: {signature: "s"}}), "pending");
+    assert.equal(PSL.linkChipLevel({finding: {signature: "s"}, link: {level: "strong", reasons: [], rules_version: 2}}),
+        "strong");
+});
+
 test("a frozen finding's impact is the dashboard's traces times extra operations, absent when unscored", () => {
     const row = (seen, perTrace) => ({
         seen_count: seen, first_seen_ms: 1,
@@ -2253,6 +2344,9 @@ test("Management_text_matches_the_launcher_helpers", () => {
     assert.equal(PSL.co2Tail(1, "pilotage"), ", part of the activity has no CO2 estimate");
     assert.equal(PSL.co2Tail(2, "tech"), ", 2 sources without a coefficient");
     assert.equal(PSL.co2Tail(1, "tech"), ", 1 source without a coefficient");
+    assert.equal(PSL.co2Tail(2, "tech", 3), ", 2 sources without a coefficient on 3 days");
+    assert.equal(PSL.co2Tail(1, "tech", 1), ", 1 source without a coefficient on 1 day");
+    assert.equal(PSL.co2Tail(1, "pilotage", 2), ", part of the activity has no CO2 estimate");
     assert.equal(PSL.co2Tail(0, "pilotage"), "");
     assert.equal(PSL.confirmationLabel("confirmed", "pilotage"), "Confirmed by the measurements");
     assert.equal(PSL.confirmationLabel("contradicted", "pilotage"), "Still detected");
@@ -3134,8 +3228,8 @@ test("the steps come in the screen's order, each on its anchors", () => {
     assert.deepEqual(list.map((step) => [step.id, step.anchors]), [
         ["view", ["recap.view"]], ["period", ["recap.period"]], ["io", ["recap.io"]], ["co2", ["recap.co2"]],
         ["open", ["recap.findings", "recap.actions"]], ["table", ["recap.table"]], ["row", ["recap.row"]],
-        ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
-        ["card", ["recap.card"]], ["end", []]]);
+        ["below", ["recap.below"]], ["incidents", ["recap.incidents"]], ["moved", ["recap.moved"]],
+        ["reports", ["recap.reports"]], ["card", ["recap.card"]], ["end", []]]);
     assert.deepEqual(list.find((step) => step.id === "row").marks.map((mark) => mark.anchor),
         ["recap.row.rank", "recap.row.what", "recap.row.where", "recap.row.figure", "recap.row.trend", "recap.row.state"]);
     assert.ok(list.every((step) => step.title && Array.isArray(step.body)));
@@ -3213,6 +3307,13 @@ guideTest("a known carbon figure is an order of magnitude, at least when sources
     const partial = steps({tiles: {co2_grams: 1200, co2_sources_without_coefficient: 2}}).co2.body.join(" ");
     assert.ok(partial.includes(says.cite));
     assert.ok(partial.includes(says.atLeast));
+    // The engineering guide says over how many days the figure is short, as its tile does; pilotage never counts.
+    const tiles = {co2_grams: 1200, co2_sources_without_coefficient: 2, co2_days_without_coefficient: 3};
+    const threeDays = PSL.t("recap.co2.days.other", {count: 3});
+    assert.ok(techSteps({tiles}).co2.body.join(" ").includes(threeDays));
+    assert.ok(!techSteps({tiles: {co2_grams: 1200, co2_sources_without_coefficient: 2}}).co2.body.join(" ")
+        .includes(threeDays));
+    assert.ok(!steps({tiles}).co2.body.join(" ").includes(threeDays));
     // Under a gram the tile reads "< 1 g" with no "at least": the guide does not point at a word it does not show.
     assert.ok(!steps({tiles: {co2_grams: 0.4, co2_sources_without_coefficient: 2}}).co2.body.join(" ")
         .includes(says.atLeast));
@@ -3385,8 +3486,8 @@ test("the technical steps come in the screen's order, each on its anchors", () =
         ["findings", ["recap.findings"]], ["actions", ["recap.actions"]], ["table", ["recap.table"]],
         ["row", ["recap.row"]], ["fix", ["recap.row.detail"]], ["sql", ["recap.row.sql"]],
         ["act", ["recap.row.facts", "recap.row.state"]],
-        ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
-        ["card", ["recap.card"]], ["end", []]]);
+        ["below", ["recap.below"]], ["incidents", ["recap.incidents"]], ["moved", ["recap.moved"]],
+        ["reports", ["recap.reports"]], ["card", ["recap.card"]], ["end", []]]);
     const row = list.find((step) => step.id === "row");
     assert.deepEqual(row.body, []);
     assert.deepEqual(row.marks.map((mark) => mark.anchor),
@@ -4220,4 +4321,73 @@ test("the public and access guides have no em dash, and French addresses the rea
             assert.match(all, /(?<!\p{L})vous(?!\p{L})/iu);
         }
     });
+});
+
+// ---- the recap's incidents tile and recurring suspects
+
+test("the recap counts incidents per kind, the most first, in the shown language", () => {
+    assert.equal(PSL.incidentKindsText({restart: 2, oom_kill: 4, deploy: 1, other: 0}),
+        "4 OOM kill, 2 restart, 1 deploy");
+    assert.equal(PSL.incidentKindsText({brand_new: 1}), "1 brand_new");
+    assert.equal(PSL.incidentKindsText({}), "");
+    inLang("fr", () => assert.equal(PSL.incidentKindsText({restart: 2, oom_kill: 2}), "2 OOM kill, 2 redémarrage"));
+});
+
+test("a recurring suspect says where it was strong and how often medium, never as a cause", () => {
+    const suspect = (strong, medium, byKind) => ({
+        rank: 1, finding_type: "n_plus_one_sql", service: "s", endpoint: null, strong: strong, medium: medium,
+        strong_by_kind: byKind, latest_incident_id: "i", latest_source_id: "a"
+    });
+    assert.equal(PSL.recapSuspectWhy(suspect(4, 1, {oom_kill: 3, restart: 1})),
+        "Strong in 3 OOM kill, 1 restart, medium in 1 other incident");
+    assert.equal(PSL.recapSuspectWhy(suspect(0, 2, {})), "Medium in 2 incidents");
+    inLang("fr", () => {
+        assert.equal(PSL.recapSuspectWhy(suspect(1, 2, {oom_kill: 1})),
+            "Fort dans 1 OOM kill, moyen dans 2 autres incidents");
+        assert.equal(PSL.recapSuspectWhy(suspect(0, 1, {})), "Moyen dans 1 incident");
+    });
+    assert.doesNotMatch(PSL.recapSuspectWhy(suspect(4, 1, {oom_kill: 4})), /cause/i);
+});
+
+test("the recap guides read the incidents tile, and the suspects only when the screen lists some", () => {
+    const suspect = {
+        rank: 1, finding_type: "n_plus_one_sql", service: "s", endpoint: null, strong: 2, medium: 0,
+        strong_by_kind: {oom_kill: 2}, latest_incident_id: "i", latest_source_id: "a"
+    };
+    const withSuspects = {incidents: {count: 3, previous_count: 1, by_kind: {oom_kill: 3}, suspects: [suspect], more_suspects: 0}};
+    const without = {incidents: {count: 3, previous_count: 1, by_kind: {oom_kill: 3}, suspects: [], more_suspects: 0}};
+    for (const lang of ["en", "fr"]) {
+        inLang(lang, () => {
+            const pilotage = (over) => text(steps(over).incidents);
+            const tech = (over) => text(techSteps(over).incidents);
+            for (const read of [pilotage, tech]) {
+                assert.ok(read(withSuspects).includes(PSL.t(read === pilotage
+                    ? "guide.pilotage.incidents.suspects" : "guide.tech.incidents.suspects")), lang);
+                assert.ok(!read(without).includes(PSL.t(read === pilotage
+                    ? "guide.pilotage.incidents.suspects" : "guide.tech.incidents.suspects")), lang);
+                assert.doesNotMatch(read(withSuspects), /caused by|root cause|causé par|cause racine/i);
+            }
+        });
+    }
+});
+
+test("an unfolded incident's guide reads the link column, its filter, the paging and the bounded table", () => {
+    const keys = ["panel.link", "panel.filter", "panel.paging", "panel.scroll"];
+    for (const lang of ["en", "fr"]) {
+        inLang(lang, () => {
+            const findings = text(incidentsBy({panel: "findings", unfolded: true}).panel);
+            for (const key of keys) assert.ok(findings.includes(PSL.t("guide.incidents." + key)), lang + " " + key);
+            // The earlier steps stay.
+            for (const key of ["panel.before", "panel.analyse", "panel.correlations"]) {
+                assert.ok(findings.includes(PSL.t("guide.incidents." + key)), lang + " " + key);
+            }
+            const none = text(incidentsBy({panel: "none", unfolded: true}).panel);
+            for (const key of keys) assert.ok(!none.includes(PSL.t("guide.incidents." + key)), lang + " " + key);
+            // The saturation note is read only when the panel shows one.
+            const saturation = PSL.t("guide.incidents.panel.saturation");
+            assert.ok(!findings.includes(saturation), lang);
+            assert.ok(text(incidentsBy({panel: "findings", unfolded: true, saturation: true}).panel).includes(saturation));
+            assert.ok(text(incidentsBy({panel: "none", unfolded: true, saturation: true}).panel).includes(saturation));
+        });
+    }
 });

@@ -24,7 +24,7 @@ public sealed class RecapCo2Tests
     {
         var estimate = RecapCo2.Estimate([Row("a", 40, 3.0, 120), Row("b", 50)]);
 
-        Assert.Equal(new Co2Estimate(1, 1, null), estimate);
+        Assert.Equal(new Co2Estimate(1, 1, null, 1), estimate);
     }
 
     [Fact]
@@ -32,7 +32,8 @@ public sealed class RecapCo2Tests
     {
         var estimate = RecapCo2.Estimate([Row("a", 40), Row("a", 10, day: 20751), Row("b", 5)]);
 
-        Assert.Equal(new Co2Estimate(null, 2, "no_coefficient"), estimate);
+        // Two sources over two distinct days: the days are counted once each, whatever the source.
+        Assert.Equal(new Co2Estimate(null, 2, "no_coefficient", 2), estimate);
     }
 
     [Fact]
@@ -49,7 +50,7 @@ public sealed class RecapCo2Tests
     {
         var estimate = RecapCo2.Estimate([Row("a", 40, 0.0, 0)]);
 
-        Assert.Equal(new Co2Estimate(null, 1, "no_coefficient"), estimate);
+        Assert.Equal(new Co2Estimate(null, 1, "no_coefficient", 1), estimate);
     }
 
     [Fact]

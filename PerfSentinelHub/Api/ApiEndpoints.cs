@@ -7,6 +7,7 @@ using PerfSentinelHub.Access;
 using PerfSentinelHub.Analysis;
 using PerfSentinelHub.Collection;
 using PerfSentinelHub.Configuration;
+using PerfSentinelHub.Links;
 using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
@@ -426,6 +427,7 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
+        IncidentLinkQueue links,
         CancellationToken cancellationToken)
     {
         return PushImportAsync(request, options, admission, IncidentImportMaxBytes, IncidentParser.ParseImport,
@@ -433,9 +435,11 @@ public static partial class ApiEndpoints
             {
                 if (import.Page.Incidents.Count == 0)
                     return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-                if (!await database.TryUpsertPushedIncidentsAsync(source.Id, import.Page.Incidents,
-                        timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
+                if (await database.TryUpsertPushedIncidentsAsync(source.Id, import.Page.Incidents,
+                        timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken) is not { } changed)
                     return null;
+                foreach (var id in changed)
+                    links.Enqueue(new IncidentKey(id, source.Id));
                 if (import.Page.RejectedCount > 0)
                     LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
                         import.Page.RejectedCount);

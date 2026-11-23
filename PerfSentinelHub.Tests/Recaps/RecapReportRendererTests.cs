@@ -72,6 +72,130 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
+    public void The_engineering_report_shows_the_incidents_and_the_recurring_suspects()
+    {
+        var visible = Visible(Html(RecapSnapshots.WithIncidents()));
+
+        Assert.Contains("Incidents", visible, StringComparison.Ordinal);
+        Assert.Contains("previous week 3", visible, StringComparison.Ordinal);
+        Assert.Contains("4 OOM kill, 2 restart, 1 deploy", visible, StringComparison.Ordinal);
+        Assert.Contains("Recurring suspects", visible, StringComparison.Ordinal);
+        Assert.Contains("N+1 SQL", visible, StringComparison.Ordinal);
+        Assert.Contains("GET /orders", visible, StringComparison.Ordinal);
+        Assert.Contains("Strong in 3 OOM kill, 1 restart", visible, StringComparison.Ordinal);
+        Assert.Contains("medium in 1 other incident", visible, StringComparison.Ordinal);
+        Assert.Contains("href=\"/#/incidents\"", Html(RecapSnapshots.WithIncidents()), StringComparison.Ordinal);
+        // The link opens the screen, not one incident: its words say so.
+        Assert.Contains("Open the Incidents screen", visible, StringComparison.Ordinal);
+        Assert.DoesNotContain("cause", visible, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void The_engineering_report_says_the_suspects_it_left_out()
+    {
+        var snapshot = RecapSnapshots.WithIncidents();
+        snapshot = snapshot with { Incidents = snapshot.Incidents! with { MoreSuspects = 4 } };
+
+        Assert.Contains("…and 4 more, not listed.", Visible(Html(snapshot)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_suspect_never_strong_reads_medium_without_other()
+    {
+        var snapshot = RecapSnapshots.WithIncidents();
+        var suspect = snapshot.Incidents!.Suspects[0] with
+        {
+            Strong = 0,
+            Medium = 2,
+            StrongByKind = new Dictionary<string, int>()
+        };
+        snapshot = snapshot with { Incidents = snapshot.Incidents with { Suspects = [suspect] } };
+
+        Assert.Contains("Medium in 2 incidents", Visible(Html(snapshot)), StringComparison.Ordinal);
+        Assert.Contains("Moyen dans 2 incidents",
+            Visible(Encoding.UTF8.GetString(RecapReportRenderer.Render(snapshot, HubLang.Fr))),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_suspect_with_no_strong_and_no_medium_incident_renders_without_a_why()
+    {
+        var snapshot = RecapSnapshots.WithIncidents();
+        var suspect = snapshot.Incidents!.Suspects[0] with
+        {
+            Strong = 0,
+            Medium = 0,
+            StrongByKind = new Dictionary<string, int>()
+        };
+        snapshot = snapshot with { Incidents = snapshot.Incidents with { Suspects = [suspect] } };
+
+        var visible = Visible(Html(snapshot));
+
+        Assert.Contains("N+1 SQL", visible, StringComparison.Ordinal);
+        Assert.Contains("Open the Incidents screen", visible, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_incidents_tile_is_labelled_apart_from_its_section_heading()
+    {
+        var html = Html(RecapSnapshots.WithIncidents());
+        var french = Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapSnapshots.WithIncidents(), HubLang.Fr));
+
+        Assert.Contains("<span class=\"tile-label\">This period", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"tile-label\">Sur la p", french, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_french_report_words_the_suspects_without_a_cause()
+    {
+        var html = Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapSnapshots.WithIncidents(), HubLang.Fr));
+        var visible = Visible(html);
+
+        Assert.Contains("Suspects récurrents", visible, StringComparison.Ordinal);
+        Assert.Contains("3 OOM kill, 1 redémarrage", visible, StringComparison.Ordinal);
+        Assert.Contains("Fort dans", visible, StringComparison.Ordinal);
+        Assert.Contains("Ouvrir l'écran des incidents", visible, StringComparison.Ordinal);
+        Assert.DoesNotContain("cause", visible, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_suspect_s_service_is_encoded()
+    {
+        var html = Html(RecapSnapshots.WithIncidents(service: "<img src=x>"));
+
+        Assert.DoesNotContain("<img src=x>", html.Split("<script type=\"application/json\"")[0],
+            StringComparison.Ordinal);
+        Assert.Contains("&lt;img src=x&gt;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_management_report_keeps_three_suspects_without_endpoint_or_link()
+    {
+        var html = Html(RecapViews.Frozen(RecapSnapshots.WithIncidents(5)));
+        var visible = Visible(html);
+
+        Assert.Contains("Recurring suspects", visible, StringComparison.Ordinal);
+        Assert.Equal(3, Regex.Matches(visible, "Strong in").Count);
+        Assert.Contains("2 more in the engineering view.", visible, StringComparison.Ordinal);
+        Assert.DoesNotContain("GET /orders", visible, StringComparison.Ordinal);
+        Assert.DoesNotContain("#/incidents", html.Split("<script type=\"application/json\"")[0],
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void No_incident_block_without_incidents_or_suspects()
+    {
+        var empty = RecapSnapshots.Distinctive() with
+        {
+            Incidents = new RecapIncidents(0, 0, new Dictionary<string, int>(), [], 0)
+        };
+
+        foreach (var snapshot in new[] { RecapSnapshots.Distinctive(), empty })
+            Assert.DoesNotContain("Recurring suspects", Visible(Html(snapshot)), StringComparison.Ordinal);
+        Assert.DoesNotContain("<h2 class=\"section-head\">Incidents", Html(empty), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_french_report_says_lang_fr()
     {
         var html = Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapSnapshots.Distinctive(), HubLang.Fr));

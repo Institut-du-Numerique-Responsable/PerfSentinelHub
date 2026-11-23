@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Mail;
 using System.Text;
 using PerfSentinelHub.Configuration;
@@ -28,7 +29,7 @@ public static class RecapMail
             Subject = HubText.Get(lang, "mail.subject." + report.PeriodKind, ("period", period),
                 ("incomplete", incomplete)),
             SubjectEncoding = Encoding.UTF8,
-            Body = string.Join('\n', BodyLines(report, period, publicUrl, lang)),
+            Body = string.Join('\n', BodyLines(report, tech, period, publicUrl, lang)),
             BodyEncoding = Encoding.UTF8
         };
         if (report.Views.Contains(RecapViewNames.Pilotage))
@@ -38,7 +39,8 @@ public static class RecapMail
         return message;
     }
 
-    private static IEnumerable<string> BodyLines(RecapReportSummary report, string period, Uri? publicUrl, string lang)
+    private static IEnumerable<string> BodyLines(
+        RecapReportSummary report, RecapSnapshot tech, string period, Uri? publicUrl, string lang)
     {
         yield return HubText.Get(lang, "mail.intro." + report.PeriodKind, ("subscription", report.Subscription ?? ""),
             ("period", period));
@@ -50,6 +52,45 @@ public static class RecapMail
             yield return RecapWebhook.LinkTo(report, RecapViewNames.Tech, publicUrl, lang) is { } link
                 ? HubText.Get(lang, "mail.tech_link", ("link", link))
                 : HubText.Get(lang, "mail.no_link");
+        foreach (var line in IncidentLines(report, tech, publicUrl, lang))
+            yield return line;
         yield return HubText.Get(lang, "mail.footer");
+    }
+
+    // The management cut, whatever the views: a mail travels, so it names no endpoint or signature.
+    // A value read from a daemon must not start a line of its own in a plain-text body.
+    private static string OneLine(string value)
+    {
+        return string.Create(value.Length, value, static (span, text) =>
+        {
+            for (var i = 0; i < text.Length; i++)
+                span[i] = char.IsControl(text[i]) || text[i] is '\u2028' or '\u2029' ? ' ' : text[i];
+        });
+    }
+
+    private static IEnumerable<string> IncidentLines(
+        RecapReportSummary report, RecapSnapshot tech, Uri? publicUrl, string lang)
+    {
+        if (RecapViews.Frozen(tech).Incidents is not { } incidents ||
+            (incidents.Count == 0 && incidents.Suspects.Count == 0))
+            yield break;
+        var kinds = RecapText.Kinds(incidents.ByKind, lang);
+        yield return HubText.Get(lang, "mail.incidents",
+            ("count", RecapText.Number(incidents.Count, lang)),
+            ("previous", RecapText.Previous(tech.Previous, RecapText.Number(incidents.PreviousCount, lang), lang)),
+            ("kinds", kinds.Length > 0 ? ", " + kinds : ""));
+        if (incidents.Suspects.Count > 0)
+            yield return HubText.Get(lang, "mail.suspects");
+        foreach (var suspect in incidents.Suspects)
+            yield return HubText.Get(lang, "mail.suspect",
+                ("rank", suspect.Rank.ToString(CultureInfo.InvariantCulture)),
+                ("type", OneLine(RecapText.Type(suspect.FindingType, lang))), ("service", OneLine(suspect.Service)),
+                ("why", OneLine(RecapText.SuspectWhy(suspect, lang))));
+        if (incidents.MoreSuspects > 0)
+            yield return HubText.Get(lang, "recap.more.report." + HubLang.Plural(lang, incidents.MoreSuspects),
+                ("count", incidents.MoreSuspects.ToString(CultureInfo.InvariantCulture)));
+        // The Incidents screen sits behind the sign-in, like the engineering view.
+        if (report.Views.Contains(RecapViewNames.Tech) && publicUrl is not null)
+            yield return HubText.Get(lang, "mail.incidents_link", ("link", new Uri(publicUrl, "/#/incidents").ToString()));
     }
 }

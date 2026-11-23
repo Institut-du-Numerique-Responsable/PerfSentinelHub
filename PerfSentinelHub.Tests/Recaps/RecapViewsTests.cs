@@ -36,6 +36,33 @@ public sealed class RecapViewsTests
             new RecapMovements([Move()], [Move()], 0, [Move()], [Move()], [Move()], [Move()]), false, [], false);
     }
 
+    [Fact]
+    public void Pilotage_keeps_three_suspects_and_counts_the_rest()
+    {
+        var suspects = Enumerable.Range(1, 8).Select(rank => new RecapSuspect(
+            rank, $"s{rank}", "slow_sql", "svc", "GET /x", 9 - rank, 0, new Dictionary<string, int>(), "i", "a")).ToList();
+        var tech = Tech(1) with { Incidents = new RecapIncidents(4, 2, new Dictionary<string, int>(), suspects, 2) };
+
+        var pilotage = RecapViews.Pilotage(tech).Incidents!;
+
+        Assert.Equal(["s1", "s2", "s3"], pilotage.Suspects.Select(suspect => "s" + suspect.Rank));
+        Assert.All(pilotage.Suspects, suspect => Assert.Null(suspect.Signature));
+        Assert.Equal(7, pilotage.MoreSuspects);
+        Assert.Equal(10, tech.Incidents.Suspects.Count + tech.Incidents.MoreSuspects);
+        Assert.All(RecapViews.Frozen(tech).Incidents!.Suspects, suspect => Assert.Null(suspect.Endpoint));
+    }
+
+    [Fact]
+    public void A_frozen_report_without_incidents_still_reads()
+    {
+        var json = JsonSerializer.Serialize(Tech(1), Wire);
+        Assert.Contains("\"incidents\":null", json, StringComparison.Ordinal);
+        var old = json.Replace(",\"incidents\":null", "", StringComparison.Ordinal);
+
+        Assert.Null(JsonSerializer.Deserialize<RecapSnapshot>(old, Wire)!.Incidents);
+        Assert.Null(RecapViews.Frozen(Tech(1)).Incidents);
+    }
+
     // A week of churn listed thousands of moves: the screen reads the first of each list and its count.
     [Fact]
     public void Listed_cuts_each_move_list_and_keeps_its_count()

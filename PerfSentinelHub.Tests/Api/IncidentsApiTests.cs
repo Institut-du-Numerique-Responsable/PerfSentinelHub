@@ -2,8 +2,11 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Collection;
+using PerfSentinelHub.Links;
+using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Api;
 
@@ -187,6 +190,88 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         // poorer re-capture carried is read from the column, not from it.
         Assert.Equal(2, incident.GetProperty("findings").GetArrayLength());
         Assert.Equal(EndedAtMs, incident.GetProperty("ended_at_ms").GetInt64());
+    }
+
+    [Fact]
+    public async Task Incident_detail_carries_links_by_signature()
+    {
+        await SeedAsync();
+        await factory.Database.ReplaceLinksAsync(
+            new IncidentKey(FixtureId, "test"),
+            [
+                new StoredLink("sig-a", LinkLevel.Strong,
+                    [new LinkReason("recurrence", K: 4, N: 5, UsualShare: 0.2), new LinkReason("mechanism_compatible")],
+                    1),
+                new StoredLink("sig-b", LinkLevel.Weak, [], 1)
+            ],
+            TestContext.Current.CancellationToken);
+
+        var incident = await GetAsync(FixtureId);
+        var links = incident.GetProperty("links");
+        var strong = links.GetProperty("sig-a");
+        Assert.Equal("strong", strong.GetProperty("level").GetString());
+        Assert.Equal(1, strong.GetProperty("rules_version").GetInt32());
+        var reasons = strong.GetProperty("reasons");
+        Assert.Equal("recurrence", reasons[0].GetProperty("code").GetString());
+        Assert.Equal(4, reasons[0].GetProperty("k").GetInt32());
+        Assert.Equal(5, reasons[0].GetProperty("n").GetInt32());
+        Assert.Equal(0.2, reasons[0].GetProperty("usual_share").GetDouble());
+        Assert.False(reasons[0].TryGetProperty("ratio", out _));
+        Assert.False(reasons[1].TryGetProperty("k", out _));
+        Assert.Equal("weak", links.GetProperty("sig-b").GetProperty("level").GetString());
+        Assert.Equal(0, links.GetProperty("sig-b").GetProperty("reasons").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Incident_detail_omits_links_before_assessment()
+    {
+        await SeedAsync();
+        // Another incident has links: this one, not yet assessed, must not borrow them.
+        await factory.Database.ReplaceLinksAsync(
+            new IncidentKey(FixtureId, "test"), [new StoredLink("sig-a", LinkLevel.Weak, [], 1)],
+            TestContext.Current.CancellationToken);
+
+        Assert.True((await GetAsync(FixtureId)).TryGetProperty("links", out _));
+        Assert.False((await GetAsync(CompleteId)).TryGetProperty("links", out _));
+    }
+
+    [Fact]
+    public async Task A_links_property_in_the_relayed_document_is_not_duplicated()
+    {
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        var row = new StoredIncident("test", null, 0, null, 0, """{"id":"x","links":{"daemon":1}}""", 0, 0, "[]");
+
+        await IncidentWriter.WriteObjectAsync(
+            context.Response, row, [new StoredLink("sig-a", LinkLevel.Weak, [], 1)], [], true,
+            TestContext.Current.CancellationToken);
+
+        context.Response.Body.Position = 0;
+        var text = await new StreamReader(context.Response.Body).ReadToEndAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, text.Split("\"links\"").Length - 1);
+        Assert.Contains("sig-a", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("daemon", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Incident_listing_never_carries_links()
+    {
+        await SeedAsync();
+        await factory.Database.ReplaceLinksAsync(
+            new IncidentKey(FixtureId, "test"), [new StoredLink("sig-a", LinkLevel.Weak, [], 1)],
+            TestContext.Current.CancellationToken);
+
+        foreach (var incident in (await ListAsync("/api/incidents?source_id=test")).EnumerateArray())
+            Assert.False(incident.TryGetProperty("links", out _));
+    }
+
+    private async Task<JsonElement> GetAsync(string id)
+    {
+        using var response = await _client.GetAsync($"/api/incidents/{id}", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
+        return document.RootElement.Clone();
     }
 
     private static string Id(JsonElement incident)

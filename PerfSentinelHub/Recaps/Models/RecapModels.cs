@@ -26,7 +26,35 @@ public sealed record RecapSnapshot(
     bool Truncated,
     // The sources that recorded nothing until after the period, left out of it; null on a report
     // frozen before the field existed.
-    IReadOnlyList<string>? LateSources = null);
+    IReadOnlyList<string>? LateSources = null,
+    // The period's incidents and the signatures that keep recurring in them; null on a report
+    // frozen before the field existed.
+    RecapIncidents? Incidents = null);
+
+/// <summary>
+///     Incidents of the period, once per id across sources, against the previous period cut to the same
+///     length. Suspects are the signatures linked strongly or moderately to them, the most often first.
+/// </summary>
+public sealed record RecapIncidents(
+    int Count,
+    int PreviousCount,
+    IReadOnlyDictionary<string, int> ByKind,
+    IReadOnlyList<RecapSuspect> Suspects,
+    int MoreSuspects);
+
+public sealed record RecapSuspect(
+    int Rank,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Signature,
+    string FindingType,
+    string Service,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Endpoint,
+    int Strong,
+    int Medium,
+    IReadOnlyDictionary<string, int> StrongByKind,
+    string LatestIncidentId,
+    string LatestSourceId);
 
 public sealed record RecapPeriodInfo(
     string Kind,
@@ -87,7 +115,8 @@ public sealed record RecapTiles(
     int ActiveFindings,
     int PreviousActiveFindings,
     int AckedFindings,
-    RecapActionCounts Actions);
+    RecapActionCounts Actions,
+    int Co2DaysWithoutCoefficient = 0);
 
 public sealed record RecapActionCounts(
     int Todo,

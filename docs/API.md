@@ -274,7 +274,20 @@ each other has.
 
 `GET /api/incidents/{id}` returns one incident whole, findings included, the richest copy
 when several sources hold the id. A finding whose `first_seen_ms` is past `at_ms` fired
-only after the restart. Like `/api/findings`, both
+only after the restart. The daemon's `saturation`
+(0 to 1, when it sent one) rides in the relayed document and is read by the link rules.
+
+The single read also carries `links`, written after `findings` and absent until the Hub has
+assessed the incident, which a background worker does some time after the copy is stored.
+It maps each frozen finding's signature to `{"level", "reasons", "rules_version"}`: `level`
+is `strong`, `medium` or `weak`, `reasons` lists the facts behind it as `{"code"}` plus,
+when the reason has them, `ratio`, `k`, `n`, `usual_share` and `value` (a field with no
+value is omitted), and `rules_version` is the version of the rules that computed it. A
+`recurrence` reason counts incidents across every source of the incident's environment, so
+its `k`, `n` and `usual_share` are omitted for a caller whose access does not hold each of
+those sources whole (a service or attribute pattern does not): the code stays. The
+listing never carries `links`, and a `links` field in a daemon's own document is not relayed.
+Like `/api/findings`, the listing and the single read both
 answer whoever reaches the Hub's port: a daemon's read key protects the daemon, and the
 Hub re-exposes the frozen findings behind whatever fronts the Hub.
 
@@ -676,8 +689,11 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
 - **Carbon.** `co2_grams` is context, never a sort key: an estimate, rounded to one
   significant figure, of the extra I/O priced at each day's own grams per avoidable I/O, as the
   engine sent them with its ledger days. It is a partial minimum when some sources send
-  no coefficient: `co2_sources_without_coefficient` counts them and the figure is never
-  extrapolated. With none, `co2_grams` is `null` and `co2_missing_reason` is
+  no coefficient: `co2_sources_without_coefficient` counts them, `co2_days_without_coefficient`
+  the distinct days of the period they leave unpriced (absent on a report frozen before 0.21.0),
+  and the figure is never extrapolated. A day of the period is priced whatever its coverage: a
+  gap, a restart or an overflow leaves its detections counted, and only a missing coefficient
+  leaves them out. A period in progress covers the days up to today. With none, `co2_grams` is `null` and `co2_missing_reason` is
   `no_coefficient`, or `no_avoidable_io` when there is nothing to price. A priority carries
   its own `co2_grams` and `co2_partial`.
 - **Actions and confirmation.** A priority carries its `action` (status, owner, `owner_display`,
@@ -701,6 +717,19 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   priority or a movement item whose `label` is `null`: two rows of the same type stay apart
   by the one technical value left. A frozen report and a recap webhook drop `endpoint` on those
   rows too (see [Recap reports](#recap-reports)).
+- **Incidents.** `incidents` counts the period's incidents once each across sources, with
+  `count`, `previous_count` (the previous period cut to the same length, as the tiles are),
+  `by_kind` (`oom_kill`, `memory_saturation`, `restart`, `deploy`, `other`) and `suspects`: the
+  signatures linked `strong`, then `medium`, to those incidents, the most often first. A suspect
+  carries `rank`, `signature` (absent in the `pilotage` view), `finding_type`, `service`, `endpoint`, `strong` and `medium` (the
+  numbers of incidents), `strong_by_kind`, and `latest_incident_id` with `latest_source_id`, the
+  most recent incident it was linked to. The `tech` view keeps the 10 first suspects, `pilotage`
+  the 3 first, `more_suspects` counting the rest; a frozen report and a recap webhook drop
+  `endpoint` there too. The key is absent on a report frozen before it existed. A `grouping`
+  filter keeps the incidents whose alert carried that namespace: an incident has no grouping
+  value of its own, so on daemons whose first `grouping_attributes` is not
+  `k8s.namespace.name` a grouped recap counts no incident. A link is a suspicion to check,
+  never a proven cause.
 - **Cap.** `priorities` and each movement list keep their 5,000 first, in ranking order; the
   tiles still count every finding read, `more_priorities` the priorities past the cap and
   `movements.counts` each list's whole length. A read of more than 50,000 findings keeps the first
@@ -748,9 +777,9 @@ or repeated join the same job. `POST` and `DELETE` are refused from another site
 (`403`) and without a JSON content type (`415`), as an acknowledgment is.
 
 - **The job.** `status` is `running`, `succeeded`, `failed` (with `error_code`) or `cancelled`.
-  `stages` lists the nine steps of a computation in order, `findings_period`, `findings_open`,
-  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels` and
-  `assemble`, each `pending`, `running`, `done` (with `ms`) or `skipped` when that day has nothing
+  `stages` lists the ten steps of a computation in order, `findings_period`, `findings_open`,
+  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels`, `incidents`
+  and `assemble`, each `pending`, `running`, `done` (with `ms`) or `skipped` when that day has nothing
   to read for it, and `stage` names the one running. `progress`, from `0` to `1`, is the share of
   the expected work behind the job: each stage weighs what it took on average in the Hub's past
   computations, the findings reads most until there is one. It moves when a stage ends, never

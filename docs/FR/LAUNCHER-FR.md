@@ -260,7 +260,11 @@ même endpoint en porte souvent plusieurs, et son impact estimé, les opération
 tiret quand le daemon a le calcul green coupé. Les findings s'ouvrent du plus grave au
 moins grave, puis du plus vu au moins vu, un clic ou une touche sur l'en-tête d'une colonne
 les trie selon elle, et un champ au-dessus du tableau les restreint par endpoint ou par
-gabarit. Cinq sélecteurs restreignent la liste. Kind et service restent
+gabarit. Une colonne Lien donne à chaque finding un niveau, fort, moyen ou faible, avec ses
+raisons dans l'infobulle et pour les lecteurs d'écran, ou dit qu'il est en cours d'évaluation : elle
+indique à quel point un finding est suspect, pas une cause prouvée. Les findings s'ouvrent par ce
+niveau, et un sélecteur à côté du champ n'en garde qu'un. Quand le daemon a envoyé une lecture de
+saturation, la note au-dessus du tableau la donne. Cinq sélecteurs restreignent la liste. Kind et service restent
 visibles, namespace, environnement et daemon se replient derrière More filters, qui dit
 combien d'entre eux sont posés. Celui du namespace apparaît dès qu'une ligne en a porté un. C'est le Hub qui les applique, donc les lignes plus anciennes
 qu'un bouton charge ensuite, par centaine et depuis le magasin plutôt que depuis les
@@ -343,7 +347,7 @@ terminée compris, s'affiche à votre heure avec son fuseau (`2026-10-29 14:32 C
 
 Sur une grosse base, le récap prend plusieurs minutes : l'écran demande donc au Hub de le calculer en
 tâche ([l'API](API-FR.md#calcul-du-récap-en-tâche)) et montre où il en est : une barre de la part du travail
-faite, les neuf étapes chacune cochée avec sa durée, marquée en cours, ou pas nécessaire ce jour-là, et
+faite, les dix étapes chacune cochée avec sa durée, marquée en cours, ou pas nécessaire ce jour-là, et
 le temps écoulé depuis le début du calcul. Vous pouvez quitter la page : le Hub poursuit, et en revenant
 vous retrouvez la même tâche, ou le résultat tout de suite si elle a fini. Une fois calculé, une ligne
 dit quand, et jusqu'à quand le Hub le réutilise (10 minutes pour une période en cours ou dont un jour est encore compté, une
@@ -403,6 +407,15 @@ la page d'acquittement. Name this, ou Rename, donne à l'endpoint un nom métier
 Pilotage aussi. Le propriétaire d'une action se lit comme un nom : celui que la connexion a donné, sinon
 un nom tiré de l'identité (`alice.martin@acme.com` se lit Alice Martin), l'identité au survol. Un refus,
 pas d'identité ou pas de permission, montre dans la carte la phrase même du Hub.
+
+Incidents suit, quand la période en a eu : une tuile avec leur nombre, une fois par incident quelle
+que soit la source qui l'a vu, celui de la période précédente sous la même coupe que les autres
+tuiles, et le nombre par type. Dessous, Suspects récurrents liste les findings liés fortement ou
+moyennement à ces incidents, les plus souvent forts d'abord : le type, le service,
+l'endpoint quand la vue le montre, où il a été fort par type et combien de fois moyen, et un lien
+vers l'écran des incidents. Un niveau de lien dit à quel point un finding est suspect, pas une cause
+prouvée. La vue Technique garde dix suspects, la vue Pilotage trois, chacune disant combien elle en
+laisse de côté.
 
 What moved liste les findings nouveaux, disparus, en hausse, en baisse, revenus et terminés mais encore
 détectés, les groupes qui contiennent quelque chose seulement. Disparu est une présomption, pas la preuve

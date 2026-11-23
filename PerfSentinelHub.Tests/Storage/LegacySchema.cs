@@ -12,4 +12,14 @@ internal static class LegacySchema
                                             ALTER TABLE finding_sources ADD COLUMN finding_json TEXT;
                                             DELETE FROM schema_migrations WHERE version = 22;
                                             """;
+
+    // A version 23 database: the links table and its version row are not there yet.
+    internal const string WithoutLinks = """
+                                         DROP TABLE incident_finding_links;
+                                         DROP TRIGGER incident_signatures_insert;
+                                         DROP TRIGGER incident_signatures_update;
+                                         DROP TRIGGER incident_signatures_delete;
+                                         DROP TABLE incident_signatures;
+                                         DELETE FROM schema_migrations WHERE version = 24;
+                                         """;
 }
