@@ -109,6 +109,34 @@ public sealed partial class RecapReportRendererTests
     }
 
     [Fact]
+    public void A_suspect_with_no_strong_and_no_medium_incident_renders_without_a_why()
+    {
+        var snapshot = RecapSnapshots.WithIncidents();
+        var suspect = snapshot.Incidents!.Suspects[0] with
+        {
+            Strong = 0,
+            Medium = 0,
+            StrongByKind = new Dictionary<string, int>()
+        };
+        snapshot = snapshot with { Incidents = snapshot.Incidents with { Suspects = [suspect] } };
+
+        var visible = Visible(Html(snapshot));
+
+        Assert.Contains("N+1 SQL", visible, StringComparison.Ordinal);
+        Assert.Contains("Open the Incidents screen", visible, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_incidents_tile_is_labelled_apart_from_its_section_heading()
+    {
+        var html = Html(RecapSnapshots.WithIncidents());
+        var french = Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapSnapshots.WithIncidents(), HubLang.Fr));
+
+        Assert.Contains("<span class=\"tile-label\">This period", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"tile-label\">Sur la p", french, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_french_report_words_the_suspects_without_a_cause()
     {
         var html = Encoding.UTF8.GetString(RecapReportRenderer.Render(RecapSnapshots.WithIncidents(), HubLang.Fr));

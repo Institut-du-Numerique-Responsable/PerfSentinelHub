@@ -8667,7 +8667,7 @@
             recapHeading('recap-h-incidents', t('recap.incidents.title'), t('recap.incidents.hint'), '', ''),
             el('div', {class: 'disc-figures recap-tiles'}, [
                 el('div', {class: 'disc-figure'}, [
-                    el('span', {class: 'disc-figure-label'}, [document.createTextNode(t('recap.incidents.title')),
+                    el('span', {class: 'disc-figure-label'}, [document.createTextNode(t('recap.incidents.tile')),
                         recapProgressChip(snapshot)]),
                     el('span', {class: 'disc-figure-value', text: String(incidents.count)})
                 ].concat([recapPreviousText(snapshot, incidents.previous_count), PSL.incidentKindsText(incidents.by_kind)]

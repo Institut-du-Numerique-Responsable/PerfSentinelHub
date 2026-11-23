@@ -1625,6 +1625,7 @@
         'recap.confirm.awaiting.pilotage': 'Waiting for a full day of measurements',
         'recap.incidents.overline': '// incidents',
         'recap.incidents.title': 'Incidents',
+        'recap.incidents.tile': 'This period',
         'recap.incidents.hint': 'in the period, once each, whichever source saw them',
         'recap.suspects.title': 'Recurring suspects',
         'recap.suspects.hint': 'findings linked to this period\'s incidents, the most often first: a suspect to check, not a verdict',

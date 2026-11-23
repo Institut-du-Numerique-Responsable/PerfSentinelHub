@@ -239,6 +239,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
         var previous = span.PreviousWindow is { } before ? await Read(before, 2, []) : [];
         var ranked = RecapIncidentSuspects.Rank(rows);
         var kept = ranked.Take(TechSuspects).ToList();
+        // No services filter here on purpose: the signatures already come from the filtered incidents.
         var found = kept.Count == 0
             ? []
             : (await database.QueryFindingsAsync(

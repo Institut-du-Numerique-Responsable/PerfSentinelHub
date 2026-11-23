@@ -320,7 +320,7 @@ public static class RecapReportRenderer
         html.Append("<section class=\"section\">\n").Append(Overline(page.T("recap.incidents.overline")))
             .Append("<h2 class=\"section-head\">").Append(E(page.T("recap.incidents.title"))).Append("<small>")
             .Append(E(page.T("recap.incidents.hint"))).Append("</small></h2>\n<div class=\"tiles tiles-one\">\n");
-        Tile(html, page, page.T("recap.incidents.title"), page.Snapshot.Period.InProgress,
+        Tile(html, page, page.T("recap.incidents.tile"), page.Snapshot.Period.InProgress,
             page.Number(incidents.Count),
             [PreviousText(page, page.Number(incidents.PreviousCount)), kinds]);
         html.Append(DivEndLine);
@@ -342,7 +342,9 @@ public static class RecapReportRenderer
                 .Append("<span class=\"strong\">").Append(E(suspect.Service)).Append(SpanEnd);
             if (suspect.Endpoint is not null)
                 html.Append("<span class=\"endpoint\">").Append(E(suspect.Endpoint)).Append(SpanEnd);
-            html.Append(DivEnd).Append("<p class=\"why\">").Append(E(char.ToUpperInvariant(why[0]) + why[1..]));
+            // Strong and medium both at zero leaves nothing to say: the link alone stays.
+            html.Append(DivEnd).Append("<p class=\"why\">")
+                .Append(E(why.Length == 0 ? "" : char.ToUpperInvariant(why[0]) + why[1..]));
             // The launcher lives at the Hub's root; a frozen management report has no Hub to open it on.
             if (!page.Management)
                 html.Append(" <a href=\"/#/incidents\">").Append(E(page.T("recap.suspect.link"))).Append("</a>");

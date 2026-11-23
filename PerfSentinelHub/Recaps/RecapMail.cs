@@ -58,6 +58,16 @@ public static class RecapMail
     }
 
     // The management cut, whatever the views: a mail travels, so it names no endpoint or signature.
+    // A value read from a daemon must not start a line of its own in a plain-text body.
+    private static string OneLine(string value)
+    {
+        return string.Create(value.Length, value, static (span, text) =>
+        {
+            for (var i = 0; i < text.Length; i++)
+                span[i] = char.IsControl(text[i]) ? ' ' : text[i];
+        });
+    }
+
     private static IEnumerable<string> IncidentLines(
         RecapReportSummary report, RecapSnapshot tech, Uri? publicUrl, string lang)
     {
@@ -74,8 +84,8 @@ public static class RecapMail
         foreach (var suspect in incidents.Suspects)
             yield return HubText.Get(lang, "mail.suspect",
                 ("rank", suspect.Rank.ToString(CultureInfo.InvariantCulture)),
-                ("type", RecapText.Type(suspect.FindingType, lang)), ("service", suspect.Service),
-                ("why", RecapText.SuspectWhy(suspect, lang)));
+                ("type", OneLine(RecapText.Type(suspect.FindingType, lang))), ("service", OneLine(suspect.Service)),
+                ("why", OneLine(RecapText.SuspectWhy(suspect, lang))));
         if (incidents.MoreSuspects > 0)
             yield return HubText.Get(lang, "recap.more.report." + HubLang.Plural(lang, incidents.MoreSuspects),
                 ("count", incidents.MoreSuspects.ToString(CultureInfo.InvariantCulture)));

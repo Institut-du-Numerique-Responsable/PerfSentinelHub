@@ -1696,6 +1696,7 @@
         'recap.confirm.awaiting.pilotage': 'En attente d\'une journée complète de mesures',
         'recap.incidents.overline': '// incidents',
         'recap.incidents.title': 'Incidents',
+        'recap.incidents.tile': 'Sur la période',
         'recap.incidents.hint': 'sur la période, comptés une fois chacun, quelle que soit la source qui les a vus',
         'recap.suspects.title': 'Suspects récurrents',
         'recap.suspects.hint': 'findings liés aux incidents de la période, les plus fréquents d\'abord : un suspect à vérifier, pas un verdict',

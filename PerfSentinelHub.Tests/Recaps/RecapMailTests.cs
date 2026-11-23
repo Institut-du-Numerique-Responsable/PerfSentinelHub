@@ -90,6 +90,24 @@ public sealed class RecapMailTests
     }
 
     [Fact]
+    public void A_suspect_s_service_and_type_never_break_the_mail_into_extra_lines()
+    {
+        var snapshot = RecapSnapshots.WithIncidents(service: "svc\r\nBcc: x@example.test");
+        snapshot = snapshot with
+        {
+            Incidents = snapshot.Incidents! with
+            {
+                Suspects = [snapshot.Incidents.Suspects[0] with { FindingType = "type\nInjected line" }]
+            }
+        };
+        using var mail = Build(new Uri("https://hub.example/"), snapshot: snapshot);
+
+        Assert.DoesNotContain(mail.Body.Split('\n'), line => line.StartsWith("Bcc:", StringComparison.Ordinal));
+        Assert.DoesNotContain(mail.Body.Split('\n'), line => line.StartsWith("Injected", StringComparison.Ordinal));
+        Assert.Contains("svc  Bcc: x@example.test", mail.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_french_mail_words_the_incidents_in_french()
     {
         var summary = new RecapReportSummary(

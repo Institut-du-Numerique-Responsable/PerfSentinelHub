@@ -105,7 +105,11 @@ public sealed class RecapWebhookTests : IAsyncLifetime
         Assert.Equal(4, incidents.GetProperty("by_kind").GetProperty("oom_kill").GetInt32());
         Assert.Equal(3, incidents.GetProperty("suspects").GetArrayLength());
         Assert.All(incidents.GetProperty("suspects").EnumerateArray(),
-            suspect => Assert.False(suspect.TryGetProperty("signature", out _)));
+            suspect =>
+            {
+                Assert.False(suspect.TryGetProperty("signature", out _));
+                Assert.False(suspect.TryGetProperty("endpoint", out _));
+            });
         Assert.Equal(2, incidents.GetProperty("more_suspects").GetInt32());
         Assert.DoesNotContain("GET /orders", received.Body, StringComparison.Ordinal);
     }
