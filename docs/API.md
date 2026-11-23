@@ -286,7 +286,8 @@ value is omitted), and `rules_version` is the version of the rules that computed
 `recurrence` reason counts incidents across every source of the incident's environment, so
 its `k`, `n` and `usual_share` are omitted for a caller whose access does not hold each of
 those sources whole (a service or attribute pattern does not): the code stays. The
-listing never carries `links`. Like `/api/findings`, both
+listing never carries `links`, and a `links` field in a daemon's own document is not relayed.
+Like `/api/findings`, the listing and the single read both
 answer whoever reaches the Hub's port: a daemon's read key protects the daemon, and the
 Hub re-exposes the frozen findings behind whatever fronts the Hub.
 

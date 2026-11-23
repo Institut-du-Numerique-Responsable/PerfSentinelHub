@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -226,8 +227,31 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     public async Task Incident_detail_omits_links_before_assessment()
     {
         await SeedAsync();
-        var incident = await GetAsync(CompleteId);
-        Assert.False(incident.TryGetProperty("links", out _));
+        // Another incident has links: this one, not yet assessed, must not borrow them.
+        await factory.Database.ReplaceLinksAsync(
+            new IncidentKey(FixtureId, "test"), "test", [new StoredLink("sig-a", LinkLevel.Weak, [], 1)],
+            TestContext.Current.CancellationToken);
+
+        Assert.True((await GetAsync(FixtureId)).TryGetProperty("links", out _));
+        Assert.False((await GetAsync(CompleteId)).TryGetProperty("links", out _));
+    }
+
+    [Fact]
+    public async Task A_links_property_in_the_relayed_document_is_not_duplicated()
+    {
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        var row = new StoredIncident("test", null, 0, null, 0, """{"id":"x","links":{"daemon":1}}""", 0, 0, "[]");
+
+        await IncidentWriter.WriteObjectAsync(
+            context.Response, row, [new StoredLink("sig-a", LinkLevel.Weak, [], 1)], [], true,
+            TestContext.Current.CancellationToken);
+
+        context.Response.Body.Position = 0;
+        var text = await new StreamReader(context.Response.Body).ReadToEndAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, text.Split("\"links\"").Length - 1);
+        Assert.Contains("sig-a", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("daemon", text, StringComparison.Ordinal);
     }
 
     [Fact]

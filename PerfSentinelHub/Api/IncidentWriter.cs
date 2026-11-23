@@ -93,7 +93,8 @@ public static class IncidentWriter
         // ReSharper disable once ForeachCanBePartlyConvertedToQueryUsingAnotherGetEnumerator
         foreach (var property in document.RootElement.EnumerateObject())
         {
-            if (property.Name == "ended_at_ms")
+            // The Hub writes `links` itself below: a daemon's own would be a duplicate key.
+            if (property.Name is "ended_at_ms" or "links")
                 continue;
             property.WriteTo(writer);
         }
