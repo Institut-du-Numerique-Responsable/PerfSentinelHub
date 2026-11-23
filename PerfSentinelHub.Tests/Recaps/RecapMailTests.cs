@@ -107,6 +107,18 @@ public sealed class RecapMailTests
         Assert.Contains("svc  Bcc: x@example.test", mail.Body, StringComparison.Ordinal);
     }
 
+    // A mail client may break on the Unicode line and paragraph separators, which are not control characters.
+    [Fact]
+    public void A_suspect_s_service_never_carries_a_unicode_line_separator()
+    {
+        using var mail = Build(new Uri("https://hub.example/"),
+            snapshot: RecapSnapshots.WithIncidents(service: "svc\u2028Injected\u2029line"));
+
+        Assert.DoesNotContain('\u2028', mail.Body);
+        Assert.DoesNotContain('\u2029', mail.Body);
+        Assert.Contains("svc Injected line", mail.Body, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_french_mail_words_the_incidents_in_french()
     {

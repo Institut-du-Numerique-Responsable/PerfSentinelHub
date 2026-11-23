@@ -516,7 +516,7 @@ public static class HubText
         ["recap.incidents.tile"] = "Sur la période",
         ["recap.incidents.hint"] = "sur la période, comptés une fois chacun, quelle que soit la source qui les a vus",
         ["recap.suspects.title"] = "Suspects récurrents",
-        ["recap.suspects.hint"] = "constats liés aux incidents de la période, les plus fréquents d'abord\u00a0: un suspect à vérifier, pas un verdict",
+        ["recap.suspects.hint"] = "findings liés aux incidents de la période, les plus fréquents d'abord\u00a0: un suspect à vérifier, pas un verdict",
         ["recap.suspect.strong"] = "fort dans {kinds}",
         ["recap.suspect.medium.one"] = "moyen dans {count} autre incident",
         ["recap.suspect.medium.other"] = "moyen dans {count} autres incidents",

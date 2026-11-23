@@ -64,7 +64,7 @@ public static class RecapMail
         return string.Create(value.Length, value, static (span, text) =>
         {
             for (var i = 0; i < text.Length; i++)
-                span[i] = char.IsControl(text[i]) ? ' ' : text[i];
+                span[i] = char.IsControl(text[i]) || text[i] is '\u2028' or '\u2029' ? ' ' : text[i];
         });
     }
 
