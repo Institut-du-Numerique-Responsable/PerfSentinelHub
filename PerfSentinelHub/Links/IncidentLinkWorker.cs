@@ -54,11 +54,9 @@ public sealed partial class IncidentLinkWorker(
 
     private async Task RetryCatchUpAsync(CancellationToken stoppingToken)
     {
-        while (true)
-        {
-            await Task.Delay(CatchUpInterval, timeProvider, stoppingToken);
+        using var timer = new PeriodicTimer(CatchUpInterval, timeProvider);
+        while (await timer.WaitForNextTickAsync(stoppingToken))
             await CatchUpAsync(stoppingToken);
-        }
     }
 
     private async Task ConsumeAsync(CancellationToken stoppingToken)
