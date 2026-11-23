@@ -347,7 +347,7 @@ terminée compris, s'affiche à votre heure avec son fuseau (`2026-10-29 14:32 C
 
 Sur une grosse base, le récap prend plusieurs minutes : l'écran demande donc au Hub de le calculer en
 tâche ([l'API](API-FR.md#calcul-du-récap-en-tâche)) et montre où il en est : une barre de la part du travail
-faite, les neuf étapes chacune cochée avec sa durée, marquée en cours, ou pas nécessaire ce jour-là, et
+faite, les dix étapes chacune cochée avec sa durée, marquée en cours, ou pas nécessaire ce jour-là, et
 le temps écoulé depuis le début du calcul. Vous pouvez quitter la page : le Hub poursuit, et en revenant
 vous retrouvez la même tâche, ou le résultat tout de suite si elle a fini. Une fois calculé, une ligne
 dit quand, et jusqu'à quand le Hub le réutilise (10 minutes pour une période en cours ou dont un jour est encore compté, une

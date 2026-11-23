@@ -56,4 +56,21 @@ public static class RecapSnapshots
             new RecapMovements([Move()], [Move()], 1, [Move()], [Move()], [Move()], [Move()]), false, ["svc-quiet"],
             false);
     }
+
+    public static RecapSuspect Suspect(int rank, string service = "checkout-api", string endpoint = "GET /orders")
+    {
+        return new RecapSuspect(rank, $"sig-S{rank}", "n_plus_one_sql", service, endpoint, 4, 1,
+            new Dictionary<string, int> { ["oom_kill"] = 3, ["restart"] = 1 }, "inc-9", "src-1");
+    }
+
+    /// <summary>A period with seven incidents, against three, and one suspect more than the pilotage view keeps.</summary>
+    public static RecapSnapshot WithIncidents(int suspects = 1, string service = "checkout-api")
+    {
+        return Distinctive() with
+        {
+            Incidents = new RecapIncidents(7, 3,
+                new Dictionary<string, int> { ["oom_kill"] = 4, ["restart"] = 2, ["deploy"] = 1 },
+                [.. Enumerable.Range(1, suspects).Select(rank => Suspect(rank, service))], 0)
+        };
+    }
 }

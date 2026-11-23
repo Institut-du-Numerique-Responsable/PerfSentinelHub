@@ -189,6 +189,41 @@ public static class RecapText
         return HubText.Has("gap.tech." + reason) ? T(lang, "gap.tech." + reason) : reason;
     }
 
+    public static string IncidentKind(string kind, string lang = HubLang.En)
+    {
+        return HubText.Has("incident.kind." + kind) ? T(lang, "incident.kind." + kind) : kind;
+    }
+
+    /// <summary>Counts per incident kind, the most frequent first: <c>4 OOM kill, 2 restart</c>.</summary>
+    public static string Kinds(IReadOnlyDictionary<string, int> byKind, string lang = HubLang.En)
+    {
+        return string.Join(", ", byKind.Where(pair => pair.Value > 0).OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => pair.Value.ToString(CultureInfo.InvariantCulture) + " " + IncidentKind(pair.Key, lang)));
+    }
+
+    /// <summary>Why a finding is a suspect: strong in some kinds of incident, medium in a few more.</summary>
+    public static string SuspectWhy(RecapSuspect suspect, string lang = HubLang.En)
+    {
+        var parts = new List<string>();
+        if (suspect.Strong > 0)
+            parts.Add(T(lang, "recap.suspect.strong", ("kinds", Kinds(suspect.StrongByKind, lang))));
+        if (suspect.Medium > 0)
+            parts.Add(T(lang, "recap.suspect.medium." + HubLang.Plural(lang, suspect.Medium),
+                ("count", suspect.Medium.ToString(CultureInfo.InvariantCulture))));
+        return string.Join(", ", parts);
+    }
+
+    /// <summary>"previous week 3", with the days it was cut to when that comparison was not over.</summary>
+    public static string Previous(RecapPeriodInfo previous, string value, string lang = HubLang.En)
+    {
+        var cut = previous.TruncatedToDays is > 0 and var days
+            ? T(lang, "recap.previous.cut." + HubLang.Plural(lang, days),
+                ("count", days.ToString(CultureInfo.InvariantCulture)))
+            : "";
+        return T(lang, "recap.previous." + previous.Kind, ("cut", cut), ("value", value));
+    }
+
     public static string Type(string findingType, string lang = HubLang.En)
     {
         return HubText.Has("finding.type." + findingType) ? T(lang, "finding.type." + findingType) : findingType;

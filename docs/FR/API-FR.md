@@ -763,6 +763,17 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   sauf sur une priorité ou un élément de mouvement dont le `label` est `null` : deux lignes du
   même type restent distinguées par la seule valeur technique qui reste. Un rapport figé et un
   webhook du récap retirent aussi `endpoint` de ces lignes (voir [Rapports de récap](#rapports-de-récap)).
+- **Incidents.** `incidents` compte les incidents de la période une seule fois chacun, toutes
+  sources confondues, avec `count`, `previous_count` (la période précédente coupée à la même
+  longueur, comme les tuiles), `by_kind` (`oom_kill`, `memory_saturation`, `restart`, `deploy`,
+  `other`) et `suspects` : les signatures liées `strong`, puis `medium`, à ces incidents, les plus
+  fréquentes d'abord. Un suspect porte `rank`, `signature`, `finding_type`, `service`,
+  `endpoint`, `strong` et `medium` (des nombres d'incidents), `strong_by_kind`, et
+  `latest_incident_id` avec `latest_source_id`, l'incident le plus récent auquel il a été lié. La
+  vue `tech` garde les 10 premiers suspects, `pilotage` les 3 premiers, `more_suspects` comptant
+  les autres ; un rapport figé et un webhook du récap retirent aussi `endpoint` ici. La clé est
+  absente d'un rapport figé avant son existence. Un lien est un soupçon à vérifier, jamais une
+  cause prouvée.
 - **Plafond.** `priorities` et chaque liste de mouvements gardent leurs 5 000 premiers, dans
   l'ordre du classement ; les tuiles comptent toujours tous les findings lus, `more_priorities`
   les priorités au-delà du plafond et `movements.counts` la longueur entière de chaque liste.
@@ -815,9 +826,9 @@ répétés, rejoignent la même tâche. `POST` et `DELETE` sont refusés depuis 
 et sans type de contenu JSON (`415`), comme un acquittement.
 
 - **La tâche.** `status` vaut `running`, `succeeded`, `failed` (avec `error_code`) ou `cancelled`.
-  `stages` liste dans l'ordre les neuf étapes d'un calcul, `findings_period`, `findings_open`,
-  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels` et
-  `assemble`, chacune `pending`, `running`, `done` (avec `ms`) ou `skipped` quand ce jour-là n'a rien
+  `stages` liste dans l'ordre les dix étapes d'un calcul, `findings_period`, `findings_open`,
+  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels`, `incidents`
+  et `assemble`, chacune `pending`, `running`, `done` (avec `ms`) ou `skipped` quand ce jour-là n'a rien
   à lire pour elle, et `stage` nomme celle qui tourne. `progress`, de `0` à `1`, est la part du
   travail attendu déjà faite : chaque étape pèse ce qu'elle a pris en moyenne dans les calculs
   précédents du Hub, les lectures de findings le plus tant qu'il n'y en a pas eu. Elle avance quand

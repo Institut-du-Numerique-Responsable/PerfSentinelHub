@@ -158,6 +158,22 @@ partir des archives des daemons de production et signé par une tâche planifié
 workflow de CI pour son identité OIDC. Le Hub le garde et le montre tel qu'il est arrivé, voir
 [API-FR.md](API-FR.md#divulgations).
 
+## La saturation d'un incident vient de la règle d'alerte
+
+Un incident ne porte une `saturation` que si l'alerte qui l'a déclenché la fournit. Une règle
+dont l'expression est déjà un ratio de la limite (mémoire utilisée sur limite mémoire, par
+exemple) ajoute l'annotation `perf_sentinel_saturation` :
+
+```yaml
+annotations:
+  perf_sentinel_saturation: "{{ $value }}"
+```
+
+Le daemon accepte une valeur de 0 à 1 ou de 0 à 100, et `[daemon.incidents] saturation_annotation`
+de perf-sentinel renomme l'annotation lue. Le Hub affiche la valeur en pourcentage de la limite
+sur l'écran Incidents et s'en sert pour lier les findings à l'incident. Mettre à jour les règles
+d'un déploiement relève de ce déploiement.
+
 ## Les attributs de regroupement se choisissent sur chaque daemon
 
 Le Hub n'ajoute aucun réglage de regroupement à lui. Il enregistre, par source,

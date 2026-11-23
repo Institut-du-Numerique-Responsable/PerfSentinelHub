@@ -82,6 +82,7 @@ public static class RecapReportRenderer
         Header(html, page);
         Tiles(html, page, labels);
         Priorities(html, page);
+        Incidents(html, page);
         Moves(html, page, labels);
         Help(html, page);
         Footer(html, page);
@@ -258,17 +259,7 @@ public static class RecapReportRenderer
     {
         if (value is null)
             return "";
-        var previous = page.Snapshot.Previous;
-        return page.T("recap.previous." + previous.Kind, ("cut", CutTo(page, previous.TruncatedToDays)),
-            ("value", value));
-    }
-
-    private static string CutTo(Page page, int? days)
-    {
-        if (days is not > 0)
-            return "";
-        return page.T("recap.previous.cut." + page.Plural(days.Value),
-            (CountName, days.Value.ToString(CultureInfo.InvariantCulture)));
+        return RecapText.Previous(page.Snapshot.Previous, value, page.Lang);
     }
 
     private static string? Count(Page page, long? value)
@@ -317,6 +308,53 @@ public static class RecapReportRenderer
             html.Append("<p class=\"sources-note\">").Append(E(RecapText.Truncated(snapshot.View, page.Lang)))
                 .Append(ParagraphEndLine);
         html.Append("</section>\n");
+    }
+
+    // ---- the incidents and their recurring suspects
+
+    private static void Incidents(StringBuilder html, Page page)
+    {
+        if (page.Snapshot.Incidents is not { } incidents || (incidents.Count == 0 && incidents.Suspects.Count == 0))
+            return;
+        var kinds = RecapText.Kinds(incidents.ByKind, page.Lang);
+        html.Append("<section class=\"section\">\n").Append(Overline(page.T("recap.incidents.overline")))
+            .Append("<h2 class=\"section-head\">").Append(E(page.T("recap.incidents.title"))).Append("<small>")
+            .Append(E(page.T("recap.incidents.hint"))).Append("</small></h2>\n<div class=\"tiles tiles-one\">\n");
+        Tile(html, page, page.T("recap.incidents.title"), page.Snapshot.Period.InProgress,
+            page.Number(incidents.Count),
+            [PreviousText(page, page.Number(incidents.PreviousCount)), kinds]);
+        html.Append(DivEndLine);
+        if (incidents.Suspects.Count > 0)
+            Suspects(html, page, incidents);
+        html.Append("</section>\n");
+    }
+
+    private static void Suspects(StringBuilder html, Page page, RecapIncidents incidents)
+    {
+        html.Append("<h3 class=\"suspects-head\">").Append(E(page.T("recap.suspects.title"))).Append("<small>")
+            .Append(E(page.T("recap.suspects.hint"))).Append("</small></h3>\n<ol class=\"suspects\">\n");
+        foreach (var suspect in incidents.Suspects)
+        {
+            var why = RecapText.SuspectWhy(suspect, page.Lang);
+            html.Append("<li><span class=\"rank\">").Append(suspect.Rank.ToString(CultureInfo.InvariantCulture))
+                .Append("</span><div class=\"what\"><div class=\"head\"><span class=\"chip\">")
+                .Append(E(RecapText.Type(suspect.FindingType, page.Lang))).Append(SpanEnd)
+                .Append("<span class=\"strong\">").Append(E(suspect.Service)).Append(SpanEnd);
+            if (suspect.Endpoint is not null)
+                html.Append("<span class=\"endpoint\">").Append(E(suspect.Endpoint)).Append(SpanEnd);
+            html.Append(DivEnd).Append("<p class=\"why\">").Append(E(char.ToUpperInvariant(why[0]) + why[1..]));
+            // The launcher lives at the Hub's root; a frozen management report has no Hub to open it on.
+            if (!page.Management)
+                html.Append(" <a href=\"/#/incidents\">").Append(E(page.T("recap.suspect.link"))).Append("</a>");
+            html.Append("</p></div></li>\n");
+        }
+
+        html.Append("</ol>\n");
+        if (page.Management && incidents.MoreSuspects > 0)
+            html.Append("<p class=\"more-note\">")
+                .Append(E(page.T("recap.more.report." + page.Plural(incidents.MoreSuspects),
+                    (CountName, incidents.MoreSuspects.ToString(CultureInfo.InvariantCulture)))))
+                .Append(ParagraphEndLine);
     }
 
     // What a list the Hub kept the costliest of left out, said under it.

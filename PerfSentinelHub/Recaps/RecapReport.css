@@ -177,6 +177,41 @@ h3 {
     background: var(--surface-2);
 }
 
+.tiles.tiles-one {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.suspects-head {
+    margin: 20px 0 8px;
+    font-size: 14px;
+}
+
+.suspects-head small {
+    margin-left: 8px;
+    font-weight: 400;
+    color: var(--text-2);
+}
+
+.suspects {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.suspects li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+}
+
+.suspects .why {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--text-2);
+}
+
 .tile {
     display: flex;
     flex-direction: column;

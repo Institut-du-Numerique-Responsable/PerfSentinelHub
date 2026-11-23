@@ -91,6 +91,24 @@ public sealed class RecapWebhookTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_webhook_carries_the_incidents_of_the_pilotage_view()
+    {
+        var hub = await ReportedAsync(snapshot: RecapSnapshots.WithIncidents(5));
+
+        await RunAsync(hub);
+
+        var received = Assert.Single(_received);
+        using var body = JsonDocument.Parse(received.Body);
+        var incidents = body.RootElement.GetProperty("recap").GetProperty("incidents");
+        Assert.Equal(7, incidents.GetProperty("count").GetInt32());
+        Assert.Equal(3, incidents.GetProperty("previous_count").GetInt32());
+        Assert.Equal(4, incidents.GetProperty("by_kind").GetProperty("oom_kill").GetInt32());
+        Assert.Equal(3, incidents.GetProperty("suspects").GetArrayLength());
+        Assert.Equal(2, incidents.GetProperty("more_suspects").GetInt32());
+        Assert.DoesNotContain("GET /orders", received.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_french_subscription_s_webhook_carries_french_plain_sentences()
     {
         var hub = await ReportedAsync(language: "fr");

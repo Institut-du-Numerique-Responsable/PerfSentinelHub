@@ -406,6 +406,10 @@ elsewhere. Give `traces.read` only to those who may see cross-team traces: the b
 a source row written before the per-source copy existed serves the shared envelope until
 that source reports the finding again.
 
+An incident finding's link level and its recurrence numbers are computed over every source of
+the incident's environment, so a caller scoped to some sources can see a level influenced by
+incidents on sources it cannot read.
+
 How fresh a decision is:
 
 - provider groups are read at sign-in, so they are at most 8 hours old, and a terminal

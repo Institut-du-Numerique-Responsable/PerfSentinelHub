@@ -710,6 +710,16 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   priority or a movement item whose `label` is `null`: two rows of the same type stay apart
   by the one technical value left. A frozen report and a recap webhook drop `endpoint` on those
   rows too (see [Recap reports](#recap-reports)).
+- **Incidents.** `incidents` counts the period's incidents once each across sources, with
+  `count`, `previous_count` (the previous period cut to the same length, as the tiles are),
+  `by_kind` (`oom_kill`, `memory_saturation`, `restart`, `deploy`, `other`) and `suspects`: the
+  signatures linked `strong`, then `medium`, to those incidents, the most often first. A suspect
+  carries `rank`, `signature`, `finding_type`, `service`, `endpoint`, `strong` and `medium` (the
+  numbers of incidents), `strong_by_kind`, and `latest_incident_id` with `latest_source_id`, the
+  most recent incident it was linked to. The `tech` view keeps the 10 first suspects, `pilotage`
+  the 3 first, `more_suspects` counting the rest; a frozen report and a recap webhook drop
+  `endpoint` there too. The key is absent on a report frozen before it existed. A link is a
+  suspicion to check, never a proven cause.
 - **Cap.** `priorities` and each movement list keep their 5,000 first, in ranking order; the
   tiles still count every finding read, `more_priorities` the priorities past the cap and
   `movements.counts` each list's whole length. A read of more than 50,000 findings keeps the first
@@ -757,9 +767,9 @@ or repeated join the same job. `POST` and `DELETE` are refused from another site
 (`403`) and without a JSON content type (`415`), as an acknowledgment is.
 
 - **The job.** `status` is `running`, `succeeded`, `failed` (with `error_code`) or `cancelled`.
-  `stages` lists the nine steps of a computation in order, `findings_period`, `findings_open`,
-  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels` and
-  `assemble`, each `pending`, `running`, `done` (with `ms`) or `skipped` when that day has nothing
+  `stages` lists the ten steps of a computation in order, `findings_period`, `findings_open`,
+  `findings_closed`, `findings_previous`, `coverage`, `carbon`, `actions`, `labels`, `incidents`
+  and `assemble`, each `pending`, `running`, `done` (with `ms`) or `skipped` when that day has nothing
   to read for it, and `stage` names the one running. `progress`, from `0` to `1`, is the share of
   the expected work behind the job: each stage weighs what it took on average in the Hub's past
   computations, the findings reads most until there is one. It moves when a stage ends, never

@@ -73,6 +73,46 @@ public sealed class RecapMailTests
     }
 
     [Fact]
+    public void The_mail_lists_the_incidents_and_the_suspects_without_endpoint()
+    {
+        using var mail = Build(new Uri("https://hub.example/"), snapshot: RecapSnapshots.WithIncidents(5));
+
+        Assert.Contains("Incidents: 7 (previous week 3), 4 OOM kill, 2 restart, 1 deploy.", Lines(mail));
+        Assert.Contains("Recurring suspects:", Lines(mail));
+        Assert.Contains("1. N+1 SQL, checkout-api: strong in 3 OOM kill, 1 restart, medium in 1 other incident.",
+            Lines(mail));
+        Assert.DoesNotContain("4. N+1 SQL", mail.Body, StringComparison.Ordinal);
+        Assert.Contains("2 more in the engineering view.", Lines(mail));
+        Assert.Contains("Incidents screen, after signing in to the Hub: https://hub.example/#/incidents",
+            Lines(mail));
+        Assert.DoesNotContain("GET /orders", mail.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("cause", mail.Body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_french_mail_words_the_incidents_in_french()
+    {
+        var summary = new RecapReportSummary(
+            Id, "weekly-shop", "week", "2026-10-19", "2026-10-25", [RecapViewNames.Pilotage], true, false, null,
+            10_000, "fr");
+        using var mail = RecapMail.Build(summary, RecapSnapshots.WithIncidents(), "pm@example.test", Relay, null,
+            "fr");
+
+        Assert.Contains("Incidents\u00a0: 7 (semaine précédente 3), 4 OOM kill, 2 redémarrage, 1 déploiement.",
+            Lines(mail));
+        Assert.Contains("fort dans 3 OOM kill, 1 redémarrage", mail.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("#/incidents", mail.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_mail_has_no_incident_line_without_incidents()
+    {
+        using var mail = Build(new Uri("https://hub.example/"));
+
+        Assert.DoesNotContain("Incidents", mail.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Without_a_public_url_the_mail_says_why_there_is_no_link()
     {
         using var mail = Build(null);

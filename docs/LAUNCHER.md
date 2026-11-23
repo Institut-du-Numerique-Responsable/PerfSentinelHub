@@ -321,7 +321,7 @@ on the page, the moment an action was taken or finished included, shows in your 
 (`2026-10-29 14:32 CET`), the UTC moment on hover.
 
 On a large database the recap takes minutes, so the screen asks the Hub to compute it as a job
-([the API](API.md#recap-jobs)) and shows where it is: a bar of the share of the work done, the nine
+([the API](API.md#recap-jobs)) and shows where it is: a bar of the share of the work done, the ten
 steps each ticked off with its duration, marked running, or not needed that day, and the time since the
 computation started. You can leave the page: the Hub goes on, and coming back picks up the same job, or
 shows the result at once if it finished. Once computed, a line says when, and until when the Hub reuses
