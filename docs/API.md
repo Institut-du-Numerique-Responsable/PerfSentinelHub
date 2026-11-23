@@ -714,7 +714,7 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   `count`, `previous_count` (the previous period cut to the same length, as the tiles are),
   `by_kind` (`oom_kill`, `memory_saturation`, `restart`, `deploy`, `other`) and `suspects`: the
   signatures linked `strong`, then `medium`, to those incidents, the most often first. A suspect
-  carries `rank`, `signature`, `finding_type`, `service`, `endpoint`, `strong` and `medium` (the
+  carries `rank`, `signature` (absent in the `pilotage` view), `finding_type`, `service`, `endpoint`, `strong` and `medium` (the
   numbers of incidents), `strong_by_kind`, and `latest_incident_id` with `latest_source_id`, the
   most recent incident it was linked to. The `tech` view keeps the 10 first suspects, `pilotage`
   the 3 first, `more_suspects` counting the rest; a frozen report and a recap webhook drop

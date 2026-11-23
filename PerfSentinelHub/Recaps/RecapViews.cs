@@ -55,7 +55,7 @@ public static class RecapViews
             Incidents = tech.Incidents is { } incidents
                 ? incidents with
                 {
-                    Suspects = [.. incidents.Suspects.Take(PilotageSuspects)],
+                    Suspects = [.. incidents.Suspects.Take(PilotageSuspects).Select(suspect => suspect with { Signature = null })],
                     MoreSuspects = incidents.MoreSuspects + Math.Max(0, incidents.Suspects.Count - PilotageSuspects)
                 }
                 : null,

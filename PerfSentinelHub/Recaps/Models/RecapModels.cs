@@ -44,7 +44,8 @@ public sealed record RecapIncidents(
 
 public sealed record RecapSuspect(
     int Rank,
-    string Signature,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Signature,
     string FindingType,
     string Service,
     string? Endpoint,

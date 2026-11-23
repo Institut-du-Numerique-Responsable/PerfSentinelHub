@@ -767,7 +767,7 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   sources confondues, avec `count`, `previous_count` (la période précédente coupée à la même
   longueur, comme les tuiles), `by_kind` (`oom_kill`, `memory_saturation`, `restart`, `deploy`,
   `other`) et `suspects` : les signatures liées `strong`, puis `medium`, à ces incidents, les plus
-  fréquentes d'abord. Un suspect porte `rank`, `signature`, `finding_type`, `service`,
+  fréquentes d'abord. Un suspect porte `rank`, `signature` (absente de la vue `pilotage`), `finding_type`, `service`,
   `endpoint`, `strong` et `medium` (des nombres d'incidents), `strong_by_kind`, et
   `latest_incident_id` avec `latest_source_id`, l'incident le plus récent auquel il a été lié. La
   vue `tech` garde les 10 premiers suspects, `pilotage` les 3 premiers, `more_suspects` comptant

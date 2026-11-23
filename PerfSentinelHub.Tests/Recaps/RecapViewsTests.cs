@@ -45,7 +45,8 @@ public sealed class RecapViewsTests
 
         var pilotage = RecapViews.Pilotage(tech).Incidents!;
 
-        Assert.Equal(["s1", "s2", "s3"], pilotage.Suspects.Select(suspect => suspect.Signature));
+        Assert.Equal(["s1", "s2", "s3"], pilotage.Suspects.Select(suspect => "s" + suspect.Rank));
+        Assert.All(pilotage.Suspects, suspect => Assert.Null(suspect.Signature));
         Assert.Equal(7, pilotage.MoreSuspects);
         Assert.Equal(10, tech.Incidents.Suspects.Count + tech.Incidents.MoreSuspects);
         Assert.All(RecapViews.Frozen(tech).Incidents!.Suspects, suspect => Assert.Null(suspect.Endpoint));
