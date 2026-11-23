@@ -34,14 +34,15 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
     }
 
     private Task SeedIncidentAsync(string id, string source, long atMs, string findings,
-        string service = "checkout-svc", string kind = "oom_kill", string incidentJson = "{}") =>
+        string service = "checkout-svc", string kind = "oom_kill", string incidentJson = "{}", long findingCount = 1) =>
         ExecuteAsync("""
                      INSERT INTO incidents(id, source_id, service, kind, at_ms, window_from_ms, window_to_ms,
                        finding_count, incident_json, first_seen_ms, last_seen_ms, findings_json)
-                     VALUES ($id, $source, $service, $kind, $at, $from, $to, 1, $json, $at, $at, $findings);
+                     VALUES ($id, $source, $service, $kind, $at, $from, $to, $count, $json, $at, $at, $findings);
                      """,
             ("$id", id), ("$source", source), ("$service", service), ("$kind", kind), ("$at", atMs),
-            ("$from", atMs - 300_000), ("$to", atMs), ("$json", incidentJson), ("$findings", findings));
+            ("$from", atMs - 300_000), ("$to", atMs), ("$json", incidentJson), ("$findings", findings),
+            ("$count", findingCount));
 
     private Task SeedDayAsync(string source, long day, string ledger = "l1", int gap = 0, long overflow = 0) =>
         ExecuteAsync("""
@@ -244,8 +245,10 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         var missing = new IncidentKey(NewId(), NewId());
         var outdated = new IncidentKey(NewId(), NewId());
         var current = new IncidentKey(NewId(), NewId());
+        var empty = new IncidentKey(NewId(), NewId());
         foreach (var key in new[] { missing, outdated, current })
             await SeedIncidentAsync(key.Id, key.SourceId, AtMs, Frozen(("sig-a", "slow_sql", 1, 1)));
+        await SeedIncidentAsync(empty.Id, empty.SourceId, AtMs, "[]", findingCount: 0);
         await factory.Database.ReplaceLinksAsync(outdated, "production",
             [new StoredLink("sig-a", LinkLevel.Weak, [], 1)], Token);
         await factory.Database.ReplaceLinksAsync(current, "production",
@@ -256,6 +259,8 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         Assert.Contains(missing, needing);
         Assert.Contains(outdated, needing);
         Assert.DoesNotContain(current, needing);
+        // No frozen finding, so no link is ever written: queueing it would repeat at every start.
+        Assert.DoesNotContain(empty, needing);
     }
 
     [Fact]

@@ -235,6 +235,8 @@ public sealed partial class HubDatabase
     public async Task ReplaceLinksAsync(
         IncidentKey key, string environment, IReadOnlyList<StoredLink> links, CancellationToken cancellationToken)
     {
+        var reasonsJson = links.Select(link =>
+            JsonSerializer.Serialize(link.Reasons, HubJsonContext.Default.IReadOnlyListLinkReason)).ToArray();
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
@@ -264,12 +266,13 @@ public sealed partial class HubDatabase
                 var levelRank = command.Parameters.Add("$level_rank", SqliteType.Integer);
                 var reasons = command.Parameters.Add("$reasons_json", SqliteType.Text);
                 var rulesVersion = command.Parameters.Add("$rules_version", SqliteType.Integer);
-                foreach (var link in links)
+                for (var i = 0; i < links.Count; i++)
                 {
+                    var link = links[i];
                     signature.Value = link.Signature;
                     level.Value = link.Level.ToString().ToLowerInvariant();
                     levelRank.Value = (int)link.Level;
-                    reasons.Value = JsonSerializer.Serialize(link.Reasons, HubJsonContext.Default.IReadOnlyListLinkReason);
+                    reasons.Value = reasonsJson[i];
                     rulesVersion.Value = link.RulesVersion;
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
@@ -304,14 +307,14 @@ public sealed partial class HubDatabase
         return links;
     }
 
-    /// <summary>Incidents with no links at all, or links computed by older rules.</summary>
+    /// <summary>Incidents with frozen findings and no links at all, or links computed by older rules.</summary>
     public async Task<IReadOnlyList<IncidentKey>> IncidentsNeedingLinksAsync(int rulesVersion, CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
                               SELECT i.id, i.source_id FROM incidents AS i
-                              WHERE NOT EXISTS (
+                              WHERE i.finding_count > 0 AND NOT EXISTS (
                                 SELECT 1 FROM incident_finding_links AS l
                                 WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $rules_version);
                               """;
