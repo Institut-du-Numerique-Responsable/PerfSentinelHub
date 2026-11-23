@@ -831,6 +831,26 @@ public sealed class RecapServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_narrowed_caller_counts_only_the_incidents_its_access_reaches()
+    {
+        var at = Mon * DayMs;
+        await IncidentAsync("a", "i1", "oom_kill", at + 1000, ("s1", LinkLevel.Strong));
+        await IncidentAsync("b", "i2", "oom_kill", at + 2000, ("s1", LinkLevel.Strong));
+        await IncidentAsync("a", "i3", "oom_kill", at + 3000, "billing-svc", ("s1", LinkLevel.Strong));
+        var onlyOrders = AccessScope.Of([
+            AccessPattern.Compile(new PatternOptions { Source = "a", Service = "order-svc" })
+        ]);
+
+        var incidents = (await _service.ComputeAsync(Request(access: onlyOrders), Token)).Incidents;
+
+        Assert.NotNull(incidents);
+        Assert.Equal(1, incidents.Count);
+        var suspect = Assert.Single(incidents.Suspects);
+        Assert.Equal(1, suspect.Strong);
+        Assert.Equal("i1", suspect.LatestIncidentId);
+    }
+
+    [Fact]
     public async Task Recap_previous_count_uses_the_truncated_previous_range()
     {
         // Three closed days in: the previous week counts its Monday to Wednesday only.
@@ -869,8 +889,10 @@ public sealed class RecapServiceTests : IAsyncLifetime
         // The same incident seen by a second source counts once.
         await IncidentAsync("b", "i2", "error_spike", at + 2000, ("s-a", LinkLevel.Strong));
 
-        var suspects = (await RecapAsync()).Incidents!.Suspects;
+        var incidents = (await RecapAsync()).Incidents!;
+        var suspects = incidents.Suspects;
 
+        Assert.Equal(3, incidents.Count);
         Assert.Equal(["s-a", "s-b", "s-c"], suspects.Select(suspect => suspect.Signature));
         Assert.Equal([1, 2, 3], suspects.Select(suspect => suspect.Rank));
         Assert.Equal(2, suspects[0].Strong);
@@ -879,17 +901,25 @@ public sealed class RecapServiceTests : IAsyncLifetime
         Assert.Equal(1, suspects[0].StrongByKind["error_spike"]);
         Assert.Equal((1, 2), (suspects[1].Strong, suspects[1].Medium));
         Assert.Equal("i2", suspects[0].LatestIncidentId);
-        // A weak link counts for the latest incident, and a finding the store holds names its endpoint.
-        Assert.Equal("i3", suspects[2].LatestIncidentId);
+        // i3 is newer but links s-c only weakly, so the latest incident is the newest medium one; a
+        // finding the store holds names its endpoint.
+        Assert.Equal("i2", suspects[2].LatestIncidentId);
         Assert.Equal("GET /orders", suspects[0].Endpoint);
         Assert.Equal("unknown", suspects[1].FindingType);
     }
 
-    private async Task IncidentAsync(
+    private Task IncidentAsync(
         string source, string id, string kind, long atMs, params (string Signature, LinkLevel Level)[] links)
     {
+        return IncidentAsync(source, id, kind, atMs, "order-svc", links);
+    }
+
+    private async Task IncidentAsync(
+        string source, string id, string kind, long atMs, string service,
+        params (string Signature, LinkLevel Level)[] links)
+    {
         await _database.UpsertIncidentsAsync(
-            source, [new ParsedIncident(id, "order-svc", kind, atMs, null, atMs - 1000, atMs, null, 0, "{}", "[]")],
+            source, [new ParsedIncident(id, service, kind, atMs, null, atMs - 1000, atMs, null, 0, "{}", "[]")],
             NowMs, Token);
         await _database.ReplaceLinksAsync(
             new IncidentKey(id, source), "env",

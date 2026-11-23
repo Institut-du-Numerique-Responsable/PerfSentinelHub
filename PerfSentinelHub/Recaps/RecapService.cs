@@ -232,9 +232,10 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
                 request.Access, minRank, signatures, cancellationToken);
         }
 
-        // One read at every level: the ranking keeps strong and medium links, Latest also sees weak ones,
-        // and both come from the same rows, so a link replaced meanwhile cannot unsettle a suspect.
-        var rows = await Read(span.Period, 1, null);
+        // One read of the strong and medium links, with a bare row for an incident that has none so the
+        // counts still see it: the ranking and Latest come from the same rows, so a link replaced
+        // meanwhile cannot unsettle a suspect.
+        var rows = await Read(span.Period, 2, null);
         var previous = span.PreviousWindow is { } before ? await Read(before, 2, []) : [];
         var ranked = RecapIncidentSuspects.Rank(rows);
         var kept = ranked.Take(TechSuspects).ToList();

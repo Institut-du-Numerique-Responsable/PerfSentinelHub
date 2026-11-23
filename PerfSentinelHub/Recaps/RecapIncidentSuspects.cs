@@ -41,7 +41,7 @@ public static class RecapIncidentSuspects
     }
 
     /// <summary>
-    ///     The suspects with their latest incident (a link of any level counts) and the words of their
+    ///     The suspects with their latest incident (a strong or medium link) and the words of their
     ///     finding; a finding the store no longer holds reads <paramref name="unknown" />.
     /// </summary>
     public static List<RecapSuspect> Named(
@@ -55,7 +55,7 @@ public static class RecapIncidentSuspects
         [
             .. kept.Select(item =>
             {
-                var latest = linked.Where(row => row.Signature == item.Signature)
+                var latest = linked.Where(row => row.Signature == item.Signature && row.LevelRank >= MediumRank)
                     .OrderByDescending(row => row.AtMs)
                     .ThenBy(row => row.Id, StringComparer.Ordinal)
                     .ThenBy(row => row.SourceId, StringComparer.Ordinal)
