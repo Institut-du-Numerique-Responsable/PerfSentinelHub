@@ -6,7 +6,7 @@ namespace PerfSentinelHub.Links;
 /// </summary>
 public static class IncidentLinkRules
 {
-    public const int RulesVersion = 1;
+    public const int RulesVersion = 2;
 
     private const double HighIntensityRatio = 3;
     private const double MediumIntensityRatio = 1.5;
@@ -35,9 +35,11 @@ public static class IncidentLinkRules
         if (mechanism == Mechanism.Compatible && input.Saturation is >= SaturationBoost
             && (intensity == Signal.Medium || recurrence == Signal.Medium))
         {
+            // The reason is stored only when the boost lifts the level, not when a signal was already high.
+            var lifted = intensity != Signal.High && recurrence != Signal.High;
             intensity = intensity == Signal.Medium ? Signal.High : intensity;
             recurrence = recurrence == Signal.Medium ? Signal.High : recurrence;
-            reasons.Add(new LinkReason("saturation", Value: input.Saturation));
+            if (lifted) reasons.Add(new LinkReason("saturation", Value: input.Saturation));
         }
 
         var best = (Signal)Math.Max((int)intensity, (int)recurrence);
@@ -83,7 +85,7 @@ public static class IncidentLinkRules
             return Signal.None;
         }
 
-        if (baseline.DaysSeen == 0 || baseline.Detections <= 0)
+        if (baseline.Detections <= 0)
         {
             reasons.Add(new LinkReason("intensity_new"));
             return Signal.High;

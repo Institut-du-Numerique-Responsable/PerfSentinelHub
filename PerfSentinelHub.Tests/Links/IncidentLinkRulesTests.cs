@@ -34,6 +34,13 @@ public sealed class IncidentLinkRulesTests
             ["mechanism_compatible", "intensity_unknown", "recurrence"] },
         { "saturation boost", Input("oom_kill", "chatty_service", Daily(), 7, saturation: 0.95), LinkLevel.Strong,
             ["mechanism_compatible", "intensity", "saturation"] },
+        { "saturation not needed, high intensity", Input("oom_kill", "chatty_service", Daily(1000, 1), 35,
+            new Recurrence(5, 2), 0.95), LinkLevel.Strong,
+            ["mechanism_compatible", "intensity", "recurrence"] },
+        { "new by detections, days seen", Input("oom_kill", "chatty_service", new Baseline(7, 3, 0)), LinkLevel.Strong,
+            ["mechanism_compatible", "intensity_new"] },
+        { "not new, no days seen", Input("oom_kill", "chatty_service", new Baseline(7, 0, 50), 1), LinkLevel.Strong,
+            ["mechanism_compatible", "intensity"] },
         { "no boost below 0.9", Input("oom_kill", "chatty_service", Daily(), 7, saturation: 0.85), LinkLevel.Medium,
             ["mechanism_compatible", "intensity"] },
         { "incompatible", Input("oom_kill", "slow_sql", NewFinding, 1, new Recurrence(5, 5), 0.99), LinkLevel.Weak,
@@ -75,6 +82,13 @@ public sealed class IncidentLinkRulesTests
         var result = IncidentLinkRules.Assess(Input("oom_kill", "n_plus_one_sql", Daily(), 7));
         var ratio = Assert.Single(result.Reasons, r => r.Code == "intensity").Ratio;
         Assert.Equal(2.0, ratio!.Value, 0.1);
+    }
+
+    [Fact]
+    public void Spike_reason_carries_its_ratio()
+    {
+        var result = IncidentLinkRules.Assess(Input("oom_kill", "n_plus_one_sql", new Baseline(7, 7, 7000), 100));
+        Assert.Equal(100 / (1000.0 / 86_400_000 * Window), Assert.Single(result.Reasons, r => r.Code == "intensity").Ratio!.Value, 0.1);
     }
 
     [Fact]
