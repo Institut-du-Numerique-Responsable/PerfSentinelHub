@@ -76,7 +76,8 @@ public static class IncidentLinkRules
     private static Signal Intensity(LinkInput input, List<LinkReason> reasons)
     {
         var baseline = input.Baseline;
-        if (baseline.CoveredDays <= 0)
+        // A zero window has no expected count: the ratio would be infinite or NaN, which cannot be serialized.
+        if (baseline.CoveredDays <= 0 || input.WindowMs <= 0)
         {
             reasons.Add(new LinkReason("intensity_unknown"));
             return Signal.None;
