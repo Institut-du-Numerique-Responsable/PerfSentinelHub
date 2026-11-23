@@ -3197,8 +3197,8 @@ test("the steps come in the screen's order, each on its anchors", () => {
     assert.deepEqual(list.map((step) => [step.id, step.anchors]), [
         ["view", ["recap.view"]], ["period", ["recap.period"]], ["io", ["recap.io"]], ["co2", ["recap.co2"]],
         ["open", ["recap.findings", "recap.actions"]], ["table", ["recap.table"]], ["row", ["recap.row"]],
-        ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
-        ["card", ["recap.card"]], ["end", []]]);
+        ["below", ["recap.below"]], ["incidents", ["recap.incidents"]], ["moved", ["recap.moved"]],
+        ["reports", ["recap.reports"]], ["card", ["recap.card"]], ["end", []]]);
     assert.deepEqual(list.find((step) => step.id === "row").marks.map((mark) => mark.anchor),
         ["recap.row.rank", "recap.row.what", "recap.row.where", "recap.row.figure", "recap.row.trend", "recap.row.state"]);
     assert.ok(list.every((step) => step.title && Array.isArray(step.body)));
@@ -3448,8 +3448,8 @@ test("the technical steps come in the screen's order, each on its anchors", () =
         ["findings", ["recap.findings"]], ["actions", ["recap.actions"]], ["table", ["recap.table"]],
         ["row", ["recap.row"]], ["fix", ["recap.row.detail"]], ["sql", ["recap.row.sql"]],
         ["act", ["recap.row.facts", "recap.row.state"]],
-        ["below", ["recap.below"]], ["moved", ["recap.moved"]], ["reports", ["recap.reports"]],
-        ["card", ["recap.card"]], ["end", []]]);
+        ["below", ["recap.below"]], ["incidents", ["recap.incidents"]], ["moved", ["recap.moved"]],
+        ["reports", ["recap.reports"]], ["card", ["recap.card"]], ["end", []]]);
     const row = list.find((step) => step.id === "row");
     assert.deepEqual(row.body, []);
     assert.deepEqual(row.marks.map((mark) => mark.anchor),
@@ -4311,3 +4311,40 @@ test("a recurring suspect says where it was strong and how often medium, never a
     assert.doesNotMatch(PSL.recapSuspectWhy(suspect(4, 1, {oom_kill: 4})), /cause/i);
 });
 
+test("the recap guides read the incidents tile, and the suspects only when the screen lists some", () => {
+    const suspect = {
+        rank: 1, finding_type: "n_plus_one_sql", service: "s", endpoint: null, strong: 2, medium: 0,
+        strong_by_kind: {oom_kill: 2}, latest_incident_id: "i", latest_source_id: "a"
+    };
+    const withSuspects = {incidents: {count: 3, previous_count: 1, by_kind: {oom_kill: 3}, suspects: [suspect], more_suspects: 0}};
+    const without = {incidents: {count: 3, previous_count: 1, by_kind: {oom_kill: 3}, suspects: [], more_suspects: 0}};
+    for (const lang of ["en", "fr"]) {
+        inLang(lang, () => {
+            const pilotage = (over) => text(steps(over).incidents);
+            const tech = (over) => text(techSteps(over).incidents);
+            for (const read of [pilotage, tech]) {
+                assert.ok(read(withSuspects).includes(PSL.t(read === pilotage
+                    ? "guide.pilotage.incidents.suspects" : "guide.tech.incidents.suspects")), lang);
+                assert.ok(!read(without).includes(PSL.t(read === pilotage
+                    ? "guide.pilotage.incidents.suspects" : "guide.tech.incidents.suspects")), lang);
+                assert.doesNotMatch(read(withSuspects), /caused by|root cause|causé par|cause racine/i);
+            }
+        });
+    }
+});
+
+test("an unfolded incident's guide reads the link column, its filter, the paging and the bounded table", () => {
+    const keys = ["panel.link", "panel.filter", "panel.paging", "panel.scroll"];
+    for (const lang of ["en", "fr"]) {
+        inLang(lang, () => {
+            const findings = text(incidentsBy({panel: "findings", unfolded: true}).panel);
+            for (const key of keys) assert.ok(findings.includes(PSL.t("guide.incidents." + key)), lang + " " + key);
+            // The earlier steps stay.
+            for (const key of ["panel.before", "panel.analyse", "panel.correlations"]) {
+                assert.ok(findings.includes(PSL.t("guide.incidents." + key)), lang + " " + key);
+            }
+            const none = text(incidentsBy({panel: "none", unfolded: true}).panel);
+            for (const key of keys) assert.ok(!none.includes(PSL.t("guide.incidents." + key)), lang + " " + key);
+        });
+    }
+});

@@ -3500,6 +3500,7 @@
         if (snapshot.priorities.length) steps.push(guideRowStep(snapshot.priorities[0]));
         steps.push(
             guideStep('below', ['recap.below']),
+            recapIncidentsStep(snapshot, guideText),
             guideMovedStep(snapshot),
             guideStep('reports', ['recap.reports']),
             guideStep('card', ['recap.card']),
@@ -3639,6 +3640,19 @@
         });
     }
 
+    /**
+     * The incidents tile, then the recurring suspects when the screen lists some. The controller drops
+     * the step on a snapshot without incidents, where the screen draws no section.
+     * @param {import('../types').RecapSnapshot} snapshot
+     * @param {(key: string, vars?: Record<string, string | number>) => string} text the view's texts
+     * @returns {import('../types').GuideStep}
+     */
+    function recapIncidentsStep(snapshot, text) {
+        const body = [text('incidents.body')];
+        if (snapshot.incidents && hasItems(snapshot.incidents.suspects)) body.push(text('incidents.suspects'));
+        return guideStep('incidents', ['recap.incidents'], {body}, text);
+    }
+
     // ---- the guide of the technical recap
 
     /**
@@ -3695,6 +3709,7 @@
         if (first) steps.push(techActStep(first));
         steps.push(
             techStep('below', ['recap.below']),
+            recapIncidentsStep(snapshot, techText),
             techMovedStep(snapshot, (ctx && ctx.movesOpen) || {}, Boolean(ctx && ctx.movesWhole)),
             techStep('reports', ['recap.reports']),
             guideStep('card', ['recap.card']),
@@ -4188,8 +4203,10 @@
         if (ctx.panel === 'gone') steps.push(guideStep('panel', ['incidents.panel'], {body: [text('panel.gone')]}, text));
         else if (ctx.panel) {
             steps.push(guideStep('panel', ['incidents.panel'], {
-                body: [text(ctx.panel === 'none' ? 'panel.none' : 'panel.before'), text('panel.analyse'),
-                    text('panel.correlations')]
+                body: ctx.panel === 'none'
+                    ? [text('panel.none'), text('panel.analyse'), text('panel.correlations')]
+                    : [text('panel.before'), text('panel.link'), text('panel.filter'), text('panel.paging'),
+                        text('panel.scroll'), text('panel.analyse'), text('panel.correlations')]
             }, text));
         }
         steps.push(
