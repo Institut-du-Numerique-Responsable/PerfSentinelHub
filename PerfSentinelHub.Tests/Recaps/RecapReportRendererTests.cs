@@ -85,7 +85,25 @@ public sealed partial class RecapReportRendererTests
         Assert.Contains("Strong in 3 OOM kill, 1 restart", visible, StringComparison.Ordinal);
         Assert.Contains("medium in 1 other incident", visible, StringComparison.Ordinal);
         Assert.Contains("href=\"/#/incidents\"", Html(RecapSnapshots.WithIncidents()), StringComparison.Ordinal);
+        // The link opens the screen, not one incident: its words say so.
+        Assert.Contains("Open the Incidents screen", visible, StringComparison.Ordinal);
         Assert.DoesNotContain("cause", visible, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_suspect_never_strong_reads_medium_without_other()
+    {
+        var snapshot = RecapSnapshots.WithIncidents();
+        var suspect = snapshot.Incidents!.Suspects[0] with
+        {
+            Strong = 0, Medium = 2, StrongByKind = new Dictionary<string, int>()
+        };
+        snapshot = snapshot with { Incidents = snapshot.Incidents with { Suspects = [suspect] } };
+
+        Assert.Contains("Medium in 2 incidents", Visible(Html(snapshot)), StringComparison.Ordinal);
+        Assert.Contains("Moyen dans 2 incidents",
+            Visible(Encoding.UTF8.GetString(RecapReportRenderer.Render(snapshot, HubLang.Fr))),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,6 +115,7 @@ public sealed partial class RecapReportRendererTests
         Assert.Contains("Suspects récurrents", visible, StringComparison.Ordinal);
         Assert.Contains("3 OOM kill, 1 redémarrage", visible, StringComparison.Ordinal);
         Assert.Contains("Fort dans", visible, StringComparison.Ordinal);
+        Assert.Contains("Ouvrir l'écran des incidents", visible, StringComparison.Ordinal);
         Assert.DoesNotContain("cause", visible, StringComparison.OrdinalIgnoreCase);
     }
 

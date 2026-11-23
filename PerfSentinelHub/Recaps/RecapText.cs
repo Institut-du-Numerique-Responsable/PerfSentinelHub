@@ -209,7 +209,9 @@ public static class RecapText
         if (suspect.Strong > 0)
             parts.Add(T(lang, "recap.suspect.strong", ("kinds", Kinds(suspect.StrongByKind, lang))));
         if (suspect.Medium > 0)
-            parts.Add(T(lang, "recap.suspect.medium." + HubLang.Plural(lang, suspect.Medium),
+            // "other" only after a strong part, which already counted some incidents.
+            parts.Add(T(lang, (suspect.Strong > 0 ? "recap.suspect.medium." : "recap.suspect.medium_only.")
+                              + HubLang.Plural(lang, suspect.Medium),
                 ("count", suspect.Medium.ToString(CultureInfo.InvariantCulture))));
         return string.Join(", ", parts);
     }
