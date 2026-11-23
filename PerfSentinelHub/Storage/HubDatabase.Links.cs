@@ -131,15 +131,16 @@ public sealed partial class HubDatabase
                 var type = finding.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
                     ? t.GetString() ?? ""
                     : "";
-                yield return (signature, type, LongOf(row, "seen_count"), LongOf(row, "first_seen_ms"));
+                // A row without a seen count was seen once, as the daemon defaults it.
+                yield return (signature, type, LongOf(row, "seen_count", 1), LongOf(row, "first_seen_ms", 0));
             }
         }
     }
 
-    private static long LongOf(JsonElement row, string name) =>
+    private static long LongOf(JsonElement row, string name, long fallback) =>
         row.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)
             ? number
-            : 0;
+            : fallback;
 
     private static async Task<(Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
         SqliteConnection connection, string sourceId, long day, HashSet<string> wanted,
@@ -169,9 +170,13 @@ public sealed partial class HubDatabase
         {
             command.CommandText = """
                                   SELECT signature, day, sum(detections) FROM detection_counts
-                                  WHERE source_id = $source_id AND day BETWEEN $from_day AND $to_day
+                                  WHERE signature IN (SELECT value FROM json_each($wanted))
+                                    AND source_id = $source_id AND day BETWEEN $from_day AND $to_day
+                                    AND detections > 0
                                   GROUP BY signature, day;
                                   """;
+            command.Parameters.AddWithValue("$wanted",
+                JsonSerializer.Serialize([.. wanted], HubJsonContext.Default.StringArray));
             command.Parameters.AddWithValue("$source_id", sourceId);
             command.Parameters.AddWithValue("$from_day", day - BaselineDays);
             command.Parameters.AddWithValue("$to_day", day - 1);
@@ -179,8 +184,6 @@ public sealed partial class HubDatabase
             while (await reader.ReadAsync(cancellationToken))
             {
                 var signature = reader.GetString(0);
-                if (!wanted.Contains(signature))
-                    continue;
                 seenBefore.Add(signature);
                 if (!covered.Contains(reader.GetInt64(1)))
                     continue;

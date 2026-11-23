@@ -138,6 +138,54 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
     }
 
     [Fact]
+    public async Task Baseline_ignores_rows_below_the_detection_threshold()
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs, Frozen(("sig-a", "n_plus_one_sql", 1, AtMs)));
+        await SeedDayAsync(source, Day - 1);
+        // A pass below the threshold stores a zero row: the signature was not detected that day.
+        await SeedCountAsync(source, "sig-a", Day - 1, 0);
+
+        var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
+
+        Assert.NotNull(context);
+        Assert.Equal(new Baseline(1, 0, 0), context.Baselines["sig-a"]);
+        Assert.Empty(context.SeenBeforeDeploy);
+    }
+
+    [Fact]
+    public async Task Baseline_spans_the_seven_days_before_the_incident_day()
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs, Frozen(("sig-a", "n_plus_one_sql", 1, AtMs)));
+        await SeedDayAsync(source, Day - 7);
+        await SeedDayAsync(source, Day - 8);
+        await SeedCountAsync(source, "sig-a", Day - 7, 3);
+        await SeedCountAsync(source, "sig-a", Day - 8, 50);
+
+        var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
+
+        Assert.NotNull(context);
+        Assert.Equal(new Baseline(1, 1, 3), context.Baselines["sig-a"]);
+    }
+
+    [Fact]
+    public async Task Frozen_row_without_seen_count_counts_once()
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs,
+            """[{"finding":{"type":"slow_sql","signature":"sig-a"},"first_seen_ms":5}]""");
+
+        var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
+
+        Assert.NotNull(context);
+        Assert.Equal(new FrozenSignature("sig-a", "slow_sql", 1, 5), Assert.Single(context.Signatures));
+    }
+
+    [Fact]
     public async Task Recurrence_counts_earlier_incidents_of_the_environment_once_per_id()
     {
         var id = NewId();
@@ -151,6 +199,8 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         await SeedIncidentAsync(shared, source, AtMs - DayMs, frozen);
         await SeedIncidentAsync(shared, twin, AtMs - DayMs, frozen);
         await SeedIncidentAsync(NewId(), source, AtMs - 2 * DayMs, Frozen(("sig-z", "slow_sql", 1, 1)));
+        // Exactly 30 days earlier is still inside the lookback.
+        await SeedIncidentAsync(NewId(), source, AtMs - 30 * DayMs, frozen);
         // Ignored: another environment, older than 30 days, later, another service or kind.
         await SeedIncidentAsync(NewId(), other, AtMs - DayMs, frozen);
         await SeedIncidentAsync(NewId(), source, AtMs - 31 * DayMs, frozen);
@@ -162,7 +212,7 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
             new IncidentKey(id, source), [source, twin], Token);
 
         Assert.NotNull(context);
-        Assert.Equal(new Recurrence(2, 1), context.Recurrences["sig-a"]);
+        Assert.Equal(new Recurrence(3, 2), context.Recurrences["sig-a"]);
     }
 
     [Fact]
