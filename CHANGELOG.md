@@ -2,6 +2,43 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- Each finding frozen on an incident gets a link level, `strong`, `medium` or `weak`, with the
+  reasons behind it: whether its type fits the incident's kind, how far its count in the incident
+  window exceeds its usual rate over the 7 covered days before, how often it came back on earlier
+  incidents of the same environment, service and kind over 30 days, and the alert's saturation.
+  A background worker assesses an incident after its copy is stored, so an import never waits
+  on it, and catches up at start and every hour on copies with no links or links from older
+  rules. `GET /api/incidents/{id}` carries them as `links`; a caller that does not hold every
+  source of the environment sees a recurrence reason without its numbers. A link is a suspicion
+  to check, never a proven cause.
+- An unfolded incident on the Incidents screen lists its frozen findings 20 at a time in a
+  bounded table, with each finding's link level and its reasons, and a select that keeps one
+  level.
+- The recap carries the period's incidents: their count against the previous period, their
+  count by kind, and the suspects, the signatures linked `strong` or `medium` to them, the most
+  often first. The screen, the HTML report, the mail and the webhook show them; the `tech` view
+  lists 10 suspects and the `pilotage` view 3, each saying how many it leaves out. A `grouping`
+  filter keeps the incidents whose alert carried that namespace.
+
+### Changed
+
+- The image ships perf-sentinel `0.49.0` as its analysis engine, repinned by digest from
+  `0.48.1`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.48.1` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. An incident can now carry the alert's
+  `saturation`, read from the `perf_sentinel_saturation` annotation: a bare number is a ratio, a
+  number ending in `%` a percentage, both capped at 1. The Incidents screen shows it as a
+  percentage of the limit, and the link rules use it. The Hub reads a value outside 0 to 1 as no
+  saturation, since only a malformed push can send one. No report format, disclosure schema or
+  daemon route changes.
+- Schema migration 24 adds the `incident_finding_links` table. At the first start the worker
+  assesses every stored incident with frozen findings, off the import path; on a Hub holding
+  thousands of incidents of one service and kind within 30 days that first pass takes a while.
+
 ## [0.20.3] - 2026-11-22
 
 ### Changed
