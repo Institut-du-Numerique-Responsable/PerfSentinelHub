@@ -380,7 +380,7 @@ identity on hover. A refusal, no identity or no permission, shows the Hub's own 
 
 Incidents follows, when the period had any: a tile with their count, once per incident whichever
 source saw it, the previous period's count under the same cut as the other tiles, and the count per
-kind. Under it, Recurring suspects lists the findings linked strongly or moderately to several of
+kind. Under it, Recurring suspects lists the findings linked strongly or moderately to
 those incidents, the most often strong first: the type, the service, the endpoint when the view
 shows it, where it was strong by kind and how often medium, and a link to the Incidents screen. A
 link level says how suspect a finding is, not a proven cause. The Engineering view keeps ten

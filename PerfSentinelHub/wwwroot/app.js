@@ -411,7 +411,7 @@
         ack: null,
         // The route an in-app Ack link was followed from, for the page's way back.
         ackReturn: null,
-        // How an incident's frozen findings are ordered: worst, then most seen, first.
+        // How an incident's frozen findings are ordered: strongest link first, ties worst and most seen first.
         findingSort: {key: 'link', dir: 'desc'},
         incidentFiltersOpen: false,
         // What was typed above each incident's findings, by incident key.
@@ -1303,13 +1303,17 @@
         const refused = (state.sources || []).find(function (source) {
             return source.incidents_state === 'unauthorized';
         });
-        const panels = state.incidents.map(incidentGuidePanel).filter(Boolean);
+        const opened = state.incidents.find(incidentGuidePanel);
+        const panel = opened ? incidentGuidePanel(opened) : null;
+        const detail = opened && panel !== 'gone' ? state.incidentDetails[opened.id] : null;
         return {
             status: 'ready', steps: PSL.incidentsSteps({
                 stale: state.incidentsError === 'stale',
                 unauthorized: refused ? refused.name : null,
                 filtered: Object.values(state.incidentFilter).some(Boolean),
-                panel: panels[0] || null,
+                panel,
+                saturation: detail !== null && typeof detail === 'object'
+                    && PSL.saturationPercent(detail.saturation) !== null,
                 unfolded: state.incidents.some(function (incident) {
                     return state.panelOpen[foldKey(incident)] === true;
                 })
@@ -6421,7 +6425,9 @@
         // The Hub's assessment rides on each row, so the sort and the filter read it like any other column.
         const links = detail.links || {};
         const findings = PSL.sortFindings((detail.findings || []).map(function (row) {
-            const link = row.finding && row.finding.signature ? links[row.finding.signature] : undefined;
+            // Own keys only: a signature such as `constructor` must not read Object.prototype.
+            const signature = row.finding && row.finding.signature;
+            const link = signature && Object.prototype.hasOwnProperty.call(links, signature) ? links[signature] : undefined;
             return link ? {...row, link: link} : row;
         }), state.findingSort.key, state.findingSort.dir);
         // A link, so it opens in a new tab too. Its end is clamped to the moment it is followed.
@@ -8666,7 +8672,7 @@
     // ---- the incidents and their recurring suspects
 
     /**
-     * The period's incidents and the findings linked to several of them, as the report shows them.
+     * The period's incidents and the findings linked to them, as the report shows them.
      * Absent from a snapshot taken before incidents were counted, and from a period without any.
      * @param {RecapSnapshot} snapshot
      */

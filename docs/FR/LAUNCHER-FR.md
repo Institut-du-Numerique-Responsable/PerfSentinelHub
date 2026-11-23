@@ -411,7 +411,7 @@ pas d'identité ou pas de permission, montre dans la carte la phrase même du Hu
 Incidents suit, quand la période en a eu : une tuile avec leur nombre, une fois par incident quelle
 que soit la source qui l'a vu, celui de la période précédente sous la même coupe que les autres
 tuiles, et le nombre par type. Dessous, Suspects récurrents liste les findings liés fortement ou
-moyennement à plusieurs de ces incidents, les plus souvent forts d'abord : le type, le service,
+moyennement à ces incidents, les plus souvent forts d'abord : le type, le service,
 l'endpoint quand la vue le montre, où il a été fort par type et combien de fois moyen, et un lien
 vers l'écran des incidents. Un niveau de lien dit à quel point un finding est suspect, pas une cause
 prouvée. La vue Technique garde dix suspects, la vue Pilotage trois, chacune disant combien elle en

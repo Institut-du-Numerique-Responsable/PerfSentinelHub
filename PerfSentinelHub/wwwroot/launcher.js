@@ -3801,7 +3801,12 @@
         const without = tiles.co2_sources_without_coefficient;
         const body = [techText('co2.body')];
         if (co2Parts(tiles.co2_grams, without, tiles.co2_missing_reason, 'tech').lead) {
-            body.push(techText('co2.least.' + plural(without), {count: String(without)}));
+            const days = tiles.co2_days_without_coefficient;
+            body.push(days !== undefined && days > 0
+                ? techText('co2.least.days.' + plural(without), {
+                    count: String(without), days: t('recap.co2.days.' + plural(days), {count: days})
+                })
+                : techText('co2.least.' + plural(without), {count: String(without)}));
         }
         return techStep('co2', ['recap.co2'], {body});
     }
@@ -4238,10 +4243,10 @@
         if (ctx.panel === 'gone') steps.push(guideStep('panel', ['incidents.panel'], {body: [text('panel.gone')]}, text));
         else if (ctx.panel) {
             steps.push(guideStep('panel', ['incidents.panel'], {
-                body: ctx.panel === 'none'
+                body: (ctx.saturation ? [text('panel.saturation')] : []).concat(ctx.panel === 'none'
                     ? [text('panel.none'), text('panel.analyse'), text('panel.correlations')]
                     : [text('panel.before'), text('panel.link'), text('panel.filter'), text('panel.paging'),
-                        text('panel.scroll'), text('panel.analyse'), text('panel.correlations')]
+                        text('panel.scroll'), text('panel.analyse'), text('panel.correlations')])
             }, text));
         }
         steps.push(

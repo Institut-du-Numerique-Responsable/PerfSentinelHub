@@ -3307,6 +3307,13 @@ guideTest("a known carbon figure is an order of magnitude, at least when sources
     const partial = steps({tiles: {co2_grams: 1200, co2_sources_without_coefficient: 2}}).co2.body.join(" ");
     assert.ok(partial.includes(says.cite));
     assert.ok(partial.includes(says.atLeast));
+    // The engineering guide says over how many days the figure is short, as its tile does; pilotage never counts.
+    const tiles = {co2_grams: 1200, co2_sources_without_coefficient: 2, co2_days_without_coefficient: 3};
+    const threeDays = PSL.t("recap.co2.days.other", {count: 3});
+    assert.ok(techSteps({tiles}).co2.body.join(" ").includes(threeDays));
+    assert.ok(!techSteps({tiles: {co2_grams: 1200, co2_sources_without_coefficient: 2}}).co2.body.join(" ")
+        .includes(threeDays));
+    assert.ok(!steps({tiles}).co2.body.join(" ").includes(threeDays));
     // Under a gram the tile reads "< 1 g" with no "at least": the guide does not point at a word it does not show.
     assert.ok(!steps({tiles: {co2_grams: 0.4, co2_sources_without_coefficient: 2}}).co2.body.join(" ")
         .includes(says.atLeast));
@@ -4376,6 +4383,11 @@ test("an unfolded incident's guide reads the link column, its filter, the paging
             }
             const none = text(incidentsBy({panel: "none", unfolded: true}).panel);
             for (const key of keys) assert.ok(!none.includes(PSL.t("guide.incidents." + key)), lang + " " + key);
+            // The saturation note is read only when the panel shows one.
+            const saturation = PSL.t("guide.incidents.panel.saturation");
+            assert.ok(!findings.includes(saturation), lang);
+            assert.ok(text(incidentsBy({panel: "findings", unfolded: true, saturation: true}).panel).includes(saturation));
+            assert.ok(text(incidentsBy({panel: "none", unfolded: true, saturation: true}).panel).includes(saturation));
         });
     }
 });

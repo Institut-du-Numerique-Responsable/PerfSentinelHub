@@ -580,14 +580,15 @@ export interface RecapIncidents {
     more_suspects: number;
 }
 
-/** A finding strongly or moderately linked to several of the period's incidents, `RecapSuspect`. */
+/** A finding strongly or moderately linked to the period's incidents, `RecapSuspect`. */
 export interface RecapSuspect {
     rank: number;
     /** Absent from the pilotage view. */
     signature?: string;
     finding_type: string;
     service: string;
-    endpoint: string | null;
+    /** Absent when the finding has none, and from a frozen report or a webhook. */
+    endpoint?: string;
     strong: number;
     medium: number;
     strong_by_kind: Record<string, number>;
@@ -640,6 +641,8 @@ export interface IncidentsGuideContext {
     panel: "findings" | "none" | "gone" | null;
     /** A row is unfolded, whatever its detail says: one that failed to read is not asked to unfold. */
     unfolded: boolean;
+    /** The panel shows the saturation the alert reported. */
+    saturation?: boolean;
 }
 
 /** What the Correlations guide reads off the listing. */
