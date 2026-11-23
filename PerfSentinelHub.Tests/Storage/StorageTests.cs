@@ -43,7 +43,7 @@ public sealed class StorageTests
                 "disclosures", "endpoint_heartbeats", "endpoint_labels", "finding_action_events",
                 "finding_actions", "finding_attributes", "finding_envelopes", "finding_groupings", "finding_lineage",
                 "finding_observations", "finding_source_envelopes", "finding_sources", "findings",
-                "incident_attributes", "incident_finding_links", "incident_reads", "incidents",
+                "incident_attributes", "incident_finding_links", "incident_reads", "incident_signatures", "incidents",
                 "recap_deliveries", "recap_reports", "schema_migrations", "service_labels", "source_acks",
                 "source_finding_imports", "source_imports", "source_state", "terminal_tokens"
             ],

@@ -179,22 +179,14 @@ public sealed partial class HubDatabase
             StringComparer.Ordinal), seenBefore);
     }
 
-    // The signature of one frozen row, null for a row FrozenRows skips; json_each of a NULL document is empty.
-    private const string FrozenSignatureSql = """
-                                              CASE WHEN f.type <> 'object' THEN NULL
-                                                   WHEN json_type(f.value, '$.finding.signature') = 'text'
-                                                     THEN json_extract(f.value, '$.finding.signature') END
-                                              """;
-
+    // incident_signatures holds each copy's signatures, kept by the triggers of Schema.V24.
     private const string RecurrenceSql = $"""
         SELECT count(DISTINCT id) FROM incidents AS i WHERE {EarlierIncidentsWhere};
-        SELECT signature, count(DISTINCT id) FROM (
-          SELECT i.id AS id, {FrozenSignatureSql} AS signature
-          FROM incidents AS i,
-               json_each(CASE WHEN json_valid(i.findings_json) THEN i.findings_json END) AS f
-          WHERE {EarlierIncidentsWhere})
-        WHERE signature IN (SELECT value FROM json_each($wanted))
-        GROUP BY signature;
+        SELECT s.signature, count(DISTINCT i.id)
+        FROM incidents AS i
+        JOIN incident_signatures AS s ON s.incident_id = i.id AND s.source_id = i.source_id
+        WHERE {EarlierIncidentsWhere} AND s.signature IN (SELECT value FROM json_each($wanted))
+        GROUP BY s.signature;
         """;
 
     private const string EarlierIncidentsWhere = """
@@ -204,8 +196,6 @@ public sealed partial class HubDatabase
                                                  """;
 
     // By incident id: the same id stored by two sources is one incident, whose signatures are the union.
-    // shortcut: SQLite still parses every earlier copy's findings once per assessment; a per-incident
-    // signature table is the upgrade if a crash-looping service makes the catch-up slow.
     private static async Task<Dictionary<string, Recurrence>> LoadRecurrencesAsync(
         SqliteConnection connection, IncidentKey key, IReadOnlyCollection<string> environmentSourceIds,
         string service, string kind, long atMs, HashSet<string> wanted, CancellationToken cancellationToken)
@@ -309,15 +299,14 @@ public sealed partial class HubDatabase
         return links;
     }
 
-    private const string IncidentsNeedingLinksSql = $"""
+    private const string IncidentsNeedingLinksSql = """
         SELECT i.id, i.source_id FROM incidents AS i
         WHERE i.finding_count > 0 AND i.source_id IN (SELECT value FROM json_each($source_ids))
           AND NOT EXISTS (
             SELECT 1 FROM incident_finding_links AS l
             WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $rules_version)
           AND EXISTS (
-            SELECT 1 FROM json_each(CASE WHEN json_valid(i.findings_json) THEN i.findings_json END) AS f
-            WHERE {FrozenSignatureSql} <> '');
+            SELECT 1 FROM incident_signatures AS s WHERE s.incident_id = i.id AND s.source_id = i.source_id);
         """;
 
     /// <summary>

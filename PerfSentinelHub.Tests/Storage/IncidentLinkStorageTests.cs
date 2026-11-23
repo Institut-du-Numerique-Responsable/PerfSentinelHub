@@ -311,6 +311,47 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
     }
 
     [Fact]
+    public async Task Signatures_follow_the_incident_findings()
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs,
+            """[{"finding":{"type":"slow_sql","signature":"sig-a"}},{"finding":{"type":"slow_sql","signature":"sig-a"}},""" +
+            """{"finding":{"signature":""}},{"finding":{"signature":7}},"row",{"finding":{"type":"slow_sql","signature":"sig-b"}}]""");
+        Assert.Equal(["sig-a", "sig-b"], await SignaturesAsync(id, source));
+
+        await ExecuteAsync("UPDATE incidents SET findings_json = $f WHERE id = $id AND source_id = $source",
+            ("$f", Frozen(("sig-c", "slow_sql", 1, 1))), ("$id", id), ("$source", source));
+        Assert.Equal(["sig-c"], await SignaturesAsync(id, source));
+
+        await ExecuteAsync("UPDATE incidents SET findings_json = 'not json' WHERE id = $id AND source_id = $source",
+            ("$id", id), ("$source", source));
+        Assert.Empty(await SignaturesAsync(id, source));
+
+        await ExecuteAsync("UPDATE incidents SET findings_json = $f WHERE id = $id AND source_id = $source",
+            ("$f", Frozen(("sig-d", "slow_sql", 1, 1))), ("$id", id), ("$source", source));
+        await ExecuteAsync("DELETE FROM incidents WHERE id = $id AND source_id = $source", ("$id", id), ("$source", source));
+        Assert.Empty(await SignaturesAsync(id, source));
+    }
+
+    private async Task<List<string>> SignaturesAsync(string id, string source)
+    {
+        await using var connection = await factory.Database.OpenConnectionAsync(Token);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT signature FROM incident_signatures
+                              WHERE incident_id = $id AND source_id = $source ORDER BY signature;
+                              """;
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$source", source);
+        var signatures = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(Token);
+        while (await reader.ReadAsync(Token))
+            signatures.Add(reader.GetString(0));
+        return signatures;
+    }
+
+    [Fact]
     public async Task Purge_removes_links_with_their_incident()
     {
         var gone = new IncidentKey(NewId(), NewId());
@@ -341,6 +382,15 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
                 await using var downgrade = connection.CreateCommand();
                 downgrade.CommandText = LegacySchema.WithoutLinks;
                 await downgrade.ExecuteNonQueryAsync(Token);
+                // An incident a version 23 build stored: the migration derives its signatures.
+                await using var seed = connection.CreateCommand();
+                seed.CommandText = $"""
+                                    INSERT INTO incidents(id, source_id, service, kind, at_ms, window_from_ms, window_to_ms,
+                                      finding_count, incident_json, first_seen_ms, last_seen_ms, findings_json)
+                                    VALUES ('old', 'src', 'svc', 'oom_kill', 1, 0, 1, 2, '{"{}"}', 1, 1,
+                                            '{Frozen(("sig-a", "slow_sql", 1, 1), ("sig-b", "slow_sql", 1, 1))}');
+                                    """;
+                await seed.ExecuteNonQueryAsync(Token);
             }
 
             await new HubDatabase(options, TimeProvider.System).InitializeAsync(Token);
@@ -350,12 +400,14 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
             await using var query = check.CreateCommand();
             query.CommandText = """
                                 SELECT (SELECT count(*) FROM sqlite_master WHERE name = 'incident_finding_links'),
-                                       (SELECT count(*) FROM schema_migrations WHERE version = 24);
+                                       (SELECT count(*) FROM schema_migrations WHERE version = 24),
+                                       (SELECT count(*) FROM incident_signatures WHERE incident_id = 'old');
                                 """;
             await using var reader = await query.ExecuteReaderAsync(Token);
             Assert.True(await reader.ReadAsync(Token));
             Assert.Equal(1, reader.GetInt64(0));
             Assert.Equal(1, reader.GetInt64(1));
+            Assert.Equal(2, reader.GetInt64(2));
         }
         finally
         {
