@@ -257,6 +257,31 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         Assert.Contains(key, await factory.Database.IncidentsNeedingLinksAsync(IncidentLinkRules.RulesVersion, [key.SourceId], Token));
     }
 
+    // The worker reads outside the write gate: links read from findings an upsert replaced meanwhile must
+    // not land, or the catch-up would count the copy as assessed once the re-queued key is lost.
+    [Fact]
+    public async Task Replace_writes_nothing_when_the_findings_changed_since_the_context_was_read()
+    {
+        var key = new IncidentKey(NewId(), NewId());
+        var poor = new ParsedIncident(key.Id, "checkout-svc", "oom_kill", AtMs, null, AtMs - 300_000, AtMs, null, 1,
+            "{}", Frozen(("sig-a", "slow_sql", 1, 1)));
+        var rich = poor with { FindingCount = 2, FindingsJson = Frozen(("sig-a", "slow_sql", 1, 1), ("sig-b", "slow_sql", 1, 1)) };
+        var link = new StoredLink("sig-a", LinkLevel.Weak, [], IncidentLinkRules.RulesVersion);
+        await factory.Database.UpsertIncidentsAsync(key.SourceId, [poor], AtMs, Token);
+        var context = await factory.Database.LoadLinkContextAsync(key, [key.SourceId], Token);
+        Assert.NotNull(context);
+
+        await factory.Database.UpsertIncidentsAsync(key.SourceId, [rich], AtMs + 1, Token);
+        await factory.Database.ReplaceLinksAsync(key, [link], context.FindingsJson, Token);
+
+        Assert.Equal(0, await CountLinksAsync(key.Id));
+        Assert.Contains(key, await factory.Database.IncidentsNeedingLinksAsync(IncidentLinkRules.RulesVersion, [key.SourceId], Token));
+
+        var fresh = await factory.Database.LoadLinkContextAsync(key, [key.SourceId], Token);
+        await factory.Database.ReplaceLinksAsync(key, [link], fresh!.FindingsJson, Token);
+        Assert.Equal(1, await CountLinksAsync(key.Id));
+    }
+
     [Fact]
     public async Task Replace_is_idempotent_and_listing_returns_the_new_rows()
     {

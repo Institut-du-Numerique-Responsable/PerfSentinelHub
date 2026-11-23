@@ -548,7 +548,9 @@ public sealed record LinkContext(
     IReadOnlyList<FrozenSignature> Signatures,
     IReadOnlyDictionary<string, Baseline> Baselines,
     IReadOnlyDictionary<string, Recurrence> Recurrences,
-    IReadOnlySet<string> SeenInBaselineDays);
+    IReadOnlySet<string> SeenInBaselineDays,
+    // The findings the context was read from, so the write can tell an upsert replaced them since.
+    string FindingsJson);
 
 public sealed record StoredLink(string Signature, LinkLevel Level, IReadOnlyList<LinkReason> Reasons, int RulesVersion);
 

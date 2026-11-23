@@ -108,16 +108,16 @@ public sealed partial class IncidentLinkWorker(
             links.Add(new StoredLink(signature.Signature, result.Level, result.Reasons, IncidentLinkRules.RulesVersion));
         }
 
-        await database.ReplaceLinksAsync(key, links, cancellationToken);
+        await database.ReplaceLinksAsync(key, links, context.FindingsJson, cancellationToken);
         return true;
     }
 
-    [LoggerMessage(1501, LogLevel.Information, "Queued {Count} incidents whose finding links are missing or outdated.")]
+    [LoggerMessage(2601, LogLevel.Information, "Queued {Count} incidents whose finding links are missing or outdated.")]
     private static partial void LogCatchUp(ILogger logger, int count);
 
-    [LoggerMessage(1502, LogLevel.Error, "Assessing the finding links of incident {IncidentId} failed.")]
+    [LoggerMessage(2602, LogLevel.Error, "Assessing the finding links of incident {IncidentId} failed.")]
     private static partial void LogIncidentFailed(ILogger logger, string incidentId, Exception exception);
 
-    [LoggerMessage(1503, LogLevel.Error, "The catch-up of finding links failed; incidents imported from now on are still assessed.")]
+    [LoggerMessage(2603, LogLevel.Error, "The catch-up of finding links failed; incidents imported from now on are still assessed.")]
     private static partial void LogCatchUpFailed(ILogger logger, Exception exception);
 }

@@ -49,7 +49,7 @@ public sealed partial class HubDatabase
             connection, key, environmentSourceIds, service, kind, atMs, wanted, cancellationToken);
 
         return new LinkContext(service, kind, atMs, windowFromMs, windowToMs, SaturationOf(incidentJson),
-            signatures, baselines, recurrences, seenBefore);
+            signatures, baselines, recurrences, seenBefore, findingsJson);
     }
 
     // The daemon sends a ratio in [0, 1]; any other value is a malformed push and reads as none.
@@ -227,8 +227,17 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>Replaces one incident's links in a single transaction, under the write gate.</summary>
+    public Task ReplaceLinksAsync(
+        IncidentKey key, IReadOnlyList<StoredLink> links, CancellationToken cancellationToken) =>
+        ReplaceLinksAsync(key, links, null, cancellationToken);
+
+    /// <summary>
+    ///     As above, but writes nothing when the copy no longer holds <paramref name="assessedFindingsJson" />:
+    ///     the upsert that replaced them dropped the links and queued the copy again.
+    /// </summary>
     public async Task ReplaceLinksAsync(
-        IncidentKey key, IReadOnlyList<StoredLink> links, CancellationToken cancellationToken)
+        IncidentKey key, IReadOnlyList<StoredLink> links, string? assessedFindingsJson,
+        CancellationToken cancellationToken)
     {
         var reasonsJson = links.Select(link =>
             JsonSerializer.Serialize(link.Reasons, HubJsonContext.Default.IReadOnlyListLinkReason)).ToArray();
@@ -237,6 +246,21 @@ public sealed partial class HubDatabase
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction(false);
+            if (assessedFindingsJson is not null)
+            {
+                await using var check = connection.CreateCommand();
+                check.Transaction = transaction;
+                check.CommandText = """
+                                    SELECT 1 FROM incidents
+                                    WHERE id = $id AND source_id = $source_id AND findings_json = $findings_json;
+                                    """;
+                check.Parameters.AddWithValue("$id", key.Id);
+                check.Parameters.AddWithValue("$source_id", key.SourceId);
+                check.Parameters.AddWithValue("$findings_json", assessedFindingsJson);
+                if (await check.ExecuteScalarAsync(cancellationToken) is null)
+                    return;
+            }
+
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = "DELETE FROM incident_finding_links WHERE incident_id = $id AND source_id = $source_id;";
