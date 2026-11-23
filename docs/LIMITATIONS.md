@@ -407,8 +407,10 @@ a source row written before the per-source copy existed serves the shared envelo
 that source reports the finding again.
 
 An incident finding's link level and its recurrence numbers are computed over every source of
-the incident's environment, so a caller scoped to some sources can see a level influenced by
-incidents on sources it cannot read.
+the incident's environment. The numbers are hidden from a caller that does not hold each of
+those sources whole: it sees the recurrence code alone. Only the level stays
+environment-wide, so such a caller can see a level influenced by incidents on sources it
+cannot read.
 
 How fresh a decision is:
 

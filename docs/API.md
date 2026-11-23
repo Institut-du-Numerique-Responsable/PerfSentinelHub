@@ -282,7 +282,10 @@ assessed the incident, which a background worker does some time after the copy i
 It maps each frozen finding's signature to `{"level", "reasons", "rules_version"}`: `level`
 is `strong`, `medium` or `weak`, `reasons` lists the facts behind it as `{"code"}` plus,
 when the reason has them, `ratio`, `k`, `n`, `usual_share` and `value` (a field with no
-value is omitted), and `rules_version` is the version of the rules that computed it. The
+value is omitted), and `rules_version` is the version of the rules that computed it. A
+`recurrence` reason counts incidents across every source of the incident's environment, so
+its `k`, `n` and `usual_share` are omitted for a caller whose access does not hold each of
+those sources whole (a service or attribute pattern does not): the code stays. The
 listing never carries `links`. Like `/api/findings`, both
 answer whoever reaches the Hub's port: a daemon's read key protects the daemon, and the
 Hub re-exposes the frozen findings behind whatever fronts the Hub.

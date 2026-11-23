@@ -307,7 +307,10 @@ de la copie. Il associe la signature de chaque finding figé à `{"level", "reas
 "rules_version"}` : `level` vaut `strong`, `medium` ou `weak`, `reasons` liste les faits qui
 la justifient sous la forme `{"code"}` plus, quand la raison les a, `ratio`, `k`, `n`,
 `usual_share` et `value` (un champ sans valeur est omis), et `rules_version` est la version
-des règles qui l'ont calculé. La liste ne porte jamais `links`. Comme `/api/findings`, les deux
+des règles qui l'ont calculé. Une raison `recurrence` compte les incidents de toutes les sources
+de l'environnement de l'incident : ses `k`, `n` et `usual_share` sont donc omis pour un
+appelant dont l'accès ne tient pas chacune de ces sources entière (un motif de service ou
+d'attribut ne suffit pas), le code reste. La liste ne porte jamais `links`. Comme `/api/findings`, les deux
 répondent à quiconque atteint le port du Hub :
 la clé de lecture d'un daemon protège le daemon, et le Hub réexpose les findings gelés
 derrière ce qui protège le Hub.
