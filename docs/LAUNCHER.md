@@ -238,7 +238,11 @@ since one endpoint often carries several, and its estimated impact, the findings
 dashboard's avoidable I/O operations: traces seen times extra operations per trace, a dash
 when the daemon has green scoring off. The findings open worst
 first, then most seen, a click or a keypress on a column head sorts them by that column,
-and a field above the table narrows them by endpoint or template. Five selects narrow the list. Kind and service stay
+and a field above the table narrows them by endpoint or template. A Link column gives each
+finding a level, strong, medium or weak, with its reasons in the tooltip and for screen readers,
+or says it is being assessed: it shows how suspect a finding is, not a proven cause. The findings
+open by that level, and a select beside the field keeps one level. When the daemon sent a
+saturation reading, the note above the table gives it. Five selects narrow the list. Kind and service stay
 in sight, and namespace, environment and daemon fold behind More filters, which says how
 many of them are set. The namespace one appears once a row has carried one. The Hub applies them, so the older
 rows a button loads next, a hundred at a time from the store rather than from the daemons,

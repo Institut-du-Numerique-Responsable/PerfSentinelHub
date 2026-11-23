@@ -412,12 +412,14 @@
         // The route an in-app Ack link was followed from, for the page's way back.
         ackReturn: null,
         // How an incident's frozen findings are ordered: worst, then most seen, first.
-        findingSort: {key: 'severity', dir: 'desc'},
+        findingSort: {key: 'link', dir: 'desc'},
         incidentFiltersOpen: false,
         // What was typed above each incident's findings, by incident key.
         findingQuery: {},
         // How many of each incident's findings the table draws, by incident key: FINDINGS_PAGE until asked for more.
         findingLimit: {},
+        // The link level each incident's findings are narrowed to, by incident key: '' or absent for all.
+        findingLevel: {},
         // The incident a `#/new?from=…` link pre-filled the form from, or null.
         /** @type {?Handoff} */
         handoff: null,
@@ -6416,7 +6418,12 @@
             ]);
         }
         const capture = PSL.incidentCapture(detail);
-        const findings = PSL.sortFindings(detail.findings || [], state.findingSort.key, state.findingSort.dir);
+        // The Hub's assessment rides on each row, so the sort and the filter read it like any other column.
+        const links = detail.links || {};
+        const findings = PSL.sortFindings((detail.findings || []).map(function (row) {
+            const link = row.finding && row.finding.signature ? links[row.finding.signature] : undefined;
+            return link ? {...row, link: link} : row;
+        }), state.findingSort.key, state.findingSort.dir);
         // A link, so it opens in a new tab too. Its end is clamped to the moment it is followed.
         const analyse = el('a', {class: 'pill-button', href: PSL.incidentHandoffHash(detail, Date.now())}, [
             svg([['path', {d: 'M5 12h14M13 6l6 6-6 6'}]], 14),
@@ -6432,7 +6439,9 @@
                 text: t(INCIDENT_CAPTURE[capture]) + ' ' + t('incidents.panel.window', {
                     before: PSL.dur(detail.at_ms - detail.window_from_ms),
                     after: PSL.dur(detail.window_to_ms - detail.at_ms)
-                })
+                }) + (detail.saturation == null ? '' : ' ' + t('incidents.panel.saturation', {
+                    value: Math.round(detail.saturation * 100)
+                }))
             }),
             el('div', {}, [analyse]),
             findings.length === 0
@@ -6463,9 +6472,24 @@
             delete state.findingLimit[key];
             fillFindings(key);
         });
+        const level = el('select', {class: 'input', 'data-findings-level': key}, ['', 'strong', 'medium', 'weak'].map(function (name) {
+            return el('option', {
+                value: name, text: t(name ? 'incidents.link.level.' + name : 'incidents.link.filter.any')
+            });
+        }));
+        level.value = state.findingLevel[key] || '';
+        level.addEventListener('change', function () {
+            state.findingLevel[key] = level.value;
+            delete state.findingLimit[key];
+            fillFindings(key);
+        });
         const row = field(t('incidents.filter.label'), input, null);
         row.appendChild(count);
-        return row;
+        return el('div', {class: 'findings-controls'}, [
+            row,
+            field(t('incidents.link.filter'), level, null),
+            el('p', {class: 'field-note', text: t('incidents.link.note')})
+        ]);
     }
 
     /**
@@ -6492,10 +6516,11 @@
         const held = table && FINDING_TABLE.get(table);
         if (!held) return;
         const query = state.findingQuery[key] || '';
-        const page = PSL.pageFindings(held.findings, query, state.findingLimit[key] || FINDINGS_PAGE);
+        const level = state.findingLevel[key] || '';
+        const page = PSL.pageFindings(held.findings, query, state.findingLimit[key] || FINDINGS_PAGE, level);
         table.querySelector('tbody').replaceChildren(...page.shown.map(held.row));
         const count = document.querySelector(`[data-findings-count="${CSS.escape(key)}"]`);
-        if (count) count.textContent = query.trim() === '' ? '' : t('incidents.filter.shown', {
+        if (count) count.textContent = query.trim() === '' && level === '' ? '' : t('incidents.filter.shown', {
             shown: page.matched,
             total: held.findings.length
         });
@@ -6545,7 +6570,7 @@
         const canAck = (state.sources || []).some(function (source) {
             return source.ack_relay;
         });
-        const columns = ['type', 'severity', 'impact', 'endpoint', 'template', 'seen', 'first'].concat(canAck ? ['ack'] : []);
+        const columns = ['type', 'severity', 'link', 'impact', 'endpoint', 'template', 'seen', 'first'].concat(canAck ? ['ack'] : []);
         const head = el('tr', {}, columns.map(function (name) {
             return findingHead(name, incident);
         }));
@@ -6565,6 +6590,7 @@
                     'data-sev': finding.severity || null,
                     text: severityLabel(finding.severity)
                 })]),
+                el('td', {}, [linkChip(row.link)]),
                 el('td', {'data-align': 'right', text: impact == null ? '—' : PSL.num(impact)}),
                 el('td', {class: 'table-mono'}, [breakable(finding.source_endpoint || '?')]),
                 // Whole, wrapped: the template is what tells two rows apart.
@@ -6634,7 +6660,7 @@
     }
 
     /** The columns a click sorts on, each under the sort key of its name. The ack column does not sort. */
-    const FINDING_SORT_KEY = ['type', 'severity', 'impact', 'endpoint', 'template', 'seen', 'first'];
+    const FINDING_SORT_KEY = ['type', 'severity', 'link', 'impact', 'endpoint', 'template', 'seen', 'first'];
 
     /**
      * A column head that sorts on click. Counts and severity read worst first, the rest A to Z.
@@ -6662,12 +6688,31 @@
         button.addEventListener('click', function () {
             state.findingSort = active
                 ? {key: key, dir: sort.dir === 'asc' ? 'desc' : 'asc'}
-                : {key: key, dir: key === 'severity' || key === 'impact' || key === 'seen' ? 'desc' : 'asc'};
+                : {key: key, dir: key === 'severity' || key === 'link' || key === 'impact' || key === 'seen' ? 'desc' : 'asc'};
             // The ids come from the daemon: escaped, so a quote in one cannot break the selector.
             renderFocus('[data-sort="' + CSS.escape(id) + '"]');
         });
         th.appendChild(button);
         return th;
+    }
+
+    /**
+     * How suspect a finding is, as a chip. The reasons ride in the tooltip and in a visually hidden
+     * span, which a keyboard or a screen reader reaches where a tooltip alone would not.
+     * @param {import('../types').IncidentLink | undefined} link
+     */
+    function linkChip(link) {
+        if (!link) return el('span', {class: 'chip', 'data-link': 'pending', text: t('incidents.link.pending')});
+        const reasons = link.reasons.map(function (reason) {
+            const part = PSL.linkReasonParts(reason);
+            return PSL.hasText(part.key) ? t(part.key, part.params) : '';
+        }).filter(Boolean).join(' ');
+        const chip = el('span', {
+            class: 'chip', 'data-link': link.level, title: reasons || null,
+            text: t('incidents.link.level.' + link.level)
+        });
+        if (reasons) chip.appendChild(el('span', {class: 'visually-hidden', text: ' ' + t('incidents.link.reasons', {list: reasons})}));
+        return chip;
     }
 
     /**

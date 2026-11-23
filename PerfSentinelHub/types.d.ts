@@ -262,6 +262,8 @@ export interface StoredFindingRow {
     stored_at_ms?: number;
     first_seen_ms: number;
     seen_count?: number;
+    /** Set by the launcher from the incident's `links`, absent until the Hub has assessed it. */
+    link?: IncidentLink;
 }
 
 /** The detection volume of a windowed read, `FindingEnvelopeWriter.WriteVolume`. */

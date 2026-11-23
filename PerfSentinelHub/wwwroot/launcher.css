@@ -1178,6 +1178,35 @@ a.shell-identity[aria-current="page"] {
     background: var(--surface);
 }
 
+/* The text filter and the level select side by side, their note under both. */
+.findings-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 16px;
+}
+
+.findings-controls .field-note {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+/* How suspect a finding is: the three levels on the severity tones, unassessed stays neutral. */
+.chip[data-link="strong"] {
+    background: var(--crit-bg);
+    color: var(--crit-fg);
+}
+
+.chip[data-link="medium"] {
+    background: var(--warn-bg);
+    color: var(--warn-fg);
+}
+
+.chip[data-link="weak"] {
+    background: var(--info-bg);
+    color: var(--info-fg);
+}
+
 .findings-more {
     display: flex;
     flex-wrap: wrap;

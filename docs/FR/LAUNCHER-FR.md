@@ -260,7 +260,11 @@ même endpoint en porte souvent plusieurs, et son impact estimé, les opération
 tiret quand le daemon a le calcul green coupé. Les findings s'ouvrent du plus grave au
 moins grave, puis du plus vu au moins vu, un clic ou une touche sur l'en-tête d'une colonne
 les trie selon elle, et un champ au-dessus du tableau les restreint par endpoint ou par
-gabarit. Cinq sélecteurs restreignent la liste. Kind et service restent
+gabarit. Une colonne Lien donne à chaque finding un niveau, fort, moyen ou faible, avec ses
+raisons dans l'infobulle et pour les lecteurs d'écran, ou dit qu'il est en cours d'évaluation : elle
+indique à quel point un finding est suspect, pas une cause prouvée. Les findings s'ouvrent par ce
+niveau, et un sélecteur à côté du champ n'en garde qu'un. Quand le daemon a envoyé une lecture de
+saturation, la note au-dessus du tableau la donne. Cinq sélecteurs restreignent la liste. Kind et service restent
 visibles, namespace, environnement et daemon se replient derrière More filters, qui dit
 combien d'entre eux sont posés. Celui du namespace apparaît dès qu'une ligne en a porté un. C'est le Hub qui les applique, donc les lignes plus anciennes
 qu'un bouton charge ensuite, par centaine et depuis le magasin plutôt que depuis les

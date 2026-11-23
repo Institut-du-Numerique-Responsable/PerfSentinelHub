@@ -1082,18 +1082,41 @@
 
     /**
      * The frozen findings an incident's table draws: those that match the
-     * filter, the first `limit` of them, in the order they came in.
+     * filter and, when one is asked for, the link level, the first `limit` of
+     * them, in the order they came in.
      * @template T
      * @param {T[]} rows
      * @param {string} query
      * @param {number} limit
+     * @param {string} [level] '' or absent for any, else a link level
      * @returns {{shown: T[], matched: number}}
      */
-    function pageFindings(rows, query, limit) {
+    function pageFindings(rows, query, limit, level) {
         const matched = rows.filter(function (row) {
-            return findingMatches(/** @type {{finding?: any}} */ (row), query);
+            const link = /** @type {{link?: {level: string}}} */ (row).link;
+            return (!level || (link != null && link.level === level))
+                && findingMatches(/** @type {{finding?: any}} */ (row), query);
         });
         return {shown: matched.slice(0, limit), matched: matched.length};
+    }
+
+    /**
+     * The text key and the numbers behind one reason of a finding's link.
+     * @param {import('../types').IncidentLinkReason} reason
+     * @returns {{key: string, params: Record<string, number>}}
+     */
+    function linkReasonParts(reason) {
+        const key = 'incidents.link.reason.' + reason.code;
+        /** @param {number | undefined} x */
+        const percent = function (x) {
+            return Math.round((x || 0) * 100);
+        };
+        if (reason.code === 'intensity') return {key, params: {ratio: Math.round((reason.ratio || 0) * 10) / 10}};
+        if (reason.code === 'recurrence') {
+            return {key, params: {k: reason.k || 0, n: reason.n || 0, usual: percent(reason.usual_share)}};
+        }
+        if (reason.code === 'saturation') return {key, params: {value: percent(reason.value)}};
+        return {key, params: {}};
     }
 
     /**
@@ -1111,12 +1134,14 @@
             + quote(signature) + ' --reason ' + quote(t('ack.command.reason'));
     }
 
+    const LINK_RANK = {strong: 3, medium: 2, weak: 1};
+
     /**
      * An incident's frozen findings in the order a column asks for. Ties fall
      * back to the default reading order, worst and most seen first, so equal
      * rows never shuffle between two renders.
      * @param {Array<{seen_count?: number, first_seen_ms: number, finding?: any}>} rows
-     * @param {'type' | 'severity' | 'impact' | 'endpoint' | 'template' | 'seen' | 'first'} key
+     * @param {'type' | 'severity' | 'impact' | 'endpoint' | 'template' | 'seen' | 'first' | 'link'} key
      * @param {'asc' | 'desc'} dir
      * @returns {Array<any>}
      */
@@ -1143,6 +1168,11 @@
             },
             seen: function (row) {
                 return row.seen_count || 0;
+            },
+            // Unassessed below weak, so a descending sort leads with the likeliest.
+            link: function (row) {
+                const link = /** @type {{link?: {level: string}}} */ (row).link;
+                return link ? LINK_RANK[link.level] || 0 : 0;
             },
             first: function (row) {
                 return row.first_seen_ms;
@@ -5274,6 +5304,7 @@
         incidentCapture,
         findingPhase,
         sortFindings,
+        linkReasonParts,
         moreFiltersLabel,
         findingTemplate,
         findingImpact,

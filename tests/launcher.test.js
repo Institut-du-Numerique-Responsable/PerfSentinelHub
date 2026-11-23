@@ -1490,6 +1490,35 @@ test("an incident's findings table draws a page of the matching rows and counts 
     assert.deepEqual(PSL.pageFindings(rows, "orders", 2), {shown: [], matched: 0});
 });
 
+test("an incident's findings can be narrowed to one link level and sorted by it", () => {
+    const row = (endpoint, level, severity = "warning") =>
+        ({seen_count: 1, first_seen_ms: 1, finding: {source_endpoint: endpoint, severity}, link: level && {level, reasons: []}});
+    const rows = [row("/n", null), row("/w", "weak"), row("/s", "strong"), row("/m", "medium"), row("/s2", "strong", "critical")];
+    const endpoints = (list) => list.map((r) => r.finding.source_endpoint);
+    const strong = PSL.pageFindings(rows, "", 1, "strong");
+    assert.equal(strong.matched, 2);
+    assert.deepEqual(endpoints(strong.shown), ["/s"]);
+    assert.equal(PSL.pageFindings(rows, "", 10, "").matched, 5);
+    assert.equal(PSL.pageFindings(rows, "/s", 10, "strong").matched, 2);
+    assert.equal(PSL.pageFindings(rows, "/w", 10, "strong").matched, 0);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "link", "desc")), ["/s2", "/s", "/m", "/w", "/n"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, "link", "asc")).slice(0, 2), ["/n", "/w"]);
+});
+
+test("a link reason maps to its text key and its numbers", () => {
+    const parts = PSL.linkReasonParts;
+    assert.deepEqual(parts({code: "recurrence", k: 4, n: 5, usual_share: 0.2}),
+        {key: "incidents.link.reason.recurrence", params: {k: 4, n: 5, usual: 20}});
+    assert.deepEqual(parts({code: "intensity", ratio: 2.46}),
+        {key: "incidents.link.reason.intensity", params: {ratio: 2.5}});
+    assert.deepEqual(parts({code: "saturation", value: 0.874}),
+        {key: "incidents.link.reason.saturation", params: {value: 87}});
+    for (const code of ["mechanism_compatible", "mechanism_partial", "mechanism_incompatible",
+        "appeared_after_deploy", "intensity_new", "intensity_unknown"]) {
+        assert.deepEqual(parts({code}), {key: "incidents.link.reason." + code, params: {}});
+    }
+});
+
 test("a frozen finding's impact is the dashboard's traces times extra operations, absent when unscored", () => {
     const row = (seen, perTrace) => ({
         seen_count: seen, first_seen_ms: 1,
