@@ -776,8 +776,10 @@ et `previous` (chacun `kind`, `from`, `to`, `in_progress`, `incomplete[]`, `note
   `latest_incident_id` avec `latest_source_id`, l'incident le plus récent auquel il a été lié. La
   vue `tech` garde les 10 premiers suspects, `pilotage` les 3 premiers, `more_suspects` comptant
   les autres ; un rapport figé et un webhook du récap retirent aussi `endpoint` ici. La clé est
-  absente d'un rapport figé avant son existence. Un lien est un soupçon à vérifier, jamais une
-  cause prouvée.
+  absente d'un rapport figé avant son existence. Un filtre `grouping` garde les incidents dont
+  l'alerte portait ce namespace : un incident n'a pas de valeur de regroupement à lui, donc sur
+  des daemons dont le premier `grouping_attributes` n'est pas `k8s.namespace.name` un récap
+  regroupé ne compte aucun incident. Un lien est un soupçon à vérifier, jamais une cause prouvée.
 - **Plafond.** `priorities` et chaque liste de mouvements gardent leurs 5 000 premiers, dans
   l'ordre du classement ; les tuiles comptent toujours tous les findings lus, `more_priorities`
   les priorités au-delà du plafond et `movements.counts` la longueur entière de chaque liste.

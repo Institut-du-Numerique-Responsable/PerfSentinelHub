@@ -722,8 +722,11 @@ The answer is a snapshot, `schema_version` `1`, with `view`, `generated_at_ms`, 
   numbers of incidents), `strong_by_kind`, and `latest_incident_id` with `latest_source_id`, the
   most recent incident it was linked to. The `tech` view keeps the 10 first suspects, `pilotage`
   the 3 first, `more_suspects` counting the rest; a frozen report and a recap webhook drop
-  `endpoint` there too. The key is absent on a report frozen before it existed. A link is a
-  suspicion to check, never a proven cause.
+  `endpoint` there too. The key is absent on a report frozen before it existed. A `grouping`
+  filter keeps the incidents whose alert carried that namespace: an incident has no grouping
+  value of its own, so on daemons whose first `grouping_attributes` is not
+  `k8s.namespace.name` a grouped recap counts no incident. A link is a suspicion to check,
+  never a proven cause.
 - **Cap.** `priorities` and each movement list keep their 5,000 first, in ranking order; the
   tiles still count every finding read, `more_priorities` the priorities past the cap and
   `movements.counts` each list's whole length. A read of more than 50,000 findings keeps the first
