@@ -176,10 +176,10 @@
     {
       "name": "oras-project/setup-oras",
       "kind": "github-action",
-      "version": "2.0.3",
-      "digest_or_sha": "5e2f2482b30b0cb3e14e67f89a80c88c659a7c63",
-      "released_at": "2026-10-27T17:53:34Z",
-      "source": "https://github.com/oras-project/setup-oras/releases/tag/v2.0.3",
+      "version": "2.0.4",
+      "digest_or_sha": "ac735097e22fe643015b0d19645f7c9a69942128",
+      "released_at": "2026-11-18T17:42:55Z",
+      "source": "https://github.com/oras-project/setup-oras/releases/tag/v2.0.4",
       "reason": "Latest stable official ORAS setup action."
     },
     {
@@ -203,10 +203,10 @@
     {
       "name": "step-security/harden-runner",
       "kind": "github-action",
-      "version": "2.22.4",
-      "digest_or_sha": "1d88384fd173af6ecb012dfd0264a306b711241a",
-      "released_at": "2026-11-06T16:23:05Z",
-      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.22.4",
+      "version": "2.23.0",
+      "digest_or_sha": "aebdcf6156ab6691adf63218240e476564a1ed4c",
+      "released_at": "2026-11-18T04:38:58Z",
+      "source": "https://github.com/step-security/harden-runner/releases/tag/v2.23.0",
       "reason": "Latest stable Harden-Runner release."
     },
     {
@@ -239,19 +239,19 @@
     {
       "name": "actions/dependency-review-action",
       "kind": "github-action",
-      "version": "5.0.0",
-      "digest_or_sha": "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
-      "released_at": "2026-05-08T20:23:50Z",
-      "source": "https://github.com/actions/dependency-review-action/releases/tag/v5.0.0",
+      "version": "5.0.1",
+      "digest_or_sha": "bbc44d14a204704ccc493733616cd1e93a0321ec",
+      "released_at": "2026-11-17T22:04:02Z",
+      "source": "https://github.com/actions/dependency-review-action/releases/tag/v5.0.1",
       "reason": "Latest stable official dependency review action."
     },
     {
       "name": "actions/create-github-app-token",
       "kind": "github-action",
-      "version": "3.3.0",
-      "digest_or_sha": "64ab729a6294000f5aa4a4bc0b73d1f32bc45510",
-      "released_at": "2026-10-12T23:42:23Z",
-      "source": "https://github.com/actions/create-github-app-token/releases/tag/v3.3.0",
+      "version": "3.4.0",
+      "digest_or_sha": "f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc",
+      "released_at": "2026-11-18T15:09:15Z",
+      "source": "https://github.com/actions/create-github-app-token/releases/tag/v3.4.0",
       "reason": "Latest stable official action for a short-lived, checks-only GitHub App installation token."
     },
     {
@@ -284,10 +284,10 @@
     {
       "name": "ossf/scorecard-action",
       "kind": "github-action",
-      "version": "2.5.0",
-      "digest_or_sha": "fa7117db83c52d787ae5a89f350999701505d78e",
-      "released_at": "2026-10-12T02:54:09Z",
-      "source": "https://github.com/ossf/scorecard-action/releases/tag/v2.5.0",
+      "version": "2.6.0",
+      "digest_or_sha": "23f22cd43608bae7a1f1fa2603d7314dee9538a5",
+      "released_at": "2026-11-19T05:31:48Z",
+      "source": "https://github.com/ossf/scorecard-action/releases/tag/v2.6.0",
       "reason": "Latest stable OpenSSF Scorecard action, pinned to its release commit."
     },
     {
