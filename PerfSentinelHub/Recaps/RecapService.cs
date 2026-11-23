@@ -232,14 +232,12 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
                 request.Access, minRank, signatures, cancellationToken);
         }
 
-        var rows = await Read(span.Period, 2, null);
+        // One read at every level: the ranking keeps strong and medium links, Latest also sees weak ones,
+        // and both come from the same rows, so a link replaced meanwhile cannot unsettle a suspect.
+        var rows = await Read(span.Period, 1, null);
         var previous = span.PreviousWindow is { } before ? await Read(before, 2, []) : [];
         var ranked = RecapIncidentSuspects.Rank(rows);
         var kept = ranked.Take(TechSuspects).ToList();
-        // Latest counts a weak link too, so it reads the kept signatures again at every level.
-        var latest = kept.Count == 0
-            ? []
-            : await Read(span.Period, 1, [.. kept.Select(item => item.Signature)]);
         var found = kept.Count == 0
             ? []
             : (await database.QueryFindingsAsync(
@@ -256,7 +254,7 @@ public sealed class RecapService(HubDatabase database, IOptions<HubOptions> opti
             rows.GroupBy(row => row.Id, StringComparer.Ordinal).Select(group => group.First().Kind)
                 .GroupBy(kind => kind, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal),
-            RecapIncidentSuspects.Named(kept, latest, found, Unknown),
+            RecapIncidentSuspects.Named(kept, rows, found, Unknown),
             ranked.Count - kept.Count);
     }
 
