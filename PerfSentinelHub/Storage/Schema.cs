@@ -569,4 +569,25 @@ internal static class Schema
                                     REFERENCES finding_sources(signature, source_id) ON DELETE CASCADE
                                 );
                                 """;
+
+    // Version 24 (23 is the per-source copy columns): which findings an incident most likely
+    // explains, one row per signature, recomputed off the import path and purged with the incident.
+    internal const string V24 = """
+                                CREATE TABLE IF NOT EXISTS incident_finding_links (
+                                  incident_id TEXT NOT NULL,
+                                  source_id TEXT NOT NULL,
+                                  signature TEXT NOT NULL,
+                                  level TEXT NOT NULL,
+                                  level_rank INTEGER NOT NULL,
+                                  reasons_json TEXT NOT NULL,
+                                  rules_version INTEGER NOT NULL,
+                                  incident_at_ms INTEGER NOT NULL,
+                                  service TEXT NOT NULL,
+                                  kind TEXT NOT NULL,
+                                  environment TEXT NOT NULL,
+                                  PRIMARY KEY(incident_id, source_id, signature)
+                                );
+                                CREATE INDEX IF NOT EXISTS ix_incident_finding_links_at
+                                  ON incident_finding_links(incident_at_ms);
+                                """;
 }

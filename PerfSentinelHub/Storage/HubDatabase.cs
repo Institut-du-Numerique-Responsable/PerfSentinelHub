@@ -483,6 +483,11 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM source_state WHERE last_attempt_ms < $cutoff LIMIT $chunk);
                                    DELETE FROM incidents WHERE rowid IN (
                                      SELECT rowid FROM incidents WHERE last_seen_ms < $cutoff LIMIT $chunk);
+                                   DELETE FROM incident_finding_links WHERE rowid IN (
+                                     SELECT l.rowid FROM incident_finding_links AS l
+                                     WHERE NOT EXISTS (
+                                       SELECT 1 FROM incidents AS i WHERE i.id = l.incident_id AND i.source_id = l.source_id)
+                                     LIMIT $chunk);
                                    DELETE FROM incident_attributes WHERE rowid IN (
                                      SELECT ia.rowid FROM incident_attributes AS ia
                                      WHERE NOT EXISTS (
