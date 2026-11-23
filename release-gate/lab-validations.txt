@@ -473,3 +473,18 @@ v0.20.1	cb2877b	2026-11-22	PASS
 # hub-recap (21 checks), hub-detection-volume and hub-card (24 checks). All
 # PASS, no skip. Not run: the cluster hub scenarios, the k3d cluster being down.
 v0.20.2	072101a	2026-11-22	PASS
+# v0.21.0 full pass, the fourteen hub-* scenarios, lab at origin/main (1e02233,
+# which follows perf-sentinel 0.49.0) on a fresh `make up-cni` cluster. The
+# eleven cluster scenarios ran Hub image 0.21.0-dc41d93c (seed-hub-local) against
+# the 0.49.0 daemon; hub-recap, hub-detection-volume and hub-card ran a local
+# Release build of the same commit and the 0.49.0 macos-arm64 release binary.
+# The release links each incident's frozen findings to it (schema 24, with the
+# incident_signatures triggers), counts incidents and recurring suspects in the
+# recap, carries the alert's saturation and says over how many days the carbon
+# figure is short. Checks: access-control 55, card 24, incidents-mirror 27,
+# recap 21, disclosures 11, detection-volume 10, ingestion, correlations-push and
+# lineage-mutation 7 each, derived-status, plugin-contract, retention-purge and
+# source-reachability 6 each, incidents-push 4. All PASS, no skip. No scenario
+# reads the link levels yet: IncidentLinkRulesTests, IncidentLinkStorageTests and
+# IncidentLinkWorkerTests cover them.
+v0.21.0	1e02233	2026-11-23	PASS
