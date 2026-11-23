@@ -2,7 +2,7 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.21.0] - 2026-11-23
 
 ### Added
 
@@ -35,9 +35,10 @@ All notable changes to PerfSentinelHub are recorded here.
   percentage of the limit, and the link rules use it. The Hub reads a value outside 0 to 1 as no
   saturation, since only a malformed push can send one. No report format, disclosure schema or
   daemon route changes.
-- Schema migration 24 adds the `incident_finding_links` table. At the first start the worker
-  assesses every stored incident with frozen findings, off the import path; on a Hub holding
-  thousands of incidents of one service and kind within 30 days that first pass takes a while.
+- Schema migration 24 adds the `incident_finding_links` table, and `incident_signatures`, each
+  incident copy's signatures, which triggers on `incidents` keep in step so recurrence is an
+  indexed join. The migration fills it once from the stored incidents, then at the first start
+  the worker assesses every stored incident with frozen findings, off the import path.
 
 ## [0.20.3] - 2026-11-22
 
