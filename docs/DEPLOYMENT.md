@@ -159,8 +159,11 @@ annotations:
   perf_sentinel_saturation: "{{ $value }}"
 ```
 
-The daemon reads a value up to 1 as a ratio of the limit, and a value above 1 and up to 100
-as a percentage; it drops any other value and still records the incident. perf-sentinel's
+The daemon reads a bare number as a ratio of the limit and a number followed by `%` as a
+percentage, so `"0.97"` and `"97%"` both read 0.97 and `{{ $value | humanizePercentage }}`
+works too. A value above 1, or above 100%, is capped at 1: a bare `"98"` reads 1, not 98%. A
+negative, non-finite or unreadable value is dropped, and the incident is still recorded,
+without a saturation. perf-sentinel's
 `[daemon.incidents] saturation_annotation` renames the annotation it reads. The Hub shows the
 value as a percentage of the limit on the Incidents screen and uses it to link findings to the
 incident. Updating a deployment's rules is that deployment's own change.
