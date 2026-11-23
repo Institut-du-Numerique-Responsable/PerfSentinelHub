@@ -169,8 +169,9 @@ annotations:
   perf_sentinel_saturation: "{{ $value }}"
 ```
 
-Le daemon accepte une valeur de 0 à 1 ou de 0 à 100, et `[daemon.incidents] saturation_annotation`
-de perf-sentinel renomme l'annotation lue. Le Hub affiche la valeur en pourcentage de la limite
+Le daemon lit une valeur jusqu'à 1 comme une part de la limite, et une valeur au-delà de 1 et
+jusqu'à 100 comme un pourcentage ; il écarte toute autre valeur et enregistre quand même
+l'incident. `[daemon.incidents] saturation_annotation` de perf-sentinel renomme l'annotation lue. Le Hub affiche la valeur en pourcentage de la limite
 sur l'écran Incidents et s'en sert pour lier les findings à l'incident. Mettre à jour les règles
 d'un déploiement relève de ce déploiement.
 

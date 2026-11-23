@@ -208,6 +208,7 @@ une autorisation filtre, compte et juge le statut.
 | `source_finding_imports`       | source, son dernier push de findings                                 | jamais                                     |
 | `incidents`                    | incident et source                                                   | rétention, sur `last_seen_ms`              |
 | `incident_attributes`          | incident, source et paire que porte chaque finding gelé              | avec son incident                          |
+| `incident_finding_links`       | incident, source et signature gelée, avec son niveau de lien         | avec son incident                          |
 | `correlation_episodes`         | épisode et source                                                    | rétention, sur `last_seen_ms`              |
 | `source_acks`                  | source et signature                                                  | rétention, sur `read_at_ms`                |
 | `finding_actions`              | signature, avec son statut, son responsable et l'enveloppe du finding une fois `done` | jamais                    |

@@ -570,8 +570,8 @@ internal static class Schema
                                 );
                                 """;
 
-    // Version 24 (23 is the per-source copy columns): which findings an incident most likely
-    // explains, one row per signature, recomputed off the import path and purged with the incident.
+    // Version 24 (23 is the per-source copy columns): how suspect each finding frozen on an incident
+    // is, one row per signature, recomputed off the import path and purged with the incident.
     internal const string V24 = """
                                 CREATE TABLE IF NOT EXISTS incident_finding_links (
                                   incident_id TEXT NOT NULL,
