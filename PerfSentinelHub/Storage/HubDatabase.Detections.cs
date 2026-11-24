@@ -292,7 +292,7 @@ public sealed partial class HubDatabase
     ///     sealed_through that page carried, and moves the cursor to the day after, so the
     ///     next pass rereads whole any day sealed while this one ran. A day below the read
     ///     was pruned by the daemon, perhaps read partially, and stays open. A first page
-    ///     with no sealed day leaves both as they are.
+    ///     with no sealed day leaves both as they are. Either way the walk is over.
     /// </summary>
     public async Task SealDetectionPassAsync(
         string sourceId,
@@ -302,9 +302,6 @@ public sealed partial class HubDatabase
         int? sealedThrough,
         CancellationToken cancellationToken)
     {
-        if (sealedThrough is null)
-            return;
-
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
@@ -316,14 +313,16 @@ public sealed partial class HubDatabase
                                   UPDATE detection_days SET sealed = 1
                                   WHERE source_id = $source_id AND ledger_id = $ledger_id
                                     AND day BETWEEN MAX($since_day, $oldest_day) AND $sealed_through;
-                                  UPDATE detection_ledgers SET read_from_day = $sealed_through + 1
+                                  UPDATE detection_ledgers
+                                  SET read_from_day = COALESCE($sealed_through + 1, read_from_day),
+                                      pass_after = NULL, pass_after_grouping = NULL, pass_sealed_through = NULL
                                   WHERE source_id = $source_id AND ledger_id = $ledger_id;
                                   """;
             command.Parameters.AddWithValue(SourceIdParameter, sourceId);
             command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
             command.Parameters.AddWithValue("$since_day", sinceDay);
             command.Parameters.AddWithValue("$oldest_day", oldestDay);
-            command.Parameters.AddWithValue("$sealed_through", sealedThrough.Value);
+            command.Parameters.AddWithValue("$sealed_through", (object?)sealedThrough ?? DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
@@ -333,7 +332,10 @@ public sealed partial class HubDatabase
         }
     }
 
-    /// <summary>The form the next poll pass asks this ledger in: split by grouping unless its counts are stored unsplit.</summary>
+    /// <summary>
+    ///     How the next poll pass reads this ledger: split by grouping unless its counts are stored unsplit, and
+    ///     from where a pass capped mid-walk stopped.
+    /// </summary>
     public async Task<DetectionWalk> ReadDetectionWalkAsync(
         string sourceId,
         string ledgerId,
@@ -341,10 +343,56 @@ public sealed partial class HubDatabase
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT split FROM detection_ledgers WHERE source_id = $source_id AND ledger_id = $ledger_id;";
+        command.CommandText = """
+                              SELECT split, pass_after, pass_after_grouping, pass_sealed_through FROM detection_ledgers
+                              WHERE source_id = $source_id AND ledger_id = $ledger_id;
+                              """;
         command.Parameters.AddWithValue(SourceIdParameter, sourceId);
         command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
-        return new DetectionWalk(await command.ExecuteScalarAsync(cancellationToken) is not 0L);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+            return new DetectionWalk(true, null, null, null);
+        return new DetectionWalk(
+            reader.IsDBNull(0) || reader.GetInt64(0) == 1,
+            reader.IsDBNull(1) ? null : reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetInt32(3));
+    }
+
+    /// <summary>
+    ///     Keeps where a pass capped mid-walk stopped, or forgets it with a null <paramref name="after" />, so
+    ///     the next pass goes on from that row instead of rereading every page before it.
+    /// </summary>
+    public async Task SaveDetectionWalkAsync(
+        string sourceId,
+        string ledgerId,
+        string? after,
+        string? afterGrouping,
+        int? sealedThrough,
+        CancellationToken cancellationToken)
+    {
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                                  UPDATE detection_ledgers
+                                  SET pass_after = $after, pass_after_grouping = $after_grouping,
+                                      pass_sealed_through = $sealed_through
+                                  WHERE source_id = $source_id AND ledger_id = $ledger_id;
+                                  """;
+            command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+            command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
+            command.Parameters.AddWithValue("$after", (object?)after ?? DBNull.Value);
+            command.Parameters.AddWithValue("$after_grouping", (object?)afterGrouping ?? DBNull.Value);
+            command.Parameters.AddWithValue("$sealed_through", (object?)sealedThrough ?? DBNull.Value);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     /// <summary>The day the next poll pass of this ledger starts from, null for a ledger never sealed or never read.</summary>

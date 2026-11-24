@@ -524,6 +524,45 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_pass_capped_mid_day_resumes_where_it_stopped_and_then_seals()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var served = 0;
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()),
+            context => Serve(context, ++served < DetectionReader.PagesCap + 2
+                ? SplitPage(Today - 2, $"{Today - 2}:s{served}", "web")
+                : SplitPage(Today - 1, null, null)),
+            cancellationToken);
+        var (poller, database, watch) = await BuildAsync(cancellationToken);
+        var source = Source(daemon);
+
+        await poller.PollAsync(source, cancellationToken);
+        Assert.Equal(1, watch.Reads("prod", DetectionReadOutcome.Capped));
+        Assert.Equal([(Today - 2, false)], await DaysAsync(database, cancellationToken));
+
+        _requests.Clear();
+        await poller.PollAsync(source, cancellationToken);
+
+        var cursor = Uri.EscapeDataString($"{Today - 2}:s{DetectionReader.PagesCap}");
+        Assert.Equal(
+            [
+                $"?since_day={Today - 2}&limit=5000&split=grouping&after={cursor}&after_grouping=web",
+                $"?since_day={Today - 2}&limit=5000&split=grouping&after={Uri.EscapeDataString($"{Today - 2}:s{DetectionReader.PagesCap + 1}")}&after_grouping=web"
+            ],
+            _requests);
+        Assert.Equal(1, watch.Reads("prod", DetectionReadOutcome.Ok));
+        Assert.Equal([(Today - 2, true), (Today - 1, true)], await DaysAsync(database, cancellationToken));
+        Assert.Equal(Today, await database.ReadDetectionCursorAsync("prod", DetectionLedgerJson.LedgerId,
+            cancellationToken));
+
+        // The walk is over: the next pass starts from the cursor, with no row to resume after.
+        _requests.Clear();
+        await poller.PollAsync(source, cancellationToken);
+        Assert.Equal([$"?since_day={Today}&limit=5000&split=grouping"], _requests);
+    }
+
+    [Fact]
     public async Task A_poll_asks_for_the_split_and_walks_both_cursor_parts()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

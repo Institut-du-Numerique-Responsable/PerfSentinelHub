@@ -205,7 +205,8 @@ pour chaque daemon interrogé : `ok`, `aborted`, `unauthorized`, `failed` et `ca
 `aborted` est un daemon qui a ouvert un nouveau registre ou l'a coupé pendant le passage, et
 `capped` un registre de plus de 128 pages de 5 000 lignes, 640 000 lignes par passage : trois
 jours retenus à `max_signatures_per_day = 150000` plus les 10 000 signatures surveillées de
-chacun font 480 000. Un daemon antérieur à perf-sentinel 0.37.0, ou dont le registre est
+chacun font 480 000. Le passage suivant reprend de la ligne où un passage plafonné s'est arrêté,
+donc un registre plus grand est lu en entier sur plusieurs polls. Un daemon antérieur à perf-sentinel 0.37.0, ou dont le registre est
 coupé, n'est jamais lu et reste à zéro. `detection_rows_total` compte les lignes fusionnées
 par chaque passage, sans les lignes d'une page écartée pour être arrivée sous l'autre forme
 que son registre, découpé par regroupement ou non, et le jour ouvert est fusionné de nouveau à chaque

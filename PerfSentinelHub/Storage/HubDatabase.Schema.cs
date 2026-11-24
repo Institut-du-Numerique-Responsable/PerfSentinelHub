@@ -161,6 +161,7 @@ public sealed partial class HubDatabase
             await EnsureActionFrozenFindingColumnAsync(connection, transaction, cancellationToken);
             await RebuildDetectionCountsAsync(connection, transaction, cancellationToken);
             await EnsureDetectionLedgerSplitColumnAsync(connection, transaction, cancellationToken);
+            await EnsureDetectionWalkColumnsAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -409,6 +410,28 @@ public sealed partial class HubDatabase
                             ALTER TABLE detection_ledgers ADD COLUMN split INTEGER;
                             UPDATE detection_ledgers SET split = 0
                             WHERE (source_id, ledger_id) IN (SELECT source_id, ledger_id FROM detection_counts);
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Version 26 too: where a poll walk capped mid-ledger stopped, the row it ended on and the
+    ///     sealed_through of its first page, so the next pass goes on from there. NULL between walks.
+    /// </summary>
+    private static async Task EnsureDetectionWalkColumnsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "detection_ledgers", "pass_after", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE detection_ledgers ADD COLUMN pass_after TEXT;
+                            ALTER TABLE detection_ledgers ADD COLUMN pass_after_grouping TEXT;
+                            ALTER TABLE detection_ledgers ADD COLUMN pass_sealed_through INTEGER;
                             """;
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -96,7 +96,10 @@ a scellé pendant le passage est relu en entier par le suivant. Un jour en deç�
 daemon après une lecture partielle, reste ouvert. Un passage qui s'arrête avant, au plafond de
 pages, parce que le daemon a ouvert un nouveau registre entre-temps, ou parce qu'un push a
 stocké le registre sous l'autre forme que celle demandée par le passage, garde ce qu'il a
-fusionné et ne scelle rien. Le passage demande le registre découpé par regroupement, sauf si
+fusionné et ne scelle rien. Au plafond de pages, il garde aussi la ligne où il s'est arrêté :
+le passage suivant reprend de là au lieu de relire les premières pages, et le parcours scelle
+une fois arrivé à la dernière page, jusqu'au `sealed_through` de sa toute première page. Le
+passage demande le registre découpé par regroupement, sauf si
 ses comptes sont stockés par signature. Un daemon dont le statut ne nomme aucun registre, antérieur à
 0.37.0 ou dont le registre est coupé, n'est jamais interrogé.
 

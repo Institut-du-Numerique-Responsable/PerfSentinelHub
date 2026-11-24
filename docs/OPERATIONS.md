@@ -192,6 +192,8 @@ polled daemon: `ok`, `aborted`, `unauthorized`, `failed` and `capped`. `aborted`
 daemon that started a new ledger or turned it off during the pass, and `capped` a ledger
 past 128 pages of 5,000 rows, 640,000 rows a pass: three retained days at
 `max_signatures_per_day = 150000` plus the 10,000 watched signatures of each come to 480,000.
+The next pass goes on from the row a capped one stopped on, so a larger ledger is read whole
+over several polls.
 A daemon older than perf-sentinel 0.37.0, or with its ledger off, is never read and stays at
 zero. `detection_rows_total` counts the rows merged by each pass, not the rows of a page left
 out for coming in the other form than its ledger, split by grouping or not, and

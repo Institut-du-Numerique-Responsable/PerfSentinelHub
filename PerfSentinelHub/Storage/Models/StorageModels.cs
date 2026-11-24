@@ -436,8 +436,11 @@ public sealed record DetectionLedgerPage(
     bool Split = false,
     string? NextAfterGrouping = null);
 
-/// <summary>How the next poll pass reads a ledger: split by grouping, or per signature for a ledger stored so.</summary>
-public sealed record DetectionWalk(bool Split);
+/// <summary>
+///     How the next poll pass reads a ledger: split by grouping, or per signature for a ledger stored so, and,
+///     for a walk an earlier pass left at the page cap, the row to go on after and its first page's sealed_through.
+/// </summary>
+public sealed record DetectionWalk(bool Split, string? After, string? AfterGrouping, int? SealedThrough);
 
 /// <summary>
 ///     How a ledger page merged: not at all while the write lock stayed taken. Foreign when the page came in

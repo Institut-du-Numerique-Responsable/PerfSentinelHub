@@ -89,7 +89,9 @@ page, and moves the cursor past them, so a day the daemon sealed while the pass 
 whole again by the next one. A day below that, pruned by the daemon after a partial read, stays
 open. A pass that stops early, at the page cap, because the daemon opened a new ledger
 meanwhile, or because a push stored the ledger in the other form than the pass asked, keeps
-what it merged and seals nothing. The pass asks the ledger split by grouping unless its counts
+what it merged and seals nothing. At the page cap it also keeps the row it stopped on, so the
+next pass goes on from there instead of rereading the first pages, and the walk seals once it
+reaches the last page, up to the `sealed_through` of its very first page. The pass asks the ledger split by grouping unless its counts
 are stored per signature. A daemon whose status names no ledger, older
 than 0.37.0 or with the ledger off, is never asked.
 

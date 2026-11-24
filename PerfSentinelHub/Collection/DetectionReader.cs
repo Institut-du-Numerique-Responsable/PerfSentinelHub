@@ -8,7 +8,9 @@ namespace PerfSentinelHub.Collection;
 ///     One daemon's detection ledger, read page by page and merged. A pass starts from the
 ///     ledger's cursor, or its oldest day the first time, and seals only once it read every
 ///     page: then the days it read up to the sealed_through its first page carried, so a
-///     day the daemon sealed while the pass ran is read whole again by the next one.
+///     day the daemon sealed while the pass ran is read whole again by the next one. A pass
+///     stopped at the page cap keeps the row it ended on, and the next goes on from it, the
+///     walk sealing as one pass once it reads the last page.
 /// </summary>
 /// <remarks>
 ///     Its failures are its own, as for IncidentReader, and a storage failure too, unlike
@@ -24,7 +26,7 @@ public sealed partial class DetectionReader(
 {
     // 128 pages of 5000 rows, 640 000 rows per pass: three retained days at
     // max_signatures_per_day = 150 000 plus 10 000 watched rows each are 480 000. A pass that
-    // reaches it seals nothing, so the next one starts from the same cursor.
+    // reaches it seals nothing and keeps the row it stopped on, so the next one goes on from there.
     public const int PagesCap = 128;
 
     /// <summary>Reads one pass of the ledger the daemon's status named, or does nothing without one.</summary>
@@ -77,10 +79,12 @@ public sealed partial class DetectionReader(
         var sinceDay = await database.ReadDetectionCursorAsync(source.Id, ledger.LedgerId, cancellationToken) ??
                        ledger.OldestDay;
         var walk = await database.ReadDetectionWalkAsync(source.Id, ledger.LedgerId, cancellationToken);
-        int? sealedThrough = null;
+        // A walk an earlier pass left at the cap goes on from its row, sealing up to its own first page's
+        // sealed_through: every day up to there was sealed, so unchanged, when the walk read it.
+        var resumed = walk.After is not null;
+        var sealedThrough = walk.SealedThrough;
         var oldestDay = sinceDay;
-        string? after = null;
-        string? afterGrouping = null;
+        var (after, afterGrouping) = (walk.After, walk.AfterGrouping);
         for (var pages = 0; pages < PagesCap; pages++)
         {
             // A daemon that turned its ledger off or rolled back since its status answered.
@@ -97,14 +101,16 @@ public sealed partial class DetectionReader(
                 return DetectionReadOutcome.Aborted;
             }
 
+            // The daemon's oldest day only moves on, so this pass's first page bounds a day pruned mid-walk.
             if (pages == 0)
-                (sealedThrough, oldestDay) = (page.SealedThrough, page.OldestDay);
+                (sealedThrough, oldestDay) = (resumed ? sealedThrough : page.SealedThrough, page.OldestDay);
             var merge = await database.MergeDetectionPageAsync(source.Id, page, false, observedAtMs, cancellationToken);
             rows.Value += page.Counts.Count - merge.SkippedCounts;
             // A push stored the ledger in the other form since the pass began: the next one asks that form.
             if (merge.Foreign)
             {
                 LogOtherForm(logger, source.Id, merge.SkippedCounts);
+                await database.SaveDetectionWalkAsync(source.Id, ledger.LedgerId, null, null, null, cancellationToken);
                 return DetectionReadOutcome.Aborted;
             }
             if (page.NextAfter is null)
@@ -117,6 +123,8 @@ public sealed partial class DetectionReader(
             (after, afterGrouping) = (page.NextAfter, page.NextAfterGrouping);
         }
 
+        await database.SaveDetectionWalkAsync(source.Id, ledger.LedgerId, after, afterGrouping, sealedThrough,
+            cancellationToken);
         LogDetectionsCapped(logger, source.Id, PagesCap);
         return DetectionReadOutcome.Capped;
     }
@@ -142,7 +150,7 @@ public sealed partial class DetectionReader(
     [LoggerMessage(
         1117,
         LogLevel.Warning,
-        "Source {SourceId} detection ledger runs past {Cap} pages; the pass stopped unsealed and starts over next poll.")]
+        "Source {SourceId} detection ledger runs past {Cap} pages; the pass stopped unsealed and the next poll goes on from its last row.")]
     private static partial void LogDetectionsCapped(ILogger logger, string sourceId, int cap);
 
     [LoggerMessage(
