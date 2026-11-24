@@ -93,10 +93,11 @@ a spike. Three things follow:
   more intense than their own counts would;
 - since the detection ledger is counted per grouping, a frozen finding is compared with its own
   grouping's history: a narrowed incident, whose alert names a namespace, reads its findings
-  against that namespace's past, not the whole source's. Right after the upgrade a narrowed
-  incident has fewer covered days, only the days the daemon sent split, so its intensity stays
-  unknown at first and improves day by day up to the 7-day baseline. Below-threshold passes stay
-  counted per signature.
+  against that namespace's past, not the whole source's. A narrowed incident reads only the
+  days the daemon sent split, so it is the daemon's upgrade that counts: with the Hub upgraded
+  first, its intensity stays unknown until the daemon follows, then improves day by day up to the
+  7-day baseline, and on a source whose daemon never splits it stays unknown. Below-threshold
+  passes stay counted per signature.
 
 ## What `status` and `lineage` claim
 
@@ -321,14 +322,14 @@ machine token too and every read is trimmed to the caller's grants, see
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md) and
 [What access control does not cover](#what-access-control-does-not-cover).
 
-Six endpoints ask for a credential, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`,
-`POST /api/import/detections/by-grouping` and `POST /api/import/disclosures`, whose
-`X-API-Key` is compared by fingerprint, and `/share/` serves a disclosure's files to whoever
-holds a live token. Every other one asks for nothing: `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses`
-for both the listing and the request that starts a run, `/reports/`, `/metrics`, and the
-launcher itself. Whoever reaches the port reads every finding of every tenant, SQL query
-shapes and endpoint names included.
+Six endpoints ask for a credential, `POST /api/import/findings`, `POST /api/import/incidents`,
+`POST /api/import/correlations`, `POST /api/import/detections`,
+`POST /api/import/detections/by-grouping` and `POST /api/import/disclosures`, whose `X-API-Key`
+is compared by fingerprint, and `/share/` serves a disclosure's files to whoever holds a live
+token. Every other one asks for nothing: `/api/status`, `/api/sources`, `/api/findings`,
+`/api/correlations`, `/api/analyses` for both the listing and the request that starts a run,
+`/reports/`, `/metrics`, and the launcher itself. Whoever reaches the port reads every finding
+of every tenant, SQL query shapes and endpoint names included.
 
 The `by` and `reason` of a mirrored ack are readable on the open read route,
 `/api/findings`, which stays open to machines with `Hub:Auth` on unless `Hub:Access` is
