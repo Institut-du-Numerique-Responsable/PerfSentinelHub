@@ -78,9 +78,13 @@ answers `400` for a page that is not split, and `/api/import/detections` answers
 one; a daemon falls back to the old route when the new one answers `404` or `405`. The poll asks
 `GET /api/detections?split=grouping` and walks a page's `next_after` and `next_after_grouping`
 back as `after` and `after_grouping`; a page from an older daemon has no `split` and is stored
-unsplit. Once a day holds split rows, the unsplit count rows later sent for it (by push or poll)
-are left out, since the grouping rows already carry them: a push counts them out of `accepted`
-(not in `rejected`), and the poll logs how many it skipped.
+unsplit. A ledger is stored in one form only, set by the first page that brings it counts or a
+split: once its counts are stored unsplit, the poll asks it without `split` and a split page adds
+no count to it, and once it is split, an unsplit page adds none. Such a page still merges its day
+rows, without sealing them, a push counts its rows out of `accepted` (not in `rejected`), and a
+poll pass stops there unsealed: the next pass reads the ledger in its own form and brings those
+counts. A ledger stored unsplit before the Hub's upgrade thus stays so until its daemon restarts,
+and the next ledger is split from its first page.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are, and one source holds at most one of them: a second import from a source whose

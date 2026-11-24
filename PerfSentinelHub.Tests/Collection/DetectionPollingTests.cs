@@ -89,10 +89,11 @@ public sealed class DetectionPollingTests : IDisposable
             cancellationToken));
         Assert.Equal(3, await CountRowsAsync(database, cancellationToken));
 
+        // The daemon answered unsplit: the ledger is stored so, and read so from now on.
         _requests.Clear();
         await poller.PollAsync(source, cancellationToken);
 
-        Assert.Equal([$"?since_day={Today}&limit=5000&split=grouping"], _requests);
+        Assert.Equal([$"?since_day={Today}&limit=5000"], _requests);
         Assert.Equal(2, watch.Reads("prod", DetectionReadOutcome.Ok));
         Assert.Equal(4, watch.Rows("prod"));
     }
@@ -208,7 +209,7 @@ public sealed class DetectionPollingTests : IDisposable
         _requests.Clear();
         await poller.PollAsync(source, cancellationToken);
 
-        Assert.Equal([$"?since_day={Today - 1}&limit=5000&split=grouping"], _requests);
+        Assert.Equal([$"?since_day={Today - 1}&limit=5000"], _requests);
         Assert.Equal([(Today - 2, true), (Today - 1, true)], await DaysAsync(database, cancellationToken));
     }
 
@@ -288,7 +289,7 @@ public sealed class DetectionPollingTests : IDisposable
 
         await poller.PollAsync(Source(daemon), cancellationToken);
 
-        Assert.Equal([$"?since_day={Today - 4}&limit=5000&split=grouping"], _requests);
+        Assert.Equal([$"?since_day={Today - 4}&limit=5000"], _requests);
         Assert.Equal(
             [(Today - 4, false), (Today - 2, true), (Today - 1, true)],
             await DaysAsync(database, cancellationToken));
@@ -410,10 +411,10 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
-    public async Task Unsplit_counts_left_out_on_a_split_day_are_not_counted_as_read()
+    public async Task A_page_in_the_other_form_than_its_ledger_stops_the_pass_unsealed()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var pages = new Queue<JsonObject>([SplitPage(Today, "a", "web"), Page([Today], null)]);
+        var pages = new Queue<JsonObject>([SplitPage(Today - 2, "a", "web"), Page([Today - 1], null)]);
         await using var daemon = await DaemonAsync(
             Status(Ledger()), context => Serve(context, pages.Dequeue()), cancellationToken);
         var (poller, database, watch) = await BuildAsync(cancellationToken);
@@ -422,6 +423,88 @@ public sealed class DetectionPollingTests : IDisposable
 
         Assert.Equal(1, await CountRowsAsync(database, cancellationToken));
         Assert.Equal(1, watch.Rows("prod"));
+        Assert.Equal([(Today - 2, false), (Today - 1, false)], await DaysAsync(database, cancellationToken));
+        Assert.Null(await database.ReadDetectionCursorAsync("prod", DetectionLedgerJson.LedgerId, cancellationToken));
+        Assert.Equal(1, watch.Reads("prod", DetectionReadOutcome.Aborted));
+    }
+
+    [Fact]
+    public async Task A_ledger_stored_unsplit_before_the_upgrade_is_polled_unsplit_with_exact_totals()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        // The Hub was upgraded mid-ledger: the daemon, fallen back, pushes totals to the older route.
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()),
+            context => Serve(context, context.Request.Query.ContainsKey("split")
+                ? SplitPage(Today, null, null)
+                : DetectionLedgerJson.Page([DetectionLedgerJson.Count(Today, detections: 9)],
+                    [DetectionLedgerJson.Day(Today)], Today)),
+            cancellationToken);
+        var (poller, database, _) = await BuildAsync(cancellationToken);
+        var nowMs = DetectionLedgerJson.Midnight(Today) + 1;
+        await database.TryMergeDetectionPageAsync("prod", DetectionLedgerJson.Parse(
+            DetectionLedgerJson.Page([DetectionLedgerJson.Count(Today, detections: 7)], [], Today), nowMs),
+            nowMs, cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        Assert.Equal([$"?since_day={Today - 2}&limit=5000"], _requests);
+        Assert.Equal("=9", await GroupingRowsAsync(database, cancellationToken));
+    }
+
+    [Fact]
+    public async Task A_fresh_ledger_polled_split_from_its_first_page_stays_split()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()), context => Serve(context, SplitPage(Today, null, null)), cancellationToken);
+        var (poller, database, watch) = await BuildAsync(cancellationToken);
+        var source = Source(daemon);
+
+        await poller.PollAsync(source, cancellationToken);
+        await poller.PollAsync(source, cancellationToken);
+
+        Assert.All(_requests, request => Assert.Contains("&split=grouping", request, StringComparison.Ordinal));
+        Assert.Equal("web=5", await GroupingRowsAsync(database, cancellationToken));
+        Assert.Equal(2, watch.Reads("prod", DetectionReadOutcome.Ok));
+    }
+
+    [Fact]
+    public async Task A_push_of_totals_landing_mid_pass_on_a_fresh_ledger_neither_doubles_nor_deletes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        HubDatabase? database = null;
+        var nowMs = DetectionLedgerJson.Midnight(Today) + 1;
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()),
+            async context =>
+            {
+                if (context.Request.Query.ContainsKey("split"))
+                {
+                    // The fallen-back daemon's push lands while the split page is on its way.
+                    await database!.TryMergeDetectionPageAsync("prod", DetectionLedgerJson.Parse(
+                        DetectionLedgerJson.Page([DetectionLedgerJson.Count(Today, detections: 7)], [], Today),
+                        nowMs), nowMs, cancellationToken);
+                    await Serve(context, SplitPage(Today, null, null));
+                    return;
+                }
+
+                await Serve(context, DetectionLedgerJson.Page([DetectionLedgerJson.Count(Today, detections: 8)],
+                    [DetectionLedgerJson.Day(Today)], Today));
+            },
+            cancellationToken);
+        (var poller, database, var watch) = await BuildAsync(cancellationToken);
+        var source = Source(daemon);
+
+        await poller.PollAsync(source, cancellationToken);
+        Assert.Equal("=7", await GroupingRowsAsync(database, cancellationToken));
+        Assert.Equal(1, watch.Reads("prod", DetectionReadOutcome.Aborted));
+
+        await poller.PollAsync(source, cancellationToken);
+        Assert.Equal([$"?since_day={Today - 2}&limit=5000&split=grouping", $"?since_day={Today - 2}&limit=5000"],
+            _requests);
+        Assert.Equal("=8", await GroupingRowsAsync(database, cancellationToken));
+        Assert.Equal(1, watch.Reads("prod", DetectionReadOutcome.Ok));
     }
 
     [Fact]
@@ -611,6 +694,17 @@ public sealed class DetectionPollingTests : IDisposable
         while (await reader.ReadAsync(cancellationToken))
             days.Add((reader.GetInt32(0), reader.GetInt64(1) == 1));
         return days;
+    }
+
+    private static async Task<string?> GroupingRowsAsync(HubDatabase database, CancellationToken cancellationToken)
+    {
+        await using var connection = await database.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT group_concat(grouping || '=' || detections, ',')
+                              FROM (SELECT * FROM detection_counts WHERE source_id = 'prod' ORDER BY grouping);
+                              """;
+        return await command.ExecuteScalarAsync(cancellationToken) as string;
     }
 
     private static async Task<long> CountRowsAsync(HubDatabase database, CancellationToken cancellationToken)

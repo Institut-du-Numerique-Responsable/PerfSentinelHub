@@ -86,10 +86,15 @@ porte, les mêmes bornes et la même réponse. Cette route répond `400` à une 
 `/api/import/detections` répond `400` à une page découpée ; un daemon retombe sur l'ancienne route
 quand la nouvelle répond `404` ou `405`. Le poll demande `GET /api/detections?split=grouping` et
 renvoie le `next_after` et le `next_after_grouping` d'une page en `after` et `after_grouping` ; la
-page d'un daemon plus ancien n'a pas de `split` et est stockée non découpée. Une fois qu'un jour
-contient des lignes découpées, les lignes de comptes non découpées envoyées ensuite pour ce jour
-(par push ou par poll) sont écartées, puisque les lignes par regroupement les portent déjà : un
-push les retire de `accepted` (sans les mettre dans `rejected`), et le poll journalise leur nombre.
+page d'un daemon plus ancien n'a pas de `split` et est stockée non découpée. Un registre n'est
+stocké que sous une forme, fixée par la première page qui lui apporte des comptes ou un découpage :
+une fois ses comptes stockés non découpés, le poll le demande sans `split` et une page découpée ne
+lui ajoute aucun compte, et une fois qu'il est découpé, une page non découpée n'en ajoute aucun.
+Une telle page fusionne quand même ses lignes de jours, sans les sceller, un push retire ses lignes
+de `accepted` (sans les mettre dans `rejected`), et un passage de poll s'y arrête sans sceller : le
+passage suivant lit le registre sous sa propre forme et apporte ces comptes. Un registre stocké non
+découpé avant la mise à jour du Hub le reste donc jusqu'au redémarrage de son daemon, et le
+registre suivant est découpé dès sa première page.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons, et une source en tient au plus un : un second import d'une source dont le

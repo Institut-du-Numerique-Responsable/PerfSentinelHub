@@ -38,6 +38,7 @@ internal static class LegacySchema
                                              );
                                              CREATE INDEX ix_detection_counts_day ON detection_counts(day);
                                              DROP TABLE detection_split_days;
+                                             ALTER TABLE detection_ledgers DROP COLUMN split;
                                              DELETE FROM schema_migrations WHERE version IN (25, 26);
                                              """;
 }

@@ -436,11 +436,15 @@ public sealed record DetectionLedgerPage(
     bool Split = false,
     string? NextAfterGrouping = null);
 
+/// <summary>How the next poll pass reads a ledger: split by grouping, or per signature for a ledger stored so.</summary>
+public sealed record DetectionWalk(bool Split);
+
 /// <summary>
-///     How a ledger page merged: not at all while the write lock stayed taken. SkippedCounts are the
-///     count rows of an unsplit page left out on days already split, whose grouping rows carry them.
+///     How a ledger page merged: not at all while the write lock stayed taken. Foreign when the page came in
+///     the other form than its ledger is stored in, split by grouping or not: its day rows merged unsealed
+///     and its count rows, SkippedCounts, were left out for the poll to read in the ledger's form.
 /// </summary>
-public readonly record struct DetectionMergeResult(bool Merged, int SkippedCounts);
+public readonly record struct DetectionMergeResult(bool Merged, int SkippedCounts, bool Foreign = false);
 
 /// <summary>
 ///     How many times one signature was detected on one UTC epoch day, null I/O when green was off.

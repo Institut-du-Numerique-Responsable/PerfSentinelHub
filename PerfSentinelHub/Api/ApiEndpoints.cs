@@ -525,7 +525,7 @@ public static partial class ApiEndpoints
                         result.SkippedCounts);
                 // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
                 var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
-                // Rows left out on a split day are not accepted, and not rejected either.
+                // Rows left out for the ledger's other form are not accepted, and not rejected either.
                 return TypedResults.Ok(
                     new DetectionImportResponse(page.Counts.Count - result.SkippedCounts, 0, watch));
             },
@@ -793,7 +793,7 @@ public static partial class ApiEndpoints
         int rejectedCount);
 
     [LoggerMessage(1304, LogLevel.Information,
-        "Source {SourceId} sent {Skipped} unsplit detection counts on days already split by grouping; they were left out.")]
+        "Source {SourceId} pushed {Skipped} detection counts in the other form than its ledger is stored in, split by grouping or not; they were left out for the poll to read.")]
     private static partial void LogSkippedDetectionCounts(
         ILogger logger,
         string sourceId,

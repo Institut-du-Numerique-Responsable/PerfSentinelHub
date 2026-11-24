@@ -76,6 +76,7 @@ public sealed partial class DetectionReader(
     {
         var sinceDay = await database.ReadDetectionCursorAsync(source.Id, ledger.LedgerId, cancellationToken) ??
                        ledger.OldestDay;
+        var walk = await database.ReadDetectionWalkAsync(source.Id, ledger.LedgerId, cancellationToken);
         int? sealedThrough = null;
         var oldestDay = sinceDay;
         string? after = null;
@@ -83,7 +84,8 @@ public sealed partial class DetectionReader(
         for (var pages = 0; pages < PagesCap; pages++)
         {
             // A daemon that turned its ledger off or rolled back since its status answered.
-            if (await client.FetchDetectionsPageAsync(source, sinceDay, after, afterGrouping, cancellationToken) is not { } payload)
+            if (await client.FetchDetectionsPageAsync(source, sinceDay, after, afterGrouping, walk.Split,
+                    cancellationToken) is not { } payload)
                 return DetectionReadOutcome.Aborted;
 
             var page = DetectionLedgerParser.ParsePage(payload, observedAtMs);
@@ -98,9 +100,13 @@ public sealed partial class DetectionReader(
             if (pages == 0)
                 (sealedThrough, oldestDay) = (page.SealedThrough, page.OldestDay);
             var merge = await database.MergeDetectionPageAsync(source.Id, page, false, observedAtMs, cancellationToken);
-            if (merge.SkippedCounts > 0)
-                LogCountsSkipped(logger, source.Id, merge.SkippedCounts);
             rows.Value += page.Counts.Count - merge.SkippedCounts;
+            // A push stored the ledger in the other form since the pass began: the next one asks that form.
+            if (merge.Foreign)
+            {
+                LogOtherForm(logger, source.Id, merge.SkippedCounts);
+                return DetectionReadOutcome.Aborted;
+            }
             if (page.NextAfter is null)
             {
                 await database.SealDetectionPassAsync(
@@ -142,6 +148,6 @@ public sealed partial class DetectionReader(
     [LoggerMessage(
         1118,
         LogLevel.Information,
-        "Source {SourceId} sent {Skipped} unsplit detection counts on days already split by grouping; they were left out.")]
-    private static partial void LogCountsSkipped(ILogger logger, string sourceId, int skipped);
+        "Source {SourceId} detection ledger is stored in the other form than this pass asked, split by grouping or not; its {Skipped} counts were left out and the next pass asks the stored form.")]
+    private static partial void LogOtherForm(ILogger logger, string sourceId, int skipped);
 }

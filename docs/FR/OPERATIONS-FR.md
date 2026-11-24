@@ -207,8 +207,8 @@ pour chaque daemon interrogé : `ok`, `aborted`, `unauthorized`, `failed` et `ca
 jours retenus à `max_signatures_per_day = 150000` plus les 10 000 signatures surveillées de
 chacun font 480 000. Un daemon antérieur à perf-sentinel 0.37.0, ou dont le registre est
 coupé, n'est jamais lu et reste à zéro. `detection_rows_total` compte les lignes fusionnées
-par chaque passage, sans les lignes non découpées écartées d'un jour déjà découpé par
-regroupement, et le jour ouvert est fusionné de nouveau à chaque
+par chaque passage, sans les lignes d'une page écartée pour être arrivée sous l'autre forme
+que son registre, découpé par regroupement ou non, et le jour ouvert est fusionné de nouveau à chaque
 poll, donc il ne compte pas des lignes distinctes et son débit n'est pas un volume d'entrée.
 Un registre poussé ne compte que ses refus, dans `detection_import_rejected_total`, dont les
 motifs sont ceux de l'import des findings. Les trois compteurs de détections repartent de

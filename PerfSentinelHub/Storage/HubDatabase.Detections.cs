@@ -90,17 +90,13 @@ public sealed partial class HubDatabase
                                               """;
 
     // below_threshold_passes takes the null-tolerant maximum: a copy from an engine before C1
-    // sends none and must not erase what another copy counted. An unsplit row on a split day is
-    // left out, its signature's grouping rows holding that day; it changes no row then.
+    // sends none and must not erase what another copy counted.
     private const string DetectionCountUpsert = """
                                                 INSERT INTO detection_counts(
                                                   signature, source_id, ledger_id, day, detections, extra_io_ops,
                                                   below_threshold_passes, grouping)
-                                                SELECT $signature, $source_id, $ledger_id, $day, $detections,
-                                                       $extra_io_ops, $below_threshold_passes, $grouping
-                                                WHERE $split_page = 1 OR NOT EXISTS (
-                                                  SELECT 1 FROM detection_split_days
-                                                  WHERE source_id = $source_id AND ledger_id = $ledger_id AND day = $day)
+                                                VALUES ($signature, $source_id, $ledger_id, $day, $detections,
+                                                        $extra_io_ops, $below_threshold_passes, $grouping)
                                                 ON CONFLICT(signature, source_id, ledger_id, day, grouping) DO UPDATE SET
                                                   detections = MAX(detection_counts.detections, excluded.detections),
                                                   extra_io_ops = MAX(detection_counts.extra_io_ops, excluded.extra_io_ops),
@@ -109,17 +105,19 @@ public sealed partial class HubDatabase
                                                     detection_counts.below_threshold_passes, excluded.below_threshold_passes);
                                                 """;
 
-    // The first split page touching a day, through its counts or its day row, drops the day's
-    // unsplit totals, all on the empty grouping, and marks it; the day's later split pages only add.
+    // A split page sets its ledger split and marks the days it touches, through its counts or its day
+    // row. A ledger never holds both forms, so no unsplit total sits on those days to drop.
     private const string SplitDayMark = """
-                                        DELETE FROM detection_counts
-                                        WHERE source_id = $source_id AND ledger_id = $ledger_id AND grouping = ''
-                                          AND day IN (SELECT value FROM json_each($days))
-                                          AND day NOT IN (SELECT day FROM detection_split_days
-                                                          WHERE source_id = $source_id AND ledger_id = $ledger_id);
+                                        UPDATE detection_ledgers SET split = 1
+                                        WHERE source_id = $source_id AND ledger_id = $ledger_id;
                                         INSERT OR IGNORE INTO detection_split_days(source_id, ledger_id, day)
                                         SELECT $source_id, $ledger_id, value FROM json_each($days);
                                         """;
+
+    private const string UnsplitLedgerMark = """
+                                             UPDATE detection_ledgers SET split = 0
+                                             WHERE source_id = $source_id AND ledger_id = $ledger_id;
+                                             """;
 
     // A windowed page's volume inputs in one round trip: the page's counts in the window,
     // then the days and the ledgers of every source in scope.
@@ -148,7 +146,10 @@ public sealed partial class HubDatabase
     /// <summary>
     ///     Merges one ledger page in its own transaction, waiting for the write lock as long
     ///     as it takes. A polled page never seals a day (SealDetectionPassAsync does, once a
-    ///     whole pass is read); a pushed one seals what the daemon sent sealed.
+    ///     whole pass is read); a pushed one seals what the daemon sent sealed. A ledger is stored
+    ///     in one form, split by grouping or not, set by its first page holding counts or a split
+    ///     one: a page of the other form merges its day rows unsealed and adds no count, which the
+    ///     poll reads in the ledger's form, so no count is doubled nor deleted.
     /// </summary>
     public async Task<DetectionMergeResult> MergeDetectionPageAsync(
         string sourceId,
@@ -205,15 +206,6 @@ public sealed partial class HubDatabase
         command.Transaction = transaction;
         var parameters = command.Parameters;
 
-        if (page.Split)
-        {
-            command.CommandText = SplitDayMark;
-            BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
-            parameters.AddWithValue("$days",
-                $"[{string.Join(',', page.Days.Select(day => day.Day).Concat(page.Counts.Select(count => count.Day)).Distinct())}]");
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
-
         command.CommandText = DetectionLedgerUpsert;
         BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
         parameters.AddWithValue("$started_ms", page.StartedMs);
@@ -221,12 +213,25 @@ public sealed partial class HubDatabase
         parameters.AddWithValue("$pushed", fromPush ? 1 : 0);
         await command.ExecuteNonQueryAsync(cancellationToken);
 
+        command.CommandText = "SELECT split FROM detection_ledgers WHERE source_id = $source_id AND ledger_id = $ledger_id;";
+        BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
+        var foreign = await command.ExecuteScalarAsync(cancellationToken) is long stored && (stored == 1) != page.Split;
+        if (!foreign && (page.Split || page.Counts.Count > 0))
+        {
+            command.CommandText = page.Split ? SplitDayMark : UnsplitLedgerMark;
+            BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
+            parameters.AddWithValue("$days",
+                $"[{string.Join(',', page.Days.Select(day => day.Day).Concat(page.Counts.Select(count => count.Day)).Distinct())}]");
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         command.CommandText = DetectionDayUpsert;
         foreach (var day in page.Days)
         {
             BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
             parameters.AddWithValue("$day", day.Day);
-            parameters.AddWithValue("$sealed", fromPush && day.Sealed ? 1 : 0);
+            // A day whose counts this page cannot bring is not complete on its word.
+            parameters.AddWithValue("$sealed", fromPush && day.Sealed && !foreign ? 1 : 0);
             parameters.AddWithValue("$gap", day.Gap ? 1 : 0);
             parameters.AddWithValue("$overflow_detections", day.OverflowDetections);
             parameters.AddWithValue("$overflow_extra_io_ops", (object?)day.OverflowExtraIoOps ?? DBNull.Value);
@@ -242,8 +247,7 @@ public sealed partial class HubDatabase
         }
 
         command.CommandText = DetectionCountUpsert;
-        var skipped = 0;
-        foreach (var count in page.Counts)
+        foreach (var count in foreign ? [] : page.Counts)
         {
             BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
             parameters.AddWithValue("$day", count.Day);
@@ -252,15 +256,13 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$extra_io_ops", (object?)count.ExtraIoOps ?? DBNull.Value);
             parameters.AddWithValue("$below_threshold_passes", (object?)count.BelowThresholdPasses ?? DBNull.Value);
             parameters.AddWithValue("$grouping", count.Grouping);
-            parameters.AddWithValue("$split_page", page.Split ? 1 : 0);
-            if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
-                skipped++;
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         if (fromPush)
             await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new DetectionMergeResult(true, skipped);
+        return new DetectionMergeResult(true, foreign ? page.Counts.Count : 0, foreign);
     }
 
     // Clears the previous row's values; SQLite ignores a bound name the statement does not use.
@@ -329,6 +331,20 @@ public sealed partial class HubDatabase
         {
             _writeGate.Release();
         }
+    }
+
+    /// <summary>The form the next poll pass asks this ledger in: split by grouping unless its counts are stored unsplit.</summary>
+    public async Task<DetectionWalk> ReadDetectionWalkAsync(
+        string sourceId,
+        string ledgerId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT split FROM detection_ledgers WHERE source_id = $source_id AND ledger_id = $ledger_id;";
+        command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
+        return new DetectionWalk(await command.ExecuteScalarAsync(cancellationToken) is not 0L);
     }
 
     /// <summary>The day the next poll pass of this ledger starts from, null for a ledger never sealed or never read.</summary>

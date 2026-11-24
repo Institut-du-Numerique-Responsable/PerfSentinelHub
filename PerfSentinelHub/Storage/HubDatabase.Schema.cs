@@ -160,6 +160,7 @@ public sealed partial class HubDatabase
             await EnsureDetectionSignalColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionFrozenFindingColumnAsync(connection, transaction, cancellationToken);
             await RebuildDetectionCountsAsync(connection, transaction, cancellationToken);
+            await EnsureDetectionLedgerSplitColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -388,6 +389,28 @@ public sealed partial class HubDatabase
         rebuild.Transaction = transaction;
         rebuild.CommandText = Schema.V25;
         await rebuild.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Version 26 too: the form a ledger's counts are stored in, 1 split by grouping, 0 per signature, NULL
+    ///     while it holds no count nor split day. A ledger with counts from before the split is per signature.
+    /// </summary>
+    private static async Task EnsureDetectionLedgerSplitColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "detection_ledgers", "split", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = """
+                            ALTER TABLE detection_ledgers ADD COLUMN split INTEGER;
+                            UPDATE detection_ledgers SET split = 0
+                            WHERE (source_id, ledger_id) IN (SELECT source_id, ledger_id FROM detection_counts);
+                            """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

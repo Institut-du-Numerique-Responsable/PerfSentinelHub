@@ -122,13 +122,12 @@ jour du daemon qui compte :
 - l'ordre prévu est le Hub d'abord, puis le daemon. Un daemon mis à jour avant le Hub ne trouve
   pas la route par regroupement, se replie sur l'ancienne et continue de pousser des totaux par
   signature jusqu'à son redémarrage, même une fois le Hub mis à jour : redémarrez le daemon
-  après la mise à jour du Hub. D'ici là, ses jours restent non découpés, hormis ceux que le poll
-  du Hub lit découpés ;
-- tant qu'un tel daemon pousse encore des totaux par signature, un passage de poll qui s'arrête
-  après sa première page découpée d'un jour a déjà retiré les totaux de ce jour, et les
-  poussées sont écartées sur un jour découpé. Le jour manque alors des regroupements que le
-  passage n'a pas atteints jusqu'à ce qu'un passage suivant le lise en entier, et pour de bon
-  une fois que le daemon ne le garde plus.
+  après la mise à jour du Hub. D'ici là, le Hub garde ce registre par signature, son poll
+  compris, donc ses totaux restent entiers ;
+- un registre n'est jamais stocké sous les deux formes : celui dont les comptes sont arrivés
+  d'abord par signature se lit par signature jusqu'à sa fin, et celui arrivé découpé se lit
+  découpé. Une page de l'autre forme n'ajoute aucun compte, et le poll apporte ces comptes sous
+  la forme du registre tant que le daemon garde le jour.
 
 ## Ce qu'affirment `status` et `lineage`
 

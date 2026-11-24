@@ -87,8 +87,10 @@ pages to the end, 128 pages at most. A pass that reads every page seals the days
 the later of the cursor and the daemon's oldest day up to the `sealed_through` of its first
 page, and moves the cursor past them, so a day the daemon sealed while the pass ran is read
 whole again by the next one. A day below that, pruned by the daemon after a partial read, stays
-open. A pass that stops early, at the page cap or because the daemon opened a new ledger
-meanwhile, keeps what it merged and seals nothing. A daemon whose status names no ledger, older
+open. A pass that stops early, at the page cap, because the daemon opened a new ledger
+meanwhile, or because a push stored the ledger in the other form than the pass asked, keeps
+what it merged and seals nothing. The pass asks the ledger split by grouping unless its counts
+are stored per signature. A daemon whose status names no ledger, older
 than 0.37.0 or with the ledger off, is never asked.
 
 ## What a launched analysis actually does

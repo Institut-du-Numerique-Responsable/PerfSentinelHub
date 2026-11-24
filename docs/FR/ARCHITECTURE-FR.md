@@ -94,8 +94,10 @@ qu'il a lus, du plus tardif entre le curseur et le jour le plus ancien du daemon
 `sealed_through` de sa première page, et avance le curseur au-delà, donc un jour que le daemon
 a scellé pendant le passage est relu en entier par le suivant. Un jour en deçà, purgé par le
 daemon après une lecture partielle, reste ouvert. Un passage qui s'arrête avant, au plafond de
-pages ou parce que le daemon a ouvert un nouveau registre entre-temps, garde ce qu'il a
-fusionné et ne scelle rien. Un daemon dont le statut ne nomme aucun registre, antérieur à
+pages, parce que le daemon a ouvert un nouveau registre entre-temps, ou parce qu'un push a
+stocké le registre sous l'autre forme que celle demandée par le passage, garde ce qu'il a
+fusionné et ne scelle rien. Le passage demande le registre découpé par regroupement, sauf si
+ses comptes sont stockés par signature. Un daemon dont le statut ne nomme aucun registre, antérieur à
 0.37.0 ou dont le registre est coupé, n'est jamais interrogé.
 
 ## Ce que fait réellement une analyse lancée
