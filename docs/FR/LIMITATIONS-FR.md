@@ -101,11 +101,12 @@ comptes pareil, ne se lit donc pas comme un pic. Il en découle trois choses :
   d'habitude l'essentiel ne peut monter que jusqu'à l'inverse de sa part habituelle ;
 - quand les gros findings habituels se taisent pendant la fenêtre, les autres pèsent davantage
   et peuvent paraître plus intenses que leurs propres comptes ne le diraient ;
-- un incident dont l'alerte nomme un namespace ne fige que les findings de ce namespace, alors
-  que le registre des détections compte chaque signature sur toute la source. Une signature
-  partagée avec d'autres namespaces pèse alors moins dans la fenêtre que dans sa part
-  habituelle, ce qui fait monter les autres : un finding propre à ce namespace peut paraître plus
-  intense alors qu'il tourne à son rythme habituel.
+- comme le registre des détections est compté par regroupement, un finding figé est comparé à
+  l'historique de son propre regroupement : un incident restreint, dont l'alerte nomme un
+  namespace, lit ses findings face au passé de ce namespace, pas de toute la source. Juste après
+  la mise à jour, un incident restreint a moins de jours couverts, seulement ceux que le daemon a
+  envoyés découpés : son intensité reste d'abord inconnue, puis s'améliore jour après jour
+  jusqu'à la base de 7 jours. Les passages sous le seuil restent comptés par signature.
 
 ## Ce qu'affirment `status` et `lineage`
 
@@ -349,11 +350,11 @@ lecture est réduite aux autorisations de l'appelant, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) et
 [Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
-Cinq endpoints réclament une preuve, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`
-et `POST /api/import/disclosures`, dont la `X-API-Key` est comparée par empreinte, et
-`/share/` sert les fichiers d'une divulgation à quiconque détient un jeton valide. Tous les
-autres ne réclament rien : `/api/status`, `/api/sources`, `/api/findings`,
+Six endpoints réclament une preuve, `POST /api/import/findings`,
+`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`,
+`POST /api/import/detections/by-grouping` et `POST /api/import/disclosures`, dont la
+`X-API-Key` est comparée par empreinte, et `/share/` sert les fichiers d'une divulgation à
+quiconque détient un jeton valide. Tous les autres ne réclament rien : `/api/status`, `/api/sources`, `/api/findings`,
 `/api/correlations`, `/api/analyses` aussi bien pour la liste que pour la requête qui lance
 un run, `/reports/`, `/metrics`, et le lanceur lui-même. Qui joint le port lit tous les
 findings de tous les tenants, modèles de requêtes SQL et noms d'endpoints compris.

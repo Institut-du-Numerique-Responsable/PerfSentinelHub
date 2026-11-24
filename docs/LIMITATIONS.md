@@ -91,10 +91,12 @@ a spike. Three things follow:
   of them can only rise so far, at most the inverse of its usual share;
 - when the usual large findings are quiet in the window, the others weigh more and can read as
   more intense than their own counts would;
-- an incident whose alert names a namespace freezes that namespace's findings only, while the
-  detection ledger counts each signature over the whole source. A signature shared with other
-  namespaces then weighs less in the window than in its usual share, which raises the others: a
-  finding confined to that namespace can read as more intense while it runs at its usual rate.
+- since the detection ledger is counted per grouping, a frozen finding is compared with its own
+  grouping's history: a narrowed incident, whose alert names a namespace, reads its findings
+  against that namespace's past, not the whole source's. Right after the upgrade a narrowed
+  incident has fewer covered days, only the days the daemon sent split, so its intensity stays
+  unknown at first and improves day by day up to the 7-day baseline. Below-threshold passes stay
+  counted per signature.
 
 ## What `status` and `lineage` claim
 
@@ -319,11 +321,11 @@ machine token too and every read is trimmed to the caller's grants, see
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md) and
 [What access control does not cover](#what-access-control-does-not-cover).
 
-Five endpoints ask for a credential, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`
-and `POST /api/import/disclosures`, whose `X-API-Key` is compared by fingerprint, and
-`/share/` serves a disclosure's files to whoever holds a live token. Every other one asks for
-nothing: `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses`
+Six endpoints ask for a credential, `POST /api/import/findings`,
+`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`,
+`POST /api/import/detections/by-grouping` and `POST /api/import/disclosures`, whose
+`X-API-Key` is compared by fingerprint, and `/share/` serves a disclosure's files to whoever
+holds a live token. Every other one asks for nothing: `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses`
 for both the listing and the request that starts a run, `/reports/`, `/metrics`, and the
 launcher itself. Whoever reaches the port reads every finding of every tenant, SQL query
 shapes and endpoint names included.
