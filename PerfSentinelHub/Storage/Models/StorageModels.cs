@@ -433,7 +433,8 @@ public sealed record DetectionLedgerPage(
     IReadOnlyList<DetectionCountRow> Counts,
     IReadOnlyList<DetectionDayRow> Days,
     string? NextAfter,
-    bool Split = false);
+    bool Split = false,
+    string? NextAfterGrouping = null);
 
 /// <summary>
 ///     How a ledger page merged: not at all while the write lock stayed taken. SkippedCounts are the

@@ -166,6 +166,7 @@ public static partial class ApiEndpoints
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
         app.MapPost("/api/import/detections", ImportDetectionsAsync).AllowAnonymous();
+        app.MapPost("/api/import/detections/by-grouping", ImportDetectionsByGroupingAsync).AllowAnonymous();
         app.MapPost("/api/import/disclosures", ImportDisclosuresAsync).AllowAnonymous();
         app.MapGet("/api/disclosures", GetDisclosuresAsync);
         app.MapGet("/api/disclosures/{id}", GetDisclosureAsync);
@@ -479,20 +480,46 @@ public static partial class ApiEndpoints
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
+        // A split page has a route of its own.
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, false, cancellationToken);
+    }
+
+    private static Task<IResult> ImportDetectionsByGroupingAsync(
+        HttpRequest request,
+        HubDatabase database,
+        ImportAdmission<DetectionImportMetrics> admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, true, cancellationToken);
+    }
+
+    private static Task<IResult> PushDetectionsAsync(
+        HttpRequest request,
+        HubDatabase database,
+        ImportAdmission<DetectionImportMetrics> admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        bool split,
+        CancellationToken cancellationToken)
+    {
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         // No refusal for an empty page: the midnight seal often arrives as a day with no rows.
         return PushImportAsync(request, options, admission, DetectionImportMaxBytes,
             payload => DetectionLedgerParser.ParsePage(payload, nowMs),
             async (source, page) =>
             {
-                // A split page has a route of its own.
-                if (page.Split)
+                if (page.Split != split)
                     return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
-                if (!(await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken)).Merged)
+                var result = await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken);
+                if (!result.Merged)
                     return null;
                 // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
                 var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
-                return TypedResults.Ok(new DetectionImportResponse(page.Counts.Count, 0, watch));
+                // Rows left out on a split day are not accepted, and not rejected either.
+                return TypedResults.Ok(
+                    new DetectionImportResponse(page.Counts.Count - result.SkippedCounts, 0, watch));
             },
             cancellationToken);
     }

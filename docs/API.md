@@ -71,6 +71,17 @@ below the threshold and no detection of the signature at this source, whatever i
 newest done come first, at most 10,000. The list is always sent, `[]` when empty, so the daemon
 replaces its own on every answer. Only a push gets it: a polled daemon never does.
 
+A daemon that can split the ledger by grouping sends a page with `"split": "grouping"`, each count
+row then carrying a `grouping` (an empty string is the unnamed one), to
+`POST /api/import/detections/by-grouping`, with the same key, gate, bounds and reply. That route
+answers `400` for a page that is not split, and `/api/import/detections` answers `400` for a split
+one; a daemon falls back to the old route when the new one answers `404` or `405`. The poll asks
+`GET /api/detections?split=grouping` and walks a page's `next_after` and `next_after_grouping`
+back as `after` and `after_grouping`; a page from an older daemon has no `split` and is stored
+unsplit. Once a day holds split rows, the unsplit count rows later sent for it (by push or poll)
+are left out, since the grouping rows already carry them: a push counts them out of `accepted`
+(not in `rejected`), and the poll logs how many it skipped.
+
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are, and one source holds at most one of them: a second import from a source whose
 first is still running, of any kind, gets `503 Retry-After: 1`. A body still arriving after

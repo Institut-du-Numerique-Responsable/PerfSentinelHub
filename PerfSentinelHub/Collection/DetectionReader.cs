@@ -78,10 +78,11 @@ public sealed partial class DetectionReader(
         int? sealedThrough = null;
         var oldestDay = sinceDay;
         string? after = null;
+        string? afterGrouping = null;
         for (var pages = 0; pages < PagesCap; pages++)
         {
             // A daemon that turned its ledger off or rolled back since its status answered.
-            if (await client.FetchDetectionsPageAsync(source, sinceDay, after, cancellationToken) is not { } payload)
+            if (await client.FetchDetectionsPageAsync(source, sinceDay, after, afterGrouping, cancellationToken) is not { } payload)
                 return DetectionReadOutcome.Aborted;
 
             var page = DetectionLedgerParser.ParsePage(payload, observedAtMs);
@@ -95,7 +96,9 @@ public sealed partial class DetectionReader(
 
             if (pages == 0)
                 (sealedThrough, oldestDay) = (page.SealedThrough, page.OldestDay);
-            await database.MergeDetectionPageAsync(source.Id, page, false, observedAtMs, cancellationToken);
+            var merge = await database.MergeDetectionPageAsync(source.Id, page, false, observedAtMs, cancellationToken);
+            if (merge.SkippedCounts > 0)
+                LogCountsSkipped(logger, source.Id, merge.SkippedCounts);
             rows.Value += page.Counts.Count;
             if (page.NextAfter is null)
             {
@@ -104,7 +107,7 @@ public sealed partial class DetectionReader(
                 return DetectionReadOutcome.Ok;
             }
 
-            after = page.NextAfter;
+            (after, afterGrouping) = (page.NextAfter, page.NextAfterGrouping);
         }
 
         LogDetectionsCapped(logger, source.Id, PagesCap);
@@ -134,4 +137,10 @@ public sealed partial class DetectionReader(
         LogLevel.Warning,
         "Source {SourceId} detection ledger runs past {Cap} pages; the pass stopped unsealed and starts over next poll.")]
     private static partial void LogDetectionsCapped(ILogger logger, string sourceId, int cap);
+
+    [LoggerMessage(
+        1118,
+        LogLevel.Information,
+        "Source {SourceId} sent {Skipped} unsplit detection counts on days already split by grouping; they were left out.")]
+    private static partial void LogCountsSkipped(ILogger logger, string sourceId, int skipped);
 }

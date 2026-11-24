@@ -64,8 +64,9 @@ public static class DetectionLedgerParser
                 IsAbsent(root, "sealed_through") ? null : window.Day(root, "sealed_through"),
                 rows,
                 [.. days.EnumerateArray().Select(row => ReadDay(Row(row), window))],
-                ReadNextAfter(root),
-                split);
+                ReadNextAfter(root, "next_after"),
+                split,
+                ReadNextAfter(root, "next_after_grouping"));
         }
     }
 
@@ -151,12 +152,12 @@ public static class DetectionLedgerParser
             : throw Invalid("The detection page's ledger_id is not a GUID.");
     }
 
-    private static string? ReadNextAfter(JsonElement root)
+    private static string? ReadNextAfter(JsonElement root, string name)
     {
-        if (IsAbsent(root, "next_after"))
+        if (IsAbsent(root, name))
             return null;
-        return JsonRead.ReadString(root, "next_after") ??
-               throw Invalid("The detection page's next_after is not a string.");
+        return JsonRead.ReadString(root, name) ??
+               throw Invalid($"The detection page's {name} is not a string.");
     }
 
     private static JsonElement Row(JsonElement row)

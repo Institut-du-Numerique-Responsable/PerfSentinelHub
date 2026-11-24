@@ -191,7 +191,7 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
 
     /// <summary>
     ///     One page of the daemon's detection ledger, from <paramref name="sinceDay" /> on and
-    ///     past the cursor <paramref name="after" /> the previous page ended on. Null when the
+    ///     past the cursor <paramref name="after" /> (and <paramref name="afterGrouping" />) the previous page ended on. Null when the
     ///     route is absent (404) or the ledger is off (503), and a 401 is its own exception,
     ///     as for the incidents.
     /// </summary>
@@ -199,12 +199,18 @@ public sealed class DaemonClient(HttpClient httpClient, IOptions<HubOptions> opt
         SourceOptions source,
         int sinceDay,
         string? after,
+        string? afterGrouping,
         CancellationToken cancellationToken)
     {
-        // The cursor is "<day>:<signature>", and a signature may hold spaces, '&' or '+'.
-        var path = $"api/detections?since_day={sinceDay}&limit={DetectionsPageSize}";
+        // The cursor is "<day>:<signature>", and a signature or grouping may hold spaces, '&' or '+'.
+        // An older daemon ignores split and answers an unsplit page.
+        var path = $"api/detections?since_day={sinceDay}&limit={DetectionsPageSize}&split=grouping";
         if (after is not null)
+        {
             path += $"&after={Uri.EscapeDataString(after)}";
+            if (afterGrouping is not null)
+                path += $"&after_grouping={Uri.EscapeDataString(afterGrouping)}";
+        }
         try
         {
             return await SendAsync(source, path, cancellationToken, maxBytes: DetectionsMaxBytes);

@@ -23,14 +23,22 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
     private const string Slow = "slow_sql:order-svc:GET_/orders:ab";
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static HttpRequestMessage Request(string? apiKey, JsonObject page, string query = "source_id=test")
+    private static HttpRequestMessage Request(
+        string? apiKey,
+        JsonObject page,
+        string query = "source_id=test",
+        string route = "/api/import/detections")
     {
-        return Request(apiKey, page.ToJsonString(), query);
+        return Request(apiKey, page.ToJsonString(), query, route);
     }
 
-    private static HttpRequestMessage Request(string? apiKey, string body, string query = "source_id=test")
+    private static HttpRequestMessage Request(
+        string? apiKey,
+        string body,
+        string query = "source_id=test",
+        string route = "/api/import/detections")
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, "/api/import/detections?" + query)
+        var request = new HttpRequestMessage(HttpMethod.Post, route + "?" + query)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
@@ -234,6 +242,65 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(before + 1, Refusals("bad_request"));
         Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM detection_counts WHERE signature = 'split-route';"));
+    }
+
+    [Fact]
+    public async Task The_by_grouping_route_stores_split_rows_and_answers_the_watch_list()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var split = DetectionLedgerJson.Page(
+            [
+                DetectionLedgerJson.Count(0, "by-grouping", grouping: "checkout"),
+                DetectionLedgerJson.Count(0, "by-grouping", grouping: "cart")
+            ],
+            [DetectionLedgerJson.Day(0)]);
+        split["split"] = "grouping";
+
+        using var request = Request(ApiKey, split, route: "/api/import/detections/by-grouping");
+        using var response = await _client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
+        Assert.Equal(2, body.RootElement.GetProperty("accepted").GetInt32());
+        Assert.Equal(0, body.RootElement.GetProperty("rejected").GetInt32());
+        Assert.Equal(JsonValueKind.Array, body.RootElement.GetProperty("watch").ValueKind);
+        Assert.Equal("cart,checkout", await ScalarAsync(
+            "SELECT group_concat(grouping, ',') FROM (SELECT grouping FROM detection_counts " +
+            "WHERE signature = 'by-grouping' ORDER BY grouping);"));
+    }
+
+    [Fact]
+    public async Task The_by_grouping_route_refuses_an_unsplit_page()
+    {
+        var before = Refusals("bad_request");
+
+        using var request = Request(ApiKey, Page("unsplit-route"), route: "/api/import/detections/by-grouping");
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(before + 1, Refusals("bad_request"));
+        Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM detection_counts WHERE signature = 'unsplit-route';"));
+    }
+
+    [Fact]
+    public async Task An_unsplit_push_on_a_split_day_is_reported_as_not_accepted()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var split = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(0, "late-unsplit", grouping: "checkout")], [DetectionLedgerJson.Day(0)]);
+        split["split"] = "grouping";
+        using (var first = Request(ApiKey, split, route: "/api/import/detections/by-grouping"))
+        using (var splitResponse = await _client.SendAsync(first, cancellationToken))
+            Assert.Equal(HttpStatusCode.OK, splitResponse.StatusCode);
+
+        var unsplit = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(0, "late-unsplit")], [DetectionLedgerJson.Day(0)]);
+        using var request = Request(ApiKey, unsplit);
+        using var response = await _client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
+        Assert.Equal(0, body.RootElement.GetProperty("accepted").GetInt32());
     }
 
     // A lone surrogate is valid JSON text, but no .NET string holds it: reading it throws.

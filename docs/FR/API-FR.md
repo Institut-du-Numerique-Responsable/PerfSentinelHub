@@ -79,6 +79,18 @@ en premier, 10 000 au plus. La liste est toujours envoyée, `[]` quand elle est 
 remplace la sienne à chaque réponse. Seul un push la reçoit : un daemon interrogé par le poll ne la
 reçoit jamais.
 
+Un daemon qui sait découper le registre par regroupement envoie une page avec
+`"split": "grouping"`, chaque ligne de comptes portant alors un `grouping` (une chaîne vide est le
+regroupement sans nom), à `POST /api/import/detections/by-grouping`, avec la même clé, la même
+porte, les mêmes bornes et la même réponse. Cette route répond `400` à une page non découpée, et
+`/api/import/detections` répond `400` à une page découpée ; un daemon retombe sur l'ancienne route
+quand la nouvelle répond `404` ou `405`. Le poll demande `GET /api/detections?split=grouping` et
+renvoie le `next_after` et le `next_after_grouping` d'une page en `after` et `after_grouping` ; la
+page d'un daemon plus ancien n'a pas de `split` et est stockée non découpée. Une fois qu'un jour
+contient des lignes découpées, les lignes de comptes non découpées envoyées ensuite pour ce jour
+(par push ou par poll) sont écartées, puisque les lignes par regroupement les portent déjà : un
+push les retire de `accepted` (sans les mettre dans `rejected`), et le poll journalise leur nombre.
+
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons, et une source en tient au plus un : un second import d'une source dont le
 premier tourne encore, de quelque type qu'il soit, reçoit `503 Retry-After: 1`. Un corps qui
