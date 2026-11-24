@@ -511,7 +511,13 @@ grows with the observation days the Hub keeps, one row of about 300 bytes per fi
 daemon and observed day for the length of `Hub:Retention`: 2,000 signatures seen daily on
 three daemons at the 180-day default come to roughly 300 MB, so size the volume for the
 fleet rather than for the default. Detection rows stay longer, 1,100 days by default
-(`Hub:DetectionRetention`), one row per signature, daemon and day. Disclosures add their
+(`Hub:DetectionRetention`), one row per signature, grouping, ledger and day. On a grouped
+fleet a signature seen in several namespaces takes a row in each: 2.4 times as many rows as
+signatures were measured on one fleet, and up to 6.4 times is possible. At about 300 bytes a
+row with its index, a source with 25,000 rows a day adds about 8 MB a day, and one with 66,000
+about 20 MB: over the 1,100-day default that is about 9 GB and 22 GB for each source, while
+the chart's 1Gi default fills in about four months at 8 MB a day and seven weeks at 20 MB.
+Size the volume for that, or shorten `Hub:DetectionRetention`. Disclosures add their
 files: the report, the attestation, the bundle and the PDF are kept in the database, never
 purged, so the backup carries them and grows with each one published.
 

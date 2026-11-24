@@ -553,7 +553,15 @@ une ligne d'environ 300 octets par finding, par daemon et par jour observé pend
 de `Hub:Retention` : 2 000 signatures vues chaque jour sur trois daemons, au défaut de
 180 jours, font environ 300 Mo, donc dimensionnez le volume pour la flotte plutôt que pour
 le défaut. Les lignes de détections restent plus longtemps, 1 100 jours par défaut
-(`Hub:DetectionRetention`), une ligne par signature, par daemon et par jour. Les divulgations
+(`Hub:DetectionRetention`), une ligne par signature, par regroupement, par registre et par
+jour. Sur une flotte à regroupements, une signature vue dans plusieurs namespaces prend une
+ligne dans chacun : 2,4 fois plus de lignes que de signatures ont été mesurées sur une flotte,
+et jusqu'à 6,4 fois est possible. À environ 300 octets par ligne avec son index, une source à
+25 000 lignes par jour ajoute environ 8 Mo par jour, et une source à 66 000 environ 20 Mo :
+sur les 1 100 jours par défaut, cela fait environ 9 Go et 22 Go par source, alors que le défaut
+de 1 Gio du chart se remplit en quatre mois environ à 8 Mo par jour et en sept semaines à
+20 Mo. Dimensionnez le volume en conséquence, ou raccourcissez `Hub:DetectionRetention`. Les
+divulgations
 ajoutent leurs fichiers : le rapport, l'attestation, le bundle et le PDF sont gardés dans la
 base, jamais purgés, si bien que la sauvegarde les emporte et grossit à chaque publication.
 
