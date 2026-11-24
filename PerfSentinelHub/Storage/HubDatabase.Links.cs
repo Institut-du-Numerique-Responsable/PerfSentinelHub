@@ -142,7 +142,8 @@ public sealed partial class HubDatabase
 
     // A row with a grouping reads its own history, one without the signature's sum. One day set serves the
     // whole incident, so its shares divide sums over the same days: the split covered days when any
-    // signature reads per grouping, every covered day otherwise.
+    // signature reads per grouping, every covered day otherwise. With no split covered day, every signature
+    // reads its sum over every covered day, the rules v4 baseline.
     private static async Task<(List<FrozenSignature>, Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
         SqliteConnection connection, string sourceId, long day, List<FrozenRow> rows, HashSet<string> wanted,
         CancellationToken cancellationToken)
@@ -188,8 +189,9 @@ public sealed partial class HubDatabase
         }
 
         // A signature also frozen without a grouping reads as a whole: its grouped rows are in that sum already.
+        var anySplit = covered.ContainsValue(true);
         var groups = rows.GroupBy(r => r.Signature, StringComparer.Ordinal)
-            .Select(g => (Rows: g, AsWhole: g.Any(r => r.Grouping.Length == 0))).ToList();
+            .Select(g => (Rows: g, AsWhole: !anySplit || g.Any(r => r.Grouping.Length == 0))).ToList();
         var anyGrouped = groups.Any(g => !g.AsWhole);
         // A split day's whole sum is still the complete signature, so a whole read keeps it.
         var days = covered.Where(d => !anyGrouped || d.Value).Select(d => d.Key).ToList();

@@ -99,14 +99,15 @@ a spike. Three things follow:
 The move to counts per grouping takes a few days to settle, and the daemon's upgrade is the one
 that counts:
 
-- as soon as one frozen finding of an incident carries a grouping, the whole incident reads
-  only the days the daemon sent split, its findings without a grouping too. On a grouped fleet
-  that is every incident, not only the narrowed ones: with the Hub upgraded first, a usual share
-  stays unknown until the daemon follows, then improves day by day up to the 7-day baseline, and
-  on a source whose daemon never splits it stays unknown;
+- while none of an incident's covered days was sent split, every finding of the incident reads
+  its signature's sum over every covered day, as before the split, so a source whose daemon does
+  not split yet keeps its usual shares. Once one of them was, as soon as one frozen finding
+  carries a grouping, the whole incident reads only the split days, its findings without a
+  grouping too: on a grouped fleet that is every incident, not only the narrowed ones, and the
+  per-grouping comparison then improves day by day up to the 7-day baseline;
 - an incident assessed before the upgrade whose seven covered days all predate the first day its
-  daemon sent split keeps its earlier link levels, since assessing it again could only read its
-  usual shares as unknown. One with a split day among them is assessed again;
+  daemon sent split keeps its earlier link levels, since its baseline has not changed. One with
+  a split day among them is assessed again;
 - the intended order is the Hub first, then the daemon. A daemon upgraded before the Hub finds
   no per-grouping route, falls back to the older one and keeps pushing per-signature totals
   until it restarts, even once the Hub is upgraded: restart the daemon after upgrading the Hub.

@@ -109,16 +109,16 @@ comptes pareil, ne se lit donc pas comme un pic. Il en découle trois choses :
 Le passage aux comptes par regroupement met quelques jours à se stabiliser, et c'est la mise à
 jour du daemon qui compte :
 
-- dès qu'un finding figé d'un incident porte un regroupement, tout l'incident ne lit que les
-  jours que le daemon a envoyés découpés, ses findings sans regroupement compris. Sur une flotte
-  à regroupements, c'est le cas de chaque incident, pas seulement des incidents restreints :
-  avec le Hub mis à jour d'abord, une part habituelle reste inconnue jusqu'à ce que le daemon
-  suive, puis s'améliore jour après jour jusqu'à la base de 7 jours ; sur une source dont le
-  daemon ne découpe jamais, elle reste inconnue ;
+- tant qu'aucun des jours couverts d'un incident n'a été envoyé découpé, chaque finding de
+  l'incident lit la somme de sa signature sur tous les jours couverts, comme avant le découpage :
+  une source dont le daemon ne découpe pas encore garde ses parts habituelles. Dès que l'un
+  d'eux l'a été et qu'un finding figé porte un regroupement, tout l'incident ne lit que les jours
+  découpés, ses findings sans regroupement compris : sur une flotte à regroupements, c'est le cas
+  de chaque incident, pas seulement des incidents restreints, et la comparaison par regroupement
+  s'améliore ensuite jour après jour jusqu'à la base de 7 jours ;
 - un incident évalué avant la mise à jour dont les sept jours couverts précèdent tous le premier
-  jour que son daemon a envoyé découpé garde ses niveaux de lien précédents, car l'évaluer de
-  nouveau ne pourrait que lire ses parts habituelles comme inconnues. Celui dont un de ces jours
-  est découpé est évalué de nouveau ;
+  jour que son daemon a envoyé découpé garde ses niveaux de lien précédents, car sa base n'a pas
+  changé. Celui dont un de ces jours est découpé est évalué de nouveau ;
 - l'ordre prévu est le Hub d'abord, puis le daemon. Un daemon mis à jour avant le Hub ne trouve
   pas la route par regroupement, se replie sur l'ancienne et continue de pousser des totaux par
   signature jusqu'à son redémarrage, même une fois le Hub mis à jour : redémarrez le daemon

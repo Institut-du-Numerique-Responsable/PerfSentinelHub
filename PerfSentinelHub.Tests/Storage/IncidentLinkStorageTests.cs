@@ -239,23 +239,25 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
     }
 
     [Fact]
-    public async Task A_grouped_row_without_split_days_is_unknown_not_the_whole_source()
+    public async Task A_grouped_incident_without_split_days_reads_the_whole_signature_over_every_covered_day()
     {
         var id = NewId();
         var source = NewId();
-        await SeedIncidentAsync(id, source, AtMs, FrozenIn(("sig-a", "ns-a", 4)));
+        await SeedIncidentAsync(id, source, AtMs, FrozenIn(("sig-a", "ns-a", 4), ("sig-b", "", 2)));
         for (var day = Day - 7; day < Day; day++)
         {
             await SeedDayAsync(source, day);
             await SeedCountAsync(source, "sig-a", day, 100);
+            await SeedCountAsync(source, "sig-b", day, 10);
         }
 
         var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
 
+        // The rules v4 baseline, for every signature, while the daemon sends no split day.
         Assert.NotNull(context);
-        Assert.Equal(new Baseline(0, 0, 0), context.Baselines["sig-a"]);
-        Assert.Equal(["sig-a"], context.SeenInBaselineDays);
-        Assert.Equal(0, context.Signatures.Single().KnownSeenCount);
+        Assert.Equal(new Baseline(7, 7, 700), context.Baselines["sig-a"]);
+        Assert.Equal(new Baseline(7, 7, 70), context.Baselines["sig-b"]);
+        Assert.Equal([4L, 2L], context.Signatures.OrderBy(s => s.Signature).Select(s => s.KnownSeenCount));
     }
 
     [Fact]
