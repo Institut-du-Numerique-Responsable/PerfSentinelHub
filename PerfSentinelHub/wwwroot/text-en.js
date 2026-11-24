@@ -2185,7 +2185,7 @@
         'guide.incidents.panel.title': 'An unfolded incident',
         'guide.incidents.panel.saturation': 'The note above the table gives the saturation the alert reported, as a share of its limit. From 90%, it can raise the link level of a finding whose type fits the incident.',
         'guide.incidents.panel.before': 'Those marked "before the incident" were already firing.',
-        'guide.incidents.panel.link': 'The Link column says how suspect each finding is for this incident: strong, medium or weak, or being assessed until the Hub has read it. Hover the chip for its reasons; a screen reader reads them with the level. It is a suspicion, not a proven cause.',
+        'guide.incidents.panel.link': 'The Link column says how suspect each finding is for this incident: strong, medium or weak, or being assessed until the Hub has read it. Hover the chip for its reasons; a screen reader reads them with the level. It is a suspicion, not a proven cause. For a few days after an upgrade, a finding\'s usual share can be unknown: see the limitations in the documentation.',
         'guide.incidents.panel.filter': 'The level filter sits next to the text filter, and the two combine.',
         'guide.incidents.panel.paging': 'The table shows 20 findings at a time: one button below it adds the next ones, the other shows them all.',
         'guide.incidents.panel.scroll': 'A long table scrolls inside its frame, its heads staying in view.',
