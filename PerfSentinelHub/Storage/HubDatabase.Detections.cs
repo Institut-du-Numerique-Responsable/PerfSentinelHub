@@ -215,8 +215,8 @@ public sealed partial class HubDatabase
 
         command.CommandText = "SELECT split FROM detection_ledgers WHERE source_id = $source_id AND ledger_id = $ledger_id;";
         BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
-        var stored = await command.ExecuteScalarAsync(cancellationToken) as long?;
-        var foreign = stored is not null && (stored == 1) != page.Split;
+        bool? storedSplit = await command.ExecuteScalarAsync(cancellationToken) is long stored ? stored == 1 : null;
+        var foreign = storedSplit is { } split && split != page.Split;
         var sets = !foreign && (page.Split || page.Counts.Count > 0);
         if (sets)
         {
@@ -227,13 +227,28 @@ public sealed partial class HubDatabase
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // A day whose counts this page cannot bring is not complete on its word.
+        await UpsertDetectionDaysAsync(command, sourceId, page, fromPush && !foreign, observedAtMs, cancellationToken);
+        if (!foreign)
+            await UpsertDetectionCountsAsync(command, sourceId, page, observedAtMs, cancellationToken);
+
+        if (fromPush)
+            await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new DetectionMergeResult(true, foreign ? page.Counts.Count : 0, foreign,
+            sets ? page.Split : storedSplit);
+    }
+
+    private static async Task UpsertDetectionDaysAsync(SqliteCommand command, string sourceId,
+        DetectionLedgerPage page, bool sealable, long observedAtMs, CancellationToken cancellationToken)
+    {
+        var parameters = command.Parameters;
         command.CommandText = DetectionDayUpsert;
         foreach (var day in page.Days)
         {
             BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
             parameters.AddWithValue("$day", day.Day);
-            // A day whose counts this page cannot bring is not complete on its word.
-            parameters.AddWithValue("$sealed", fromPush && day.Sealed && !foreign ? 1 : 0);
+            parameters.AddWithValue("$sealed", sealable && day.Sealed ? 1 : 0);
             parameters.AddWithValue("$gap", day.Gap ? 1 : 0);
             parameters.AddWithValue("$overflow_detections", day.OverflowDetections);
             parameters.AddWithValue("$overflow_extra_io_ops", (object?)day.OverflowExtraIoOps ?? DBNull.Value);
@@ -247,9 +262,14 @@ public sealed partial class HubDatabase
             BindThresholds(parameters, day.Thresholds);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
+    }
 
+    private static async Task UpsertDetectionCountsAsync(SqliteCommand command, string sourceId,
+        DetectionLedgerPage page, long observedAtMs, CancellationToken cancellationToken)
+    {
+        var parameters = command.Parameters;
         command.CommandText = DetectionCountUpsert;
-        foreach (var count in foreign ? [] : page.Counts)
+        foreach (var count in page.Counts)
         {
             BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
             parameters.AddWithValue("$day", count.Day);
@@ -260,12 +280,6 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$grouping", count.Grouping);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
-
-        if (fromPush)
-            await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new DetectionMergeResult(true, foreign ? page.Counts.Count : 0, foreign,
-            sets ? page.Split : stored is null ? null : stored == 1);
     }
 
     // Clears the previous row's values; SQLite ignores a bound name the statement does not use.

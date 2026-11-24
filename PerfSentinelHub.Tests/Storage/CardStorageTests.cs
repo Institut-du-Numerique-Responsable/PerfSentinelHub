@@ -18,7 +18,7 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     // One pushed page of one ledger: a single count on a single day.
-    private Task CountAsync(
+    private Task<DetectionMergeResult> CountAsync(
         string sourceId, string ledgerId, int day, string signature, long detections, long? passes = null,
         bool sealedDay = false, long? extraIoOps = null)
     {
@@ -27,7 +27,7 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
             new DetectionCountRow(day, signature, detections, extraIoOps, passes));
     }
 
-    private Task PageAsync(string sourceId, string ledgerId, DetectionDayRow day, params DetectionCountRow[] counts)
+    private Task<DetectionMergeResult> PageAsync(string sourceId, string ledgerId, DetectionDayRow day, params DetectionCountRow[] counts)
     {
         var page = new DetectionLedgerPage(ledgerId, 0, day.Day, day.Day, null, counts, [day], null);
         return Database.MergeDetectionPageAsync(sourceId, page, true, DoneMs, Token);
@@ -124,7 +124,7 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
     }
 
     // A split day of the grouped source: each count row in its own grouping, the passes on the empty one.
-    private Task SplitAsync(DetectionDayRow day, params (string Grouping, long Detections, long? Io, long? Passes)[] rows)
+    private Task<DetectionMergeResult> SplitAsync(DetectionDayRow day, params (string Grouping, long Detections, long? Io, long? Passes)[] rows)
     {
         var counts = rows.Select(row =>
             new DetectionCountRow(day.Day, "slow_sql:grouped:a", row.Detections, row.Io, row.Passes, row.Grouping));

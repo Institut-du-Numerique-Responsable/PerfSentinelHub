@@ -16,6 +16,8 @@ namespace PerfSentinelHub.Api;
 public static partial class ApiEndpoints
 {
     // A deep OFFSET is a scan: SQLite steps over every skipped row.
+    private const string ImportLogCategory = "ImportApi";
+
     private const int MaxFindingOffset = 1_000_000;
 
     // What a body read is capped at unless its route says otherwise.
@@ -297,7 +299,7 @@ public static partial class ApiEndpoints
 
             if (import.Batch.RejectedCount > 0)
                 LogRejectedImportedFindings(
-                    loggerFactory.CreateLogger("ImportApi"),
+                    loggerFactory.CreateLogger(ImportLogCategory),
                     source.Id,
                     import.Batch.RejectedCount);
             return TypedResults.Ok(new ImportResponse(import.Batch.Findings.Count, import.Batch.RejectedCount));
@@ -442,7 +444,7 @@ public static partial class ApiEndpoints
                 foreach (var id in changed)
                     links.Enqueue(new IncidentKey(id, source.Id));
                 if (import.Page.RejectedCount > 0)
-                    LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                    LogRejectedImportedIncidents(loggerFactory.CreateLogger(ImportLogCategory), source.Id,
                         import.Page.RejectedCount);
                 return TypedResults.Ok(new ImportResponse(import.Page.Incidents.Count, import.Page.RejectedCount));
             }, cancellationToken);
@@ -466,7 +468,7 @@ public static partial class ApiEndpoints
                         timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
                     return null;
                 if (import.RejectedCount > 0)
-                    LogRejectedImportedEpisodes(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                    LogRejectedImportedEpisodes(loggerFactory.CreateLogger(ImportLogCategory), source.Id,
                         import.RejectedCount);
                 return TypedResults.Ok(new ImportResponse(import.Episodes.Count, import.RejectedCount));
             }, cancellationToken);
@@ -478,12 +480,10 @@ public static partial class ApiEndpoints
         ImportAdmission<DetectionImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
-        ILoggerFactory loggerFactory,
-        CancellationToken cancellationToken)
+        ILoggerFactory loggerFactory)
     {
         // A split page has a route of its own.
-        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, false,
-            cancellationToken);
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, false);
     }
 
     private static Task<IResult> ImportDetectionsByGroupingAsync(
@@ -492,11 +492,9 @@ public static partial class ApiEndpoints
         ImportAdmission<DetectionImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
-        ILoggerFactory loggerFactory,
-        CancellationToken cancellationToken)
+        ILoggerFactory loggerFactory)
     {
-        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, true,
-            cancellationToken);
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, true);
     }
 
     private static Task<IResult> PushDetectionsAsync(
@@ -506,9 +504,10 @@ public static partial class ApiEndpoints
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
         ILoggerFactory loggerFactory,
-        bool split,
-        CancellationToken cancellationToken)
+        bool split)
     {
+        // The token minimal APIs bind is this one, read here to keep the parameter list short.
+        var cancellationToken = request.HttpContext.RequestAborted;
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         // No refusal for an empty page: the midnight seal often arrives as a day with no rows.
         return PushImportAsync(request, options, admission, DetectionImportMaxBytes,
@@ -521,7 +520,7 @@ public static partial class ApiEndpoints
                 if (!result.Merged)
                     return null;
                 if (result.Foreign)
-                    LogForeignDetectionPage(loggerFactory.CreateLogger("ImportApi"), source.Id, page.LedgerId,
+                    LogForeignDetectionPage(loggerFactory.CreateLogger(ImportLogCategory), source.Id, page.LedgerId,
                         result.SkippedCounts);
                 // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
                 var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);

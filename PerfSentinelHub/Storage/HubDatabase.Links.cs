@@ -95,32 +95,33 @@ public sealed partial class HubDatabase
                 if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("finding", out var finding)
                     || finding.ValueKind != JsonValueKind.Object)
                     continue;
-                var signature = finding.TryGetProperty("signature", out var s) && s.ValueKind == JsonValueKind.String
-                    ? s.GetString()
-                    : null;
-                if (string.IsNullOrEmpty(signature))
+                var signature = StringOf(finding, "signature");
+                if (signature.Length == 0)
                     continue;
-                var type = finding.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
-                    ? t.GetString() ?? ""
-                    : "";
-                var grouping = finding.TryGetProperty("grouping", out var g) && g.ValueKind == JsonValueKind.Array
-                               && g.GetArrayLength() > 0 && g[0].ValueKind == JsonValueKind.Object
-                               && g[0].TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String
-                    ? v.GetString() ?? ""
-                    : "";
                 // A row without a seen count was seen once, as the daemon defaults it.
-                yield return new FrozenRow(signature, grouping, type, LongOf(row, "seen_count", 1),
-                    LongOf(row, "first_seen_ms", 0));
+                yield return new FrozenRow(signature, FirstGroupingValue(finding), StringOf(finding, "type"),
+                    LongOf(row, "seen_count", 1), LongOf(row, "first_seen_ms", 0));
             }
         }
     }
+
+    private static string StringOf(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
+
+    private static string FirstGroupingValue(JsonElement finding) =>
+        finding.TryGetProperty("grouping", out var grouping) && grouping.ValueKind == JsonValueKind.Array
+        && grouping.GetArrayLength() > 0 && grouping[0].ValueKind == JsonValueKind.Object
+            ? StringOf(grouping[0], "value")
+            : "";
 
     private static long LongOf(JsonElement row, string name, long fallback) =>
         row.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)
             ? number
             : fallback;
 
-    private readonly record struct FrozenRow(string Signature, string Grouping, string Type, long Seen, long First);
+    private readonly record struct FrozenRow(string Signature, string Grouping, string Type, long Seen, long FirstSeenMs);
 
     // A source's covered days from fromDay to toDay, one group per day that no ledger flagged a gap or an
     // overflow, for the baseline and the catch-up selection alike so the two read one rule.
@@ -208,7 +209,7 @@ public sealed partial class HubDatabase
                 var population = asWhole ? "" : row.Grouping;
                 populations[population] = populations.GetValueOrDefault(population) + row.Seen;
                 seen += row.Seen;
-                first = Math.Min(first, row.First);
+                first = Math.Min(first, row.FirstSeenMs);
             }
 
             long Count(string grouping, long countDay) => asWhole
