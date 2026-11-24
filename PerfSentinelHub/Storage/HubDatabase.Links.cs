@@ -371,12 +371,24 @@ public sealed partial class HubDatabase
           AND NOT EXISTS (
             SELECT 1 FROM incident_finding_links AS l
             WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $rules_version)
+          AND (NOT EXISTS (
+                 SELECT 1 FROM incident_finding_links AS l
+                 WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $unsplit_rules_version)
+               OR EXISTS (
+                 SELECT 1 FROM detection_split_days AS d
+                 WHERE d.source_id = i.source_id
+                   AND d.day BETWEEN i.at_ms / $day_ms - $baseline_days AND i.at_ms / $day_ms - 1))
           AND EXISTS (
             SELECT 1 FROM incident_signatures AS s WHERE s.incident_id = i.id AND s.source_id = i.source_id);
         """;
 
+    // The last rules version before the per-grouping baseline: its links stay while no covered day is split,
+    // since a recompute over unsplit days only would read a narrowed finding's usual share as unknown.
+    private const int UnsplitRulesVersion = 4;
+
     /// <summary>
-    ///     Incidents of <paramref name="sourceIds" /> with no links at all, or links computed by older rules.
+    ///     Incidents of <paramref name="sourceIds" /> with no links at all, or links computed by older rules:
+    ///     rules older than v4, or v4 on an incident whose seven covered days hold a day the source sent split.
     ///     An incident none of whose frozen rows has a signature never gets a link, so it is left out, as
     ///     is a source no longer configured: queueing either would repeat at every catch-up.
     /// </summary>
@@ -387,6 +399,9 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = IncidentsNeedingLinksSql;
         command.Parameters.AddWithValue("$rules_version", rulesVersion);
+        command.Parameters.AddWithValue("$unsplit_rules_version", UnsplitRulesVersion);
+        command.Parameters.AddWithValue("$day_ms", DayMs);
+        command.Parameters.AddWithValue("$baseline_days", BaselineDays);
         command.Parameters.AddWithValue("$source_ids",
             JsonSerializer.Serialize([.. sourceIds], HubJsonContext.Default.StringArray));
         var keys = new List<IncidentKey>();

@@ -402,6 +402,29 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
     }
 
     [Fact]
+    public async Task A_v4_incident_is_requeued_only_when_its_baseline_window_holds_a_split_day()
+    {
+        var before = new IncidentKey(NewId(), NewId());
+        var within = new IncidentKey(NewId(), NewId());
+        foreach (var key in new[] { before, within })
+        {
+            await SeedIncidentAsync(key.Id, key.SourceId, AtMs, FrozenIn(("sig-a", "ns-a", 3)));
+            await factory.Database.ReplaceLinksAsync(key, [new StoredLink("sig-a", LinkLevel.Weak, [], 4)], Token);
+        }
+
+        // Split days on either side of the seven covered days keep the v4 links.
+        await SeedSplitAsync(before.SourceId, Day - 8);
+        await SeedSplitAsync(before.SourceId, Day);
+        await SeedSplitAsync(within.SourceId, Day - 1);
+
+        var needing = await factory.Database.IncidentsNeedingLinksAsync(IncidentLinkRules.RulesVersion,
+            [before.SourceId, within.SourceId], Token);
+
+        Assert.DoesNotContain(before, needing);
+        Assert.Contains(within, needing);
+    }
+
+    [Fact]
     public async Task Incidents_needing_links_lists_missing_and_outdated_rows()
     {
         var missing = new IncidentKey(NewId(), NewId());

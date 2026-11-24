@@ -348,7 +348,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         await SeedIncidentAsync(fresh, 2);
         await SeedIncidentAsync(stale, 2);
         var staleKey = new IncidentKey(stale, Source);
-        await factory.Database.ReplaceLinksAsync(staleKey, [new StoredLink("sig-0", LinkLevel.Weak, [], IncidentLinkRules.RulesVersion - 1)], Token);
+        await factory.Database.ReplaceLinksAsync(staleKey, [new StoredLink("sig-0", LinkLevel.Weak, [], 3)], Token);
         using var worker = NewWorker();
         await worker.StartAsync(Token);
         try
