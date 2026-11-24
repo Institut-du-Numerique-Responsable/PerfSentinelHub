@@ -410,6 +410,21 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
+    public async Task Unsplit_counts_left_out_on_a_split_day_are_not_counted_as_read()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pages = new Queue<JsonObject>([SplitPage(Today, "a", "web"), Page([Today], null)]);
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()), context => Serve(context, pages.Dequeue()), cancellationToken);
+        var (poller, database, watch) = await BuildAsync(cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        Assert.Equal(1, await CountRowsAsync(database, cancellationToken));
+        Assert.Equal(1, watch.Rows("prod"));
+    }
+
+    [Fact]
     public async Task A_pass_stops_at_the_page_cap_without_sealing()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

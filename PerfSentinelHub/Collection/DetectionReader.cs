@@ -100,7 +100,7 @@ public sealed partial class DetectionReader(
             var merge = await database.MergeDetectionPageAsync(source.Id, page, false, observedAtMs, cancellationToken);
             if (merge.SkippedCounts > 0)
                 LogCountsSkipped(logger, source.Id, merge.SkippedCounts);
-            rows.Value += page.Counts.Count;
+            rows.Value += page.Counts.Count - merge.SkippedCounts;
             if (page.NextAfter is null)
             {
                 await database.SealDetectionPassAsync(
