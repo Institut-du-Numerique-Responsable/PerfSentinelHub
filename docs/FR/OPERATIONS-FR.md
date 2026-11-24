@@ -202,7 +202,8 @@ compteurs repartent de zéro à chaque démarrage, comme celui de l'import des f
 
 `outcome`, sur les lectures de détections, prend cinq constantes, publiées dès le démarrage
 pour chaque daemon interrogé : `ok`, `aborted`, `unauthorized`, `failed` et `capped`.
-`aborted` est un daemon qui a ouvert un nouveau registre ou l'a coupé pendant le passage, et
+`aborted` est un daemon qui a ouvert un nouveau registre ou l'a coupé pendant le passage, ou
+une page sous l'autre forme que celle sous laquelle un push a stocké son registre entre-temps, et
 `capped` un registre de plus de 128 pages de 5 000 lignes, 640 000 lignes par passage : trois
 jours retenus à `max_signatures_per_day = 150000` plus les 10 000 signatures surveillées de
 chacun font 480 000. Le passage suivant reprend de la ligne où un passage plafonné s'est arrêté,

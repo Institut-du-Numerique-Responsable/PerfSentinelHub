@@ -189,7 +189,8 @@ each start, as the findings import counter does.
 
 `outcome` on the detection reads takes five constants, published from startup for every
 polled daemon: `ok`, `aborted`, `unauthorized`, `failed` and `capped`. `aborted` is a
-daemon that started a new ledger or turned it off during the pass, and `capped` a ledger
+daemon that started a new ledger or turned it off during the pass, or a page in the other form
+than a push stored its ledger in meanwhile, and `capped` a ledger
 past 128 pages of 5,000 rows, 640,000 rows a pass: three retained days at
 `max_signatures_per_day = 150000` plus the 10,000 watched signatures of each come to 480,000.
 The next pass goes on from the row a capped one stopped on, so a larger ledger is read whole
