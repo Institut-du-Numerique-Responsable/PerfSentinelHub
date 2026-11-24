@@ -82,6 +82,7 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
         Assert.Equal(2, body.RootElement.GetProperty("accepted").GetInt32());
         Assert.Equal(0, body.RootElement.GetProperty("rejected").GetInt32());
+        Assert.Equal("unsplit", body.RootElement.GetProperty("ledger_form").GetString());
         Assert.Equal("stored-a 5 40,stored-b 7 -", await ScalarAsync("""
                                                                      SELECT group_concat(signature || ' ' || detections || ' ' || IFNULL(extra_io_ops, '-'), ',')
                                                                      FROM (SELECT * FROM detection_counts
@@ -267,6 +268,7 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         Assert.Equal(2, body.RootElement.GetProperty("accepted").GetInt32());
         Assert.Equal(0, body.RootElement.GetProperty("rejected").GetInt32());
         Assert.Equal(JsonValueKind.Array, body.RootElement.GetProperty("watch").ValueKind);
+        Assert.Equal("split", body.RootElement.GetProperty("ledger_form").GetString());
         Assert.Equal("cart,checkout", await ScalarAsync(
             "SELECT group_concat(grouping, ',') FROM (SELECT grouping FROM detection_counts " +
             "WHERE signature = 'by-grouping' ORDER BY grouping);"));
@@ -307,6 +309,51 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
         Assert.Equal(0, body.RootElement.GetProperty("accepted").GetInt32());
+        // The form the ledger is stored in, so the daemon pushes that one from now on.
+        Assert.Equal("split", body.RootElement.GetProperty("ledger_form").GetString());
+        Assert.Equal("checkout", await ScalarAsync(
+            $"SELECT group_concat(grouping, ',') FROM detection_counts WHERE ledger_id = '{ledger}';"));
+    }
+
+    [Fact]
+    public async Task A_split_push_on_a_ledger_stored_unsplit_answers_that_form_and_stores_nothing()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var ledger = Guid.NewGuid().ToString();
+        var unsplit = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(0, "late-split")], [DetectionLedgerJson.Day(0)]);
+        unsplit["ledger_id"] = ledger;
+        using (var first = Request(ApiKey, unsplit))
+        using (var unsplitResponse = await _client.SendAsync(first, cancellationToken))
+            Assert.Equal(HttpStatusCode.OK, unsplitResponse.StatusCode);
+
+        var split = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(0, "late-split", grouping: "checkout")], [DetectionLedgerJson.Day(0)]);
+        split["split"] = "grouping";
+        split["ledger_id"] = ledger;
+        using var request = Request(ApiKey, split, route: "/api/import/detections/by-grouping");
+        using var response = await _client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
+        Assert.Equal(0, body.RootElement.GetProperty("accepted").GetInt32());
+        Assert.Equal("unsplit", body.RootElement.GetProperty("ledger_form").GetString());
+        Assert.Equal("1 ", await ScalarAsync(
+            $"SELECT COUNT(*) || ' ' || group_concat(grouping, ',') FROM detection_counts WHERE ledger_id = '{ledger}';"));
+    }
+
+    [Fact]
+    public async Task A_page_without_counts_on_a_fresh_ledger_answers_no_form()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var page = DetectionLedgerJson.Page([], [DetectionLedgerJson.Day(0)]);
+        page["ledger_id"] = Guid.NewGuid().ToString();
+        using var request = Request(ApiKey, page);
+        using var response = await _client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
+        Assert.False(body.RootElement.TryGetProperty("ledger_form", out _));
     }
 
     [Fact]
@@ -334,8 +381,8 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         using var response = await client.SendAsync(request, cancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Single(logger.Messages, message => message ==
-            "Source test pushed 2 detection counts in the other form than its ledger is stored in, split by grouping or not; they were left out for the poll to read.");
+        Assert.Single(logger.Warnings, message => message ==
+            $"Source test pushed a detection page in the other form than its ledger {ledger} is stored in, split by grouping or not; its 2 counts were left out for the poll to read.");
     }
 
     private sealed class Capture(ListLogger<Program> logger) : ILoggerProvider

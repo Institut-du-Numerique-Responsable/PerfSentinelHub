@@ -446,8 +446,13 @@ public sealed record DetectionWalk(bool Split, string? After, string? AfterGroup
 ///     How a ledger page merged: not at all while the write lock stayed taken. Foreign when the page came in
 ///     the other form than its ledger is stored in, split by grouping or not: its day rows merged unsealed
 ///     and its count rows, SkippedCounts, were left out for the poll to read in the ledger's form.
+///     LedgerSplit is that form after the page, null while no page has set it.
 /// </summary>
-public readonly record struct DetectionMergeResult(bool Merged, int SkippedCounts, bool Foreign = false);
+public readonly record struct DetectionMergeResult(
+    bool Merged,
+    int SkippedCounts,
+    bool Foreign = false,
+    bool? LedgerSplit = null);
 
 /// <summary>
 ///     How many times one signature was detected on one UTC epoch day, null I/O when green was off.

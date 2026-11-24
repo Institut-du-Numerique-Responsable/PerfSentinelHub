@@ -520,14 +520,14 @@ public static partial class ApiEndpoints
                 var result = await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken);
                 if (!result.Merged)
                     return null;
-                if (result.SkippedCounts > 0)
-                    LogSkippedDetectionCounts(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                if (result.Foreign)
+                    LogForeignDetectionPage(loggerFactory.CreateLogger("ImportApi"), source.Id, page.LedgerId,
                         result.SkippedCounts);
                 // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
                 var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
                 // Rows left out for the ledger's other form are not accepted, and not rejected either.
-                return TypedResults.Ok(
-                    new DetectionImportResponse(page.Counts.Count - result.SkippedCounts, 0, watch));
+                return TypedResults.Ok(new DetectionImportResponse(page.Counts.Count - result.SkippedCounts, 0,
+                    watch, result.LedgerSplit switch { true => "split", false => "unsplit", null => null }));
             },
             cancellationToken);
     }
@@ -792,11 +792,12 @@ public static partial class ApiEndpoints
         string sourceId,
         int rejectedCount);
 
-    [LoggerMessage(1304, LogLevel.Information,
-        "Source {SourceId} pushed {Skipped} detection counts in the other form than its ledger is stored in, split by grouping or not; they were left out for the poll to read.")]
-    private static partial void LogSkippedDetectionCounts(
+    [LoggerMessage(1304, LogLevel.Warning,
+        "Source {SourceId} pushed a detection page in the other form than its ledger {LedgerId} is stored in, split by grouping or not; its {Skipped} counts were left out for the poll to read.")]
+    private static partial void LogForeignDetectionPage(
         ILogger logger,
         string sourceId,
+        string ledgerId,
         int skipped);
 
     [LoggerMessage(2010, LogLevel.Information,

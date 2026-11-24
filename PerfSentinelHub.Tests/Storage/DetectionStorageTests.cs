@@ -429,10 +429,10 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         await PushAsync(Split(Grouped("a", 6)));
 
         // By both paths, on a split day and on a day not split yet alike.
-        Assert.Equal(new DetectionMergeResult(true, 1, true), await PollAsync(Page(50, shedTraces: 2)));
-        Assert.Equal(new DetectionMergeResult(true, 1, true), await _database.TryMergeDetectionPageAsync(
+        Assert.Equal(new DetectionMergeResult(true, 1, true, true), await PollAsync(Page(50, shedTraces: 2)));
+        Assert.Equal(new DetectionMergeResult(true, 1, true, true), await _database.TryMergeDetectionPageAsync(
             "daemon-a", Page(50, sealedDay: true), ObservedAt, TestContext.Current.CancellationToken));
-        Assert.Equal(new DetectionMergeResult(true, 1, true), await PollAsync(Days(Day - 1) with
+        Assert.Equal(new DetectionMergeResult(true, 1, true, true), await PollAsync(Days(Day - 1) with
         {
             Counts = [new DetectionCountRow(Day - 1, Signature, 3, 30)]
         }));
@@ -447,7 +447,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
     {
         await PushAsync(Page(10, 100));
 
-        Assert.Equal(new DetectionMergeResult(true, 2, true), await _database.TryMergeDetectionPageAsync(
+        Assert.Equal(new DetectionMergeResult(true, 2, true, false), await _database.TryMergeDetectionPageAsync(
             "daemon-a", Split(Grouped("a", 6), Grouped("b", 4)) with
             {
                 Days = [new DetectionDayRow(Day, true, false, 0, 0, 0, 0, 1.0)]

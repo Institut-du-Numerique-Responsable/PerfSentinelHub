@@ -215,8 +215,10 @@ public sealed partial class HubDatabase
 
         command.CommandText = "SELECT split FROM detection_ledgers WHERE source_id = $source_id AND ledger_id = $ledger_id;";
         BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
-        var foreign = await command.ExecuteScalarAsync(cancellationToken) is long stored && (stored == 1) != page.Split;
-        if (!foreign && (page.Split || page.Counts.Count > 0))
+        var stored = await command.ExecuteScalarAsync(cancellationToken) as long?;
+        var foreign = stored is not null && (stored == 1) != page.Split;
+        var sets = !foreign && (page.Split || page.Counts.Count > 0);
+        if (sets)
         {
             command.CommandText = page.Split ? SplitDayMark : UnsplitLedgerMark;
             BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
@@ -262,7 +264,8 @@ public sealed partial class HubDatabase
         if (fromPush)
             await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new DetectionMergeResult(true, foreign ? page.Counts.Count : 0, foreign);
+        return new DetectionMergeResult(true, foreign ? page.Counts.Count : 0, foreign,
+            sets ? page.Split : stored is null ? null : stored == 1);
     }
 
     // Clears the previous row's values; SQLite ignores a bound name the statement does not use.
