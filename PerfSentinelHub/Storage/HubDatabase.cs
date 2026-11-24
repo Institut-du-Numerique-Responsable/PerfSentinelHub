@@ -501,6 +501,8 @@ public sealed partial class HubDatabase(IOptions<HubOptions> options, TimeProvid
                                      SELECT rowid FROM detection_counts WHERE day < $detection_cutoff_day LIMIT $chunk);
                                    DELETE FROM detection_days WHERE rowid IN (
                                      SELECT rowid FROM detection_days WHERE day < $detection_cutoff_day LIMIT $chunk);
+                                   DELETE FROM detection_split_days WHERE rowid IN (
+                                     SELECT rowid FROM detection_split_days WHERE day < $detection_cutoff_day LIMIT $chunk);
                                    DELETE FROM detection_ledgers WHERE rowid IN (
                                      SELECT rowid FROM detection_ledgers WHERE last_read_ms < $detection_cutoff LIMIT $chunk);
                                    DELETE FROM finding_groupings WHERE rowid IN (

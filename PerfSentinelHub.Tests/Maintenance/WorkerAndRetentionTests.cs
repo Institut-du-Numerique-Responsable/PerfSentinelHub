@@ -137,7 +137,7 @@ public sealed class WorkerAndRetentionTests : IDisposable
                     new DetectionDayRow(2, false, false, 0, null, 0, 0, 1.0),
                     new DetectionDayRow(3, false, false, 0, null, 0, 0, 1.0)
                 ],
-                null),
+                null, true),
             false, 3 * dayMs, cancellationToken);
         await database.MergeDetectionPageAsync("b", new DetectionLedgerPage(
                 ledger, 0, 4, 4, null, [], [new DetectionDayRow(4, false, false, 0, null, 0, 0, 1.0)], null),
@@ -150,9 +150,10 @@ public sealed class WorkerAndRetentionTests : IDisposable
         read.CommandText = """
                            SELECT (SELECT group_concat(day, ',') FROM detection_counts) || ' | ' ||
                                   (SELECT group_concat(day, ',') FROM (SELECT day FROM detection_days ORDER BY day)) || ' | ' ||
-                                  (SELECT group_concat(source_id, ',') FROM detection_ledgers);
+                                  (SELECT group_concat(source_id, ',') FROM detection_ledgers) || ' | ' ||
+                                  (SELECT group_concat(day, ',') FROM detection_split_days);
                            """;
-        Assert.Equal("3 | 3,4 | b", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
+        Assert.Equal("3 | 3,4 | b | 3", (string)(await read.ExecuteScalarAsync(cancellationToken))!);
     }
 
     [Fact]

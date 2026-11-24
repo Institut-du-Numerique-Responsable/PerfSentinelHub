@@ -654,4 +654,16 @@ internal static class Schema
         ALTER TABLE detection_counts_v25 RENAME TO detection_counts;
         CREATE INDEX IF NOT EXISTS ix_detection_counts_day ON detection_counts(day);
         """;
+
+    // Version 26: the days a ledger sent split by grouping, marked by the first split page touching one,
+    // through its counts or its day row: a day's row only rides its last page, and push and poll may
+    // interleave on one ledger, so detection_days.split alone cannot tell a day's first split page.
+    internal const string V26 = """
+        CREATE TABLE IF NOT EXISTS detection_split_days (
+          source_id TEXT NOT NULL,
+          ledger_id TEXT NOT NULL,
+          day INTEGER NOT NULL,
+          PRIMARY KEY(source_id, ledger_id, day)
+        );
+        """;
 }

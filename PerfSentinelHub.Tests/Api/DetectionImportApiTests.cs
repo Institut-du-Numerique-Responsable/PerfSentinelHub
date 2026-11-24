@@ -220,6 +220,22 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM detection_counts WHERE signature = 'invalid';"));
     }
 
+    [Fact]
+    public async Task A_split_page_is_a_400_on_this_route()
+    {
+        var split = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(2, "split-route", grouping: "checkout")], [DetectionLedgerJson.Day(2)]);
+        split["split"] = "grouping";
+        var before = Refusals("bad_request");
+
+        using var request = Request(ApiKey, split);
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(before + 1, Refusals("bad_request"));
+        Assert.Equal("0", await ScalarAsync("SELECT COUNT(*) FROM detection_counts WHERE signature = 'split-route';"));
+    }
+
     // A lone surrogate is valid JSON text, but no .NET string holds it: reading it throws.
     [Theory]
     [InlineData("signature")]

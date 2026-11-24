@@ -150,7 +150,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
             null);
     }
 
-    private Task<DetectionMergeOutcome> PollAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
+    private Task<DetectionMergeResult> PollAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
     {
         return _database.MergeDetectionPageAsync(
             "daemon-a", page, false, observedAt, TestContext.Current.CancellationToken);
@@ -158,8 +158,8 @@ public sealed class DetectionStorageTests : IAsyncLifetime
 
     private async Task PushAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
     {
-        Assert.Equal(DetectionMergeOutcome.Merged, await _database.TryMergeDetectionPageAsync(
-            "daemon-a", page, observedAt, TestContext.Current.CancellationToken));
+        Assert.True((await _database.TryMergeDetectionPageAsync(
+            "daemon-a", page, observedAt, TestContext.Current.CancellationToken)).Merged);
     }
 
     private async Task<string> ScalarAsync(string sql)
@@ -378,9 +378,9 @@ public sealed class DetectionStorageTests : IAsyncLifetime
                                 || grouping, ',')
                               FROM (SELECT * FROM detection_counts ORDER BY day, signature DESC);
                               """));
-        Assert.Equal("0 1 1 signature,source_id,ledger_id,day,grouping", await ScalarAsync("""
+        Assert.Equal("0 2 1 signature,source_id,ledger_id,day,grouping", await ScalarAsync("""
             SELECT (SELECT split FROM detection_days)
-              || ' ' || (SELECT count(*) FROM schema_migrations WHERE version = 25)
+              || ' ' || (SELECT count(*) FROM schema_migrations WHERE version IN (25, 26))
               || ' ' || (SELECT count(*) FROM sqlite_master WHERE name = 'ix_detection_counts_day')
               || ' ' || (SELECT group_concat(name, ',') FROM (
                    SELECT name FROM pragma_table_info('detection_counts') WHERE pk > 0 ORDER BY pk));
@@ -409,13 +409,18 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         Assert.Equal($"{Day - 1} 0,{Day} 1",
             await ScalarAsync("SELECT group_concat(day || ' ' || split, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));
 
-        // An unsplit page onto that day is refused whole, by both paths, and the day stays split.
-        Assert.Equal(DetectionMergeOutcome.DaySplit, await PollAsync(Page(50)));
-        Assert.Equal(DetectionMergeOutcome.DaySplit, await _database.TryMergeDetectionPageAsync(
+        // An unsplit page onto that day keeps its day row and leaves its counts out, by both paths.
+        Assert.Equal(new DetectionMergeResult(true, 1), await PollAsync(Page(50, shedTraces: 2)));
+        Assert.Equal(new DetectionMergeResult(true, 1), await _database.TryMergeDetectionPageAsync(
             "daemon-a", Page(50) with { Days = [] }, ObservedAt, TestContext.Current.CancellationToken));
-        Assert.Equal(DetectionMergeOutcome.Merged, await PollAsync(Days(Day - 1)));
-        Assert.Equal("a=6/10", await ScalarAsync(GroupingRows));
-        Assert.Equal("1", await ScalarAsync($"SELECT split FROM detection_days WHERE day = {Day};"));
+        // Its rows of a day not split are written as usual.
+        Assert.Equal(new DetectionMergeResult(true, 0), await PollAsync(Days(Day - 1) with
+        {
+            Counts = [new DetectionCountRow(Day - 1, Signature, 3, 30)]
+        }));
+        Assert.Equal("=3/30,a=6/10", await ScalarAsync(GroupingRows));
+        Assert.Equal($"{Day - 1} 0 0,{Day} 1 2", await ScalarAsync(
+            "SELECT group_concat(day || ' ' || split || ' ' || shed_traces, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));
     }
 
     [Fact]
@@ -458,5 +463,32 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         Assert.Equal("15 5", await ScalarAsync(
             $"SELECT group_concat(detections, ' ') FROM (SELECT * FROM detection_counts WHERE day = {Day + 1} ORDER BY grouping);"));
         Assert.Equal("1 1", await ScalarAsync("SELECT group_concat(split, ' ') FROM detection_days;"));
+    }
+
+    [Fact]
+    public async Task An_unsplit_count_only_page_then_split_pages_read_the_split_sum()
+    {
+        // An unsplit read cut on Day: its counts landed, its day row never came.
+        await PollAsync(Page(10, 100) with { Days = [] });
+        await PushAsync(Split(Grouped("a", 6)) with { Days = [] });
+        await PushAsync(Split(Grouped("b", 4)));
+
+        Assert.Equal("a=6/10,b=4/10", await ScalarAsync(GroupingRows));
+        Assert.Equal(10, (await VolumeAsync()).Detections);
+    }
+
+    [Fact]
+    public async Task Unsplit_pushes_and_split_polls_interleaved_on_one_day_never_double()
+    {
+        await PushAsync(Page(10, 100));
+        await PollAsync(Split(Grouped("a", 6)) with { Days = [] });
+        // The daemon keeps pushing totals: the day row merges, the totals are left out.
+        await PushAsync(Page(12, 120, sealedDay: true));
+        await PollAsync(Split(Grouped("a", 7), Grouped("b", 5)));
+        await PushAsync(Page(13, 130, sealedDay: true));
+
+        Assert.Equal("a=7/10,b=5/10", await ScalarAsync(GroupingRows));
+        Assert.Equal("1 1", await ScalarAsync("SELECT sealed || ' ' || split FROM detection_days;"));
+        Assert.Equal(12, (await VolumeAsync()).Detections);
     }
 }

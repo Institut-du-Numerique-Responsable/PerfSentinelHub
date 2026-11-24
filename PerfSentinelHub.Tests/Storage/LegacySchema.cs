@@ -23,7 +23,7 @@ internal static class LegacySchema
                                          DELETE FROM schema_migrations WHERE version = 24;
                                          """;
 
-    // A version 24 database: detection_counts keyed without its grouping, detection_days without split.
+    // A version 24 database: detection_counts keyed without its grouping, no split day anywhere.
     internal const string WithoutGroupings = """
                                              DROP TABLE detection_counts;
                                              CREATE TABLE detection_counts (
@@ -38,6 +38,7 @@ internal static class LegacySchema
                                              );
                                              CREATE INDEX ix_detection_counts_day ON detection_counts(day);
                                              ALTER TABLE detection_days DROP COLUMN split;
-                                             DELETE FROM schema_migrations WHERE version = 25;
+                                             DROP TABLE detection_split_days;
+                                             DELETE FROM schema_migrations WHERE version IN (25, 26);
                                              """;
 }

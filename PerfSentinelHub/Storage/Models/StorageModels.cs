@@ -436,15 +436,10 @@ public sealed record DetectionLedgerPage(
     bool Split = false);
 
 /// <summary>
-///     How a ledger page merged. DaySplit refuses an unsplit page touching a day already stored split:
-///     its per-signature totals would add up with the grouping rows.
+///     How a ledger page merged: not at all while the write lock stayed taken. SkippedCounts are the
+///     count rows of an unsplit page left out on days already split, whose grouping rows carry them.
 /// </summary>
-public enum DetectionMergeOutcome
-{
-    Merged,
-    Busy,
-    DaySplit
-}
+public readonly record struct DetectionMergeResult(bool Merged, int SkippedCounts);
 
 /// <summary>
 ///     How many times one signature was detected on one UTC epoch day, null I/O when green was off.

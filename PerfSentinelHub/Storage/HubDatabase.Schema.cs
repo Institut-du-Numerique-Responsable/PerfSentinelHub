@@ -145,7 +145,7 @@ public sealed partial class HubDatabase
                     Schema.V1 + Schema.V2 + Schema.V3 + Schema.V4 + Schema.V5 + Schema.V6 + Schema.V7 + Schema.V8 +
                     Schema.V9 + Schema.V10 + Schema.V11 + Schema.V12 + Schema.V13 + Schema.V14 +
                     Schema.V15 + Schema.V16 + Schema.V17 + Schema.V18 + Schema.V19 + Schema.V20 +
-                    Schema.V22 + Schema.V24;
+                    Schema.V22 + Schema.V24 + Schema.V26;
                 await migration.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -175,7 +175,8 @@ public sealed partial class HubDatabase
                                              (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
                                              (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
                                              (19, $applied_at_ms), (20, $applied_at_ms), (21, $applied_at_ms),
-                                             (23, $applied_at_ms), (24, $applied_at_ms), (25, $applied_at_ms);
+                                             (23, $applied_at_ms), (24, $applied_at_ms), (25, $applied_at_ms),
+                                             (26, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -391,8 +392,9 @@ public sealed partial class HubDatabase
     }
 
     /// <summary>
-    ///     1 once a day's counts came split by grouping. On an unsplit day the empty grouping's row holds
-    ///     every grouping of its signature; on a split day only the findings without one and the passes.
+    ///     1 once a day's counts came split by grouping, copied from detection_split_days. On an unsplit
+    ///     day the empty grouping's row holds every grouping of its signature; on a split day only the
+    ///     findings without one and the passes.
     /// </summary>
     private static async Task EnsureDetectionDaySplitColumnAsync(
         SqliteConnection connection,
