@@ -329,6 +329,12 @@ public sealed class DetectionStorageTests : IAsyncLifetime
                                         FROM (SELECT * FROM detection_counts ORDER BY grouping);
                                         """;
 
+    // 1 when the day of a detection_days row d is marked split, 0 otherwise.
+    private const string SplitOf = """
+                                   (SELECT count(*) FROM detection_split_days AS m
+                                    WHERE m.source_id = d.source_id AND m.ledger_id = d.ledger_id AND m.day = d.day)
+                                   """;
+
     // The finding's volume over Day, read as a windowed listing an hour into the next day.
     private async Task<DetectionVolume> VolumeAsync()
     {
@@ -379,7 +385,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
                               FROM (SELECT * FROM detection_counts ORDER BY day, signature DESC);
                               """));
         Assert.Equal("0 2 1 signature,source_id,ledger_id,day,grouping", await ScalarAsync("""
-            SELECT (SELECT split FROM detection_days)
+            SELECT (SELECT count(*) FROM pragma_table_info('detection_days') WHERE name = 'split')
               || ' ' || (SELECT count(*) FROM schema_migrations WHERE version IN (25, 26))
               || ' ' || (SELECT count(*) FROM sqlite_master WHERE name = 'ix_detection_counts_day')
               || ' ' || (SELECT group_concat(name, ',') FROM (
@@ -407,7 +413,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         await PollAsync(Days(Day - 1));
         await PushAsync(Split(Grouped("a", 6)));
         Assert.Equal($"{Day - 1} 0,{Day} 1",
-            await ScalarAsync("SELECT group_concat(day || ' ' || split, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));
+            await ScalarAsync($"SELECT group_concat(day || ' ' || {SplitOf}, ',') FROM (SELECT * FROM detection_days ORDER BY day) AS d;"));
 
         // An unsplit page onto that day keeps its day row and leaves its counts out, by both paths.
         Assert.Equal(new DetectionMergeResult(true, 1), await PollAsync(Page(50, shedTraces: 2)));
@@ -420,7 +426,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         }));
         Assert.Equal("=3/30,a=6/10", await ScalarAsync(GroupingRows));
         Assert.Equal($"{Day - 1} 0 0,{Day} 1 2", await ScalarAsync(
-            "SELECT group_concat(day || ' ' || split || ' ' || shed_traces, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));
+            $"SELECT group_concat(day || ' ' || {SplitOf} || ' ' || shed_traces, ',') FROM (SELECT * FROM detection_days ORDER BY day) AS d;"));
     }
 
     [Fact]
@@ -462,7 +468,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
 
         Assert.Equal("15 5", await ScalarAsync(
             $"SELECT group_concat(detections, ' ') FROM (SELECT * FROM detection_counts WHERE day = {Day + 1} ORDER BY grouping);"));
-        Assert.Equal("1 1", await ScalarAsync("SELECT group_concat(split, ' ') FROM detection_days;"));
+        Assert.Equal("1 1", await ScalarAsync($"SELECT group_concat({SplitOf}, ' ') FROM detection_days AS d;"));
     }
 
     [Fact]
@@ -488,7 +494,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
         await PushAsync(Page(13, 130, sealedDay: true));
 
         Assert.Equal("a=7/10,b=5/10", await ScalarAsync(GroupingRows));
-        Assert.Equal("1 1", await ScalarAsync("SELECT sealed || ' ' || split FROM detection_days;"));
+        Assert.Equal("1 1", await ScalarAsync($"SELECT sealed || ' ' || {SplitOf} FROM detection_days AS d;"));
         Assert.Equal(12, (await VolumeAsync()).Detections);
     }
 }

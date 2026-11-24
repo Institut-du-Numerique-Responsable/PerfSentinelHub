@@ -151,8 +151,8 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
                 await using var command = connection.CreateCommand();
                 command.CommandText = """
                                       INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
-                                        shed_traces, ingest_rejected, sampling_rate, last_read_ms, split)
-                                      VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0, 1);
+                                        shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                                      VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0);
                                       INSERT INTO detection_split_days(source_id, ledger_id, day) VALUES ($source, 'l1', $day);
                                       INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, grouping)
                                       VALUES ('sig-a', $source, 'l1', $day, 10, 'ns-a'), ('sig-b', $source, 'l1', $day, 90, 'ns-a'),
@@ -187,8 +187,8 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         await using var command = connection.CreateCommand();
         command.CommandText = """
                               INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
-                                shed_traces, ingest_rejected, sampling_rate, last_read_ms, split)
-                              VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0, $split);
+                                shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                              VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0);
                               """ + (split
                                   ? "INSERT INTO detection_split_days(source_id, ledger_id, day) VALUES ($source, 'l1', $day);"
                                   : "")
@@ -198,7 +198,6 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
                                   """));
         command.Parameters.AddWithValue("$source", Source);
         command.Parameters.AddWithValue("$day", day);
-        command.Parameters.AddWithValue("$split", split ? 1 : 0);
         for (var i = 0; i < counts.Length; i++)
         {
             command.Parameters.AddWithValue($"$s{i}", counts[i].Signature);

@@ -37,7 +37,6 @@ internal static class LegacySchema
                                                PRIMARY KEY(signature, source_id, ledger_id, day)
                                              );
                                              CREATE INDEX ix_detection_counts_day ON detection_counts(day);
-                                             ALTER TABLE detection_days DROP COLUMN split;
                                              DROP TABLE detection_split_days;
                                              DELETE FROM schema_migrations WHERE version IN (25, 26);
                                              """;

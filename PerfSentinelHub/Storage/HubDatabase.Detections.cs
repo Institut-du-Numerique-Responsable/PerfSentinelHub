@@ -25,8 +25,7 @@ public sealed partial class HubDatabase
                                                    pushed = MAX(detection_ledgers.pushed, excluded.pushed);
                                                  """;
 
-    // A day keeps the lowest sampling rate it was ever read at, a sealed day stays sealed, and split
-    // follows the day's detection_split_days mark.
+    // A day keeps the lowest sampling rate it was ever read at, and a sealed day stays sealed.
     // The four carbon columns merge by a null-tolerant maximum: NULL there means "not yet
     // accumulated", unlike overflow_extra_io_ops where NULL means green off and stays sticky.
     // The six thresholds take the same maximum, written COALESCE(MAX(a, b), a, b): a day spanning
@@ -39,20 +38,16 @@ public sealed partial class HubDatabase
                                                 last_read_ms, avoidable_gco2, avoidable_io_ops, avoidable_gco2_low,
                                                 total_io_ops, slow_query_threshold_ms, slow_http_threshold_ms,
                                                 max_fanout, chatty_threshold, pool_saturation_threshold,
-                                                serialized_min_calls, split)
+                                                serialized_min_calls)
                                               VALUES ($source_id, $ledger_id, $day, $sealed, $gap, $overflow_detections,
                                                       $overflow_extra_io_ops, $shed_traces, $ingest_rejected,
                                                       $sampling_rate, $observed_at, $avoidable_gco2,
                                                       $avoidable_io_ops, $avoidable_gco2_low, $total_io_ops,
                                                       $slow_query_threshold_ms, $slow_http_threshold_ms, $max_fanout,
                                                       $chatty_threshold, $pool_saturation_threshold,
-                                                      $serialized_min_calls,
-                                                      (SELECT count(*) FROM detection_split_days
-                                                       WHERE source_id = $source_id AND ledger_id = $ledger_id
-                                                         AND day = $day))
+                                                      $serialized_min_calls)
                                               ON CONFLICT(source_id, ledger_id, day) DO UPDATE SET
                                                 sealed = MAX(detection_days.sealed, excluded.sealed),
-                                                split = MAX(detection_days.split, excluded.split),
                                                 gap = MAX(detection_days.gap, excluded.gap),
                                                 overflow_detections = MAX(detection_days.overflow_detections,
                                                                           excluded.overflow_detections),
@@ -124,9 +119,6 @@ public sealed partial class HubDatabase
                                                           WHERE source_id = $source_id AND ledger_id = $ledger_id);
                                         INSERT OR IGNORE INTO detection_split_days(source_id, ledger_id, day)
                                         SELECT $source_id, $ledger_id, value FROM json_each($days);
-                                        UPDATE detection_days SET split = 1
-                                        WHERE source_id = $source_id AND ledger_id = $ledger_id AND split = 0
-                                          AND day IN (SELECT value FROM json_each($days));
                                         """;
 
     // A windowed page's volume inputs in one round trip: the page's counts in the window,

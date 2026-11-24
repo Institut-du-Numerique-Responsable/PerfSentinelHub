@@ -160,7 +160,6 @@ public sealed partial class HubDatabase
             await EnsureDetectionSignalColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionFrozenFindingColumnAsync(connection, transaction, cancellationToken);
             await RebuildDetectionCountsAsync(connection, transaction, cancellationToken);
-            await EnsureDetectionDaySplitColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -389,25 +388,6 @@ public sealed partial class HubDatabase
         rebuild.Transaction = transaction;
         rebuild.CommandText = Schema.V25;
         await rebuild.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    /// <summary>
-    ///     1 once a day's counts came split by grouping, copied from detection_split_days. On an unsplit
-    ///     day the empty grouping's row holds every grouping of its signature; on a split day only the
-    ///     findings without one and the passes.
-    /// </summary>
-    private static async Task EnsureDetectionDaySplitColumnAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        CancellationToken cancellationToken)
-    {
-        if (await HasColumnAsync(connection, transaction, "detection_days", "split", cancellationToken))
-            return;
-
-        await using var alter = connection.CreateCommand();
-        alter.Transaction = transaction;
-        alter.CommandText = "ALTER TABLE detection_days ADD COLUMN split INTEGER NOT NULL DEFAULT 0;";
-        await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

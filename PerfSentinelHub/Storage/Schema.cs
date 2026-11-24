@@ -657,7 +657,7 @@ internal static class Schema
 
     // Version 26: the days a ledger sent split by grouping, marked by the first split page touching one,
     // through its counts or its day row: a day's row only rides its last page, and push and poll may
-    // interleave on one ledger, so detection_days.split alone cannot tell a day's first split page.
+    // interleave on one ledger, so the day row alone cannot tell a day's first split page.
     internal const string V26 = """
         CREATE TABLE IF NOT EXISTS detection_split_days (
           source_id TEXT NOT NULL,
