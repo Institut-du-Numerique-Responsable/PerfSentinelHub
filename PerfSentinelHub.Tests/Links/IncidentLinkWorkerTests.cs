@@ -29,11 +29,11 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         TimeProvider.System,
         NullLogger<IncidentLinkWorker>.Instance);
 
-    private static string Frozen(int count) =>
+    private static string Frozen(int count, long atMs) =>
         "[" + string.Join(",", Enumerable.Range(0, count).Select(index =>
-            $$"""{"finding":{"type":"n_plus_one_sql","signature":"sig-{{index}}"},"stored_at_ms":1,"first_seen_ms":{{AtMs + 5}},"seen_count":3}""")) + "]";
+            $$"""{"finding":{"type":"n_plus_one_sql","signature":"sig-{{index}}"},"stored_at_ms":1,"first_seen_ms":{{atMs + 5}},"seen_count":3}""")) + "]";
 
-    private async Task SeedIncidentAsync(string id, int signatures)
+    private async Task SeedIncidentAsync(string id, int signatures, long atMs = AtMs)
     {
         await using var connection = await factory.Database.OpenConnectionAsync(Token);
         await using var command = connection.CreateCommand();
@@ -44,9 +44,9 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
                               """;
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$source", Source);
-        command.Parameters.AddWithValue("$at", AtMs);
-        command.Parameters.AddWithValue("$from", AtMs - 300_000);
-        command.Parameters.AddWithValue("$findings", Frozen(signatures));
+        command.Parameters.AddWithValue("$at", atMs);
+        command.Parameters.AddWithValue("$from", atMs - 300_000);
+        command.Parameters.AddWithValue("$findings", Frozen(signatures, atMs));
         await command.ExecuteNonQueryAsync(Token);
     }
 
@@ -98,11 +98,13 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
     public async Task Intensity_weighs_each_finding_against_its_usual_share_of_the_incident()
     {
         var id = NewId();
-        await SeedIncidentAsync(id, 2);
+        // 40 days past the other tests' incidents: its ledger rows never reach their baselines, nor they its recurrence.
+        const long at = AtMs + 40 * 86_400_000L;
+        await SeedIncidentAsync(id, 3, at);
         await using (var connection = await factory.Database.OpenConnectionAsync(Token))
         {
-            // Seven covered days before the incident: sig-0 is usually 5 % of these findings, sig-1 95 %.
-            for (var day = AtMs / 86_400_000L - 7; day < AtMs / 86_400_000L; day++)
+            // Seven covered days before the incident: sig-0 is usually 5 % of these findings, sig-1 95 %, sig-2 new.
+            for (var day = at / 86_400_000L - 7; day < at / 86_400_000L; day++)
             {
                 await using var command = connection.CreateCommand();
                 command.CommandText = """
@@ -121,12 +123,14 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         using var worker = NewWorker();
         Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
 
-        // Both were seen 3 times in the window, half each: sig-0 weighed ten times its usual share, sig-1 about half.
+        // Each was seen 3 times. The new sig-2 has no usual share, so it stays out of both totals: sig-0 and sig-1
+        // weigh half each, sig-0 ten times its usual share, sig-1 about half.
         var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
             .ToDictionary(link => link.Signature);
         Assert.Equal(LinkLevel.Strong, links["sig-0"].Level);
         Assert.Equal(10.0, Assert.Single(links["sig-0"].Reasons, r => r.Code == "intensity").Ratio!.Value, 0.01);
         Assert.Equal(LinkLevel.Weak, links["sig-1"].Level);
+        Assert.Contains(links["sig-2"].Reasons, r => r.Code == "intensity_new");
     }
 
     [Fact]

@@ -65,8 +65,8 @@ public sealed class IncidentLinkRulesTests
             LinkLevel.Weak, ["mechanism_compatible", "intensity_unknown"] },
         { "empty baseline total", Input("oom_kill", "n_plus_one_sql", Daily(), 5) with { BaselineTotal = 0 },
             LinkLevel.Weak, ["mechanism_compatible", "intensity_unknown"] },
-        { "empty window total, new finding", Input("oom_kill", "n_plus_one_sql", NewFinding, 5) with { WindowTotal = 0 },
-            LinkLevel.Weak, ["mechanism_compatible", "intensity_unknown"] },
+        { "only new findings, no known total", Input("oom_kill", "n_plus_one_sql", NewFinding, 5) with
+            { WindowTotal = 0, BaselineTotal = 0 }, LinkLevel.Strong, ["mechanism_compatible", "intensity_new"] },
         { "deploy regression", Input("deploy", "n_plus_one_sql", NewFinding, afterDeploy: true), LinkLevel.Strong,
             ["appeared_after_deploy", "intensity_new"] },
         { "deploy other", Input("deploy", "n_plus_one_sql", Daily(), 100, new Recurrence(5, 5)),

@@ -91,9 +91,17 @@ public sealed partial class IncidentLinkWorker(
         if (await database.LoadLinkContextAsync(key, sourceIds, cancellationToken) is not { } context)
             return false;
 
-        var windowTotal = context.Signatures.Sum(signature => signature.SeenCount);
-        var baselineTotal = context.Signatures.Sum(signature =>
-            context.Baselines.GetValueOrDefault(signature.Signature)?.Detections ?? 0);
+        // Only findings with a usual share weigh in both totals, so the two shares compare like with like.
+        // Summed as doubles: a malformed seen_count must not overflow and fail the whole incident.
+        double windowTotal = 0, baselineTotal = 0;
+        foreach (var signature in context.Signatures)
+        {
+            if (context.Baselines.GetValueOrDefault(signature.Signature) is not { Detections: > 0 } known)
+                continue;
+            windowTotal += signature.SeenCount;
+            baselineTotal += known.Detections;
+        }
+
         var links = new List<StoredLink>(context.Signatures.Count);
         foreach (var signature in context.Signatures)
         {

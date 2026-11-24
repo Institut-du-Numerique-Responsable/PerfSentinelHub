@@ -77,8 +77,7 @@ public static class IncidentLinkRules
     private static Signal Intensity(LinkInput input, List<LinkReason> reasons)
     {
         var baseline = input.Baseline;
-        // An empty total has no share to compare: the ratio would be infinite or NaN, which cannot be serialized.
-        if (baseline.CoveredDays <= 0 || input.WindowTotal <= 0)
+        if (baseline.CoveredDays <= 0)
         {
             reasons.Add(new LinkReason("intensity_unknown"));
             return Signal.None;
@@ -97,7 +96,9 @@ public static class IncidentLinkRules
             return Signal.High;
         }
 
-        if (input.BaselineTotal <= 0)
+        // An empty total has no share to compare: the ratio would be infinite or NaN, which cannot be serialized.
+        // Checked after a new finding, since an incident of new findings only has no known total.
+        if (input.WindowTotal <= 0 || input.BaselineTotal <= 0)
         {
             reasons.Add(new LinkReason("intensity_unknown"));
             return Signal.None;
