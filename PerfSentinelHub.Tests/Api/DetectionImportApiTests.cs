@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using PerfSentinelHub.Api;
 using PerfSentinelHub.Storage;
@@ -301,6 +302,44 @@ public sealed class DetectionImportApiTests(HubApplicationFactory factory) : ICl
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
         Assert.Equal(0, body.RootElement.GetProperty("accepted").GetInt32());
+    }
+
+    [Fact]
+    public async Task An_unsplit_push_on_a_split_day_logs_the_counts_left_out()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var logger = new ListLogger<Program>();
+        await using var logged = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.AddSingleton<ILoggerProvider>(new Capture(logger))));
+        using var client = logged.CreateClient();
+        var split = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(0, "logged-unsplit", grouping: "checkout")], [DetectionLedgerJson.Day(0)]);
+        split["split"] = "grouping";
+        using (var first = Request(ApiKey, split, route: "/api/import/detections/by-grouping"))
+        using (var splitResponse = await client.SendAsync(first, cancellationToken))
+            Assert.Equal(HttpStatusCode.OK, splitResponse.StatusCode);
+
+        var unsplit = DetectionLedgerJson.Page(
+            [DetectionLedgerJson.Count(0, "logged-unsplit"), DetectionLedgerJson.Count(0, "logged-unsplit-b")],
+            [DetectionLedgerJson.Day(0)]);
+        using var request = Request(ApiKey, unsplit);
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(logger.Messages, message => message ==
+            "Source test sent 2 unsplit detection counts on days already split by grouping; they were left out.");
+    }
+
+    private sealed class Capture(ListLogger<Program> logger) : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName)
+        {
+            return logger;
+        }
+
+        public void Dispose()
+        {
+        }
     }
 
     // A lone surrogate is valid JSON text, but no .NET string holds it: reading it throws.

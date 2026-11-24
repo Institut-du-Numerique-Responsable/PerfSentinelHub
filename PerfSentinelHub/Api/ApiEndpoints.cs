@@ -478,10 +478,12 @@ public static partial class ApiEndpoints
         ImportAdmission<DetectionImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         // A split page has a route of its own.
-        return PushDetectionsAsync(request, database, admission, options, timeProvider, false, cancellationToken);
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, false,
+            cancellationToken);
     }
 
     private static Task<IResult> ImportDetectionsByGroupingAsync(
@@ -490,9 +492,11 @@ public static partial class ApiEndpoints
         ImportAdmission<DetectionImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        return PushDetectionsAsync(request, database, admission, options, timeProvider, true, cancellationToken);
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, true,
+            cancellationToken);
     }
 
     private static Task<IResult> PushDetectionsAsync(
@@ -501,6 +505,7 @@ public static partial class ApiEndpoints
         ImportAdmission<DetectionImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         bool split,
         CancellationToken cancellationToken)
     {
@@ -515,6 +520,9 @@ public static partial class ApiEndpoints
                 var result = await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken);
                 if (!result.Merged)
                     return null;
+                if (result.SkippedCounts > 0)
+                    LogSkippedDetectionCounts(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                        result.SkippedCounts);
                 // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
                 var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
                 // Rows left out on a split day are not accepted, and not rejected either.
@@ -783,6 +791,13 @@ public static partial class ApiEndpoints
         ILogger logger,
         string sourceId,
         int rejectedCount);
+
+    [LoggerMessage(1304, LogLevel.Information,
+        "Source {SourceId} sent {Skipped} unsplit detection counts on days already split by grouping; they were left out.")]
+    private static partial void LogSkippedDetectionCounts(
+        ILogger logger,
+        string sourceId,
+        int skipped);
 
     [LoggerMessage(2010, LogLevel.Information,
         "Terminal sign-in approved by {Identity} ({Subject}) for {ClientAddress}, from another network: {OtherNetwork}.")]
