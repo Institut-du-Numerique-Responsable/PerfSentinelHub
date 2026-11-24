@@ -83,7 +83,7 @@ at the daemon's cap of a thousand rows is mirrored and filed `truncated`, since 
 which is where the baseline sits, may be missing.
 
 The ledger read starts from the ledger's cursor, or from its oldest day the first time, and
-pages to the end, 64 pages at most. A pass that reads every page seals the days it read, from
+pages to the end, 128 pages at most. A pass that reads every page seals the days it read, from
 the later of the cursor and the daemon's oldest day up to the `sealed_through` of its first
 page, and moves the cursor past them, so a day the daemon sealed while the pass ran is read
 whole again by the next one. A day below that, pruned by the daemon after a partial read, stays

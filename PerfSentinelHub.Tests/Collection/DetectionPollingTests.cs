@@ -392,6 +392,24 @@ public sealed class DetectionPollingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_pass_reads_three_full_retained_days_with_their_watched_rows()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        // Three days at max_signatures_per_day = 150 000, plus the 10 000 watched signatures each.
+        const int pages = 3 * (150_000 + 10_000) / DaemonClient.DetectionsPageSize;
+        var served = 0;
+        await using var daemon = await DaemonAsync(
+            Status(Ledger()), context => Serve(context, Page([Today - 2], ++served < pages ? "a" : null)),
+            cancellationToken);
+        var (poller, _, watch) = await BuildAsync(cancellationToken);
+
+        await poller.PollAsync(Source(daemon), cancellationToken);
+
+        Assert.Equal(pages, _requests.Count);
+        Assert.Equal(1, watch.Reads("prod", DetectionReadOutcome.Ok));
+    }
+
+    [Fact]
     public async Task A_pass_stops_at_the_page_cap_without_sealing()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

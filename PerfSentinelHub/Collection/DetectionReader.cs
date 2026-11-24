@@ -22,9 +22,10 @@ public sealed partial class DetectionReader(
     DetectionWatch watch,
     ILogger<DetectionReader> logger)
 {
-    // 64 pages of 5000 rows, 320 000 signature-days per pass. A pass that reaches it
-    // seals nothing, so the next one starts from the same cursor.
-    public const int PagesCap = 64;
+    // 128 pages of 5000 rows, 640 000 rows per pass: three retained days at
+    // max_signatures_per_day = 150 000 plus 10 000 watched rows each are 480 000. A pass that
+    // reaches it seals nothing, so the next one starts from the same cursor.
+    public const int PagesCap = 128;
 
     /// <summary>Reads one pass of the ledger the daemon's status named, or does nothing without one.</summary>
     public async Task ReadAsync(

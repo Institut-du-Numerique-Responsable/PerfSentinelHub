@@ -190,8 +190,10 @@ each start, as the findings import counter does.
 `outcome` on the detection reads takes five constants, published from startup for every
 polled daemon: `ok`, `aborted`, `unauthorized`, `failed` and `capped`. `aborted` is a
 daemon that started a new ledger or turned it off during the pass, and `capped` a ledger
-past 64 pages. A daemon older than perf-sentinel 0.37.0, or with its ledger off, is never
-read and stays at zero. `detection_rows_total` counts the rows merged by each pass, and
+past 128 pages of 5,000 rows, 640,000 rows a pass: three retained days at
+`max_signatures_per_day = 150000` plus the 10,000 watched signatures of each come to 480,000.
+A daemon older than perf-sentinel 0.37.0, or with its ledger off, is never read and stays at
+zero. `detection_rows_total` counts the rows merged by each pass, and
 the open day is merged again on every poll, so it does not count distinct rows and its
 rate is not an intake volume. A pushed ledger counts only its refusals, on
 `detection_import_rejected_total`, whose reasons are the findings import's. The three

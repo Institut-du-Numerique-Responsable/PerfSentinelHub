@@ -89,7 +89,7 @@ plafond du daemon, mille lignes, est reflétée et consignée `truncated`, puisq
 là où se trouve la baseline, peut manquer.
 
 La lecture du registre part de son curseur, ou de son jour le plus ancien la première fois, et
-pagine jusqu'au bout, 64 pages au plus. Un passage qui lit toutes les pages scelle les jours
+pagine jusqu'au bout, 128 pages au plus. Un passage qui lit toutes les pages scelle les jours
 qu'il a lus, du plus tardif entre le curseur et le jour le plus ancien du daemon jusqu'au
 `sealed_through` de sa première page, et avance le curseur au-delà, donc un jour que le daemon
 a scellé pendant le passage est relu en entier par le suivant. Un jour en deçà, purgé par le
