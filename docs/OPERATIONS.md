@@ -700,3 +700,15 @@ those builds, back to the release that added it, so only its members sign in. Se
 Rolling back below the storage release (schema version 9) and forward again is safe for
 the data: every start fills in the attributes, the per-source service and the incident
 pairs an older build left out.
+
+## Rolling back below the per-grouping detection ledger
+
+Do not roll the image back below the release that counts detections per grouping (schema
+versions 25 and 26) on the database it upgraded. An older build's detection upsert names a
+conflict target, signature, source, ledger and day, that no longer matches the five-column key
+of `detection_counts`, so every detection page it pushes or polls fails to store. A downgrade
+needs the backup taken before the upgrade: stop the Hub, restore that backup as in
+[Restore](#restore), then start the older image. What the Hub stored since the upgrade is lost.
+Restart the daemons afterwards: one that had its split pages accepted keeps retrying the
+per-grouping route until it restarts, then falls back to the older route and sends its
+retained days again.

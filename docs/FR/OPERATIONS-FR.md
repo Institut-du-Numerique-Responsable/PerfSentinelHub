@@ -752,3 +752,16 @@ décision délibérée, puis revenez en arrière.
 Revenir avant la version de stockage (version 9 du schéma) puis repartir en avant est sûr
 pour les données : chaque démarrage complète les attributs, le service par source et les
 paires d'incident qu'une version plus ancienne a laissés de côté.
+
+## Revenir en arrière avant le registre des détections par regroupement
+
+Ne revenez pas à une image antérieure à la version qui compte les détections par regroupement
+(versions 25 et 26 du schéma) sur la base qu'elle a mise à jour. L'upsert des détections d'une
+version plus ancienne nomme une cible de conflit, signature, source, registre et jour, qui ne
+correspond plus à la clé à cinq colonnes de `detection_counts` : chaque page de détections
+qu'elle reçoit par poussée ou par poll échoue à s'enregistrer. Un retour en arrière demande la
+sauvegarde prise avant la mise à jour : arrêtez le Hub, restaurez cette sauvegarde comme dans
+[Restauration](#restauration), puis démarrez l'image plus ancienne. Ce que le Hub a enregistré
+depuis la mise à jour est perdu. Redémarrez ensuite les daemons : un daemon dont les pages
+découpées ont été acceptées retente la route par regroupement jusqu'à son redémarrage, puis se
+replie sur l'ancienne route et renvoie ses jours retenus.
