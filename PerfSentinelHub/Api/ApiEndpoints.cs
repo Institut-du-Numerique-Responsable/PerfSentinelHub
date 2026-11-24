@@ -30,7 +30,7 @@ public static partial class ApiEndpoints
     // Twice the daemon's own 4 MiB bound on a ledger page.
     private const int DetectionImportMaxBytes = 8 * 1024 * 1024;
 
-    // The engine's default max_signatures_per_day; the daemon caps again at its own value.
+    // Under the engine's default max_signatures_per_day; the daemon caps again at its own value.
     private const int MaxWatchSignatures = 10_000;
 
     // An import slot is held across its body read: a daemon on a working link sends 8 MiB in
