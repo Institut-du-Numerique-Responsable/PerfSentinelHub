@@ -123,8 +123,9 @@ public sealed partial class HubDatabase
     private readonly record struct FrozenRow(string Signature, string Grouping, string Type, long Seen, long First);
 
     // A covered day is split when every ledger of the source sent it split: only then do its grouping rows
-    // hold the whole day of a grouping. A row with a grouping reads its own history over the split covered
-    // days, one without reads the signature's sum over every covered day, as before the split.
+    // hold the whole day of a grouping. A row with a grouping reads its own history, one without the
+    // signature's sum. One day set serves the whole incident, so its shares divide sums over the same days:
+    // the split covered days when any signature reads per grouping, every covered day otherwise.
     private static async Task<(List<FrozenSignature>, Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
         SqliteConnection connection, string sourceId, long day, List<FrozenRow> rows, HashSet<string> wanted,
         CancellationToken cancellationToken)
@@ -176,13 +177,17 @@ public sealed partial class HubDatabase
             }
         }
 
+        // A signature also frozen without a grouping reads as a whole: its grouped rows are in that sum already.
+        var groups = rows.GroupBy(r => r.Signature, StringComparer.Ordinal)
+            .Select(g => (Rows: g, AsWhole: g.Any(r => r.Grouping.Length == 0))).ToList();
+        var anyGrouped = groups.Any(g => !g.AsWhole);
+        // A split day's whole sum is still the complete signature, so a whole read keeps it.
+        var days = covered.Where(d => !anyGrouped || d.Value).Select(d => d.Key).ToList();
         var signatures = new List<FrozenSignature>();
         var baselines = new Dictionary<string, Baseline>(StringComparer.Ordinal);
-        foreach (var group in rows.GroupBy(r => r.Signature, StringComparer.Ordinal))
+        foreach (var (group, asWhole) in groups)
         {
             var signature = group.Key;
-            // A signature also frozen without a grouping reads as a whole: its grouped rows are in that sum already.
-            var asWhole = group.Any(r => r.Grouping.Length == 0);
             // Summed by hand, unchecked as before: a malformed seen_count must not fail the whole incident.
             var populations = new Dictionary<string, long>(StringComparer.Ordinal);
             long seen = 0, first = long.MaxValue;
@@ -198,7 +203,6 @@ public sealed partial class HubDatabase
                 ? whole.GetValueOrDefault((signature, countDay))
                 : byGrouping.GetValueOrDefault((signature, grouping, countDay));
 
-            var days = covered.Where(d => asWhole || d.Value).Select(d => d.Key).ToList();
             long detections = 0, knownSeen = 0;
             foreach (var (grouping, populationSeen) in populations)
             {

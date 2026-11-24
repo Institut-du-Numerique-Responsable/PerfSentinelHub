@@ -175,6 +175,84 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         Assert.Equal(LinkLevel.Weak, links["sig-a"].Level);
     }
 
+    // Frozen n_plus_one_sql rows, filed under a grouping unless it is empty.
+    private static string FrozenIn(params (string Signature, string Grouping, long Seen)[] rows) =>
+        "[" + string.Join(",", rows.Select(row =>
+            $$"""{"finding":{"type":"n_plus_one_sql","signature":"{{row.Signature}}"{{(row.Grouping.Length > 0 ? $$""","grouping":[{"key":"k8s.namespace","value":"{{row.Grouping}}"}]""" : "")}}},"first_seen_ms":1,"seen_count":{{row.Seen}}}""")) + "]";
+
+    // One clean ledger day of the test source, marked split when asked, with its count rows.
+    private async Task SeedLedgerDayAsync(long day, bool split, params (string Signature, string Grouping, long Detections)[] counts)
+    {
+        await using var connection = await factory.Database.OpenConnectionAsync(Token);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                                shed_traces, ingest_rejected, sampling_rate, last_read_ms, split)
+                              VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0, $split);
+                              """ + (split
+                                  ? "INSERT INTO detection_split_days(source_id, ledger_id, day) VALUES ($source, 'l1', $day);"
+                                  : "")
+                              + string.Concat(counts.Select((_, i) => $"""
+                                  INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, grouping)
+                                  VALUES ($s{i}, $source, 'l1', $day, $d{i}, $g{i});
+                                  """));
+        command.Parameters.AddWithValue("$source", Source);
+        command.Parameters.AddWithValue("$day", day);
+        command.Parameters.AddWithValue("$split", split ? 1 : 0);
+        for (var i = 0; i < counts.Length; i++)
+        {
+            command.Parameters.AddWithValue($"$s{i}", counts[i].Signature);
+            command.Parameters.AddWithValue($"$g{i}", counts[i].Grouping);
+            command.Parameters.AddWithValue($"$d{i}", counts[i].Detections);
+        }
+
+        await command.ExecuteNonQueryAsync(Token);
+    }
+
+    [Fact]
+    public async Task Mixed_signatures_read_one_day_set_during_the_transition()
+    {
+        var id = NewId();
+        // 120 days past the other tests' incidents, 40 past the grouping population test's.
+        const long at = AtMs + 120 * 86_400_000L;
+        await SeedIncidentAsync(id, 0, at, FrozenIn(("sig-x", "", 10), ("sig-y", "ns-a", 10)));
+        // Seven covered days, the last three split: both run steadily at 100 a day.
+        for (var day = at / 86_400_000L - 7; day < at / 86_400_000L; day++)
+        {
+            var split = day >= at / 86_400_000L - 3;
+            await SeedLedgerDayAsync(day, split, ("sig-x", "", 100), ("sig-y", split ? "ns-a" : "", 100));
+        }
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        // Over the same three split days both are half of the incident, as usual; seven days against three
+        // would read sig-y at 1.67 times its usual share.
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Equal(LinkLevel.Weak, links["sig-y"].Level);
+        Assert.DoesNotContain(links["sig-y"].Reasons, r => r.Code == "intensity");
+        Assert.Equal(LinkLevel.Weak, links["sig-x"].Level);
+    }
+
+    [Fact]
+    public async Task A_grouped_row_unseen_in_its_grouping_but_seen_in_another_is_unknown_not_new()
+    {
+        var id = NewId();
+        // 160 days past the other tests' incidents, 40 past the transition test's.
+        const long at = AtMs + 160 * 86_400_000L;
+        await SeedIncidentAsync(id, 0, at, FrozenIn(("sig-a", "ns-a", 5), ("sig-b", "ns-a", 5)));
+        await SeedLedgerDayAsync(at / 86_400_000L - 1, true, ("sig-a", "ns-b", 40), ("sig-b", "ns-a", 60));
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Contains(links["sig-a"].Reasons, r => r.Code == "intensity_unknown");
+        Assert.DoesNotContain(links["sig-a"].Reasons, r => r.Code == "intensity_new");
+    }
+
     [Fact]
     public async Task Imported_incident_gets_links_once_the_worker_runs()
     {
