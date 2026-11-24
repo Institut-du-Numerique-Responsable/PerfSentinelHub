@@ -93,14 +93,13 @@ lui ajoute aucun compte, et une fois qu'il est découpé, une page non découpé
 Une telle page fusionne quand même ses lignes de jours, sans les sceller, un push retire ses lignes
 de `accepted` (sans les mettre dans `rejected`) et est journalisé en avertissement avec sa source et
 son registre, et un passage de poll s'y arrête sans sceller : le passage suivant lit le registre
-sous sa propre forme et apporte ces comptes. Les deux routes d'import ajoutent `ledger_form` à leur
-réponse, `"split"` ou `"unsplit"`, la forme sous laquelle le registre est stocké après la requête,
-absente tant qu'aucune page ne l'a fixée. Un daemon dont la page est arrivée sous l'autre forme
-pousse sous celle-ci à partir de là et renvoie en entier les jours qu'il conserve, donc une réponse
-perdue après que le Hub a stocké une page ne peut pas le laisser pousser des comptes que le Hub
-écarte. Un registre stocké non
-découpé avant la mise à jour du Hub le reste donc jusqu'au redémarrage de son daemon, et le
-registre suivant est découpé dès sa première page.
+sous sa propre forme et apporte ces comptes. Un registre stocké non découpé avant la mise à jour du
+Hub le reste donc jusqu'au redémarrage de son daemon, et le registre suivant est découpé dès sa
+première page. Les deux routes d'import ajoutent `ledger_form` à leur réponse, `"split"` ou
+`"unsplit"`, la forme sous laquelle le registre est stocké après la requête, absente tant qu'aucune
+page ne l'a fixée. Un daemon dont la page est arrivée sous l'autre forme pousse sous celle-ci à
+partir de là et renvoie en entier les jours qu'il conserve, donc une réponse perdue après que le
+Hub a stocké une page ne peut pas le laisser pousser des comptes que le Hub écarte.
 
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons, et une source en tient au plus un : un second import d'une source dont le

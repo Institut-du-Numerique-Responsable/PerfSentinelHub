@@ -83,12 +83,13 @@ split: once its counts are stored unsplit, the poll asks it without `split` and 
 no count to it, and once it is split, an unsplit page adds none. Such a page still merges its day
 rows, without sealing them, a push counts its rows out of `accepted` (not in `rejected`) and is
 logged as a warning with its source and ledger, and a poll pass stops there unsealed: the next
-pass reads the ledger in its own form and brings those counts. Both import routes add
-`ledger_form` to their reply, `"split"` or `"unsplit"`, the form the ledger is stored in after
-the request, absent while no page has set it. A daemon whose page came in the other form pushes
-in that form from then on and sends its retained days again whole, so a reply lost after the Hub
-stored a page cannot leave it pushing counts the Hub leaves out. A ledger stored unsplit before the Hub's upgrade thus stays so until its daemon restarts,
-and the next ledger is split from its first page.
+pass reads the ledger in its own form and brings those counts. A ledger stored unsplit before
+the Hub's upgrade thus stays so until its daemon restarts, and the next ledger is split from its
+first page. Both import routes add `ledger_form` to their reply, `"split"` or `"unsplit"`, the
+form the ledger is stored in after the request, absent while no page has set it. A daemon whose
+page came in the other form pushes in that form from then on and sends its retained days again
+whole, so a reply lost after the Hub stored a page cannot leave it pushing counts the Hub leaves
+out.
 
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are, and one source holds at most one of them: a second import from a source whose
