@@ -293,8 +293,9 @@ assessed the incident, which a background worker does some time after the copy i
 It maps each frozen finding's signature to `{"level", "reasons", "rules_version"}`: `level`
 is `strong`, `medium` or `weak`, `reasons` lists the facts behind it as `{"code"}` plus,
 when the reason has them, `ratio`, `k`, `n`, `usual_share` and `value` (a field with no
-value is omitted), and `rules_version` is the version of the rules that computed it. A
-`recurrence` reason counts incidents across every source of the incident's environment, so
+value is omitted), and `rules_version` is the version of the rules that computed it. An
+incident whose seven covered days all predate the first day its daemon sent split keeps the
+links version 4 gave it, beside version 5 on the others. A `recurrence` reason counts incidents across every source of the incident's environment, so
 its `k`, `n` and `usual_share` are omitted for a caller whose access does not hold each of
 those sources whole (a service or attribute pattern does not): the code stays. The
 listing never carries `links`, and a `links` field in a daemon's own document is not relayed.

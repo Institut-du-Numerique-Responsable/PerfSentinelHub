@@ -319,7 +319,9 @@ de la copie. Il associe la signature de chaque finding figé à `{"level", "reas
 "rules_version"}` : `level` vaut `strong`, `medium` ou `weak`, `reasons` liste les faits qui
 la justifient sous la forme `{"code"}` plus, quand la raison les a, `ratio`, `k`, `n`,
 `usual_share` et `value` (un champ sans valeur est omis), et `rules_version` est la version
-des règles qui l'ont calculé. Une raison `recurrence` compte les incidents de toutes les sources
+des règles qui l'ont calculé. Un incident dont les sept jours couverts précèdent tous le
+premier jour que son daemon a envoyé découpé garde les liens que la version 4 lui a donnés, à
+côté de la version 5 sur les autres. Une raison `recurrence` compte les incidents de toutes les sources
 de l'environnement de l'incident : ses `k`, `n` et `usual_share` sont donc omis pour un
 appelant dont l'accès ne tient pas chacune de ces sources entière (un motif de service ou
 d'attribut ne suffit pas), le code reste. La liste ne porte jamais `links`, et un champ `links`
