@@ -150,7 +150,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
             null);
     }
 
-    private Task PollAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
+    private Task<DetectionMergeOutcome> PollAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
     {
         return _database.MergeDetectionPageAsync(
             "daemon-a", page, false, observedAt, TestContext.Current.CancellationToken);
@@ -158,7 +158,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
 
     private async Task PushAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
     {
-        Assert.True(await _database.TryMergeDetectionPageAsync(
+        Assert.Equal(DetectionMergeOutcome.Merged, await _database.TryMergeDetectionPageAsync(
             "daemon-a", page, observedAt, TestContext.Current.CancellationToken));
     }
 
@@ -312,5 +312,151 @@ public sealed class DetectionStorageTests : IAsyncLifetime
             TimeProvider.System);
 
         Assert.Empty(await database.QueryFindingsAsync(new FindingQuery(null, null, null, 10), cancellationToken));
+    }
+
+    private static DetectionLedgerPage Split(params DetectionCountRow[] counts)
+    {
+        return Page() with { Counts = counts, Split = true };
+    }
+
+    private static DetectionCountRow Grouped(string grouping, long detections, long? extraIoOps = 10)
+    {
+        return new DetectionCountRow(Day, Signature, detections, extraIoOps, Grouping: grouping);
+    }
+
+    private const string GroupingRows = """
+                                        SELECT group_concat(grouping || '=' || detections || '/' || IFNULL(extra_io_ops, '-'), ',')
+                                        FROM (SELECT * FROM detection_counts ORDER BY grouping);
+                                        """;
+
+    // The finding's volume over Day, read as a windowed listing an hour into the next day.
+    private async Task<DetectionVolume> VolumeAsync()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const long dayMs = 86_400_000;
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds((Day + 1) * dayMs + 3_600_000));
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _path, Retention = TimeSpan.FromDays(30) }), clock);
+        var parsed = FindingParser.Parse(await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
+            cancellationToken));
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("daemon-a", "Daemon A", "lab", "0.37.0"),
+            new ParsedBatch([parsed.Findings[0] with { Signature = Signature }], 0), Day * dayMs, cancellationToken);
+        return Assert.Single(await database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 10, FromMs: 0), cancellationToken)).Volume!;
+    }
+
+    [Fact]
+    public async Task Migration_from_v24_keeps_every_count_with_an_empty_grouping()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using (var connection = await _database.OpenConnectionAsync(cancellationToken))
+        {
+            await using var downgrade = connection.CreateCommand();
+            downgrade.CommandText = LegacySchema.WithoutGroupings + $"""
+                INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                  shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                VALUES ('daemon-a', '{Ledger}', {Day}, 1, 0, 0, 0, 0, 1.0, 1);
+                INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, extra_io_ops,
+                  below_threshold_passes)
+                VALUES ('{Signature}', 'daemon-a', '{Ledger}', {Day}, 7, 70, NULL),
+                       ('slow_sql:a', 'daemon-a', '{Ledger}', {Day}, 0, NULL, 4),
+                       ('{Signature}', 'daemon-b', '{Ledger}', {Day - 1}, 2, 20, 1);
+                """;
+            await downgrade.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        TestPool.ClearFor(_path);
+        await new HubDatabase(Options.Create(new HubOptions { DatabasePath = _path }), TimeProvider.System)
+            .InitializeAsync(cancellationToken);
+
+        Assert.Equal($"{Day - 1} daemon-b 2 20 1 ,{Day} daemon-a 0 - 4 ,{Day} daemon-a 7 70 - ",
+            await ScalarAsync("""
+                              SELECT group_concat(day || ' ' || source_id || ' ' || detections || ' '
+                                || IFNULL(extra_io_ops, '-') || ' ' || IFNULL(below_threshold_passes, '-') || ' '
+                                || grouping, ',')
+                              FROM (SELECT * FROM detection_counts ORDER BY day, signature DESC);
+                              """));
+        Assert.Equal("0 1 1 signature,source_id,ledger_id,day,grouping", await ScalarAsync("""
+            SELECT (SELECT split FROM detection_days)
+              || ' ' || (SELECT count(*) FROM schema_migrations WHERE version = 25)
+              || ' ' || (SELECT count(*) FROM sqlite_master WHERE name = 'ix_detection_counts_day')
+              || ' ' || (SELECT group_concat(name, ',') FROM (
+                   SELECT name FROM pragma_table_info('detection_counts') WHERE pk > 0 ORDER BY pk));
+            """));
+        // Booting again rebuilds nothing.
+        await new HubDatabase(Options.Create(new HubOptions { DatabasePath = _path }), TimeProvider.System)
+            .InitializeAsync(cancellationToken);
+        Assert.Equal("3", await ScalarAsync("SELECT count(*) FROM detection_counts;"));
+    }
+
+    [Fact]
+    public async Task Two_groupings_of_one_signature_are_two_rows_and_merge_by_max_each()
+    {
+        await PushAsync(Split(Grouped("a", 6), Grouped("b", 4, 40)));
+        await PushAsync(Split(Grouped("a", 5, 30), Grouped("b", 7)));
+
+        Assert.Equal("a=6/30,b=7/40", await ScalarAsync(GroupingRows));
+        Assert.Equal(13, (await VolumeAsync()).Detections);
+    }
+
+    [Fact]
+    public async Task A_split_page_marks_its_days_split()
+    {
+        await PollAsync(Days(Day - 1));
+        await PushAsync(Split(Grouped("a", 6)));
+        Assert.Equal($"{Day - 1} 0,{Day} 1",
+            await ScalarAsync("SELECT group_concat(day || ' ' || split, ',') FROM (SELECT * FROM detection_days ORDER BY day);"));
+
+        // An unsplit page onto that day is refused whole, by both paths, and the day stays split.
+        Assert.Equal(DetectionMergeOutcome.DaySplit, await PollAsync(Page(50)));
+        Assert.Equal(DetectionMergeOutcome.DaySplit, await _database.TryMergeDetectionPageAsync(
+            "daemon-a", Page(50) with { Days = [] }, ObservedAt, TestContext.Current.CancellationToken));
+        Assert.Equal(DetectionMergeOutcome.Merged, await PollAsync(Days(Day - 1)));
+        Assert.Equal("a=6/10", await ScalarAsync(GroupingRows));
+        Assert.Equal("1", await ScalarAsync($"SELECT split FROM detection_days WHERE day = {Day};"));
+    }
+
+    [Fact]
+    public async Task A_first_split_page_replaces_the_unsplit_totals_of_its_day_and_a_later_one_adds()
+    {
+        await PushAsync(Page(10, 100));
+        Assert.Equal(10, (await VolumeAsync()).Detections);
+
+        await PushAsync(Split(Grouped("a", 6), Grouped("b", 4)));
+        Assert.Equal("a=6/10,b=4/10", await ScalarAsync(GroupingRows));
+        Assert.Equal(10, (await VolumeAsync()).Detections);
+
+        // The pass's next page of the same day: the first page's rows stay.
+        await PushAsync(Split(Grouped("", 1, 5)));
+        Assert.Equal("=1/5,a=6/10,b=4/10", await ScalarAsync(GroupingRows));
+        Assert.Equal(11, (await VolumeAsync()).Detections);
+        Assert.Equal(25, (await VolumeAsync()).AvoidableIoOps);
+    }
+
+    [Fact]
+    public async Task A_day_split_over_pages_with_its_row_on_the_last_keeps_every_page()
+    {
+        // A large day goes out in pages, its day row on the last one only.
+        await PushAsync(Split(Grouped("a", 6)) with { Days = [] });
+        await PushAsync(Split(Grouped("b", 4)));
+        Assert.Equal("a=6/10,b=4/10", await ScalarAsync(GroupingRows));
+
+        // The same over a day first stored unsplit: the first page replaces the totals, the last adds.
+        await PushAsync(Page(20) with
+        {
+            Days = [new DetectionDayRow(Day + 1, false, false, 0, 0, 0, 0, 1.0)],
+            Counts = [new DetectionCountRow(Day + 1, Signature, 20, 10)]
+        });
+        await PushAsync(Split(new DetectionCountRow(Day + 1, Signature, 15, 10, Grouping: "a")) with { Days = [] });
+        await PushAsync(Split(new DetectionCountRow(Day + 1, Signature, 5, 10, Grouping: "b")) with
+        {
+            Days = [new DetectionDayRow(Day + 1, false, false, 0, 0, 0, 0, 1.0)]
+        });
+
+        Assert.Equal("15 5", await ScalarAsync(
+            $"SELECT group_concat(detections, ' ') FROM (SELECT * FROM detection_counts WHERE day = {Day + 1} ORDER BY grouping);"));
+        Assert.Equal("1 1", await ScalarAsync("SELECT group_concat(split, ' ') FROM detection_days;"));
     }
 }

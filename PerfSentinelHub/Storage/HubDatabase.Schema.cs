@@ -159,6 +159,8 @@ public sealed partial class HubDatabase
             await EnsureRecapLanguageColumnAsync(connection, transaction, cancellationToken);
             await EnsureDetectionSignalColumnsAsync(connection, transaction, cancellationToken);
             await EnsureActionFrozenFindingColumnAsync(connection, transaction, cancellationToken);
+            await RebuildDetectionCountsAsync(connection, transaction, cancellationToken);
+            await EnsureDetectionDaySplitColumnAsync(connection, transaction, cancellationToken);
             await BackfillGroupingsAsync(connection, transaction, cancellationToken);
 
             await using (var version = connection.CreateCommand())
@@ -173,7 +175,7 @@ public sealed partial class HubDatabase
                                              (13, $applied_at_ms), (14, $applied_at_ms), (15, $applied_at_ms),
                                              (16, $applied_at_ms), (17, $applied_at_ms), (18, $applied_at_ms),
                                              (19, $applied_at_ms), (20, $applied_at_ms), (21, $applied_at_ms),
-                                             (23, $applied_at_ms), (24, $applied_at_ms);
+                                             (23, $applied_at_ms), (24, $applied_at_ms), (25, $applied_at_ms);
                                       """;
                 version.Parameters.AddWithValue(
                     "$applied_at_ms",
@@ -370,6 +372,39 @@ public sealed partial class HubDatabase
                             ALTER TABLE detection_days ADD COLUMN pool_saturation_threshold INTEGER;
                             ALTER TABLE detection_days ADD COLUMN serialized_min_calls INTEGER;
                             """;
+        await alter.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>Version 25, on a database whose detection_counts has no grouping yet, a fresh one included.</summary>
+    private static async Task RebuildDetectionCountsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "detection_counts", "grouping", cancellationToken))
+            return;
+
+        await using var rebuild = connection.CreateCommand();
+        rebuild.Transaction = transaction;
+        rebuild.CommandText = Schema.V25;
+        await rebuild.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     1 once a day's counts came split by grouping. On an unsplit day the empty grouping's row holds
+    ///     every grouping of its signature; on a split day only the findings without one and the passes.
+    /// </summary>
+    private static async Task EnsureDetectionDaySplitColumnAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (await HasColumnAsync(connection, transaction, "detection_days", "split", cancellationToken))
+            return;
+
+        await using var alter = connection.CreateCommand();
+        alter.Transaction = transaction;
+        alter.CommandText = "ALTER TABLE detection_days ADD COLUMN split INTEGER NOT NULL DEFAULT 0;";
         await alter.ExecuteNonQueryAsync(cancellationToken);
     }
 

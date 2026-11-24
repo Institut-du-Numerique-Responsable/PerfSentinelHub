@@ -1,3 +1,4 @@
+using PerfSentinelHub.Recaps;
 using PerfSentinelHub.Storage;
 
 namespace PerfSentinelHub.Tests.Storage;
@@ -120,5 +121,43 @@ public sealed class CardStorageTests(HubApplicationFactory factory) : IClassFixt
             await Database.ReadCarbonDaysAsync([signature], ["carbon-low"], Today - 1, Today - 1, Token));
 
         Assert.Equal(3.0, day.AvoidableGco2Low);
+    }
+
+    // A split day of the grouped source: each count row in its own grouping, the passes on the empty one.
+    private Task SplitAsync(DetectionDayRow day, params (string Grouping, long Detections, long? Io, long? Passes)[] rows)
+    {
+        var counts = rows.Select(row =>
+            new DetectionCountRow(day.Day, "slow_sql:grouped:a", row.Detections, row.Io, row.Passes, row.Grouping));
+        var page = new DetectionLedgerPage(LedgerA, 0, day.Day, day.Day, null, [.. counts], [day], null, true);
+        return Database.MergeDetectionPageAsync("grouped", page, true, DoneMs, Token);
+    }
+
+    [Fact]
+    public async Task Cards_and_carbon_sum_a_signature_over_its_groupings()
+    {
+        const string signature = "slow_sql:grouped:a";
+        await SplitAsync(new DetectionDayRow(Today - 1, true, false, 0, null, 0, 0, 1.0, 9.0, 1000, 3.0, 5000),
+            ("a", 2, 100, null), ("b", 3, 50, null));
+        await DoneAsync(signature, DoneMs);
+        // Detected in two groupings that day while the empty one saw passes only: no confirmation.
+        await SplitAsync(new DetectionDayRow(Today + 2, true, false, 0, null, 0, 0, 1.0, Thresholds: Slow500),
+            ("", 0, null, 5), ("a", 1, null, null), ("b", 1, null, null));
+
+        Assert.Equal([(signature, "grouped")], await Database.ReadCountedSourcesAsync([signature], ["grouped"], Token));
+        var carbon = await Database.ReadCarbonDaysAsync([signature], ["grouped"], Today - 1, Today - 1, Token);
+        Assert.Equal(150, carbon.Sum(row => row.Day.ExtraIoOps));
+        Assert.Equal(0.45, RecapCo2.LowGrams([.. carbon.Select(row => row.Day)])!.Value, 9);
+        Assert.Equal([(signature, "grouped", Today + 2)],
+            (await Database.ReadActionEvidenceAsync([signature], ["grouped"], Today, Token)).Detected);
+        Assert.Empty(await Database.ReadSignalDaysAsync([signature], ["grouped"], Today, Token));
+        Assert.Equal([signature], await Database.ReadWatchAsync("grouped", 10, Token));
+
+        // A day of passes only, a grouping row of zero beside them: it confirms, once.
+        await SplitAsync(new DetectionDayRow(Today + 1, true, false, 0, null, 0, 0, 1.0, Thresholds: Slow500),
+            ("", 0, null, 5), ("a", 0, null, null));
+
+        Assert.Equal(new SignalDay(signature, "grouped", Today + 1, Slow500),
+            Assert.Single(await Database.ReadSignalDaysAsync([signature], ["grouped"], Today, Token)));
+        Assert.Empty(await Database.ReadWatchAsync("grouped", 10, Token));
     }
 }

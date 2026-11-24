@@ -25,7 +25,7 @@ public sealed partial class HubDatabase
                                                    pushed = MAX(detection_ledgers.pushed, excluded.pushed);
                                                  """;
 
-    // A day keeps the lowest sampling rate it was ever read at, and a sealed day stays sealed.
+    // A day keeps the lowest sampling rate it was ever read at, and a sealed day stays sealed, a split one split.
     // The four carbon columns merge by a null-tolerant maximum: NULL there means "not yet
     // accumulated", unlike overflow_extra_io_ops where NULL means green off and stays sticky.
     // The six thresholds take the same maximum, written COALESCE(MAX(a, b), a, b): a day spanning
@@ -38,16 +38,17 @@ public sealed partial class HubDatabase
                                                 last_read_ms, avoidable_gco2, avoidable_io_ops, avoidable_gco2_low,
                                                 total_io_ops, slow_query_threshold_ms, slow_http_threshold_ms,
                                                 max_fanout, chatty_threshold, pool_saturation_threshold,
-                                                serialized_min_calls)
+                                                serialized_min_calls, split)
                                               VALUES ($source_id, $ledger_id, $day, $sealed, $gap, $overflow_detections,
                                                       $overflow_extra_io_ops, $shed_traces, $ingest_rejected,
                                                       $sampling_rate, $observed_at, $avoidable_gco2,
                                                       $avoidable_io_ops, $avoidable_gco2_low, $total_io_ops,
                                                       $slow_query_threshold_ms, $slow_http_threshold_ms, $max_fanout,
                                                       $chatty_threshold, $pool_saturation_threshold,
-                                                      $serialized_min_calls)
+                                                      $serialized_min_calls, $split)
                                               ON CONFLICT(source_id, ledger_id, day) DO UPDATE SET
                                                 sealed = MAX(detection_days.sealed, excluded.sealed),
+                                                split = MAX(detection_days.split, excluded.split),
                                                 gap = MAX(detection_days.gap, excluded.gap),
                                                 overflow_detections = MAX(detection_days.overflow_detections,
                                                                           excluded.overflow_detections),
@@ -94,16 +95,38 @@ public sealed partial class HubDatabase
     private const string DetectionCountUpsert = """
                                                 INSERT INTO detection_counts(
                                                   signature, source_id, ledger_id, day, detections, extra_io_ops,
-                                                  below_threshold_passes)
+                                                  below_threshold_passes, grouping)
                                                 VALUES ($signature, $source_id, $ledger_id, $day, $detections,
-                                                        $extra_io_ops, $below_threshold_passes)
-                                                ON CONFLICT(signature, source_id, ledger_id, day) DO UPDATE SET
+                                                        $extra_io_ops, $below_threshold_passes, $grouping)
+                                                ON CONFLICT(signature, source_id, ledger_id, day, grouping) DO UPDATE SET
                                                   detections = MAX(detection_counts.detections, excluded.detections),
                                                   extra_io_ops = MAX(detection_counts.extra_io_ops, excluded.extra_io_ops),
                                                   below_threshold_passes = COALESCE(
                                                     MAX(detection_counts.below_threshold_passes, excluded.below_threshold_passes),
                                                     detection_counts.below_threshold_passes, excluded.below_threshold_passes);
                                                 """;
+
+    // An unsplit page would add its per-signature totals to the grouping rows of a split day.
+    private const string SplitDayRead = """
+                                        SELECT EXISTS (
+                                          SELECT 1 FROM detection_days
+                                          WHERE source_id = $source_id AND ledger_id = $ledger_id AND split = 1
+                                            AND day IN (SELECT value FROM json_each($days)));
+                                        """;
+
+    // A split page on a day still unsplit replaces its rows, every one an unsplit total on the empty
+    // grouping, and marks the day split first: the day's later pages then add to this one's rows. A day
+    // has no row yet until its last page arrives, so a count-only day not yet stored is left as it is.
+    private const string SplitDayFlip = """
+                                        DELETE FROM detection_counts
+                                        WHERE source_id = $source_id AND ledger_id = $ledger_id AND day IN (
+                                          SELECT day FROM detection_days
+                                          WHERE source_id = $source_id AND ledger_id = $ledger_id AND split = 0
+                                            AND day IN (SELECT value FROM json_each($days)));
+                                        UPDATE detection_days SET split = 1
+                                        WHERE source_id = $source_id AND ledger_id = $ledger_id AND split = 0
+                                          AND day IN (SELECT value FROM json_each($days));
+                                        """;
 
     // A windowed page's volume inputs in one round trip: the page's counts in the window,
     // then the days and the ledgers of every source in scope.
@@ -134,7 +157,7 @@ public sealed partial class HubDatabase
     ///     as it takes. A polled page never seals a day (SealDetectionPassAsync does, once a
     ///     whole pass is read); a pushed one seals what the daemon sent sealed.
     /// </summary>
-    public async Task MergeDetectionPageAsync(
+    public async Task<DetectionMergeOutcome> MergeDetectionPageAsync(
         string sourceId,
         DetectionLedgerPage page,
         bool fromPush,
@@ -144,7 +167,7 @@ public sealed partial class HubDatabase
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
-            await WriteDetectionPageAsync(sourceId, page, fromPush, observedAtMs, cancellationToken);
+            return await WriteDetectionPageAsync(sourceId, page, fromPush, observedAtMs, cancellationToken);
         }
         finally
         {
@@ -157,18 +180,17 @@ public sealed partial class HubDatabase
     ///     gives up so the daemon retries on a 503. Files the push in source_imports and
     ///     never touches source_state nor source_finding_imports.
     /// </summary>
-    public async Task<bool> TryMergeDetectionPageAsync(
+    public async Task<DetectionMergeOutcome> TryMergeDetectionPageAsync(
         string sourceId,
         DetectionLedgerPage page,
         long observedAtMs,
         CancellationToken cancellationToken)
     {
         if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
-            return false;
+            return DetectionMergeOutcome.Busy;
         try
         {
-            await WriteDetectionPageAsync(sourceId, page, true, observedAtMs, cancellationToken);
-            return true;
+            return await WriteDetectionPageAsync(sourceId, page, true, observedAtMs, cancellationToken);
         }
         finally
         {
@@ -176,7 +198,7 @@ public sealed partial class HubDatabase
         }
     }
 
-    private async Task WriteDetectionPageAsync(
+    private async Task<DetectionMergeOutcome> WriteDetectionPageAsync(
         string sourceId,
         DetectionLedgerPage page,
         bool fromPush,
@@ -189,6 +211,21 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         var parameters = command.Parameters;
+
+        BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
+        parameters.AddWithValue("$days",
+            $"[{string.Join(',', page.Days.Select(day => day.Day).Concat(page.Counts.Select(count => count.Day)).Distinct())}]");
+        if (page.Split)
+        {
+            command.CommandText = SplitDayFlip;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        else
+        {
+            command.CommandText = SplitDayRead;
+            if (await command.ExecuteScalarAsync(cancellationToken) is 1L)
+                return DetectionMergeOutcome.DaySplit;
+        }
 
         command.CommandText = DetectionLedgerUpsert;
         BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
@@ -214,6 +251,7 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$avoidable_gco2_low", (object?)day.AvoidableGco2Low ?? DBNull.Value);
             parameters.AddWithValue("$total_io_ops", (object?)day.TotalIoOps ?? DBNull.Value);
             BindThresholds(parameters, day.Thresholds);
+            parameters.AddWithValue("$split", page.Split ? 1 : 0);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -226,12 +264,14 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$detections", count.Detections);
             parameters.AddWithValue("$extra_io_ops", (object?)count.ExtraIoOps ?? DBNull.Value);
             parameters.AddWithValue("$below_threshold_passes", (object?)count.BelowThresholdPasses ?? DBNull.Value);
+            parameters.AddWithValue("$grouping", count.Grouping);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         if (fromPush)
             await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return DetectionMergeOutcome.Merged;
     }
 
     // Clears the previous row's values; SQLite ignores a bound name the statement does not use.

@@ -420,7 +420,10 @@ public sealed record ListedAck(
     string? Service,
     IReadOnlyList<AccessAttribute> Rows);
 
-/// <summary>One page of a daemon's detection ledger, as the poll reads it and the push sends it.</summary>
+/// <summary>
+///     One page of a daemon's detection ledger, as the poll reads it and the push sends it. Split when
+///     the daemon answered "split": "grouping", each count row then holding one grouping of a signature.
+/// </summary>
 public sealed record DetectionLedgerPage(
     string LedgerId,
     long StartedMs,
@@ -429,19 +432,33 @@ public sealed record DetectionLedgerPage(
     int? SealedThrough,
     IReadOnlyList<DetectionCountRow> Counts,
     IReadOnlyList<DetectionDayRow> Days,
-    string? NextAfter);
+    string? NextAfter,
+    bool Split = false);
+
+/// <summary>
+///     How a ledger page merged. DaySplit refuses an unsplit page touching a day already stored split:
+///     its per-signature totals would add up with the grouping rows.
+/// </summary>
+public enum DetectionMergeOutcome
+{
+    Merged,
+    Busy,
+    DaySplit
+}
 
 /// <summary>
 ///     How many times one signature was detected on one UTC epoch day, null I/O when green was off.
 ///     BelowThresholdPasses counts the passes under the threshold of a watched signature (C1), null
-///     on an engine that does not send it; such a row may carry zero detections.
+///     on an engine that does not send it; such a row may carry zero detections. Grouping is empty on an
+///     unsplit page, and on a split one for findings without a grouping, where the passes land too.
 /// </summary>
 public sealed record DetectionCountRow(
     int Day,
     string Signature,
     long Detections,
     long? ExtraIoOps,
-    long? BelowThresholdPasses = null);
+    long? BelowThresholdPasses = null,
+    string Grouping = "");
 
 /// <summary>
 ///     What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.

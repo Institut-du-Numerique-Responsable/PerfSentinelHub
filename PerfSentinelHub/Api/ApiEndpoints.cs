@@ -485,8 +485,11 @@ public static partial class ApiEndpoints
             payload => DetectionLedgerParser.ParsePage(payload, nowMs),
             async (source, page) =>
             {
-                if (!await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken))
+                var outcome = await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken);
+                if (outcome == DetectionMergeOutcome.Busy)
                     return null;
+                if (outcome == DetectionMergeOutcome.DaySplit)
+                    return TypedResults.Conflict();
                 // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
                 var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
                 return TypedResults.Ok(new DetectionImportResponse(page.Counts.Count, 0, watch));

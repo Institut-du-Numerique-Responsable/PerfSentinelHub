@@ -407,4 +407,48 @@ public sealed class DetectionLedgerParserTests
 
         Assert.Equal(0, row.Detections);
     }
+
+    [Fact]
+    public void Parser_reads_grouping_and_refuses_a_duplicate_row()
+    {
+        var unsplit = Parse(Valid());
+        Assert.False(unsplit.Split);
+        Assert.Equal("", Assert.Single(unsplit.Counts).Grouping);
+
+        var json = Valid(
+            DetectionLedgerJson.Count(Today, grouping: "checkout"),
+            DetectionLedgerJson.Count(Today, grouping: "billing"),
+            DetectionLedgerJson.Count(Today));
+        json["split"] = "grouping";
+        var page = Parse(json);
+        Assert.True(page.Split);
+        Assert.Equal(["checkout", "billing", ""], page.Counts.Select(row => row.Grouping));
+
+        json["counts"]!.AsArray().Add(DetectionLedgerJson.Count(Today, grouping: "billing", detections: 2));
+        Assert.Equal("The detection page has two rows on one day, signature and grouping.",
+            Assert.Throws<InvalidDataException>(() => Parse(json)).Message);
+        Assert.Throws<InvalidDataException>(() =>
+            Parse(Valid(DetectionLedgerJson.Count(Today), DetectionLedgerJson.Count(Today, detections: 1))));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("check\nout")]
+    [InlineData(null)]
+    public void A_grouping_outside_the_signature_limits_is_refused(string? grouping)
+    {
+        var json = Valid(DetectionLedgerJson.Count(Today, grouping: grouping ?? new string('g', 1025)));
+        json["split"] = "grouping";
+
+        Assert.Throws<InvalidDataException>(() => Parse(json));
+    }
+
+    [Fact]
+    public void A_grouping_on_an_unsplit_page_or_an_unknown_split_is_refused()
+    {
+        Assert.Throws<InvalidDataException>(() => Parse(Valid(DetectionLedgerJson.Count(Today, grouping: "a"))));
+        var json = Valid();
+        json["split"] = "service";
+        Assert.Throws<InvalidDataException>(() => Parse(json));
+    }
 }

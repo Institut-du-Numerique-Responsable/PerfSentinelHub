@@ -25,9 +25,12 @@ internal static class DetectionLedgerJson
         string signature = Signature,
         long detections = 5,
         long? extraIoOps = 40,
-        long? belowThresholdPasses = null)
+        long? belowThresholdPasses = null,
+        string? grouping = null)
     {
         var count = new JsonObject { ["day"] = day, ["signature"] = signature, ["detections"] = detections };
+        if (grouping is not null)
+            count["grouping"] = grouping;
         if (extraIoOps is { } io)
             count["extra_io_ops"] = io;
         if (belowThresholdPasses is { } passes)
