@@ -110,7 +110,11 @@ that counts:
 - the intended order is the Hub first, then the daemon. A daemon upgraded before the Hub finds
   no per-grouping route, falls back to the older one and keeps pushing per-signature totals
   until it restarts, even once the Hub is upgraded: restart the daemon after upgrading the Hub.
-  Until then its days stay unsplit, apart from the ones the Hub's poll reads split.
+  Until then its days stay unsplit, apart from the ones the Hub's poll reads split;
+- while such a daemon still pushes per-signature totals, a poll pass that stops after its first
+  split page of a day has already dropped that day's totals, and the pushes are left out on a
+  split day. The day then misses the groupings the pass did not reach until a later pass reads
+  it whole, and for good once the daemon no longer holds it.
 
 ## What `status` and `lineage` claim
 

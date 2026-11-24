@@ -123,7 +123,12 @@ jour du daemon qui compte :
   pas la route par regroupement, se replie sur l'ancienne et continue de pousser des totaux par
   signature jusqu'à son redémarrage, même une fois le Hub mis à jour : redémarrez le daemon
   après la mise à jour du Hub. D'ici là, ses jours restent non découpés, hormis ceux que le poll
-  du Hub lit découpés.
+  du Hub lit découpés ;
+- tant qu'un tel daemon pousse encore des totaux par signature, un passage de poll qui s'arrête
+  après sa première page découpée d'un jour a déjà retiré les totaux de ce jour, et les
+  poussées sont écartées sur un jour découpé. Le jour manque alors des regroupements que le
+  passage n'a pas atteints jusqu'à ce qu'un passage suivant le lise en entier, et pour de bon
+  une fois que le daemon ne le garde plus.
 
 ## Ce qu'affirment `status` et `lineage`
 
