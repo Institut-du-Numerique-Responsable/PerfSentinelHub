@@ -103,12 +103,27 @@ comptes pareil, ne se lit donc pas comme un pic. Il en découle trois choses :
   et peuvent paraître plus intenses que leurs propres comptes ne le diraient ;
 - comme le registre des détections est compté par regroupement, un finding figé est comparé à
   l'historique de son propre regroupement : un incident restreint, dont l'alerte nomme un
-  namespace, lit ses findings face au passé de ce namespace, pas de toute la source. Un incident
-  restreint ne lit que les jours que le daemon a envoyés découpés : c'est donc la mise à jour du
-  daemon qui compte. Avec le Hub mis à jour d'abord, son intensité reste inconnue jusqu'à ce que
-  le daemon suive, puis s'améliore jour après jour jusqu'à la base de 7 jours ; sur une source
-  dont le daemon ne découpe jamais, elle reste inconnue. Les passages sous le seuil restent
-  comptés par signature.
+  namespace, lit ses findings face au passé de ce namespace, pas de toute la source. Les passages
+  sous le seuil restent comptés par signature.
+
+Le passage aux comptes par regroupement met quelques jours à se stabiliser, et c'est la mise à
+jour du daemon qui compte :
+
+- dès qu'un finding figé d'un incident porte un regroupement, tout l'incident ne lit que les
+  jours que le daemon a envoyés découpés, ses findings sans regroupement compris. Sur une flotte
+  à regroupements, c'est le cas de chaque incident, pas seulement des incidents restreints :
+  avec le Hub mis à jour d'abord, une part habituelle reste inconnue jusqu'à ce que le daemon
+  suive, puis s'améliore jour après jour jusqu'à la base de 7 jours ; sur une source dont le
+  daemon ne découpe jamais, elle reste inconnue ;
+- un incident évalué avant la mise à jour dont les sept jours couverts précèdent tous le premier
+  jour que son daemon a envoyé découpé garde ses niveaux de lien précédents, car l'évaluer de
+  nouveau ne pourrait que lire ses parts habituelles comme inconnues. Celui dont un de ces jours
+  est découpé est évalué de nouveau ;
+- l'ordre prévu est le Hub d'abord, puis le daemon. Un daemon mis à jour avant le Hub ne trouve
+  pas la route par regroupement, se replie sur l'ancienne et continue de pousser des totaux par
+  signature jusqu'à son redémarrage, même une fois le Hub mis à jour : redémarrez le daemon
+  après la mise à jour du Hub. D'ici là, ses jours restent non découpés, hormis ceux que le poll
+  du Hub lit découpés.
 
 ## Ce qu'affirment `status` et `lineage`
 
