@@ -80,7 +80,7 @@ public static class DetectionLedgerParser
         return true;
     }
 
-    // The grouping is absent when empty, and only a split page carries one.
+    // The grouping is absent or empty for the ungrouped row, and only a split page names one.
     private static DetectionCountRow ReadCount(JsonElement row, DayWindow window, bool split)
     {
         if (JsonRead.ReadString(row, "signature") is not { } signature || !IsReadable(signature))
@@ -88,7 +88,8 @@ public static class DetectionLedgerParser
         var grouping = "";
         if (!IsAbsent(row, "grouping"))
         {
-            if (!split || JsonRead.ReadString(row, "grouping") is not { } value || !IsReadable(value))
+            if (JsonRead.ReadString(row, "grouping") is not { } value ||
+                (value.Length > 0 && (!split || !IsReadable(value))))
                 throw Invalid("A detection count has a grouping off a split page, or one not readable.");
             grouping = value;
         }

@@ -431,8 +431,21 @@ public sealed class DetectionLedgerParserTests
             Parse(Valid(DetectionLedgerJson.Count(Today), DetectionLedgerJson.Count(Today, detections: 1))));
     }
 
+    [Fact]
+    public void An_empty_grouping_reads_as_the_ungrouped_row_split_or_not()
+    {
+        var split = Valid(DetectionLedgerJson.Count(Today, grouping: ""));
+        split["split"] = "grouping";
+        Assert.Equal("", Assert.Single(Parse(split).Counts).Grouping);
+        Assert.Equal("", Assert.Single(Parse(Valid(DetectionLedgerJson.Count(Today, grouping: ""))).Counts).Grouping);
+
+        // Explicit or absent, one ungrouped row: two of them on one signature and day are a duplicate.
+        var twice = Valid(DetectionLedgerJson.Count(Today, grouping: ""), DetectionLedgerJson.Count(Today));
+        twice["split"] = "grouping";
+        Assert.Throws<InvalidDataException>(() => Parse(twice));
+    }
+
     [Theory]
-    [InlineData("")]
     [InlineData("check\nout")]
     [InlineData(null)]
     public void A_grouping_outside_the_signature_limits_is_refused(string? grouping)
