@@ -33,7 +33,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         "[" + string.Join(",", Enumerable.Range(0, count).Select(index =>
             $$"""{"finding":{"type":"n_plus_one_sql","signature":"sig-{{index}}"},"stored_at_ms":1,"first_seen_ms":{{atMs + 5}},"seen_count":3}""")) + "]";
 
-    private async Task SeedIncidentAsync(string id, int signatures, long atMs = AtMs)
+    private async Task SeedIncidentAsync(string id, int signatures, long atMs = AtMs, string? findings = null)
     {
         await using var connection = await factory.Database.OpenConnectionAsync(Token);
         await using var command = connection.CreateCommand();
@@ -46,7 +46,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         command.Parameters.AddWithValue("$source", Source);
         command.Parameters.AddWithValue("$at", atMs);
         command.Parameters.AddWithValue("$from", atMs - 300_000);
-        command.Parameters.AddWithValue("$findings", Frozen(signatures, atMs));
+        command.Parameters.AddWithValue("$findings", findings ?? Frozen(signatures, atMs));
         await command.ExecuteNonQueryAsync(Token);
     }
 
@@ -131,6 +131,48 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         Assert.Equal(10.0, Assert.Single(links["sig-0"].Reasons, r => r.Code == "intensity").Ratio!.Value, 0.01);
         Assert.Equal(LinkLevel.Weak, links["sig-1"].Level);
         Assert.Contains(links["sig-2"].Reasons, r => r.Code == "intensity_new");
+    }
+
+    [Fact]
+    public async Task Worker_shares_compare_the_same_grouping_population()
+    {
+        var id = NewId();
+        // 80 days past the other tests' incidents, and 40 past the intensity test's.
+        const long at = AtMs + 80 * 86_400_000L;
+        // Frozen in ns-a at ns-a's usual shares: sig-a 1 in 10, sig-b 9 in 10.
+        var findings = "[" + string.Join(",", new[] { ("sig-a", 1), ("sig-b", 9) }.Select(row =>
+            $$"""{"finding":{"type":"n_plus_one_sql","signature":"{{row.Item1}}","grouping":[{"key":"k8s.namespace","value":"ns-a"}]},"first_seen_ms":1,"seen_count":{{row.Item2}}}""")) + "]";
+        await SeedIncidentAsync(id, 0, at, findings);
+        await using (var connection = await factory.Database.OpenConnectionAsync(Token))
+        {
+            // Source-wide sig-a is 90 % of these findings and sig-b 10 %, but in ns-a sig-a is only 10 %.
+            for (var day = at / 86_400_000L - 7; day < at / 86_400_000L; day++)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                                      INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                                        shed_traces, ingest_rejected, sampling_rate, last_read_ms, split)
+                                      VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0, 1);
+                                      INSERT INTO detection_split_days(source_id, ledger_id, day) VALUES ($source, 'l1', $day);
+                                      INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, grouping)
+                                      VALUES ('sig-a', $source, 'l1', $day, 10, 'ns-a'), ('sig-b', $source, 'l1', $day, 90, 'ns-a'),
+                                             ('sig-a', $source, 'l1', $day, 890, 'ns-b'), ('sig-b', $source, 'l1', $day, 10, 'ns-b');
+                                      """;
+                command.Parameters.AddWithValue("$source", Source);
+                command.Parameters.AddWithValue("$day", day);
+                await command.ExecuteNonQueryAsync(Token);
+            }
+        }
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        // Read source-wide, sig-b would be nine times its usual share; in its own grouping it is at its usual share.
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Equal(LinkLevel.Weak, links["sig-b"].Level);
+        Assert.DoesNotContain(links["sig-b"].Reasons, r => r.Code.StartsWith("intensity", StringComparison.Ordinal));
+        Assert.Equal(LinkLevel.Weak, links["sig-a"].Level);
     }
 
     [Fact]

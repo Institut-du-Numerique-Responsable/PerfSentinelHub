@@ -53,13 +53,23 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
                      """,
             ("$source", source), ("$ledger", ledger), ("$day", day), ("$gap", gap), ("$overflow", overflow));
 
-    private Task SeedCountAsync(string source, string signature, long day, long detections, string ledger = "l1") =>
+    private Task SeedCountAsync(string source, string signature, long day, long detections, string ledger = "l1",
+        string grouping = "") =>
         ExecuteAsync("""
-                     INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections)
-                     VALUES ($signature, $source, $ledger, $day, $detections);
+                     INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, grouping)
+                     VALUES ($signature, $source, $ledger, $day, $detections, $grouping);
                      """,
             ("$signature", signature), ("$source", source), ("$ledger", ledger), ("$day", day),
-            ("$detections", detections));
+            ("$detections", detections), ("$grouping", grouping));
+
+    private Task SeedSplitAsync(string source, long day, string ledger = "l1") =>
+        ExecuteAsync("INSERT INTO detection_split_days(source_id, ledger_id, day) VALUES ($source, $ledger, $day);",
+            ("$source", source), ("$ledger", ledger), ("$day", day));
+
+    // Frozen rows filed under a grouping, as the daemon writes them; an empty grouping writes none.
+    private static string FrozenIn(params (string Signature, string Grouping, long Seen)[] rows) =>
+        "[" + string.Join(",", rows.Select(row =>
+            $$"""{"finding":{"type":"n_plus_one_sql","signature":"{{row.Signature}}"{{(row.Grouping.Length > 0 ? $$""","grouping":[{"key":"k8s.namespace","value":"{{row.Grouping}}"}]""" : "")}}},"first_seen_ms":1,"seen_count":{{row.Seen}}}""")) + "]";
 
     private async Task<long> CountLinksAsync(string id)
     {
@@ -90,7 +100,7 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         Assert.Equal(AtMs, context.WindowToMs);
         Assert.Equal(0.95, context.Saturation);
         Assert.Equal(["sig-a", "sig-b"], context.Signatures.Select(s => s.Signature).Order());
-        Assert.Equal(new FrozenSignature("sig-a", "n_plus_one_sql", 7, 700),
+        Assert.Equal(new FrozenSignature("sig-a", "n_plus_one_sql", 7, 700, 0),
             context.Signatures.Single(s => s.Signature == "sig-a"));
     }
 
@@ -191,6 +201,92 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
     }
 
     [Fact]
+    public async Task A_narrowed_row_reads_its_own_grouping_history()
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs, FrozenIn(("sig-a", "ns-a", 4), ("sig-b", "ns-a", 2), ("sig-b", "ns-c", 3)));
+        // Days -1..-3 split: sig-a 5 a day in ns-a, 95 in ns-b; sig-b in ns-a on days -1 and -2, in ns-b on day -3.
+        for (var day = Day - 3; day < Day; day++)
+        {
+            await SeedDayAsync(source, day);
+            await SeedSplitAsync(source, day);
+            await SeedCountAsync(source, "sig-a", day, 5, grouping: "ns-a");
+            await SeedCountAsync(source, "sig-a", day, 95, grouping: "ns-b");
+        }
+
+        await SeedCountAsync(source, "sig-b", Day - 1, 7, grouping: "ns-a");
+        await SeedCountAsync(source, "sig-b", Day - 2, 7, grouping: "ns-a");
+        await SeedCountAsync(source, "sig-b", Day - 3, 50, grouping: "ns-b");
+        // Day -4 came unsplit: its one row holds every grouping, so a narrowed row cannot read it.
+        await SeedDayAsync(source, Day - 4);
+        await SeedCountAsync(source, "sig-a", Day - 4, 1000);
+        // Day -5 has a second ledger that sent it unsplit: not a split day for the source either.
+        await SeedDayAsync(source, Day - 5);
+        await SeedDayAsync(source, Day - 5, ledger: "l2");
+        await SeedSplitAsync(source, Day - 5);
+        await SeedCountAsync(source, "sig-a", Day - 5, 5, grouping: "ns-a");
+        await SeedCountAsync(source, "sig-a", Day - 5, 50, ledger: "l2");
+
+        var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
+
+        Assert.NotNull(context);
+        Assert.Equal(new Baseline(3, 3, 15), context.Baselines["sig-a"]);
+        // Two groupings sum their histories over the split days; ns-c was never seen, so its 3 stay unknown.
+        Assert.Equal(new Baseline(3, 2, 14), context.Baselines["sig-b"]);
+        Assert.Equal(new FrozenSignature("sig-b", "n_plus_one_sql", 5, 1, 2), context.Signatures.Single(s => s.Signature == "sig-b"));
+        Assert.Equal(new FrozenSignature("sig-a", "n_plus_one_sql", 4, 1, 4), context.Signatures.Single(s => s.Signature == "sig-a"));
+    }
+
+    [Fact]
+    public async Task A_grouped_row_without_split_days_is_unknown_not_the_whole_source()
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs, FrozenIn(("sig-a", "ns-a", 4)));
+        for (var day = Day - 7; day < Day; day++)
+        {
+            await SeedDayAsync(source, day);
+            await SeedCountAsync(source, "sig-a", day, 100);
+        }
+
+        var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
+
+        Assert.NotNull(context);
+        Assert.Equal(new Baseline(0, 0, 0), context.Baselines["sig-a"]);
+        Assert.Equal(["sig-a"], context.SeenInBaselineDays);
+        Assert.Equal(0, context.Signatures.Single().KnownSeenCount);
+    }
+
+    [Fact]
+    public async Task An_ungrouped_row_reads_the_signature_sum_as_before()
+    {
+        var id = NewId();
+        var source = NewId();
+        await SeedIncidentAsync(id, source, AtMs, FrozenIn(("sig-a", "", 4), ("sig-c", "", 1), ("sig-c", "ns-a", 2)));
+        // Day -1 split: its groupings and its row without one all count; day -2 unsplit.
+        await SeedDayAsync(source, Day - 1);
+        await SeedSplitAsync(source, Day - 1);
+        await SeedDayAsync(source, Day - 2);
+        foreach (var signature in new[] { "sig-a", "sig-c" })
+        {
+            await SeedCountAsync(source, signature, Day - 1, 5, grouping: "ns-a");
+            await SeedCountAsync(source, signature, Day - 1, 95, grouping: "ns-b");
+            await SeedCountAsync(source, signature, Day - 1, 2);
+            await SeedCountAsync(source, signature, Day - 2, 40);
+        }
+
+        var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
+
+        Assert.NotNull(context);
+        Assert.Equal(new Baseline(2, 2, 142), context.Baselines["sig-a"]);
+        Assert.Equal(4, context.Signatures.Single(s => s.Signature == "sig-a").KnownSeenCount);
+        // A signature also frozen without a grouping reads as a whole: its ns-a history is already in the sum.
+        Assert.Equal(new Baseline(2, 2, 142), context.Baselines["sig-c"]);
+        Assert.Equal(3, context.Signatures.Single(s => s.Signature == "sig-c").KnownSeenCount);
+    }
+
+    [Fact]
     public async Task Frozen_row_without_seen_count_counts_once()
     {
         var id = NewId();
@@ -201,7 +297,7 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         var context = await factory.Database.LoadLinkContextAsync(new IncidentKey(id, source), [source], Token);
 
         Assert.NotNull(context);
-        Assert.Equal(new FrozenSignature("sig-a", "slow_sql", 1, 5), Assert.Single(context.Signatures));
+        Assert.Equal(new FrozenSignature("sig-a", "slow_sql", 1, 5, 0), Assert.Single(context.Signatures));
     }
 
     [Fact]

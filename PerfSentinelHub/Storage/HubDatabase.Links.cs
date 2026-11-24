@@ -42,9 +42,10 @@ public sealed partial class HubDatabase
             findingsJson = reader.GetString(6);
         }
 
-        var signatures = FrozenSignatures(findingsJson);
-        var wanted = signatures.Select(s => s.Signature).ToHashSet(StringComparer.Ordinal);
-        var (baselines, seenBefore) = await LoadBaselinesAsync(connection, key.SourceId, atMs / DayMs, wanted, cancellationToken);
+        var rows = FrozenRows(findingsJson).ToList();
+        var wanted = rows.Select(r => r.Signature).ToHashSet(StringComparer.Ordinal);
+        var (signatures, baselines, seenBefore) =
+            await LoadBaselinesAsync(connection, key.SourceId, atMs / DayMs, rows, wanted, cancellationToken);
         var recurrences = await LoadRecurrencesAsync(
             connection, key, environmentSourceIds, service, kind, atMs, wanted, cancellationToken);
 
@@ -71,21 +72,9 @@ public sealed partial class HubDatabase
         }
     }
 
-    private static List<FrozenSignature> FrozenSignatures(string findingsJson)
-    {
-        var rows = new Dictionary<string, FrozenSignature>(StringComparer.Ordinal);
-        foreach (var (signature, type, seen, first) in FrozenRows(findingsJson))
-        {
-            rows[signature] = rows.TryGetValue(signature, out var existing)
-                ? existing with { SeenCount = existing.SeenCount + seen, FirstSeenMs = Math.Min(existing.FirstSeenMs, first) }
-                : new FrozenSignature(signature, type, seen, first);
-        }
-
-        return [.. rows.Values];
-    }
-
-    // Rows with a missing or empty signature are skipped; a malformed document reads as no rows.
-    private static IEnumerable<(string Signature, string Type, long Seen, long First)> FrozenRows(string findingsJson)
+    // Rows with a missing or empty signature are skipped; a malformed document reads as no rows. A row's
+    // grouping is the value of its first grouping attribute, the one the daemon files it under, empty when none.
+    private static IEnumerable<FrozenRow> FrozenRows(string findingsJson)
     {
         JsonDocument document;
         try
@@ -114,8 +103,14 @@ public sealed partial class HubDatabase
                 var type = finding.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
                     ? t.GetString() ?? ""
                     : "";
+                var grouping = finding.TryGetProperty("grouping", out var g) && g.ValueKind == JsonValueKind.Array
+                               && g.GetArrayLength() > 0 && g[0].ValueKind == JsonValueKind.Object
+                               && g[0].TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String
+                    ? v.GetString() ?? ""
+                    : "";
                 // A row without a seen count was seen once, as the daemon defaults it.
-                yield return (signature, type, LongOf(row, "seen_count", 1), LongOf(row, "first_seen_ms", 0));
+                yield return new FrozenRow(signature, grouping, type, LongOf(row, "seen_count", 1),
+                    LongOf(row, "first_seen_ms", 0));
             }
         }
     }
@@ -125,38 +120,45 @@ public sealed partial class HubDatabase
             ? number
             : fallback;
 
-    private static async Task<(Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
-        SqliteConnection connection, string sourceId, long day, HashSet<string> wanted,
+    private readonly record struct FrozenRow(string Signature, string Grouping, string Type, long Seen, long First);
+
+    // A covered day is split when every ledger of the source sent it split: only then do its grouping rows
+    // hold the whole day of a grouping. A row with a grouping reads its own history over the split covered
+    // days, one without reads the signature's sum over every covered day, as before the split.
+    private static async Task<(List<FrozenSignature>, Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
+        SqliteConnection connection, string sourceId, long day, List<FrozenRow> rows, HashSet<string> wanted,
         CancellationToken cancellationToken)
     {
-        var covered = new HashSet<long>();
+        var covered = new Dictionary<long, bool>();
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-                                  SELECT day FROM detection_days
-                                  WHERE source_id = $source_id AND day BETWEEN $from_day AND $to_day
-                                  GROUP BY day
-                                  HAVING sum(gap <> 0 OR overflow_detections > 0) = 0;
+                                  SELECT d.day, min(m.day IS NOT NULL) FROM detection_days AS d
+                                  LEFT JOIN detection_split_days AS m
+                                    ON m.source_id = d.source_id AND m.ledger_id = d.ledger_id AND m.day = d.day
+                                  WHERE d.source_id = $source_id AND d.day BETWEEN $from_day AND $to_day
+                                  GROUP BY d.day
+                                  HAVING sum(d.gap <> 0 OR d.overflow_detections > 0) = 0;
                                   """;
             command.Parameters.AddWithValue("$source_id", sourceId);
             command.Parameters.AddWithValue("$from_day", day - BaselineDays);
             command.Parameters.AddWithValue("$to_day", day - 1);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
-                covered.Add(reader.GetInt64(0));
+                covered[reader.GetInt64(0)] = reader.GetInt64(1) == 1;
         }
 
-        var daysSeen = wanted.ToDictionary(s => s, _ => 0, StringComparer.Ordinal);
-        var detections = wanted.ToDictionary(s => s, _ => 0L, StringComparer.Ordinal);
+        var whole = new Dictionary<(string, long), long>();
+        var byGrouping = new Dictionary<(string, string, long), long>();
         var seenBefore = new HashSet<string>(StringComparer.Ordinal);
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-                                  SELECT signature, day, sum(detections) FROM detection_counts
+                                  SELECT signature, grouping, day, sum(detections) FROM detection_counts
                                   WHERE signature IN (SELECT value FROM json_each($wanted))
                                     AND source_id = $source_id AND day BETWEEN $from_day AND $to_day
                                     AND detections > 0
-                                  GROUP BY signature, day;
+                                  GROUP BY signature, grouping, day;
                                   """;
             command.Parameters.AddWithValue("$wanted",
                 JsonSerializer.Serialize([.. wanted], HubJsonContext.Default.StringArray));
@@ -166,17 +168,53 @@ public sealed partial class HubDatabase
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
-                var signature = reader.GetString(0);
+                var (signature, grouping, countDay, detections) =
+                    (reader.GetString(0), reader.GetString(1), reader.GetInt64(2), reader.GetInt64(3));
                 seenBefore.Add(signature);
-                if (!covered.Contains(reader.GetInt64(1)))
-                    continue;
-                daysSeen[signature]++;
-                detections[signature] += reader.GetInt64(2);
+                whole[(signature, countDay)] = whole.GetValueOrDefault((signature, countDay)) + detections;
+                byGrouping[(signature, grouping, countDay)] = detections;
             }
         }
 
-        return (wanted.ToDictionary(s => s, s => new Baseline(covered.Count, daysSeen[s], detections[s]),
-            StringComparer.Ordinal), seenBefore);
+        var signatures = new List<FrozenSignature>();
+        var baselines = new Dictionary<string, Baseline>(StringComparer.Ordinal);
+        foreach (var group in rows.GroupBy(r => r.Signature, StringComparer.Ordinal))
+        {
+            var signature = group.Key;
+            // A signature also frozen without a grouping reads as a whole: its grouped rows are in that sum already.
+            var asWhole = group.Any(r => r.Grouping.Length == 0);
+            // Summed by hand, unchecked as before: a malformed seen_count must not fail the whole incident.
+            var populations = new Dictionary<string, long>(StringComparer.Ordinal);
+            long seen = 0, first = long.MaxValue;
+            foreach (var row in group)
+            {
+                var population = asWhole ? "" : row.Grouping;
+                populations[population] = populations.GetValueOrDefault(population) + row.Seen;
+                seen += row.Seen;
+                first = Math.Min(first, row.First);
+            }
+
+            long Count(string grouping, long countDay) => asWhole
+                ? whole.GetValueOrDefault((signature, countDay))
+                : byGrouping.GetValueOrDefault((signature, grouping, countDay));
+
+            var days = covered.Where(d => asWhole || d.Value).Select(d => d.Key).ToList();
+            long detections = 0, knownSeen = 0;
+            foreach (var (grouping, populationSeen) in populations)
+            {
+                long sum = 0;
+                foreach (var countDay in days)
+                    sum += Count(grouping, countDay);
+                detections += sum;
+                if (sum > 0) knownSeen += populationSeen;
+            }
+
+            var daysSeen = days.Count(d => populations.Keys.Any(grouping => Count(grouping, d) > 0));
+            signatures.Add(new FrozenSignature(signature, group.First().Type, seen, first, knownSeen));
+            baselines[signature] = new Baseline(days.Count, daysSeen, detections);
+        }
+
+        return (signatures, baselines, seenBefore);
     }
 
     // incident_signatures holds each copy's signatures, kept by the triggers of Schema.V24.

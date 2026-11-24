@@ -6,7 +6,7 @@ namespace PerfSentinelHub.Links;
 /// </summary>
 public static class IncidentLinkRules
 {
-    public const int RulesVersion = 4;
+    public const int RulesVersion = 5;
 
     private const double HighIntensityRatio = 3;
     private const double MediumIntensityRatio = 1.5;

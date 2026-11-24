@@ -91,14 +91,14 @@ public sealed partial class IncidentLinkWorker(
         if (await database.LoadLinkContextAsync(key, sourceIds, cancellationToken) is not { } context)
             return false;
 
-        // Only findings with a usual share weigh in both totals, so the two shares compare like with like.
-        // Summed as doubles: a malformed seen_count must not overflow and fail the whole incident.
+        // Only frozen rows with a usual share, each in its own grouping, weigh in both totals, so the two shares
+        // compare like with like. Summed as doubles: a malformed seen_count must not overflow and fail the whole incident.
         double windowTotal = 0, baselineTotal = 0;
         foreach (var signature in context.Signatures)
         {
             if (context.Baselines.GetValueOrDefault(signature.Signature) is not { Detections: > 0 } known)
                 continue;
-            windowTotal += signature.SeenCount;
+            windowTotal += signature.KnownSeenCount;
             baselineTotal += known.Detections;
         }
 
@@ -111,7 +111,7 @@ public sealed partial class IncidentLinkWorker(
                 context.Saturation,
                 windowTotal,
                 baselineTotal,
-                signature.SeenCount,
+                signature.KnownSeenCount,
                 signature.FirstSeenMs >= context.AtMs && !context.SeenInBaselineDays.Contains(signature.Signature),
                 context.Baselines.GetValueOrDefault(signature.Signature, new Baseline(0, 0, 0)),
                 context.Recurrences.GetValueOrDefault(signature.Signature, new Recurrence(0, 0)),

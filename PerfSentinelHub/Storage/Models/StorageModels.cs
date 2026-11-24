@@ -548,8 +548,12 @@ public sealed record StoredCardKey(
 
 public sealed record IncidentKey(string Id, string SourceId);
 
-/// <summary>The frozen rows of one signature, summed: empty signatures are dropped before this.</summary>
-public sealed record FrozenSignature(string Signature, string FindingType, long SeenCount, long FirstSeenMs);
+/// <summary>
+///     The frozen rows of one signature, summed: empty signatures are dropped before this.
+///     <c>KnownSeenCount</c> sums the rows whose history has a usual share, the part its share is compared on.
+/// </summary>
+public sealed record FrozenSignature(
+    string Signature, string FindingType, long SeenCount, long FirstSeenMs, long KnownSeenCount);
 
 public sealed record LinkContext(
     string Service,

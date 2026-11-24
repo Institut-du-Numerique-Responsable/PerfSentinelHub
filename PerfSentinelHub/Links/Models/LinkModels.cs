@@ -10,7 +10,10 @@ public enum LinkLevel
     [JsonStringEnumMemberName("strong")] Strong = 3
 }
 
-/// <summary>Detection history of one signature over the 7 covered days before an incident; <c>CoveredDays == 0</c> means unknown.</summary>
+/// <summary>
+///     Detection history of one signature over the 7 covered days before an incident, read per grouping of its
+///     frozen rows over the days sent split; <c>CoveredDays == 0</c> means unknown.
+/// </summary>
 public sealed record Baseline(int CoveredDays, int DaysSeen, long Detections);
 
 /// <summary>Earlier incidents of the same environment, service and kind: <c>n</c> in total, <c>k</c> carrying the signature.</summary>
