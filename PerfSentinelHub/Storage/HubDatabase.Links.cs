@@ -122,10 +122,27 @@ public sealed partial class HubDatabase
 
     private readonly record struct FrozenRow(string Signature, string Grouping, string Type, long Seen, long First);
 
-    // A covered day is split when every ledger of the source sent it split: only then do its grouping rows
-    // hold the whole day of a grouping. A row with a grouping reads its own history, one without the
-    // signature's sum. One day set serves the whole incident, so its shares divide sums over the same days:
-    // the split covered days when any signature reads per grouping, every covered day otherwise.
+    // A source's covered days from fromDay to toDay, one group per day that no ledger flagged a gap or an
+    // overflow, for the baseline and the catch-up selection alike so the two read one rule.
+    private static string CoveredDaysSql(string sourceId, string fromDay, string toDay) => $"""
+        FROM detection_days AS d
+        LEFT JOIN detection_split_days AS m
+          ON m.source_id = d.source_id AND m.ledger_id = d.ledger_id AND m.day = d.day
+        WHERE d.source_id = {sourceId} AND d.day BETWEEN {fromDay} AND {toDay}
+        GROUP BY d.day
+        HAVING sum(d.gap <> 0 OR d.overflow_detections > 0) = 0
+        """;
+
+    // 1 on a covered day when every ledger of the source that sent it sent it split: only then do its
+    // grouping rows hold the whole day of a grouping.
+    private const string SplitDaySql = "min(m.day IS NOT NULL)";
+
+    private static readonly string CoveredDaysWithSplitSql =
+        $"SELECT d.day, {SplitDaySql} {CoveredDaysSql("$source_id", "$from_day", "$to_day")};";
+
+    // A row with a grouping reads its own history, one without the signature's sum. One day set serves the
+    // whole incident, so its shares divide sums over the same days: the split covered days when any
+    // signature reads per grouping, every covered day otherwise.
     private static async Task<(List<FrozenSignature>, Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
         SqliteConnection connection, string sourceId, long day, List<FrozenRow> rows, HashSet<string> wanted,
         CancellationToken cancellationToken)
@@ -133,14 +150,7 @@ public sealed partial class HubDatabase
         var covered = new Dictionary<long, bool>();
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = """
-                                  SELECT d.day, min(m.day IS NOT NULL) FROM detection_days AS d
-                                  LEFT JOIN detection_split_days AS m
-                                    ON m.source_id = d.source_id AND m.ledger_id = d.ledger_id AND m.day = d.day
-                                  WHERE d.source_id = $source_id AND d.day BETWEEN $from_day AND $to_day
-                                  GROUP BY d.day
-                                  HAVING sum(d.gap <> 0 OR d.overflow_detections > 0) = 0;
-                                  """;
+            command.CommandText = CoveredDaysWithSplitSql;
             command.Parameters.AddWithValue("$source_id", sourceId);
             command.Parameters.AddWithValue("$from_day", day - BaselineDays);
             command.Parameters.AddWithValue("$to_day", day - 1);
@@ -365,7 +375,7 @@ public sealed partial class HubDatabase
         return links;
     }
 
-    private const string IncidentsNeedingLinksSql = """
+    private static readonly string IncidentsNeedingLinksSql = $"""
         SELECT i.id, i.source_id FROM incidents AS i
         WHERE i.finding_count > 0 AND i.source_id IN (SELECT value FROM json_each($source_ids))
           AND NOT EXISTS (
@@ -375,9 +385,8 @@ public sealed partial class HubDatabase
                  SELECT 1 FROM incident_finding_links AS l
                  WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $unsplit_rules_version)
                OR EXISTS (
-                 SELECT 1 FROM detection_split_days AS d
-                 WHERE d.source_id = i.source_id
-                   AND d.day BETWEEN i.at_ms / $day_ms - $baseline_days AND i.at_ms / $day_ms - 1))
+                 SELECT 1 {CoveredDaysSql("i.source_id", "i.at_ms / $day_ms - $baseline_days", "i.at_ms / $day_ms - 1")}
+                   AND {SplitDaySql} = 1))
           AND EXISTS (
             SELECT 1 FROM incident_signatures AS s WHERE s.incident_id = i.id AND s.source_id = i.source_id);
         """;
@@ -388,7 +397,7 @@ public sealed partial class HubDatabase
 
     /// <summary>
     ///     Incidents of <paramref name="sourceIds" /> with no links at all, or links computed by older rules:
-    ///     rules older than v4, or v4 on an incident whose seven covered days hold a day the source sent split.
+    ///     rules older than v4, or v4 on an incident whose seven covered days hold one its baseline reads as split.
     ///     An incident none of whose frozen rows has a signature never gets a link, so it is left out, as
     ///     is a source no longer configured: queueing either would repeat at every catch-up.
     /// </summary>

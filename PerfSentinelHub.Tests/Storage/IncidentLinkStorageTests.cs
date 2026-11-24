@@ -413,15 +413,42 @@ public sealed class IncidentLinkStorageTests(HubApplicationFactory factory) : IC
         }
 
         // Split days on either side of the seven covered days keep the v4 links.
-        await SeedSplitAsync(before.SourceId, Day - 8);
-        await SeedSplitAsync(before.SourceId, Day);
-        await SeedSplitAsync(within.SourceId, Day - 1);
+        foreach (var (source, day) in new[] { (before.SourceId, Day - 8), (before.SourceId, Day), (within.SourceId, Day - 1) })
+        {
+            await SeedDayAsync(source, day);
+            await SeedSplitAsync(source, day);
+        }
 
         var needing = await factory.Database.IncidentsNeedingLinksAsync(IncidentLinkRules.RulesVersion,
             [before.SourceId, within.SourceId], Token);
 
         Assert.DoesNotContain(before, needing);
         Assert.Contains(within, needing);
+    }
+
+    [Fact]
+    public async Task A_v4_incident_is_requeued_only_for_a_day_every_ledger_of_its_source_sent_split()
+    {
+        var mixed = new IncidentKey(NewId(), NewId());
+        var whole = new IncidentKey(NewId(), NewId());
+        foreach (var key in new[] { mixed, whole })
+        {
+            await SeedIncidentAsync(key.Id, key.SourceId, AtMs, FrozenIn(("sig-a", "ns-a", 3)));
+            await factory.Database.ReplaceLinksAsync(key, [new StoredLink("sig-a", LinkLevel.Weak, [], 4)], Token);
+            // The upgrade day: the ledger before the restart sent it unsplit, the one after split.
+            await SeedDayAsync(key.SourceId, Day - 1);
+            await SeedDayAsync(key.SourceId, Day - 1, ledger: "l2");
+            await SeedSplitAsync(key.SourceId, Day - 1, ledger: "l2");
+        }
+
+        await SeedSplitAsync(whole.SourceId, Day - 1);
+
+        var needing = await factory.Database.IncidentsNeedingLinksAsync(IncidentLinkRules.RulesVersion,
+            [mixed.SourceId, whole.SourceId], Token);
+
+        // The baseline reads no split day in the mixed window, so a recompute would only lose the v4 links.
+        Assert.DoesNotContain(mixed, needing);
+        Assert.Contains(whole, needing);
     }
 
     [Fact]
