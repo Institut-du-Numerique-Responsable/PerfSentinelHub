@@ -71,6 +71,26 @@ below the threshold and no detection of the signature at this source, whatever i
 newest done come first, at most 10,000. The list is always sent, `[]` when empty, so the daemon
 replaces its own on every answer. Only a push gets it: a polled daemon never does.
 
+A daemon that can split the ledger by grouping sends a page with `"split": "grouping"`, each count
+row then carrying a `grouping` (an empty string is the unnamed one), to
+`POST /api/import/detections/by-grouping`, with the same key, gate, bounds and reply. That route
+answers `400` for a page that is not split, and `/api/import/detections` answers `400` for a split
+one; a daemon falls back to the old route when the new one answers `404` or `405`. The poll asks
+`GET /api/detections?split=grouping` and walks a page's `next_after` and `next_after_grouping`
+back as `after` and `after_grouping`; a page from an older daemon has no `split` and is stored
+unsplit. A ledger is stored in one form only, set by the first page that brings it counts or a
+split: once its counts are stored unsplit, the poll asks it without `split` and a split page adds
+no count to it, and once it is split, an unsplit page adds none. Such a page still merges its day
+rows, without sealing them, a push counts its rows out of `accepted` (not in `rejected`) and is
+logged as a warning with its source and ledger, and a poll pass stops there unsealed: the next
+pass reads the ledger in its own form and brings those counts. A ledger stored unsplit before
+the Hub's upgrade thus stays so until its daemon restarts, and the next ledger is split from its
+first page. Both import routes add `ledger_form` to their reply, `"split"` or `"unsplit"`, the
+form the ledger is stored in after the request, absent while no page has set it. A daemon whose
+page came in the other form pushes in that form from then on and sends its retained days again
+whole, so a reply lost after the Hub stored a page cannot leave it pushing counts the Hub leaves
+out.
+
 Four imports run at a time, which bounds request memory independently of how many daemons
 there are, and one source holds at most one of them: a second import from a source whose
 first is still running, of any kind, gets `503 Retry-After: 1`. A body still arriving after
@@ -282,8 +302,9 @@ assessed the incident, which a background worker does some time after the copy i
 It maps each frozen finding's signature to `{"level", "reasons", "rules_version"}`: `level`
 is `strong`, `medium` or `weak`, `reasons` lists the facts behind it as `{"code"}` plus,
 when the reason has them, `ratio`, `k`, `n`, `usual_share` and `value` (a field with no
-value is omitted), and `rules_version` is the version of the rules that computed it. A
-`recurrence` reason counts incidents across every source of the incident's environment, so
+value is omitted), and `rules_version` is the version of the rules that computed it. An
+incident whose seven covered days all predate the first day its daemon sent split keeps the
+links version 4 gave it, beside version 5 on the others. A `recurrence` reason counts incidents across every source of the incident's environment, so
 its `k`, `n` and `usual_share` are omitted for a caller whose access does not hold each of
 those sources whole (a service or attribute pattern does not): the code stays. The
 listing never carries `links`, and a `links` field in a daemon's own document is not relayed.

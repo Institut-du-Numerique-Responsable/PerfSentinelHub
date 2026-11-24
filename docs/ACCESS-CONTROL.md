@@ -185,6 +185,7 @@ does not depend on the provider at all.
 | `POST` and `DELETE` under `/api/disclosures/{id}/`                     | `disclosures.manage` on `*`, and somebody to name               | `403`                   |
 | `GET /share/{token}/{name}`                                            | anonymous, the token alone                                      | `404`                   |
 | `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`, `POST /api/import/disclosures`, `/health/*` | unchanged                                                       |                         |
+| `POST /api/import/detections/by-grouping`                              | unchanged                                                       |                         |
 
 `GET /api/sources` lists only the sources where the caller holds something, each with a
 `permissions` array (absent with access off). A source missing from that list is

@@ -2,6 +2,38 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.22.0] - 2026-11-24
+
+### Added
+
+- The detection ledger is stored per grouping: one row per signature, grouping, ledger and day,
+  so an incident's link baseline compares a frozen finding with its own namespace's history
+  instead of the whole signature's. The poll asks `GET /api/detections?split=grouping`, and a
+  daemon pushes split pages to the new `POST /api/import/detections/by-grouping`, which takes the
+  same key, gate, bounds and reply as `/api/import/detections`. A page from an older daemon is
+  stored unsplit as before.
+- Both detection import routes answer `ledger_form`, `"split"` or `"unsplit"`, the form the
+  ledger is stored in. A ledger keeps the form of its first page with counts; a page in the other
+  form adds no count to it, is logged as a warning and counted out of `accepted`, and the daemon
+  switches to the stored form and sends its retained days again.
+
+### Changed
+
+- The image ships perf-sentinel `0.50.0` as its analysis engine, repinned by digest from
+  `0.49.0`. It is also the version the launcher compares a polled daemon's `producer_version`
+  against, so a daemon still on `0.49.0` or earlier now reads behind. `config/supply-chain.json`
+  carries the same digest as the `Dockerfile`. The engine counts its detection ledger per
+  grouping and pushes it to the by-grouping route first, falling back to the older route on a
+  Hub that answers `404` or `405`. Upgrade the Hub before the daemons.
+- Link rules version 5 reads the per-grouping baseline. An incident whose seven covered days all
+  predate the first split day of its daemon keeps its version 4 links.
+- A detection poll pass reads up to 128 pages instead of 64, and a pass stopped at the cap goes on
+  from the row it stopped on at the next poll.
+- Schema migrations 25 and 26 add the grouping to the `detection_counts` key and record the
+  first split day of each ledger. Detection rows grow with the number of namespaces a signature
+  is seen in; [Operations](docs/OPERATIONS.md) sizes them. Rolling back below this release needs
+  the backup taken before the upgrade.
+
 ## [0.21.0] - 2026-11-23
 
 ### Added

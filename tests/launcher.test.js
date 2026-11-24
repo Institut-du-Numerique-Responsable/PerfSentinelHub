@@ -1541,6 +1541,20 @@ test("a recurrence reason never reads an absent share or count as zero", () => {
     }
 });
 
+test("an intensity ratio from rules before version 4 keeps the rate wording it was computed with", () => {
+    const parts = PSL.linkReasonParts;
+    assert.deepEqual(parts({code: "intensity", ratio: 28.8}, 3),
+        {key: "incidents.link.reason.intensity_rate", params: {ratio: 28.8}});
+    assert.deepEqual(parts({code: "intensity"}, 3), {key: "incidents.link.reason.intensity_rate_no_number", params: {}});
+    assert.deepEqual(parts({code: "intensity", ratio: 2}, 4), {key: "incidents.link.reason.intensity", params: {ratio: 2}});
+    // No version given reads as the current rules.
+    assert.deepEqual(parts({code: "intensity", ratio: 2}), {key: "incidents.link.reason.intensity", params: {ratio: 2}});
+    for (const key of ["incidents.link.reason.intensity_rate", "incidents.link.reason.intensity_rate_no_number",
+        "incidents.link.reason.intensity_alone"]) {
+        assert.ok(PSL.hasText(key), key);
+    }
+});
+
 test("an intensity or saturation reason without its number reads without one", () => {
     const parts = PSL.linkReasonParts;
     assert.deepEqual(parts({code: "intensity"}), {key: "incidents.link.reason.intensity_no_number", params: {}});

@@ -202,10 +202,15 @@ compteurs repartent de zéro à chaque démarrage, comme celui de l'import des f
 
 `outcome`, sur les lectures de détections, prend cinq constantes, publiées dès le démarrage
 pour chaque daemon interrogé : `ok`, `aborted`, `unauthorized`, `failed` et `capped`.
-`aborted` est un daemon qui a ouvert un nouveau registre ou l'a coupé pendant le passage, et
-`capped` un registre de plus de 64 pages. Un daemon antérieur à perf-sentinel 0.37.0, ou
-dont le registre est coupé, n'est jamais lu et reste à zéro. `detection_rows_total` compte
-les lignes fusionnées par chaque passage, et le jour ouvert est fusionné de nouveau à chaque
+`aborted` est un daemon qui a ouvert un nouveau registre ou l'a coupé pendant le passage, ou
+une page sous l'autre forme que celle sous laquelle un push a stocké son registre entre-temps, et
+`capped` un registre de plus de 128 pages de 5 000 lignes, 640 000 lignes par passage : trois
+jours retenus à `max_signatures_per_day = 150000` plus les 10 000 signatures surveillées de
+chacun font 480 000. Le passage suivant reprend de la ligne où un passage plafonné s'est arrêté,
+donc un registre plus grand est lu en entier sur plusieurs polls. Un daemon antérieur à perf-sentinel 0.37.0, ou dont le registre est
+coupé, n'est jamais lu et reste à zéro. `detection_rows_total` compte les lignes fusionnées
+par chaque passage, sans les lignes d'une page écartée pour être arrivée sous l'autre forme
+que son registre, découpé par regroupement ou non, et le jour ouvert est fusionné de nouveau à chaque
 poll, donc il ne compte pas des lignes distinctes et son débit n'est pas un volume d'entrée.
 Un registre poussé ne compte que ses refus, dans `detection_import_rejected_total`, dont les
 motifs sont ceux de l'import des findings. Les trois compteurs de détections repartent de
@@ -550,7 +555,15 @@ une ligne d'environ 300 octets par finding, par daemon et par jour observé pend
 de `Hub:Retention` : 2 000 signatures vues chaque jour sur trois daemons, au défaut de
 180 jours, font environ 300 Mo, donc dimensionnez le volume pour la flotte plutôt que pour
 le défaut. Les lignes de détections restent plus longtemps, 1 100 jours par défaut
-(`Hub:DetectionRetention`), une ligne par signature, par daemon et par jour. Les divulgations
+(`Hub:DetectionRetention`), une ligne par signature, par regroupement, par registre et par
+jour. Sur une flotte à regroupements, une signature vue dans plusieurs namespaces prend une
+ligne dans chacun : 2,4 fois plus de lignes que de signatures ont été mesurées sur une flotte,
+et jusqu'à 6,4 fois est possible. À environ 300 octets par ligne avec son index, une source à
+25 000 lignes par jour ajoute environ 8 Mo par jour, et une source à 66 000 environ 20 Mo :
+sur les 1 100 jours par défaut, cela fait environ 9 Go et 22 Go par source, alors que le défaut
+de 1 Gio du chart se remplit en quatre mois environ à 8 Mo par jour et en sept semaines à
+20 Mo. Dimensionnez le volume en conséquence, ou raccourcissez `Hub:DetectionRetention`. Les
+divulgations
 ajoutent leurs fichiers : le rapport, l'attestation, le bundle et le PDF sont gardés dans la
 base, jamais purgés, si bien que la sauvegarde les emporte et grossit à chaque publication.
 
@@ -741,3 +754,16 @@ décision délibérée, puis revenez en arrière.
 Revenir avant la version de stockage (version 9 du schéma) puis repartir en avant est sûr
 pour les données : chaque démarrage complète les attributs, le service par source et les
 paires d'incident qu'une version plus ancienne a laissés de côté.
+
+## Revenir en arrière avant le registre des détections par regroupement
+
+Ne revenez pas à une image antérieure à la version qui compte les détections par regroupement
+(versions 25 et 26 du schéma) sur la base qu'elle a mise à jour. L'upsert des détections d'une
+version plus ancienne nomme une cible de conflit, signature, source, registre et jour, qui ne
+correspond plus à la clé à cinq colonnes de `detection_counts` : chaque page de détections
+qu'elle reçoit par poussée ou par poll échoue à s'enregistrer. Un retour en arrière demande la
+sauvegarde prise avant la mise à jour : arrêtez le Hub, restaurez cette sauvegarde comme dans
+[Restauration](#restauration), puis démarrez l'image plus ancienne. Ce que le Hub a enregistré
+depuis la mise à jour est perdu. Redémarrez ensuite les daemons : un daemon dont les pages
+découpées ont été acceptées retente la route par regroupement jusqu'à son redémarrage, puis se
+replie sur l'ancienne route et renvoie ses jours retenus.

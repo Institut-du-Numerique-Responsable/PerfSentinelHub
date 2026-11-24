@@ -488,3 +488,17 @@ v0.20.2	072101a	2026-11-22	PASS
 # reads the link levels yet: IncidentLinkRulesTests, IncidentLinkStorageTests and
 # IncidentLinkWorkerTests cover them.
 v0.21.0	1e02233	2026-11-23	PASS
+# v0.22.0 full pass, the fourteen hub-* scenarios, lab at origin/main (093cde1,
+# which follows perf-sentinel 0.50.0 and adds H7 to hub-detection-volume) on a
+# fresh `make up-cni` cluster. The eleven cluster scenarios ran Hub image
+# 0.22.0-fed4d798 (seed-hub-local) against the 0.50.0 daemon; hub-recap,
+# hub-detection-volume and hub-card ran a local Release build of the same commit
+# and the 0.50.0 macos-arm64 release binary. The release stores the detection
+# ledger per grouping (schema 25 and 26), reads it by the split poll and the
+# by-grouping push, answers ledger_form, and links frozen findings against their
+# grouping's history (rules version 5). H7 reads every ledger of hdv-poll and
+# hdv-push stored split. Checks: access-control 55, card 24, incidents-mirror 27,
+# recap 21, detection-volume 11, disclosures 11, ingestion, correlations-push and
+# lineage-mutation 7 each, derived-status, plugin-contract, retention-purge and
+# source-reachability 6 each, incidents-push 4. All PASS, no skip.
+v0.22.0	093cde1	2026-11-24	PASS

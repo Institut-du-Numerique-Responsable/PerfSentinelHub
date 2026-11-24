@@ -79,6 +79,45 @@ A correlation is a repeated co-occurrence, not a cause: two findings that keep
 firing within the daemon's configured lag of each other, which does not say
 that one provokes the other.
 
+## What an incident link level claims
+
+A link level is a suspicion to check, not a cause. Its intensity signal compares a finding's
+share of the incident's frozen findings in the window with its share of those same findings
+over the covered days before, so a busy hour, which raises every count alike, does not read as
+a spike. Three things follow:
+
+- the share is taken among the incident's own known findings: the only known finding of an
+  incident has no share to compare (`intensity_alone`), and a finding that usually makes up most
+  of them can only rise so far, at most the inverse of its usual share;
+- when the usual large findings are quiet in the window, the others weigh more and can read as
+  more intense than their own counts would;
+- since the detection ledger is counted per grouping, a frozen finding is compared with its own
+  grouping's history: a narrowed incident, whose alert names a namespace, reads its findings
+  against that namespace's past, not the whole source's. Below-threshold passes stay counted per
+  signature.
+
+The move to counts per grouping takes a few days to settle, and the daemon's upgrade is the one
+that counts:
+
+- while none of an incident's covered days was sent split, every finding of the incident reads
+  its signature's sum over every covered day, as before the split, so a source whose daemon does
+  not split yet keeps its usual shares. Once one of them was, as soon as one frozen finding
+  carries a grouping, the whole incident reads only the split days, its findings without a
+  grouping too: on a grouped fleet that is every incident, not only the narrowed ones, and the
+  per-grouping comparison then improves day by day up to the 7-day baseline;
+- an incident assessed before the upgrade whose seven covered days all predate the first day its
+  daemon sent split keeps its earlier link levels, since its baseline has not changed. One with
+  a split day among them is assessed again;
+- the intended order is the Hub first, then the daemon. A daemon upgraded before the Hub finds
+  no per-grouping route, falls back to the older one and keeps pushing per-signature totals
+  until it restarts, even once the Hub is upgraded: restart the daemon after upgrading the Hub.
+  Until then the Hub keeps that ledger per signature, its poll included, so its totals stay
+  whole;
+- a ledger is never stored in both forms: one whose counts came per signature first reads per
+  signature to its end, and one that came split reads split. A page of the other form adds no
+  count, and the poll brings those counts in the ledger's form while the daemon still holds the
+  day.
+
 ## What `status` and `lineage` claim
 
 `status` is a presumption, not a verdict. It is derived at read time from data
@@ -302,14 +341,14 @@ machine token too and every read is trimmed to the caller's grants, see
 [ACCESS-CONTROL.md](ACCESS-CONTROL.md) and
 [What access control does not cover](#what-access-control-does-not-cover).
 
-Five endpoints ask for a credential, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`
-and `POST /api/import/disclosures`, whose `X-API-Key` is compared by fingerprint, and
-`/share/` serves a disclosure's files to whoever holds a live token. Every other one asks for
-nothing: `/api/status`, `/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses`
-for both the listing and the request that starts a run, `/reports/`, `/metrics`, and the
-launcher itself. Whoever reaches the port reads every finding of every tenant, SQL query
-shapes and endpoint names included.
+Six endpoints ask for a credential, `POST /api/import/findings`, `POST /api/import/incidents`,
+`POST /api/import/correlations`, `POST /api/import/detections`,
+`POST /api/import/detections/by-grouping` and `POST /api/import/disclosures`, whose `X-API-Key`
+is compared by fingerprint, and `/share/` serves a disclosure's files to whoever holds a live
+token. Every other one asks for nothing: `/api/status`, `/api/sources`, `/api/findings`,
+`/api/correlations`, `/api/analyses` for both the listing and the request that starts a run,
+`/reports/`, `/metrics`, and the launcher itself. Whoever reaches the port reads every finding
+of every tenant, SQL query shapes and endpoint names included.
 
 The `by` and `reason` of a mirrored ack are readable on the open read route,
 `/api/findings`, which stays open to machines with `Hub:Auth` on unless `Hub:Access` is

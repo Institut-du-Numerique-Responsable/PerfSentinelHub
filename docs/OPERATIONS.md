@@ -189,9 +189,15 @@ each start, as the findings import counter does.
 
 `outcome` on the detection reads takes five constants, published from startup for every
 polled daemon: `ok`, `aborted`, `unauthorized`, `failed` and `capped`. `aborted` is a
-daemon that started a new ledger or turned it off during the pass, and `capped` a ledger
-past 64 pages. A daemon older than perf-sentinel 0.37.0, or with its ledger off, is never
-read and stays at zero. `detection_rows_total` counts the rows merged by each pass, and
+daemon that started a new ledger or turned it off during the pass, or a page in the other form
+than a push stored its ledger in meanwhile, and `capped` a ledger
+past 128 pages of 5,000 rows, 640,000 rows a pass: three retained days at
+`max_signatures_per_day = 150000` plus the 10,000 watched signatures of each come to 480,000.
+The next pass goes on from the row a capped one stopped on, so a larger ledger is read whole
+over several polls.
+A daemon older than perf-sentinel 0.37.0, or with its ledger off, is never read and stays at
+zero. `detection_rows_total` counts the rows merged by each pass, not the rows of a page left
+out for coming in the other form than its ledger, split by grouping or not, and
 the open day is merged again on every poll, so it does not count distinct rows and its
 rate is not an intake volume. A pushed ledger counts only its refusals, on
 `detection_import_rejected_total`, whose reasons are the findings import's. The three
@@ -508,7 +514,13 @@ grows with the observation days the Hub keeps, one row of about 300 bytes per fi
 daemon and observed day for the length of `Hub:Retention`: 2,000 signatures seen daily on
 three daemons at the 180-day default come to roughly 300 MB, so size the volume for the
 fleet rather than for the default. Detection rows stay longer, 1,100 days by default
-(`Hub:DetectionRetention`), one row per signature, daemon and day. Disclosures add their
+(`Hub:DetectionRetention`), one row per signature, grouping, ledger and day. On a grouped
+fleet a signature seen in several namespaces takes a row in each: 2.4 times as many rows as
+signatures were measured on one fleet, and up to 6.4 times is possible. At about 300 bytes a
+row with its index, a source with 25,000 rows a day adds about 8 MB a day, and one with 66,000
+about 20 MB: over the 1,100-day default that is about 9 GB and 22 GB for each source, while
+the chart's 1Gi default fills in about four months at 8 MB a day and seven weeks at 20 MB.
+Size the volume for that, or shorten `Hub:DetectionRetention`. Disclosures add their
 files: the report, the attestation, the bundle and the PDF are kept in the database, never
 purged, so the backup carries them and grows with each one published.
 
@@ -691,3 +703,15 @@ those builds, back to the release that added it, so only its members sign in. Se
 Rolling back below the storage release (schema version 9) and forward again is safe for
 the data: every start fills in the attributes, the per-source service and the incident
 pairs an older build left out.
+
+## Rolling back below the per-grouping detection ledger
+
+Do not roll the image back below the release that counts detections per grouping (schema
+versions 25 and 26) on the database it upgraded. An older build's detection upsert names a
+conflict target, signature, source, ledger and day, that no longer matches the five-column key
+of `detection_counts`, so every detection page it pushes or polls fails to store. A downgrade
+needs the backup taken before the upgrade: stop the Hub, restore that backup as in
+[Restore](#restore), then start the older image. What the Hub stored since the upgrade is lost.
+Restart the daemons afterwards: one that had its split pages accepted keeps retrying the
+per-grouping route until it restarts, then falls back to the older route and sends its
+retained days again.

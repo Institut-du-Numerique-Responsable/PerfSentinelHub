@@ -197,6 +197,7 @@ d'admins, est la voie qui ne dépend en rien du fournisseur.
 | `POST` et `DELETE` sous `/api/disclosures/{id}/`                                                                                                                       | `disclosures.manage` sur `*`, et quelqu'un à nommer                                               | `403`                              |
 | `GET /share/{token}/{name}`                                                                                                                                            | anonyme, le jeton seul                                                                            | `404`                              |
 | `POST /api/import/findings`, `POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`, `POST /api/import/disclosures`, `/health/*` | inchangé                                                                                          |                                    |
+| `POST /api/import/detections/by-grouping`                                                                                                                              | inchangé                                                                                          |                                    |
 
 `GET /api/sources` ne liste que les sources où l'appelant détient quelque chose, chacune
 avec un tableau `permissions` (absent sans contrôle d'accès). Une source absente de cette

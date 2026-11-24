@@ -420,7 +420,10 @@ public sealed record ListedAck(
     string? Service,
     IReadOnlyList<AccessAttribute> Rows);
 
-/// <summary>One page of a daemon's detection ledger, as the poll reads it and the push sends it.</summary>
+/// <summary>
+///     One page of a daemon's detection ledger, as the poll reads it and the push sends it. Split when
+///     the daemon answered "split": "grouping", each count row then holding one grouping of a signature.
+/// </summary>
 public sealed record DetectionLedgerPage(
     string LedgerId,
     long StartedMs,
@@ -429,19 +432,41 @@ public sealed record DetectionLedgerPage(
     int? SealedThrough,
     IReadOnlyList<DetectionCountRow> Counts,
     IReadOnlyList<DetectionDayRow> Days,
-    string? NextAfter);
+    string? NextAfter,
+    bool Split = false,
+    string? NextAfterGrouping = null);
+
+/// <summary>
+///     How the next poll pass reads a ledger: split by grouping, or per signature for a ledger stored so, and,
+///     for a walk an earlier pass left at the page cap, the row to go on after and its first page's sealed_through.
+/// </summary>
+public sealed record DetectionWalk(bool Split, string? After, string? AfterGrouping, int? SealedThrough);
+
+/// <summary>
+///     How a ledger page merged: not at all while the write lock stayed taken. Foreign when the page came in
+///     the other form than its ledger is stored in, split by grouping or not: its day rows merged unsealed
+///     and its count rows, SkippedCounts, were left out for the poll to read in the ledger's form.
+///     LedgerSplit is that form after the page, null while no page has set it.
+/// </summary>
+public readonly record struct DetectionMergeResult(
+    bool Merged,
+    int SkippedCounts,
+    bool Foreign = false,
+    bool? LedgerSplit = null);
 
 /// <summary>
 ///     How many times one signature was detected on one UTC epoch day, null I/O when green was off.
 ///     BelowThresholdPasses counts the passes under the threshold of a watched signature (C1), null
-///     on an engine that does not send it; such a row may carry zero detections.
+///     on an engine that does not send it; such a row may carry zero detections. Grouping is empty on an
+///     unsplit page, and on a split one for findings without a grouping, where the passes land too.
 /// </summary>
 public sealed record DetectionCountRow(
     int Day,
     string Signature,
     long Detections,
     long? ExtraIoOps,
-    long? BelowThresholdPasses = null);
+    long? BelowThresholdPasses = null,
+    string Grouping = "");
 
 /// <summary>
 ///     What one UTC epoch day of a ledger covers: sealed or open, and every reason its counts fall short.
@@ -535,8 +560,12 @@ public sealed record StoredCardKey(
 
 public sealed record IncidentKey(string Id, string SourceId);
 
-/// <summary>The frozen rows of one signature, summed: empty signatures are dropped before this.</summary>
-public sealed record FrozenSignature(string Signature, string FindingType, long SeenCount, long FirstSeenMs);
+/// <summary>
+///     The frozen rows of one signature, summed: empty signatures are dropped before this.
+///     <c>KnownSeenCount</c> sums the rows whose history has a usual share, the part its share is compared on.
+/// </summary>
+public sealed record FrozenSignature(
+    string Signature, string FindingType, long SeenCount, long FirstSeenMs, long KnownSeenCount);
 
 public sealed record LinkContext(
     string Service,

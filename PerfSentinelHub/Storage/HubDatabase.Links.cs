@@ -42,9 +42,10 @@ public sealed partial class HubDatabase
             findingsJson = reader.GetString(6);
         }
 
-        var signatures = FrozenSignatures(findingsJson);
-        var wanted = signatures.Select(s => s.Signature).ToHashSet(StringComparer.Ordinal);
-        var (baselines, seenBefore) = await LoadBaselinesAsync(connection, key.SourceId, atMs / DayMs, wanted, cancellationToken);
+        var rows = FrozenRows(findingsJson).ToList();
+        var wanted = rows.Select(r => r.Signature).ToHashSet(StringComparer.Ordinal);
+        var (signatures, baselines, seenBefore) =
+            await LoadBaselinesAsync(connection, key.SourceId, atMs / DayMs, rows, wanted, cancellationToken);
         var recurrences = await LoadRecurrencesAsync(
             connection, key, environmentSourceIds, service, kind, atMs, wanted, cancellationToken);
 
@@ -71,21 +72,9 @@ public sealed partial class HubDatabase
         }
     }
 
-    private static List<FrozenSignature> FrozenSignatures(string findingsJson)
-    {
-        var rows = new Dictionary<string, FrozenSignature>(StringComparer.Ordinal);
-        foreach (var (signature, type, seen, first) in FrozenRows(findingsJson))
-        {
-            rows[signature] = rows.TryGetValue(signature, out var existing)
-                ? existing with { SeenCount = existing.SeenCount + seen, FirstSeenMs = Math.Min(existing.FirstSeenMs, first) }
-                : new FrozenSignature(signature, type, seen, first);
-        }
-
-        return [.. rows.Values];
-    }
-
-    // Rows with a missing or empty signature are skipped; a malformed document reads as no rows.
-    private static IEnumerable<(string Signature, string Type, long Seen, long First)> FrozenRows(string findingsJson)
+    // Rows with a missing or empty signature are skipped; a malformed document reads as no rows. A row's
+    // grouping is the value of its first grouping attribute, the one the daemon files it under, empty when none.
+    private static IEnumerable<FrozenRow> FrozenRows(string findingsJson)
     {
         JsonDocument document;
         try
@@ -106,57 +95,83 @@ public sealed partial class HubDatabase
                 if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("finding", out var finding)
                     || finding.ValueKind != JsonValueKind.Object)
                     continue;
-                var signature = finding.TryGetProperty("signature", out var s) && s.ValueKind == JsonValueKind.String
-                    ? s.GetString()
-                    : null;
-                if (string.IsNullOrEmpty(signature))
+                var signature = StringOf(finding, "signature");
+                if (signature.Length == 0)
                     continue;
-                var type = finding.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
-                    ? t.GetString() ?? ""
-                    : "";
                 // A row without a seen count was seen once, as the daemon defaults it.
-                yield return (signature, type, LongOf(row, "seen_count", 1), LongOf(row, "first_seen_ms", 0));
+                yield return new FrozenRow(signature, FirstGroupingValue(finding), StringOf(finding, "type"),
+                    LongOf(row, "seen_count", 1), LongOf(row, "first_seen_ms", 0));
             }
         }
     }
+
+    private static string StringOf(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
+
+    private static string FirstGroupingValue(JsonElement finding) =>
+        finding.TryGetProperty("grouping", out var grouping) && grouping.ValueKind == JsonValueKind.Array
+        && grouping.GetArrayLength() > 0 && grouping[0].ValueKind == JsonValueKind.Object
+            ? StringOf(grouping[0], "value")
+            : "";
 
     private static long LongOf(JsonElement row, string name, long fallback) =>
         row.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)
             ? number
             : fallback;
 
-    private static async Task<(Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
-        SqliteConnection connection, string sourceId, long day, HashSet<string> wanted,
+    private readonly record struct FrozenRow(string Signature, string Grouping, string Type, long Seen, long FirstSeenMs);
+
+    // A source's covered days from fromDay to toDay, one group per day that no ledger flagged a gap or an
+    // overflow, for the baseline and the catch-up selection alike so the two read one rule.
+    private static string CoveredDaysSql(string sourceId, string fromDay, string toDay) => $"""
+        FROM detection_days AS d
+        LEFT JOIN detection_split_days AS m
+          ON m.source_id = d.source_id AND m.ledger_id = d.ledger_id AND m.day = d.day
+        WHERE d.source_id = {sourceId} AND d.day BETWEEN {fromDay} AND {toDay}
+        GROUP BY d.day
+        HAVING sum(d.gap <> 0 OR d.overflow_detections > 0) = 0
+        """;
+
+    // 1 on a covered day when every ledger of the source that sent it sent it split: only then do its
+    // grouping rows hold the whole day of a grouping.
+    private const string SplitDaySql = "min(m.day IS NOT NULL)";
+
+    private static readonly string CoveredDaysWithSplitSql =
+        $"SELECT d.day, {SplitDaySql} {CoveredDaysSql("$source_id", "$from_day", "$to_day")};";
+
+    // A row with a grouping reads its own history, one without the signature's sum. One day set serves the
+    // whole incident, so its shares divide sums over the same days: the split covered days when any
+    // signature reads per grouping, every covered day otherwise. With no split covered day, every signature
+    // reads its sum over every covered day, the rules v4 baseline.
+    private static async Task<(List<FrozenSignature>, Dictionary<string, Baseline>, HashSet<string>)> LoadBaselinesAsync(
+        SqliteConnection connection, string sourceId, long day, List<FrozenRow> rows, HashSet<string> wanted,
         CancellationToken cancellationToken)
     {
-        var covered = new HashSet<long>();
+        var covered = new Dictionary<long, bool>();
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = """
-                                  SELECT day FROM detection_days
-                                  WHERE source_id = $source_id AND day BETWEEN $from_day AND $to_day
-                                  GROUP BY day
-                                  HAVING sum(gap <> 0 OR overflow_detections > 0) = 0;
-                                  """;
+            command.CommandText = CoveredDaysWithSplitSql;
             command.Parameters.AddWithValue("$source_id", sourceId);
             command.Parameters.AddWithValue("$from_day", day - BaselineDays);
             command.Parameters.AddWithValue("$to_day", day - 1);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
-                covered.Add(reader.GetInt64(0));
+                covered[reader.GetInt64(0)] = reader.GetInt64(1) == 1;
         }
 
-        var daysSeen = wanted.ToDictionary(s => s, _ => 0, StringComparer.Ordinal);
-        var detections = wanted.ToDictionary(s => s, _ => 0L, StringComparer.Ordinal);
+        var whole = new Dictionary<(string, long), long>();
+        var byGrouping = new Dictionary<(string, string, long), long>();
         var seenBefore = new HashSet<string>(StringComparer.Ordinal);
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
-                                  SELECT signature, day, sum(detections) FROM detection_counts
+                                  SELECT signature, grouping, day, sum(detections) FROM detection_counts
                                   WHERE signature IN (SELECT value FROM json_each($wanted))
                                     AND source_id = $source_id AND day BETWEEN $from_day AND $to_day
                                     AND detections > 0
-                                  GROUP BY signature, day;
+                                  GROUP BY signature, grouping, day;
                                   """;
             command.Parameters.AddWithValue("$wanted",
                 JsonSerializer.Serialize([.. wanted], HubJsonContext.Default.StringArray));
@@ -166,17 +181,57 @@ public sealed partial class HubDatabase
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
-                var signature = reader.GetString(0);
+                var (signature, grouping, countDay, detections) =
+                    (reader.GetString(0), reader.GetString(1), reader.GetInt64(2), reader.GetInt64(3));
                 seenBefore.Add(signature);
-                if (!covered.Contains(reader.GetInt64(1)))
-                    continue;
-                daysSeen[signature]++;
-                detections[signature] += reader.GetInt64(2);
+                whole[(signature, countDay)] = whole.GetValueOrDefault((signature, countDay)) + detections;
+                byGrouping[(signature, grouping, countDay)] = detections;
             }
         }
 
-        return (wanted.ToDictionary(s => s, s => new Baseline(covered.Count, daysSeen[s], detections[s]),
-            StringComparer.Ordinal), seenBefore);
+        // A signature also frozen without a grouping reads as a whole: its grouped rows are in that sum already.
+        var anySplit = covered.ContainsValue(true);
+        var groups = rows.GroupBy(r => r.Signature, StringComparer.Ordinal)
+            .Select(g => (Rows: g, AsWhole: !anySplit || g.Any(r => r.Grouping.Length == 0))).ToList();
+        var anyGrouped = groups.Any(g => !g.AsWhole);
+        // A split day's whole sum is still the complete signature, so a whole read keeps it.
+        var days = covered.Where(d => !anyGrouped || d.Value).Select(d => d.Key).ToList();
+        var signatures = new List<FrozenSignature>();
+        var baselines = new Dictionary<string, Baseline>(StringComparer.Ordinal);
+        foreach (var (group, asWhole) in groups)
+        {
+            var signature = group.Key;
+            // Summed by hand, unchecked as before: a malformed seen_count must not fail the whole incident.
+            var populations = new Dictionary<string, long>(StringComparer.Ordinal);
+            long seen = 0, first = long.MaxValue;
+            foreach (var row in group)
+            {
+                var population = asWhole ? "" : row.Grouping;
+                populations[population] = populations.GetValueOrDefault(population) + row.Seen;
+                seen += row.Seen;
+                first = Math.Min(first, row.FirstSeenMs);
+            }
+
+            long Count(string grouping, long countDay) => asWhole
+                ? whole.GetValueOrDefault((signature, countDay))
+                : byGrouping.GetValueOrDefault((signature, grouping, countDay));
+
+            long detections = 0, knownSeen = 0;
+            foreach (var (grouping, populationSeen) in populations)
+            {
+                long sum = 0;
+                foreach (var countDay in days)
+                    sum += Count(grouping, countDay);
+                detections += sum;
+                if (sum > 0) knownSeen += populationSeen;
+            }
+
+            var daysSeen = days.Count(d => populations.Keys.Any(grouping => Count(grouping, d) > 0));
+            signatures.Add(new FrozenSignature(signature, group.First().Type, seen, first, knownSeen));
+            baselines[signature] = new Baseline(days.Count, daysSeen, detections);
+        }
+
+        return (signatures, baselines, seenBefore);
     }
 
     // incident_signatures holds each copy's signatures, kept by the triggers of Schema.V24.
@@ -323,18 +378,29 @@ public sealed partial class HubDatabase
         return links;
     }
 
-    private const string IncidentsNeedingLinksSql = """
+    private static readonly string IncidentsNeedingLinksSql = $"""
         SELECT i.id, i.source_id FROM incidents AS i
         WHERE i.finding_count > 0 AND i.source_id IN (SELECT value FROM json_each($source_ids))
           AND NOT EXISTS (
             SELECT 1 FROM incident_finding_links AS l
             WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $rules_version)
+          AND (NOT EXISTS (
+                 SELECT 1 FROM incident_finding_links AS l
+                 WHERE l.incident_id = i.id AND l.source_id = i.source_id AND l.rules_version >= $unsplit_rules_version)
+               OR EXISTS (
+                 SELECT 1 {CoveredDaysSql("i.source_id", "i.at_ms / $day_ms - $baseline_days", "i.at_ms / $day_ms - 1")}
+                   AND {SplitDaySql} = 1))
           AND EXISTS (
             SELECT 1 FROM incident_signatures AS s WHERE s.incident_id = i.id AND s.source_id = i.source_id);
         """;
 
+    // The last rules version before the per-grouping baseline: its links stay while no covered day is split,
+    // since a recompute over unsplit days only would read a narrowed finding's usual share as unknown.
+    private const int UnsplitRulesVersion = 4;
+
     /// <summary>
-    ///     Incidents of <paramref name="sourceIds" /> with no links at all, or links computed by older rules.
+    ///     Incidents of <paramref name="sourceIds" /> with no links at all, or links computed by older rules:
+    ///     rules older than v4, or v4 on an incident whose seven covered days hold one its baseline reads as split.
     ///     An incident none of whose frozen rows has a signature never gets a link, so it is left out, as
     ///     is a source no longer configured: queueing either would repeat at every catch-up.
     /// </summary>
@@ -345,6 +411,9 @@ public sealed partial class HubDatabase
         await using var command = connection.CreateCommand();
         command.CommandText = IncidentsNeedingLinksSql;
         command.Parameters.AddWithValue("$rules_version", rulesVersion);
+        command.Parameters.AddWithValue("$unsplit_rules_version", UnsplitRulesVersion);
+        command.Parameters.AddWithValue("$day_ms", DayMs);
+        command.Parameters.AddWithValue("$baseline_days", BaselineDays);
         command.Parameters.AddWithValue("$source_ids",
             JsonSerializer.Serialize([.. sourceIds], HubJsonContext.Default.StringArray));
         var keys = new List<IncidentKey>();

@@ -51,26 +51,57 @@ public static class DetectionLedgerParser
                 throw new ImportBatchTooLargeException();
 
             var window = new DayWindow(nowMs / MsPerDay);
+            var split = ReadSplit(root);
+            DetectionCountRow[] rows = [.. counts.EnumerateArray().Select(row => ReadCount(Row(row), window, split))];
+            // Two copies of one row would merge by MAX into neither's value.
+            if (rows.DistinctBy(row => (row.Day, row.Signature, row.Grouping)).Count() != rows.Length)
+                throw Invalid("The detection page has two rows on one day, signature and grouping.");
             return new DetectionLedgerPage(
                 ReadLedgerId(root),
                 Integer(root, "started_ms"),
                 window.Day(root, "current_day"),
                 window.Day(root, "oldest_day"),
                 IsAbsent(root, "sealed_through") ? null : window.Day(root, "sealed_through"),
-                [.. counts.EnumerateArray().Select(row => ReadCount(Row(row), window))],
+                rows,
                 [.. days.EnumerateArray().Select(row => ReadDay(Row(row), window))],
-                ReadNextAfter(root));
+                ReadNextAfter(root, "next_after"),
+                split,
+                ReadNextAfter(root, "next_after_grouping"));
         }
     }
 
-    private static DetectionCountRow ReadCount(JsonElement row, DayWindow window)
+    // Absent on an unsplit page. Any other split is refused: its rows would be stored as per-signature totals.
+    private static bool ReadSplit(JsonElement root)
     {
-        if (JsonRead.ReadString(row, "signature") is not { Length: > 0 and <= MaxSignatureLength } signature ||
-            signature.Any(char.IsControl))
+        if (IsAbsent(root, "split"))
+            return false;
+        if (JsonRead.ReadString(root, "split") != "grouping")
+            throw Invalid("The detection page's split is not \"grouping\".");
+        return true;
+    }
+
+    // The grouping is absent or empty for the ungrouped row, and only a split page names one.
+    private static DetectionCountRow ReadCount(JsonElement row, DayWindow window, bool split)
+    {
+        if (JsonRead.ReadString(row, "signature") is not { } signature || !IsReadable(signature))
             throw Invalid("A detection count has no readable signature.");
+        var grouping = "";
+        if (!IsAbsent(row, "grouping"))
+        {
+            if (JsonRead.ReadString(row, "grouping") is not { } value ||
+                (value.Length > 0 && (!split || !IsReadable(value))))
+                throw Invalid("A detection count has a grouping off a split page, or one not readable.");
+            grouping = value;
+        }
+
         return new DetectionCountRow(
             window.Day(row, "day"), signature, Integer(row, "detections"), OptionalInteger(row, "extra_io_ops"),
-            OptionalInteger(row, "below_threshold_passes"));
+            OptionalInteger(row, "below_threshold_passes"), grouping);
+    }
+
+    private static bool IsReadable(string value)
+    {
+        return value.Length is > 0 and <= MaxSignatureLength && !value.Any(char.IsControl);
     }
 
     private static DetectionDayRow ReadDay(JsonElement row, DayWindow window)
@@ -122,12 +153,12 @@ public static class DetectionLedgerParser
             : throw Invalid("The detection page's ledger_id is not a GUID.");
     }
 
-    private static string? ReadNextAfter(JsonElement root)
+    private static string? ReadNextAfter(JsonElement root, string name)
     {
-        if (IsAbsent(root, "next_after"))
+        if (IsAbsent(root, name))
             return null;
-        return JsonRead.ReadString(root, "next_after") ??
-               throw Invalid("The detection page's next_after is not a string.");
+        return JsonRead.ReadString(root, name) ??
+               throw Invalid($"The detection page's {name} is not a string.");
     }
 
     private static JsonElement Row(JsonElement row)

@@ -89,13 +89,18 @@ plafond du daemon, mille lignes, est reflétée et consignée `truncated`, puisq
 là où se trouve la baseline, peut manquer.
 
 La lecture du registre part de son curseur, ou de son jour le plus ancien la première fois, et
-pagine jusqu'au bout, 64 pages au plus. Un passage qui lit toutes les pages scelle les jours
+pagine jusqu'au bout, 128 pages au plus. Un passage qui lit toutes les pages scelle les jours
 qu'il a lus, du plus tardif entre le curseur et le jour le plus ancien du daemon jusqu'au
 `sealed_through` de sa première page, et avance le curseur au-delà, donc un jour que le daemon
 a scellé pendant le passage est relu en entier par le suivant. Un jour en deçà, purgé par le
 daemon après une lecture partielle, reste ouvert. Un passage qui s'arrête avant, au plafond de
-pages ou parce que le daemon a ouvert un nouveau registre entre-temps, garde ce qu'il a
-fusionné et ne scelle rien. Un daemon dont le statut ne nomme aucun registre, antérieur à
+pages, parce que le daemon a ouvert un nouveau registre entre-temps, ou parce qu'un push a
+stocké le registre sous l'autre forme que celle demandée par le passage, garde ce qu'il a
+fusionné et ne scelle rien. Au plafond de pages, il garde aussi la ligne où il s'est arrêté :
+le passage suivant reprend de là au lieu de relire les premières pages, et le parcours scelle
+une fois arrivé à la dernière page, jusqu'au `sealed_through` de sa toute première page. Le
+passage demande le registre découpé par regroupement, sauf si
+ses comptes sont stockés par signature. Un daemon dont le statut ne nomme aucun registre, antérieur à
 0.37.0 ou dont le registre est coupé, n'est jamais interrogé.
 
 ## Ce que fait réellement une analyse lancée

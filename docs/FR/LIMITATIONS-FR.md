@@ -89,6 +89,46 @@ Une corrélation est une co-occurrence répétée, pas une cause : deux findings
 qui se déclenchent sans cesse l'un après l'autre dans le délai réglé sur le
 daemon, ce qui ne dit pas que l'un provoque l'autre.
 
+## Ce qu'affirme un niveau de lien d'incident
+
+Un niveau de lien est un soupçon à vérifier, pas une cause. Son signal d'intensité compare la
+part d'un finding dans les findings figés de l'incident, pendant la fenêtre, à sa part dans ces
+mêmes findings sur les jours couverts d'avant : une heure chargée, qui fait monter tous les
+comptes pareil, ne se lit donc pas comme un pic. Il en découle trois choses :
+
+- la part se prend parmi les findings connus de l'incident lui-même : le seul finding connu d'un
+  incident n'a pas de part à comparer (`intensity_alone`), et un finding qui en fait
+  d'habitude l'essentiel ne peut monter que jusqu'à l'inverse de sa part habituelle ;
+- quand les gros findings habituels se taisent pendant la fenêtre, les autres pèsent davantage
+  et peuvent paraître plus intenses que leurs propres comptes ne le diraient ;
+- comme le registre des détections est compté par regroupement, un finding figé est comparé à
+  l'historique de son propre regroupement : un incident restreint, dont l'alerte nomme un
+  namespace, lit ses findings face au passé de ce namespace, pas de toute la source. Les passages
+  sous le seuil restent comptés par signature.
+
+Le passage aux comptes par regroupement met quelques jours à se stabiliser, et c'est la mise à
+jour du daemon qui compte :
+
+- tant qu'aucun des jours couverts d'un incident n'a été envoyé découpé, chaque finding de
+  l'incident lit la somme de sa signature sur tous les jours couverts, comme avant le découpage :
+  une source dont le daemon ne découpe pas encore garde ses parts habituelles. Dès que l'un
+  d'eux l'a été et qu'un finding figé porte un regroupement, tout l'incident ne lit que les jours
+  découpés, ses findings sans regroupement compris : sur une flotte à regroupements, c'est le cas
+  de chaque incident, pas seulement des incidents restreints, et la comparaison par regroupement
+  s'améliore ensuite jour après jour jusqu'à la base de 7 jours ;
+- un incident évalué avant la mise à jour dont les sept jours couverts précèdent tous le premier
+  jour que son daemon a envoyé découpé garde ses niveaux de lien précédents, car sa base n'a pas
+  changé. Celui dont un de ces jours est découpé est évalué de nouveau ;
+- l'ordre prévu est le Hub d'abord, puis le daemon. Un daemon mis à jour avant le Hub ne trouve
+  pas la route par regroupement, se replie sur l'ancienne et continue de pousser des totaux par
+  signature jusqu'à son redémarrage, même une fois le Hub mis à jour : redémarrez le daemon
+  après la mise à jour du Hub. D'ici là, le Hub garde ce registre par signature, son poll
+  compris, donc ses totaux restent entiers ;
+- un registre n'est jamais stocké sous les deux formes : celui dont les comptes sont arrivés
+  d'abord par signature se lit par signature jusqu'à sa fin, et celui arrivé découpé se lit
+  découpé. Une page de l'autre forme n'ajoute aucun compte, et le poll apporte ces comptes sous
+  la forme du registre tant que le daemon garde le jour.
+
 ## Ce qu'affirment `status` et `lineage`
 
 `status` est une présomption, pas un verdict. Il est dérivé à la lecture depuis
@@ -331,14 +371,15 @@ lecture est réduite aux autorisations de l'appelant, voir
 [ACCESS-CONTROL-FR.md](ACCESS-CONTROL-FR.md) et
 [Ce que le contrôle d'accès ne couvre pas](#ce-que-le-contrôle-daccès-ne-couvre-pas).
 
-Cinq endpoints réclament une preuve, `POST /api/import/findings`,
-`POST /api/import/incidents`, `POST /api/import/correlations`, `POST /api/import/detections`
-et `POST /api/import/disclosures`, dont la `X-API-Key` est comparée par empreinte, et
-`/share/` sert les fichiers d'une divulgation à quiconque détient un jeton valide. Tous les
-autres ne réclament rien : `/api/status`, `/api/sources`, `/api/findings`,
-`/api/correlations`, `/api/analyses` aussi bien pour la liste que pour la requête qui lance
-un run, `/reports/`, `/metrics`, et le lanceur lui-même. Qui joint le port lit tous les
-findings de tous les tenants, modèles de requêtes SQL et noms d'endpoints compris.
+Six endpoints réclament une preuve, `POST /api/import/findings`, `POST /api/import/incidents`,
+`POST /api/import/correlations`, `POST /api/import/detections`,
+`POST /api/import/detections/by-grouping` et `POST /api/import/disclosures`, dont la
+`X-API-Key` est comparée par empreinte, et `/share/` sert les fichiers d'une divulgation à
+quiconque détient un jeton valide. Tous les autres ne réclament rien : `/api/status`,
+`/api/sources`, `/api/findings`, `/api/correlations`, `/api/analyses` aussi bien pour la liste
+que pour la requête qui lance un run, `/reports/`, `/metrics`, et le lanceur lui-même. Qui
+joint le port lit tous les findings de tous les tenants, modèles de requêtes SQL et noms
+d'endpoints compris.
 
 Le `by` et le `reason` d'un acquittement reflété sont lisibles sur la route de
 lecture ouverte, `/api/findings`, qui reste ouverte aux machines quand

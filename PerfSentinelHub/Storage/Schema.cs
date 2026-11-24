@@ -630,4 +630,40 @@ internal static class Schema
           WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version = 24))
         WHERE signature <> '';
         """;
+
+    // Version 25: detection_counts keyed by grouping too, a split page holding one row per grouping of a
+    // signature, the rows stored before it moving to the empty grouping. A primary key cannot be altered,
+    // so the table is rebuilt; RebuildDetectionCountsAsync runs it once, after below_threshold_passes exists.
+    internal const string V25 = """
+        CREATE TABLE detection_counts_v25 (
+          signature TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          ledger_id TEXT NOT NULL,
+          day INTEGER NOT NULL,
+          detections INTEGER NOT NULL,
+          extra_io_ops INTEGER,
+          below_threshold_passes INTEGER,
+          grouping TEXT NOT NULL DEFAULT '',
+          PRIMARY KEY(signature, source_id, ledger_id, day, grouping)
+        );
+        INSERT INTO detection_counts_v25(
+          signature, source_id, ledger_id, day, detections, extra_io_ops, below_threshold_passes)
+        SELECT signature, source_id, ledger_id, day, detections, extra_io_ops, below_threshold_passes
+        FROM detection_counts;
+        DROP TABLE detection_counts;
+        ALTER TABLE detection_counts_v25 RENAME TO detection_counts;
+        CREATE INDEX IF NOT EXISTS ix_detection_counts_day ON detection_counts(day);
+        """;
+
+    // Version 26: the days a ledger sent split by grouping, marked by every split page touching one,
+    // through its counts or its day row: a day's row only rides its last page, so the day row alone cannot
+    // tell a split day. EnsureDetectionLedgerSplitColumnAsync adds detection_ledgers.split beside it.
+    internal const string V26 = """
+        CREATE TABLE IF NOT EXISTS detection_split_days (
+          source_id TEXT NOT NULL,
+          ledger_id TEXT NOT NULL,
+          day INTEGER NOT NULL,
+          PRIMARY KEY(source_id, ledger_id, day)
+        );
+        """;
 }

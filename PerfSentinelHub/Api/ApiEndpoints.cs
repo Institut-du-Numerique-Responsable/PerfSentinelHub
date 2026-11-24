@@ -16,6 +16,8 @@ namespace PerfSentinelHub.Api;
 public static partial class ApiEndpoints
 {
     // A deep OFFSET is a scan: SQLite steps over every skipped row.
+    private const string ImportLogCategory = "ImportApi";
+
     private const int MaxFindingOffset = 1_000_000;
 
     // What a body read is capped at unless its route says otherwise.
@@ -30,7 +32,7 @@ public static partial class ApiEndpoints
     // Twice the daemon's own 4 MiB bound on a ledger page.
     private const int DetectionImportMaxBytes = 8 * 1024 * 1024;
 
-    // The engine's default max_signatures_per_day; the daemon caps again at its own value.
+    // Under the engine's default max_signatures_per_day; the daemon caps again at its own value.
     private const int MaxWatchSignatures = 10_000;
 
     // An import slot is held across its body read: a daemon on a working link sends 8 MiB in
@@ -166,6 +168,7 @@ public static partial class ApiEndpoints
         app.MapPost("/api/import/incidents", ImportIncidentsAsync).AllowAnonymous();
         app.MapPost("/api/import/correlations", ImportCorrelationsAsync).AllowAnonymous();
         app.MapPost("/api/import/detections", ImportDetectionsAsync).AllowAnonymous();
+        app.MapPost("/api/import/detections/by-grouping", ImportDetectionsByGroupingAsync).AllowAnonymous();
         app.MapPost("/api/import/disclosures", ImportDisclosuresAsync).AllowAnonymous();
         app.MapGet("/api/disclosures", GetDisclosuresAsync);
         app.MapGet("/api/disclosures/{id}", GetDisclosureAsync);
@@ -296,7 +299,7 @@ public static partial class ApiEndpoints
 
             if (import.Batch.RejectedCount > 0)
                 LogRejectedImportedFindings(
-                    loggerFactory.CreateLogger("ImportApi"),
+                    loggerFactory.CreateLogger(ImportLogCategory),
                     source.Id,
                     import.Batch.RejectedCount);
             return TypedResults.Ok(new ImportResponse(import.Batch.Findings.Count, import.Batch.RejectedCount));
@@ -441,7 +444,7 @@ public static partial class ApiEndpoints
                 foreach (var id in changed)
                     links.Enqueue(new IncidentKey(id, source.Id));
                 if (import.Page.RejectedCount > 0)
-                    LogRejectedImportedIncidents(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                    LogRejectedImportedIncidents(loggerFactory.CreateLogger(ImportLogCategory), source.Id,
                         import.Page.RejectedCount);
                 return TypedResults.Ok(new ImportResponse(import.Page.Incidents.Count, import.Page.RejectedCount));
             }, cancellationToken);
@@ -465,7 +468,7 @@ public static partial class ApiEndpoints
                         timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), cancellationToken))
                     return null;
                 if (import.RejectedCount > 0)
-                    LogRejectedImportedEpisodes(loggerFactory.CreateLogger("ImportApi"), source.Id,
+                    LogRejectedImportedEpisodes(loggerFactory.CreateLogger(ImportLogCategory), source.Id,
                         import.RejectedCount);
                 return TypedResults.Ok(new ImportResponse(import.Episodes.Count, import.RejectedCount));
             }, cancellationToken);
@@ -477,19 +480,53 @@ public static partial class ApiEndpoints
         ImportAdmission<DetectionImportMetrics> admission,
         IOptions<HubOptions> options,
         TimeProvider timeProvider,
-        CancellationToken cancellationToken)
+        ILoggerFactory loggerFactory)
     {
+        // A split page has a route of its own.
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, false);
+    }
+
+    private static Task<IResult> ImportDetectionsByGroupingAsync(
+        HttpRequest request,
+        HubDatabase database,
+        ImportAdmission<DetectionImportMetrics> admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        ILoggerFactory loggerFactory)
+    {
+        return PushDetectionsAsync(request, database, admission, options, timeProvider, loggerFactory, true);
+    }
+
+    private static Task<IResult> PushDetectionsAsync(
+        HttpRequest request,
+        HubDatabase database,
+        ImportAdmission<DetectionImportMetrics> admission,
+        IOptions<HubOptions> options,
+        TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
+        bool split)
+    {
+        // The token minimal APIs bind is this one, read here to keep the parameter list short.
+        var cancellationToken = request.HttpContext.RequestAborted;
         var nowMs = timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
         // No refusal for an empty page: the midnight seal often arrives as a day with no rows.
         return PushImportAsync(request, options, admission, DetectionImportMaxBytes,
             payload => DetectionLedgerParser.ParsePage(payload, nowMs),
             async (source, page) =>
             {
-                if (!await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken))
+                if (page.Split != split)
+                    return admission.Refuse(ImportRejection.BadRequest, TypedResults.BadRequest());
+                var result = await database.TryMergeDetectionPageAsync(source.Id, page, nowMs, cancellationToken);
+                if (!result.Merged)
                     return null;
+                if (result.Foreign)
+                    LogForeignDetectionPage(loggerFactory.CreateLogger(ImportLogCategory), source.Id, page.LedgerId,
+                        result.SkippedCounts);
                 // Read outside the write gate, and always sent: the daemon replaces its list on every answer.
                 var watch = await database.ReadWatchAsync(source.Id, MaxWatchSignatures, cancellationToken);
-                return TypedResults.Ok(new DetectionImportResponse(page.Counts.Count, 0, watch));
+                // Rows left out for the ledger's other form are not accepted, and not rejected either.
+                return TypedResults.Ok(new DetectionImportResponse(page.Counts.Count - result.SkippedCounts, 0,
+                    watch, result.LedgerSplit switch { true => "split", false => "unsplit", null => null }));
             },
             cancellationToken);
     }
@@ -753,6 +790,14 @@ public static partial class ApiEndpoints
         ILogger logger,
         string sourceId,
         int rejectedCount);
+
+    [LoggerMessage(1304, LogLevel.Warning,
+        "Source {SourceId} pushed a detection page in the other form than its ledger {LedgerId} is stored in, split by grouping or not; its {Skipped} counts were left out for the poll to read.")]
+    private static partial void LogForeignDetectionPage(
+        ILogger logger,
+        string sourceId,
+        string ledgerId,
+        int skipped);
 
     [LoggerMessage(2010, LogLevel.Information,
         "Terminal sign-in approved by {Identity} ({Subject}) for {ClientAddress}, from another network: {OtherNetwork}.")]

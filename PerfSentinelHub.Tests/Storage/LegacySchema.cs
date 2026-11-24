@@ -22,4 +22,23 @@ internal static class LegacySchema
                                          DROP TABLE incident_signatures;
                                          DELETE FROM schema_migrations WHERE version = 24;
                                          """;
+
+    // A version 24 database: detection_counts keyed without its grouping, no split day anywhere.
+    internal const string WithoutGroupings = """
+                                             DROP TABLE detection_counts;
+                                             CREATE TABLE detection_counts (
+                                               signature TEXT NOT NULL,
+                                               source_id TEXT NOT NULL,
+                                               ledger_id TEXT NOT NULL,
+                                               day INTEGER NOT NULL,
+                                               detections INTEGER NOT NULL,
+                                               extra_io_ops INTEGER,
+                                               below_threshold_passes INTEGER,
+                                               PRIMARY KEY(signature, source_id, ledger_id, day)
+                                             );
+                                             CREATE INDEX ix_detection_counts_day ON detection_counts(day);
+                                             DROP TABLE detection_split_days;
+                                             ALTER TABLE detection_ledgers DROP COLUMN split;
+                                             DELETE FROM schema_migrations WHERE version IN (25, 26);
+                                             """;
 }

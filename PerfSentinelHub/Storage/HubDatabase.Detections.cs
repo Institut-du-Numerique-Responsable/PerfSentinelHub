@@ -94,16 +94,30 @@ public sealed partial class HubDatabase
     private const string DetectionCountUpsert = """
                                                 INSERT INTO detection_counts(
                                                   signature, source_id, ledger_id, day, detections, extra_io_ops,
-                                                  below_threshold_passes)
+                                                  below_threshold_passes, grouping)
                                                 VALUES ($signature, $source_id, $ledger_id, $day, $detections,
-                                                        $extra_io_ops, $below_threshold_passes)
-                                                ON CONFLICT(signature, source_id, ledger_id, day) DO UPDATE SET
+                                                        $extra_io_ops, $below_threshold_passes, $grouping)
+                                                ON CONFLICT(signature, source_id, ledger_id, day, grouping) DO UPDATE SET
                                                   detections = MAX(detection_counts.detections, excluded.detections),
                                                   extra_io_ops = MAX(detection_counts.extra_io_ops, excluded.extra_io_ops),
                                                   below_threshold_passes = COALESCE(
                                                     MAX(detection_counts.below_threshold_passes, excluded.below_threshold_passes),
                                                     detection_counts.below_threshold_passes, excluded.below_threshold_passes);
                                                 """;
+
+    // A split page sets its ledger split and marks the days it touches, through its counts or its day
+    // row. A ledger never holds both forms, so no unsplit total sits on those days to drop.
+    private const string SplitDayMark = """
+                                        UPDATE detection_ledgers SET split = 1
+                                        WHERE source_id = $source_id AND ledger_id = $ledger_id;
+                                        INSERT OR IGNORE INTO detection_split_days(source_id, ledger_id, day)
+                                        SELECT $source_id, $ledger_id, value FROM json_each($days);
+                                        """;
+
+    private const string UnsplitLedgerMark = """
+                                             UPDATE detection_ledgers SET split = 0
+                                             WHERE source_id = $source_id AND ledger_id = $ledger_id;
+                                             """;
 
     // A windowed page's volume inputs in one round trip: the page's counts in the window,
     // then the days and the ledgers of every source in scope.
@@ -132,9 +146,12 @@ public sealed partial class HubDatabase
     /// <summary>
     ///     Merges one ledger page in its own transaction, waiting for the write lock as long
     ///     as it takes. A polled page never seals a day (SealDetectionPassAsync does, once a
-    ///     whole pass is read); a pushed one seals what the daemon sent sealed.
+    ///     whole pass is read); a pushed one seals what the daemon sent sealed. A ledger is stored
+    ///     in one form, split by grouping or not, set by its first page holding counts or a split
+    ///     one: a page of the other form merges its day rows unsealed and adds no count, which the
+    ///     poll reads in the ledger's form, so no count is doubled nor deleted.
     /// </summary>
-    public async Task MergeDetectionPageAsync(
+    public async Task<DetectionMergeResult> MergeDetectionPageAsync(
         string sourceId,
         DetectionLedgerPage page,
         bool fromPush,
@@ -144,7 +161,7 @@ public sealed partial class HubDatabase
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
-            await WriteDetectionPageAsync(sourceId, page, fromPush, observedAtMs, cancellationToken);
+            return await WriteDetectionPageAsync(sourceId, page, fromPush, observedAtMs, cancellationToken);
         }
         finally
         {
@@ -157,18 +174,17 @@ public sealed partial class HubDatabase
     ///     gives up so the daemon retries on a 503. Files the push in source_imports and
     ///     never touches source_state nor source_finding_imports.
     /// </summary>
-    public async Task<bool> TryMergeDetectionPageAsync(
+    public async Task<DetectionMergeResult> TryMergeDetectionPageAsync(
         string sourceId,
         DetectionLedgerPage page,
         long observedAtMs,
         CancellationToken cancellationToken)
     {
         if (!await _writeGate.WaitAsync(WriteGateWait, cancellationToken))
-            return false;
+            return default;
         try
         {
-            await WriteDetectionPageAsync(sourceId, page, true, observedAtMs, cancellationToken);
-            return true;
+            return await WriteDetectionPageAsync(sourceId, page, true, observedAtMs, cancellationToken);
         }
         finally
         {
@@ -176,7 +192,7 @@ public sealed partial class HubDatabase
         }
     }
 
-    private async Task WriteDetectionPageAsync(
+    private async Task<DetectionMergeResult> WriteDetectionPageAsync(
         string sourceId,
         DetectionLedgerPage page,
         bool fromPush,
@@ -197,12 +213,42 @@ public sealed partial class HubDatabase
         parameters.AddWithValue("$pushed", fromPush ? 1 : 0);
         await command.ExecuteNonQueryAsync(cancellationToken);
 
+        command.CommandText = "SELECT split FROM detection_ledgers WHERE source_id = $source_id AND ledger_id = $ledger_id;";
+        BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
+        bool? storedSplit = await command.ExecuteScalarAsync(cancellationToken) is long stored ? stored == 1 : null;
+        var foreign = storedSplit is { } split && split != page.Split;
+        var sets = !foreign && (page.Split || page.Counts.Count > 0);
+        if (sets)
+        {
+            command.CommandText = page.Split ? SplitDayMark : UnsplitLedgerMark;
+            BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
+            parameters.AddWithValue("$days",
+                $"[{string.Join(',', page.Days.Select(day => day.Day).Concat(page.Counts.Select(count => count.Day)).Distinct())}]");
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // A day whose counts this page cannot bring is not complete on its word.
+        await UpsertDetectionDaysAsync(command, sourceId, page, fromPush && !foreign, observedAtMs, cancellationToken);
+        if (!foreign)
+            await UpsertDetectionCountsAsync(command, sourceId, page, observedAtMs, cancellationToken);
+
+        if (fromPush)
+            await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new DetectionMergeResult(true, foreign ? page.Counts.Count : 0, foreign,
+            sets ? page.Split : storedSplit);
+    }
+
+    private static async Task UpsertDetectionDaysAsync(SqliteCommand command, string sourceId,
+        DetectionLedgerPage page, bool sealable, long observedAtMs, CancellationToken cancellationToken)
+    {
+        var parameters = command.Parameters;
         command.CommandText = DetectionDayUpsert;
         foreach (var day in page.Days)
         {
             BindLedger(parameters, sourceId, page.LedgerId, observedAtMs);
             parameters.AddWithValue("$day", day.Day);
-            parameters.AddWithValue("$sealed", fromPush && day.Sealed ? 1 : 0);
+            parameters.AddWithValue("$sealed", sealable && day.Sealed ? 1 : 0);
             parameters.AddWithValue("$gap", day.Gap ? 1 : 0);
             parameters.AddWithValue("$overflow_detections", day.OverflowDetections);
             parameters.AddWithValue("$overflow_extra_io_ops", (object?)day.OverflowExtraIoOps ?? DBNull.Value);
@@ -216,7 +262,12 @@ public sealed partial class HubDatabase
             BindThresholds(parameters, day.Thresholds);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
+    }
 
+    private static async Task UpsertDetectionCountsAsync(SqliteCommand command, string sourceId,
+        DetectionLedgerPage page, long observedAtMs, CancellationToken cancellationToken)
+    {
+        var parameters = command.Parameters;
         command.CommandText = DetectionCountUpsert;
         foreach (var count in page.Counts)
         {
@@ -226,12 +277,9 @@ public sealed partial class HubDatabase
             parameters.AddWithValue("$detections", count.Detections);
             parameters.AddWithValue("$extra_io_ops", (object?)count.ExtraIoOps ?? DBNull.Value);
             parameters.AddWithValue("$below_threshold_passes", (object?)count.BelowThresholdPasses ?? DBNull.Value);
+            parameters.AddWithValue("$grouping", count.Grouping);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
-
-        if (fromPush)
-            await RecordImportAsync(connection, transaction, sourceId, observedAtMs, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     // Clears the previous row's values; SQLite ignores a bound name the statement does not use.
@@ -261,7 +309,7 @@ public sealed partial class HubDatabase
     ///     sealed_through that page carried, and moves the cursor to the day after, so the
     ///     next pass rereads whole any day sealed while this one ran. A day below the read
     ///     was pruned by the daemon, perhaps read partially, and stays open. A first page
-    ///     with no sealed day leaves both as they are.
+    ///     with no sealed day leaves both as they are. Either way the walk is over.
     /// </summary>
     public async Task SealDetectionPassAsync(
         string sourceId,
@@ -271,9 +319,6 @@ public sealed partial class HubDatabase
         int? sealedThrough,
         CancellationToken cancellationToken)
     {
-        if (sealedThrough is null)
-            return;
-
         await _writeGate.WaitAsync(cancellationToken);
         try
         {
@@ -285,16 +330,81 @@ public sealed partial class HubDatabase
                                   UPDATE detection_days SET sealed = 1
                                   WHERE source_id = $source_id AND ledger_id = $ledger_id
                                     AND day BETWEEN MAX($since_day, $oldest_day) AND $sealed_through;
-                                  UPDATE detection_ledgers SET read_from_day = $sealed_through + 1
+                                  UPDATE detection_ledgers
+                                  SET read_from_day = COALESCE($sealed_through + 1, read_from_day),
+                                      pass_after = NULL, pass_after_grouping = NULL, pass_sealed_through = NULL
                                   WHERE source_id = $source_id AND ledger_id = $ledger_id;
                                   """;
             command.Parameters.AddWithValue(SourceIdParameter, sourceId);
             command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
             command.Parameters.AddWithValue("$since_day", sinceDay);
             command.Parameters.AddWithValue("$oldest_day", oldestDay);
-            command.Parameters.AddWithValue("$sealed_through", sealedThrough.Value);
+            command.Parameters.AddWithValue("$sealed_through", (object?)sealedThrough ?? DBNull.Value);
             await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
+    }
+
+    /// <summary>
+    ///     How the next poll pass reads this ledger: split by grouping unless its counts are stored unsplit, and
+    ///     from where a pass capped mid-walk stopped.
+    /// </summary>
+    public async Task<DetectionWalk> ReadDetectionWalkAsync(
+        string sourceId,
+        string ledgerId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT split, pass_after, pass_after_grouping, pass_sealed_through FROM detection_ledgers
+                              WHERE source_id = $source_id AND ledger_id = $ledger_id;
+                              """;
+        command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+        command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+            return new DetectionWalk(true, null, null, null);
+        return new DetectionWalk(
+            reader.IsDBNull(0) || reader.GetInt64(0) == 1,
+            reader.IsDBNull(1) ? null : reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetInt32(3));
+    }
+
+    /// <summary>
+    ///     Keeps where a pass capped mid-walk stopped, or forgets it with a null <paramref name="after" />, so
+    ///     the next pass goes on from that row instead of rereading every page before it.
+    /// </summary>
+    public async Task SaveDetectionWalkAsync(
+        string sourceId,
+        string ledgerId,
+        string? after,
+        string? afterGrouping,
+        int? sealedThrough,
+        CancellationToken cancellationToken)
+    {
+        await _writeGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                                  UPDATE detection_ledgers
+                                  SET pass_after = $after, pass_after_grouping = $after_grouping,
+                                      pass_sealed_through = $sealed_through
+                                  WHERE source_id = $source_id AND ledger_id = $ledger_id;
+                                  """;
+            command.Parameters.AddWithValue(SourceIdParameter, sourceId);
+            command.Parameters.AddWithValue(LedgerIdParameter, ledgerId);
+            command.Parameters.AddWithValue("$after", (object?)after ?? DBNull.Value);
+            command.Parameters.AddWithValue("$after_grouping", (object?)afterGrouping ?? DBNull.Value);
+            command.Parameters.AddWithValue("$sealed_through", (object?)sealedThrough ?? DBNull.Value);
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
         finally
         {

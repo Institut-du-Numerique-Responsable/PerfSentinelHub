@@ -123,8 +123,14 @@ public sealed record SourceResponse(
 public sealed record ImportResponse(int Accepted, int Rejected);
 
 // Watch is the C1 list: the signatures the Hub asks the pushing daemon to count passes
-// below the threshold for, empty when none.
-public sealed record DetectionImportResponse(int Accepted, int Rejected, IReadOnlyList<string> Watch);
+// below the threshold for, empty when none. LedgerForm is "split" or "unsplit", the form
+// the ledger is stored in after the page, absent while no page has set it.
+public sealed record DetectionImportResponse(
+    int Accepted,
+    int Rejected,
+    IReadOnlyList<string> Watch,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? LedgerForm = null);
 
 // SourceIds is the resolved scope, as on IncidentQuery below. FromMs and ToMs
 // bound the observation window in epoch milliseconds, each side open when null.

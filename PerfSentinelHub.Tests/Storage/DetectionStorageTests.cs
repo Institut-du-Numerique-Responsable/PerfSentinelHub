@@ -150,7 +150,7 @@ public sealed class DetectionStorageTests : IAsyncLifetime
             null);
     }
 
-    private Task PollAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
+    private Task<DetectionMergeResult> PollAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
     {
         return _database.MergeDetectionPageAsync(
             "daemon-a", page, false, observedAt, TestContext.Current.CancellationToken);
@@ -158,8 +158,8 @@ public sealed class DetectionStorageTests : IAsyncLifetime
 
     private async Task PushAsync(DetectionLedgerPage page, long observedAt = ObservedAt)
     {
-        Assert.True(await _database.TryMergeDetectionPageAsync(
-            "daemon-a", page, observedAt, TestContext.Current.CancellationToken));
+        Assert.True((await _database.TryMergeDetectionPageAsync(
+            "daemon-a", page, observedAt, TestContext.Current.CancellationToken)).Merged);
     }
 
     private async Task<string> ScalarAsync(string sql)
@@ -312,5 +312,205 @@ public sealed class DetectionStorageTests : IAsyncLifetime
             TimeProvider.System);
 
         Assert.Empty(await database.QueryFindingsAsync(new FindingQuery(null, null, null, 10), cancellationToken));
+    }
+
+    private static DetectionLedgerPage Split(params DetectionCountRow[] counts)
+    {
+        return Page() with { Counts = counts, Split = true };
+    }
+
+    private static DetectionCountRow Grouped(string grouping, long detections, long? extraIoOps = 10)
+    {
+        return new DetectionCountRow(Day, Signature, detections, extraIoOps, Grouping: grouping);
+    }
+
+    private const string GroupingRows = """
+                                        SELECT group_concat(grouping || '=' || detections || '/' || IFNULL(extra_io_ops, '-'), ',')
+                                        FROM (SELECT * FROM detection_counts ORDER BY grouping);
+                                        """;
+
+    // 1 when the day of a detection_days row d is marked split, 0 otherwise.
+    private const string SplitOf = """
+                                   (SELECT count(*) FROM detection_split_days AS m
+                                    WHERE m.source_id = d.source_id AND m.ledger_id = d.ledger_id AND m.day = d.day)
+                                   """;
+
+    // The finding's volume over Day, read as a windowed listing an hour into the next day.
+    private async Task<DetectionVolume> VolumeAsync()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const long dayMs = 86_400_000;
+        var clock = new FakeTimeProvider(DateTimeOffset.FromUnixTimeMilliseconds((Day + 1) * dayMs + 3_600_000));
+        var database = new HubDatabase(
+            Options.Create(new HubOptions { DatabasePath = _path, Retention = TimeSpan.FromDays(30) }), clock);
+        var parsed = FindingParser.Parse(await File.ReadAllBytesAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "daemon-findings-0.11.2.json"),
+            cancellationToken));
+        await database.UpsertBatchAsync(
+            new SourceSnapshot("daemon-a", "Daemon A", "lab", "0.37.0"),
+            new ParsedBatch([parsed.Findings[0] with { Signature = Signature }], 0), Day * dayMs, cancellationToken);
+        return Assert.Single(await database.QueryFindingsAsync(
+            new FindingQuery(null, null, null, 10, FromMs: 0), cancellationToken)).Volume!;
+    }
+
+    [Fact]
+    public async Task Migration_from_v24_keeps_every_count_with_an_empty_grouping()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using (var connection = await _database.OpenConnectionAsync(cancellationToken))
+        {
+            await using var downgrade = connection.CreateCommand();
+            downgrade.CommandText = LegacySchema.WithoutGroupings + $"""
+                INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                  shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                VALUES ('daemon-a', '{Ledger}', {Day}, 1, 0, 0, 0, 0, 1.0, 1);
+                INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, extra_io_ops,
+                  below_threshold_passes)
+                VALUES ('{Signature}', 'daemon-a', '{Ledger}', {Day}, 7, 70, NULL),
+                       ('slow_sql:a', 'daemon-a', '{Ledger}', {Day}, 0, NULL, 4),
+                       ('{Signature}', 'daemon-b', '{Ledger}', {Day - 1}, 2, 20, 1);
+                INSERT INTO detection_ledgers(source_id, ledger_id, started_ms, first_read_ms, last_read_ms,
+                  polled, pushed)
+                VALUES ('daemon-a', '{Ledger}', 1, 1, 1, 1, 0), ('daemon-c', '{Ledger}', 1, 1, 1, 1, 0);
+                """;
+            await downgrade.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        TestPool.ClearFor(_path);
+        await new HubDatabase(Options.Create(new HubOptions { DatabasePath = _path }), TimeProvider.System)
+            .InitializeAsync(cancellationToken);
+
+        Assert.Equal($"{Day - 1} daemon-b 2 20 1 ,{Day} daemon-a 0 - 4 ,{Day} daemon-a 7 70 - ",
+            await ScalarAsync("""
+                              SELECT group_concat(day || ' ' || source_id || ' ' || detections || ' '
+                                || IFNULL(extra_io_ops, '-') || ' ' || IFNULL(below_threshold_passes, '-') || ' '
+                                || grouping, ',')
+                              FROM (SELECT * FROM detection_counts ORDER BY day, signature DESC);
+                              """));
+        Assert.Equal("0 2 1 signature,source_id,ledger_id,day,grouping", await ScalarAsync("""
+            SELECT (SELECT count(*) FROM pragma_table_info('detection_days') WHERE name = 'split')
+              || ' ' || (SELECT count(*) FROM schema_migrations WHERE version IN (25, 26))
+              || ' ' || (SELECT count(*) FROM sqlite_master WHERE name = 'ix_detection_counts_day')
+              || ' ' || (SELECT group_concat(name, ',') FROM (
+                   SELECT name FROM pragma_table_info('detection_counts') WHERE pk > 0 ORDER BY pk));
+            """));
+        // A ledger with counts stored before the split is an unsplit one; one without is still open.
+        Assert.Equal("daemon-a 0,daemon-c -", await ScalarAsync(
+            "SELECT group_concat(source_id || ' ' || IFNULL(split, '-'), ',') FROM (SELECT * FROM detection_ledgers ORDER BY source_id);"));
+        // Booting again rebuilds nothing.
+        await new HubDatabase(Options.Create(new HubOptions { DatabasePath = _path }), TimeProvider.System)
+            .InitializeAsync(cancellationToken);
+        Assert.Equal("3", await ScalarAsync("SELECT count(*) FROM detection_counts;"));
+    }
+
+    [Fact]
+    public async Task Two_groupings_of_one_signature_are_two_rows_and_merge_by_max_each()
+    {
+        await PushAsync(Split(Grouped("a", 6), Grouped("b", 4, 40)));
+        await PushAsync(Split(Grouped("a", 5, 30), Grouped("b", 7)));
+
+        Assert.Equal("a=6/30,b=7/40", await ScalarAsync(GroupingRows));
+        Assert.Equal(13, (await VolumeAsync()).Detections);
+    }
+
+    [Fact]
+    public async Task A_split_page_marks_its_days_split()
+    {
+        await PollAsync(Days(Day - 1));
+        await PushAsync(Split(Grouped("a", 6)));
+        Assert.Equal($"{Day - 1} 0,{Day} 1",
+            await ScalarAsync($"SELECT group_concat(day || ' ' || {SplitOf}, ',') FROM (SELECT * FROM detection_days ORDER BY day) AS d;"));
+        Assert.Equal("1", await ScalarAsync("SELECT split FROM detection_ledgers;"));
+    }
+
+    [Fact]
+    public async Task An_unsplit_page_onto_a_split_ledger_keeps_its_day_rows_unsealed_and_adds_no_count()
+    {
+        await PushAsync(Split(Grouped("a", 6)));
+
+        // By both paths, on a split day and on a day not split yet alike.
+        Assert.Equal(new DetectionMergeResult(true, 1, true, true), await PollAsync(Page(50, shedTraces: 2)));
+        Assert.Equal(new DetectionMergeResult(true, 1, true, true), await _database.TryMergeDetectionPageAsync(
+            "daemon-a", Page(50, sealedDay: true), ObservedAt, TestContext.Current.CancellationToken));
+        Assert.Equal(new DetectionMergeResult(true, 1, true, true), await PollAsync(Days(Day - 1) with
+        {
+            Counts = [new DetectionCountRow(Day - 1, Signature, 3, 30)]
+        }));
+
+        Assert.Equal("a=6/10", await ScalarAsync(GroupingRows));
+        Assert.Equal($"{Day - 1} 0 0 0,{Day} 1 0 2", await ScalarAsync(
+            $"SELECT group_concat(day || ' ' || {SplitOf} || ' ' || sealed || ' ' || shed_traces, ',') FROM (SELECT * FROM detection_days ORDER BY day) AS d;"));
+    }
+
+    [Fact]
+    public async Task A_split_page_onto_a_ledger_stored_unsplit_adds_no_count_and_deletes_none()
+    {
+        await PushAsync(Page(10, 100));
+
+        Assert.Equal(new DetectionMergeResult(true, 2, true, false), await _database.TryMergeDetectionPageAsync(
+            "daemon-a", Split(Grouped("a", 6), Grouped("b", 4)) with
+            {
+                Days = [new DetectionDayRow(Day, true, false, 0, 0, 0, 0, 1.0)]
+            }, ObservedAt, TestContext.Current.CancellationToken));
+
+        Assert.Equal("=10/100", await ScalarAsync(GroupingRows));
+        Assert.Equal("0 0 0", await ScalarAsync(
+            $"SELECT sealed || ' ' || {SplitOf} || ' ' || (SELECT split FROM detection_ledgers) FROM detection_days AS d;"));
+        Assert.Equal(10, (await VolumeAsync()).Detections);
+    }
+
+    [Fact]
+    public async Task A_day_split_over_pages_with_its_row_on_the_last_keeps_every_page()
+    {
+        // A large day goes out in pages, its day row on the last one only.
+        await PushAsync(Split(Grouped("a", 6)) with { Days = [] });
+        await PushAsync(Split(Grouped("b", 4)));
+        await PushAsync(Split(Grouped("", 1, 5)));
+
+        Assert.Equal("=1/5,a=6/10,b=4/10", await ScalarAsync(GroupingRows));
+        Assert.Equal("1", await ScalarAsync($"SELECT group_concat({SplitOf}, ' ') FROM detection_days AS d;"));
+        Assert.Equal(11, (await VolumeAsync()).Detections);
+        Assert.Equal(25, (await VolumeAsync()).AvoidableIoOps);
+    }
+
+    [Fact]
+    public async Task A_page_without_counts_leaves_a_fresh_ledger_open_to_either_form()
+    {
+        await PollAsync(Days(Day));
+        Assert.Equal("-", await ScalarAsync("SELECT IFNULL(split, '-') FROM detection_ledgers;"));
+
+        await PollAsync(Page(10, 100) with { Days = [] });
+        Assert.Equal("0", await ScalarAsync("SELECT split FROM detection_ledgers;"));
+    }
+
+    [Fact]
+    public async Task Unsplit_pushes_and_split_polls_interleaved_on_one_ledger_never_double_nor_delete()
+    {
+        // The daemon pushes totals to the older route while the Hub polls it split.
+        await PushAsync(Page(10, 100));
+        Assert.True((await PollAsync(Split(Grouped("a", 6)) with { Days = [] })).Foreign);
+        await PushAsync(Page(12, 120, sealedDay: true));
+        Assert.True((await PollAsync(Split(Grouped("a", 7), Grouped("b", 5)))).Foreign);
+        await PushAsync(Page(13, 130, sealedDay: true));
+
+        Assert.Equal("=13/130", await ScalarAsync(GroupingRows));
+        Assert.Equal("1 0", await ScalarAsync($"SELECT sealed || ' ' || {SplitOf} FROM detection_days AS d;"));
+        Assert.Equal(13, (await VolumeAsync()).Detections);
+    }
+
+    [Fact]
+    public async Task Split_polls_and_unsplit_pushes_interleaved_on_one_ledger_never_double_nor_delete()
+    {
+        // The other order: the split poll lands first, the pushed totals add nothing.
+        await PollAsync(Split(Grouped("a", 6)) with { Days = [] });
+        Assert.True((await _database.TryMergeDetectionPageAsync(
+            "daemon-a", Page(10, 100), ObservedAt, TestContext.Current.CancellationToken)).Foreign);
+        await PollAsync(Split(Grouped("a", 7), Grouped("b", 5)));
+        Assert.True((await _database.TryMergeDetectionPageAsync(
+            "daemon-a", Page(13, 130, sealedDay: true), ObservedAt, TestContext.Current.CancellationToken)).Foreign);
+
+        Assert.Equal("a=7/10,b=5/10", await ScalarAsync(GroupingRows));
+        Assert.Equal("0 1", await ScalarAsync($"SELECT sealed || ' ' || {SplitOf} FROM detection_days AS d;"));
+        Assert.Equal(12, (await VolumeAsync()).Detections);
     }
 }

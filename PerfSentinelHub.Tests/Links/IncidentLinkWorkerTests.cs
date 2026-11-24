@@ -29,11 +29,11 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         TimeProvider.System,
         NullLogger<IncidentLinkWorker>.Instance);
 
-    private static string Frozen(int count) =>
+    private static string Frozen(int count, long atMs) =>
         "[" + string.Join(",", Enumerable.Range(0, count).Select(index =>
-            $$"""{"finding":{"type":"n_plus_one_sql","signature":"sig-{{index}}"},"stored_at_ms":1,"first_seen_ms":{{AtMs + 5}},"seen_count":3}""")) + "]";
+            $$"""{"finding":{"type":"n_plus_one_sql","signature":"sig-{{index}}"},"stored_at_ms":1,"first_seen_ms":{{atMs + 5}},"seen_count":3}""")) + "]";
 
-    private async Task SeedIncidentAsync(string id, int signatures)
+    private async Task SeedIncidentAsync(string id, int signatures, long atMs = AtMs, string? findings = null)
     {
         await using var connection = await factory.Database.OpenConnectionAsync(Token);
         await using var command = connection.CreateCommand();
@@ -44,9 +44,9 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
                               """;
         command.Parameters.AddWithValue("$id", id);
         command.Parameters.AddWithValue("$source", Source);
-        command.Parameters.AddWithValue("$at", AtMs);
-        command.Parameters.AddWithValue("$from", AtMs - 300_000);
-        command.Parameters.AddWithValue("$findings", Frozen(signatures));
+        command.Parameters.AddWithValue("$at", atMs);
+        command.Parameters.AddWithValue("$from", atMs - 300_000);
+        command.Parameters.AddWithValue("$findings", findings ?? Frozen(signatures, atMs));
         await command.ExecuteNonQueryAsync(Token);
     }
 
@@ -92,6 +92,164 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         request.Headers.Add("X-API-Key", ApiKey);
         using var response = await factory.CreateClient().SendAsync(request, Token);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Intensity_weighs_each_finding_against_its_usual_share_of_the_incident()
+    {
+        var id = NewId();
+        // 40 days past the other tests' incidents: its ledger rows never reach their baselines, nor they its recurrence.
+        const long at = AtMs + 40 * 86_400_000L;
+        await SeedIncidentAsync(id, 3, at);
+        await using (var connection = await factory.Database.OpenConnectionAsync(Token))
+        {
+            // Seven covered days before the incident: sig-0 is usually 5 % of these findings, sig-1 95 %, sig-2 new.
+            for (var day = at / 86_400_000L - 7; day < at / 86_400_000L; day++)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                                      INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                                        shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                                      VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0);
+                                      INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections)
+                                      VALUES ('sig-0', $source, 'l1', $day, 5), ('sig-1', $source, 'l1', $day, 95);
+                                      """;
+                command.Parameters.AddWithValue("$source", Source);
+                command.Parameters.AddWithValue("$day", day);
+                await command.ExecuteNonQueryAsync(Token);
+            }
+        }
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        // Each was seen 3 times. The new sig-2 has no usual share, so it stays out of both totals: sig-0 and sig-1
+        // weigh half each, sig-0 ten times its usual share, sig-1 about half.
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Equal(LinkLevel.Strong, links["sig-0"].Level);
+        Assert.Equal(10.0, Assert.Single(links["sig-0"].Reasons, r => r.Code == "intensity").Ratio!.Value, 0.01);
+        Assert.Equal(LinkLevel.Weak, links["sig-1"].Level);
+        Assert.Contains(links["sig-2"].Reasons, r => r.Code == "intensity_new");
+    }
+
+    [Fact]
+    public async Task Worker_shares_compare_the_same_grouping_population()
+    {
+        var id = NewId();
+        // 80 days past the other tests' incidents, and 40 past the intensity test's.
+        const long at = AtMs + 80 * 86_400_000L;
+        // Frozen in ns-a at ns-a's usual shares: sig-a 1 in 10, sig-b 9 in 10.
+        var findings = "[" + string.Join(",", new[] { ("sig-a", 1), ("sig-b", 9) }.Select(row =>
+            $$"""{"finding":{"type":"n_plus_one_sql","signature":"{{row.Item1}}","grouping":[{"key":"k8s.namespace","value":"ns-a"}]},"first_seen_ms":1,"seen_count":{{row.Item2}}}""")) + "]";
+        await SeedIncidentAsync(id, 0, at, findings);
+        await using (var connection = await factory.Database.OpenConnectionAsync(Token))
+        {
+            // Source-wide sig-a is 90 % of these findings and sig-b 10 %, but in ns-a sig-a is only 10 %.
+            for (var day = at / 86_400_000L - 7; day < at / 86_400_000L; day++)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                                      INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                                        shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                                      VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0);
+                                      INSERT INTO detection_split_days(source_id, ledger_id, day) VALUES ($source, 'l1', $day);
+                                      INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, grouping)
+                                      VALUES ('sig-a', $source, 'l1', $day, 10, 'ns-a'), ('sig-b', $source, 'l1', $day, 90, 'ns-a'),
+                                             ('sig-a', $source, 'l1', $day, 890, 'ns-b'), ('sig-b', $source, 'l1', $day, 10, 'ns-b');
+                                      """;
+                command.Parameters.AddWithValue("$source", Source);
+                command.Parameters.AddWithValue("$day", day);
+                await command.ExecuteNonQueryAsync(Token);
+            }
+        }
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        // Read source-wide, sig-b would be nine times its usual share; in its own grouping it is at its usual share.
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Equal(LinkLevel.Weak, links["sig-b"].Level);
+        Assert.DoesNotContain(links["sig-b"].Reasons, r => r.Code.StartsWith("intensity", StringComparison.Ordinal));
+        Assert.Equal(LinkLevel.Weak, links["sig-a"].Level);
+    }
+
+    // Frozen n_plus_one_sql rows, filed under a grouping unless it is empty.
+    private static string FrozenIn(params (string Signature, string Grouping, long Seen)[] rows) =>
+        "[" + string.Join(",", rows.Select(row =>
+            $$"""{"finding":{"type":"n_plus_one_sql","signature":"{{row.Signature}}"{{(row.Grouping.Length > 0 ? $$""","grouping":[{"key":"k8s.namespace","value":"{{row.Grouping}}"}]""" : "")}}},"first_seen_ms":1,"seen_count":{{row.Seen}}}""")) + "]";
+
+    // One clean ledger day of the test source, marked split when asked, with its count rows.
+    private async Task SeedLedgerDayAsync(long day, bool split, params (string Signature, string Grouping, long Detections)[] counts)
+    {
+        await using var connection = await factory.Database.OpenConnectionAsync(Token);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                                shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                              VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0);
+                              """ + (split
+                                  ? "INSERT INTO detection_split_days(source_id, ledger_id, day) VALUES ($source, 'l1', $day);"
+                                  : "")
+                              + string.Concat(counts.Select((_, i) => $"""
+                                  INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections, grouping)
+                                  VALUES ($s{i}, $source, 'l1', $day, $d{i}, $g{i});
+                                  """));
+        command.Parameters.AddWithValue("$source", Source);
+        command.Parameters.AddWithValue("$day", day);
+        for (var i = 0; i < counts.Length; i++)
+        {
+            command.Parameters.AddWithValue($"$s{i}", counts[i].Signature);
+            command.Parameters.AddWithValue($"$g{i}", counts[i].Grouping);
+            command.Parameters.AddWithValue($"$d{i}", counts[i].Detections);
+        }
+
+        await command.ExecuteNonQueryAsync(Token);
+    }
+
+    [Fact]
+    public async Task Mixed_signatures_read_one_day_set_during_the_transition()
+    {
+        var id = NewId();
+        // 120 days past the other tests' incidents, 40 past the grouping population test's.
+        const long at = AtMs + 120 * 86_400_000L;
+        await SeedIncidentAsync(id, 0, at, FrozenIn(("sig-x", "", 10), ("sig-y", "ns-a", 10)));
+        // Seven covered days, the last three split: both run steadily at 100 a day.
+        for (var day = at / 86_400_000L - 7; day < at / 86_400_000L; day++)
+        {
+            var split = day >= at / 86_400_000L - 3;
+            await SeedLedgerDayAsync(day, split, ("sig-x", "", 100), ("sig-y", split ? "ns-a" : "", 100));
+        }
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        // Over the same three split days both are half of the incident, as usual; seven days against three
+        // would read sig-y at 1.67 times its usual share.
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Equal(LinkLevel.Weak, links["sig-y"].Level);
+        Assert.DoesNotContain(links["sig-y"].Reasons, r => r.Code == "intensity");
+        Assert.Equal(LinkLevel.Weak, links["sig-x"].Level);
+    }
+
+    [Fact]
+    public async Task A_grouped_row_unseen_in_its_grouping_but_seen_in_another_is_unknown_not_new()
+    {
+        var id = NewId();
+        // 160 days past the other tests' incidents, 40 past the transition test's.
+        const long at = AtMs + 160 * 86_400_000L;
+        await SeedIncidentAsync(id, 0, at, FrozenIn(("sig-a", "ns-a", 5), ("sig-b", "ns-a", 5)));
+        await SeedLedgerDayAsync(at / 86_400_000L - 1, true, ("sig-a", "ns-b", 40), ("sig-b", "ns-a", 60));
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Contains(links["sig-a"].Reasons, r => r.Code == "intensity_unknown");
+        Assert.DoesNotContain(links["sig-a"].Reasons, r => r.Code == "intensity_new");
     }
 
     [Fact]
@@ -189,7 +347,7 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
         await SeedIncidentAsync(fresh, 2);
         await SeedIncidentAsync(stale, 2);
         var staleKey = new IncidentKey(stale, Source);
-        await factory.Database.ReplaceLinksAsync(staleKey, [new StoredLink("sig-0", LinkLevel.Weak, [], IncidentLinkRules.RulesVersion - 1)], Token);
+        await factory.Database.ReplaceLinksAsync(staleKey, [new StoredLink("sig-0", LinkLevel.Weak, [], 3)], Token);
         using var worker = NewWorker();
         await worker.StartAsync(Token);
         try

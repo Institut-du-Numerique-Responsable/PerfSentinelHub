@@ -39,7 +39,7 @@ public sealed class StorageTests
         Assert.Equal(
             [
                 "ack_reads", "analysis_runs", "card_keys", "correlation_episodes", "detection_counts", "detection_days",
-                "detection_ledgers", "disclosure_deliveries", "disclosure_share_links",
+                "detection_ledgers", "detection_split_days", "disclosure_deliveries", "disclosure_share_links",
                 "disclosures", "endpoint_heartbeats", "endpoint_labels", "finding_action_events",
                 "finding_actions", "finding_attributes", "finding_envelopes", "finding_groupings", "finding_lineage",
                 "finding_observations", "finding_source_envelopes", "finding_sources", "findings",
@@ -62,7 +62,7 @@ public sealed class StorageTests
         await using var command = connection.CreateCommand();
         command.CommandText =
             "SELECT group_concat(version, ',') FROM (SELECT version FROM schema_migrations ORDER BY version);";
-        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24",
+        Assert.Equal("1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26",
             (string)(await command.ExecuteScalarAsync(cancellationToken))!);
     }
 

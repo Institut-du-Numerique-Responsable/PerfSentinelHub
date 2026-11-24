@@ -79,6 +79,28 @@ en premier, 10 000 au plus. La liste est toujours envoyée, `[]` quand elle est 
 remplace la sienne à chaque réponse. Seul un push la reçoit : un daemon interrogé par le poll ne la
 reçoit jamais.
 
+Un daemon qui sait découper le registre par regroupement envoie une page avec
+`"split": "grouping"`, chaque ligne de comptes portant alors un `grouping` (une chaîne vide est le
+regroupement sans nom), à `POST /api/import/detections/by-grouping`, avec la même clé, la même
+porte, les mêmes bornes et la même réponse. Cette route répond `400` à une page non découpée, et
+`/api/import/detections` répond `400` à une page découpée ; un daemon retombe sur l'ancienne route
+quand la nouvelle répond `404` ou `405`. Le poll demande `GET /api/detections?split=grouping` et
+renvoie le `next_after` et le `next_after_grouping` d'une page en `after` et `after_grouping` ; la
+page d'un daemon plus ancien n'a pas de `split` et est stockée non découpée. Un registre n'est
+stocké que sous une forme, fixée par la première page qui lui apporte des comptes ou un découpage :
+une fois ses comptes stockés non découpés, le poll le demande sans `split` et une page découpée ne
+lui ajoute aucun compte, et une fois qu'il est découpé, une page non découpée n'en ajoute aucun.
+Une telle page fusionne quand même ses lignes de jours, sans les sceller, un push retire ses lignes
+de `accepted` (sans les mettre dans `rejected`) et est journalisé en avertissement avec sa source et
+son registre, et un passage de poll s'y arrête sans sceller : le passage suivant lit le registre
+sous sa propre forme et apporte ces comptes. Un registre stocké non découpé avant la mise à jour du
+Hub le reste donc jusqu'au redémarrage de son daemon, et le registre suivant est découpé dès sa
+première page. Les deux routes d'import ajoutent `ledger_form` à leur réponse, `"split"` ou
+`"unsplit"`, la forme sous laquelle le registre est stocké après la requête, absente tant qu'aucune
+page ne l'a fixée. Un daemon dont la page est arrivée sous l'autre forme pousse sous celle-ci à
+partir de là et renvoie en entier les jours qu'il conserve, donc une réponse perdue après que le
+Hub a stocké une page ne peut pas le laisser pousser des comptes que le Hub écarte.
+
 Quatre imports tournent à la fois, ce qui borne la mémoire des requêtes indépendamment du
 nombre de daemons, et une source en tient au plus un : un second import d'une source dont le
 premier tourne encore, de quelque type qu'il soit, reçoit `503 Retry-After: 1`. Un corps qui
@@ -307,7 +329,9 @@ de la copie. Il associe la signature de chaque finding figé à `{"level", "reas
 "rules_version"}` : `level` vaut `strong`, `medium` ou `weak`, `reasons` liste les faits qui
 la justifient sous la forme `{"code"}` plus, quand la raison les a, `ratio`, `k`, `n`,
 `usual_share` et `value` (un champ sans valeur est omis), et `rules_version` est la version
-des règles qui l'ont calculé. Une raison `recurrence` compte les incidents de toutes les sources
+des règles qui l'ont calculé. Un incident dont les sept jours couverts précèdent tous le
+premier jour que son daemon a envoyé découpé garde les liens que la version 4 lui a donnés, à
+côté de la version 5 sur les autres. Une raison `recurrence` compte les incidents de toutes les sources
 de l'environnement de l'incident : ses `k`, `n` et `usual_share` sont donc omis pour un
 appelant dont l'accès ne tient pas chacune de ces sources entière (un motif de service ou
 d'attribut ne suffit pas), le code reste. La liste ne porte jamais `links`, et un champ `links`

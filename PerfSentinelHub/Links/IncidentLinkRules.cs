@@ -6,7 +6,7 @@ namespace PerfSentinelHub.Links;
 /// </summary>
 public static class IncidentLinkRules
 {
-    public const int RulesVersion = 3;
+    public const int RulesVersion = 5;
 
     private const double HighIntensityRatio = 3;
     private const double MediumIntensityRatio = 1.5;
@@ -14,7 +14,6 @@ public static class IncidentLinkRules
     private const int RecurrenceMinEarlier = 2;
     private const double RecurrenceHighShare = 0.5;
     private const double RecurrenceHighFactor = 2;
-    private const double MsPerDay = 86_400_000;
 
     private enum Mechanism { Compatible, Partial, Incompatible }
 
@@ -78,14 +77,13 @@ public static class IncidentLinkRules
     private static Signal Intensity(LinkInput input, List<LinkReason> reasons)
     {
         var baseline = input.Baseline;
-        // A zero window has no expected count: the ratio would be infinite or NaN, which cannot be serialized.
-        if (baseline.CoveredDays <= 0 || input.WindowMs <= 0)
+        if (baseline.CoveredDays <= 0)
         {
             reasons.Add(new LinkReason("intensity_unknown"));
             return Signal.None;
         }
 
-        // Seen only on days a gap or an overflow leaves uncovered: not new, its usual rate is unknown.
+        // Seen only on days a gap or an overflow leaves uncovered: not new, its usual share is unknown.
         if (baseline.Detections <= 0 && input.SeenInBaselineDays)
         {
             reasons.Add(new LinkReason("intensity_unknown"));
@@ -98,9 +96,24 @@ public static class IncidentLinkRules
             return Signal.High;
         }
 
-        // The daemon folds frozen rows over the incident window alone, so SeenCount is the window's count.
-        var expected = (double)baseline.Detections / baseline.CoveredDays / MsPerDay * input.WindowMs;
-        var ratio = input.SeenCount / expected;
+        // An empty total has no share to compare: the ratio would be infinite or NaN, which cannot be serialized.
+        // Checked after a new finding, since an incident of new findings only has no known total.
+        if (input.WindowTotal <= 0 || input.BaselineTotal <= 0)
+        {
+            reasons.Add(new LinkReason("intensity_unknown"));
+            return Signal.None;
+        }
+
+        // The only known finding makes up both totals: a share of 1 against 1 says nothing about a spike.
+        if (input.BaselineTotal <= baseline.Detections)
+        {
+            reasons.Add(new LinkReason("intensity_alone"));
+            return Signal.None;
+        }
+
+        // Its share of the incident's findings against its usual share: a busy hour raises every count alike, so
+        // comparing counts to a daily mean read nearly every finding of a daytime incident as a spike.
+        var ratio = (double)input.SeenCount / input.WindowTotal / ((double)baseline.Detections / input.BaselineTotal);
         if (ratio < MediumIntensityRatio) return Signal.None;
         reasons.Add(new LinkReason("intensity", Ratio: ratio));
         return ratio >= HighIntensityRatio ? Signal.High : Signal.Medium;
