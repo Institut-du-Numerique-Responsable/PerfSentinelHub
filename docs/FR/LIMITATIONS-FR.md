@@ -89,6 +89,24 @@ Une corrélation est une co-occurrence répétée, pas une cause : deux findings
 qui se déclenchent sans cesse l'un après l'autre dans le délai réglé sur le
 daemon, ce qui ne dit pas que l'un provoque l'autre.
 
+## Ce qu'affirme un niveau de lien d'incident
+
+Un niveau de lien est un soupçon à vérifier, pas une cause. Son signal d'intensité compare la
+part d'un finding dans les findings figés de l'incident, pendant la fenêtre, à sa part dans ces
+mêmes findings sur les jours couverts d'avant : une heure chargée, qui fait monter tous les
+comptes pareil, ne se lit donc pas comme un pic. Il en découle trois choses :
+
+- la part se prend parmi les findings connus de l'incident lui-même : le seul finding connu d'un
+  incident n'a pas de part à comparer (`intensity_alone`), et un finding qui en fait
+  d'habitude l'essentiel ne peut monter que jusqu'à l'inverse de sa part habituelle ;
+- quand les gros findings habituels se taisent pendant la fenêtre, les autres pèsent davantage
+  et peuvent paraître plus intenses que leurs propres comptes ne le diraient ;
+- un incident dont l'alerte nomme un namespace ne fige que les findings de ce namespace, alors
+  que le registre des détections compte chaque signature sur toute la source. Une signature
+  partagée avec d'autres namespaces pèse alors moins dans la fenêtre que dans sa part
+  habituelle, ce qui fait monter les autres : un finding propre à ce namespace peut paraître plus
+  intense alors qu'il tourne à son rythme habituel.
+
 ## Ce qu'affirment `status` et `lineage`
 
 `status` est une présomption, pas un verdict. Il est dérivé à la lecture depuis

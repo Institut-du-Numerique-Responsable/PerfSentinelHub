@@ -30,6 +30,9 @@ public sealed class IncidentLinkRulesTests
             LinkLevel.Weak, ["mechanism_compatible"] },
         { "busy hour, usual share", Input("memory_saturation", "n_plus_one_sql", Daily(), 100) with
             { WindowTotal = 10_000 }, LinkLevel.Weak, ["mechanism_compatible"] },
+        // The only known finding is all of both totals: a share of 1 against 1 says nothing about a spike.
+        { "only known finding", Input("oom_kill", "n_plus_one_sql", Daily(), 500) with
+            { WindowTotal = 500, BaselineTotal = 700 }, LinkLevel.Weak, ["mechanism_compatible", "intensity_alone"] },
         { "recurring, rare", Input("memory_saturation", "redundant_sql", new Baseline(5, 1, 7000), 100,
             new Recurrence(5, 4)), LinkLevel.Strong, ["mechanism_compatible", "recurrence"] },
         { "new finding", Input("oom_kill", "excessive_fanout", NewFinding), LinkLevel.Strong,

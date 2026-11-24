@@ -104,6 +104,13 @@ public static class IncidentLinkRules
             return Signal.None;
         }
 
+        // The only known finding makes up both totals: a share of 1 against 1 says nothing about a spike.
+        if (input.BaselineTotal <= baseline.Detections)
+        {
+            reasons.Add(new LinkReason("intensity_alone"));
+            return Signal.None;
+        }
+
         // Its share of the incident's findings against its usual share: a busy hour raises every count alike, so
         // comparing counts to a daily mean read nearly every finding of a daytime incident as a spike.
         var ratio = (double)input.SeenCount / input.WindowTotal / ((double)baseline.Detections / input.BaselineTotal);

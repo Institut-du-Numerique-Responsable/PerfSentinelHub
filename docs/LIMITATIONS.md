@@ -79,6 +79,23 @@ A correlation is a repeated co-occurrence, not a cause: two findings that keep
 firing within the daemon's configured lag of each other, which does not say
 that one provokes the other.
 
+## What an incident link level claims
+
+A link level is a suspicion to check, not a cause. Its intensity signal compares a finding's
+share of the incident's frozen findings in the window with its share of those same findings
+over the covered days before, so a busy hour, which raises every count alike, does not read as
+a spike. Three things follow:
+
+- the share is taken among the incident's own known findings: the only known finding of an
+  incident has no share to compare (`intensity_alone`), and a finding that usually makes up most
+  of them can only rise so far, at most the inverse of its usual share;
+- when the usual large findings are quiet in the window, the others weigh more and can read as
+  more intense than their own counts would;
+- an incident whose alert names a namespace freezes that namespace's findings only, while the
+  detection ledger counts each signature over the whole source. A signature shared with other
+  namespaces then weighs less in the window than in its usual share, which raises the others: a
+  finding confined to that namespace can read as more intense while it runs at its usual rate.
+
 ## What `status` and `lineage` claim
 
 `status` is a presumption, not a verdict. It is derived at read time from data
