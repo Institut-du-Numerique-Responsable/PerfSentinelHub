@@ -91,7 +91,9 @@ public sealed partial class IncidentLinkWorker(
         if (await database.LoadLinkContextAsync(key, sourceIds, cancellationToken) is not { } context)
             return false;
 
-        var windowMs = context.WindowToMs - context.WindowFromMs;
+        var windowTotal = context.Signatures.Sum(signature => signature.SeenCount);
+        var baselineTotal = context.Signatures.Sum(signature =>
+            context.Baselines.GetValueOrDefault(signature.Signature)?.Detections ?? 0);
         var links = new List<StoredLink>(context.Signatures.Count);
         foreach (var signature in context.Signatures)
         {
@@ -99,7 +101,8 @@ public sealed partial class IncidentLinkWorker(
                 context.Kind,
                 signature.FindingType,
                 context.Saturation,
-                windowMs,
+                windowTotal,
+                baselineTotal,
                 signature.SeenCount,
                 signature.FirstSeenMs >= context.AtMs && !context.SeenInBaselineDays.Contains(signature.Signature),
                 context.Baselines.GetValueOrDefault(signature.Signature, new Baseline(0, 0, 0)),

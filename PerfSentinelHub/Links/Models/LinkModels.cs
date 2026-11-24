@@ -20,7 +20,9 @@ public sealed record LinkInput(
     string IncidentKind,
     string FindingType,
     double? Saturation,
-    long WindowMs,
+    // What the incident's frozen findings add up to, in the window and over the covered baseline days.
+    long WindowTotal,
+    long BaselineTotal,
     long SeenCount,
     bool AppearedAfterDeploy,
     Baseline Baseline,

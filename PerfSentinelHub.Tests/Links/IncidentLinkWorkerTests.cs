@@ -95,6 +95,41 @@ public sealed class IncidentLinkWorkerTests(HubApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Intensity_weighs_each_finding_against_its_usual_share_of_the_incident()
+    {
+        var id = NewId();
+        await SeedIncidentAsync(id, 2);
+        await using (var connection = await factory.Database.OpenConnectionAsync(Token))
+        {
+            // Seven covered days before the incident: sig-0 is usually 5 % of these findings, sig-1 95 %.
+            for (var day = AtMs / 86_400_000L - 7; day < AtMs / 86_400_000L; day++)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                                      INSERT INTO detection_days(source_id, ledger_id, day, sealed, gap, overflow_detections,
+                                        shed_traces, ingest_rejected, sampling_rate, last_read_ms)
+                                      VALUES ($source, 'l1', $day, 1, 0, 0, 0, 0, 1.0, 0);
+                                      INSERT INTO detection_counts(signature, source_id, ledger_id, day, detections)
+                                      VALUES ('sig-0', $source, 'l1', $day, 5), ('sig-1', $source, 'l1', $day, 95);
+                                      """;
+                command.Parameters.AddWithValue("$source", Source);
+                command.Parameters.AddWithValue("$day", day);
+                await command.ExecuteNonQueryAsync(Token);
+            }
+        }
+
+        using var worker = NewWorker();
+        Assert.True(await worker.ProcessAsync(new IncidentKey(id, Source), Token));
+
+        // Both were seen 3 times in the window, half each: sig-0 weighed ten times its usual share, sig-1 about half.
+        var links = (await factory.Database.ListLinksAsync(new IncidentKey(id, Source), Token))
+            .ToDictionary(link => link.Signature);
+        Assert.Equal(LinkLevel.Strong, links["sig-0"].Level);
+        Assert.Equal(10.0, Assert.Single(links["sig-0"].Reasons, r => r.Code == "intensity").Ratio!.Value, 0.01);
+        Assert.Equal(LinkLevel.Weak, links["sig-1"].Level);
+    }
+
+    [Fact]
     public async Task Imported_incident_gets_links_once_the_worker_runs()
     {
         var id = Id(1);
