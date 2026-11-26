@@ -1180,11 +1180,11 @@
         'correlations.no_incident': 'aucun',
         'correlations.explain': 'Expliquer la dernière paire',
         'correlations.incident.title': 'Actives pendant cet incident',
-        'correlations.incident.sub': 'Les épisodes du même daemon dont l\'activité recouvre la fenêtre de '
-            + 'l\'incident.',
+        'correlations.incident.sub': 'Les épisodes du même daemon qui impliquent {service} et recouvrent la '
+            + 'fenêtre de l\'incident.',
         'correlations.incident.reading': 'Lecture des corrélations.',
         'correlations.incident.error': 'Le Hub n\'a pas renvoyé les corrélations de cette fenêtre.',
-        'correlations.incident.none': 'Aucune corrélation n\'était active dans cette fenêtre.',
+        'correlations.incident.none': 'Aucune corrélation impliquant {service} n\'était active dans cette fenêtre.',
         'correlations.incident.show_all': 'Tout afficher ({count})',
         'correlations.incident.no_push': '{name} ne pousse aucune corrélation que vous puissiez lire, aucune ne peut '
             + 'donc s\'afficher ici.',

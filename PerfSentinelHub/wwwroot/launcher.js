@@ -1604,6 +1604,22 @@
     }
 
     /**
+     * The episodes that concern an incident: a side on its service, and in its namespace when it
+     * names one. A side with no grouping value cannot be placed in a namespace, so it stays.
+     * @param {Array<{source: {service: string, grouping_value: string | null}, target: {service: string, grouping_value: string | null}}>} episodes
+     * @param {{service: string, namespace?: string}} incident
+     * @returns {Array<any>}
+     */
+    function incidentEpisodes(episodes, incident) {
+        return episodes.filter(function (episode) {
+            return [episode.source, episode.target].some(function (side) {
+                return side.service === incident.service
+                    && (!incident.namespace || side.grouping_value == null || side.grouping_value === incident.namespace);
+            });
+        });
+    }
+
+    /**
      * A pair's accessible name: both finding types and both services, so two pairs between
      * the same services read apart.
      * @param {{source: {finding_type: string, service: string}, target: {finding_type: string, service: string}}} episode
@@ -5436,6 +5452,7 @@
         CORRELATION_RANGES,
         readCorrelationPair,
         correlationWindowKey,
+        incidentEpisodes,
         pairLabel,
         episodeEndNote,
         correlationPairs,

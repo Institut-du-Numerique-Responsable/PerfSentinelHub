@@ -7197,8 +7197,11 @@
         const cacheKey = PSL.correlationWindowKey(key, incident.window_from_ms, incidentEnd(incident));
         state.incidentCorrelations[cacheKey] = 'loading';
         const scope = '/api/correlations?source_id=' + encodeURIComponent(incident.source_id);
-        readAllEpisodes(scope + '&from=' + incident.window_from_ms + '&to=' + incidentEnd(incident), 0)
-            .then(function (rows) {
+        // The service narrows on the Hub, the namespace here: the route has no grouping filter.
+        readAllEpisodes(scope + '&service=' + encodeURIComponent(incident.service)
+            + '&from=' + incident.window_from_ms + '&to=' + incidentEnd(incident), 0)
+            .then(function (all) {
+                const rows = PSL.incidentEpisodes(all, incident);
                 if (rows.length > 0) return {rows: rows, pushes: true};
                 return getJson(scope + '&limit=1').then(function (/** @type {Episode[]} */ any) {
                     return {rows: rows, pushes: any.length > 0};
@@ -7246,7 +7249,7 @@
         const block = el('div', {class: 'incident-correlations'}, [
             el('p', {class: 'overline daemon-audience', text: t('correlations.overline')}),
             el('h3', {class: 'daemon-lead', text: t('correlations.incident.title')}),
-            el('p', {class: 'daemon-source-note', text: t('correlations.incident.sub')})
+            el('p', {class: 'daemon-source-note', text: t('correlations.incident.sub', {service: incident.service})})
         ]);
         if (held === undefined || held === 'loading') {
             block.appendChild(el('p', {
@@ -7271,7 +7274,7 @@
             block.appendChild(el('p', {
                 class: 'empty-state',
                 text: held.pushes
-                    ? t('correlations.incident.none')
+                    ? t('correlations.incident.none', {service: incident.service})
                     : t('correlations.incident.no_push', {name: incident.source_name || incident.source_id})
             }));
         }

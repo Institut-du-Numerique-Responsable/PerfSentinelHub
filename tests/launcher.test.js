@@ -1779,6 +1779,22 @@ test("an incident's correlations are cached per window, so a later end reads aga
     assert.notEqual(PSL.correlationWindowKey("k", 1000, 5000), PSL.correlationWindowKey("k", 1000, 9000));
 });
 
+test("an incident's correlations keep the episodes on its service, in its namespace", () => {
+    const side = (service, ns) => ({service, grouping_value: ns});
+    const ep = (id, source, target) => ({id, source, target});
+    const episodes = [
+        ep("other", side("web-crm", "a"), side("referentiel", "a")),
+        ep("target-side", side("web-crm", "a"), side("web-report", "a")),
+        ep("other-ns", side("web-report", "b"), side("web-crm", "b")),
+        ep("no-grouping", side("web-report", null), side("web-crm", null))
+    ];
+    const ids = list => list.map(e => e.id);
+    assert.deepEqual(ids(PSL.incidentEpisodes(episodes, {service: "web-report", namespace: "a"})),
+        ["target-side", "no-grouping"]);
+    assert.deepEqual(ids(PSL.incidentEpisodes(episodes, {service: "web-report"})),
+        ["target-side", "other-ns", "no-grouping"], "no namespace keeps every namespace");
+});
+
 test("a pair's accessible name says both finding types and both services", () => {
     const side = (type, service) => ({finding_type: type, service: service, template: "SELECT 1"});
     assert.equal(

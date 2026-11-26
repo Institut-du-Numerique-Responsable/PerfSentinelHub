@@ -322,7 +322,9 @@ Hub a un backend de traces, ouvre New analysis sur la trace d'un finding de la d
 co-occurrence de la paire, l'autre trace restant à un clic dans le bandeau.
 
 Un incident déplié liste les corrélations actives pendant sa durée : les épisodes de son daemon qui
-recouvrent la fenêtre de l'incident, jusqu'à sa fin dès qu'il en a une, chacun avec un lien vers
+recouvrent la fenêtre de l'incident, jusqu'à sa fin dès qu'il en a une, et impliquent son service
+d'un côté ou de l'autre, dans son namespace quand l'incident en nomme un (un côté sans valeur de
+regroupement reste affiché), chacun avec un lien vers
 tous les épisodes de sa paire. Ce lien, `#/correlations?pair_key=<clé>`, est aussi celui du tableau
 des corrélations de Grafana : l'écran s'ouvre sur cette paire sur 180 jours, dépliée, avec un
 bouton Show every pair pour en sortir. Un daemon qui n'a poussé aucune corrélation le dit, pour qu'un bloc

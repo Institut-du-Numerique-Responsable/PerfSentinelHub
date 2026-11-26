@@ -297,7 +297,9 @@ analysis on the trace of one finding of the pair's last co-occurrence, with the 
 click away in the banner.
 
 An unfolded incident lists the correlations active during it: the episodes of its daemon that
-overlap the incident's window, up to its end once it has one, each with a link to every episode of
+overlap the incident's window, up to its end once it has one, and that involve its service on
+either side, in its namespace when the incident names one (a side with no grouping value stays),
+each with a link to every episode of
 its pair. That link, `#/correlations?pair_key=<key>`, is the one the Grafana correlations table
 uses too: the screen opens on that pair over 180 days, unfolded, with a Show every pair button
 to leave it. A daemon that pushed no correlation at all says so, so an empty block never reads as

@@ -12,6 +12,9 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ### Fixed
 
+- An unfolded incident's correlations keep the episodes that involve its service, on either side,
+  and its namespace when the incident names one. They listed every episode of the daemon that
+  overlapped the window, thousands on a busy fleet and none of them about the incident.
 - The link level select of an unfolded incident no longer drops below the search field once the
   match count shows under it: both fields line up at the top.
 
