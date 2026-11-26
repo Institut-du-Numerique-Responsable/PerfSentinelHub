@@ -4683,7 +4683,7 @@ a.chip {
 }
 
 .timeline-episode {
-    fill: var(--strip-pair);
+    fill: var(--brand);
 }
 
 .timeline-axis {
@@ -4736,7 +4736,7 @@ a.chip {
 }
 
 .timeline-key-episode::before {
-    background: var(--strip-pair);
+    background: var(--brand);
 }
 
 .timeline-key-incident::before {
