@@ -1182,7 +1182,8 @@ a.shell-identity[aria-current="page"] {
 .findings-controls {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-end;
+    /* Top, not bottom: the match count under the search field must not push the level select down. */
+    align-items: flex-start;
     gap: 8px 16px;
 }
 

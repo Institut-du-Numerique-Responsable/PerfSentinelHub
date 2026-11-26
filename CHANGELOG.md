@@ -2,6 +2,13 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- The link level select of an unfolded incident no longer drops below the search field once the
+  match count shows under it: both fields line up at the top.
+
 ## [0.22.0] - 2026-11-24
 
 ### Added
