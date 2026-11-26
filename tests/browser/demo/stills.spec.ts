@@ -148,7 +148,7 @@ test("correlations", async ({page}, info) => {
 test("correlations hand an episode's window to a new analysis", async ({page}) => {
     await openPair(page);
     await page.getByRole("link", {name: "Analyse this window"}).first().click();
-    await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=order-svc&pair=[0-9a-f]{32}&source=[^&]+$/);
+    await expect(page).toHaveURL(/#\/new\?from=\d+&to=\d+&service=checkout-svc&pair=[0-9a-f]{32}&source=[^&]+$/);
     await expect(page.locator(".banner", {hasText: "from the correlations screen"})).toBeVisible();
 });
 
@@ -219,7 +219,7 @@ test("correlations an incident cannot show", async ({page}) => {
     await page.goto("/#/incidents");
     await settled(page, "What was already burning");
     await page.locator("button.row-toggle", {hasText: "search-svc"}).click();
-    await expect(page.locator(".incident-correlations", {hasText: "No correlation was active in this window."}))
+    await expect(page.locator(".incident-correlations", {hasText: "No correlation involving search-svc was active in this window."}))
         .toBeVisible({timeout: 15_000});
     await page.locator("button.row-toggle", {hasText: "cache-svc"}).click();
     await expect(page.locator(".incident-correlations",
