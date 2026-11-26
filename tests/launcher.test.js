@@ -1752,6 +1752,33 @@ test("a strip places each span on its range, clipped, and never thinner than thr
         [{x: 160, w: 160}, {x: 0, w: 32}, {x: 576, w: 64}, {x: 256, w: 3}]);
 });
 
+test("a strip starts at its earliest span, less a margin, never before its range", () => {
+    const day = 86_400_000;
+    const now = 200 * day;
+    const range = now - 180 * day;
+    // A week of episodes in a 180-day range: the strip opens a little before the week.
+    const start = PSL.stripStart([{from: now - 7 * day, to: now - 6 * day}, {from: now - day, to: null}], range, now);
+    assert.ok(start < now - 7 * day && start > now - 8 * day, String(start));
+    assert.equal(PSL.stripStart([], range, now), range, "nothing to show keeps the range");
+    assert.equal(PSL.stripStart([{from: range - day, to: now}], range, now), range, "a span before the range clips to it");
+    assert.equal(PSL.stripStart([{from: range - 3 * day, to: range - 2 * day}], range, now), range,
+        "a span that ended before the range does not count");
+});
+
+test("a strip's dated marks stay between its ends, at most four, on round hours or midnights", () => {
+    const from = new Date(2026, 10, 18, 9, 30).getTime();
+    const days = PSL.stripTicks(from, new Date(2026, 10, 25, 9, 30).getTime());
+    assert.ok(days.length >= 1 && days.length <= 4, JSON.stringify(days));
+    for (const tick of days) {
+        assert.ok(tick.at >= 0.12 && tick.at <= 0.88);
+        assert.match(tick.label, /^\d\d-\d\d$/, "a day mark reads the day alone");
+    }
+    const hours = PSL.stripTicks(from, from + 10 * 3_600_000);
+    assert.ok(hours.length >= 1 && hours.length <= 4);
+    assert.match(hours[0].label, /^\d\d-\d\d \d\d:00$/, "an hour mark reads its day and round hour");
+    assert.deepEqual(PSL.stripTicks(from, from), []);
+});
+
 test("a lag keeps its tenth of a second, which dur() would round away", () => {
     assert.equal(PSL.lagText(850), "850 ms");
     assert.equal(PSL.lagText(1200), "1.2 s");

@@ -7057,12 +7057,22 @@
 
     /**
      * The range as a strip: each episode in green, the same daemon's incidents in red behind them.
+     * The strip starts at the earliest of them rather than at the range's start, carries a few
+     * dated marks and a legend, and each bar names its span on hover.
      * @param {Episode[]} episodes
      * @param {Incident[]} incidents
-     * @param {number} fromMs
+     * @param {number} rangeFromMs
      * @param {number} toMs
      */
-    function timelineStrip(episodes, incidents, fromMs, toMs) {
+    function timelineStrip(episodes, incidents, rangeFromMs, toMs) {
+        const incidentSpans = incidents.map(function (incident) {
+            return {from: incident.window_from_ms, to: incidentEnd(incident)};
+        });
+        const episodeSpans = episodes.map(function (episode) {
+            return {from: episode.started_at_ms, to: episode.ended_at_ms};
+        });
+        const fromMs = PSL.stripStart(incidentSpans.concat(episodeSpans), rangeFromMs, toMs);
+        const ticks = PSL.stripTicks(fromMs, toMs);
         const ns = 'http://www.w3.org/2000/svg';
         const strip = document.createElementNS(ns, 'svg');
         strip.setAttribute('viewBox', '0 0 ' + STRIP_WIDTH + ' 30');
@@ -7070,16 +7080,27 @@
         strip.setAttribute('class', 'timeline-strip');
         strip.setAttribute('role', 'img');
         strip.setAttribute('aria-label', t('correlations.strip_label', {
-            episodes: episodes.length, incidents: incidents.length, span: PSL.humanDur(state.correlationFilter.range)
+            episodes: episodes.length, incidents: incidents.length, span: PSL.dur(toMs - fromMs)
         }));
+        ticks.forEach(function (tick) {
+            const line = document.createElementNS(ns, 'line');
+            const x = String(Math.round(tick.at * STRIP_WIDTH));
+            line.setAttribute('x1', x);
+            line.setAttribute('x2', x);
+            line.setAttribute('y1', '0');
+            line.setAttribute('y2', '30');
+            line.setAttribute('class', 'timeline-tick');
+            strip.appendChild(line);
+        });
         /**
          * @param {Array<{x: number, w: number}>} marks
+         * @param {string[]} titles
          * @param {string} className
          * @param {number} y
          * @param {number} height
          */
-        const draw = function (marks, className, y, height) {
-            marks.forEach(function (mark) {
+        const draw = function (marks, titles, className, y, height) {
+            marks.forEach(function (mark, at) {
                 const rect = document.createElementNS(ns, 'rect');
                 rect.setAttribute('x', String(mark.x));
                 rect.setAttribute('width', String(mark.w));
@@ -7087,20 +7108,38 @@
                 rect.setAttribute('height', String(height));
                 rect.setAttribute('rx', '3');
                 rect.setAttribute('class', className);
+                // A mouse reads the span here; a screen reader reads it in the table below.
+                const title = document.createElementNS(ns, 'title');
+                title.textContent = titles[at];
+                rect.appendChild(title);
                 strip.appendChild(rect);
             });
         };
-        draw(PSL.timelineMarks(incidents.map(function (incident) {
-            return {from: incident.window_from_ms, to: incidentEnd(incident)};
-        }), fromMs, toMs, STRIP_WIDTH), 'timeline-incident', 2, 26);
-        draw(PSL.timelineMarks(episodes.map(function (episode) {
-            return {from: episode.started_at_ms, to: episode.ended_at_ms};
-        }), fromMs, toMs, STRIP_WIDTH), 'timeline-episode', 9, 12);
+        draw(PSL.timelineMarks(incidentSpans, fromMs, toMs, STRIP_WIDTH), incidents.map(function (incident) {
+            return t('correlations.strip.incident', {
+                kind: PSL.INCIDENT_KIND_LABEL[incident.kind] || incident.kind,
+                span: PSL.episodeSpan(incident.window_from_ms, incidentEnd(incident))
+            });
+        }), 'timeline-incident', 2, 26);
+        draw(PSL.timelineMarks(episodeSpans, fromMs, toMs, STRIP_WIDTH), episodes.map(function (episode) {
+            return t('correlations.strip.episode', {
+                span: episode.ended_at_ms == null
+                    ? t('correlations.strip.running', {start: PSL.dateTime(episode.started_at_ms)})
+                    : PSL.episodeSpan(episode.started_at_ms, episode.ended_at_ms)
+            });
+        }), 'timeline-episode', 9, 12);
         return el('div', {class: 'timeline'}, [
             strip,
             el('div', {class: 'timeline-axis'}, [
                 el('span', {text: PSL.dateTime(fromMs)}),
+                el('span', {class: 'timeline-ticks', 'aria-hidden': 'true'}, ticks.map(function (tick) {
+                    return el('span', {class: 'timeline-tick-label', style: 'left:' + (tick.at * 100).toFixed(2) + '%', text: tick.label});
+                })),
                 el('span', {text: t('correlations.now')})
+            ]),
+            el('div', {class: 'timeline-legend'}, [
+                el('span', {class: 'timeline-key timeline-key-episode', text: t('correlations.strip.legend_episode')}),
+                el('span', {class: 'timeline-key timeline-key-incident', text: t('correlations.strip.legend_incident')})
             ])
         ]);
     }

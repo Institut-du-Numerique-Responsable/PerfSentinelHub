@@ -1177,6 +1177,11 @@
         'correlations.strip_label': 'Épisodes\u00a0: {episodes}, incidents\u00a0: {incidents}, sur une période de '
             + '{span}',
         'correlations.now': 'maintenant',
+        'correlations.strip.episode': 'Épisode de la paire\u00a0: {span}',
+        'correlations.strip.running': 'depuis le {start}, toujours en cours',
+        'correlations.strip.incident': 'Incident, {kind}\u00a0: {span}',
+        'correlations.strip.legend_episode': 'Épisode de la paire',
+        'correlations.strip.legend_incident': 'Incident du daemon',
         'correlations.no_incident': 'aucun',
         'correlations.explain': 'Expliquer la dernière paire',
         'correlations.incident.title': 'Actives pendant cet incident',

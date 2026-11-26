@@ -10,6 +10,13 @@ All notable changes to PerfSentinelHub are recorded here.
   on a column head adds it as the next sort, or turns it round where it already sorts, and each
   sorted head shows its rank. A plain click still sorts by that column alone.
 
+### Changed
+
+- A correlation pair's strip starts at the earliest episode or incident it shows, a little
+  before, instead of at the range's start, carries up to four dated marks between its ends and a
+  legend, and each bar gives its span on hover. A week of episodes in the 180 days an incident's
+  pair link opens on no longer sits in the strip's last pixels.
+
 ### Fixed
 
 - An unfolded incident's correlations keep the episodes that involve its service, on either side,

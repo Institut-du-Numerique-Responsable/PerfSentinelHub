@@ -4672,12 +4672,61 @@ a.chip {
 }
 
 .timeline-axis {
+    position: relative;
     display: flex;
     justify-content: space-between;
     margin-top: 4px;
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-3);
+}
+
+/* The dated marks sit where their line crosses the strip, between the two ends. */
+.timeline-ticks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.timeline-tick-label {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.timeline-tick {
+    stroke: var(--border);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.timeline-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-2);
+}
+
+.timeline-key::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
+.timeline-key-episode::before {
+    background: var(--brand);
+}
+
+.timeline-key-incident::before {
+    height: 12px;
+    background: var(--crit-bg);
 }
 
 /* An incident's correlations, under its frozen findings and set apart from them. */

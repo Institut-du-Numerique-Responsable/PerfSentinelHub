@@ -314,7 +314,10 @@ cherché des deux côtés, un daemon et un interrupteur "active now only" resser
 </picture>
 
 Une ligne se déplie en une frise de la période, chaque épisode en vert sur les incidents du même
-daemon en rouge, puis la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
+daemon en rouge, une légende dessous et chaque barre donnant sa durée au survol. La frise commence
+au premier épisode ou incident qu'elle montre, un peu avant, plutôt qu'au début de la période, pour
+qu'une semaine d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, et jusqu'à
+quatre repères datés se placent entre ses bouts. Vient ensuite la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
 ouvrent l'écran des incidents sur cet incident. Analyse this window ouvre New analysis sur la
 fenêtre de l'épisode, élargie d'une minute de chaque côté, et sur le service du côté qui se
 déclenche en premier, comme le fait l'écran des incidents. Explain the last pair, affiché quand le

@@ -1568,6 +1568,79 @@
     }
 
     /**
+     * Where a strip starts: at the earliest span it shows, less a small margin, rather than at the
+     * range's start, so a week of episodes in a 180-day range is not crushed into its last pixels.
+     * Never before the range's start, and the range's start when no span falls in it.
+     * @param {Array<{from: number, to: number | null}>} spans
+     * @param {number} fromMs
+     * @param {number} toMs
+     * @returns {number}
+     */
+    function stripStart(spans, fromMs, toMs) {
+        const starts = spans.filter(function (span) {
+            return span.from < toMs && (span.to == null || span.to >= fromMs);
+        }).map(function (span) {
+            return Math.max(fromMs, span.from);
+        });
+        if (starts.length === 0) return fromMs;
+        const earliest = Math.min.apply(null, starts);
+        return Math.max(fromMs, earliest - Math.max((toMs - earliest) * 0.05, 30 * 60000));
+    }
+
+    const STRIP_TICK_STEPS = [1, 2, 3, 6, 12, 24, 48, 168, 336, 720].map(function (hours) {
+        return hours * 3600000;
+    });
+
+    /**
+     * Up to four dated marks between a strip's ends, on round local hours or midnights, none so
+     * close to an end that its label would run into the end's own.
+     * @param {number} fromMs
+     * @param {number} toMs
+     * @returns {Array<{at: number, label: string}>} at: where the mark sits, 0 to 1
+     */
+    function stripTicks(fromMs, toMs) {
+        const span = toMs - fromMs;
+        if (span <= 0) return [];
+        const step = STRIP_TICK_STEPS.find(function (candidate) {
+            return span / candidate <= 4;
+        }) || STRIP_TICK_STEPS[STRIP_TICK_STEPS.length - 1];
+        const day = step >= 86400000;
+        const midnight = new Date(fromMs);
+        midnight.setHours(0, 0, 0, 0);
+        let mark = midnight.getTime();
+        while (mark <= fromMs) mark += day ? 86400000 : step;
+        /** @type {Array<{at: number, label: string}>} */
+        const ticks = [];
+        for (; mark < toMs; mark = day ? nextMidnight(mark, step / 86400000) : mark + step) {
+            const at = (mark - fromMs) / span;
+            if (at < 0.12 || at > 0.88) continue;
+            ticks.push({at: at, label: day ? dayMonth(mark) : dayMonth(mark) + ' ' + time(mark)});
+        }
+        return ticks;
+    }
+
+    /**
+     * A local midnight some days later, by the calendar, so a change of clock does not drift it.
+     * @param {number} ms
+     * @param {number} days
+     */
+    function nextMidnight(ms, days) {
+        const d = new Date(ms);
+        d.setDate(d.getDate() + days);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime();
+    }
+
+    /**
+     * A day and month: `25/11` in French, `11-25` in English, as dateTime writes them.
+     * @param {number} ms
+     */
+    function dayMonth(ms) {
+        if (LANG !== 'fr') return dtHuman(ms).slice(5, 10);
+        return new Intl.DateTimeFormat('fr-FR', {day: '2-digit', month: '2-digit'}).format(new Date(ms));
+    }
+
+    /**
      * A median lag, often under a second and seldom over a minute: dur() rounds to whole
      * seconds, which would print 1.2 s as 1 s.
      * @param {number | null | undefined} ms
@@ -5462,6 +5535,8 @@
         pairTraceHash,
         readTraceHandoff,
         timelineMarks,
+        stripStart,
+        stripTicks,
         lagText,
         episodeSpan,
         ackRouteHash,
