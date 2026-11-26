@@ -1278,6 +1278,27 @@
     }
 
     /**
+     * The columns a click on a head leaves: alone, turned round when it already sorted alone, or
+     * with Shift after the others, turned round where it already sorts. Counts and severity
+     * start worst first, the rest A to Z.
+     * @param {Array<{key: FindingSortKey, dir: 'asc' | 'desc'}>} sorts
+     * @param {FindingSortKey} key
+     * @param {boolean} shift
+     * @returns {Array<{key: FindingSortKey, dir: 'asc' | 'desc'}>}
+     */
+    function nextFindingSort(sorts, key, shift) {
+        const rank = sorts.findIndex(function (sort) { return sort.key === key; });
+        /** @type {{key: FindingSortKey, dir: 'asc' | 'desc'} | null} */
+        const flipped = rank >= 0 ? {key: key, dir: sorts[rank].dir === 'asc' ? 'desc' : 'asc'} : null;
+        /** @type {{key: FindingSortKey, dir: 'asc' | 'desc'}} */
+        const fresh = {key: key, dir: key === 'severity' || key === 'link' || key === 'impact' || key === 'seen' ? 'desc' : 'asc'};
+        if (!shift) return [flipped && sorts.length === 1 ? flipped : fresh];
+        return flipped
+            ? sorts.map(function (other, at) { return at === rank ? flipped : other; })
+            : sorts.concat([fresh]);
+    }
+
+    /**
      * How a frozen finding's first sighting reads against its incident. An OOM
      * kill ends in a restart and a deploy is its own event, so "after the
      * restart" is said only where a restart happened.
@@ -1587,6 +1608,26 @@
         return Math.max(fromMs, earliest - Math.max((toMs - earliest) * 0.05, 30 * 60000));
     }
 
+    /**
+     * A pair's strip: it starts at the pair's own episodes. The incidents come from the daemon's
+     * newest page, not only from the pair's services, so an old unrelated one would otherwise
+     * stretch the strip back to it. The incidents kept are those the strip reaches, so its label
+     * and its legend count what it draws.
+     * @param {Array<{from: number, to: number | null}>} episodes
+     * @param {Array<{from: number, to: number | null}>} incidents
+     * @param {number} fromMs
+     * @param {number} toMs
+     * @returns {{from: number, incidents: number[]}} incidents: the indexes of those kept
+     */
+    function stripWindow(episodes, incidents, fromMs, toMs) {
+        const from = stripStart(episodes, fromMs, toMs);
+        const kept = [];
+        incidents.forEach(function (span, at) {
+            if (spansOverlap(span.from, span.to, from, toMs)) kept.push(at);
+        });
+        return {from: from, incidents: kept};
+    }
+
     const STRIP_TICK_STEPS = [1, 2, 3, 6, 12, 24, 48, 168, 336, 720].map(function (hours) {
         return hours * 3600000;
     });
@@ -1608,7 +1649,7 @@
         const midnight = new Date(fromMs);
         midnight.setHours(0, 0, 0, 0);
         let mark = midnight.getTime();
-        while (mark <= fromMs) mark += day ? 86400000 : step;
+        while (mark <= fromMs) mark = day ? nextMidnight(mark, 1) : mark + step;
         /** @type {Array<{at: number, label: string}>} */
         const ticks = [];
         for (; mark < toMs; mark = day ? nextMidnight(mark, step / 86400000) : mark + step) {
@@ -1679,8 +1720,9 @@
 
     /**
      * The episodes that concern an incident: a side on its service, and in its namespace when it
-     * names one. A side with no grouping value cannot be placed in a namespace, so it stays.
-     * @param {Array<{source: {service: string, grouping_value: string | null}, target: {service: string, grouping_value: string | null}}>} episodes
+     * names one. A side grouped on no namespace, with no grouping value or with a daemon whose
+     * first grouping attribute is another one, cannot be placed in a namespace, so it stays.
+     * @param {Array<{source: {service: string, grouping_key: string | null, grouping_value: string | null}, target: {service: string, grouping_key: string | null, grouping_value: string | null}}>} episodes
      * @param {{service: string, namespace?: string}} incident
      * @returns {Array<any>}
      */
@@ -1688,7 +1730,8 @@
         return episodes.filter(function (episode) {
             return [episode.source, episode.target].some(function (side) {
                 return side.service === incident.service
-                    && (!incident.namespace || side.grouping_value == null || side.grouping_value === incident.namespace);
+                    && (!incident.namespace || side.grouping_key !== 'k8s.namespace.name'
+                        || side.grouping_value === incident.namespace);
             });
         });
     }
@@ -5505,6 +5548,7 @@
         incidentCapture,
         findingPhase,
         sortFindings,
+        nextFindingSort,
         linkReasonParts,
         saturationPercent,
         linkChipLevel,
@@ -5537,6 +5581,7 @@
         readTraceHandoff,
         timelineMarks,
         stripStart,
+        stripWindow,
         stripTicks,
         lagText,
         episodeSpan,

@@ -6716,20 +6716,15 @@
             // Idle heads carry both arrows, or only the sorted column would read as sortable.
             svg([['path', {d: sort ? (sort.dir === 'asc' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6') : 'M8 9l4-4 4 4M8 15l4 4 4-4'}]], 11),
             sort && sorts.length > 1
-                ? el('span', {class: 'sort-rank', text: String(rank + 1), title: t('incidents.sort.rank', {rank: rank + 1})})
+                ? el('span', {class: 'sort-rank', 'aria-hidden': 'true', text: String(rank + 1), title: t('incidents.sort.rank', {rank: rank + 1})})
+                : null,
+            // aria-sort names the first column's direction; the others say their rank and direction here.
+            sort && rank > 0
+                ? el('span', {class: 'visually-hidden', text: ' ' + t('incidents.sort.rank_' + sort.dir, {rank: rank + 1})})
                 : null
         ]);
         button.addEventListener('click', function (event) {
-            const flipped = sort ? {key: key, dir: sort.dir === 'asc' ? 'desc' : 'asc'} : null;
-            const fresh = {key: key, dir: key === 'severity' || key === 'link' || key === 'impact' || key === 'seen' ? 'desc' : 'asc'};
-            if (event.shiftKey) {
-                // Shift adds the column after the others, or turns it round where it already sorts.
-                state.findingSort = flipped
-                    ? sorts.map(function (other, at) { return at === rank ? flipped : other; })
-                    : sorts.concat([fresh]);
-            } else {
-                state.findingSort = [flipped && sorts.length === 1 ? flipped : fresh];
-            }
+            state.findingSort = PSL.nextFindingSort(sorts, key, event.shiftKey);
             // The ids come from the daemon: escaped, so a quote in one cannot break the selector.
             renderFocus('[data-sort="' + CSS.escape(id) + '"]');
         });
@@ -7050,29 +7045,38 @@
                 && PSL.spansOverlap(incident.window_from_ms, incidentEnd(incident), fromMs, toMs);
         });
         const guide = foldGuide('correlations.panel', state.panelOpen['pair:' + pair.key] === true);
+        // A pair read a while ago can hold an episode that has since left the range: the strip,
+        // which starts at what it shows, would otherwise pin it to its left edge.
+        const episodes = pair.episodes.filter(function (episode) {
+            return PSL.spansOverlap(episode.started_at_ms, episode.ended_at_ms, fromMs, toMs);
+        });
         return el('div', {class: 'daemon-panel', ...guide}, [
-            timelineStrip(pair.episodes, incidents, fromMs, toMs),
+            timelineStrip(episodes, incidents, fromMs, toMs),
             el('div', {class: 'sources-wrap'}, [episodesTable(pair.episodes, incidents)])
         ]);
     }
 
     /**
-     * The range as a strip: each episode in green, the same daemon's incidents in red behind them.
-     * The strip starts at the earliest of them rather than at the range's start, carries a few
-     * dated marks and a legend, and each bar names its span on hover.
+     * The range as a strip: each episode in green, the same daemon's incidents behind them coloured by kind.
+     * The strip starts at the earliest episode rather than at the range's start, keeps the incidents
+     * it reaches, carries a few dated marks and a legend, and each bar names its span on hover.
      * @param {Episode[]} episodes
-     * @param {Incident[]} incidents
+     * @param {Incident[]} rangeIncidents the daemon's incidents in the range
      * @param {number} rangeFromMs
      * @param {number} toMs
      */
-    function timelineStrip(episodes, incidents, rangeFromMs, toMs) {
-        const incidentSpans = incidents.map(function (incident) {
-            return {from: incident.window_from_ms, to: incidentEnd(incident)};
-        });
+    function timelineStrip(episodes, rangeIncidents, rangeFromMs, toMs) {
         const episodeSpans = episodes.map(function (episode) {
             return {from: episode.started_at_ms, to: episode.ended_at_ms};
         });
-        const fromMs = PSL.stripStart(incidentSpans.concat(episodeSpans), rangeFromMs, toMs);
+        const shown = PSL.stripWindow(episodeSpans, rangeIncidents.map(function (incident) {
+            return {from: incident.window_from_ms, to: incidentEnd(incident)};
+        }), rangeFromMs, toMs);
+        const fromMs = shown.from;
+        const incidents = shown.incidents.map(function (at) { return rangeIncidents[at]; });
+        const incidentSpans = incidents.map(function (incident) {
+            return {from: incident.window_from_ms, to: incidentEnd(incident)};
+        });
         const ticks = PSL.stripTicks(fromMs, toMs);
         const ns = 'http://www.w3.org/2000/svg';
         const strip = document.createElementNS(ns, 'svg');
@@ -7255,7 +7259,7 @@
             + '&from=' + incident.window_from_ms + '&to=' + incidentEnd(incident), 0)
             .then(function (all) {
                 const rows = PSL.incidentEpisodes(all, incident);
-                if (rows.length > 0) return {rows: rows, pushes: true};
+                if (all.length > 0) return {rows: rows, pushes: true};
                 return getJson(scope + '&limit=1').then(function (/** @type {Episode[]} */ any) {
                     return {rows: rows, pushes: any.length > 0};
                 });

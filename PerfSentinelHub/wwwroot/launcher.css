@@ -4710,6 +4710,14 @@ a.chip {
     white-space: nowrap;
 }
 
+/* The marks sit at fractions of the strip and their labels are a fixed width: on a narrow
+   strip they would run into the start's date, so only the lines stay. */
+@container (max-width: 760px) {
+    .timeline-ticks {
+        display: none;
+    }
+}
+
 .timeline-tick {
     stroke: var(--border);
     stroke-width: 1;

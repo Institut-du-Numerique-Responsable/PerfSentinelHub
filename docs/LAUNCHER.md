@@ -290,9 +290,10 @@ service matched on either side, a daemon and an "active now only" switch narrow 
 
 A row unfolds into a strip of the range, each episode in green over the same daemon's incidents,
 coloured by kind as the incident chips are (an OOM kill red, a memory saturation orange, a restart
-or a deploy blue, any other grey), a legend under it naming the kinds shown and each bar giving its span on hover. The strip starts at the earliest
-episode or incident it shows, a little before, rather than at the range's start, so a week of
-episodes in 180 days is not crushed into its last pixels, and up to four dated marks sit between
+or a deploy blue, any other grey), a legend under it naming the kinds shown and each bar giving its span on hover. The strip starts at the pair's earliest
+episode, a little before, rather than at the range's start, so a week of episodes in 180 days is
+not crushed into its last pixels, even when the daemon had an older incident in the range: the
+strip only shows the incidents it reaches, and up to four dated marks sit between
 its ends. Then comes the list of its episodes: span, duration, peaks and the incidents each one overlaps,
 which open the incidents screen on that incident. Analyse this window opens New analysis on the
 episode's window, a minute wider on each side, and on the service of the side that fires first, as
@@ -302,7 +303,7 @@ click away in the banner.
 
 An unfolded incident lists the correlations active during it: the episodes of its daemon that
 overlap the incident's window, up to its end once it has one, and that involve its service on
-either side, in its namespace when the incident names one (a side with no grouping value stays),
+either side, in its namespace when the incident names one (a side grouped on no `k8s.namespace.name` stays),
 each with a link to every episode of
 its pair. That link, `#/correlations?pair_key=<key>`, is the one the Grafana correlations table
 uses too: the screen opens on that pair over 180 days, unfolded, with a Show every pair button

@@ -317,8 +317,9 @@ Une ligne se déplie en une frise de la période, chaque épisode en vert sur le
 daemon, colorés par type comme leurs pastilles (un OOM kill en rouge, une saturation mémoire en
 orange, un redémarrage ou un déploiement en bleu, tout autre en gris), une légende dessous qui
 nomme les types présents et chaque barre donnant sa durée au survol. La frise commence
-au premier épisode ou incident qu'elle montre, un peu avant, plutôt qu'au début de la période, pour
-qu'une semaine d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, et jusqu'à
+au premier épisode de la paire, un peu avant, plutôt qu'au début de la période, pour qu'une semaine
+d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, même quand le daemon a eu un
+incident plus ancien dans la période : la frise ne montre que les incidents qu'elle atteint, et jusqu'à
 quatre repères datés se placent entre ses bouts. Vient ensuite la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
 ouvrent l'écran des incidents sur cet incident. Analyse this window ouvre New analysis sur la
 fenêtre de l'épisode, élargie d'une minute de chaque côté, et sur le service du côté qui se
@@ -328,8 +329,8 @@ co-occurrence de la paire, l'autre trace restant à un clic dans le bandeau.
 
 Un incident déplié liste les corrélations actives pendant sa durée : les épisodes de son daemon qui
 recouvrent la fenêtre de l'incident, jusqu'à sa fin dès qu'il en a une, et impliquent son service
-d'un côté ou de l'autre, dans son namespace quand l'incident en nomme un (un côté sans valeur de
-regroupement reste affiché), chacun avec un lien vers
+d'un côté ou de l'autre, dans son namespace quand l'incident en nomme un (un côté qui n'est pas
+regroupé sur `k8s.namespace.name` reste affiché), chacun avec un lien vers
 tous les épisodes de sa paire. Ce lien, `#/correlations?pair_key=<clé>`, est aussi celui du tableau
 des corrélations de Grafana : l'écran s'ouvre sur cette paire sur 180 jours, dépliée, avec un
 bouton Show every pair pour en sortir. Un daemon qui n'a poussé aucune corrélation le dit, pour qu'un bloc
