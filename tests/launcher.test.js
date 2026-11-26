@@ -1770,7 +1770,7 @@ test("a strip's dated marks stay between its ends, at most four, on round hours 
     const days = PSL.stripTicks(from, new Date(2026, 10, 25, 9, 30).getTime());
     assert.ok(days.length >= 1 && days.length <= 4, JSON.stringify(days));
     for (const tick of days) {
-        assert.ok(tick.at >= 0.12 && tick.at <= 0.88);
+        assert.ok(tick.at >= 0.22 && tick.at <= 0.88);
         assert.match(tick.label, /^\d\d-\d\d$/, "a day mark reads the day alone");
     }
     const hours = PSL.stripTicks(from, from + 10 * 3_600_000);

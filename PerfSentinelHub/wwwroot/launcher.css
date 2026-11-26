@@ -4663,8 +4663,10 @@ a.chip {
     background: var(--surface);
 }
 
+/* Saturated enough to read as a few pixels wide on a week, still behind the episodes. */
 .timeline-incident {
-    fill: var(--crit-bg);
+    fill: var(--crit-fg);
+    fill-opacity: .65;
 }
 
 .timeline-episode {
@@ -4726,7 +4728,8 @@ a.chip {
 
 .timeline-key-incident::before {
     height: 12px;
-    background: var(--crit-bg);
+    background: var(--crit-fg);
+    opacity: .65;
 }
 
 /* An incident's correlations, under its frozen findings and set apart from them. */

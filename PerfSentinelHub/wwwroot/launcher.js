@@ -1613,7 +1613,8 @@
         const ticks = [];
         for (; mark < toMs; mark = day ? nextMidnight(mark, step / 86400000) : mark + step) {
             const at = (mark - fromMs) / span;
-            if (at < 0.12 || at > 0.88) continue;
+            // The start's label is a whole date and time, the end's a word: more room on the left.
+            if (at < 0.22 || at > 0.88) continue;
             ticks.push({at: at, label: day ? dayMonth(mark) : dayMonth(mark) + ' ' + time(mark)});
         }
         return ticks;
