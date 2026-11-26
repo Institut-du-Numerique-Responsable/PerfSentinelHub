@@ -259,7 +259,8 @@ même endpoint en porte souvent plusieurs, et son impact estimé, les opération
 évitables du dashboard des findings : traces vues fois opérations en trop par trace, un
 tiret quand le daemon a le calcul green coupé. Les findings s'ouvrent du plus grave au
 moins grave, puis du plus vu au moins vu, un clic ou une touche sur l'en-tête d'une colonne
-les trie selon elle, et un champ au-dessus du tableau les restreint par endpoint ou par
+les trie selon elle, Maj en plus l'ajoute comme tri suivant, son rang affiché à côté de la
+flèche, et un champ au-dessus du tableau les restreint par endpoint ou par
 gabarit. Une colonne Lien donne à chaque finding un niveau, fort, moyen ou faible, avec ses
 raisons dans l'infobulle et pour les lecteurs d'écran, ou dit qu'il est en cours d'évaluation : elle
 indique à quel point un finding est suspect, pas une cause prouvée. Les findings s'ouvrent par ce
@@ -313,7 +314,13 @@ cherché des deux côtés, un daemon et un interrupteur "active now only" resser
 </picture>
 
 Une ligne se déplie en une frise de la période, chaque épisode en vert sur les incidents du même
-daemon en rouge, puis la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
+daemon, colorés par type comme leurs pastilles (un OOM kill en rouge, une saturation mémoire en
+orange, un redémarrage ou un déploiement en bleu, tout autre en gris), une légende dessous qui
+nomme les types présents et chaque barre donnant sa durée au survol. La frise commence
+au premier épisode de la paire, un peu avant, plutôt qu'au début de la période, pour qu'une semaine
+d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, même quand le daemon a eu un
+incident plus ancien dans la période : la frise ne montre que les incidents qu'elle atteint, et jusqu'à
+quatre repères datés se placent entre ses bouts. Vient ensuite la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
 ouvrent l'écran des incidents sur cet incident. Analyse this window ouvre New analysis sur la
 fenêtre de l'épisode, élargie d'une minute de chaque côté, et sur le service du côté qui se
 déclenche en premier, comme le fait l'écran des incidents. Explain the last pair, affiché quand le
@@ -321,7 +328,9 @@ Hub a un backend de traces, ouvre New analysis sur la trace d'un finding de la d
 co-occurrence de la paire, l'autre trace restant à un clic dans le bandeau.
 
 Un incident déplié liste les corrélations actives pendant sa durée : les épisodes de son daemon qui
-recouvrent la fenêtre de l'incident, jusqu'à sa fin dès qu'il en a une, chacun avec un lien vers
+recouvrent la fenêtre de l'incident, jusqu'à sa fin dès qu'il en a une, et impliquent son service
+d'un côté ou de l'autre, dans son namespace quand l'incident en nomme un (un côté qui n'est pas
+regroupé sur `k8s.namespace.name` reste affiché), chacun avec un lien vers
 tous les épisodes de sa paire. Ce lien, `#/correlations?pair_key=<clé>`, est aussi celui du tableau
 des corrélations de Grafana : l'écran s'ouvre sur cette paire sur 180 jours, dépliée, avec un
 bouton Show every pair pour en sortir. Un daemon qui n'a poussé aucune corrélation le dit, pour qu'un bloc

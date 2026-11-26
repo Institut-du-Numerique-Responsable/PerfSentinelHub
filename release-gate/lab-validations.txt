@@ -502,3 +502,13 @@ v0.21.0	1e02233	2026-11-23	PASS
 # lineage-mutation 7 each, derived-status, plugin-contract, retention-purge and
 # source-reachability 6 each, incidents-push 4. All PASS, no skip.
 v0.22.0	093cde1	2026-11-24	PASS
+# v0.23.0 targeted pass on a local Release build of fix/incident-filters-alignment
+# (379ee715) and the perf-sentinel 0.50.0 macos-arm64 release binary, no cluster,
+# lab at origin/main (2c6e8b2). The release changes the launcher only: an
+# incident's findings sort by several columns, its correlations keep to its
+# service and namespace, and a pair's strip starts at the pair's episodes. No
+# scenario drives the launcher: launcher.test.js and the Playwright guide walk
+# (188 passed) cover it. hub-recap (21 checks), hub-detection-volume (11) and
+# hub-card (24). All PASS, no skip. Not run: the cluster hub scenarios, the k3d
+# cluster being down, with no server-side change for them to exercise.
+v0.23.0	2c6e8b2	2026-11-26	PASS

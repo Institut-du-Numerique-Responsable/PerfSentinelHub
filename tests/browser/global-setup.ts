@@ -338,7 +338,8 @@ async function seedCorrelations(importKey: string): Promise<void> {
         if (!found) throw new Error(`daemon-findings.json holds no ${type} on ${service}`);
         return {finding_type: type, service, template: found.finding.pattern?.template ?? "", grouping_key: null};
     };
-    const pool = {source: side("n_plus_one_sql", "order-svc"), target: side("pool_saturation", "orders-svc")};
+    // The pair runs through the OOM kill on checkout-svc: an incident lists only the episodes on its service.
+    const pool = {source: side("excessive_fanout", "checkout-svc"), target: side("pool_saturation", "orders-svc")};
     const slow = {source: side("slow_http", "reports-svc"), target: side("n_plus_one_http", "order-svc")};
     const quiet = {source: side("redundant_sql", "cache-svc"), target: side("slow_sql", "reports-svc")};
     // An ended episode that straddles midnight prints its end with the full date, which widens the

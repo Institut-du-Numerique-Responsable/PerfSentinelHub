@@ -1441,6 +1441,34 @@ test("an incident's findings sort by the column asked, worst and most seen first
     assert.equal(rows[0].finding.source_endpoint, "/b", "the input is left in its order");
 });
 
+test("an incident's findings sort by several columns in turn, the first one first", () => {
+    const row = (endpoint, level, extra, seen) => ({
+        seen_count: seen, first_seen_ms: 0, link: level ? {level} : undefined,
+        finding: {type: "n_plus_one_sql", severity: "warning", source_endpoint: endpoint,
+            green_impact: {estimated_extra_io_ops: extra}}
+    });
+    const rows = [row("/m1", "medium", 1, 1), row("/s1", "strong", 1, 1), row("/m9", "medium", 9, 1), row("/s5", "strong", 5, 1)];
+    const endpoints = list => list.map(r => r.finding.source_endpoint);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, [{key: "link", dir: "desc"}, {key: "impact", dir: "desc"}])),
+        ["/s5", "/s1", "/m9", "/m1"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, [{key: "link", dir: "desc"}, {key: "impact", dir: "asc"}])),
+        ["/s1", "/s5", "/m1", "/m9"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, [{key: "link", dir: "desc"}])),
+        endpoints(PSL.sortFindings(rows, "link", "desc")), "one column in a list reads as that column alone");
+});
+
+test("a click on a findings head sorts by it alone, Shift adds it or turns it round", () => {
+    const link = [{key: "link", dir: "desc"}];
+    assert.deepEqual(PSL.nextFindingSort(link, "endpoint", false), [{key: "endpoint", dir: "asc"}]);
+    assert.deepEqual(PSL.nextFindingSort(link, "link", false), [{key: "link", dir: "asc"}], "alone, it turns round");
+    const two = PSL.nextFindingSort(link, "impact", true);
+    assert.deepEqual(two, [{key: "link", dir: "desc"}, {key: "impact", dir: "desc"}]);
+    assert.deepEqual(PSL.nextFindingSort(two, "impact", true), [{key: "link", dir: "desc"}, {key: "impact", dir: "asc"}],
+        "Shift turns a sorted column round in place");
+    assert.deepEqual(PSL.nextFindingSort(two, "link", false), [{key: "link", dir: "desc"}],
+        "a plain click on one of several starts again from it alone");
+});
+
 test("the folded incident filters say how many of them are in force", () => {
     const filter = {service: "a", kind: "oom_kill", namespace: "", environment: "", source_id: ""};
     assert.equal(PSL.moreFiltersLabel(filter), "More filters", "service and kind stay in sight");
@@ -1736,6 +1764,60 @@ test("a strip places each span on its range, clipped, and never thinner than thr
         [{x: 160, w: 160}, {x: 0, w: 32}, {x: 576, w: 64}, {x: 256, w: 3}]);
 });
 
+test("a strip starts at its earliest span, less a margin, never before its range", () => {
+    const day = 86_400_000;
+    const now = 200 * day;
+    const range = now - 180 * day;
+    // A week of episodes in a 180-day range: the strip opens a little before the week.
+    const start = PSL.stripStart([{from: now - 7 * day, to: now - 6 * day}, {from: now - day, to: null}], range, now);
+    assert.ok(start < now - 7 * day && start > now - 8 * day, String(start));
+    assert.equal(PSL.stripStart([], range, now), range, "nothing to show keeps the range");
+    assert.equal(PSL.stripStart([{from: range - day, to: now}], range, now), range, "a span before the range clips to it");
+    assert.equal(PSL.stripStart([{from: range - 3 * day, to: range - 2 * day}], range, now), range,
+        "a span that ended before the range does not count");
+});
+
+test("a pair's strip starts at its episodes and keeps only the incidents it reaches", () => {
+    const day = 86_400_000;
+    const now = 200 * day;
+    const range = now - 180 * day;
+    const episodes = [{from: now - 7 * day, to: now - 6 * day}];
+    // An unrelated incident 170 days back must not stretch the strip back to it.
+    const incidents = [{from: now - 170 * day, to: now - 170 * day + 3600000}, {from: now - 7 * day, to: null}];
+    const strip = PSL.stripWindow(episodes, incidents, range, now);
+    assert.equal(strip.from, PSL.stripStart(episodes, range, now));
+    assert.deepEqual(strip.incidents, [1]);
+    // No episode in the range: the strip is the range, and every incident in it shows.
+    assert.deepEqual(PSL.stripWindow([], incidents, range, now), {from: range, incidents: [0, 1]});
+});
+
+test("a strip's dated marks stay between its ends, at most four, on round hours or midnights", () => {
+    const from = new Date(2026, 10, 18, 9, 30).getTime();
+    const days = PSL.stripTicks(from, new Date(2026, 10, 25, 9, 30).getTime());
+    assert.ok(days.length >= 1 && days.length <= 4, JSON.stringify(days));
+    for (const tick of days) {
+        assert.ok(tick.at >= 0.22 && tick.at <= 0.88);
+        assert.match(tick.label, /^\d\d-\d\d$/, "a day mark reads the day alone");
+    }
+    const hours = PSL.stripTicks(from, from + 10 * 3_600_000);
+    assert.ok(hours.length >= 1 && hours.length <= 4);
+    assert.match(hours[0].label, /^\d\d-\d\d \d\d:00$/, "an hour mark reads its day and round hour");
+    assert.deepEqual(PSL.stripTicks(from, from), []);
+});
+
+test("a strip's first midnight mark holds on a day the clock goes back", () => {
+    const kept = process.env.TZ;
+    try {
+        process.env.TZ = "Europe/Paris";
+        // 25 October 2026 lasts 25 hours: a day of milliseconds after its midnight is still the 25th.
+        const from = new Date(2026, 9, 25, 3, 0).getTime();
+        const ticks = PSL.stripTicks(from, new Date(2026, 9, 28, 3, 0).getTime());
+        assert.equal(ticks[0].label, "10-26", JSON.stringify(ticks));
+    } finally {
+        if (kept === undefined) delete process.env.TZ; else process.env.TZ = kept;
+    }
+});
+
 test("a lag keeps its tenth of a second, which dur() would round away", () => {
     assert.equal(PSL.lagText(850), "850 ms");
     assert.equal(PSL.lagText(1200), "1.2 s");
@@ -1761,6 +1843,24 @@ test("a link to one pair carries its key in the correlations route", () => {
 test("an incident's correlations are cached per window, so a later end reads again", () => {
     assert.equal(PSL.correlationWindowKey("k", 1000, 5000), PSL.correlationWindowKey("k", 1000, 5000));
     assert.notEqual(PSL.correlationWindowKey("k", 1000, 5000), PSL.correlationWindowKey("k", 1000, 9000));
+});
+
+test("an incident's correlations keep the episodes on its service, in its namespace", () => {
+    const side = (service, ns, key = ns == null ? null : "k8s.namespace.name") =>
+        ({service, grouping_key: key, grouping_value: ns});
+    const ep = (id, source, target) => ({id, source, target});
+    const episodes = [
+        ep("other", side("web-crm", "a"), side("referentiel", "a")),
+        ep("target-side", side("web-crm", "a"), side("web-report", "a")),
+        ep("other-ns", side("web-report", "b"), side("web-crm", "b")),
+        ep("no-grouping", side("web-report", null), side("web-crm", null)),
+        ep("team-grouping", side("web-report", "payments", "team"), side("web-crm", "payments", "team"))
+    ];
+    const ids = list => list.map(e => e.id);
+    assert.deepEqual(ids(PSL.incidentEpisodes(episodes, {service: "web-report", namespace: "a"})),
+        ["target-side", "no-grouping", "team-grouping"], "a grouping on another attribute names no namespace");
+    assert.deepEqual(ids(PSL.incidentEpisodes(episodes, {service: "web-report"})),
+        ["target-side", "other-ns", "no-grouping", "team-grouping"], "no namespace keeps every namespace");
 });
 
 test("a pair's accessible name says both finding types and both services", () => {

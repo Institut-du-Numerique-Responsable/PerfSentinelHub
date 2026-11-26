@@ -2,6 +2,32 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [0.23.0] - 2026-11-26
+
+### Added
+
+- An incident's frozen findings sort by several columns: Shift and a click, or Shift and Enter,
+  on a column head adds it as the next sort, or turns it round where it already sorts, and each
+  sorted head shows its rank, which a screen reader hears with its direction. A plain click
+  still sorts by that column alone.
+
+### Changed
+
+- A correlation pair's strip starts at the pair's earliest episode, a little before, instead
+  of at the range's start, shows only the incidents it reaches, carries up to four dated marks
+  between its ends and a legend, and each bar gives its span on hover. The incidents behind the pair's green episodes
+  take their kind's colour, an OOM kill red and a memory saturation orange, the legend naming the
+  kinds the strip shows. A week of episodes in the 180 days an incident's
+  pair link opens on no longer sits in the strip's last pixels.
+
+### Fixed
+
+- An unfolded incident's correlations keep the episodes that involve its service, on either side,
+  and its namespace when the incident names one. They listed every episode of the daemon that
+  overlapped the window, thousands on a busy fleet and none of them about the incident.
+- The link level select of an unfolded incident no longer drops below the search field once the
+  match count shows under it: both fields line up at the top.
+
 ## [0.22.0] - 2026-11-24
 
 ### Added
