@@ -6788,6 +6788,7 @@
     const EPISODE_COLUMNS = ['episode', 'lasted', 'peak_conf', 'peak_co', 'incidents', ''];
     const EPISODE_COLUMNS_RIGHT = ['lasted', 'peak_conf', 'peak_co'];
     const STRIP_WIDTH = 640;
+    const STRIP_KINDS = ['oom_kill', 'memory_saturation', 'restart', 'deploy', 'other'];
 
     function correlationsPath() {
         const filter = state.correlationFilter;
@@ -7098,10 +7099,12 @@
          * @param {string} className
          * @param {number} y
          * @param {number} height
+         * @param {string[]} [kinds] each incident's kind, which picks its colour
          */
-        const draw = function (marks, titles, className, y, height) {
+        const draw = function (marks, titles, className, y, height, kinds) {
             marks.forEach(function (mark, at) {
                 const rect = document.createElementNS(ns, 'rect');
+                if (kinds) rect.setAttribute('data-kind', kinds[at]);
                 rect.setAttribute('x', String(mark.x));
                 rect.setAttribute('width', String(mark.w));
                 rect.setAttribute('y', String(y));
@@ -7120,7 +7123,9 @@
                 kind: PSL.INCIDENT_KIND_LABEL[incident.kind] || incident.kind,
                 span: PSL.episodeSpan(incident.window_from_ms, incidentEnd(incident))
             });
-        }), 'timeline-incident', 2, 26);
+        }), 'timeline-incident', 2, 26, incidents.map(function (incident) {
+            return incident.kind;
+        }));
         draw(PSL.timelineMarks(episodeSpans, fromMs, toMs, STRIP_WIDTH), episodes.map(function (episode) {
             return t('correlations.strip.episode', {
                 span: episode.ended_at_ms == null
@@ -7137,10 +7142,19 @@
                 })),
                 el('span', {text: t('correlations.now')})
             ]),
+            // The pair, then one key per kind of incident the strip shows, in the incident chips' order.
             el('div', {class: 'timeline-legend'}, [
-                el('span', {class: 'timeline-key timeline-key-episode', text: t('correlations.strip.legend_episode')}),
-                el('span', {class: 'timeline-key timeline-key-incident', text: t('correlations.strip.legend_incident')})
-            ])
+                el('span', {class: 'timeline-key timeline-key-episode', text: t('correlations.strip.legend_episode')})
+            ].concat(STRIP_KINDS.filter(function (kind) {
+                return incidents.some(function (incident) {
+                    return (STRIP_KINDS.indexOf(incident.kind) >= 0 ? incident.kind : 'other') === kind;
+                });
+            }).map(function (kind) {
+                return el('span', {
+                    class: 'timeline-key timeline-key-incident', 'data-kind': kind,
+                    text: t('correlations.strip.legend_incident', {kind: PSL.INCIDENT_KIND_LABEL[kind] || kind})
+                });
+            })))
         ]);
     }
 

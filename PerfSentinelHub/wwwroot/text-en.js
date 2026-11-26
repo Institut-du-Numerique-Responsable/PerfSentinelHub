@@ -1119,7 +1119,7 @@
         'correlations.strip.running': 'from {start}, still running',
         'correlations.strip.incident': 'Incident, {kind}: {span}',
         'correlations.strip.legend_episode': 'Episode of the pair',
-        'correlations.strip.legend_incident': 'Incident of the daemon',
+        'correlations.strip.legend_incident': 'Incident: {kind}',
         'correlations.no_incident': 'none',
         'correlations.explain': 'Explain the last pair',
         'correlations.incident.title': 'Active during this incident',

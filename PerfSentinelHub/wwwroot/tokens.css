@@ -51,6 +51,11 @@
     --info-fg: #8fc0f5;
     --info-bg: #1a2836;
     --info-bd: #26394e;
+    /* A correlation strip's marks: the pair in yellow, the incidents a kill red or a
+       saturation orange, saturated enough to read as a few pixels wide on a week. */
+    --strip-pair: #e3b341;
+    --strip-oom: #ff6b61;
+    --strip-saturation: #f0883e;
     --ok-fg: #8fe6b8;
     --ok-bg: #17342a;
     --ok-bd: #235c41;
@@ -108,6 +113,9 @@
     --info-fg: #1f5e9e;
     --info-bg: #e9f0f8;
     --info-bd: #d5e4f3;
+    --strip-pair: #d4a12a;
+    --strip-oom: #d1352b;
+    --strip-saturation: #e8762c;
     --ok-fg: #1b530d;
     --ok-bg: #ddf3dc;
     --ok-bd: #c6e6c4;

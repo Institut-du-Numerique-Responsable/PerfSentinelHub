@@ -4663,14 +4663,27 @@ a.chip {
     background: var(--surface);
 }
 
-/* Saturated enough to read as a few pixels wide on a week, still behind the episodes. */
+/* An incident behind the pair's episodes, by kind as the incident chips read: a kill red,
+   a saturation orange, a restart or a deploy blue, and `other` the neutral grey. */
 .timeline-incident {
-    fill: var(--crit-fg);
-    fill-opacity: .65;
+    fill: var(--text-3);
+}
+
+.timeline-incident[data-kind="oom_kill"] {
+    fill: var(--strip-oom);
+}
+
+.timeline-incident[data-kind="memory_saturation"] {
+    fill: var(--strip-saturation);
+}
+
+.timeline-incident[data-kind="restart"],
+.timeline-incident[data-kind="deploy"] {
+    fill: var(--info-fg);
 }
 
 .timeline-episode {
-    fill: var(--brand);
+    fill: var(--strip-pair);
 }
 
 .timeline-axis {
@@ -4723,13 +4736,25 @@ a.chip {
 }
 
 .timeline-key-episode::before {
-    background: var(--brand);
+    background: var(--strip-pair);
 }
 
 .timeline-key-incident::before {
     height: 12px;
-    background: var(--crit-fg);
-    opacity: .65;
+    background: var(--text-3);
+}
+
+.timeline-key-incident[data-kind="oom_kill"]::before {
+    background: var(--strip-oom);
+}
+
+.timeline-key-incident[data-kind="memory_saturation"]::before {
+    background: var(--strip-saturation);
+}
+
+.timeline-key-incident[data-kind="restart"]::before,
+.timeline-key-incident[data-kind="deploy"]::before {
+    background: var(--info-fg);
 }
 
 /* An incident's correlations, under its frozen findings and set apart from them. */
