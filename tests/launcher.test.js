@@ -1441,6 +1441,22 @@ test("an incident's findings sort by the column asked, worst and most seen first
     assert.equal(rows[0].finding.source_endpoint, "/b", "the input is left in its order");
 });
 
+test("an incident's findings sort by several columns in turn, the first one first", () => {
+    const row = (endpoint, level, extra, seen) => ({
+        seen_count: seen, first_seen_ms: 0, link: level ? {level} : undefined,
+        finding: {type: "n_plus_one_sql", severity: "warning", source_endpoint: endpoint,
+            green_impact: {estimated_extra_io_ops: extra}}
+    });
+    const rows = [row("/m1", "medium", 1, 1), row("/s1", "strong", 1, 1), row("/m9", "medium", 9, 1), row("/s5", "strong", 5, 1)];
+    const endpoints = list => list.map(r => r.finding.source_endpoint);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, [{key: "link", dir: "desc"}, {key: "impact", dir: "desc"}])),
+        ["/s5", "/s1", "/m9", "/m1"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, [{key: "link", dir: "desc"}, {key: "impact", dir: "asc"}])),
+        ["/s1", "/s5", "/m1", "/m9"]);
+    assert.deepEqual(endpoints(PSL.sortFindings(rows, [{key: "link", dir: "desc"}])),
+        endpoints(PSL.sortFindings(rows, "link", "desc")), "one column in a list reads as that column alone");
+});
+
 test("the folded incident filters say how many of them are in force", () => {
     const filter = {service: "a", kind: "oom_kill", namespace: "", environment: "", source_id: ""};
     assert.equal(PSL.moreFiltersLabel(filter), "More filters", "service and kind stay in sight");

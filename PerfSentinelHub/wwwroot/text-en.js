@@ -1046,6 +1046,8 @@
         'incidents.link.level.unknown': 'Unknown level',
         'incidents.link.pending': 'Being assessed',
         'incidents.link.note': 'Shows how suspect a finding is, not a proven cause.',
+        'incidents.sort.hint': 'Shift and a click on a column head adds it as the next sort.',
+        'incidents.sort.rank': 'Sort {rank}',
         'incidents.link.filter': 'Link level',
         'incidents.link.filter.any': 'All levels',
         'incidents.link.filter.none': 'No finding matches this level.',

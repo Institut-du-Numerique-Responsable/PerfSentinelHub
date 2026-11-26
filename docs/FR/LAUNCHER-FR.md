@@ -259,7 +259,8 @@ même endpoint en porte souvent plusieurs, et son impact estimé, les opération
 évitables du dashboard des findings : traces vues fois opérations en trop par trace, un
 tiret quand le daemon a le calcul green coupé. Les findings s'ouvrent du plus grave au
 moins grave, puis du plus vu au moins vu, un clic ou une touche sur l'en-tête d'une colonne
-les trie selon elle, et un champ au-dessus du tableau les restreint par endpoint ou par
+les trie selon elle, Maj en plus l'ajoute comme tri suivant, son rang affiché à côté de la
+flèche, et un champ au-dessus du tableau les restreint par endpoint ou par
 gabarit. Une colonne Lien donne à chaque finding un niveau, fort, moyen ou faible, avec ses
 raisons dans l'infobulle et pour les lecteurs d'écran, ou dit qu'il est en cours d'évaluation : elle
 indique à quel point un finding est suspect, pas une cause prouvée. Les findings s'ouvrent par ce

@@ -411,8 +411,9 @@
         ack: null,
         // The route an in-app Ack link was followed from, for the page's way back.
         ackReturn: null,
-        // How an incident's frozen findings are ordered: strongest link first, ties worst and most seen first.
-        findingSort: {key: 'link', dir: 'desc'},
+        // How an incident's frozen findings are ordered, the first column first: strongest link first,
+        // ties worst and most seen first. Shift and a click on a head adds a column.
+        findingSort: [{key: 'link', dir: 'desc'}],
         incidentFiltersOpen: false,
         // What was typed above each incident's findings, by incident key.
         findingQuery: {},
@@ -6429,7 +6430,7 @@
             const signature = row.finding && row.finding.signature;
             const link = signature && Object.prototype.hasOwnProperty.call(links, signature) ? links[signature] : undefined;
             return link ? {...row, link: link} : row;
-        }), state.findingSort.key, state.findingSort.dir);
+        }), state.findingSort);
         // A link, so it opens in a new tab too. Its end is clamped to the moment it is followed.
         const analyse = el('a', {class: 'pill-button', href: PSL.incidentHandoffHash(detail, Date.now())}, [
             svg([['path', {d: 'M5 12h14M13 6l6 6-6 6'}]], 14),
@@ -6497,7 +6498,8 @@
         return el('div', {class: 'findings-controls'}, [
             row,
             field(t('incidents.link.filter'), level, null),
-            el('p', {class: 'field-note', id: noteId, text: t('incidents.link.note')})
+            el('p', {class: 'field-note', id: noteId, text: t('incidents.link.note')}),
+            el('p', {class: 'field-note', text: t('incidents.sort.hint')})
         ]);
     }
 
@@ -6700,19 +6702,34 @@
             th.textContent = label;
             return th;
         }
-        const sort = state.findingSort;
-        const active = sort.key === key;
-        if (active) th.setAttribute('aria-sort', sort.dir === 'asc' ? 'ascending' : 'descending');
+        const sorts = state.findingSort;
+        const rank = sorts.findIndex(function (sort) { return sort.key === key; });
+        const sort = rank >= 0 ? sorts[rank] : null;
+        if (sort) {
+            th.setAttribute('data-sorted', '');
+            // ARIA allows aria-sort on one head: the first column, the one the rows read by.
+            if (rank === 0) th.setAttribute('aria-sort', sort.dir === 'asc' ? 'ascending' : 'descending');
+        }
         const id = incidentKey(incident) + ':' + key;
         const button = el('button', {type: 'button', class: 'sort-head', 'data-sort': id}, [
             el('span', {text: label}),
             // Idle heads carry both arrows, or only the sorted column would read as sortable.
-            svg([['path', {d: active ? (sort.dir === 'asc' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6') : 'M8 9l4-4 4 4M8 15l4 4 4-4'}]], 11)
+            svg([['path', {d: sort ? (sort.dir === 'asc' ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6') : 'M8 9l4-4 4 4M8 15l4 4 4-4'}]], 11),
+            sort && sorts.length > 1
+                ? el('span', {class: 'sort-rank', text: String(rank + 1), title: t('incidents.sort.rank', {rank: rank + 1})})
+                : null
         ]);
-        button.addEventListener('click', function () {
-            state.findingSort = active
-                ? {key: key, dir: sort.dir === 'asc' ? 'desc' : 'asc'}
-                : {key: key, dir: key === 'severity' || key === 'link' || key === 'impact' || key === 'seen' ? 'desc' : 'asc'};
+        button.addEventListener('click', function (event) {
+            const flipped = sort ? {key: key, dir: sort.dir === 'asc' ? 'desc' : 'asc'} : null;
+            const fresh = {key: key, dir: key === 'severity' || key === 'link' || key === 'impact' || key === 'seen' ? 'desc' : 'asc'};
+            if (event.shiftKey) {
+                // Shift adds the column after the others, or turns it round where it already sorts.
+                state.findingSort = flipped
+                    ? sorts.map(function (other, at) { return at === rank ? flipped : other; })
+                    : sorts.concat([fresh]);
+            } else {
+                state.findingSort = [flipped && sorts.length === 1 ? flipped : fresh];
+            }
             // The ids come from the daemon: escaped, so a quote in one cannot break the selector.
             renderFocus('[data-sort="' + CSS.escape(id) + '"]');
         });

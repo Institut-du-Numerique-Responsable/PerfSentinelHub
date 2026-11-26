@@ -1118,7 +1118,7 @@ a.shell-identity[aria-current="page"] {
     cursor: pointer;
 }
 
-.sort-head:hover, th[aria-sort] .sort-head {
+.sort-head:hover, th[aria-sort] .sort-head, th[data-sorted] .sort-head {
     color: var(--text);
 }
 
@@ -1126,8 +1126,14 @@ a.shell-identity[aria-current="page"] {
     opacity: .5;
 }
 
-.sort-head:hover svg, th[aria-sort] .sort-head svg {
+.sort-head:hover svg, th[aria-sort] .sort-head svg, th[data-sorted] .sort-head svg {
     opacity: 1;
+}
+
+/* Where a sorted column stands among several: 1 reads first. */
+.sort-rank {
+    font-size: .8em;
+    font-variant-numeric: tabular-nums;
 }
 
 /* An incident's findings: fewer columns than the fleet table, and the

@@ -1106,6 +1106,8 @@
         'incidents.link.level.unknown': 'Niveau inconnu',
         'incidents.link.pending': 'En cours d\'évaluation',
         'incidents.link.note': 'Indique à quel point un finding est suspect, pas une cause prouvée.',
+        'incidents.sort.hint': 'Maj et un clic sur l\'en-tête d\'une colonne l\'ajoutent comme tri suivant.',
+        'incidents.sort.rank': 'Tri {rank}',
         'incidents.link.filter': 'Niveau du lien',
         'incidents.link.filter.any': 'Tous les niveaux',
         'incidents.link.filter.none': 'Aucun finding ne correspond à ce niveau.',

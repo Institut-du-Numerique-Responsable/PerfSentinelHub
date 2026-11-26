@@ -4,6 +4,12 @@ All notable changes to PerfSentinelHub are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- An incident's frozen findings sort by several columns: Shift and a click, or Shift and Enter,
+  on a column head adds it as the next sort, or turns it round where it already sorts, and each
+  sorted head shows its rank. A plain click still sorts by that column alone.
+
 ### Fixed
 
 - The link level select of an unfolded incident no longer drops below the search field once the

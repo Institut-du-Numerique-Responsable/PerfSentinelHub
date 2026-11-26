@@ -1212,16 +1212,19 @@
 
     const LINK_RANK = {strong: 3, medium: 2, weak: 1};
 
+    /** @typedef {'type' | 'severity' | 'impact' | 'endpoint' | 'template' | 'seen' | 'first' | 'link'} FindingSortKey */
+
     /**
-     * An incident's frozen findings in the order a column asks for. Ties fall
-     * back to the default reading order, worst and most seen first, so equal
+     * An incident's frozen findings in the order one or more columns ask for, the first column
+     * first. Ties fall back to the default reading order, worst and most seen first, so equal
      * rows never shuffle between two renders.
      * @param {Array<{seen_count?: number, first_seen_ms: number, finding?: any}>} rows
-     * @param {'type' | 'severity' | 'impact' | 'endpoint' | 'template' | 'seen' | 'first' | 'link'} key
-     * @param {'asc' | 'desc'} dir
+     * @param {FindingSortKey | Array<{key: FindingSortKey, dir: 'asc' | 'desc'}>} key a column, or the columns in order
+     * @param {'asc' | 'desc'} [dir] the column's direction when a single one is given
      * @returns {Array<any>}
      */
     function sortFindings(rows, key, dir) {
+        const sorts = Array.isArray(key) ? key : [{key: key, dir: dir || 'asc'}];
         /** @type {Record<string, (row: {seen_count?: number, first_seen_ms: number, finding?: any}) => string | number>} */
         const value = {
             type: function (row) {
@@ -1264,10 +1267,12 @@
             const y = value[name](b);
             return typeof x === 'string' ? x.localeCompare(String(y)) : x - Number(y);
         };
-        const sign = dir === 'asc' ? 1 : -1;
         return rows.slice().sort(function (a, b) {
-            return sign * compare(key, a, b)
-                || -compare('severity', a, b) || -compare('seen', a, b)
+            for (const sort of sorts) {
+                const order = (sort.dir === 'asc' ? 1 : -1) * compare(sort.key, a, b);
+                if (order) return order;
+            }
+            return -compare('severity', a, b) || -compare('seen', a, b)
                 || compare('endpoint', a, b) || compare('first', a, b);
         });
     }
