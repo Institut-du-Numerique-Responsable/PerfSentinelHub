@@ -53,8 +53,8 @@
     --info-bd: #26394e;
     /* A correlation strip's incidents, a kill red or a saturation orange, saturated
        enough to read as a few pixels wide on a week. */
-    --strip-oom: #ff6b61;
-    --strip-saturation: #f0883e;
+    --strip-oom: #f04438;
+    --strip-saturation: #f7a531;
     --ok-fg: #8fe6b8;
     --ok-bg: #17342a;
     --ok-bd: #235c41;
