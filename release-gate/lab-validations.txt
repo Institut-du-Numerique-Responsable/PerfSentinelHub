@@ -512,3 +512,13 @@ v0.22.0	093cde1	2026-11-24	PASS
 # hub-card (24). All PASS, no skip. Not run: the cluster hub scenarios, the k3d
 # cluster being down, with no server-side change for them to exercise.
 v0.23.0	2c6e8b2	2026-11-26	PASS
+# v0.24.0 targeted pass on a fresh up-cni (Cilium), the Hub built locally from
+# fix/pair-strip-incidents (0.24.0-78c65bd9), lab at origin/main (d82dba7). The
+# release adds from and to to /api/incidents and its refresh, and the pair panel
+# reads each service's incidents with from. hub-incidents-mirror,
+# hub-incidents-push and hub-correlations-push on the cluster, then hub-recap
+# (21 checks), hub-detection-volume (7) and hub-card (24). All PASS, no skip.
+# hub-correlations-push first stopped at pre-flight on ErrImageNeverPull and
+# passed once the daemon image was pulled on every node. Not run: the other
+# cluster hub scenarios, which the change does not reach.
+v0.24.0	d82dba7	2026-11-27	PASS
