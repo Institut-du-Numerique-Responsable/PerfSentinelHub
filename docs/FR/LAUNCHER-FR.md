@@ -313,12 +313,12 @@ cherché des deux côtés, un daemon et un interrupteur "active now only" resser
   <img alt="L'écran des corrélations avec une paire dépliée sur sa frise et ses épisodes" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-correlations.png">
 </picture>
 
-Une ligne se déplie en une frise de la période, chaque épisode en vert sur les incidents du même
-daemon, colorés par type comme leurs pastilles (un OOM kill en rouge, une saturation mémoire en
+Une ligne se déplie en une frise de la période, chaque épisode en vert au-dessus des incidents des
+deux services de la paire, colorés par type comme leurs pastilles (un OOM kill en rouge, une saturation mémoire en
 orange, un redémarrage ou un déploiement en bleu, tout autre en gris), une légende dessous qui
 nomme les types présents et chaque barre donnant sa durée au survol. La frise commence
 au premier épisode de la paire, un peu avant, plutôt qu'au début de la période, pour qu'une semaine
-d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, même quand le daemon a eu un
+d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, même quand l'un de ses services a eu un
 incident plus ancien dans la période : la frise ne montre que les incidents qu'elle atteint, et jusqu'à
 quatre repères datés se placent entre ses bouts. Vient ensuite la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
 ouvrent l'écran des incidents sur cet incident. Analyse this window ouvre New analysis sur la

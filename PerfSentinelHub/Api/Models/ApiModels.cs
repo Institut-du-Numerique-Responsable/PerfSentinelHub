@@ -172,7 +172,8 @@ public sealed record FindingQuery(
 }
 
 // SourceIds is the resolved set: one id from source_id, every id of an
-// environment from environment, null for the whole fleet.
+// environment from environment, null for the whole fleet. FromMs and ToMs keep the
+// incidents whose span, window start to end or window end, overlaps them, bounds included.
 public sealed record IncidentQuery(
     string? Service,
     string? Namespace,
@@ -180,7 +181,9 @@ public sealed record IncidentQuery(
     IReadOnlyList<string>? SourceIds,
     int Offset,
     int Limit,
-    AccessScope? Access = null);
+    AccessScope? Access = null,
+    long? FromMs = null,
+    long? ToMs = null);
 
 // SourceIds is the resolved scope, as on IncidentQuery. FromMs and ToMs keep the episodes
 // whose activity overlaps the span, bounds included, a running one reaching every later

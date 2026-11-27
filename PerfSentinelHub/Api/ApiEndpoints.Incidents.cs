@@ -219,7 +219,9 @@ public static partial class ApiEndpoints
             return false;
         if (!TryReadBounded(request, "limit", options.DefaultReadLimit, 1, options.MaxReadLimit, out var limit) ||
             !TryReadBounded(request, "offset", 0, 0, int.MaxValue, out var offset) ||
-            !TryReadIncidentFilters(request, sources, out var kind, out var sourceIds))
+            !TryReadIncidentFilters(request, sources, out var kind, out var sourceIds) ||
+            !TryReadEpochMs(request, "from", out var fromMs) ||
+            !TryReadEpochMs(request, "to", out var toMs))
             return false;
 
         query = new IncidentQuery(
@@ -228,7 +230,9 @@ public static partial class ApiEndpoints
             kind,
             sourceIds,
             offset,
-            limit);
+            limit,
+            FromMs: fromMs,
+            ToMs: toMs);
         return true;
     }
 
