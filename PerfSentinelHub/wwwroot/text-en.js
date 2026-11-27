@@ -2226,7 +2226,7 @@
         'guide.correlations.table.episodes': 'Several episodes mean the pair became active again several times over the period.',
         'guide.correlations.table.limit': 'The Hub stopped at the {limit} most recent episodes: narrow the period or the filters.',
         'guide.correlations.pair.title': 'Unfold a pair',
-        'guide.correlations.pair.body': 'A pair unfolds onto a strip of the period: its episodes in green, in front of the same daemon\'s incidents coloured by kind, a legend under it. Then the list of its episodes, with the incidents each one overlaps.',
+        'guide.correlations.pair.body': 'A pair unfolds onto a strip of the period: its episodes in green, and under them its services\' incidents coloured by kind, a legend under it. Then the list of its episodes, with the incidents each one overlaps.',
         'guide.correlations.episodes.title': 'The episodes',
         'guide.correlations.episodes.body': 'An incident that overlaps an episode opens the incidents screen. "Analyse this window" opens New analysis on the episode\'s window, widened by a minute on each side.',
         'guide.correlations.episodes.explain': '"Explain the last pair" opens New analysis on the trace of a finding from the last co-occurrence.',

@@ -4663,7 +4663,7 @@ a.chip {
     background: var(--surface);
 }
 
-/* An incident behind the pair's episodes, by kind as the incident chips read: a kill red,
+/* An incident on the lane under the pair's episodes, by kind as the incident chips read: a kill red,
    a saturation orange, a restart or a deploy blue, and `other` the neutral grey. */
 .timeline-incident {
     fill: var(--text-3);

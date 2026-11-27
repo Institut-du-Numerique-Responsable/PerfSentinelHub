@@ -7040,9 +7040,11 @@
     function pairPanel(pair) {
         const toMs = Date.now();
         const fromMs = toMs - PSL.parseDur(state.correlationFilter.range);
+        // Only the incidents of the pair's services: the daemon's page holds the whole fleet's.
         const incidents = state.correlationIncidents.filter(function (incident) {
             return incident.source_id === pair.source_id
-                && PSL.spansOverlap(incident.window_from_ms, incidentEnd(incident), fromMs, toMs);
+                && PSL.spansOverlap(incident.window_from_ms, incidentEnd(incident), fromMs, toMs)
+                && PSL.incidentEpisodes(pair.episodes, incident).length > 0;
         });
         const guide = foldGuide('correlations.panel', state.panelOpen['pair:' + pair.key] === true);
         // A pair read a while ago can hold an episode that has since left the range: the strip,
@@ -7057,7 +7059,7 @@
     }
 
     /**
-     * The range as a strip: each episode in green, the same daemon's incidents behind them coloured by kind.
+     * The range as a strip: each episode in green, the incidents of the pair's services on a lane under them, coloured by kind.
      * The strip starts at the earliest episode rather than at the range's start, keeps the incidents
      * it reaches, carries a few dated marks and a legend, and each bar names its span on hover.
      * @param {Episode[]} episodes
@@ -7127,7 +7129,7 @@
                 kind: PSL.INCIDENT_KIND_LABEL[incident.kind] || incident.kind,
                 span: PSL.episodeSpan(incident.window_from_ms, incidentEnd(incident))
             });
-        }), 'timeline-incident', 2, 26, incidents.map(function (incident) {
+        }), 'timeline-incident', 21, 6, incidents.map(function (incident) {
             return incident.kind;
         }));
         draw(PSL.timelineMarks(episodeSpans, fromMs, toMs, STRIP_WIDTH), episodes.map(function (episode) {
@@ -7136,7 +7138,7 @@
                     ? t('correlations.strip.running', {start: PSL.dateTime(episode.started_at_ms)})
                     : PSL.episodeSpan(episode.started_at_ms, episode.ended_at_ms)
             });
-        }), 'timeline-episode', 9, 12);
+        }), 'timeline-episode', 3, 14);
         return el('div', {class: 'timeline'}, [
             strip,
             el('div', {class: 'timeline-axis'}, [

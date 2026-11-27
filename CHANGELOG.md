@@ -2,6 +2,15 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- An unfolded correlation pair shows only the incidents of its two services, in their namespace
+  when the incident names one, on its strip and in its episodes' list. It showed every incident of
+  the daemon in the range, those of services the pair never touches included. On the strip they
+  sit on a thin lane under the episodes instead of behind them, which they hid.
+
 ## [0.23.0] - 2026-11-26
 
 ### Added
