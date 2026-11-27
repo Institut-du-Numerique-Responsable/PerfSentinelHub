@@ -292,7 +292,7 @@ A row unfolds into a strip of the range, each episode in green above the inciden
 coloured by kind as the incident chips are (an OOM kill red, a memory saturation orange, a restart
 or a deploy blue, any other grey), a legend under it naming the kinds shown and each bar giving its span on hover. The strip starts at the pair's earliest
 episode, a little before, rather than at the range's start, so a week of episodes in 180 days is
-not crushed into its last pixels, even when the daemon had an older incident in the range: the
+not crushed into its last pixels, even when one of its services had an older incident in the range: the
 strip only shows the incidents it reaches, and up to four dated marks sit between
 its ends. Then comes the list of its episodes: span, duration, peaks and the incidents each one overlaps,
 which open the incidents screen on that incident. Analyse this window opens New analysis on the

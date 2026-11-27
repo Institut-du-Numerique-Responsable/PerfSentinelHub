@@ -318,7 +318,7 @@ deux services de la paire, colorés par type comme leurs pastilles (un OOM kill 
 orange, un redémarrage ou un déploiement en bleu, tout autre en gris), une légende dessous qui
 nomme les types présents et chaque barre donnant sa durée au survol. La frise commence
 au premier épisode de la paire, un peu avant, plutôt qu'au début de la période, pour qu'une semaine
-d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, même quand le daemon a eu un
+d'épisodes sur 180 jours ne se tasse pas dans ses derniers pixels, même quand l'un de ses services a eu un
 incident plus ancien dans la période : la frise ne montre que les incidents qu'elle atteint, et jusqu'à
 quatre repères datés se placent entre ses bouts. Vient ensuite la liste de ses épisodes : durée, pics et incidents que chacun recouvre, qui
 ouvrent l'écran des incidents sur cet incident. Analyse this window ouvre New analysis sur la

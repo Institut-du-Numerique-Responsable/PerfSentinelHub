@@ -6941,7 +6941,8 @@
      * @param {CorrelationPair} pair
      */
     function pairDetailId(pair) {
-        return 'pair-detail-' + pair.key.replace(/[^A-Za-z0-9_-]/g, '-');
+        // Whole: a source id may hold a dot, which a dash in its place would make another daemon's.
+        return 'pair-detail-' + pair.key;
     }
 
     /**
@@ -7039,6 +7040,8 @@
         const open = state.panelOpen['pair:' + pair.key] === true;
         const held = state.correlationIncidents[pair.key];
         if (open && held === undefined) {
+            // Marked now, so a second build before the read starts does not read again.
+            state.correlationIncidents[pair.key] = 'loading';
             queueMicrotask(function () {
                 loadPairIncidents(pair, fromMs);
             });
@@ -7049,6 +7052,8 @@
                 el('p', {class: 'daemon-loading', role: 'status', text: t('correlations.pair.incidents_reading')})
             ]);
         }
+        // Shown once: the next build of this panel, a refold or a re-read, asks again.
+        if (held === 'error') delete state.correlationIncidents[pair.key];
         const incidents = held === 'error' ? [] : PSL.pairIncidents(pair, held, fromMs, toMs);
         // A pair read a while ago can hold an episode that has since left the range: the strip,
         // which starts at what it shows, would otherwise pin it to its left edge.
@@ -7062,47 +7067,57 @@
         ]);
     }
 
-    // shortcut: a service is read ten pages deep at most, so a crash loop over a long range
-    // draws its newest thousand incidents; page further if a strip ever needs more.
+    // A service is read ten pages deep at most, so a crash loop over a long range draws its
+    // newest ten pages of incidents in the range; page further if a strip ever needs more.
     const PAIR_INCIDENT_PAGES = 10;
 
     /**
-     * The incidents of a pair's services on its daemon, newest first, page after page until a
-     * page holds nothing that reaches the range.
+     * The incidents of a pair's services that reach the range, newest first, page after page until
+     * a short one. Read on every daemon, so a source since removed from the Hub's configuration,
+     * which source_id refuses, still shows its stored incidents: pairIncidents keeps the pair's.
      * @param {CorrelationPair} pair
      * @param {number} fromMs
      */
     function loadPairIncidents(pair, fromMs) {
-        state.correlationIncidents[pair.key] = 'loading';
+        // The map of this read of the screen: a re-read starts another, and this answer, made
+        // for the old range, then lands in the old one unseen.
+        const held = state.correlationIncidents;
+        held[pair.key] = 'loading';
         const services = PSL.pairServices(pair.episodes);
         Promise.all(services.map(function (service) {
-            return readIncidentsSince('/api/incidents?source_id=' + encodeURIComponent(pair.source_id)
-                + '&service=' + encodeURIComponent(service), fromMs, 0);
+            return readIncidentPages('/api/incidents?service=' + encodeURIComponent(service)
+                + '&from=' + fromMs, 0);
         })).then(function (lists) {
-            state.correlationIncidents[pair.key] = lists.flat();
+            // A row that slid onto the next page while the pages were read counts once.
+            const seen = new Set();
+            held[pair.key] = lists.flat().filter(function (incident) {
+                const fresh = !seen.has(incident.id);
+                seen.add(incident.id);
+                return fresh;
+            }).sort(function (a, b) {
+                return b.at_ms - a.at_ms;
+            });
         }).catch(function () {
-            state.correlationIncidents[pair.key] = 'error';
+            held[pair.key] = 'error';
         }).finally(function () {
             const cell = document.getElementById(pairDetailId(pair));
-            if (cell && state.panelOpen['pair:' + pair.key] === true) cell.replaceChildren(pairPanel(pair));
+            if (held === state.correlationIncidents && cell && state.panelOpen['pair:' + pair.key] === true) {
+                cell.replaceChildren(pairPanel(pair));
+            }
         });
     }
 
     /**
      * @param {string} path
-     * @param {number} fromMs
      * @param {number} page
      * @returns {Promise<Incident[]>}
      */
-    async function readIncidentsSince(path, fromMs, page) {
+    async function readIncidentPages(path, page) {
         const size = incidentPage();
         /** @type {Incident[]} */
         const rows = await getJson(path + '&limit=' + size + '&offset=' + page * size);
-        const reaches = rows.some(function (incident) {
-            return PSL.incidentEnd(incident) >= fromMs;
-        });
-        if (rows.length < size || !reaches || page + 1 >= PAIR_INCIDENT_PAGES) return rows;
-        return rows.concat(await readIncidentsSince(path, fromMs, page + 1));
+        if (rows.length < size || page + 1 >= PAIR_INCIDENT_PAGES) return rows;
+        return rows.concat(await readIncidentPages(path, page + 1));
     }
 
     /**

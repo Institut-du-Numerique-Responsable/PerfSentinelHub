@@ -1746,7 +1746,7 @@
 
     /**
      * The incidents a pair's strip draws: on the pair's daemon, in the range, and on one of the
-     * pair's services, since the daemon's page holds the whole fleet's.
+     * pair's services, in its namespace when the incident names one.
      * @param {import('../types').CorrelationPair} pair
      * @param {import('../types').Incident[]} incidents
      * @param {number} fromMs
