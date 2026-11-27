@@ -35,6 +35,8 @@ public sealed partial class HubDatabase
                                                 AND ($kind IS NULL OR kind = $kind)
                                                 AND ($namespace IS NULL OR json_extract(incident_json, '$.namespace') = $namespace)
                                                 AND ($source_ids IS NULL OR source_id IN (SELECT value FROM json_each($source_ids)))
+                                                AND ($from IS NULL OR COALESCE(ended_at_ms, window_to_ms) >= $from)
+                                                AND ($to IS NULL OR window_from_ms <= $to)
                                               """;
 
     private const string IncidentListPage = """
@@ -381,6 +383,8 @@ public sealed partial class HubDatabase
         command.Parameters.AddWithValue(
             "$source_ids",
             query.SourceIds is null ? DBNull.Value : JsonArray(query.SourceIds));
+        command.Parameters.AddWithValue("$from", (object?)query.FromMs ?? DBNull.Value);
+        command.Parameters.AddWithValue("$to", (object?)query.ToMs ?? DBNull.Value);
         command.Parameters.AddWithValue("$limit", query.Limit);
         command.Parameters.AddWithValue("$offset", query.Offset);
 

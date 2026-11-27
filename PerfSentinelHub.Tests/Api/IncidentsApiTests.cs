@@ -108,6 +108,28 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
         Assert.Empty((await ListAsync("/api/incidents?kind=deploy&namespace=checkout")).EnumerateArray());
     }
 
+    // Every seeded copy spans the fixture's window, and the ended one runs past it to its end.
+    [Fact]
+    public async Task From_and_to_keep_the_incidents_whose_span_overlaps()
+    {
+        await SeedAsync();
+        using var fixture = JsonDocument.Parse(
+            await File.ReadAllBytesAsync(FixturePath, TestContext.Current.CancellationToken));
+        var windowFrom = fixture.RootElement[0].GetProperty("window_from_ms").GetInt64();
+        var windowTo = fixture.RootElement[0].GetProperty("window_to_ms").GetInt64();
+        var all = (await ListAsync("/api/incidents")).EnumerateArray().Select(Id).ToArray();
+
+        Assert.Equal(all, (await ListAsync($"/api/incidents?from={windowTo}")).EnumerateArray().Select(Id));
+        Assert.Equal(all, (await ListAsync($"/api/incidents?to={windowFrom}")).EnumerateArray().Select(Id));
+        // Past the window, only the copy whose end came later still reaches.
+        Assert.Equal([EndedId], (await ListAsync($"/api/incidents?from={windowTo + 1}")).EnumerateArray().Select(Id));
+        Assert.Empty((await ListAsync($"/api/incidents?from={EndedAtMs + 1}")).EnumerateArray());
+        Assert.Empty((await ListAsync($"/api/incidents?to={windowFrom - 1}")).EnumerateArray());
+        Assert.Equal(
+            [EndedId],
+            (await ListAsync($"/api/incidents?from={windowTo + 1}&to={EndedAtMs}")).EnumerateArray().Select(Id));
+    }
+
     /// <summary>
     ///     A source outside the named environment leaves the intersection empty,
     ///     which is a page with nothing on it and not the whole fleet. Asserted on
@@ -151,6 +173,8 @@ public sealed class IncidentsApiTests(HubApplicationFactory factory) : IClassFix
     [InlineData("/api/incidents?source_id=nope")]
     [InlineData("/api/incidents?kind=bogus")]
     [InlineData("/api/incidents?environment=nope")]
+    [InlineData("/api/incidents?from=x")]
+    [InlineData("/api/incidents?to=-1")]
     public async Task Invalid_query_is_rejected(string path)
     {
         using var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
