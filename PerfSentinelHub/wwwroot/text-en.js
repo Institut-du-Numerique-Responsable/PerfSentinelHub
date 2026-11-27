@@ -1122,6 +1122,8 @@
         'correlations.strip.incident': 'Incident, {kind}: {span}',
         'correlations.strip.legend_episode': 'Episode of the pair',
         'correlations.strip.legend_incident': 'Incident: {kind}',
+        'correlations.pair.incidents_reading': 'Reading the incidents of the pair\'s services.',
+        'correlations.pair.incidents_error': 'The Hub did not return the incidents of the pair\'s services: the strip shows its episodes only.',
         'correlations.no_incident': 'none',
         'correlations.explain': 'Explain the last pair',
         'correlations.incident.title': 'Active during this incident',
