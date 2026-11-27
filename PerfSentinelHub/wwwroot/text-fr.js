@@ -1184,6 +1184,8 @@
         'correlations.strip.incident': 'Incident, {kind}\u00a0: {span}',
         'correlations.strip.legend_episode': 'Épisode de la paire',
         'correlations.strip.legend_incident': 'Incident\u00a0: {kind}',
+        'correlations.pair.incidents_reading': 'Lecture des incidents des services de la paire.',
+        'correlations.pair.incidents_error': 'Le Hub n\'a pas renvoyé les incidents des services de la paire\u00a0: la frise ne montre que ses épisodes.',
         'correlations.no_incident': 'aucun',
         'correlations.explain': 'Expliquer la dernière paire',
         'correlations.incident.title': 'Actives pendant cet incident',

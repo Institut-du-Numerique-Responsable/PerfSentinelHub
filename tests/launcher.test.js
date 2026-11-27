@@ -1863,6 +1863,30 @@ test("an incident's correlations keep the episodes on its service, in its namesp
         ["target-side", "other-ns", "no-grouping", "team-grouping"], "no namespace keeps every namespace");
 });
 
+test("a pair's strip keeps the incidents of its daemon, its range and its services", () => {
+    const side = service => ({service, grouping_key: null, grouping_value: null});
+    const pair = {source_id: "d1", episodes: [{source: side("pool-svc"), target: side("checkout-svc")}]};
+    const inc = (id, extra) => ({id, source_id: "d1", service: "pool-svc", window_from_ms: 100,
+        window_to_ms: 200, ended_at_ms: null, ...extra});
+    const incidents = [
+        inc("own"),
+        inc("target-service", {service: "checkout-svc"}),
+        inc("other-service", {service: "reports-svc"}),
+        inc("other-daemon", {source_id: "d2"}),
+        inc("before-range", {window_from_ms: 10, window_to_ms: 40}),
+        inc("ended-in-range", {window_from_ms: 10, window_to_ms: 40, ended_at_ms: 60})
+    ];
+    assert.deepEqual(PSL.pairIncidents(pair, incidents, 50, 1000).map(i => i.id),
+        ["own", "target-service", "ended-in-range"]);
+});
+
+test("a pair reads its incidents on each of its services once", () => {
+    const ep = (source, target) => ({source: {service: source}, target: {service: target}});
+    assert.deepEqual(PSL.pairServices([ep("pool-svc", "checkout-svc"), ep("pool-svc", "checkout-svc")]),
+        ["pool-svc", "checkout-svc"]);
+    assert.deepEqual(PSL.pairServices([ep("pool-svc", "pool-svc")]), ["pool-svc"]);
+});
+
 test("a pair's accessible name says both finding types and both services", () => {
     const side = (type, service) => ({finding_type: type, service: service, template: "SELECT 1"});
     assert.equal(
