@@ -2,7 +2,14 @@
 
 All notable changes to PerfSentinelHub are recorded here.
 
-## [Unreleased]
+## [0.24.0] - 2026-11-27
+
+### Added
+
+- `GET /api/incidents` and `POST /api/incidents/refresh` take `from` and `to`, epoch
+  milliseconds, and keep the incidents whose span overlaps them, bounds included: from the
+  window's start to the incident's end, or to the window's end while no end has come. A value the
+  route cannot read is a `400`.
 
 ### Fixed
 
@@ -13,6 +20,11 @@ All notable changes to PerfSentinelHub are recorded here.
 - An unfolded incident's findings filter keeps its width: the search field no longer widens once
   the match count shows under it, pushing the link level select along, nor cuts its placeholder.
   Both controls take the panel's compact size.
+- An unfolded pair reads its services' incidents in the range, however many older ones the
+  daemon recorded since: a long incident that ended inside the range no longer goes missing
+  behind a page of older ones. A pair of a source since removed from the configuration keeps its
+  stored incidents rather than an error, a failed read is asked again on the next unfold, and an
+  answer for a range the screen has since left no longer replaces the new one.
 
 ## [0.23.0] - 2026-11-26
 
