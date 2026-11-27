@@ -2297,7 +2297,7 @@
         'guide.correlations.table.episodes': 'Plusieurs épisodes veulent dire que la paire est redevenue active plusieurs fois sur la période.',
         'guide.correlations.table.limit': 'Le Hub s\'est arrêté aux {limit} épisodes les plus récents : resserrez la période ou les filtres.',
         'guide.correlations.pair.title': 'Déplier une paire',
-        'guide.correlations.pair.body': 'Une paire se déplie sur une frise de la période : ses épisodes en vert, devant les incidents du même daemon colorés par type, une légende dessous. Puis la liste de ses épisodes, avec les incidents que chacun recouvre.',
+        'guide.correlations.pair.body': 'Une paire se déplie sur une frise de la période : ses épisodes en vert, et dessous les incidents de ses services colorés par type, une légende dessous. Puis la liste de ses épisodes, avec les incidents que chacun recouvre.',
         'guide.correlations.episodes.title': 'Les épisodes',
         'guide.correlations.episodes.body': 'Un incident qui recouvre un épisode ouvre l\'écran des incidents. « Analyser cette fenêtre » ouvre Nouvelle analyse sur la fenêtre de l\'épisode, élargie d\'une minute de chaque côté.',
         'guide.correlations.episodes.explain': '« Expliquer la dernière paire » ouvre Nouvelle analyse sur la trace d\'un finding de la dernière co-occurrence.',

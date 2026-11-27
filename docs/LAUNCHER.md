@@ -288,7 +288,7 @@ service matched on either side, a daemon and an "active now only" switch narrow 
   <img alt="The correlations screen with a pair unfolded on its strip and its episodes" src="https://raw.githubusercontent.com/Institut-du-Numerique-Responsable/PerfSentinelHub/main/docs/img/hub/launcher-correlations.png">
 </picture>
 
-A row unfolds into a strip of the range, each episode in green over the same daemon's incidents,
+A row unfolds into a strip of the range, each episode in green above the incidents of the pair's two services,
 coloured by kind as the incident chips are (an OOM kill red, a memory saturation orange, a restart
 or a deploy blue, any other grey), a legend under it naming the kinds shown and each bar giving its span on hover. The strip starts at the pair's earliest
 episode, a little before, rather than at the range's start, so a week of episodes in 180 days is
