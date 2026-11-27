@@ -1198,6 +1198,26 @@ a.shell-identity[aria-current="page"] {
     margin: 0;
 }
 
+.findings-controls > .field {
+    margin-bottom: 0;
+}
+
+/* A set width: sized by its content, the search field widened once the match count showed
+   under it, cut its placeholder before, and pushed the level select along. */
+.findings-controls > .field:first-child {
+    flex: 0 1 320px;
+}
+
+.findings-controls .findings-filter {
+    max-width: none;
+}
+
+/* The compact size of the panel around them, not the full size of a form. */
+.findings-controls .input {
+    height: 30px;
+    font-size: 12px;
+}
+
 /* How suspect a finding is: the three levels on the severity tones, unassessed stays neutral. */
 .chip[data-link="strong"] {
     background: var(--crit-bg);

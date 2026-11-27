@@ -10,6 +10,9 @@ All notable changes to PerfSentinelHub are recorded here.
   when the incident names one, on its strip and in its episodes' list. It showed every incident of
   the daemon in the range, those of services the pair never touches included. On the strip they
   sit on a thin lane under the episodes instead of behind them, which they hid.
+- An unfolded incident's findings filter keeps its width: the search field no longer widens once
+  the match count shows under it, pushing the link level select along, nor cuts its placeholder.
+  Both controls take the panel's compact size.
 
 ## [0.23.0] - 2026-11-26
 
